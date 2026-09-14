@@ -1,0 +1,29 @@
+{
+  "name": "tavernus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "D&D multijugador por chat con Master IA — motor de juego",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "dev": "node --env-file-if-exists=.env --import tsx src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
+    "@google-cloud/firestore": "^9.0.1",
+    "discord.js": "^14.27.0"
+  }
+}

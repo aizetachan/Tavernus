@@ -1,0 +1,20 @@
+[Unit]
+Description=Tavernus: motor + bot de Discord
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tavernus
+WorkingDirectory=/opt/tavernus
+ExecStart=/usr/bin/node --env-file=/opt/tavernus/.env dist/index.js
+# Si muere, systemd lo relanza a los 5 s; también arranca solo al encender la VM.
+Restart=always
+RestartSec=5
+# Deja constancia del motivo para el aviso de arranque en #reportes.
+ExecStopPost=/opt/tavernus/deploy/on-exit.sh
+StandardOutput=append:/opt/tavernus/logs/bot.log
+StandardError=append:/opt/tavernus/logs/bot.log
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,473 @@
+/**
+ * Modelo de datos del mundo (fase 1).
+ *
+ * Principios (SPEC §14.2):
+ *  - Un solo árbol de contención: todo lo que ocupa espacio tiene un único
+ *    campo `location` polimórfico. Nada existe en dos sitios.
+ *  - Las salidas son entidades con estado, no aristas.
+ *  - Los sistemas (combates, crímenes, líneas secundarias) no son objetos del mundo.
+ *
+ * Unidades: metros, segundos de tiempo de juego, libras (5e) para peso.
+ */
+
+export type Id = string;
+
+/** Dónde está algo. Exactamente un sitio (SPEC §5.3, §14.2). */
+export type Placement =
+  | { type: 'spot'; id: Id }
+  | { type: 'character'; id: Id; slot: CarrySlot }
+  | { type: 'npc'; id: Id }
+  | { type: 'container'; id: Id }
+  | { type: 'vehicle'; id: Id };
+
+/** Dónde lleva un PJ un ítem (SPEC §5.4). */
+export type CarrySlot =
+  | { kind: 'hand'; which: 'main' | 'off' | 'both' }
+  | { kind: 'pocket' }
+  | { kind: 'equipped'; slot: EquipSlot };
+
+export type EquipSlot =
+  | 'head' | 'body' | 'hands' | 'feet' | 'neck' | 'ring1' | 'ring2' | 'back' | 'belt';
+
+export const EQUIP_SLOTS: readonly EquipSlot[] = [
+  'head', 'body', 'hands', 'feet', 'neck', 'ring1', 'ring2', 'back', 'belt',
+];
+
+// ---------------------------------------------------------------------------
+// Campaña y tiempo
+// ---------------------------------------------------------------------------
+
+export interface Campaign {
+  id: Id;
+  name: string;
+  /** Segundos de juego por segundo real. SPEC §1.3: 3. */
+  time_ratio: number;
+  /** Instante real (ms epoch) en que el reloj de juego valía `game_epoch_s`. */
+  real_epoch_ms: number;
+  /** Segundos de juego transcurridos en `real_epoch_ms`. */
+  game_epoch_s: number;
+  calendar: Calendar;
+  /** Puntos de inicio con su origen narrativo. Un PJ nuevo aparece en el de la localización menos poblada. */
+  starting_points: { spot_id: Id; origin: string }[];
+  perception_rules: PerceptionRules;
+  movement_rules: MovementRules;
+  capacity_rules: CapacityRules;
+  /** Identidad de la campaña para el master (SPEC §1.1). */
+  premise: string;
+  setting: string;
+  tone: 'epic' | 'grim' | 'comedy' | 'horror' | 'pulp';
+  content_rating: 0 | 1 | 2 | 3;
+  language: 'es' | 'en';
+  house_rules: string;
+  /** Bienvenida en voz del master al crear personaje. `{name}` se sustituye por el del PJ. */
+  welcome: string;
+  master: MasterConfig;
+  factions: Faction[];
+  /** Pistas del hilo de la demo: descubrimientos personales, no se consumen. */
+  clues: Clue[];
+  /** Encargos del tablón. Rotan cada día de juego. */
+  jobs: Job[];
+  achievement: Achievement;
+  progression: { practice_thresholds: number[]; practice_min_dc: number };
+  /** Estado vivo del tablón. */
+  board: { active_job_ids: Id[]; last_rotation_day: number };
+}
+
+export interface Faction { id: Id; name: string; description: string }
+
+export interface Clue {
+  id: Id;
+  title: string;
+  /** Solo para el master: cómo se obtiene y qué revela. */
+  how: string;
+  reputation: number;
+}
+
+export interface Job {
+  id: Id;
+  title: string;
+  text: string;
+  giver_npc_id: Id;
+  kind: 'deliver' | 'visit' | 'narrative';
+  deliver?: { item_id: Id; quantity: number };
+  visit_spot_id?: Id;
+  reward_coins: number;
+  reward_reputation: number;
+}
+
+export interface Achievement {
+  id: Id;
+  title: string;
+  faction_id: Id;
+  clues_required: number;
+  reputation_required: number;
+  reward_item_id: Id | null;
+  reward_spot_id: Id | null;
+  announcement: string;
+}
+
+/** Configuración del master (SPEC §2). Separada de la campaña para poder cambiar de master. */
+export interface MasterConfig {
+  model: string;
+  effort: 'low' | 'medium' | 'high';
+  name: string;
+  voice: string[];
+  narration_length: 'short' | 'medium' | 'long';
+  perspective: 'second' | 'third';
+  difficulty: 'easy' | 'normal' | 'hard' | 'deadly';
+  improvisation: number;
+  /** Máximo de llamadas a tools por acción. */
+  max_tool_calls: number;
+}
+
+export interface Calendar {
+  /** Nombres de los días de la semana, en orden. */
+  day_names: string[];
+  /** Nombres de los meses, con su duración en días. */
+  months: { name: string; days: number }[];
+  /** Hora en que amanece / anochece (0-24). Para el factor de luz. */
+  sunrise_h: number;
+  sunset_h: number;
+  /** Duración del crepúsculo a cada lado, en horas. */
+  twilight_h: number;
+}
+
+export interface PerceptionRules {
+  vision_base_m: number;
+  hearing_base_m: number;
+  light_factor: { day: number; twilight: number; night_moon: number; night_dark: number; torch: number };
+  torch_fixed_m: number;
+  darkvision_m: number;
+  /** ±% por punto de percepción pasiva respecto a 10. */
+  skill_step: number;
+  asleep_factor: number;
+}
+
+export interface MovementRules {
+  /** m/s a 30 ft de velocidad (5e: 9 m / 6 s). */
+  base_speed_mps: number;
+  pace: { stealth: number; walk: number; run: number };
+}
+
+export interface CapacityRules {
+  pockets_slots: number;
+  /** Máximo = STR × este factor (libras). */
+  carry_per_str: number;
+  encumbered_at: number;   // × STR
+  heavily_at: number;      // × STR
+  coins_per_lb: number;
+}
+
+// ---------------------------------------------------------------------------
+// Mapa: región → zona → localización → punto (SPEC §3.2)
+// ---------------------------------------------------------------------------
+
+export interface Region { id: Id; name: string; }
+export interface Zone { id: Id; region_id: Id; name: string; kind: string; }
+
+export interface Location {
+  id: Id;
+  zone_id: Id;
+  name: string;
+  description_base: string;
+  default_spot_id: Id;
+  /** Interior cerrado: la luz no depende del sol sino de `ambience.light`. */
+  indoor: boolean;
+  ambience: { light: LightLevel | 'natural'; noise: number; smell?: string };
+  state: Record<string, unknown>;
+  discovery: Record<Id, 'unknown' | 'heard_of' | 'visited'>;
+}
+
+export type LightLevel = 'day' | 'twilight' | 'night_moon' | 'night_dark';
+
+export interface Spot {
+  id: Id;
+  location_id: Id;
+  name: string;
+  aliases: string[];
+  description: string;
+  x: number;
+  y: number;
+  capacity: number | null;
+  hidden: boolean;
+  dc_to_find?: number;
+  discovered_by: Id[];
+  state: Record<string, unknown>;
+  tags: string[];
+  terrain_multiplier: number;
+  entry_cost_s: number;
+  /** Enlaces internos con bloqueo de visión/sonido (SPEC §9.2). */
+  links: { to_spot_id: Id; blocks_sight?: boolean; muffles?: number }[];
+}
+
+/** Salida entre localizaciones. Entidad con estado (SPEC §14.2). */
+export interface Exit {
+  id: Id;
+  from_spot_id: Id;
+  to_spot_id: Id;
+  distance_m: number;
+  terrain_multiplier: number;
+  bidirectional: boolean;
+  state: { blocked_by?: string; locked?: boolean; [k: string]: unknown };
+}
+
+// ---------------------------------------------------------------------------
+// Entidades con presencia
+// ---------------------------------------------------------------------------
+
+export type Pace = 'stealth' | 'walk' | 'run';
+
+export interface Transit {
+  origin_spot_id: Id;
+  destination_spot_id: Id;
+  pace: Pace;
+  /** Tramos del camino, en orden, con el instante de juego en que se completa cada uno. */
+  legs: TransitLeg[];
+  departed_game_s: number;
+  arrives_game_s: number;
+}
+
+export interface TransitLeg {
+  from_spot_id: Id;
+  to_spot_id: Id;
+  distance_m: number;
+  /** Segundos de juego que dura este tramo. */
+  duration_s: number;
+  /** Instante de juego al terminar el tramo. */
+  ends_game_s: number;
+  via_exit_id?: Id;
+}
+
+export type CharacterStatus = 'active' | 'asleep' | 'unconscious' | 'dead' | 'retired';
+
+export interface Condition { name: string; source: string; expires_game_s: number | null }
+
+export interface Character {
+  id: Id;
+  user_id: Id;
+  name: string;
+  /** Identidad para el master (SPEC §4.1). Fase 2: nombre, raza, clase, aspecto, historia. */
+  race: string;
+  class_name: string;
+  /** IDs SRD (race/class/background) para reglas; los nombres de arriba son para mostrar. */
+  race_id: string;
+  class_id: string;
+  background_id: string;
+  hit_die: number;
+  death_mode: 'casual' | 'hardcore';
+  level: number;
+  appearance: string;
+  backstory: string;
+  hp_max: number;
+  hp_current: number;
+  hp_temp: number;
+  conditions: Condition[];
+  /** Skills y salvaciones con competencia (claves 5e en inglés: 'athletics', 'str'…). */
+  proficiencies: { skills: string[]; expert: string[]; saves: string[] };
+  /** Progresión por uso (SPEC §4.11): usos significativos por skill y bonus ganado (+1/+2). */
+  practice: Record<string, number>;
+  practice_bonus: Record<string, number>;
+  reputation: Record<Id, number>;
+  /** A quién conoce por su nombre (NPCs y otros PJs). Hasta entonces, solo lo que se ve. */
+  knows: Id[];
+  clues: Id[];
+  completed_jobs: Id[];
+  achievements: { id: Id; game_s: number }[];
+  /** Solo posición; la hoja completa llega en fase 2. */
+  location: Extract<Placement, { type: 'spot' | 'vehicle' }>;
+  transit: Transit | null;
+  status: CharacterStatus;
+  /** Velocidad 5e en pies (30 por defecto). */
+  speed_ft: number;
+  abilities: { str: number; dex: number; con: number; int: number; wis: number; cha: number };
+  passive_perception: number;
+  darkvision: boolean;
+  /** Multiplicador de condiciones (cargado, exhausto…). 1 = normal. */
+  condition_speed_factor: number;
+  coins: number;
+  decisive: DecisiveWindow | null;
+  xp: number;
+  last_seen_event_id: Id | null;
+  /** Fijado al desconectar: desde dónde contar el /recap al volver. null = sin recap pendiente. */
+  recap_from: { event_id: Id | null } | null;
+  connected: boolean;
+  veiled: boolean;
+}
+
+/** Lo que un NPC recuerda de un PJ (SPEC §3.3). Lo escribe el master solo cuando hablan. */
+export interface NpcMemory {
+  character_id: Id;
+  game_s: number;
+  note: string;
+  /** 1 se olvida en días; 2 en semanas; 3 nunca. */
+  importance: 1 | 2 | 3;
+}
+
+export interface Npc {
+  id: Id;
+  name: string;
+  role: string;
+  location: Extract<Placement, { type: 'spot' }>;
+  status: 'alive' | 'dead' | 'missing';
+  passive_perception: number;
+  description: string;
+  motivation: string;
+  /** Lo que el master sabe y no debe soltar sin motivo. */
+  secret: string;
+  memory: NpcMemory[];
+  /** Cola de conversación (SPEC §9.6): con quién habla ahora. */
+  talking_to: { character_id: Id; since_game_s: number } | null;
+  /** Comercio (SPEC §5.6): qué compra y a qué precio; qué vende. */
+  buys: { item_id: Id; price: number }[];
+  sells: { item_id: Id; price: number }[];
+  /** Bloque de combate SRD simplificado (SPEC §3.3). null = no combate. */
+  stats: NpcStats | null;
+  /** Actitud por PJ; `default` para quien no conoce. */
+  attitude: { default: Attitude; by_character: Record<Id, Attitude> };
+}
+
+export type Attitude = 'hostile' | 'unfriendly' | 'neutral' | 'friendly' | 'allied';
+
+export interface NpcStats {
+  ac: number;
+  hp_max: number;
+  hp: number;
+  attack_bonus: number;
+  damage: string;
+  damage_type: string;
+  attack_name: string;
+  /** XP 5e por derrotarlo. */
+  xp: number;
+}
+
+export interface Vehicle {
+  id: Id;
+  name: string;
+  kind: 'mount' | 'cart' | 'carriage';
+  location: Extract<Placement, { type: 'spot' }>;
+  speed_ft: number;
+  capacity: number;
+  owner_id: Id | null;
+  terrain_allowed: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Ítems (SPEC §5)
+// ---------------------------------------------------------------------------
+
+export type ItemSize = 'tiny' | 'small' | 'medium' | 'large' | 'bulky';
+export type ItemType = 'weapon' | 'armor' | 'consumable' | 'tool' | 'quest' | 'treasure' | 'misc' | 'container';
+
+export interface ItemDef {
+  id: Id;
+  name: string;
+  aliases: string[];
+  type: ItemType;
+  size: ItemSize;
+  weight_lb: number;
+  value: number;
+  unique: boolean;
+  /** Si es contenedor: capacidad. */
+  container?: { slots: number; max_weight_lb: number; max_size: ItemSize; fixed?: boolean };
+  /** Si es equipable: slot que ocupa. */
+  equip_slot?: EquipSlot;
+  /** Armadura (SPEC §5.1): CA base y tope de DES (null = sin tope). */
+  armor?: { ac_base: number; dex_max: number | null; stealth_disadvantage: boolean };
+  /** Escudo: bonus a la CA cuando va en la mano. */
+  shield_bonus?: number;
+  weapon?: { damage: string; damage_type: string; finesse?: boolean; ranged?: boolean; two_handed?: boolean };
+  /** Fuente de luz cuando `state.lit === true` (antorcha, farol). */
+  light_source?: boolean;
+  origin: 'srd' | 'custom';
+}
+
+/** Un ejemplar concreto en el mundo. Siempre en exactamente un `location`. */
+export interface ItemInstance {
+  id: Id;
+  item_id: Id;
+  quantity: number;
+  location: Placement;
+  state: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Recursos (SPEC §3.2.5)
+// ---------------------------------------------------------------------------
+
+export interface ResourceNode {
+  id: Id;
+  spot_id: Id;
+  name: string;
+  aliases: string[];
+  resource_item_id: Id;
+  yield_max: number;
+  /** Segundos de juego para regenerarse del todo. */
+  regen_time_s: number;
+  /** Instante de juego de la última extracción y estado en ese momento. */
+  last_harvested_game_s: number | null;
+  regen_state_at_harvest: number;
+  destructive: boolean;
+  skill: string;
+  dc: number;
+  tool_required: Id | null;
+}
+
+// ---------------------------------------------------------------------------
+// Eventos (SPEC §6)
+// ---------------------------------------------------------------------------
+
+export type Visibility = 'public' | 'location' | 'private';
+
+export interface GameEvent {
+  id: Id;
+  seq: number;
+  timestamp_real_ms: number;
+  timestamp_game_s: number;
+  campaign_id: Id;
+  location_id: Id;
+  spot_id: Id | null;
+  actor_id: Id | null;
+  action_type: string;
+  input_text: string | null;
+  /** Lo que ve el propio actor. */
+  narration_private: string;
+  /** Lo que ve un testigo (SPEC §11.2). */
+  observable: string | null;
+  visibility: Visibility;
+  tags: string[];
+  /** A quién se ha entregado y con qué nivel de percepción. */
+  delivered_to: { character_id: Id; level: PerceptionLevel }[];
+  payload: Record<string, unknown>;
+}
+
+export type PerceptionLevel = 'full' | 'vague' | 'hint' | 'none';
+
+/** Ventana de respuesta decisiva (SPEC §9.3). */
+export interface DecisiveWindow {
+  opened_real_ms: number;
+  window_s: number;
+  /** Qué amenaza se resuelve contra el PJ si no responde. */
+  threat: string;
+  /** NPC que amenaza, si lo hay. */
+  npc_id: Id | null;
+  event_id: Id;
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot completo (lo que carga el motor en RAM y persiste)
+// ---------------------------------------------------------------------------
+
+export interface WorldSnapshot {
+  campaign: Campaign;
+  regions: Region[];
+  zones: Zone[];
+  locations: Location[];
+  spots: Spot[];
+  exits: Exit[];
+  characters: Character[];
+  npcs: Npc[];
+  vehicles: Vehicle[];
+  item_defs: ItemDef[];
+  item_instances: ItemInstance[];
+  resource_nodes: ResourceNode[];
+}
