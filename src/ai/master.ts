@@ -33,6 +33,28 @@ export interface MasterOptions {
 
 const CACHE_TTL: Anthropic.Beta.BetaCacheControlEphemeral = { type: 'ephemeral', ttl: '1h' };
 
+/** Haiku no admite el parámetro de fallbacks ante rechazos; el resto de la familia 5 sí. */
+function modelSupportsFallbacks(model: string): boolean {
+  return !model.startsWith('claude-haiku');
+}
+
+/**
+ * Modelo y esfuerzo efectivos: la campaña manda, salvo que MASTER_MODEL / MASTER_EFFORT
+ * los sobrescriban (pensado para partidas de prueba con un modelo barato).
+ */
+export function effectiveModel(cfg: { model: string; effort: 'low' | 'medium' | 'high' }, env: NodeJS.ProcessEnv = process.env): { model: string; effort: 'low' | 'medium' | 'high' } {
+  const model = env['MASTER_MODEL']?.trim() || cfg.model;
+  const e = env['MASTER_EFFORT']?.trim();
+  const effort = e === 'low' || e === 'medium' || e === 'high' ? e : cfg.effort;
+  return { model, effort };
+}
+
+/** Cliente real contra la API (SDK de Anthropic). Lee la clave del entorno. */
+export function liveClient(timeoutMs = 90_000): MasterClient {
+  const sdk = new Anthropic({ timeout: timeoutMs, maxRetries: 2 });
+  return { create: (p) => sdk.beta.messages.create(p) };
+}
+
 export class Master {
   private readonly client: MasterClient;
   private readonly rng: Rng;
@@ -41,14 +63,12 @@ export class Master {
   constructor(private readonly engine: Engine, opts: MasterOptions = {}) {
     this.rng = opts.rng ?? defaultRng;
     this.timeoutMs = opts.timeoutMs ?? 90_000;
-    if (opts.client) this.client = opts.client;
-    else {
-      const sdk = new Anthropic({ timeout: this.timeoutMs, maxRetries: 2 });
-      this.client = { create: (p) => sdk.beta.messages.create(p) };
-    }
+    this.client = opts.client ?? liveClient(this.timeoutMs);
   }
 
-  static configured(): boolean {
+  /** ¿Se puede arrancar el máster? Los modos sin API (offline, replay) siempre; live y record necesitan clave. */
+  static configured(mode: 'live' | 'record' | 'replay' | 'offline' = 'live'): boolean {
+    if (mode === 'offline' || mode === 'replay') return true;
     return Boolean(process.env['ANTHROPIC_API_KEY'] || process.env['ANTHROPIC_AUTH_TOKEN']);
   }
 
@@ -56,6 +76,10 @@ export class Master {
   async resolve(actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string }, scene?: Scene, decisive?: DecisiveResponse): Promise<MasterOutcome> {
     const { engine } = this;
     const cfg = engine.world.campaign.master;
+    const { model, effort } = effectiveModel(cfg);
+    const safeguards: Partial<Pick<Anthropic.Beta.MessageCreateParamsNonStreaming, 'betas' | 'fallbacks'>> = modelSupportsFallbacks(model)
+      ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }
+      : {};
     const context = actionContext(engine, actor, text, roll, intro, scene, decisive);
     const ctx: ToolContext = { engine, actor, nowGameS: engine.gameNow(), rng: this.rng, closed: null, rolls: [], progress: [] };
     const calls: ToolCallRecord[] = [];
@@ -68,11 +92,10 @@ export class Master {
       for (let i = 0; i < cfg.max_tool_calls + 1; i++) {
         usage.iterations++;
         const res = await this.client.create({
-          model: cfg.model,
+          model,
           max_tokens: 4096,
-          betas: ['server-side-fallback-2026-07-01'],
-          fallbacks: 'default',
-          output_config: { effort: cfg.effort },
+          ...safeguards,
+          output_config: { effort },
           system: [{ type: 'text', text: systemPrompt(engine.world.campaign), cache_control: CACHE_TTL }],
           tools: MASTER_TOOLS,
           messages,
@@ -114,12 +137,12 @@ export class Master {
       // Tope alcanzado: una última llamada solo con log_event para que cierre narrando lo conseguido y lo que falló.
       messages.push({ role: 'user', content: 'Has agotado las llamadas a tools. Cierra AHORA con log_event: narra lo que sí ha ocurrido y, si algo no fue posible, dilo en ficción. No intentes más cambios.' });
       const fin = await this.client.create({
-        model: cfg.model, max_tokens: 2048,
-        betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
-        output_config: { effort: cfg.effort },
+        model, max_tokens: 2048,
+        ...safeguards,
+        output_config: { effort },
         system: [{ type: 'text', text: systemPrompt(engine.world.campaign), cache_control: CACHE_TTL }],
         tools: MASTER_TOOLS.filter((t) => t.name === 'log_event'),
-        tool_choice: { type: 'tool', name: 'log_event' },
+        tool_choice: { type: 'auto' },
         messages,
       });
       usage.iterations++;

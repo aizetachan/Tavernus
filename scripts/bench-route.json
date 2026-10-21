@@ -1,0 +1,21 @@
+{
+  "name": "kael-taberna-plaza",
+  "description": "Kael empieza en la barra de la Taberna del Jabalí: habla con Brenna, compra, insiste sobre la quemadura (tirada social), sale a la plaza y habla con Doro en el portón.",
+  "character_id": "ch_kael",
+  "start_spot": "sp_tab_barra",
+  "seed": 20261016,
+  "step_real_s": 30,
+  "max_rolls_per_action": 2,
+  "actions": [
+    { "id": "a01", "kind": "diálogo", "text": "Me apoyo en la barra y le pido a Brenna una cerveza." },
+    { "id": "a02", "kind": "diálogo", "text": "Le pregunto a Brenna por el aviso del perro perdido que hay en el tablón." },
+    { "id": "a03", "kind": "diálogo", "text": "Le digo a Brenna que acepto el encargo: buscaré a Ceniza y se lo traeré." },
+    { "id": "a04", "kind": "compra", "text": "Le compro a Brenna una antorcha." },
+    { "id": "a05", "kind": "diálogo", "text": "Le pregunto a Brenna, sin rodeos, cómo se hizo la quemadura del dorso de la mano." },
+    { "id": "a06", "kind": "tirada social", "text": "Insisto con tacto: le digo que yo también he visto incendios y que puede confiar en mí. Quiero saber qué pasó con esa quemadura.", "expect_roll": true, "dry_run_roll": { "kind": "skill", "key": "persuasion", "dc": 16 } },
+    { "id": "a07", "kind": "movimiento", "text": "Me termino la cerveza, me despido de Brenna y salgo a la plaza." },
+    { "id": "a08", "kind": "movimiento", "text": "Cruzo la plaza hasta el portón norte, donde hace guardia Doro." },
+    { "id": "a09", "kind": "diálogo", "text": "Saludo a Doro y le pregunto si ha visto pasar un perro pardo con una oreja rota." },
+    { "id": "a10", "kind": "diálogo", "text": "Le pregunto a Doro, como entre colegas, si ha notado algo raro últimamente en el camino de la montaña." }
+  ]
+}

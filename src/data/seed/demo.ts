@@ -11,7 +11,7 @@ export const SEED_REAL_EPOCH_MS = Date.UTC(2026, 8, 1, 10, 0, 0);
 export const SEED_GAME_EPOCH_S = 8 * 3600;
 
 export const DEFAULT_MASTER: MasterConfig = {
-  model: 'claude-opus-5',
+  model: 'claude-haiku-5-5',
   effort: 'low',
   name: 'el Narrador',
   voice: [
@@ -72,11 +72,11 @@ const SEED: WorldSnapshot = {
     master: DEFAULT_MASTER,
     factions: [{ id: 'fac_brezal', name: 'la aldea de Brezal', description: 'Los vecinos de Brezal. Desconfían de los forasteros hasta que hacen algo por la aldea.' }],
     clues: [
-      { id: 'clue_hacha', title: 'El hacha con hollín', how: 'Examinar de cerca el hacha de leñador del claro (o el mango de cualquier hacha del claro): el hollín del mango es reciente y huele a resina quemada, no a leña de hogar. Alguien bajó de la montaña hace pocos días. Se obtiene con una tirada de Investigación CD 10 o Supervivencia CD 10 al examinarla con intención.', reputation: 2 },
-      { id: 'clue_brenna', title: 'La noche del incendio', how: 'Brenna admite, a medias, que estuvo en Vharn la noche del incendio y que "no fue un accidente". Solo tras confianza ganada en varias conversaciones o una tirada de Persuasión/Perspicacia CD 16. Nunca da el nombre del culpable.', reputation: 2 },
-      { id: 'clue_doro', title: 'Luces en la ciudadela', how: 'Doro confiesa que ha visto luces arriba dos noches seguidas y no lo ha contado. Sale si el jugador le trata como a un igual, le invita a algo o supera Persuasión CD 13; con Intimidación se cierra.', reputation: 2 },
-      { id: 'clue_pozo', title: 'Ceniza en el agua del pozo', how: 'Al sacar agua del pozo o mirar el cubo con atención: el agua trae ceniza fina y un olor a azufre. El pozo lo alimenta un arroyo que baja de la montaña. Tirada de Percepción CD 11 o Naturaleza CD 10.', reputation: 2 },
-      { id: 'clue_trampilla', title: 'Lo que hay bajo la taberna', how: 'Descubrir la trampilla oculta bajo la alfombra de la mesa del fondo (Percepción/Investigación CD 14) y bajar: un sótano con cajas marcadas con el sello de Vharn, tapadas con sacos. Brenna no quiere que se vea.', reputation: 2 },
+      { id: 'clue_hacha', title: 'El hacha con hollín', how: 'Examinar de cerca el hacha de leñador del claro (o el mango de cualquier hacha del claro): el hollín del mango es reciente y huele a resina quemada, no a leña de hogar. Alguien bajó de la montaña hace pocos días. Se obtiene con una tirada de Investigación CD 10 o Supervivencia CD 10 al examinarla con intención.', reputation: 2, location_ids: ['loc_claro'] },
+      { id: 'clue_brenna', title: 'La noche del incendio', how: 'Brenna admite, a medias, que estuvo en Vharn la noche del incendio y que "no fue un accidente". Solo tras confianza ganada en varias conversaciones o una tirada de Persuasión/Perspicacia CD 16. Nunca da el nombre del culpable.', reputation: 2, npc_ids: ['npc_brenna'] },
+      { id: 'clue_doro', title: 'Luces en la ciudadela', how: 'Doro confiesa que ha visto luces arriba dos noches seguidas y no lo ha contado. Sale si el jugador le trata como a un igual, le invita a algo o supera Persuasión CD 13; con Intimidación se cierra.', reputation: 2, npc_ids: ['npc_doro'] },
+      { id: 'clue_pozo', title: 'Ceniza en el agua del pozo', how: 'Al sacar agua del pozo o mirar el cubo con atención: el agua trae ceniza fina y un olor a azufre. El pozo lo alimenta un arroyo que baja de la montaña. Tirada de Percepción CD 11 o Naturaleza CD 10.', reputation: 2, location_ids: ['loc_plaza'] },
+      { id: 'clue_trampilla', title: 'Lo que hay bajo la taberna', how: 'Descubrir la trampilla oculta bajo la alfombra de la mesa del fondo (Percepción/Investigación CD 14) y bajar: un sótano con cajas marcadas con el sello de Vharn, tapadas con sacos. Brenna no quiere que se vea.', reputation: 2, location_ids: ['loc_taberna'] },
     ],
     jobs: [
       { id: 'job_lena', title: 'Leña para la posada', text: 'Brenna paga por diez leños secos. Los del roble del claro sirven.', giver_npc_id: 'npc_brenna', kind: 'deliver', deliver: { item_id: 'it_madera', quantity: 10 }, reward_coins: 900, reward_reputation: 1 },

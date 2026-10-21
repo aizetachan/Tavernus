@@ -65,7 +65,7 @@ describe('Master', () => {
 
     // Petición: sistema cacheado, tools completos, contexto con la acción.
     const p = requests[0]!;
-    expect(p.model).toBe('claude-opus-5');
+    expect(p.model).toBe('claude-haiku-5-5');
     expect((p.system as { cache_control?: unknown }[])[0]!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
     expect(p.tools).toHaveLength(MASTER_TOOLS.length);
     expect(p.messages[0]!.content).toContain('«Me acerco a Brenna y le pido una cerveza»');
