@@ -13,13 +13,19 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "node --env-file-if-exists=.env dist/index.js",
-    "dev": "node --env-file-if-exists=.env --import tsx src/index.ts"
+    "dev": "node --env-file-if-exists=.env --import tsx src/index.ts",
+    "web": "node --env-file-if-exists=.env --import tsx src/index.ts --web",
+    "rules:ingest": "node --import tsx scripts/ingest-rules.ts",
+    "bench": "node --env-file-if-exists=.env --import tsx scripts/model-bench.ts",
+    "bench:report": "node --import tsx scripts/bench-report.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "pdfjs-dist": "^4.10.38",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "word-list": "^4.1.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

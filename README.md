@@ -1,6 +1,6 @@
 # Tavernus
 
-D&D multijugador por chat con Master IA. La spec completa está en [`docs/SPEC.md`](docs/SPEC.md).
+D&D multijugador por chat con Master IA. La spec completa está en [`docs/SPEC.md`](docs/SPEC.md); la dirección y las fases hacia mundos generados y vivos, en [`docs/PLAN.md`](docs/PLAN.md).
 
 Principio rector: **la base de datos es la verdad; el master IA solo puede cambiarla a través de tools.**
 
@@ -25,6 +25,7 @@ Lo que hay funcionando, con tests:
 | Alta mínima de personaje (solo nombre; el flujo SRD llega en fase 2) y presencia: conectado = online o acción en 30 min, si no velo | `src/engine/engine.ts` | §4.6, §9.1 |
 | Bot de Discord: `#pov-<nombre>` privado, `#hoja-<nombre>` con hoja viva fijada, `#tablon`, `#ooc`, `#crear-personaje`, comandos slash efímeros, reportes con ⚠️ + reply en `#reportes` | `src/adapters/discord/` | §11.2 |
 | REPL de terminal, mismo motor | `src/adapters/repl.ts` | §11 |
+| Web local (chat, botones, hoja), mismo motor | `src/adapters/web/` | §11 |
 
 El repositorio Firestore está escrito pero **no probado contra un proyecto real** todavía.
 
@@ -53,9 +54,19 @@ Pendiente de la fase 2: descanso y muerte con reaparición, hechizos y barra rá
 
 ```
 npm install
-npm test          # 83 tests
+npm test          # 178 tests
 npm run dev       # sin .env: REPL local con dos personajes y persistencia en ./data/local
 ```
+
+### Web local
+
+```
+npm run web       # http://localhost:3000 (puerto en WEB_PORT)
+```
+
+Una página con el `#pov` del personaje elegido, botones de acciones sugeridas y 🎲, comandos `/look /where /who…` y la hoja al lado. Sin autenticación: escucha solo en `127.0.0.1`.
+
+**Menú y partidas.** Al entrar aparece un menú con cuatro bloques: *Nueva partida* (nombre, máster real / offline / grabar demo y, si quieres, un personaje propio con raza y clase), *Continuar* (abrir o borrar las guardadas), *Demos* (abrir o empezar de nuevo) y *Grabaciones* (abrir o «convertir en demo»). No hace falta tocar variables de entorno ni reiniciar. Cada partida es una carpeta `data/games/<slug>/` (`GAMES_DIR` la cambia) con un `game.json` (nombre, fechas, campaña, modo del máster, carpeta de datos, carpeta de caché y semilla de dados opcional) y dentro sus datos JSON (`data/`) y su caché de respuestas (`master-cache/`); el servidor arranca un motor por partida al abrirla y la partida viaja en la URL (`/?game=<slug>`; todas las rutas `/api/*` piden `?game=`). Una grabación es una partida real en modo `record` con semilla de dados fija y una foto del estado recién creado (`initial/`); al convertirla en demo pasa a `replay` con su caché, lo jugado se guarda en `recorded/` y la demo vuelve a empezar desde esa foto, así que se repite sin gastar tokens (lo que no esté en la caché lo narra el cliente offline, con aviso en consola). La primera vez, la partida de `DATA_DIR` pasa a ser la «principal» sin mover sus ficheros (con el modo de `MASTER_MODE`) y, si hay caché en `data/local/master-cache`, se empaqueta como «Demo inicial». La web siempre guarda en JSON; Discord y el REPL siguen con un motor único sobre `DATA_DIR`/Firestore. Con `npm run web` y la configuración `tavernus-web-offline` de `.claude/launch.json` se prueba todo sin API (sus partidas van a `data/local/offline/games`).
 
 ### Bot de Discord
 
@@ -66,7 +77,11 @@ npm run dev       # sin .env: REPL local con dos personajes y persistencia en ./
 
 Los dos personajes de la semilla (Kael, Mira) tienen `user_id` ficticios; en Discord no tendrán canal hasta que se cambie su `user_id` por un ID real o se creen personajes nuevos.
 
-Con `ANTHROPIC_API_KEY` en `.env` el master es Claude (modelo y esfuerzo en `campaign.master`); sin ella, narración plana. Prueba rápida sin Discord:
+Con `ANTHROPIC_API_KEY` en `.env` el master es Claude (modelo y esfuerzo en `campaign.master`, salvo que `MASTER_MODEL` y `MASTER_EFFORT` los sobrescriban: hoy `.env` fija Haiku a esfuerzo bajo para probar sin gastar); sin ella, narración plana. Prueba rápida sin Discord:
+
+Para jugar o probar sin gastar tokens, `MASTER_MODE` elige el máster: `live` (por defecto) llama a la API en cada acción; `offline` no la llama nunca y responde con un cierre determinista sacado del contexto («Haces X. Nada cambia.», 2-3 acciones sugeridas de los puntos y salidas presentes; si la acción dice «ataco» o «atacar», pide una tirada de ataque para probar el flujo del dado); `record` envuelve al máster real y guarda cada respuesta en `data/local/master-cache/<hash>.json` (hash estable de sistema + tools + mensajes, sin horas), devolviéndola sin llamar si ya existe; `replay` solo lee esa caché y, si falta una petición, avisa por consola y responde en modo offline. Así `MASTER_MODE=offline npm run web` permite jugar en el navegador sin clave (`MASTER_CACHE_DIR` cambia la carpeta de la caché; el motor y el `engine` no cambian).
+
+**Ilustraciones de escena (opcional).** Con `IMAGES=on`, la primera vez que un personaje pisa una localización (al crearlo o al llegar viajando) el motor encola una ilustración de esa escena (`src/ai/illustrate.ts`). Si hay `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`, la genera Cloudflare Workers AI (`@cf/black-forest-labs/flux-1-schnell`, 4 pasos, 1024x1024, hasta 2 peticiones a la vez y sin espaciado; cuota gratuita de 10.000 neuronas al día, unas 170 imágenes); si Cloudflare falla (red, `success: false`, o cuota agotada con 429 o error en `errors`, y entonces no se vuelve a probar hasta la medianoche UTC) o no hay esas variables, la hace [Pollinations](https://pollinations.ai). La consola dice qué proveedor sirvió cada imagen. La dispara el motor, no el máster, y no gasta tokens. El prompt es corto y determinista (nombre y descripción base de la localización, luz del momento y un estilo fijo «fantasy illustration, medieval, painterly») y la seed sale de la semilla del mundo (la de dados de la partida o, si no hay, el id de campaña) más el id de la localización: la misma escena da siempre la misma imagen y nunca se pide dos veces (caché en memoria y en `images/index.json`). El servidor descarga el JPEG a `data/games/<slug>/images/<locId>-<seed>.jpg` (Discord y el REPL: `DATA_DIR/images`); la web lo sirve en `/images/<fichero>?game=<slug>` y lo muestra sobre el chat, cambiándolo al moverte, y Discord lo manda al `#pov` como recuadro con la imagen adjunta. Con Pollinations, sin clave funciona en modo anónimo: la imagen lleva un logo pequeño y Pollinations limita a ~1 imagen cada 45 s por IP, contados desde que termina la anterior; la cola pide de una en una, deja 45 s entre peticiones y, ante un 402/429, espera lo que diga `Retry-After` (nunca menos de esos 45 s) y reintenta; una petición colgada se corta a los 90 s. Si se pasa del límite, Pollinations sirve al navegador una imagen «Free limit reached» que no se distingue de una buena, por eso la descarga la hace el servidor, que sí ve el 402; si falla del todo, no se muestra nada y la escena se vuelve a intentar a los 5 minutos. Con `POLLINATIONS_API_KEY` (de enter.pollinations.ai) la petición lleva `Authorization: Bearer` y sale sin logo ni límite. Por defecto está apagado (`IMAGES=off`), así que los tests no tocan la red; con `IMAGES=on` funciona en cualquier modo del máster, también `offline` (ese modo solo evita la API de Anthropic). Las partidas que ya estaban en marcha al activarlo piden la escena actual al abrir la página. Para probarlo sin gastar tokens: configuración `tavernus-web-images` de `.claude/launch.json` (puerto 3127, API de Anthropic desconectada).
 
 ```
 node --env-file=.env --import tsx scripts/master-smoke.ts "mirar" "le pido una cerveza a Brenna" "tirar"
@@ -116,7 +131,8 @@ src/clock        reloj global y tickers persistentes
 src/persistence  contrato de repositorio, memoria, ficheros JSON, Firestore
 src/data/seed    campaña semilla
 src/ai           (fase 2) master y director
-src/adapters     bot de Discord y REPL de terminal
+src/adapters     bot de Discord, REPL de terminal y web local
+src/games        gestor de partidas de la web (data/games/<slug>)
 src/api          (PWA) interfaz HTTP/WS
 test/            vitest
 docs/SPEC.md     especificación completa

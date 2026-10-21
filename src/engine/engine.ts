@@ -13,7 +13,10 @@ import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, transferItem, type InventoryView, type TransferError } from './inventory.js';
 import type { Character, GameEvent, Id, Npc, Pace, Placement, WorldSnapshot } from './model.js';
 import { interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
-import { describeSurroundings, fmtDuration, whereAmI, whoIsHere } from './narrate.js';
+import { aEs, arrivalNarration, describeSurroundings, fmtDuration, whereAmI, whoIsHere } from './narrate.js';
+import { encounterChance, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
+import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
+import type { Rng } from './dice.js';
 import { harvest } from './resources.js';
 import { spawnItem } from './inventory.js';
 import { characterCheck, type CheckKind } from './rules.js';
@@ -53,16 +56,40 @@ export interface CharacterSpec {
 
 /** Contrato mínimo del master para el motor (implementado en src/ai/master.ts). */
 export interface MasterLike {
-  resolve(actor: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string }, scene?: 'arrival' | 'decisive_timeout', decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<MasterResolution>;
+  resolve(actor: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<MasterResolution>;
 }
+/** `hook`: salta un gancho sembrado (hooks.ts) sin acción del jugador. */
+export type MasterScene = 'arrival' | 'decisive_timeout' | 'hook';
+
+/**
+ * Lo que el motor quiere que el master tenga delante en esta llamada, además de
+ * la acción: ganchos que saltan ahora o que ha salido la tirada de imprevisto.
+ * El master lo lee con `engine.sceneHints(actor.id)` al montar el contexto.
+ */
+export interface SceneHints {
+  hooks: Hook[];
+  encounter: { chance: number; roll: number } | null;
+}
+
 export type MasterResolution =
   | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[] }
   | { ok: false; reason: string; message: string; usage?: unknown; calls?: unknown };
+
+/** Un PJ pisa una localización por primera vez (para ilustrarla, src/ai/illustrate.ts). */
+export interface FirstVisit { character_id: Id; location_id: Id; game_s: number }
+export type FirstVisitListener = (v: FirstVisit) => void;
 
 export interface EngineOptions {
   repo: Repository;
   /** Reloj real inyectable para tests. */
   now?: () => number;
+  /** Azar de la tirada de imprevisto; inyectable para tests. */
+  rng?: Rng;
+  /**
+   * Acciones triviales y llegadas sin IA cuando la escena está tranquila
+   * (por defecto sí). Con false, todo pasa por el master como antes.
+   */
+  deterministic?: boolean;
 }
 
 export class Engine {
@@ -77,6 +104,12 @@ export class Engine {
   private tickerTask: Promise<void> | null = null;
   private master: MasterLike | null = null;
   private pendingRolls = new Map<Id, PendingRoll>();
+  private readonly rng: Rng;
+  readonly deterministic: boolean;
+  private hints = new Map<Id, SceneHints>();
+  /** Localización desde la que salió cada viaje iniciado por el motor (para saber si la llegada cruza a otra). */
+  private tripFrom = new Map<Id, Id>();
+  private firstVisitListeners: FirstVisitListener[] = [];
   /** Verbos mecánicos que no pasan por el master aunque esté configurado. */
   private static readonly MECHANICAL = /^(inventario|inventory|qui[eé]n|who|d[oó]nde|where|dormir|duermo|me duermo|descansar|descanso|sleep|despierto|despertar|me despierto|wake|parar|me paro|me detengo|stop)\b/i;
 
@@ -103,6 +136,8 @@ export class Engine {
   private constructor(snapshot: WorldSnapshot, opts: EngineOptions, lastSeq: number) {
     this.repo = opts.repo;
     this.now = opts.now ?? (() => Date.now());
+    this.rng = opts.rng ?? Math.random;
+    this.deterministic = opts.deterministic ?? true;
     this.realClock = !opts.now;
     this.world = new World(snapshot);
     this.clock = GameClock.fromCampaign(this.world.campaign);
@@ -135,6 +170,18 @@ export class Engine {
   gameNow(): number { return this.clock.gameNow(this.now()); }
 
   onDelivery(l: DeliveryListener): () => void { return this.events.onDelivery(l); }
+
+  /** Primera llegada de un PJ a una localización (al crear el personaje o al viajar). Sin red: solo avisa. */
+  onFirstVisit(l: FirstVisitListener): () => void {
+    this.firstVisitListeners.push(l);
+    return () => { this.firstVisitListeners = this.firstVisitListeners.filter((x) => x !== l); };
+  }
+
+  private firstVisit(v: FirstVisit): void {
+    for (const l of this.firstVisitListeners) {
+      try { l(v); } catch (e) { console.error('[engine] primera visita:', e); }
+    }
+  }
 
   // -------------------------------------------------------------------------
   // Reloj y tickers
@@ -189,33 +236,93 @@ export class Engine {
   private settleAll(nowGameS: number): void {
     for (const c of this.world.characters.values()) {
       if (!c.transit) continue;
+      const startLoc = this.world.characterSpot(c)?.location_id;
       const r = settleTransit(this.world, c, nowGameS);
       for (const reached of r.reached) {
         const spot = this.world.spot(reached.spot_id);
         const loc = this.world.location(spot.location_id);
-        if (loc.discovery[c.id] !== 'visited') { loc.discovery[c.id] = 'visited'; this.world.touch('locations', loc.id); }
+        const firstVisit = loc.discovery[c.id] !== 'visited';
+        if (firstVisit) { loc.discovery[c.id] = 'visited'; this.world.touch('locations', loc.id); }
         const last = r.arrived && reached === r.reached[r.reached.length - 1];
-        // Con master, la llegada al destino la narra él (escena de llegada); el aviso plano queda para los tramos intermedios.
-        const narrated = last && this.master !== null && c.status === 'active' && c.connected;
+        // Con master, la llegada al destino la narra él (escena de llegada) salvo que sea trivial: entonces, plantilla.
+        // El aviso plano queda para los tramos intermedios y para quien no está mirando.
+        const live = last && this.master !== null && c.status === 'active' && c.connected;
+        const crossed = (this.tripFrom.get(c.id) ?? startLoc) !== spot.location_id;
+        const plan = live ? this.arrivalPlan(c, spot.id, firstVisit, crossed) : null;
+        if (last) this.tripFrom.delete(c.id);
+        const template = plan?.kind === 'template';
         this.events.emit({
           actor_id: c.id,
           at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
           action_type: last ? 'arrived' : 'passed',
-          narration_private: narrated ? '' : last ? `Llegas a ${spot.name}.` : `Pasas por ${spot.name}.`,
-          observable: last ? `${c.name} llega a ${spot.name}.` : `${c.name} pasa por ${spot.name}.`,
-          tags: ['movement'],
-          payload: { observable_vague: last ? `Una figura llega a ${spot.name}.` : `Una figura pasa por ${spot.name}.` },
+          narration_private: template ? arrivalNarration(this.world, this.clock, c, reached.at_game_s, crossed)
+            : plan ? '' : last ? `Llegas a ${spot.name}.` : `Pasas por ${spot.name}.`,
+          observable: last ? `${c.name} llega ${aEs(spot.name)}.` : `${c.name} pasa por ${spot.name}.`,
+          tags: template ? ['movement', 'deterministic'] : ['movement'],
+          payload: {
+            observable_vague: last ? `Una figura llega ${aEs(spot.name)}.` : `Una figura pasa por ${spot.name}.`,
+            ...(template ? { master: null, suggested_actions: suggestActions(this.world, this.clock, c, reached.at_game_s) } : {}),
+          },
         }, this.clock.realAt(reached.at_game_s));
-        if (narrated) this.narrateArrival(c);
+        if (firstVisit) this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: reached.at_game_s });
+        if (plan?.kind === 'master') this.narrateArrival(c, plan.hints);
       }
     }
   }
 
+  /**
+   * ¿Quién narra esta llegada? El master si se pide en la configuración
+   * (`master.narrate_arrivals: true`), si es la primera visita a la localización,
+   * si salta un gancho, si la escena está tensa o si al cruzar a otra
+   * localización sale la tirada de imprevisto. Si no, plantilla y coste cero.
+   */
+  private arrivalPlan(c: Character, spotId: Id, firstVisit: boolean, crossed: boolean): { kind: 'template' } | { kind: 'master'; hints: SceneHints | null } {
+    const cfg = this.world.campaign.master as { narrate_arrivals?: boolean };
+    if (!this.deterministic || cfg.narrate_arrivals === true || firstVisit) return { kind: 'master', hints: null };
+    const locId = this.world.spot(spotId).location_id;
+    const hooks = [
+      ...matchHooks(this.world, { kind: 'spot', spot_id: spotId, character_id: c.id }),
+      ...(crossed ? matchHooks(this.world, { kind: 'location', location_id: locId, character_id: c.id }) : []),
+    ];
+    if (hooks.length) return { kind: 'master', hints: { hooks, encounter: null } };
+    if (tension(this.world, c, [locId], this.recentTags([locId]))) return { kind: 'master', hints: null };
+    if (crossed) {
+      const chance = encounterChance(this.world, this.world.location(locId));
+      const roll = this.rng();
+      if (roll < chance) return { kind: 'master', hints: { hooks: [], encounter: { chance, roll } } };
+    }
+    return { kind: 'template' };
+  }
+
+  /** Etiquetas de los eventos de los últimos 10 min de juego en esas localizaciones. */
+  private recentTags(locationIds: Id[]): string[] {
+    const nowG = this.gameNow();
+    return locationIds.flatMap((l) => this.events.recentInLocation(l, 12).filter((e) => nowG - e.timestamp_game_s < 600).flatMap((e) => e.tags));
+  }
+
+  /** Ganchos e imprevisto que acompañan la llamada en curso del master para este PJ. */
+  sceneHints(characterId: Id): SceneHints | null { return this.hints.get(characterId) ?? null; }
+
+  /** Ganchos pendientes en una localización (para el contexto del master). */
+  hooksIn(locationId: Id): Hook[] { return pendingHooksIn(this.world, locationId); }
+
+  /** Llama al master con pistas de escena; los ganchos se consumen solo si el master respondió. */
+  private async resolveWithHints(c: Character, text: string, hints: SceneHints | null, scene?: MasterScene): Promise<ActionResult> {
+    if (hints) this.hints.set(c.id, hints);
+    try {
+      const r = await this.resolveWithMaster(c, text, undefined, undefined, scene);
+      if (r.ok && hints) consumeHooks(this.world, hints.hooks.map((h) => h.id));
+      return r;
+    } finally {
+      this.hints.delete(c.id);
+    }
+  }
+
   /** Escena de llegada: el master sitúa al PJ en el destino con lo que hay alrededor y qué puede hacer. */
-  private narrateArrival(c: Character): void {
+  private narrateArrival(c: Character, hints: SceneHints | null = null): void {
     const locId = this.world.characterSpot(c)!.location_id;
     void this.runInLocation(locId, async () => {
-      const r = await this.resolveWithMaster(c, '(llegada)', undefined, undefined, 'arrival');
+      const r = await this.resolveWithHints(c, '(llegada)', hints, 'arrival');
       if (!r.ok) {
         const spot = this.world.characterSpot(c)!;
         this.events.emit({ actor_id: c.id, action_type: 'arrived', narration_private: `Llegas a ${spot.name}.\n${describeSurroundings(this.world, this.clock, c, this.gameNow())}`, observable: null, tags: ['movement'] }, this.now());
@@ -235,9 +342,40 @@ export class Engine {
       this.settleAll(nowG);
       for (const id of this.presence.keys()) this.refreshConnection(id);
       this.checkDecisiveWindows();
+      this.fireTimeHooks(nowG);
+      pruneHooks(this.world, nowG);
       await this.flush();
     })();
     try { await this.tickerTask; } finally { this.tickerTask = null; }
+  }
+
+  /**
+   * Ganchos de hora vencida: saltan con un PJ despierto y conectado en su
+   * localización (el destinatario si lo hay). Sin nadie que lo vea, esperan
+   * hasta que caducan.
+   */
+  private fireTimeHooks(nowG: number): void {
+    if (!this.master) return;
+    const due = matchHooks(this.world, { kind: 'time', now_game_s: nowG });
+    const byLoc = new Map<Id, Hook[]>();
+    for (const h of due) byLoc.set(h.location_id, [...(byLoc.get(h.location_id) ?? []), h]);
+    for (const [locId, hooks] of byLoc) {
+      const here = this.world.charactersInLocation(locId).filter((c) => c.status === 'active' && c.connected && !c.transit);
+      const fire: { c: Character; hooks: Hook[] }[] = [];
+      for (const h of hooks) {
+        const c = h.for_character_id ? here.find((x) => x.id === h.for_character_id) : here[0];
+        if (!c) continue;
+        const slot = fire.find((f) => f.c.id === c.id);
+        if (slot) slot.hooks.push(h); else fire.push({ c, hooks: [h] });
+      }
+      for (const { c, hooks: hs } of fire) {
+        consumeHooks(this.world, hs.map((h) => h.id)); // saltan una vez, aunque el master falle
+        void this.runInLocation(locId, async () => {
+          await this.resolveWithHints(c, `(sucede: ${hs.map((h) => h.what).join(' / ')})`, { hooks: hs, encounter: null }, 'hook');
+          await this.flush();
+        }).catch((e) => console.error('[engine] gancho:', e));
+      }
+    }
   }
 
   async flush(): Promise<void> {
@@ -276,7 +414,10 @@ export class Engine {
         decisive = { seconds, speed: seconds < Engine.DECISIVE_FAST_S ? 'fast' : 'normal', threat: c.decisive.threat };
         this.closeDecisive(c);
       }
-      if (this.master && c.status === 'active' && !Engine.MECHANICAL.test(clean)) {
+      const fast = decisive ? null : await this.tryTrivial(c, clean);
+      if (fast) {
+        r = fast;
+      } else if (this.master && c.status === 'active' && !Engine.MECHANICAL.test(clean)) {
         r = await this.resolveWithMaster(c, clean, undefined, undefined, undefined, decisive);
         if (!r.ok && r.text === '') {
           r = this.resolveAction(c, clean); // fallo del master: parser plano
@@ -288,6 +429,119 @@ export class Engine {
       await this.flush();
       return r;
     });
+  }
+
+  private static readonly REST = /^(dormir|duermo|me duermo|descansar|descanso|sleep)\b/i;
+
+  /**
+   * Acción trivial sin IA (fastpath.ts). Devuelve null si no lo es y debe seguir
+   * el camino de siempre. Aunque sea trivial va al master si la escena está
+   * tensa, si salta un gancho o si sale la tirada de imprevisto.
+   */
+  private async tryTrivial(c: Character, text: string): Promise<ActionResult | null> {
+    if (!this.deterministic || !this.master || c.status !== 'active') return null;
+    const nowG = this.gameNow();
+    const locId = positionOf(this.world, c, nowG).location_id;
+
+    // Dormir y descansar ya no pasan por el master; la noche también puede interrumpirse.
+    if (Engine.REST.test(text)) {
+      const chance = encounterChance(this.world, this.world.location(locId));
+      const tense = tension(this.world, c, [locId], this.recentTags([locId]));
+      const roll = tense ? 0 : this.rng();
+      if (!tense && roll >= chance) return null;
+      const r = await this.resolveWithHints(c, text, tense ? null : { hooks: [], encounter: { chance, roll } });
+      return r.ok || r.text !== '' ? r : null;
+    }
+
+    const intent = parseTrivial(this.world, c, text);
+    if (!intent) return null;
+    if (intent.kind === 'move' && intent.pace === 'stealth') return null; // el sigilo es una prueba: al master
+    const locs = intent.kind === 'move' && intent.exit ? [locId, this.world.spot(intent.spot_id).location_id] : [locId];
+    if (tension(this.world, c, locs, this.recentTags(locs))) return null;
+
+    const cues: HookCue[] = [];
+    if (intent.kind === 'move') cues.push({ kind: 'spot', spot_id: intent.spot_id, character_id: c.id });
+    if (intent.kind === 'take') cues.push({ kind: 'item', item_id: this.world.itemInstance(intent.instance_id).item_id, location_id: locId, character_id: c.id });
+    const hooks = cues.flatMap((cue) => matchHooks(this.world, cue));
+    let hints: SceneHints | null = null;
+    if (hooks.length) hints = { hooks, encounter: null };
+    else {
+      const chance = encounterChance(this.world, this.world.location(locId));
+      const roll = this.rng();
+      if (roll < chance) hints = { hooks: [], encounter: { chance, roll } };
+    }
+    if (hints) {
+      const r = await this.resolveWithHints(c, text, hints);
+      if (r.ok || r.text !== '') return r;
+      // El master no responde: la acción trivial sale igual; los ganchos esperan a la próxima.
+    }
+    return this.execTrivial(c, text, intent);
+  }
+
+  /** Ejecuta con las mismas funciones que usan los tools y narra con plantilla. null si el motor la rechaza (al master). */
+  private execTrivial(c: Character, input: string, intent: TrivialIntent): ActionResult | null {
+    const nowG = this.gameNow();
+    const here = this.world.spot(positionOf(this.world, c, nowG).spot_id);
+    switch (intent.kind) {
+      case 'move': {
+        const res = moveTo(this.world, c.id, intent.spot_id, intent.pace, nowG);
+        if (!res.ok) return null;
+        this.tripFrom.set(c.id, here.location_id);
+        const dest = this.world.spot(intent.spot_id);
+        const run = intent.pace === 'run' ? ' a la carrera' : '';
+        const eta = res.total_s < 60 ? '' : ` Tardarás ${fmtDuration(res.total_s)} de juego (${fmtDuration(this.clock.gameToReal(res.total_s))} reales).`;
+        if (intent.exit) {
+          const loc = this.world.location(dest.location_id);
+          return this.emitTrivial(c, input, 'move', 'movement', `Te pones en camino hacia ${loc.name}${run}.${eta}`,
+            `${c.name} se marcha hacia ${loc.name}.`, `Una figura se marcha.`, dest.name);
+        }
+        return this.emitTrivial(c, input, 'move', 'movement', `Vas hacia ${dest.name}${run}.${eta}`,
+          `${c.name} se acerca ${aEs(dest.name)}.`, `Una figura cruza hacia ${dest.name}.`, dest.name);
+      }
+      case 'take': {
+        const inst = this.world.itemInstance(intent.instance_id);
+        const def = this.world.itemDef(inst.item_id);
+        const where = this.takeToHands(c, inst.id);
+        if (!where) return null;
+        return this.emitTrivial(c, input, 'take', 'inventory', `Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.`,
+          `${c.name} coge ${def.name}.`, 'Una figura coge algo.');
+      }
+      case 'drop': {
+        const def = this.world.itemDef(this.world.itemInstance(intent.instance_id).item_id);
+        const res = transferItem(this.world, intent.instance_id, { type: 'spot', id: here.id });
+        if (!res.ok) return null;
+        return this.emitTrivial(c, input, 'drop', 'inventory', `Dejas ${def.name} en ${here.name}.`,
+          `${c.name} deja ${def.name} en ${here.name}.`, 'Una figura deja algo.');
+      }
+      case 'wait':
+        return this.emitTrivial(c, input, 'wait', 'wait', `Esperas un rato en ${here.name}. No ocurre nada.`, null, null);
+    }
+  }
+
+  /** Mano libre o bolsillo (bulto: las dos manos), como el parser plano. */
+  private takeToHands(c: Character, instanceId: Id): 'hand' | 'pocket' | null {
+    const def = this.world.itemDef(this.world.itemInstance(instanceId).item_id);
+    const targets: Placement[] = def.size === 'bulky'
+      ? [{ type: 'character', id: c.id, slot: { kind: 'hand', which: 'both' } }]
+      : [
+        { type: 'character', id: c.id, slot: { kind: 'hand', which: 'main' } },
+        { type: 'character', id: c.id, slot: { kind: 'hand', which: 'off' } },
+        { type: 'character', id: c.id, slot: { kind: 'pocket' } },
+      ];
+    for (const t of targets) {
+      if (transferItem(this.world, instanceId, t).ok) return t.type === 'character' && t.slot.kind === 'pocket' ? 'pocket' : 'hand';
+    }
+    return null;
+  }
+
+  /** Evento determinista: coste cero (master null) y acciones sugeridas desde el estado. */
+  private emitTrivial(c: Character, input: string, type: string, tag: string, priv: string, obs: string | null, vague: string | null, skipSpotName?: string): ActionResult {
+    const suggested = suggestActions(this.world, this.clock, c, this.gameNow()).filter((s) => !skipSpotName || s !== `Ir ${aEs(skipSpotName)}`);
+    const event = this.events.emit({
+      actor_id: c.id, action_type: type, input_text: input, narration_private: priv, observable: obs, tags: ['deterministic', tag],
+      payload: { master: null, suggested_actions: suggested, ...(vague ? { observable_vague: vague } : {}) },
+    }, this.now());
+    return { ok: true, text: priv, event, suggested_actions: suggested };
   }
 
   /** El jugador pulsa 🎲: el servidor tira y el master narra la consecuencia. */
@@ -386,7 +640,7 @@ export class Engine {
     return jobs.length ? jobs.map((j) => `• **${j.title}** — ${j.text} (${j.reward_coins} monedas; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n') : 'El tablón está vacío.';
   }
 
-  private async resolveWithMaster(c: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string }, scene?: 'arrival' | 'decisive_timeout', decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<ActionResult> {
+  private async resolveWithMaster(c: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<ActionResult> {
     const t0 = Date.now();
     const out = await this.master!.resolve(c, text, roll, intro, scene, decisive);
     if (out.ok) { this.masterOk.push({ ts: Date.now(), ms: Date.now() - t0 }); if (this.masterOk.length > 500) this.masterOk.shift(); }
@@ -403,10 +657,11 @@ export class Engine {
       suggested_actions: k.suggested_actions,
       requires_roll: k.requires_roll ?? undefined,
       master: { model: out.model, usage: out.usage, calls: out.calls, context: out.context },
+      ...(this.hints.has(c.id) ? { scene_hints: this.hints.get(c.id) } : {}),
       ...(k.decisive ? { decisive: { threat: k.decisive.threat, window_s: Engine.DECISIVE_WINDOW_S } } : {}),
     };
     const event = this.events.emit({
-      actor_id: c.id, action_type: intro ? 'master_intro' : scene === 'arrival' ? 'master_arrival' : roll ? 'master_roll_outcome' : 'master', input_text: intro || scene ? null : text,
+      actor_id: c.id, action_type: intro ? 'master_intro' : scene === 'arrival' ? 'master_arrival' : scene === 'hook' ? 'master_hook' : roll ? 'master_roll_outcome' : 'master', input_text: intro || scene ? null : text,
       narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags], payload,
     }, this.now());
     if (k.requires_roll) this.pendingRolls.set(c.id, { text, roll: k.requires_roll, event_id: event.id });
@@ -455,10 +710,10 @@ export class Engine {
 
   /**
    * Alta de personaje (SPEC §4.6, §4.8). El servidor valida contra las tablas SRD,
-   * calcula derivados y crea el equipo inicial. Sin `spec`, humano guerrero
+   * calcula derivados y crea el equipo inicial. Lo que falte de `spec`: humano guerrero
    * soldado con el array recomendado (para pruebas y el REPL).
    */
-  async createCharacter(userId: Id, name: string, spec?: CharacterSpec): Promise<{ ok: true; character: Character } | { ok: false; reason: string }> {
+  async createCharacter(userId: Id, name: string, spec?: Partial<CharacterSpec>): Promise<{ ok: true; character: Character } | { ok: false; reason: string }> {
     const clean = name.trim().replace(/\s+/g, ' ');
     if (clean.length < 2 || clean.length > 24) return { ok: false, reason: 'El nombre debe tener entre 2 y 24 caracteres.' };
     if (this.characterByUser(userId)) return { ok: false, reason: 'Ya tienes un personaje.' };
@@ -536,6 +791,7 @@ export class Engine {
       actor_id: c.id, action_type: 'character_joined', narration_private: this.master ? '' : `Llegas a ${loc.name}.`,
       observable: `${c.name} llega a ${start.name}.`, tags: ['milestone:join'], payload: { observable_vague: 'Alguien llega.' },
     }, this.now());
+    this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: this.gameNow() });
     await this.flush();
     return { ok: true, character: c };
   }
@@ -656,7 +912,7 @@ export class Engine {
     if (/^(mirar|miro|mira|look|observar)\b/.test(lower)) {
       return this.emitPrivate(c, text, 'look', describeSurroundings(this.world, this.clock, c, nowG), `${c.name} mira alrededor.`);
     }
-    if ((m = lower.match(/^(?:ir|voy|vamos|ve|camino|corro|corre|me acerco|acercarme|move|go)\s+(?:(?:a la|al|a|hacia|hasta|to)\s+)?(.+?)(?:\s+(sigilosamente|corriendo|andando))?$/))) {
+    if ((m = lower.match(/^(?:ir|voy|vamos|ve|camino|corro|corre|me acerco|acercarme|salir|salgo|move|go)\s+(?:(?:a la|al|a|hacia|hasta|to)\s+)?(.+?)(?:\s+(sigilosamente|corriendo|andando))?$/))) {
       const pace: Pace = /^corr/.test(lower) || m[2] === 'corriendo' ? 'run' : m[2] === 'sigilosamente' ? 'stealth' : 'walk';
       return this.doMove(c, text, m[1]!, pace);
     }
@@ -903,6 +1159,14 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     if (c2.clues === undefined) changed = true;
     c2.factions ??= seed.campaign.factions; c2.clues ??= seed.campaign.clues; c2.jobs ??= seed.campaign.jobs;
     c2.achievement ??= seed.campaign.achievement; c2.progression ??= seed.campaign.progression; c2.board ??= { active_job_ids: [], last_rotation_day: -1 };
+    // Anclas de las pistas (qué localización o NPC trae su "cómo" al contexto): de la semilla si la partida guardada no las tiene.
+    for (const cl of c2.clues) {
+      const sc = seed.campaign.clues.find((x) => x.id === cl.id);
+      if (!sc || cl.location_ids || cl.npc_ids || (!sc.location_ids && !sc.npc_ids)) continue;
+      if (sc.location_ids) cl.location_ids = [...sc.location_ids];
+      if (sc.npc_ids) cl.npc_ids = [...sc.npc_ids];
+      changed = true;
+    }
     for (const d of seed.item_defs) {
       const cur = snapshot.item_defs.find((x) => x.id === d.id);
       if (!cur) { snapshot.item_defs.push(d); changed = true; }

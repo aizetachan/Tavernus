@@ -1,4 +1,4 @@
-import { Engine } from '../src/engine/engine.js';
+import { Engine, type EngineOptions } from '../src/engine/engine.js';
 import { World } from '../src/engine/world.js';
 import { GameClock } from '../src/clock/clock.js';
 import { makeSeed, SEED_REAL_EPOCH_MS } from '../src/data/seed/demo.js';
@@ -22,8 +22,12 @@ export function freshWorld() {
   return { world, clock, t0: clock.gameNow(SEED_REAL_EPOCH_MS) };
 }
 
-export async function bootEngine(time = fakeTime()) {
+/**
+ * Por defecto sin atajos deterministas: los tests del master esperan que toda
+ * acción pase por él. Los del atajo (deterministic.test.ts) lo activan.
+ */
+export async function bootEngine(time = fakeTime(), opts: Partial<EngineOptions> = {}) {
   const repo = new MemoryRepository();
-  const engine = await Engine.boot({ repo, campaignId: 'demo', seed: makeSeed(), now: time.now });
+  const engine = await Engine.boot({ repo, campaignId: 'demo', seed: makeSeed(), now: time.now, deterministic: false, ...opts });
   return { engine, repo, time };
 }

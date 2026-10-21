@@ -81,6 +81,9 @@ export interface Clue {
   /** Solo para el master: cómo se obtiene y qué revela. */
   how: string;
   reputation: number;
+  /** Anclas: el contexto del máster solo trae el "cómo" de la pista si el actor está en una de estas localizaciones o tiene delante a uno de estos NPCs. Sin anclas, va siempre. */
+  location_ids?: Id[];
+  npc_ids?: Id[];
 }
 
 export interface Job {

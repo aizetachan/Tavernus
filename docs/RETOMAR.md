@@ -1,6 +1,8 @@
 # Dónde lo dejamos y qué sigue
 
-Actualizado: 14 de septiembre de 2026.
+Actualizado: 14 de septiembre de 2026. El plan por fases hacia mundos generados y vivos, con lo
+construido el 16 de octubre de 2026 (modos sin API, tablero, menú de partidas, reglas, recorte de
+contexto), está en [`PLAN.md`](PLAN.md); este fichero sigue siendo el estado del despliegue.
 
 ## Estado
 

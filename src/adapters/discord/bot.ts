@@ -15,6 +15,7 @@ import type { GameEvent, Id } from '../../engine/model.js';
 import { renderSheet } from './sheet.js';
 import { WELCOME, POV_COMMANDS, joinDm } from './texts.js';
 import { CreationWizard } from './creation.js';
+import { illustratorOf, type SceneImage } from '../../ai/illustrate.js';
 import type { CharacterSpec } from '../../engine/engine.js';
 
 export interface DiscordOptions {
@@ -58,6 +59,8 @@ export class DiscordAdapter {
   /** Último mensaje con botones por PJ: se le quitan cuando llega uno nuevo. */
   private lastButtons = new Map<Id, Message>();
   private reportThreads = new Map<string, string>();
+  /** Ilustraciones que llegaron antes de existir el #pov (PJ recién creado). */
+  private pendingScenes = new Map<Id, SceneImage>();
   private tablon: TextChannel | null = null;
   private reportes: TextChannel | null = null;
   private timer: NodeJS.Timeout | null = null;
@@ -150,6 +153,10 @@ export class DiscordAdapter {
         this.messageEvents.set(msg.id, d.event);
         if (components.length) this.lastButtons.set(d.character_id, msg);
       });
+    });
+    illustratorOf(engine)?.onIllustrated((r) => {
+      if (this.povChannels.has(r.character_id)) void this.sendScene(r.character_id, r.image);
+      else this.pendingScenes.set(r.character_id, r.image);
     });
     engine.events.onEvent((e) => {
       if (e.visibility === 'public' && this.tablon) void this.tablon.send(e.observable ?? e.narration_private);
@@ -332,6 +339,17 @@ export class DiscordAdapter {
     try { return await fn(); } finally { clearInterval(timer); }
   }
 
+  /** Ilustración de la escena (IMAGES=on): recuadro de sistema con el JPEG descargado como adjunto. */
+  private async sendScene(characterId: Id, image: SceneImage): Promise<void> {
+    const ch = this.povChannels.get(characterId);
+    if (!ch) return;
+    const ill = illustratorOf(this.engine);
+    if (!ill) return;
+    const embed = new EmbedBuilder().setColor(COLOR_SYSTEM).setTitle(image.name).setImage(`attachment://${image.file}`);
+    await ch.send({ embeds: [embed], files: [{ attachment: ill.pathOf(image), name: image.file }] })
+      .catch((e) => console.error('[discord] ilustración:', e));
+  }
+
   private masterEmbed(text: string): EmbedBuilder {
     return new EmbedBuilder().setColor(COLOR_MASTER).setDescription(text.slice(0, 4000));
   }
@@ -414,6 +432,8 @@ export class DiscordAdapter {
     if (pov) {
       const intro = await this.withTyping(pov, () => this.engine.introduce(r.character.id)); // el master narra la llegada; llega por onDelivery
       if (!intro) await pov.send({ embeds: [this.systemEmbed(await this.engine.command(r.character.id, '/look'), 'Llegada')] });
+      const scene = this.pendingScenes.get(r.character.id);
+      if (scene) { this.pendingScenes.delete(r.character.id); await this.sendScene(r.character.id, scene); }
     }
   }
 

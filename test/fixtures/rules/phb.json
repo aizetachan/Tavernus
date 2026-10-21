@@ -1,0 +1,16 @@
+[
+  {
+    "id": "phb-0001",
+    "book": "phb",
+    "title": "Making an Attack",
+    "page": 179,
+    "text": "Whether you're striking with a melee weapon, firing a weapon at range, or making an attack roll as part of a spell, an attack has a simple structure. Choose a target within your attack's range: a creature, an object, or a location. Determine modifiers: the DM determines whether the target has cover and whether you have advantage or disadvantage against the target. Spells, special abilities, and other effects can apply penalties or bonuses to your attack roll. Resolve the attack: you make the attack roll, and on a hit you roll damage, unless the particular attack has rules that specify otherwise. Some attacks cause special effects in addition to or instead of damage. Grappling. When you want to grab a creature or wrestle with it, you can use the Attack action to make a special melee attack, a grapple. If you're able to make multiple attacks with the Attack action, this attack replaces one of them. The target of your grapple must be no more than one size larger than you, and it must be within your reach. Using at least one free hand, you try to seize the target by making a grapple check, a Strength (Athletics) check contested by the target's Strength (Athletics) or Dexterity (Acrobatics) check. If you succeed, you subject the target to the grappled condition."
+  },
+  {
+    "id": "phb-0002",
+    "book": "phb",
+    "title": "Resting",
+    "page": 171,
+    "text": "Adventurers can take short rests in the midst of an adventuring day and a long rest to end the day. A short rest is a period of downtime, at least 1 hour long. A long rest is a period of extended downtime, at least 8 hours long, during which a character sleeps for at least 6 hours and performs no more than 2 hours of light activity. At the end of a long rest, a character regains all lost hit points."
+  }
+]

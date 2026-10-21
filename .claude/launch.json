@@ -1,0 +1,96 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tavernus-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
+      "port": 3000,
+      "env": {
+        "MASTER_MODEL": "claude-haiku-5-5",
+        "MASTER_EFFORT": "low",
+        "IMAGES": "on"
+      }
+    },
+    {
+      "name": "tavernus-web-offline",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
+      "port": 3107,
+      "env": {
+        "IMAGES": "on",
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3107",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/offline",
+        "GAMES_DIR": "./data/local/offline/games",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": ""
+      }
+    },
+    {
+      "name": "tavernus-web-haiku",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
+      "port": 3108,
+      "env": {
+        "MASTER_MODE": "live",
+        "MASTER_MODEL": "claude-haiku-5-5",
+        "MASTER_EFFORT": "low",
+        "WEB_PORT": "3108",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/haiku",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "on"
+      }
+    },
+    {
+      "name": "tavernus-web-offline-2",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
+      "port": 3117,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3117",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/offline",
+        "GAMES_DIR": "./data/local/offline/games",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": ""
+      }
+    },
+    {
+      "name": "tavernus-web-images",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
+      "port": 3127,
+      "env": {
+        "IMAGES": "on",
+        "MASTER_MODE": "live",
+        "WEB_PORT": "3127",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/images",
+        "GAMES_DIR": "./data/local/images/games",
+        "ANTHROPIC_API_KEY": "sk-ant-sin-red",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": "",
+        "POLLINATIONS_API_KEY": ""
+      }
+    }
+  ]
+}

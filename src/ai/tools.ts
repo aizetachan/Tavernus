@@ -16,6 +16,8 @@ import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc,
 import { attitudeOf, resolveAttack } from '../engine/combat.js';
 import { characterCheck, SKILLS, type CheckKind } from '../engine/rules.js';
 import { fmtDuration } from '../engine/narrate.js';
+import { cancelHook, plantHook } from '../engine/hooks.js';
+import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
 type Tool = Anthropic.Beta.BetaTool;
 
@@ -47,6 +49,13 @@ export const MASTER_TOOLS: Tool[] = [
   tool('get_item', 'Detalle de un objeto (ejemplar) al alcance.', { instance_id: str('ID del ejemplar') }),
   tool('who_is_here', 'Quién percibe el actor a su alrededor y con qué nivel (full/vague/hint).', { unused: nstr('Sin uso; pasa null') }),
   tool('get_recent_events', 'Últimos eventos de la localización que el actor ha percibido.', { n: num('Cuántos, 1-30') }),
+  tool('get_campaign_notes', 'Notas de campaña solo para ti: todas las pistas que el actor aún no tiene, con cómo se obtienen y dónde, y los encargos del tablón completos (quién los pide, qué piden, paga). Úsalo cuando el contexto no traiga la pista o el encargo que necesitas.', {
+    unused: nstr('Sin uso; pasa null'),
+  }),
+  tool('lookup_rule', 'Consulta las reglas oficiales (Player\'s Handbook y Dungeon Master\'s Guide, en inglés) cuando dudes de una mecánica, estadística o tabla; no la uses para lo que ya está en el contexto. Devuelve hasta 3 fragmentos.', {
+    query: str('Términos en inglés: "grappling", "long rest", "cover"'),
+    book: { type: ['string', 'null'], enum: ['phb', 'dmg', null], description: 'phb, dmg o null para buscar en ambos' },
+  }),
 
   tool('roll_dice', 'Tirada de dados genérica del servidor (daño, tablas, NPCs). Para pruebas del propio jugador usa requires_roll en log_event.', {
     expr: str('Expresión: "2d6+3", "1d20+5", "4d6kh3"'),
@@ -118,6 +127,18 @@ export const MASTER_TOOLS: Tool[] = [
   }),
   tool('remove_condition', 'Quita una condición.', { target_id: str('ID del personaje'), name: str('Condición') }),
 
+  tool('plant_hook', 'Siembra algo que pasará después sin que tengas que estar mirando: a una hora, cuando alguien vaya a un punto, llegue a la localización o coja un objeto. El servidor lo vigila y te llama cuando salta. Para lo que pasa ya, no: eso se narra.', {
+    trigger: enm(['time', 'spot', 'location', 'item'], 'Qué lo dispara'),
+    location_id: nstr('Localización; null = la del actor'),
+    minutes_from_now: nnum('Solo time: minutos de juego desde ahora; null en los demás'),
+    spot_id: nstr('Solo spot: el punto; null en los demás'),
+    item_id: nstr('Solo item: el tipo de objeto (it_…); null en los demás'),
+    what: str('Qué ocurre, para ti: quién, qué hace, qué quiere. El jugador no lo lee'),
+    for_character_id: nstr('Solo con este PJ; null = con cualquiera'),
+    expires_in_minutes: nnum('Caduca a los N minutos de juego; null = por defecto (1 día, o 1 h después de la hora)'),
+  }),
+  tool('cancel_hook', 'Anula un gancho sembrado que ya no tiene sentido.', { hook_id: str('ID del gancho (hk_…)') }),
+
   tool('log_event', 'CIERRE OBLIGATORIO de cada acción. Registra lo ocurrido y lo entrega a cada personaje según lo que percibe. Tras llamarlo, termina.', {
     narration_private: str('Lo que ve el actor. Segunda persona. Breve.'),
     observable: nstr('Lo que ve un testigo cercano con detalle completo, en tercera persona con el nombre del actor. null si no hay nada observable.'),
@@ -136,6 +157,7 @@ export const MASTER_TOOLS: Tool[] = [
     npc_memory_note: nstr('Solo si ha hablado con ese NPC y hay algo que esa persona recordaría del actor (su nombre, qué le preguntó, un favor, una ofensa, una promesa, dinero). Una frase en tercera persona. null si no hay nada que recordar o si no ha habido conversación.'),
     npc_memory_importance: nnum('1 = se olvida en días (una charla, una pregunta); 2 = dura semanas (un favor, un pago, una amenaza); 3 = no se olvida nunca (le salvó la vida, le robó, le humilló). null si no hay nota.'),
     names_learned: nstr('IDs (separados por comas) de NPCs o personajes cuyo NOMBRE el actor ha aprendido en esta acción porque se presentaron o alguien los nombró. null si ninguno.'),
+    places_learned: nstr('IDs (separados por comas) de localizaciones de las que el actor ha oído hablar en esta acción porque alguien nombró el sitio o lo leyó en un cartel o mapa. null si ninguna.'),
     introduces_self: bool('true si el actor ha dicho su propio nombre en voz alta en esta acción (los presentes lo aprenden).'),
   }),
 ];
@@ -176,6 +198,18 @@ function witnessesOf(engine: Engine, at: Position, nowGameS: number, exclude: st
 /** Quita restos de sintaxis de llamada (XML de parámetros) que a veces se cuelan en los textos. */
 export function cleanText(t: string): string {
   return t.replace(/<\/?(?:parameter|narration_private|observable|observable_vague|invoke|function_calls)[^>]*>[\s\S]*$/i, '').replace(/<\/?[a-z_]+>\s*$/i, '').trim();
+}
+
+let rules: RulesIndex | null = null;
+
+/** Índice de reglas (RULES_DIR o data/local/rules), cargado una sola vez y solo si el máster lo consulta. */
+export function rulesIndex(): RulesIndex {
+  return (rules ??= loadRules(process.env['RULES_DIR'] ?? 'data/local/rules'));
+}
+
+/** Olvida el índice cargado (tests o tras volver a ingerir). */
+export function resetRulesIndex(): void {
+  rules = null;
 }
 
 export function executeTool(ctx: ToolContext, name: string, input: Record<string, unknown>): string {
@@ -255,6 +289,43 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     case 'get_recent_events': {
       const n = Math.max(1, Math.min(30, Number(input['n']) || 10));
       return engine.events.forCharacter(actor.id, null).slice(-n).map((d) => `[${engine.clock.format(d.event.timestamp_game_s)}] ${d.text}`);
+    }
+    case 'get_campaign_notes': {
+      const camp = world.campaign;
+      const ach = camp.achievement;
+      const placeName = (id: Id) => world.locations.get(id)?.name ?? id;
+      const npcName = (id: Id) => world.npcs.get(id)?.name ?? id;
+      return {
+        reputation: actor.reputation[ach.faction_id] ?? 0,
+        achievement: { title: ach.title, clues_required: ach.clues_required, reputation_required: ach.reputation_required, done: actor.achievements.some((a) => a.id === ach.id) },
+        clues_obtained: actor.clues.map((id) => camp.clues.find((x) => x.id === id)?.title ?? id),
+        clues_pending: camp.clues.filter((x) => !actor.clues.includes(x.id)).map((x) => ({
+          id: x.id, title: x.title, how: x.how,
+          where: [...(x.location_ids ?? []).map(placeName), ...(x.npc_ids ?? []).map(npcName)],
+        })),
+        board: activeJobs(world).map((j) => ({
+          id: j.id, title: j.title, text: j.text, giver: `${npcName(j.giver_npc_id)} [${j.giver_npc_id}]`, kind: j.kind,
+          ...(j.deliver ? { deliver: `${world.itemDef(j.deliver.item_id).name} ×${j.deliver.quantity}` } : {}),
+          ...(j.visit_spot_id ? { visit: world.spot(j.visit_spot_id).name } : {}),
+          reward_coins: j.reward_coins, reward_reputation: j.reward_reputation, done_by_actor: actor.completed_jobs.includes(j.id),
+        })),
+      };
+    }
+    case 'plant_hook': {
+      const opt = (k: string) => (input[k] == null || input[k] === '' ? null : String(input[k]));
+      const r = plantHook(world, {
+        location_id: opt('location_id') ?? here(), trigger: s('trigger') as 'time',
+        minutes_from_now: input['minutes_from_now'] == null ? null : Number(input['minutes_from_now']),
+        spot_id: opt('spot_id'), item_id: opt('item_id'), what: s('what'), for_character_id: opt('for_character_id'),
+        expires_in_minutes: input['expires_in_minutes'] == null ? null : Number(input['expires_in_minutes']),
+      }, nowGameS);
+      return r.ok ? { ok: true, hook_id: r.hook.id } : { error: r.error };
+    }
+    case 'cancel_hook': return cancelHook(world, s('hook_id')) ? { ok: true } : { error: `no hay gancho ${s('hook_id')}` };
+    case 'lookup_rule': {
+      const book = s('book') === 'phb' || s('book') === 'dmg' ? s('book') : null;
+      const index = rulesIndex();
+      return formatRuleHits(s('query'), searchRules(s('query'), { book, limit: 3 }, index), index);
     }
     case 'roll_dice': {
       const r = rollExpr(s('expr'), ctx.rng);
@@ -428,6 +499,14 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           if ((world.npcs.has(id) || world.characters.has(id)) && id !== actor.id && !actor.knows.includes(id)) actor.knows.push(id);
         }
         world.touch('characters', actor.id);
+      }
+      if (input['places_learned']) {
+        for (const id of s('places_learned').split(',').map((x) => x.trim()).filter(Boolean)) {
+          const loc = world.locations.get(id);
+          if (!loc || loc.discovery[actor.id] === 'visited' || loc.discovery[actor.id] === 'heard_of') continue;
+          loc.discovery[actor.id] = 'heard_of';
+          world.touch('locations', loc.id);
+        }
       }
       if (input['introduces_self'] === true) {
         const at = positionOf(world, actor, nowGameS);
