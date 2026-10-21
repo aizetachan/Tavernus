@@ -34,8 +34,9 @@ es retirarlo y ajustar la documentación.
 
 **Dónde nos quedamos y qué sigue:**
 
-1. Santy revisa el borrador de issues, milestones y fechas con el equipo (issue #4). Falta añadir
-   en la web del Project la vista Roadmap («New view → Roadmap», agrupada por milestone).
+1. Santy revisa el borrador de issues, milestones y fechas con el equipo (issue #4). El Project
+   tiene los campos de fecha «Inicio» y «Fin» en cada issue. Su vista Roadmap usa esos campos,
+   está agrupada por milestone, a escala de trimestre y con los milestones como marcadores.
 2. Revisar y fusionar el PR #3.
 3. Diseño: rediseñar más a fondo, con un kit pequeño y una vuelta fuerte de UX (issues #8 a #13).
    El estilo actual es una primera fase.
