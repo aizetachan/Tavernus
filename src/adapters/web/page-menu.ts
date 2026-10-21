@@ -7,71 +7,166 @@ export const MENU = String.raw`<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tavernus</title>
 <style>
+  /* Vidrio espacial (Figma, P0B): héroe a sangre con la taberna, controles de vidrio y tarjetas sin trazos. */
   :root {
-    --bg: #17130f; --panel: #211b15; --panel-2: #2a221a; --line: #3a2f24;
-    --text: #ece3d4; --muted: #a8998a; --accent: #d9a35b; --accent-ink: #1b140c;
-    --error: #e07a62; --ok: #9fb27a; --rec: #d0745a;
+    --bg: #07080b; --text: #f5f5f7; --muted: rgba(235,235,245,.62); --faint: rgba(235,235,245,.36);
+    --accent: #e9a94e; --accent-ink: #1a1205; --accent-tint: rgba(233,169,78,.16);
+    --platter: rgba(255,255,255,.045); --control: rgba(255,255,255,.08); --hover: rgba(255,255,255,.12);
+    --error: #ff453b; --ok: #30d159; --info: #63d1ff; --rec: #e05a4a;
+    --window: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.035));
+    --window-shadow: 0 48px 120px rgba(0,0,0,.42), 0 10px 30px rgba(0,0,0,.14), inset 0 1.5px 2px rgba(255,255,255,.10), inset 0 0 32px rgba(255,255,255,.025);
+    --control-shadow: 0 14px 36px rgba(0,0,0,.26), 0 2px 8px rgba(0,0,0,.10), inset 0 1px 1.5px rgba(255,255,255,.12);
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
-  body { background: var(--bg); color: var(--text); font: 16px/1.55 Georgia, 'Iowan Old Style', serif; min-height: 100vh; }
-  header { padding: 28px 16px 8px; text-align: center; }
-  header h1 { margin: 0; font-weight: normal; font-size: 30px; letter-spacing: .08em; color: var(--accent); }
-  header p { margin: 4px 0 0; color: var(--muted); font-style: italic; }
-  main { max-width: 1060px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; min-width: 0; }
-  section h2 { margin: 0 0 4px; font-weight: normal; font-size: 19px; color: var(--accent); letter-spacing: .03em; }
-  section .lead { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
-  label { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 4px; }
-  input, select, button { font: inherit; color: inherit; }
-  input[type=text], input[type=number], select { width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
-  input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
-  .row { display: flex; gap: 10px; } .row > * { flex: 1; min-width: 0; }
-  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .modes label { margin: 0; cursor: pointer; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--panel-2); color: var(--text); font-size: 15px; }
-  .modes label small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.35; margin-top: 2px; }
-  .modes input { margin: 0 6px 0 0; accent-color: var(--accent); }
-  .modes label:has(input:checked) { border-color: var(--accent); }
-  details { margin-top: 10px; color: var(--muted); font-size: 14px; }
-  summary { cursor: pointer; }
-  button { cursor: pointer; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; }
-  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  body { background: var(--bg); color: var(--text); font: 15px/1.47 var(--sans); letter-spacing: -.01em; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+  input, select, button { font: inherit; color: inherit; letter-spacing: inherit; }
+  button { cursor: pointer; border: 0; }
   button:disabled { opacity: .5; cursor: default; }
-  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-  button.primary:hover:not(:disabled) { color: var(--accent-ink); filter: brightness(1.08); }
-  button.danger:hover:not(:disabled), button.danger.armed { border-color: var(--error); color: var(--error); }
-  .submit { margin-top: 14px; display: flex; align-items: center; gap: 12px; }
-  .note { font-size: 13.5px; color: var(--muted); }
-  .warn { color: var(--rec); }
-  .error { color: var(--error); font-size: 14px; }
-  ul.games { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-  ul.games li { border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--panel-2); display: flex; gap: 10px; align-items: center; }
-  ul.games .info { flex: 1; min-width: 0; }
-  ul.games .name { font-size: 16px; overflow-wrap: anywhere; }
-  ul.games .meta { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
-  ul.games .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-  .badge { display: inline-block; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; color: var(--muted); vertical-align: 2px; }
-  .badge.live { color: var(--accent); border-color: #6b5233; }
-  .badge.record { color: var(--rec); border-color: #6b3a2c; }
-  .badge.replay { color: var(--ok); border-color: #4a5636; }
-  .empty { color: var(--muted); font-style: italic; font-size: 14.5px; margin: 4px 0; }
+  svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .glass { background: var(--control); box-shadow: var(--control-shadow); -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5); }
+  .window { background: var(--window); box-shadow: var(--window-shadow); -webkit-backdrop-filter: blur(48px) saturate(1.4); backdrop-filter: blur(48px) saturate(1.4); }
+  /* La taberna al amanecer ocupa la pantalla; abajo se funde con el fondo. */
+  .backdrop { position: fixed; inset: 0; z-index: -1; background: url(/assets/taberna.jpg) center 40% / cover no-repeat var(--bg); }
+  .backdrop::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(7,8,11,.72), rgba(7,8,11,.15) 55%, transparent), linear-gradient(180deg, rgba(7,8,11,.35), transparent 30%, rgba(7,8,11,.55) 62%, var(--bg) 96%); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 24px rgba(233,169,78,.3), inset 0 1px 1px rgba(255,255,255,.3); }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.06); }
+  .btn.glass:hover:not(:disabled) { background: var(--hover); }
+  .btn.sm { height: 36px; padding: 0 14px; font-size: 14px; }
+  header { display: flex; align-items: center; gap: 10px; padding: 22px 40px; }
+  header h1 { margin: 0; flex: 1; font: 600 20px/1 Georgia, 'Iowan Old Style', serif; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); }
+  .pill { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  .pill.off::before { background: var(--info); }
+  .hero { max-width: 620px; padding: 44px 40px 0; min-height: calc(58vh - 88px); }
+  .hero[hidden] { display: none; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+  .hero h2 { margin: 10px 0 14px; font-size: clamp(34px, 5vw, 52px); line-height: 1.12; font-weight: 700; letter-spacing: -.03em; text-shadow: 0 2px 24px rgba(0,0,0,.4); overflow-wrap: anywhere; }
+  .hero .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .hero p { margin: 14px 0 22px; color: var(--muted); max-width: 480px; }
+  .hero .cta { display: flex; flex-wrap: wrap; gap: 10px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px; background: rgba(0,0,0,.35); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: var(--muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.live { color: var(--ok); } .badge.offline { color: var(--info); } .badge.record { color: var(--rec); } .badge.replay { color: var(--accent); }
+  .avs { display: inline-flex; }
+  .avs span { width: 26px; height: 26px; margin-left: -6px; display: grid; place-items: center; border-radius: 50%; background: #1b1c22; box-shadow: 0 0 0 2px var(--bg); color: var(--muted); font-size: 11px; font-weight: 600; }
+  .avs span:first-child { margin-left: 0; }
+  .avs span:nth-child(3n+1) { color: var(--info); } .avs span:nth-child(3n+2) { color: var(--ok); } .avs span:nth-child(3n) { color: var(--accent); }
+  main { padding: 24px 40px 48px; }
+  .bar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .seg { display: inline-flex; padding: 3px; border-radius: 999px; }
+  .seg button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; white-space: nowrap; border-radius: 999px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; }
+  .seg button:hover { color: var(--text); }
+  .seg button.on { background: var(--hover); color: var(--text); box-shadow: inset 0 1px 1px rgba(255,255,255,.1); }
+  .bar .hint { margin-left: auto; font-size: 12px; color: var(--faint); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+  .gcard { display: flex; flex-direction: column; padding: 8px; border-radius: 30px; min-width: 0; }
+  .thumb { position: relative; height: 130px; border-radius: 22px; overflow: hidden; background: url(/assets/taberna.jpg) center 45% / 240% no-repeat #111; }
+  .thumb::after { content: ''; position: absolute; inset: 0; background: var(--tint, rgba(7,8,11,.25)); mix-blend-mode: multiply; }
+  .thumb.live { --tint: rgba(48,100,70,.55); background-position: 30% 40%; }
+  .thumb.offline { --tint: rgba(40,80,120,.6); background-position: 70% 35%; }
+  .thumb.record { --tint: rgba(120,40,30,.55); background-position: 50% 30%; }
+  .thumb.replay { --tint: rgba(120,80,20,.4); background-position: 45% 45%; }
+  .thumb .badge { position: absolute; top: 10px; left: 10px; z-index: 1; }
+  .gcard .info { padding: 14px 10px 10px; }
+  .gcard .name { font-size: 18px; font-weight: 600; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .gcard .meta { margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .gcard .foot { position: relative; display: flex; align-items: center; gap: 8px; margin-top: auto; padding: 4px 6px 6px 10px; }
+  .gcard .foot .avs { flex: 1; }
+  .more { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--control); }
+  .more:hover { background: var(--hover); }
+  .menu-pop { position: absolute; right: 8px; bottom: 48px; z-index: 5; display: flex; flex-direction: column; min-width: 200px; padding: 6px; border-radius: 18px; background: rgba(30,31,37,.94); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); box-shadow: var(--control-shadow); }
+  .menu-pop[hidden] { display: none; }
+  .menu-pop button { text-align: left; height: 36px; padding: 0 12px; border-radius: 12px; background: transparent; font-size: 14px; }
+  .menu-pop button:hover:not(:disabled) { background: var(--hover); }
+  .menu-pop button.danger { color: #ff8a80; }
+  .menu-pop button.danger.armed { background: rgba(255,69,59,.16); }
+  .gcard.new { align-items: center; justify-content: center; min-height: 262px; gap: 6px; background: transparent; box-shadow: none; outline: 1.5px dashed rgba(255,255,255,.14); outline-offset: -1.5px; color: var(--text); text-align: center; }
+  .gcard.new:hover { background: var(--platter); }
+  .gcard.new .plus { width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 6px; border-radius: 50%; background: var(--control); }
+  .gcard.new small { color: var(--muted); font-size: 12px; }
+  .empty { grid-column: 1 / -1; margin: 8px 2px; color: var(--muted); font-size: 14px; }
+  .error { color: #ff8a80; font-size: 14px; }
+  /* Nueva partida: hoja de vidrio sobre el menú atenuado. */
+  #sheet { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: rgba(5,5,13,.55); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+  #sheet[hidden] { display: none; }
+  #new { position: relative; width: min(560px, 100%); max-height: calc(100vh - 48px); overflow-y: auto; padding: 26px 26px 22px; border-radius: 34px; background: linear-gradient(180deg, #1c1d23, #131418); box-shadow: var(--window-shadow); }
+  #new h2 { margin: 0 0 4px; font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+  #new .lead { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+  #new .x { position: absolute; top: 18px; right: 18px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--control); }
+  label { display: block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); margin: 14px 0 6px; }
+  input[type=text], input[type=number], select { width: 100%; height: 42px; padding: 0 14px; border: 0; border-radius: 14px; background: var(--control); outline: none; }
+  select option { background: #1c1d23; }
+  input::placeholder { color: var(--faint); }
+  input:focus, select:focus { box-shadow: 0 0 0 1.5px rgba(233,169,78,.6); }
+  .row { display: flex; gap: 8px; } .row > * { flex: 1; min-width: 0; }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .modes label { margin: 0; cursor: pointer; padding: 10px 12px; border-radius: 16px; background: var(--platter); color: var(--text); font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+  .modes label small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.35; margin-top: 3px; }
+  .modes input { margin: 0 6px 0 0; accent-color: var(--accent); }
+  .modes label:has(input:checked) { background: var(--accent-tint); box-shadow: inset 0 0 0 1.5px rgba(233,169,78,.55); }
+  details { margin-top: 12px; color: var(--muted); font-size: 14px; }
+  summary { cursor: pointer; }
+  .submit { margin-top: 20px; display: flex; align-items: center; gap: 12px; }
+  .note { font-size: 13px; color: var(--muted); letter-spacing: 0; text-transform: none; font-weight: 400; }
+  .warn { color: #ffb38a; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 30; padding: 10px 16px; border-radius: 999px; background: rgba(30,31,37,.94); box-shadow: var(--control-shadow); color: #ff8a80; font-size: 14px; }
+  #toast[hidden] { display: none; }
   @media (max-width: 760px) {
-    main { grid-template-columns: 1fr; }
+    header { padding: 14px 16px; }
+    header h1 { font-size: 16px; }
+    header .pill { display: none; }
+    .hero { padding: 24px 16px 0; min-height: 0; }
+    main { padding: 24px 16px 40px; }
+    .bar { flex-wrap: wrap; } .bar .hint { display: none; }
+    .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+    .seg button { padding: 0 11px; }
+    .seg button svg { display: none; }
     .modes { grid-template-columns: 1fr; }
     .row { flex-wrap: wrap; } .row > input { flex-basis: 100%; }
-    ul.games li { flex-wrap: wrap; }
-    ul.games .actions { width: 100%; justify-content: flex-start; }
+    #new { padding: 22px 18px 18px; border-radius: 28px; }
   }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/></symbol>
+  <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></symbol>
+</svg>
+<div class="backdrop" aria-hidden="true"></div>
 <header>
   <h1>Tavernus</h1>
-  <p>Elige partida, o empieza una.</p>
+  <span id="status" class="pill glass" hidden></span>
+  <button id="open-new" class="btn primary" type="button"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button>
 </header>
+<section class="hero" id="hero" hidden>
+  <div class="eyebrow">Continúa tu historia</div>
+  <h2 id="hero-name"></h2>
+  <div class="meta" id="hero-meta"></div>
+  <p id="hero-text"></p>
+  <div class="cta"><button id="hero-open" class="btn primary" type="button"><svg class="i"><use href="#i-play"/></svg>Continuar partida</button></div>
+</section>
 <main>
-  <section id="new">
-    <h2>Nueva partida</h2>
+  <div class="bar">
+    <div class="seg glass" role="tablist">
+      <button type="button" data-list="continue" class="on"><svg class="i"><use href="#i-book"/></svg>Partidas · <span id="n-continue">0</span></button>
+      <button type="button" data-list="demos"><svg class="i"><use href="#i-play"/></svg>Demos · <span id="n-demos">0</span></button>
+      <button type="button" data-list="recordings"><svg class="i"><use href="#i-rec"/></svg>Grabaciones · <span id="n-recordings">0</span></button>
+    </div>
+    <span class="hint" id="list-hint">La última jugada primero</span>
+  </div>
+  <div class="grid" id="list"></div>
+</main>
+<div id="sheet" hidden>
+  <section id="new" role="dialog" aria-modal="true" aria-labelledby="new-title">
+    <button class="x" type="button" id="close-new" aria-label="Cerrar"><svg class="i"><use href="#i-x"/></svg></button>
+    <h2 id="new-title">Nueva partida</h2>
     <p class="lead">Empieza en la taberna de la semilla, con los personajes de siempre y, si quieres, uno tuyo.</p>
     <form id="new-form" autocomplete="off">
       <label for="g-name">Nombre de la partida</label>
@@ -95,39 +190,34 @@ export const MENU = String.raw`<!doctype html>
         <input id="g-seed" type="number" min="0" max="4294967295" step="1" placeholder="p. ej. 1234">
       </details>
       <div class="submit">
-        <button class="primary" type="submit">Crear y jugar</button>
+        <button class="btn primary" type="submit">Crear y jugar</button>
         <span id="new-error" class="error" role="alert"></span>
       </div>
     </form>
   </section>
-
-  <section id="continue">
-    <h2>Continuar</h2>
-    <p class="lead">Partidas guardadas, la última jugada primero.</p>
-    <ul class="games" id="list-continue"></ul>
-  </section>
-
-  <section id="demos">
-    <h2>Demos</h2>
-    <p class="lead">Partidas grabadas que se repiten sin gastar tokens (lo que no esté grabado se narra en plano).</p>
-    <ul class="games" id="list-demos"></ul>
-  </section>
-
-  <section id="recordings">
-    <h2>Grabaciones</h2>
-    <p class="lead">Partidas reales que van guardando las respuestas. Al terminar, conviértelas en demo.</p>
-    <ul class="games" id="list-recordings"></ul>
-  </section>
-</main>
+</div>
+<div id="toast" role="alert" hidden></div>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var MODE = { live: 'real', offline: 'offline', record: 'grabando', replay: 'demo' };
-  var apiKey = true, modeTouched = false;
+  var apiKey = true, modeTouched = false, lists = { continue: [], demos: [], recordings: [] }, tab = 'continue';
 
   function fmt(iso) {
     if (!iso) return '—';
     try { return new Date(iso).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return iso; }
+  }
+  /** «hace 4 min», «ayer»… y, si es de hace más de una semana, la fecha. */
+  function ago(iso) {
+    var t = Date.parse(iso);
+    if (!t) return fmt(iso);
+    var m = Math.round((Date.now() - t) / 60000);
+    if (m < 1) return 'ahora mismo';
+    if (m < 60) return 'hace ' + m + ' min';
+    var h = Math.round(m / 60);
+    if (h < 24) return 'hace ' + h + ' h';
+    var d = Math.round(h / 24);
+    return d === 1 ? 'ayer' : d < 7 ? 'hace ' + d + ' días' : fmt(iso);
   }
   function open(slug, character) {
     location.href = '/?game=' + encodeURIComponent(slug) + (character ? '&character=' + encodeURIComponent(character) : '');
@@ -135,57 +225,126 @@ export const MENU = String.raw`<!doctype html>
   function call(method, path) {
     return fetch(path, { method: method }).then(function (r) { return r.json(); }).catch(function () { return { ok: false, text: 'No hay conexión con el servidor.' }; });
   }
+  var toastTimer = null;
+  function toast(text) { var t = $('toast'); t.textContent = text; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 5000); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function icon(id) { return '<svg class="i"><use href="#' + id + '"/></svg>'; }
   function button(text, cls, onClick) {
-    var b = document.createElement('button');
-    b.type = 'button'; b.textContent = text;
-    if (cls) b.className = cls;
-    b.addEventListener('click', function () { onClick(b); });
+    var b = el('button', cls, text);
+    b.type = 'button';
+    b.addEventListener('click', function (ev) { ev.stopPropagation(); onClick(b); });
     return b;
   }
+  function avatars(names) {
+    var w = el('span', 'avs');
+    names.slice(0, 5).forEach(function (n) { var a = el('span', '', n.charAt(0).toUpperCase()); a.title = n; w.appendChild(a); });
+    return w;
+  }
+  function badge(g) { return el('span', 'badge ' + g.mode, (MODE[g.mode] || g.mode) + (g.main ? ' · principal' : '')); }
+  function when(g) { return g.last_opened_at ? 'Jugada ' + ago(g.last_opened_at) : 'Creada ' + ago(g.created_at) + ' · sin jugar'; }
+
   /** Borrar pide un segundo clic en 4 s, sin diálogos del navegador. */
   function deleteButton(g) {
     var timer = null;
     return button('Borrar', 'danger', function (b) {
       if (!b.classList.contains('armed')) {
-        b.classList.add('armed'); b.textContent = '¿Seguro? Borrar';
+        b.classList.add('armed'); b.textContent = '¿Seguro? Pulsa otra vez';
         timer = setTimeout(function () { b.classList.remove('armed'); b.textContent = 'Borrar'; }, 4000);
         return;
       }
       clearTimeout(timer); b.disabled = true;
-      call('DELETE', '/api/games?game=' + encodeURIComponent(g.slug)).then(function (r) { if (!r.ok) alert(r.text); load(); });
+      call('DELETE', '/api/games?game=' + encodeURIComponent(g.slug)).then(function (r) { if (!r.ok) toast(r.text); load(); });
     });
   }
-
-  function item(g, actions) {
-    var li = document.createElement('li');
-    var info = document.createElement('div'); info.className = 'info';
-    var name = document.createElement('div'); name.className = 'name';
-    name.textContent = g.name;
-    var badge = document.createElement('span'); badge.className = 'badge ' + g.mode; badge.textContent = MODE[g.mode] || g.mode;
-    name.appendChild(badge);
-    if (g.main) { var m = document.createElement('span'); m.className = 'badge'; m.textContent = 'principal'; name.appendChild(m); }
-    var meta = document.createElement('div'); meta.className = 'meta';
-    var bits = [(g.last_opened_at ? 'jugada ' + fmt(g.last_opened_at) : 'creada ' + fmt(g.created_at))];
-    if (g.characters.length) bits.push(g.characters.join(', '));
-    if (g.mode === 'record' || g.mode === 'replay') bits.push(g.cache_entries + ' respuestas grabadas');
-    meta.textContent = bits.join(' · ');
-    meta.title = meta.textContent;
-    info.appendChild(name); info.appendChild(meta);
-    var act = document.createElement('div'); act.className = 'actions';
-    actions.forEach(function (a) { act.appendChild(a); });
-    li.appendChild(info); li.appendChild(act);
-    return li;
+  /** Acciones de cada lista: la principal es «Abrir»; el resto va en el menú «…». */
+  function extras(g) {
+    if (tab === 'demos') return [
+      button('Jugar desde el principio', '', function (b) {
+        b.disabled = true;
+        call('POST', '/api/games/reset?game=' + encodeURIComponent(g.slug)).then(function (r) { if (!r.ok) { toast(r.text); load(); } else open(g.slug); });
+      }),
+      deleteButton(g),
+    ];
+    if (tab === 'recordings') return [
+      button('Convertir en demo', '', function (b) {
+        b.disabled = true;
+        call('POST', '/api/games/demo?game=' + encodeURIComponent(g.slug)).then(function (r) { if (!r.ok) toast(r.text); load(); });
+      }),
+      deleteButton(g),
+    ];
+    return [deleteButton(g)];
   }
 
-  function fill(ul, games, empty, actionsFor) {
-    ul.innerHTML = '';
-    if (!games.length) { var p = document.createElement('p'); p.className = 'empty'; p.textContent = empty; ul.appendChild(p); return; }
-    games.forEach(function (g) { ul.appendChild(item(g, actionsFor(g))); });
+  function card(g) {
+    var c = el('article', 'gcard window');
+    var th = el('div', 'thumb ' + g.mode); th.appendChild(badge(g)); c.appendChild(th);
+    // Cada partida enseña otro rincón del paisaje, siempre el mismo para la misma partida.
+    var h = 0; for (var i = 0; i < g.slug.length; i++) h = (h * 31 + g.slug.charCodeAt(i)) >>> 0;
+    th.style.backgroundPosition = (h % 101) + '% ' + (25 + (h >> 8) % 40) + '%';
+    var info = el('div', 'info');
+    info.appendChild(el('div', 'name', g.name));
+    var meta = [when(g)];
+    if (g.mode === 'record' || g.mode === 'replay') meta.push(g.cache_entries + ' respuestas grabadas');
+    var m = el('div', 'meta', meta.join(' · ')); m.title = m.textContent;
+    info.appendChild(m);
+    c.appendChild(info);
+    var foot = el('div', 'foot');
+    foot.appendChild(avatars(g.characters));
+    var pop = el('div', 'menu-pop'); pop.hidden = true;
+    extras(g).forEach(function (b) { pop.appendChild(b); });
+    var more = el('button', 'more'); more.type = 'button'; more.title = 'Más acciones'; more.setAttribute('aria-label', 'Más acciones'); more.innerHTML = icon('i-more');
+    more.addEventListener('click', function (ev) { ev.stopPropagation(); var was = pop.hidden; closeMenus(); pop.hidden = !was; });
+    var openB = el('button', 'btn sm glass'); openB.type = 'button'; openB.innerHTML = icon('i-play') + 'Abrir';
+    openB.addEventListener('click', function () { open(g.slug); });
+    foot.appendChild(more); foot.appendChild(openB); foot.appendChild(pop);
+    c.appendChild(foot);
+    return c;
+  }
+  function closeMenus() { document.querySelectorAll('.menu-pop').forEach(function (p) { p.hidden = true; }); }
+  document.addEventListener('click', closeMenus);
+
+  var EMPTY = {
+    continue: 'Aún no hay partidas.',
+    demos: 'La carpeta de demos está vacía. Graba una partida y conviértela en demo.',
+    recordings: 'No hay grabaciones. Crea una partida en modo «Grabar demo».',
+  };
+  function render() {
+    var grid = $('list'), games = lists[tab];
+    grid.innerHTML = '';
+    document.querySelectorAll('.seg [data-list]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-list') === tab); });
+    if (!games.length && tab !== 'continue') grid.appendChild(el('p', 'empty', EMPTY[tab]));
+    games.forEach(function (g) { grid.appendChild(card(g)); });
+    if (tab === 'continue') {
+      var n = el('button', 'gcard new');
+      n.type = 'button';
+      n.innerHTML = '<span class="plus">' + icon('i-plus') + '</span><b>Nueva partida</b><small>Real, offline o grabando una demo</small>';
+      n.addEventListener('click', openNew);
+      grid.appendChild(n);
+    }
+  }
+  document.querySelectorAll('.seg [data-list]').forEach(function (b) { b.addEventListener('click', function () { tab = b.getAttribute('data-list'); render(); }); });
+
+  /** El héroe: la última partida jugada (no demo ni grabación), para seguir con un clic. */
+  function hero(g) {
+    $('hero').hidden = !g;
+    if (!g) return;
+    $('hero-name').textContent = g.name;
+    var meta = $('hero-meta');
+    meta.innerHTML = '';
+    meta.appendChild(badge(g));
+    if (g.characters.length) meta.appendChild(avatars(g.characters));
+    meta.appendChild(el('span', '', [g.characters.join(', '), when(g).toLowerCase()].filter(Boolean).join(' · ')));
+    $('hero-text').textContent = g.characters.length ? 'Tu grupo te espera en la taberna, donde lo dejasteis.' : 'La partida está lista: entra y crea tu personaje.';
+    $('hero-open').onclick = function () { open(g.slug); };
   }
 
   function load() {
     return fetch('/api/games').then(function (r) { return r.json(); }).then(function (d) {
       apiKey = d.api_key;
+      var st = $('status');
+      st.hidden = false;
+      st.textContent = apiKey ? 'Máster con Claude disponible' : 'Sin clave de API: solo offline';
+      st.classList.toggle('off', !apiKey);
       // Sin clave, lo sensato por defecto es offline (si el usuario no ha elegido otra cosa).
       if (!apiKey && !modeTouched) document.querySelector('input[name=mode][value=offline]').checked = true;
       keyWarn();
@@ -194,35 +353,27 @@ export const MENU = String.raw`<!doctype html>
         d.options.classes.forEach(function (c) { $('g-class').add(new Option(c.name, c.id)); });
       }
       var games = d.games;
-      fill($('list-continue'), games.filter(function (g) { return !g.demo && g.mode !== 'record'; }), 'Aún no hay partidas. Crea una a la izquierda.', function (g) {
-        return [button('Abrir', 'primary', function () { open(g.slug); }), deleteButton(g)];
-      });
-      fill($('list-demos'), games.filter(function (g) { return g.demo; }), 'La carpeta de demos está vacía. Graba una partida y conviértela en demo.', function (g) {
-        return [
-          button('Abrir', 'primary', function () { open(g.slug); }),
-          button('Desde el principio', '', function (b) {
-            b.disabled = true;
-            call('POST', '/api/games/reset?game=' + encodeURIComponent(g.slug)).then(function (r) { if (!r.ok) { alert(r.text); load(); } else open(g.slug); });
-          }),
-          deleteButton(g),
-        ];
-      });
-      fill($('list-recordings'), games.filter(function (g) { return !g.demo && g.mode === 'record'; }), 'No hay grabaciones. Crea una partida en modo «Grabar demo».', function (g) {
-        return [
-          button('Abrir', 'primary', function () { open(g.slug); }),
-          button('Convertir en demo', '', function (b) {
-            b.disabled = true;
-            call('POST', '/api/games/demo?game=' + encodeURIComponent(g.slug)).then(function (r) { if (!r.ok) alert(r.text); load(); });
-          }),
-          deleteButton(g),
-        ];
-      });
-    }).catch(function () { $('list-continue').innerHTML = '<p class="error">No hay conexión con el servidor.</p>'; });
+      lists.continue = games.filter(function (g) { return !g.demo && g.mode !== 'record'; });
+      lists.demos = games.filter(function (g) { return g.demo; });
+      lists.recordings = games.filter(function (g) { return !g.demo && g.mode === 'record'; });
+      $('n-continue').textContent = lists.continue.length;
+      $('n-demos').textContent = lists.demos.length;
+      $('n-recordings').textContent = lists.recordings.length;
+      hero(lists.continue[0]);
+      render();
+    }).catch(function () { $('list').innerHTML = '<p class="error">No hay conexión con el servidor.</p>'; });
   }
 
   function mode() { var c = document.querySelector('input[name=mode]:checked'); return c ? c.value : 'live'; }
   function keyWarn() { $('key-warn').hidden = apiKey || mode() === 'offline'; }
   document.querySelectorAll('input[name=mode]').forEach(function (r) { r.addEventListener('change', function () { modeTouched = true; keyWarn(); }); });
+
+  function openNew() { $('sheet').hidden = false; $('g-name').focus(); }
+  function closeNew() { $('sheet').hidden = true; }
+  $('open-new').addEventListener('click', openNew);
+  $('close-new').addEventListener('click', closeNew);
+  $('sheet').addEventListener('click', function (ev) { if (ev.target === $('sheet')) closeNew(); });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { closeNew(); closeMenus(); } });
 
   $('new-form').addEventListener('submit', function (e) {
     e.preventDefault();

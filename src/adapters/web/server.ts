@@ -18,6 +18,7 @@
  *   GET  /api/map?character=ID      mapa de zona y región
  *   GET  /api/scene?character=ID    ilustración de la localización actual (IMAGES=on), o null
  *   GET  /images/<fichero>          ilustraciones descargadas de la partida (data/games/<slug>/images)
+ *   GET  /assets/<fichero>          imágenes fijas de la interfaz (public/), sin ?game
  *   POST /api/act      {character, text}
  *   POST /api/roll     {character}
  *   POST /api/command  {character, name}
@@ -148,6 +149,7 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
     }
     if (url.pathname === '/api/games' || url.pathname.startsWith('/api/games/')) { await handleGames(req, res, url, slug); return; }
     if (req.method === 'GET' && url.pathname.startsWith('/images/')) { await serveImage(res, url.pathname.slice('/images/'.length), slug); return; }
+    if (req.method === 'GET' && url.pathname.startsWith('/assets/')) { await serveAsset(res, url.pathname.slice('/assets/'.length)); return; }
     if (!url.pathname.startsWith('/api/')) { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
 
     if (!slug) { json(res, 400, { ok: false, text: 'Falta el parámetro game (?game=<partida>): abre una partida desde el menú.' }); return; }
@@ -218,6 +220,15 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
     if (!m || !/^[A-Za-z0-9_-]+\.jpg$/.test(name)) { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
     let bytes: Buffer;
     try { bytes = await readFile(join(games.paths(m).dir, 'images', name)); } catch { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
+    res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' });
+    res.end(bytes);
+  }
+
+  /** Imágenes fijas de la interfaz: public/ en la raíz del proyecto (vale igual desde src/ que desde dist/). */
+  async function serveAsset(res: ServerResponse, name: string): Promise<void> {
+    if (!/^[A-Za-z0-9_-]+\.jpg$/.test(name)) { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
+    let bytes: Buffer;
+    try { bytes = await readFile(new URL('../../../public/' + name, import.meta.url)); } catch { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
     res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' });
     res.end(bytes);
   }

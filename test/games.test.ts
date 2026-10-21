@@ -194,7 +194,7 @@ describe('rutas web con ?game', () => {
     expect(menu).toContain('Nueva partida');
     const { game } = await games.create({ name: 'Uno', mode: 'offline' });
     const page = await (await get(`/?game=${game.slug}`)).text();
-    expect(page).toContain('← Menú');
+    expect(page).toContain('Volver al menú de partidas');
     const missing = await fetch(`${base}/?game=nada`, { redirect: 'manual' });
     expect(missing.status).toBe(302);
   });

@@ -241,3 +241,36 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
   `deploy/` (crear VM, preparar, subir código y partida, servicio systemd, copias diarias).
   Pendiente de Santy: proyecto personal con facturación y login con la cuenta personal.
 - Para la guía de admin: separar siempre la cuenta personal de la del trabajo en `gcloud`.
+
+## Web local para trabajar el front (21 oct 2026)
+
+- **Arrancar sin gastar API ni levantar Discord:** perfil `tavernus-web-offline` de `.claude/launch.json`
+  (puerto 3107, `MASTER_MODE=offline`, partidas en `data/local/offline/`). Abre `http://localhost:3107`.
+- **El servidor no recarga solo:** el HTML/CSS/JS está en strings de `src/adapters/web/page*.ts`;
+  tras cada cambio hay que reiniciarlo.
+- **Pantallas y flujo actual en Figma:** archivo TAVERNUS, página «01 · Flujo actual».
+- **Defectos vistos al documentarlo:** en móvil (390 px) la cabecera no cabe y el botón «Hoja» se corta;
+  una partida que no existe redirige al menú sin avisar.
+
+## Diseño · propuesta 3 «Liquid Glass» (Figma, 21 oct 2026)
+- Página «03 · Liquid Glass (3 columnas)» del Figma TAVERNUS. El chat mide lo mismo que un móvil (unos 400 px) y va en el centro. A la izquierda queda la información del personaje (ficha, misión, grupo, mochila) y a la derecha lo espacial (tablero, mapa, escena, puntos cercanos, salidas).
+- En móvil, cada columna es una pestaña de la barra inferior: Personaje · Partida · Tablero. Los componentes son los mismos («Chat · móvil», «Columna · info», «Columna · tablero»).
+- Se usa el efecto Glass nativo de Figma. Las fuentes locales (SF Pro) no se dibujan desde el plugin, así que la propuesta usa Inter. En la web real se puede usar `-apple-system`/SF Pro con Inter de respaldo.
+
+## Diseño · propuesta 4 (Figma, 21 oct 2026)
+- Página «04 · Liquid Glass · layout v2»: la estructura de la propuesta 2 con el estilo vidrio de la 3. El chat sigue siendo el componente de ancho móvil («Chat · móvil»).
+- Escritorio: la escena ocupa el bloque principal y el chat flota encima, a la izquierda. A la derecha va el panel lateral con la ficha y las pestañas Tablero / Mapa / Hoja.
+- Móvil: la escena hace de cabecera y hay 4 pestañas (Partida, Tablero, Mapa, Hoja). El tablero se abre como hoja inferior de vidrio.
+
+## Diseño · versiones B «vidrio espacial» (Figma, 21 oct 2026)
+- En las páginas 03 y 04 hay una sección «Versión B · vidrio espacial (más sutil)» con las mismas pantallas (G1B–G5B y P0B–M2B), para compararlas con las originales.
+- Criterio, según las Human Interface Guidelines de Apple (Materials y Spatial layout): Liquid Glass solo en los controles y la navegación flotantes; el contenido va en superficies sin borde; una ventana por zona; nada de vidrio sobre vidrio.
+- Estilos nuevos: los efectos «Glass B/Ventana» (vidrio esmerilado, brillo superior y sombra amplia), «Glass B/Control» (Liquid Glass sutil), «Glass B/Hoja» y «Glass B/Acento», y las variables material/platter, material/control y material/hover.
+- Aprendizaje: en Figma, el efecto Glass sobre superficies grandes dibuja un canto marcado. Para las ventanas queda mejor el desenfoque de fondo.
+
+- (2026-10-21) Diseño elegido: P1B (página 04 de Figma). En escritorio el chat ocupa todo el espacio central; las imágenes de escena van dentro de los mensajes del máster y, al pulsarlas, se abren ampliadas en una modal (frame «P1B · Imagen ampliada (modal)»; se cierra con la X, clic fuera o Esc).
+
+## Interfaz web · estilo «vidrio espacial» (rama rediseno-liquid-glass-b, 21 oct 2026)
+- Menú: la taberna vikinga al amanecer de fondo (imagen hecha con Nano Banana 2.1 en Magnific; está en `public/taberna.jpg` y la sirve `/assets/taberna.jpg`). Arriba, «Continúa tu historia» con la última partida; debajo, pestañas Partidas / Demos / Grabaciones y tarjetas. «Nueva partida» abre una hoja con el formulario; las acciones secundarias (borrar, convertir en demo, jugar desde el principio) están en el botón «…» de cada tarjeta.
+- Partida: el chat ocupa el centro; las ilustraciones de escena aparecen dentro del chat y un clic las abre en grande (Esc o clic fuera para cerrar). A la derecha, la ficha del personaje (PG, CA, velocidad, percepción, nivel) y las pestañas Tablero / Mapa / Hoja. Los avatares de arriba a la derecha cambian de personaje; la hora de la partida va en el centro.
+- Móvil: barra de abajo con Partida / Tablero / Mapa / Hoja.
