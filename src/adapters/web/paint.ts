@@ -118,7 +118,8 @@ export const PAINT_STYLE = String.raw`
 
 export const PAINT_JS = String.raw`
   // --- Pincel: ilustrar el momento actual (paint.ts) ---------------------------
-  var BRUSH = '<svg class="i" viewBox="0 0 24 24"><path d="M14.5 4.5l5 5L11 18l-5-5z"/><path d="M17 2l5 5-2.5 2.5-5-5z"/><path d="M6 13c-2 0-3.5 1.6-3.5 3.6 0 1.4-.6 2.6-1.5 3.4 1.2.7 2.6 1 4 1 2.8 0 5-2.2 5-5"/></svg>';
+  // Imagen generada: un marco con un paisaje y un destello (ilustrar este momento con IA).
+  var BRUSH = '<svg class="i" viewBox="0 0 24 24"><path d="M13 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6"/><path d="M3 16l5-5 4 4 2-2 7 7"/><circle cx="8.5" cy="8.5" r="1.3"/><path d="M18.5 2.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg>';
   var brush = document.createElement('button');
   brush.type = 'button'; brush.className = 'brush'; brush.innerHTML = BRUSH; brush.hidden = true;
   brush.title = 'Pintar este momento'; brush.setAttribute('aria-label', 'Pintar este momento');

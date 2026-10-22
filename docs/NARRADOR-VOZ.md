@@ -68,7 +68,7 @@ Fuentes:
 - [Retiradas](https://developers.openai.com/api/docs/deprecations)
 - Muestras en openai.fm
 
-### ElevenLabs
+### ElevenLabs (adaptador implementado)
 
 - **Precio API.** Flash/Turbo cuesta $0,04 por 1.000 caracteres ($40 por 1M). v3, v4 y Multilingual v2 cuestan $0,08 ($80 por 1M). Es la opción más cara, pero también la más expresiva, con voces de personaje y clonado.
 - **Latencia.** Flash v2.5 tiene unos 75 ms de latencia de modelo y streaming por WebSocket. Multilingual v2 tiene variantes de España.
@@ -96,7 +96,7 @@ Fuentes:
 - [Autenticación](https://docs.cloud.google.com/text-to-speech/docs/authentication)
 - Demo en [cloud.google.com/text-to-speech](https://cloud.google.com/text-to-speech)
 
-### Azure AI Speech, Neural TTS (el adaptador implementado)
+### Azure AI Speech, Neural TTS (adaptador implementado)
 
 - **Precio.** S1 Neural cuesta $15 por 1M (vigente desde 1-2-2024) y Neural HD $22 (desde 1-3-2026). Los commitment tiers bajan hasta $5,70.
 - **Capa gratuita F0.** Trae 0,5M de caracteres neuronales al mes, unas 41 h, con un límite de 20 peticiones por minuto que no se puede ampliar. Abrir la cuenta exige tarjeta para verificar la identidad, sin cobro.
@@ -177,6 +177,29 @@ Probar contra la nube **gasta cuota**: con F0 no hay cobro, pero en S0 se cobran
    ```
 
 `TTS_MAX_CHARS` corta las peticiones a la nube por arranque del servidor; lo cacheado no cuenta. El audio se guarda en `data/games/<slug>/audio/<hash>.mp3`: si el texto y las voces coinciden, no se vuelve a pedir. Si la nube falla, la web sigue con la voz del navegador.
+
+### Activar la voz de nube (ElevenLabs)
+
+Probar contra la nube **gasta créditos de tu cuenta de ElevenLabs**. El plan gratuito no permite uso comercial y obliga a citar «elevenlabs.io»; para jugar con gente hace falta un plan de pago.
+
+1. En elevenlabs.io: tu perfil › **API Keys** › crear una clave. Basta con el permiso de «Text to Speech».
+2. Elegir las voces. En **Voices** (las tuyas o las de la Voice Library añadidas a tu cuenta) cada voz tiene un **Voice ID**: se copia desde el menú «⋯» de la voz. Una para el narrador y, si se quiere, varias para los personajes (cada personaje toma siempre la misma).
+3. Añadir al `.env` (nunca al código ni a un mensaje):
+
+   ```
+   TTS_PROVIDER=elevenlabs
+   ELEVENLABS_API_KEY=…
+   TTS_VOICE_NARRATOR=<voice id del narrador>
+   # opcionales
+   TTS_VOICES_NPC=<id>,<id>,<id>
+   ELEVENLABS_MODEL=eleven_multilingual_v2
+   TTS_RATE=1
+   TTS_MAX_CHARS=200000
+   ```
+
+4. Reiniciar el servidor. En la página, la voz pasa a ser la de ElevenLabs: se escucha pulsando el avatar de un bocadillo o con «Leer solo».
+
+Modelos: `eleven_multilingual_v2` (por defecto, la mejor calidad en castellano), `eleven_flash_v2_5` (la mitad de precio y más rápido) o `eleven_v3` (la más expresiva). La velocidad (`TTS_RATE`) se limita al rango de ElevenLabs, de 0,7 a 1,2. ElevenLabs genera una voz por petición: los trozos seguidos de la misma voz van juntos y el servidor encadena los mp3 en uno. Como con Azure, el audio se guarda en `data/games/<slug>/audio/` y no se vuelve a pedir; si la nube falla, la web sigue con la voz del navegador y el error sale en la consola del servidor (`[tts] ElevenLabs 401…`).
 
 ### Pantalla apagada en el móvil: hasta dónde llega
 

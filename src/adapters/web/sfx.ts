@@ -409,8 +409,9 @@ export const SFX_STYLE = String.raw`
   @media (max-width: 820px) { .sfx > .sfx-toggle span { display: none; } .sfx > .sfx-toggle { padding: 0 6px 0 10px; } }
 `;
 
-const NOTE_ICON = '<svg class="i onw" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
-const MUTE_ICON = '<svg class="i off" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 5M22 9l-5 5"/></svg>';
+/** Nota musical (sonido de la partida) y la misma nota tachada (silencio). */
+const NOTE_ICON = '<svg class="i onw" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>';
+const MUTE_ICON = '<svg class="i off" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path d="M3 3l18 18"/></svg>';
 const CARET = '<svg class="i" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M7 10l5 5 5-5"/></svg>';
 
 export const SFX_SCRIPT = String.raw`<script>

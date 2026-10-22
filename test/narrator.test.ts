@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
-import { AZURE_DEFAULTS, azureSsml, hashIndex, narratorFromEnv, type NarratorProvider, type SpeechRequest } from '../src/ai/narrator.js';
+import { AZURE_DEFAULTS, azureSsml, ELEVENLABS_DEFAULTS, hashIndex, narratorFromEnv, stripId3, type NarratorProvider, type SpeechRequest } from '../src/ai/narrator.js';
 import { GameManager, type MasterFactory } from '../src/games/manager.js';
 import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
 import { setNarratorForTests } from '../src/adapters/web/tts.js';
@@ -30,6 +30,51 @@ describe('narratorFromEnv', () => {
     expect(calls[0]!.url).toBe('https://westeurope.tts.speech.microsoft.com/cognitiveservices/v1');
     expect((calls[0]!.init.headers as Record<string, string>)['ocp-apim-subscription-key']).toBe('k');
     expect(String(calls[0]!.init.body)).toContain(`<voice name="${AZURE_DEFAULTS.narrator}">`);
+  });
+});
+
+describe('ElevenLabs', () => {
+  it('sin clave avisa; con ella pide cada voz por separado y junta los mp3 en uno', async () => {
+    expect(() => narratorFromEnv({ TTS_PROVIDER: 'elevenlabs' })).toThrow(/ELEVENLABS_API_KEY/);
+    const calls: { url: string; init: RequestInit }[] = [];
+    let n = 0;
+    const fake = (async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      n++;
+      return new Response(new Uint8Array([n, n]), { status: 200 });
+    }) as unknown as typeof fetch;
+    const p = narratorFromEnv({ TTS_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k', TTS_VOICE_NARRATOR: 'narr', TTS_VOICES_NPC: 'brenna' }, fake)!;
+    expect(p.id).toBe('elevenlabs');
+    const audio = await p.synthesize([
+      { text: 'La luna asoma.', role: 'narrator', speaker: null },
+      { text: 'Entre los robles.', role: 'narrator', speaker: null },
+      { text: '¿Qué te pongo?', role: 'dialogue', speaker: 'npc_brenna' },
+    ]);
+    // Dos narraciones seguidas van juntas: dos peticiones, una por voz, y el audio encadenado.
+    expect(calls.map((c) => c.url)).toEqual([
+      'https://api.elevenlabs.io/v1/text-to-speech/narr?output_format=mp3_44100_128',
+      'https://api.elevenlabs.io/v1/text-to-speech/brenna?output_format=mp3_44100_128',
+    ]);
+    expect([...audio]).toEqual([1, 1, 2, 2]);
+    expect((calls[0]!.init.headers as Record<string, string>)['xi-api-key']).toBe('k');
+    const body = JSON.parse(String(calls[0]!.init.body)) as { text: string; model_id: string; voice_settings?: unknown };
+    expect(body).toEqual({ text: 'La luna asoma.\n\nEntre los robles.', model_id: ELEVENLABS_DEFAULTS.model });
+    // La voz y el modelo forman parte de la clave de la caché.
+    expect(p.voiceFor({ text: 'x', role: 'narrator', speaker: null })).toBe(`narr@${ELEVENLABS_DEFAULTS.model}@1`);
+  });
+
+  it('al unir los mp3, quita la etiqueta ID3 de todos menos el primero', () => {
+    const tag = Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 3, 9, 9, 9]);
+    expect([...stripId3(Buffer.concat([tag, Buffer.from([0xff, 0xfb])]))]).toEqual([0xff, 0xfb]);
+    expect([...stripId3(Buffer.from([0xff, 0xfb, 1]))]).toEqual([0xff, 0xfb, 1]);
+  });
+
+  it('un error de la API se convierte en una excepción con el código', async () => {
+    const fake = (async () => new Response('invalid_api_key', { status: 401 })) as unknown as typeof fetch;
+    const p = narratorFromEnv({ TTS_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'mala', TTS_RATE: '1.5' }, fake)!;
+    await expect(p.synthesize([{ text: 'Hola', role: 'narrator', speaker: null }])).rejects.toThrow(/ElevenLabs 401/);
+    // La velocidad se limita al rango que admite ElevenLabs.
+    expect(p.voiceFor({ text: 'x', role: 'narrator', speaker: null })).toBe(`${ELEVENLABS_DEFAULTS.narrator}@${ELEVENLABS_DEFAULTS.model}@1.2`);
   });
 });
 
