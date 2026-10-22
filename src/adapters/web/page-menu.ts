@@ -91,8 +91,8 @@ export const MENU = String.raw`<!doctype html>
   #pick[hidden] { display: none; }
   /* La imagen ocupa toda la columna, con la casa en su centro; el texto va encima, abajo a la izquierda. */
   #pick { position: relative; }
-  .hero { position: relative; min-height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
-  .hero::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, var(--chat) 0%, rgba(11,13,12,.88) 26%, rgba(11,13,12,.25) 52%, rgba(11,13,12,0) 70%); }
+  .hero { position: relative; min-height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 40px 0; }
+  .hero::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(11,13,12,.86) 0%, rgba(11,13,12,.6) 32%, rgba(11,13,12,.12) 62%, rgba(11,13,12,0) 80%), linear-gradient(to top, rgba(11,13,12,.5), rgba(11,13,12,0) 35%); }
   .hero .cap { position: relative; z-index: 1; padding: 0 40px; display: flex; flex-direction: column; gap: 8px; }
   .hero > .body, .hero > .intro { position: relative; z-index: 1; }
   .eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
@@ -100,7 +100,7 @@ export const MENU = String.raw`<!doctype html>
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chips span { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; background: rgba(14,15,16,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); font-size: 12.5px; color: #d9d3c8; }
   .chips .badge { height: 28px; padding: 0 10px; border-radius: 999px; background: rgba(14,15,16,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
-  .body { max-width: 760px; padding: 18px 40px 44px; display: flex; flex-direction: column; gap: 16px; }
+  .body { max-width: 760px; padding: 18px 40px 0; display: flex; flex-direction: column; gap: 16px; }
   .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .gear-wrap { position: relative; display: inline-flex; }
   .ib.gear { width: 44px; height: 44px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
@@ -108,7 +108,7 @@ export const MENU = String.raw`<!doctype html>
   .gear-wrap .menu-pop button { text-align: center; white-space: nowrap; padding: 0 16px; }
   .kv-t { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
   .facts { color: var(--muted); font-size: 13.5px; }
-  .intro { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; max-width: 520px; padding: 18px 40px 44px; }
+  .intro { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; max-width: 520px; padding: 18px 40px 0; }
   .intro p { margin: 0; color: var(--muted); }
 
   /* Nueva partida, en la misma columna (en el móvil, una hoja desde abajo). */
