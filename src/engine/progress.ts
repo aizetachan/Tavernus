@@ -6,7 +6,7 @@
 
 import { GAME_DAY } from '../clock/clock.js';
 import { spawnItem, transferItem } from './inventory.js';
-import type { Character, Id, Job } from './model.js';
+import type { Character, Id, Job, Npc, Placement } from './model.js';
 import type { World } from './world.js';
 
 export interface ProgressEvent { kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement'; text: string; public?: string }
@@ -131,7 +131,7 @@ export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id,
   return { ok: true, item: world.itemDef(inst.item_id).name, quantity: q, total };
 }
 
-export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, quantity: number): { ok: true; item: string; quantity: number; total: number } | { ok: false; reason: string } {
+export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, quantity: number): { ok: true; item: string; quantity: number; total: number; unlocked: string[] } | { ok: false; reason: string } {
   const npc = world.npc(npcId);
   if (world.characterSpot(c)?.id !== npc.location.id) return { ok: false, reason: `${npc.name} no está aquí` };
   const offer = npc.sells.find((s) => s.item_id === itemId);
@@ -139,21 +139,41 @@ export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, qu
   const q = Math.max(1, Math.floor(quantity));
   const total = offer.price * q;
   if (c.coins < total) return { ok: false, reason: `faltan ${total - c.coins} monedas` };
-  const def = world.itemDef(itemId);
-  const targets = def.size === 'bulky'
-    ? [{ type: 'character' as const, id: c.id, slot: { kind: 'hand' as const, which: 'both' as const } }]
-    : [
-      { type: 'character' as const, id: c.id, slot: { kind: 'hand' as const, which: 'main' as const } },
-      { type: 'character' as const, id: c.id, slot: { kind: 'hand' as const, which: 'off' as const } },
-      { type: 'character' as const, id: c.id, slot: { kind: 'pocket' as const } },
-    ];
-  for (const t of targets) {
-    const r = spawnItem(world, itemId, q, t);
-    if (r.ok) { c.coins -= total; world.touch('characters', c.id); return { ok: true, item: def.name, quantity: q, total }; }
-  }
-  // Sin sitio encima: al suelo.
-  const r = spawnItem(world, itemId, q, { type: 'spot', id: npc.location.id });
-  if (!r.ok) return { ok: false, reason: 'no hay dónde ponerlo' };
+  const r = deliverGoods(world, c, npc, itemId, q);
+  if (!r.ok) return r;
   c.coins -= total; world.touch('characters', c.id);
-  return { ok: true, item: def.name, quantity: q, total };
+  return { ok: true, item: r.item, quantity: q, total, unlocked: r.unlocked };
+}
+
+/**
+ * Entrega al PJ lo que vende un NPC (comprado o fiado): en manos o bolsillo y,
+ * si no cabe, al suelo. Un servicio (noche de posada) entrega su llave y abre
+ * para el PJ los puntos del vendedor cerrados con ella. No cobra.
+ */
+export function deliverGoods(world: World, c: Character, npc: Npc, itemId: Id, q: number): { ok: true; item: string; unlocked: string[] } | { ok: false; reason: string } {
+  const def = world.itemDef(itemId);
+  const give = def.service ? world.itemDef(def.service.gives_item_id) : def;
+  const targets: Placement[] = give.size === 'bulky'
+    ? [{ type: 'character', id: c.id, slot: { kind: 'hand', which: 'both' } }]
+    : [
+      { type: 'character', id: c.id, slot: { kind: 'pocket' } },
+      { type: 'character', id: c.id, slot: { kind: 'hand', which: 'main' } },
+      { type: 'character', id: c.id, slot: { kind: 'hand', which: 'off' } },
+    ];
+  // Lo de comprar va a la mano; una llave, mejor al bolsillo.
+  if (!def.service) targets.push(targets.shift()!);
+  let placed = false;
+  for (const t of targets) if (spawnItem(world, give.id, def.service ? 1 : q, t).ok) { placed = true; break; }
+  if (!placed && !spawnItem(world, give.id, def.service ? 1 : q, { type: 'spot', id: npc.location.id }).ok) return { ok: false, reason: 'no hay dónde ponerlo' };
+  const unlocked: string[] = [];
+  if (def.service) {
+    const locId = world.spot(npc.location.id).location_id;
+    for (const sp of world.spotsOf(locId)) {
+      if (sp.state['key_item_id'] !== give.id) continue;
+      const open = Array.isArray(sp.state['unlocked_for']) ? (sp.state['unlocked_for'] as Id[]) : [];
+      if (!open.includes(c.id)) { sp.state['unlocked_for'] = [...open, c.id]; world.touch('spots', sp.id); }
+      unlocked.push(sp.name);
+    }
+  }
+  return { ok: true, item: def.service ? `${def.name} (${give.name})` : def.name, unlocked };
 }

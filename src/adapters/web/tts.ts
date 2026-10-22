@@ -1,0 +1,439 @@
+/**
+ * Narrador de voz de la web: un altavoz en cada narración del máster que la lee en alto, el ajuste
+ * «leer automáticamente» que encadena las nuevas, y un botón de parar.
+ *
+ * Dos modos, según TTS_PROVIDER (src/ai/narrator.ts):
+ *   - browser (por defecto): speechSynthesis del navegador, sin servidor ni coste; elige la mejor voz
+ *     en castellano que haya y la recuerda. El diálogo va con otra voz (o, si solo hay una, otro tono).
+ *   - nube (azure): POST /api/tts?game=SLUG {parts: [{text, role, speaker}]} devuelve la narración en un
+ *     solo audio (narrador y personajes con voces distintas), cacheado por hash en
+ *     data/games/<slug>/audio; se reproduce con <audio> y Media Session, que sigue sonando con la
+ *     pantalla apagada mejor que speechSynthesis.
+ *
+ * page.ts solo interpola TTS_STYLE dentro de su <style>, TTS_SCRIPT tras su <script> y llama a
+ * TavernusTTS.attach / .fresh al pintar un mensaje; server.ts manda /api/tts* a handleTtsRequest.
+ * La limpieza del texto (src/ai/speech.ts) se incrusta tal cual con toString(): la misma en los tests.
+ */
+
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { GameManager } from '../../games/manager.js';
+import { narratorFromEnv, type NarratorProvider, type SpeechRequest, type SpeechRole } from '../../ai/narrator.js';
+import { speechChunks, speechMarkup, speechParts, speechText } from '../../ai/speech.js';
+
+/** Las funciones de speech.ts como fuente JS para la página. `__name` lo añade tsx (keepNames) y aquí no existe. */
+export const TTS_SHARED = [
+  'var __name = function (f) { return f; };',
+  speechMarkup.toString(), speechParts.toString(), speechText.toString(), speechChunks.toString(),
+].map((s) => s.replace(/^export\s+/, '')).join('\n');
+
+const MAX_TEXT = 3000;
+
+let provider: NarratorProvider | null | undefined;
+let providerError: string | null = null;
+let sentChars = 0;
+
+function current(): NarratorProvider | null {
+  if (provider !== undefined) return provider;
+  try { provider = narratorFromEnv(process.env); } catch (e) {
+    provider = null;
+    providerError = (e as Error).message;
+    console.error('[tts]', providerError, '— se usa la voz del navegador.');
+  }
+  return provider;
+}
+
+/** Para los tests: otro proveedor (o ninguno) sin tocar el entorno. */
+export function setNarratorForTests(p: NarratorProvider | null | undefined): void { provider = p; providerError = null; sentChars = 0; }
+
+/**
+ *   GET  /api/tts/config               {provider, label}: 'browser' si la voz la pone el navegador
+ *   POST /api/tts?game=SLUG            {parts: [{text, role, speaker}]} → audio (mp3), cacheado en <partida>/audio
+ */
+export async function handleTtsRequest(req: IncomingMessage, res: ServerResponse, url: URL, games: GameManager): Promise<void> {
+  const p = current();
+  if (req.method === 'GET' && url.pathname === '/api/tts/config') {
+    json(res, 200, { provider: p ? p.id : 'browser', label: p ? p.label : 'Voz del navegador', ...(providerError ? { error: providerError } : {}) });
+    return;
+  }
+  if (req.method !== 'POST' || url.pathname !== '/api/tts') { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
+  if (!p) { json(res, 409, { ok: false, text: 'TTS_PROVIDER=browser: la voz la pone el navegador.' }); return; }
+  const slug = url.searchParams.get('game');
+  const m = slug ? await games.get(slug) : null;
+  if (!m) { json(res, 404, { ok: false, text: 'No existe esa partida.' }); return; }
+  const parts = partsOf(await readJson(req));
+  const chars = parts.reduce((n, x) => n + x.text.length, 0);
+  if (!parts.length || chars > MAX_TEXT) { json(res, 400, { ok: false, text: `Texto vacío o de más de ${MAX_TEXT} caracteres.` }); return; }
+  const key = createHash('sha256').update(p.id + parts.map((x) => `\n${p.voiceFor(x)}\n${x.text}`).join('')).digest('hex').slice(0, 32);
+  const dir = join(games.paths(m).dir, 'audio');
+  const file = join(dir, `${key}.${p.ext}`);
+  let bytes: Buffer | null = await readFile(file).catch(() => null);
+  if (!bytes) {
+    const limit = Number(process.env['TTS_MAX_CHARS'] ?? 200_000);
+    if (sentChars + chars > limit) { json(res, 429, { ok: false, text: `Límite TTS_MAX_CHARS (${limit}) alcanzado en este arranque.` }); return; }
+    sentChars += chars;
+    try { bytes = await p.synthesize(parts); } catch (e) {
+      console.error('[tts]', (e as Error).message);
+      json(res, 502, { ok: false, text: 'El proveedor de voz no responde.' });
+      return;
+    }
+    await mkdir(dir, { recursive: true });
+    await writeFile(file, bytes);
+  }
+  res.writeHead(200, { 'content-type': p.contentType, 'content-length': bytes.length, 'cache-control': 'private, max-age=86400' });
+  res.end(bytes);
+}
+
+/** {parts: [{text, role, speaker}]} o un solo {text, role, speaker}; como mucho 50 trozos. */
+function partsOf(body: Record<string, unknown>): SpeechRequest[] {
+  const list = Array.isArray(body['parts']) ? (body['parts'] as unknown[]) : [body];
+  const out: SpeechRequest[] = [];
+  for (const raw of list.slice(0, 50)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    const text = typeof r['text'] === 'string' ? r['text'].replace(/\s+/g, ' ').trim() : '';
+    if (!text) continue;
+    const role: SpeechRole = r['role'] === 'dialogue' ? 'dialogue' : 'narrator';
+    out.push({ text, role, speaker: typeof r['speaker'] === 'string' ? r['speaker'].slice(0, 80) : null });
+  }
+  return out;
+}
+
+function json(res: ServerResponse, status: number, data: unknown): void {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(data));
+}
+
+async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+  let raw = '';
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > 16_000) break;
+  }
+  try {
+    const v: unknown = JSON.parse(raw || '{}');
+    return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export const TTS_STYLE = String.raw`
+  /* Narrador de voz: altavoz en el rótulo de cada narración y controles en la cabecera del chat. */
+  .msg .who .tts-say { margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; margin-top: -6px; margin-bottom: -6px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
+  .msg .who .tts-say:hover { background: var(--hover); color: var(--text); }
+  .msg.tts-on .who .tts-say { color: var(--accent); background: var(--accent-tint); }
+  .msg.tts-on .body { box-shadow: inset 0 0 0 1.5px rgba(233,169,78,.45); }
+  .tts-say .bars, .tts-stop .bars { display: none; }
+  .msg.tts-on .tts-say .spk { display: none; }
+  .msg.tts-on .tts-say .bars, .tts-stop .bars { display: flex; }
+  .tts-bars i { transform-origin: 50% 100%; animation: tts-eq 1s ease-in-out infinite; }
+  .tts-bars i:nth-child(2) { animation-delay: -.3s; } .tts-bars i:nth-child(3) { animation-delay: -.6s; }
+  @keyframes tts-eq { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+  @media (prefers-reduced-motion: reduce) { .tts-bars i { animation: none; } }
+  .tts-bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+  .tts-bars i { display: block; width: 3px; height: 12px; border-radius: 1px; background: currentColor; }
+  .chat-head .tts { margin-left: auto; position: relative; display: flex; align-items: center; gap: 6px; flex: none; }
+  .tts > button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--control); color: var(--muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .tts > button:hover { background: var(--hover); color: var(--text); }
+  .tts > button.on { background: var(--accent-tint); color: var(--accent); }
+  .tts > .tts-stop { color: var(--accent-ink); background: var(--accent); }
+  .tts > .tts-stop:hover { background: var(--glow); color: var(--accent-ink); }
+  .tts > .tts-stop[hidden] { display: none; }
+  .tts > .tts-more { width: 32px; padding: 0; justify-content: center; }
+  .tts-pop { position: absolute; top: 40px; right: 0; z-index: 30; width: 280px; padding: 14px; border-radius: 22px; background: rgba(28,29,35,.94); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); box-shadow: var(--window-shadow); font-size: 13px; }
+  .tts-pop[hidden] { display: none; }
+  .tts-pop label { display: block; margin: 0 0 10px; color: var(--muted); font-size: 12px; font-weight: 500; }
+  .tts-pop label.row { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
+  .tts-pop select, .tts-pop input[type=range] { display: block; width: 100%; margin-top: 4px; }
+  .tts-pop select { height: 32px; padding: 0 8px; border: 0; border-radius: 10px; background: var(--control); color: var(--text); }
+  .tts-pop select option { background: #1b1c22; }
+  .tts-pop .note { margin: 6px 0 0; color: var(--faint); font-size: 11.5px; line-height: 1.4; }
+  .tts-hint { align-self: center; padding: 6px 12px; border-radius: 12px; background: var(--platter); color: var(--muted); font-size: 12.5px; }
+  @media (max-width: 820px) {
+    .tts > .tts-auto span { display: none; }
+    .tts > button { padding: 0 10px; }
+  }
+`;
+
+const SPEAKER_ICON = '<svg class="i spk" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+const BARS = '<span class="tts-bars bars"><i></i><i></i><i></i></span>';
+
+export const TTS_SCRIPT = String.raw`<script>
+(function () {
+  var log = document.getElementById('log');
+  if (!log) return;
+  ${TTS_SHARED}
+  var params = new URLSearchParams(location.search), game = params.get('game');
+  var synth = window.speechSynthesis || null;
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  var SPEAKER = '${SPEAKER_ICON}', BARS = '${BARS}';
+
+  var provider = 'browser', providerLabel = 'Voz del navegador';
+  var auto = store('tavernus.tts.auto') === '1';
+  var rate = Number(store('tavernus.tts.rate')) || 1;
+  var awake = store('tavernus.tts.awake') === '1';
+  var queue = [];          // divs de narraciones pendientes
+  var playing = null;      // { div, steps, i }
+  var justAttached = null; // la que acaba de pintarse (para «leer automáticamente»)
+  var audio = null, prefetch = null, lock = null;
+
+  /* ---------- Voces del navegador ---------- */
+  var FEMALE = /elvira|ximena|abril|helena|laura|m[oó]nica|paulina|sabina|luc[ií]a|irene|esperanza|triana|vera|estrella|arabella|isabella|marisol|paloma|dalia|larissa|francisca|camila|elena|catalina|valentina|salom[eé]|marta|carmen|conchita|soledad|ana\b|ines|in[eé]s|female|mujer/i;
+  var MALE = /[aá]lvaro|pablo|jorge|juan|diego|carlos|ra[uú]l|arnau|dar[ií]o|el[ií]as|\bnil\b|sa[uú]l|teo\b|tom[aá]s|gerardo|enrique|alonso|lorenzo|rodrigo|trist[aá]n|andr[eé]s|enrique|male|hombre/i;
+  function gender(v) { return FEMALE.test(v.name) ? 'f' : MALE.test(v.name) ? 'm' : '?'; }
+  function spanish() { return synth ? synth.getVoices().filter(function (v) { return /^es([-_]|$)/i.test(v.lang); }) : []; }
+  function score(v) {
+    var n = v.name, s = /^es[-_]ES/i.test(v.lang) ? 30 : 10;
+    if (/natural|neural/i.test(n)) s += 60;           // Edge: voces neuronales de Azure
+    if (/google/i.test(n)) s += 35;                    // Chrome: voces en línea de Google
+    if (/premium|enhanced|mejorad|siri/i.test(n)) s += 45; // Safari: voces mejoradas
+    if (/online/i.test(n)) s += 10;
+    if (/compact|eloquence|grandma|grandpa|abuel|rocko|shelley|flo\b|reed|sandy|eddy/i.test(n)) s -= 40;
+    return s;
+  }
+  function ranked() { return spanish().sort(function (a, b) { return score(b) - score(a); }); }
+  function byURI(uri) { return spanish().filter(function (v) { return v.voiceURI === uri; })[0] || null; }
+  function narratorVoice() { return byURI(store('tavernus.tts.voice')) || ranked()[0] || null; }
+  /** Voz de los personajes: la elegida, o la mejor de otro género que el narrador; cada hablante, siempre la misma. */
+  function npcVoices() {
+    var chosen = byURI(store('tavernus.tts.npcvoice'));
+    if (chosen) return [chosen];
+    var nv = narratorVoice(), list = ranked().filter(function (v) { return v !== nv && score(v) >= score(nv || v) - 40; });
+    var other = list.filter(function (v) { return nv && gender(v) !== gender(nv) && gender(v) !== '?'; });
+    return (other.length ? other.concat(list.filter(function (v) { return other.indexOf(v) < 0; })) : list).slice(0, 4);
+  }
+  /** Cada hablante, por orden de aparición, toma la siguiente voz libre; acabadas las voces, la misma con otro tono. */
+  var speakers = {}, nSpeakers = 0;
+  var PITCH = [1, 0.85, 1.18, 0.92, 1.1, 0.8, 1.25];
+  function voiceFor(step) {
+    if (step.kind === 'narrator') return { voice: narratorVoice(), pitch: 1 };
+    var key = step.speaker || '?';
+    if (!(key in speakers)) speakers[key] = nSpeakers++;
+    var n = speakers[key], pool = npcVoices();
+    if (!pool.length) return { voice: narratorVoice(), pitch: PITCH[(n + 1) % PITCH.length] };
+    return { voice: pool[n % pool.length], pitch: PITCH[Math.floor(n / pool.length) % PITCH.length] };
+  }
+
+  /* ---------- Cola de lectura ---------- */
+  /** En el navegador, frases cortas (Chrome corta a los ~15 s); en la nube, la narración entera en un solo audio. */
+  function stepsOf(div) {
+    // m.speech: el turno tal como se pinta en el hilo (bloques de novel.ts, en orden); si no, la narración.
+    var m = div.ttsMsg, parts = speechParts(m.speech || m.text, m.lines), steps = [];
+    if (provider !== 'browser') return [{ cloud: parts.map(function (p) { return { text: p.text, role: p.kind, speaker: p.speaker }; }) }];
+    parts.forEach(function (p) { speechChunks(p.text, 200).forEach(function (c) { steps.push({ kind: p.kind, speaker: p.speaker, text: c }); }); });
+    return steps;
+  }
+  function speak(div) { stop(); queue = [div]; next(); }
+  function enqueue(div) {
+    if (queue.indexOf(div) < 0 && (!playing || playing.div !== div)) queue.push(div);
+    if (!playing) next(); else if (provider !== 'browser') audioFor(div);
+  }
+  function next() {
+    if (playing) playing.div.classList.remove('tts-on');
+    playing = null;
+    while (queue.length && !document.body.contains(queue[0])) queue.shift();
+    var div = queue.shift();
+    if (!div) { ui(); release(); return; }
+    playing = { div: div, steps: stepsOf(div), i: 0 };
+    div.classList.add('tts-on');
+    ui(); keepAwake();
+    if (div.getBoundingClientRect().top > log.getBoundingClientRect().bottom || div.getBoundingClientRect().bottom < log.getBoundingClientRect().top) div.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    step();
+  }
+  function step() {
+    var p = playing;
+    if (!p) return;
+    if (p.i >= p.steps.length) { next(); return; }
+    var s = p.steps[p.i++];
+    if (provider === 'browser') sayBrowser(s, p); else sayCloud(s, p);
+  }
+  function stop() {
+    queue = [];
+    var p = playing;
+    playing = null;
+    if (p) p.div.classList.remove('tts-on');
+    if (synth) synth.cancel();
+    if (audio) { audio.pause(); audio.removeAttribute('src'); }
+    prefetch = null;
+    ui(); release();
+  }
+
+  function sayBrowser(s, p) {
+    if (!synth) { hint('Este navegador no puede leer en alto.'); stop(); return; }
+    var u = new SpeechSynthesisUtterance(s.text), v = voiceFor(s);
+    if (v.voice) { u.voice = v.voice; u.lang = v.voice.lang; } else u.lang = 'es-ES';
+    u.pitch = v.pitch; u.rate = rate;
+    u.onend = function () { if (playing === p) step(); };
+    u.onerror = function (e) {
+      if (playing !== p) return;
+      if (e.error === 'not-allowed') { hint('Toca la página una vez para que el navegador deje leer en alto.'); stop(); return; }
+      if (e.error === 'interrupted' || e.error === 'canceled') return;
+      step();
+    };
+    if (synth.paused) synth.resume();
+    synth.speak(u);
+  }
+
+  /** Audio de una narración (pedido una vez: la siguiente de la cola se pide mientras suena la actual). */
+  function audioFor(div) {
+    if (prefetch && prefetch.div === div) return prefetch.blob;
+    var parts = stepsOf(div)[0].cloud;
+    var blob = fetch('/api/tts?game=' + encodeURIComponent(game), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ parts: parts }) })
+      .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.blob(); });
+    blob.catch(function () {});
+    prefetch = { div: div, blob: blob };
+    return blob;
+  }
+  function sayCloud(s, p) {
+    if (!audio) {
+      audio = new Audio();
+      audio.addEventListener('ended', function () { if (playing) step(); });
+    }
+    var got = audioFor(p.div);
+    if (queue[0]) audioFor(queue[0]);
+    got.then(function (blob) {
+      if (playing !== p) return;
+      if (audio.src) URL.revokeObjectURL(audio.src);
+      audio.src = URL.createObjectURL(blob);
+      audio.playbackRate = rate;
+      mediaSession();
+      return audio.play();
+    }).catch(function (e) {
+      if (playing !== p) return;
+      if (e && e.name === 'NotAllowedError') { hint('Toca la página una vez para que el navegador deje reproducir audio.'); stop(); return; }
+      // La nube falla: esta narración y las siguientes, con la voz del navegador.
+      hint('El narrador de voz no responde; sigo con la voz del navegador.');
+      provider = 'browser';
+      p.steps = stepsOf(p.div); p.i = 0;
+      step();
+    });
+  }
+  function mediaSession() {
+    if (!('mediaSession' in navigator) || !window.MediaMetadata) return;
+    navigator.mediaSession.metadata = new MediaMetadata({ title: 'Narración del máster', artist: 'Tavernus', album: document.title });
+    try {
+      navigator.mediaSession.setActionHandler('pause', stop);
+      navigator.mediaSession.setActionHandler('stop', stop);
+      navigator.mediaSession.setActionHandler('nexttrack', function () { if (playing) next(); });
+    } catch (e) {}
+  }
+
+  /* Pantalla encendida mientras lee (opcional): la forma segura de que el móvil no corte la voz del navegador. */
+  function keepAwake() {
+    if (!awake || lock || !navigator.wakeLock) return;
+    navigator.wakeLock.request('screen').then(function (l) { lock = l; l.addEventListener('release', function () { lock = null; }); }).catch(function () {});
+  }
+  function release() { if (lock && !auto) { lock.release().catch(function () {}); lock = null; } }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && (playing || auto)) keepAwake(); });
+
+  /* ---------- Interfaz ---------- */
+  var hintTimer = null;
+  function hint(text) {
+    var h = document.querySelector('.tts-hint');
+    if (!h) { h = document.createElement('div'); h.className = 'tts-hint'; log.appendChild(h); }
+    h.textContent = text;
+    log.scrollTop = log.scrollHeight;
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(function () { if (h.parentNode) h.remove(); }, 8000);
+  }
+  var head = document.querySelector('.chat-head'), box = document.createElement('div');
+  box.className = 'tts';
+  box.innerHTML =
+    '<button type="button" class="tts-stop" hidden title="Parar la lectura" aria-label="Parar la lectura">' + BARS + 'Parar</button>' +
+    '<button type="button" class="tts-auto" aria-pressed="false" title="Leer en alto cada narración nueva">' + SPEAKER + '<span>Leer solo</span></button>' +
+    '<button type="button" class="tts-more" title="Voz del narrador" aria-label="Voz del narrador" aria-expanded="false"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>' +
+    '<div class="tts-pop" hidden>' +
+      '<label>Narrador<select data-k="voice"></select></label>' +
+      '<label>Personajes<select data-k="npcvoice"></select></label>' +
+      '<label>Velocidad <b class="rate"></b><input type="range" min="0.7" max="1.5" step="0.05" data-k="rate"></label>' +
+      '<label class="row"><input type="checkbox" data-k="auto">Leer automáticamente las narraciones nuevas</label>' +
+      '<label class="row"><input type="checkbox" data-k="awake">Mantener la pantalla encendida mientras lee</label>' +
+      '<p class="note"></p>' +
+    '</div>';
+  if (head) head.appendChild(box); else return;
+  var stopBtn = box.querySelector('.tts-stop'), autoBtn = box.querySelector('.tts-auto'), moreBtn = box.querySelector('.tts-more'), pop = box.querySelector('.tts-pop');
+
+  function ui() {
+    stopBtn.hidden = !playing;
+    autoBtn.classList.toggle('on', auto);
+    autoBtn.setAttribute('aria-pressed', auto ? 'true' : 'false');
+    pop.querySelector('[data-k=auto]').checked = auto;
+  }
+  function fillVoices() {
+    var browser = provider === 'browser', list = ranked(), nv = narratorVoice();
+    var opt = function (v) { return '<option value="' + v.voiceURI.replace(/"/g, '&quot;') + '">' + v.name.replace(/</g, '&lt;') + ' · ' + v.lang + '</option>'; };
+    var sv = pop.querySelector('[data-k=voice]'), sn = pop.querySelector('[data-k=npcvoice]');
+    sv.innerHTML = list.map(opt).join('') || '<option value="">Sin voces en castellano</option>';
+    sn.innerHTML = '<option value="">Automática (otra voz u otro tono)</option>' + list.map(opt).join('');
+    if (nv) sv.value = nv.voiceURI;
+    sn.value = byURI(store('tavernus.tts.npcvoice')) ? store('tavernus.tts.npcvoice') : '';
+    sv.parentNode.hidden = sn.parentNode.hidden = !browser;
+    pop.querySelector('.rate').textContent = rate.toFixed(2).replace(/0$/, '') + '×';
+    pop.querySelector('[data-k=rate]').value = String(rate);
+    pop.querySelector('[data-k=awake]').checked = awake;
+    pop.querySelector('.note').textContent = browser
+      ? (list.length ? list.length + ' voces en castellano en este navegador. Las «Natural» de Edge (escritorio) son las que mejor suenan.' : 'Este navegador no ofrece voces en castellano; leerá con la voz por defecto.')
+      : 'Voz: ' + providerLabel + ' (audio cacheado por partida).';
+  }
+  if (synth) { fillVoices(); if (synth.addEventListener) synth.addEventListener('voiceschanged', fillVoices); else synth.onvoiceschanged = fillVoices; }
+
+  /** iOS y Chrome solo dejan hablar tras un gesto: una locución vacía dentro del clic «desbloquea» la voz. */
+  function unlock() {
+    if (synth && provider === 'browser' && !playing) { var u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); }
+    if (provider !== 'browser' && !audio) { audio = new Audio(); audio.addEventListener('ended', function () { if (playing) step(); }); }
+  }
+  function lastMaster() { var l = log.querySelectorAll('.msg.master'); return l.length ? l[l.length - 1] : null; }
+  function setAuto(on) {
+    auto = on; store('tavernus.tts.auto', on ? '1' : '0');
+    if (on) { unlock(); var last = lastMaster(); if (last && !playing && last.ttsMsg) speak(last); keepAwake(); }
+    else release();
+    ui();
+  }
+  stopBtn.addEventListener('click', stop);
+  autoBtn.addEventListener('click', function () { setAuto(!auto); });
+  moreBtn.addEventListener('click', function (ev) { ev.stopPropagation(); pop.hidden = !pop.hidden; moreBtn.setAttribute('aria-expanded', String(!pop.hidden)); if (!pop.hidden) fillVoices(); });
+  document.addEventListener('click', function (ev) { if (!pop.hidden && !box.contains(ev.target)) { pop.hidden = true; moreBtn.setAttribute('aria-expanded', 'false'); } });
+  pop.addEventListener('change', function (ev) {
+    var k = ev.target.getAttribute('data-k');
+    if (k === 'voice' || k === 'npcvoice') store('tavernus.tts.' + k, ev.target.value);
+    if (k === 'rate') { rate = Number(ev.target.value) || 1; store('tavernus.tts.rate', String(rate)); }
+    if (k === 'auto') setAuto(ev.target.checked);
+    if (k === 'awake') { awake = ev.target.checked; store('tavernus.tts.awake', awake ? '1' : '0'); if (awake && (playing || auto)) keepAwake(); else if (lock) { lock.release().catch(function () {}); lock = null; } }
+    fillVoices();
+  });
+  pop.addEventListener('input', function (ev) { if (ev.target.getAttribute('data-k') === 'rate') pop.querySelector('.rate').textContent = Number(ev.target.value).toFixed(2).replace(/0$/, '') + '×'; });
+
+  // Al cambiar de personaje el chat se vacía: lo que se leía ya no está.
+  new MutationObserver(function () { if (playing && !document.body.contains(playing.div)) stop(); }).observe(log, { childList: true });
+
+  fetch('/api/tts/config').then(function (r) { return r.json(); }).then(function (c) {
+    provider = c.provider || 'browser'; providerLabel = c.label || providerLabel;
+    if (provider === 'browser' && !synth) { box.hidden = true; return; }
+    fillVoices();
+  }).catch(function () {});
+  ui();
+
+  window.TavernusTTS = {
+    /** page.ts: cada mensaje pintado. Las narraciones del máster llevan su altavoz. */
+    attach: function (div, m) {
+      if (!m || m.kind !== 'master' || !m.text) return;
+      div.ttsMsg = m;
+      justAttached = div;
+      setTimeout(function () { if (justAttached === div) justAttached = null; }, 0);
+      var who = div.querySelector('.who');
+      if (!who) return;
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'tts-say'; b.title = 'Leer en alto'; b.setAttribute('aria-label', 'Leer en alto');
+      b.innerHTML = SPEAKER + BARS;
+      b.addEventListener('click', function () { if (playing && playing.div === div) stop(); else { unlock(); speak(div); } });
+      who.appendChild(b);
+    },
+    /** page.ts: llegó un mensaje en directo (no del historial). Con «leer automáticamente», a la cola. */
+    fresh: function () { if (auto && justAttached) { enqueue(justAttached); justAttached = null; } },
+    stop: stop,
+  };
+})();
+</script>`;

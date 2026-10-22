@@ -16,9 +16,12 @@ import { interruptTransit, moveTo, positionOf, settleTransit, type MoveError } f
 import { aEs, arrivalNarration, describeSurroundings, fmtDuration, whereAmI, whoIsHere } from './narrate.js';
 import { encounterChance, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
 import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
-import type { Rng } from './dice.js';
+import { tickSchedule } from './schedule.js';
+import { aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
+import { seededRng, type Rng } from './dice.js';
 import { harvest } from './resources.js';
 import { spawnItem } from './inventory.js';
+import { classifyMoments, seenFromEvents, type DialogueLine, type Moment } from './moments.js';
 import { characterCheck, type CheckKind } from './rules.js';
 import { activeJobs, addPractice, rotateBoard, type ProgressEvent } from './progress.js';
 import { resolveAttack } from './combat.js';
@@ -27,6 +30,7 @@ import { passivePerception, type Ability } from './rules.js';
 import { ABILITIES, backgroundById, classById, raceById, STANDARD_ARRAY } from '../data/srd/index.js';
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
+import { migrateRentableRooms } from '../worldgen/rooms.js';
 
 export interface ActionResult {
   ok: boolean;
@@ -69,15 +73,21 @@ export type MasterScene = 'arrival' | 'decisive_timeout' | 'hook';
 export interface SceneHints {
   hooks: Hook[];
   encounter: { chance: number; roll: number } | null;
+  /** Viaje rápido (travel.ts): encuentro en el camino o tiempo que ha costado la llegada. */
+  travel?: TravelHint;
 }
 
 export type MasterResolution =
-  | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[] }
+  | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[] }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number } }
   | { ok: false; reason: string; message: string; usage?: unknown; calls?: unknown };
 
 /** Un PJ pisa una localización por primera vez (para ilustrarla, src/ai/illustrate.ts). */
 export interface FirstVisit { character_id: Id; location_id: Id; game_s: number }
 export type FirstVisitListener = (v: FirstVisit) => void;
+
+/** Momento ilustrable recién registrado (moments.ts), con el evento que lo trajo. */
+export interface MomentNotice { moment: Moment; event: GameEvent }
+export type MomentListener = (m: MomentNotice) => void;
 
 export interface EngineOptions {
   repo: Repository;
@@ -90,6 +100,12 @@ export interface EngineOptions {
    * (por defecto sí). Con false, todo pasa por el master como antes.
    */
   deterministic?: boolean;
+  /**
+   * Viaje rápido entre localizaciones (travel.ts; por defecto sí): el PJ llega
+   * en el acto y su reloj queda adelantado a la hora de llegada. Con false,
+   * el viaje se espera en tiempo real como antes.
+   */
+  fastTravel?: boolean;
 }
 
 export class Engine {
@@ -106,10 +122,14 @@ export class Engine {
   private pendingRolls = new Map<Id, PendingRoll>();
   private readonly rng: Rng;
   readonly deterministic: boolean;
+  readonly fastTravel: boolean;
   private hints = new Map<Id, SceneHints>();
   /** Localización desde la que salió cada viaje iniciado por el motor (para saber si la llegada cruza a otra). */
   private tripFrom = new Map<Id, Id>();
   private firstVisitListeners: FirstVisitListener[] = [];
+  private momentListeners: MomentListener[] = [];
+  /** Claves de momentos ya dados (moments.ts): se recuperan de los eventos pasados al arrancar. */
+  private readonly seenMoments = new Set<string>();
   /** Verbos mecánicos que no pasan por el master aunque esté configurado. */
   private static readonly MECHANICAL = /^(inventario|inventory|qui[eé]n|who|d[oó]nde|where|dormir|duermo|me duermo|descansar|descanso|sleep|despierto|despertar|me despierto|wake|parar|me paro|me detengo|stop)\b/i;
 
@@ -136,14 +156,49 @@ export class Engine {
   private constructor(snapshot: WorldSnapshot, opts: EngineOptions, lastSeq: number) {
     this.repo = opts.repo;
     this.now = opts.now ?? (() => Date.now());
-    this.rng = opts.rng ?? Math.random;
+    // TAVERNUS_SEED fija el azar del motor (imprevistos, encuentros) para reproducir una partida.
+    const seed = Number(process.env['TAVERNUS_SEED']);
+    this.rng = opts.rng ?? (process.env['TAVERNUS_SEED'] && Number.isFinite(seed) ? seededRng(seed) : Math.random);
     this.deterministic = opts.deterministic ?? true;
+    this.fastTravel = opts.fastTravel ?? true;
     this.realClock = !opts.now;
     this.world = new World(snapshot);
     this.clock = GameClock.fromCampaign(this.world.campaign);
     this.events = new EventLog(this.world, this.clock, lastSeq);
     this.world.onChange((c) => this.pending.set(`${c.collection}/${c.id}`, c));
+    // Antes de persistir y entregar: el evento sale ya con sus momentos en el payload.
+    this.events.onEvent((e) => this.noteMoments(e));
     this.events.onEvent((e) => { void this.repo.appendEvent(e); });
+  }
+
+  /** Momentos ilustrables de un evento: se anotan en `payload.moments` y se avisa a los oyentes (ilustrador). */
+  private noteMoments(e: GameEvent): void {
+    let moments: Moment[];
+    try {
+      moments = classifyMoments(e, this.seenMoments, { itemOfInstance: (id) => this.world.itemInstances.get(id)?.item_id ?? null });
+    } catch (err) { console.error('[engine] momentos:', err); return; }
+    if (!moments.length) return;
+    e.payload['moments'] = moments;
+    for (const m of moments) this.seenMoments.add(m.key);
+    for (const moment of moments) {
+      for (const l of this.momentListeners) {
+        try { l({ moment, event: e }); } catch (err) { console.error('[engine] momento:', err); }
+      }
+    }
+  }
+
+  /** Momento ilustrable nuevo (primer encuentro, objeto, descubrimiento, desenlace). Sin red: solo avisa. */
+  onMoment(l: MomentListener): () => void {
+    this.momentListeners.push(l);
+    return () => { this.momentListeners = this.momentListeners.filter((x) => x !== l); };
+  }
+
+  /** Al arrancar: lo ya dado en eventos pasados y los sitios ya visitados no vuelven a ser momento. */
+  private seedMoments(past: readonly GameEvent[]): void {
+    for (const k of seenFromEvents(past)) this.seenMoments.add(k);
+    for (const loc of this.world.locations.values()) {
+      for (const [cid, d] of Object.entries(loc.discovery)) if (d === 'visited') this.seenMoments.add(`scene:${cid}:${loc.id}`);
+    }
   }
 
   /** Arranca desde la persistencia, o desde `seed` si no hay nada guardado. */
@@ -158,10 +213,16 @@ export class Engine {
     const past = await opts.repo.loadEvents(opts.campaignId, 0);
     const lastSeq = past.reduce((m, e) => Math.max(m, e.seq), 0);
     const engine = new Engine(snapshot, opts, lastSeq);
+    engine.events.restore(past);
+    engine.seedMoments(past);
     await engine.installTickers();
     if (migrated) {
       engine.world.touch('campaign', snapshot.campaign.id);
       for (const c of engine.world.characters.values()) engine.world.touch('characters', c.id);
+      // La migración también puede tocar puntos, NPCs y el catálogo (cuartos de alquiler).
+      for (const n of engine.world.npcs.values()) engine.world.touch('npcs', n.id);
+      for (const sp of engine.world.spots.values()) engine.world.touch('spots', sp.id);
+      for (const d of engine.world.itemDefs.values()) engine.world.touch('item_defs', d.id);
       await engine.flush();
     }
     return engine;
@@ -204,7 +265,7 @@ export class Engine {
     const anchor = this.world.spot(this.world.campaign.starting_points[0]!.spot_id);
     this.events.emit({
       actor_id: null, at: { spot_id: anchor.id, next_spot_id: null, progress: 0, x: anchor.x, y: anchor.y, location_id: anchor.location_id },
-      action_type: 'board', narration_private: '', visibility: 'public', tags: ['board'],
+      action_type: 'board', narration_private: '', visibility: 'public', tags: ['board'], payload: { job_ids: jobs.map((j) => j.id) },
       observable: `📜 Tablón de Brezal, ${this.clock.format(tickGameS)}:\n` + jobs.map((j) => `• **${j.title}** — ${j.text} (${j.reward_coins} monedas; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n'),
     }, this.clock.realAt(tickGameS));
   }
@@ -232,18 +293,46 @@ export class Engine {
     }
   }
 
-  /** Consolida viajes de todos los PJs y emite llegadas. */
+  /** Ahora de un PJ: el del mundo, o su hora de llegada si ha viajado por delante del reloj (travel.ts). */
+  nowFor(c: Character | Id): number {
+    return nowFor(typeof c === 'string' ? this.world.character(c) : c, this.gameNow());
+  }
+
+  /** Instante real con el que se sellan los eventos de un PJ: el de su hora (adelantada si ha viajado). */
+  private stampFor(c: Character): number {
+    return Math.max(this.now(), this.clock.realAt(this.nowFor(c)));
+  }
+
+  /**
+   * Consolida viajes de todos los PJs y emite llegadas. Con viaje rápido, un
+   * tránsito que cruza de localización (o cualquiera, si el PJ ya va por
+   * delante del reloj) se completa en el acto: se tira el encuentro, el PJ
+   * queda en el destino o en el punto de camino, y su reloj, en esa hora.
+   */
   private settleAll(nowGameS: number): void {
     for (const c of this.world.characters.values()) {
+      if (clearAheadIfCaught(c, nowGameS)) this.world.touch('characters', c.id);
       if (!c.transit) continue;
       const startLoc = this.world.characterSpot(c)?.location_id;
-      const r = settleTransit(this.world, c, nowGameS);
+      let settleAt = nowFor(c, nowGameS);
+      let encounter: TravelEncounter | null = null;
+      const departed = journeyOf(c)?.started_game_s ?? c.transit.departed_game_s;
+      const pace = c.transit.pace;
+      if (this.fastTravel && (crossesLocations(c.transit) || (aheadUntil(c) ?? -Infinity) > nowGameS)) {
+        if (crossesLocations(c.transit)) encounter = rollTravelEncounter(this.world, this.clock, c.transit, this.rng);
+        if (encounter) stopAtEncounter(this.world, c, encounter);
+        settleAt = c.transit.arrives_game_s;
+        setAhead(c, settleAt, nowGameS);
+      }
+      const r = settleTransit(this.world, c, settleAt);
       for (const reached of r.reached) {
         const spot = this.world.spot(reached.spot_id);
         const loc = this.world.location(spot.location_id);
         const firstVisit = loc.discovery[c.id] !== 'visited';
         if (firstVisit) { loc.discovery[c.id] = 'visited'; this.world.touch('locations', loc.id); }
         const last = r.arrived && reached === r.reached[r.reached.length - 1];
+        if (last && encounter) { this.tripFrom.delete(c.id); this.stopOnTheRoad(c, encounter, departed, pace); continue; }
+        if (last && !isWaypoint(spot)) setJourney(c, null);
         // Con master, la llegada al destino la narra él (escena de llegada) salvo que sea trivial: entonces, plantilla.
         // El aviso plano queda para los tramos intermedios y para quien no está mirando.
         const live = last && this.master !== null && c.status === 'active' && c.connected;
@@ -251,23 +340,54 @@ export class Engine {
         const plan = live ? this.arrivalPlan(c, spot.id, firstVisit, crossed) : null;
         if (last) this.tripFrom.delete(c.id);
         const template = plan?.kind === 'template';
+        // Tiempo que ha costado el viaje: lo lee el jugador («has tardado 2 h; anochece») y, si narra él, el master.
+        const note = last && crossed ? travelNote(this.clock, departed, reached.at_game_s) : '';
+        const travel: TravelHint | null = note ? { kind: 'arrival', departed_game_s: departed, arrived_game_s: reached.at_game_s } : null;
         this.events.emit({
           actor_id: c.id,
           at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
           action_type: last ? 'arrived' : 'passed',
-          narration_private: template ? arrivalNarration(this.world, this.clock, c, reached.at_game_s, crossed)
-            : plan ? '' : last ? `Llegas a ${spot.name}.` : `Pasas por ${spot.name}.`,
+          narration_private: template ? [note, arrivalNarration(this.world, this.clock, c, reached.at_game_s, crossed)].filter(Boolean).join('\n')
+            : plan ? note : last ? [note, `Llegas a ${spot.name}.`].filter(Boolean).join(' ') : `Pasas por ${spot.name}.`,
           observable: last ? `${c.name} llega ${aEs(spot.name)}.` : `${c.name} pasa por ${spot.name}.`,
           tags: template ? ['movement', 'deterministic'] : ['movement'],
           payload: {
             observable_vague: last ? `Una figura llega ${aEs(spot.name)}.` : `Una figura pasa por ${spot.name}.`,
             ...(template ? { master: null, suggested_actions: suggestActions(this.world, this.clock, c, reached.at_game_s) } : {}),
+            ...(travel ? { travel: { departed_game_s: departed, arrived_game_s: reached.at_game_s } } : {}),
           },
         }, this.clock.realAt(reached.at_game_s));
-        if (firstVisit) this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: reached.at_game_s });
-        if (plan?.kind === 'master') this.narrateArrival(c, plan.hints);
+        if (firstVisit && !isWaypoint(spot)) this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: reached.at_game_s });
+        if (plan?.kind === 'master') this.narrateArrival(c, travel ? { hooks: [], encounter: null, ...plan.hints, travel } : plan.hints);
       }
     }
+  }
+
+  /**
+   * Encuentro en el camino: el PJ queda en el punto de camino con el viaje a
+   * medias. Lo primero que lee sale de la tabla (sin IA); la escena la narra
+   * el master con el encuentro delante. Sin master, «Continuar el viaje».
+   */
+  private stopOnTheRoad(c: Character, enc: TravelEncounter, departed: number, pace: Pace): void {
+    const prev = journeyOf(c);
+    setJourney(c, {
+      destination_spot_id: enc.destination_spot_id, origin_spot_id: prev?.origin_spot_id ?? enc.origin_spot_id,
+      pace, started_game_s: departed, waypoint_spot_id: enc.waypoint_spot_id, encounter_id: enc.entry.id,
+    });
+    this.world.touch('characters', c.id);
+    const live = this.master !== null && c.status === 'active' && c.connected;
+    const suggested = encounterSuggestions(this.world, enc);
+    this.events.emit({
+      actor_id: c.id, action_type: 'travel_encounter',
+      narration_private: live ? encounterTeaser(this.world, enc) : `${encounterTeaser(this.world, enc)}\nCuando quieras: «Continuar el viaje».`,
+      observable: `${c.name} se detiene en el camino.`, tags: ['movement', 'travel', 'encounter'],
+      payload: {
+        observable_vague: 'Una figura se detiene en el camino.',
+        travel_encounter: { id: enc.entry.id, chance: enc.chance, roll: enc.roll, remaining_m: enc.remaining_m, remaining_s: enc.remaining_s, destination_spot_id: enc.destination_spot_id },
+        ...(live ? {} : { master: null, suggested_actions: suggested }),
+      },
+    }, this.clock.realAt(enc.at_game_s));
+    if (live) this.narrateArrival(c, { hooks: [], encounter: null, travel: { kind: 'encounter', encounter: enc } });
   }
 
   /**
@@ -325,7 +445,7 @@ export class Engine {
       const r = await this.resolveWithHints(c, '(llegada)', hints, 'arrival');
       if (!r.ok) {
         const spot = this.world.characterSpot(c)!;
-        this.events.emit({ actor_id: c.id, action_type: 'arrived', narration_private: `Llegas a ${spot.name}.\n${describeSurroundings(this.world, this.clock, c, this.gameNow())}`, observable: null, tags: ['movement'] }, this.now());
+        this.events.emit({ actor_id: c.id, action_type: 'arrived', narration_private: `Llegas a ${spot.name}.\n${describeSurroundings(this.world, this.clock, c, this.nowFor(c))}`, observable: null, tags: ['movement'] }, this.stampFor(c));
       }
       await this.flush();
     }).catch((e) => console.error('[engine] llegada:', e));
@@ -340,6 +460,8 @@ export class Engine {
         if (t.run(nowG) > 0) await this.repo.saveTicker(this.world.campaign.id, t.name, t.snapshot());
       }
       this.settleAll(nowG);
+      // Agenda (schedule.ts): eventos a su hora y horarios de NPC, sin IA.
+      tickSchedule(this.world, nowG, (i, s) => { this.events.emit(i, this.clock.realAt(s)); });
       for (const id of this.presence.keys()) this.refreshConnection(id);
       this.checkDecisiveWindows();
       this.fireTimeHooks(nowG);
@@ -406,6 +528,10 @@ export class Engine {
     const locId = positionOf(this.world, c, this.gameNow()).location_id;
     return this.runInLocation(locId, async () => {
       const clean = text.trim();
+      // Llegó «del futuro» a donde otro PJ vive una hora anterior: espera a que el reloj lo alcance (irse sí puede).
+      const travel = parseTravel(clean);
+      const wait = this.aheadWait(c);
+      if (wait && !travel && !this.isLeaving(c, clean)) return { ok: false, text: wait };
       this.pendingRolls.delete(c.id); // una acción nueva anula la tirada pendiente
       let r: ActionResult;
       let decisive: { seconds: number; speed: 'fast' | 'normal'; threat: string } | undefined;
@@ -414,7 +540,7 @@ export class Engine {
         decisive = { seconds, speed: seconds < Engine.DECISIVE_FAST_S ? 'fast' : 'normal', threat: c.decisive.threat };
         this.closeDecisive(c);
       }
-      const fast = decisive ? null : await this.tryTrivial(c, clean);
+      const fast = decisive ? null : (travel ? this.tryTravel(c, clean, travel) : null) ?? await this.tryTrivial(c, clean);
       if (fast) {
         r = fast;
       } else if (this.master && c.status === 'active' && !Engine.MECHANICAL.test(clean)) {
@@ -426,9 +552,64 @@ export class Engine {
       } else {
         r = this.resolveAction(c, clean);
       }
+      this.settleAll(this.gameNow()); // viaje rápido: si la acción (o un tool del master) lo puso en camino, llega ya
       await this.flush();
       return r;
     });
+  }
+
+  /**
+   * Aviso si el PJ va por delante del reloj del mundo (llegó viajando) y en su
+   * localización hay otro PJ activo y conectado que vive una hora anterior. Si
+   * no, null. Dos PJs juntos ven siempre la misma hora: espera el adelantado.
+   */
+  private aheadWait(c: Character): string | null {
+    const g = this.gameNow();
+    const mine = nowFor(c, g);
+    if (mine - g <= SAME_TIME_TOLERANCE_S) return null;
+    const locId = this.world.characterSpot(c)?.location_id;
+    if (!locId) return null;
+    const behind = this.world.charactersInLocation(locId)
+      .filter((o) => o.id !== c.id && o.status === 'active' && o.connected && mine - nowFor(o, g) > SAME_TIME_TOLERANCE_S);
+    if (!behind.length) return null;
+    const theirs = Math.min(...behind.map((o) => nowFor(o, g)));
+    const hhmm = (s: number) => this.clock.format(s).slice(-5);
+    return `⏳ Has llegado antes que el resto: para ti son las ${hhmm(mine)} y aquí aún son las ${hhmm(theirs)}. Podrás actuar en ${fmtDuration(this.clock.gameToReal(mine - g))} reales (marcharte, ya).`;
+  }
+
+  /** ¿Es salir hacia otra localización? Eso lo puede hacer aunque vaya por delante del reloj. */
+  private isLeaving(c: Character, text: string): boolean {
+    const intent = parseTrivial(this.world, c, text);
+    return intent?.kind === 'move' && intent.exit;
+  }
+
+  /**
+   * «Continuar el viaje» tras un encuentro y «viajar con cuidado hacia X»
+   * (ritmo sigiloso: más tiempo de juego, menos encuentros). Deterministas,
+   * sin master. null si no aplica (sigue el camino de siempre).
+   */
+  private tryTravel(c: Character, text: string, intent: TravelIntent): ActionResult | null {
+    if (c.status !== 'active') return null;
+    const nowG = this.nowFor(c);
+    const here = this.world.spot(positionOf(this.world, c, nowG).spot_id);
+    if (intent.kind === 'continue') {
+      const j = journeyOf(c);
+      if (!j) return { ok: false, text: 'No tienes ningún viaje a medias.' };
+      const res = moveTo(this.world, c.id, j.destination_spot_id, intent.careful ? 'stealth' : j.pace, nowG);
+      if (!res.ok) return { ok: false, text: moveErrorText(this.world, res.error) };
+      this.tripFrom.set(c.id, here.location_id);
+      const dest = this.world.locationOfSpot(j.destination_spot_id);
+      return this.emitTrivial(c, text, 'move', 'movement', `Sigues tu camino hacia ${dest.name}${intent.careful ? ', con cuidado' : ''}.`,
+        `${c.name} sigue su camino hacia ${dest.name}.`, 'Una figura se aleja por el camino.');
+    }
+    const move = parseTrivial(this.world, c, `salir hacia ${intent.target}`);
+    if (!move || move.kind !== 'move' || !move.exit) return null;
+    const res = moveTo(this.world, c.id, move.spot_id, 'stealth', nowG);
+    if (!res.ok) return { ok: false, text: moveErrorText(this.world, res.error) };
+    this.tripFrom.set(c.id, here.location_id);
+    const dest = this.world.locationOfSpot(move.spot_id);
+    return this.emitTrivial(c, text, 'move', 'movement', `Te pones en camino hacia ${dest.name} con cuidado, atento a cada ruido (unos ${fmtDuration(res.total_s)} de juego).`,
+      `${c.name} se marcha hacia ${dest.name} con paso cauteloso.`, 'Una figura se marcha despacio.');
   }
 
   private static readonly REST = /^(dormir|duermo|me duermo|descansar|descanso|sleep)\b/i;
@@ -480,7 +661,7 @@ export class Engine {
 
   /** Ejecuta con las mismas funciones que usan los tools y narra con plantilla. null si el motor la rechaza (al master). */
   private execTrivial(c: Character, input: string, intent: TrivialIntent): ActionResult | null {
-    const nowG = this.gameNow();
+    const nowG = this.nowFor(c);
     const here = this.world.spot(positionOf(this.world, c, nowG).spot_id);
     switch (intent.kind) {
       case 'move': {
@@ -489,7 +670,9 @@ export class Engine {
         this.tripFrom.set(c.id, here.location_id);
         const dest = this.world.spot(intent.spot_id);
         const run = intent.pace === 'run' ? ' a la carrera' : '';
-        const eta = res.total_s < 60 ? '' : ` Tardarás ${fmtDuration(res.total_s)} de juego (${fmtDuration(this.clock.gameToReal(res.total_s))} reales).`;
+        // Con viaje rápido no se espera: la llegada sale enseguida y dice cuánto ha costado.
+        const instant = this.fastTravel && (intent.exit || nowG > this.gameNow());
+        const eta = res.total_s < 60 || instant ? '' : ` Tardarás ${fmtDuration(res.total_s)} de juego (${fmtDuration(this.clock.gameToReal(res.total_s))} reales).`;
         if (intent.exit) {
           const loc = this.world.location(dest.location_id);
           return this.emitTrivial(c, input, 'move', 'movement', `Te pones en camino hacia ${loc.name}${run}.${eta}`,
@@ -504,7 +687,7 @@ export class Engine {
         const where = this.takeToHands(c, inst.id);
         if (!where) return null;
         return this.emitTrivial(c, input, 'take', 'inventory', `Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.`,
-          `${c.name} coge ${def.name}.`, 'Una figura coge algo.');
+          `${c.name} coge ${def.name}.`, 'Una figura coge algo.', undefined, { item_id: def.id });
       }
       case 'drop': {
         const def = this.world.itemDef(this.world.itemInstance(intent.instance_id).item_id);
@@ -535,12 +718,12 @@ export class Engine {
   }
 
   /** Evento determinista: coste cero (master null) y acciones sugeridas desde el estado. */
-  private emitTrivial(c: Character, input: string, type: string, tag: string, priv: string, obs: string | null, vague: string | null, skipSpotName?: string): ActionResult {
+  private emitTrivial(c: Character, input: string, type: string, tag: string, priv: string, obs: string | null, vague: string | null, skipSpotName?: string, extra: Record<string, unknown> = {}): ActionResult {
     const suggested = suggestActions(this.world, this.clock, c, this.gameNow()).filter((s) => !skipSpotName || s !== `Ir ${aEs(skipSpotName)}`);
     const event = this.events.emit({
       actor_id: c.id, action_type: type, input_text: input, narration_private: priv, observable: obs, tags: ['deterministic', tag],
-      payload: { master: null, suggested_actions: suggested, ...(vague ? { observable_vague: vague } : {}) },
-    }, this.now());
+      payload: { master: null, suggested_actions: suggested, ...(vague ? { observable_vague: vague } : {}), ...extra },
+    }, this.stampFor(c));
     return { ok: true, text: priv, event, suggested_actions: suggested };
   }
 
@@ -550,14 +733,18 @@ export class Engine {
     const c = this.world.character(characterId);
     const locId = positionOf(this.world, c, this.gameNow()).location_id;
     return this.runInLocation(locId, async () => {
+      const wait = this.aheadWait(c);
+      if (wait) return { ok: false, text: wait };
       const pending = this.pendingRolls.get(c.id);
       if (!pending) return { ok: false, text: 'No tienes ninguna tirada pendiente.' };
       this.pendingRolls.delete(c.id);
       let result: CheckResult & { label: string };
       let shown: string;
+      let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean } | undefined;
       if (pending.roll.kind === 'attack' && pending.roll.target) {
         const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage);
         if ('error' in atk) return { ok: false, text: atk.error };
+        attack = { target_id: pending.roll.target, hit: atk.hit, down: Boolean(atk.target_down), dead: Boolean(atk.target_dead) };
         result = {
           label: `ataque con ${atk.weapon} a ${atk.target}`, expr: 'attack', total: atk.attack_total, rolls: [], d20s: [], modifier: 0, dc: atk.target_ac, advantage: pending.roll.advantage,
           success: atk.hit, ...(atk.natural ? { natural: atk.natural } : {}),
@@ -570,14 +757,15 @@ export class Engine {
       }
       this.events.emit({
         actor_id: c.id, action_type: 'roll', input_text: null, narration_private: shown, observable: null,
-        tags: ['roll'], payload: { roll: { ...result, dc: undefined } },
-      }, this.now());
+        tags: ['roll'], payload: { roll: { ...result, dc: undefined }, ...(attack ? { attack } : {}) },
+      }, this.stampFor(c));
       if (pending.roll.kind === 'skill' && (pending.roll.dc ?? 0) >= this.world.campaign.progression.practice_min_dc) {
         const pe = addPractice(this.world, c, pending.roll.key);
         if (pe) this.emitProgress(c, [pe]);
       }
       let r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result });
       if (!r.ok && r.text === '') r = { ok: false, text: `${shown}\nEl narrador no responde; inténtalo de nuevo.` };
+      this.settleAll(this.gameNow());
       await this.flush();
       return r;
     });
@@ -659,11 +847,16 @@ export class Engine {
       master: { model: out.model, usage: out.usage, calls: out.calls, context: out.context },
       ...(this.hints.has(c.id) ? { scene_hints: this.hints.get(c.id) } : {}),
       ...(k.decisive ? { decisive: { threat: k.decisive.threat, window_s: Engine.DECISIVE_WINDOW_S } } : {}),
+      ...(k.npc_id ? { npc_id: k.npc_id } : {}),
+      ...(k.lines?.length ? { lines: k.lines } : {}),
+      // Tools de escritura que fallaron (el cierre lleva tag tool_failed) y acercamiento que hizo el motor.
+      ...(out.tool_errors?.length ? { tool_errors: out.tool_errors } : {}),
+      ...(out.approach ? { approach: out.approach } : {}),
     };
     const event = this.events.emit({
       actor_id: c.id, action_type: intro ? 'master_intro' : scene === 'arrival' ? 'master_arrival' : scene === 'hook' ? 'master_hook' : roll ? 'master_roll_outcome' : 'master', input_text: intro || scene ? null : text,
       narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags], payload,
-    }, this.now());
+    }, this.stampFor(c));
     if (k.requires_roll) this.pendingRolls.set(c.id, { text, roll: k.requires_roll, event_id: event.id });
     if (k.decisive && scene !== 'decisive_timeout' && c.status === 'active') this.openDecisive(c, k.decisive, event.id);
     if (out.progress?.length) this.emitProgress(c, out.progress);
@@ -674,9 +867,24 @@ export class Engine {
 
   /** Comandos de sistema (SPEC §2.4). Sin LLM, sin cola. */
   async command(characterId: Id, name: string): Promise<string> {
+    // Depuración, solo en offline: «/time +2h» adelanta el reloj de juego (y lo guarda en la campaña).
+    const skip = /^\/?time\s+\+(\d+(?:[.,]\d+)?)\s*(h|m|min|d)?$/i.exec(name.trim());
+    if (skip && process.env['MASTER_MODE'] === 'offline') {
+      const unit = skip[2]?.toLowerCase() ?? 'h';
+      const s = Math.round(Number(skip[1]!.replace(',', '.')) * (unit === 'd' ? GAME_DAY : unit === 'h' ? 3600 : GAME_MINUTE));
+      // A saltos de 5 min con tick en cada uno, para que lo que empieza por el camino se cuente a su hora.
+      for (let left = s; left > 0; left -= 5 * GAME_MINUTE) {
+        const d = Math.min(left, 5 * GAME_MINUTE);
+        this.clock.shift(d);
+        this.world.campaign.game_epoch_s += d;
+        await this.tick();
+      }
+      this.world.touch('campaign', this.world.campaign.id);
+      return `Reloj adelantado ${fmtDuration(s)}: ${this.clock.format(this.gameNow())}.`;
+    }
     await this.tick();
     const c = this.world.character(characterId);
-    const nowG = this.gameNow();
+    const nowG = this.nowFor(c);
     switch (name.replace(/^\//, '')) {
       case 'where': return whereAmI(this.world, this.clock, c, nowG);
       case 'who': return whoIsHere(this.world, this.clock, c, nowG);
@@ -686,7 +894,7 @@ export class Engine {
         const missed = this.recapFor(c.id);
         return missed.length ? missed.map((d) => `· ${d.text}`).join('\n') : 'No te has perdido nada.';
       }
-      case 'time': return `${this.clock.format(nowG)} (ratio ${this.clock.timeRatio}×).`;
+      case 'time': return `${this.clock.format(nowG)} (ratio ${this.clock.timeRatio}×).${nowG - this.gameNow() > SAME_TIME_TOLERANCE_S ? ` Vas ${fmtDuration(nowG - this.gameNow())} por delante del reloj del mundo (has viajado).` : ''}`;
       case 'tablon': return this.boardText();
       case 'progress': {
         const a = this.world.campaign.achievement;
@@ -981,7 +1189,7 @@ export class Engine {
   private emit(c: Character, input: string, type: string, priv: string, obs: string | null, loudness = 1, payload: Record<string, unknown> = {}, alsoTo: Id[] = [], channel: 'sight' | 'sound' | 'any' = 'any'): ActionResult {
     const event = this.events.emit({
       actor_id: c.id, action_type: type, input_text: input, narration_private: priv, observable: obs, loudness, payload, also_to: alsoTo, channel,
-    }, this.now());
+    }, this.stampFor(c));
     return { ok: true, text: priv, event };
   }
 
@@ -993,15 +1201,15 @@ export class Engine {
     const r = resolveSpot(this.world, c, target);
     if (r.kind === 'none') return { ok: false, text: `No conoces ningún sitio llamado «${target}».` };
     if (r.kind === 'many') return this.ambiguous(r);
-    const nowG = this.gameNow();
+    const nowG = this.nowFor(c);
     const from = this.world.spot(positionOf(this.world, c, nowG).spot_id);
     const res = moveTo(this.world, c.id, r.value, pace, nowG);
     if (!res.ok) return { ok: false, text: moveErrorText(this.world, res.error) };
     const dest = this.world.spot(r.value);
     const game = fmtDuration(res.total_s);
-    const real = fmtDuration(this.clock.gameToReal(res.total_s));
+    const real = this.fastTravel && (crossesLocations(res.transit) || nowG > this.gameNow()) ? 'sin esperar' : `${fmtDuration(this.clock.gameToReal(res.total_s))} reales`;
     const paceTxt = pace === 'run' ? 'corriendo' : pace === 'stealth' ? 'con sigilo' : 'andando';
-    return this.emit(c, input, 'move', `Te pones en marcha hacia ${dest.name} ${paceTxt}. Tardarás ${game} de juego (${real} reales).`,
+    return this.emit(c, input, 'move', `Te pones en marcha hacia ${dest.name} ${paceTxt}. Tardarás ${game} de juego (${real}).`,
       `${c.name} se marcha de ${from.name} hacia ${dest.name} ${paceTxt}.`, 1, { observable_vague: `Una figura se aleja de ${from.name}.` });
   }
 
@@ -1025,7 +1233,7 @@ export class Engine {
       const res = transferItem(this.world, inst.id, t);
       if (res.ok) {
         const where = t.type === 'character' && t.slot.kind === 'pocket' ? 'y te lo guardas en un bolsillo' : 'con la mano';
-        return this.emit(c, input, 'take', `Coges ${def.name} ${where}.`, `${c.name} coge ${def.name} del suelo de ${here.name}.`, 1, { observable_vague: 'Una figura se agacha a coger algo.' });
+        return this.emit(c, input, 'take', `Coges ${def.name} ${where}.`, `${c.name} coge ${def.name} del suelo de ${here.name}.`, 1, { observable_vague: 'Una figura se agacha a coger algo.', item_id: def.id });
       }
       lastErr = res.error;
     }
@@ -1074,7 +1282,7 @@ export class Engine {
     const def = this.world.itemDef(this.world.itemInstance(item.value).item_id);
     for (const which of ['main', 'off'] as const) {
       const res = transferItem(this.world, item.value, { type: 'character', id: c.id, slot: { kind: 'hand', which } });
-      if (res.ok) return this.emit(c, input, 'take_out', `Sacas ${def.name} de ${contDef.name}.`, `${c.name} saca ${def.name} de ${contDef.name}.`);
+      if (res.ok) return this.emit(c, input, 'take_out', `Sacas ${def.name} de ${contDef.name}.`, `${c.name} saca ${def.name} de ${contDef.name}.`, 1, { item_id: def.id });
       if (res.error.code !== 'no_space') return { ok: false, text: transferErrorText(res.error) };
     }
     return { ok: false, text: 'Tienes las manos ocupadas.' };
@@ -1183,6 +1391,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     camp2.content_rating ??= seed.campaign.content_rating; camp2.language ??= seed.campaign.language; camp2.house_rules ??= seed.campaign.house_rules;
     camp2.master ??= seed.campaign.master;
   }
+  // Mundos generados antes de los cuartos de alquiler: la habitación deja de ser el premio oculto.
+  if (migrateRentableRooms(snapshot)) changed = true;
   return changed;
 }
 
@@ -1209,6 +1419,7 @@ export function moveErrorText(world: World, e: MoveError): string {
     case 'not_active': return e.status === 'asleep' ? 'Estás dormido.' : `No puedes moverte (${e.status}).`;
     case 'not_driver': return `No llevas las riendas de ${world.vehicle(e.vehicle_id).name}.`;
     case 'cannot_move': return `No puedes moverte: ${e.reason}.`;
+    case 'locked': return `${world.spot(e.spot_id).name} está cerrado con llave${e.key_item_id && world.itemDefs.get(e.key_item_id) ? ` (hace falta ${world.itemDefs.get(e.key_item_id)!.name})` : ''}.`;
   }
 }
 

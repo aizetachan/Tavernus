@@ -5,7 +5,7 @@
  *
  *   GET    /                                   menú (sin ?game) o la partida (con ?game=SLUG)
  *   GET    /api/games                          partidas, opciones de personaje y si hay clave de API
- *   POST   /api/games          {name, mode, character?, race?, class?, dice_seed?}
+ *   POST   /api/games          {name, mode, character?, race?, class?, hook?, dice_seed?, world?: {seed?, tone?, setting?}}
  *   DELETE /api/games?game=SLUG
  *   POST   /api/games/demo?game=SLUG           grabación → demo
  *   POST   /api/games/reset?game=SLUG          demo desde el principio
@@ -14,6 +14,7 @@
  *   GET  /api/characters            personajes de la campaña
  *   GET  /api/stream?character=ID   entregas de ese PJ (Server-Sent Events)
  *   GET  /api/sheet?character=ID    hoja viva
+ *   GET  /api/journal?character=ID  diario: misiones, conversaciones, crónica y lugares (journal.ts)
  *   GET  /api/board?character=ID    tablero
  *   GET  /api/map?character=ID      mapa de zona y región
  *   GET  /api/scene?character=ID    ilustración de la localización actual (IMAGES=on), o null
@@ -22,6 +23,8 @@
  *   POST /api/act      {character, text}
  *   POST /api/roll     {character}
  *   POST /api/command  {character, name}
+ *   GET  /api/tts/config  ·  POST /api/tts?game=SLUG   narrador de voz (tts.ts)
+ *   GET  /api/sfx?character=ID  ·  GET /api/sfx?key=CLAVE   sonido: estado del PJ y ficheros (sfx.ts)
  *
  * Sin autenticación: escucha solo en 127.0.0.1 y cualquiera con la página juega con cualquier PJ.
  */
@@ -32,17 +35,30 @@ import { join } from 'node:path';
 import type { Engine, ActionResult } from '../../engine/engine.js';
 import type { GameEvent, Id } from '../../engine/model.js';
 import type { Delivery } from '../../engine/events.js';
-import { GameError, GameManager, NEW_GAME_MODES, type NewGameMode } from '../../games/manager.js';
+import { GameError, GameManager, NEW_GAME_MODES, type NewGameMode, type WorldInput } from '../../games/manager.js';
 import { Master } from '../../ai/master.js';
 import { sheetView } from '../sheet-view.js';
 import { PAGE } from './page.js';
 import { MENU } from './page-menu.js';
 import { handleBoardRequest } from './board.js';
 import { handleMapRequest } from './regionmap.js';
-import { illustratorOf, sceneOf, type SceneImage } from '../../ai/illustrate.js';
+import { handleTtsRequest } from './tts.js';
+import { handleSfxRequest } from './sfx.js';
+import { soundCuesOf } from './soundmap.js';
+import { illustratorOf, MASTER_PORTRAIT_ID, masterPortraitOf, portraitOf, sceneOf, type EntityInput, type Illustrator, type SceneImage } from '../../ai/illustrate.js';
+import { type DialogueLine, type Moment } from '../../engine/moments.js';
+import { blocksSpeech, novelBlocks, type NovelBlock } from './novel.js';
+import { handleJournalRequest, noticeOf, touchesJournal, type WebNotice } from './journal.js';
 
 const MASTER_TYPES = new Set(['master', 'master_roll_outcome', 'master_intro', 'master_arrival']);
 const HISTORY = 200;
+/** Avisos fuera de la ficción: tiradas, progreso, anuncios, tablón. Lo demás lo cuenta el narrador. */
+const SYSTEM_TYPES = /^(roll|progress_|announcement|board|admin_|decisive_expired)/;
+
+/** Un parlamento en modo novela: quién habla (nombre visible para este PJ) y su retrato pequeño si ya existe. */
+interface WebLine { speaker: 'npc' | 'actor'; id: Id; name: string; text: string; avatar?: string | null }
+/** Momento ilustrado junto al evento (retrato, objeto, combate, descubrimiento); `src` cuando ya está en disco. */
+interface WebMoment { kind: Moment['kind']; key: string; entity_id: Id; name?: string; src?: string }
 
 interface WebMessage {
   seq: number;
@@ -52,6 +68,24 @@ interface WebMessage {
   roll?: { kind: string; key: string; dc: number | null };
   suggested?: string[];
   decisive_s?: number;
+  /** Modo novela (solo para el actor): la narración sin los parlamentos y, aparte, cada parlamento. */
+  prose?: string;
+  lines?: WebLine[];
+  /** El turno en orden (narración, parlamento, narración…): cada bloque es su burbuja. `line` indexa `lines`. */
+  blocks?: NovelBlock[];
+  /** Lo que lee el narrador de voz: los bloques tal como se pintan. */
+  speech?: string;
+  moments?: WebMoment[];
+  /** Ilustración de la localización: un mensaje más del hilo, en el sitio donde se mostró. */
+  scene?: { location_id: Id; name: string; src: string };
+  /** Lo que hizo o dijo el propio jugador (su mensaje a la derecha del hilo), si este evento lo responde. */
+  input?: string;
+  /** Lo cuenta el narrador (burbuja suya); si no, es un aviso del sistema (tirada, progreso, tablón). */
+  narrator?: boolean;
+  /** Sonido (solo para el actor): claves en orden, de soundmap.ts. */
+  sfx?: string[];
+  /** Aviso de una línea en lugar de burbuja (tablón, progreso): lleva al Diario. */
+  notice?: WebNotice;
 }
 
 /** Lo que la web cuelga de cada motor abierto: conexiones SSE e historial en memoria. */
@@ -59,6 +93,8 @@ interface Runtime {
   engine: Engine;
   streams: Map<Id, Set<ServerResponse>>;
   history: Map<Id, WebMessage[]>;
+  /** Pone en el hilo del PJ la escena de donde está, si aún no la tiene ahí. */
+  offerScene: (characterId: Id) => void;
   dispose: () => void;
 }
 
@@ -94,34 +130,69 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
     for (const c of engine.world.characters.values()) engine.setPresence(c.id, true);
     const streams = new Map<Id, Set<ServerResponse>>();
     const history = new Map<Id, WebMessage[]>();
+    // Al abrir la partida, el hilo de cada PJ se reconstruye del log de eventos: un reinicio no borra lo jugado.
+    for (const c of engine.world.characters.values()) {
+      const past = engine.events.forCharacter(c.id, null).slice(-HISTORY).map((d) => toMessage(d, engine));
+      if (past.length) history.set(c.id, past);
+    }
     const send = (characterId: Id, type: string, data: unknown) => {
       for (const res of streams.get(characterId) ?? []) res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
     };
-    const offDelivery = engine.onDelivery((d: Delivery) => {
-      const m = toMessage(d);
-      const h = history.get(d.character_id) ?? [];
+    const record = (characterId: Id, m: WebMessage) => {
+      const h = history.get(characterId) ?? [];
       h.push(m);
       if (h.length > HISTORY) h.splice(0, h.length - HISTORY);
-      history.set(d.character_id, h);
-      send(d.character_id, 'message', m);
+      history.set(characterId, h);
+      send(characterId, 'message', withImages(m, illustratorOf(engine), slug));
+    };
+    // La escena del sitio es un mensaje más del hilo: entra al llegar (o cuando acaba de pintarse) y se queda ahí.
+    const sceneShown = new Map<Id, Id>();
+    const offerScene = (characterId: Id, image?: SceneImage) => {
+      const c = engine.world.characters.get(characterId);
+      const loc = c ? engine.world.characterSpot(c)?.location_id : undefined;
+      if (!loc || sceneShown.get(characterId) === loc) return;
+      const img = image ?? illustratorOf(engine)?.imageFor(loc) ?? null;
+      if (!img || img.location_id !== loc) return;
+      sceneShown.set(characterId, loc);
+      const last = history.get(characterId)?.at(-1);
+      record(characterId, { seq: last?.seq ?? 0, kind: 'system', text: '', scene: sceneView(img, slug) });
+    };
+    // El diario cambia con lo que el PJ vive: se avisa (agrupado) y la página lo vuelve a pedir.
+    const journalTimers = new Map<Id, NodeJS.Timeout>();
+    const notifyJournal = (characterId: Id) => {
+      if (journalTimers.has(characterId)) return;
+      journalTimers.set(characterId, setTimeout(() => { journalTimers.delete(characterId); send(characterId, 'journal', {}); }, 300));
+    };
+    const offDelivery = engine.onDelivery((d: Delivery) => {
+      record(d.character_id, toMessage(d, engine));
+      offerScene(d.character_id);
+      if (touchesJournal(d.event)) notifyJournal(d.character_id);
     });
-    // Ilustración nueva: la escena del PJ cambia sobre el chat.
-    const offScene = illustratorOf(engine)?.onIllustrated((r) => {
-      const c = engine.world.characters.get(r.character_id);
-      if (c && engine.world.characterSpot(c)?.location_id === r.image.location_id) send(r.character_id, 'scene', sceneView(r.image, slug));
+    const offScene = illustratorOf(engine)?.onIllustrated((r) => offerScene(r.character_id, r.image)) ?? (() => {});
+    // Retrato u objeto listo: aparece junto a su evento en el hilo del PJ; los retratos, en cada parlamento.
+    const offEntity = illustratorOf(engine)?.onEntity((r) => {
+      const src = imageSrc(r.image, slug);
+      if (r.image.kind === 'portrait' && r.image.entity_id) for (const id of streams.keys()) send(id, 'portrait', { id: r.image.entity_id, src });
+      if (r.character_id && r.moment_key && r.event_seq !== null) {
+        send(r.character_id, 'moment', { seq: r.event_seq, key: r.moment_key, kind: r.image.kind, entity_id: r.image.entity_id, name: r.image.name, src });
+      }
     }) ?? (() => {});
     // La hoja se refresca cuando cambia algo del PJ o de los ítems (como #hoja en Discord).
     let sheetTimer: NodeJS.Timeout | null = null;
     const offChange = engine.world.onChange((ch) => {
+      // Rumores (campaña) y memoria de los NPC: el diario también los recoge.
+      if (ch.collection === 'campaign' || ch.collection === 'npcs') for (const id of streams.keys()) notifyJournal(id);
       if (ch.collection !== 'characters' && ch.collection !== 'item_instances') return;
+      if (ch.collection === 'characters') notifyJournal(ch.id);
       if (sheetTimer) return;
       sheetTimer = setTimeout(() => { sheetTimer = null; for (const id of streams.keys()) send(id, 'sheet', {}); }, 300);
     });
     return {
-      engine, streams, history,
+      engine, streams, history, offerScene,
       dispose() {
-        offDelivery(); offChange(); offScene();
+        offDelivery(); offChange(); offScene(); offEntity();
         if (sheetTimer) clearTimeout(sheetTimer);
+        for (const t of journalTimers.values()) clearTimeout(t);
         for (const set of streams.values()) for (const res of set) res.end();
         streams.clear();
       },
@@ -150,6 +221,7 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
     if (url.pathname === '/api/games' || url.pathname.startsWith('/api/games/')) { await handleGames(req, res, url, slug); return; }
     if (req.method === 'GET' && url.pathname.startsWith('/images/')) { await serveImage(res, url.pathname.slice('/images/'.length), slug); return; }
     if (req.method === 'GET' && url.pathname.startsWith('/assets/')) { await serveAsset(res, url.pathname.slice('/assets/'.length)); return; }
+    if (url.pathname === '/api/tts' || url.pathname.startsWith('/api/tts/')) { await handleTtsRequest(req, res, url, games); return; }
     if (!url.pathname.startsWith('/api/')) { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
 
     if (!slug) { json(res, 400, { ok: false, text: 'Falta el parámetro game (?game=<partida>): abre una partida desde el menú.' }); return; }
@@ -166,7 +238,11 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
       const id = characterOr404(engine, characterParam, res);
       if (!id) return;
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
-      res.write(`event: history\ndata: ${JSON.stringify(rt.history.get(id) ?? [])}\n\n`);
+      const ill = illustratorOf(engine);
+      rt.offerScene(id);
+      // En una sola escritura: quién habla y el historial llegan juntos.
+      res.write(`event: cast\ndata: ${JSON.stringify(castOf(engine, id, ill, slug))}\n\n`
+        + `event: history\ndata: ${JSON.stringify((rt.history.get(id) ?? []).map((m) => withImages(m, ill, slug)))}\n\n`);
       const set = rt.streams.get(id) ?? new Set();
       set.add(res);
       rt.streams.set(id, set);
@@ -175,7 +251,9 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/board') { handleBoardRequest(engine, req, res, url); return; }
+    if (req.method === 'GET' && url.pathname === '/api/journal') { handleJournalRequest(engine, req, res, url, slug); return; }
     if (req.method === 'GET' && url.pathname === '/api/map') { handleMapRequest(engine, req, res, url); return; }
+    if (req.method === 'GET' && url.pathname === '/api/sfx') { await handleSfxRequest(engine, res, url, games.paths((await games.get(slug))!).dir); return; }
     if (req.method === 'GET' && url.pathname === '/api/scene') {
       const id = characterOr404(engine, characterParam, res);
       if (!id) return;
@@ -247,7 +325,9 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
       const dice_seed = seedRaw === null || seedRaw === undefined || seedRaw === '' ? null : Number(seedRaw);
       const created = await games.create({
         name: str('name'), mode: mode as NewGameMode, dice_seed,
-        character: str('character') ? { name: str('character'), ...(str('race') ? { race_id: str('race') } : {}), ...(str('class') ? { class_id: str('class') } : {}) } : null,
+        character: str('character') ? { name: str('character'), ...(str('race') ? { race_id: str('race') } : {}), ...(str('class') ? { class_id: str('class') } : {}), ...(str('hook') ? { hook: str('hook') } : {}) } : null,
+        // Mundo nuevo generado (src/worldgen); lo valida el gestor.
+        world: body['world'] && typeof body['world'] === 'object' ? body['world'] as WorldInput : null,
       });
       // Con máster, la llegada del PJ nuevo la narra él (como en Discord); llega por el stream.
       const rt = await runtime(created.game.slug);
@@ -313,16 +393,99 @@ function reply(r: ActionResult): { ok: boolean; text: string | null } {
   return { ok: true, text: r.event ? null : r.text };
 }
 
-function toMessage(d: Delivery): WebMessage {
+function toMessage(d: Delivery, engine: Engine): WebMessage {
   const e: GameEvent = d.event;
   const m: WebMessage = { seq: e.seq, kind: MASTER_TYPES.has(e.action_type) ? 'master' : 'system', text: d.text };
+  // Tablón y progreso: fuera del hilo; queda un aviso de una línea que lleva al Diario (también en el historial restaurado).
+  const notice = noticeOf(e);
+  if (notice) { m.text = ''; m.notice = notice; return m; }
+  if (!SYSTEM_TYPES.test(e.action_type)) m.narrator = true;
   if (e.actor_id !== d.character_id) return m;
+  // La tirada y su desenlace no repiten la acción: ya salió en el mensaje que pidió la tirada.
+  if (e.input_text && e.action_type !== 'master_roll_outcome' && !e.input_text.startsWith('(')) m.input = e.input_text;
+  const sfx = soundCuesOf(engine, e);
+  if (sfx.length) m.sfx = sfx;
+  const novel = novelOf(e, engine, d.character_id, d.text);
+  if (novel) { m.prose = novel.prose; m.lines = novel.lines; m.blocks = novel.blocks; m.speech = novel.speech; }
+  const moments = (Array.isArray(e.payload['moments']) ? e.payload['moments'] as Moment[] : [])
+    .filter((x) => x.kind !== 'scene' && x.character_id === d.character_id)
+    .map((x) => ({ kind: x.kind, key: x.key, entity_id: x.entity_id }));
+  if (moments.length) m.moments = moments;
   const roll = e.payload['requires_roll'] as { kind: string; key: string; dc: number | null } | undefined;
   if (roll) m.roll = { kind: roll.kind, key: roll.key, dc: roll.dc };
   else if (Array.isArray(e.payload['suggested_actions'])) m.suggested = (e.payload['suggested_actions'] as string[]).slice(0, 4);
   const decisive = e.payload['decisive'] as { window_s: number } | undefined;
   if (decisive) m.decisive_s = decisive.window_s;
   return m;
+}
+
+/**
+ * Parlamentos del cierre para el actor: cada uno con el nombre que ese PJ conoce
+ * (si no sabe cómo se llama el NPC, su rol) y la prosa sin esas frases.
+ */
+function novelOf(e: GameEvent, engine: Engine, characterId: Id, text: string): { prose: string; lines: WebLine[]; blocks: NovelBlock[]; speech: string } | null {
+  const raw = e.payload['lines'];
+  if (!Array.isArray(raw) || !raw.length) return null;
+  const w = engine.world;
+  const me = w.characters.get(characterId);
+  const lines: WebLine[] = [];
+  const kept: DialogueLine[] = [];
+  for (const l of raw as DialogueLine[]) {
+    if (l.speaker === 'actor' && me) lines.push({ speaker: 'actor', id: me.id, name: me.name, text: l.text });
+    else if (l.speaker === 'npc' && l.npc_id) {
+      const npc = w.npcs.get(l.npc_id);
+      if (!npc) continue;
+      const known = me?.knows.includes(npc.id) ?? false;
+      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text });
+    } else continue;
+    kept.push(l);
+  }
+  if (!lines.length) return null;
+  const blocks = novelBlocks(text, kept);
+  return {
+    prose: blocks.filter((b) => b.kind === 'prose').map((b) => (b as { text: string }).text).join(' '),
+    lines, blocks, speech: blocksSpeech(blocks, kept),
+  };
+}
+
+/**
+ * Quién habla en el hilo de este PJ: el narrador (con su retrato de «ente») y el
+ * propio PJ. Si aún no tienen retrato, se encargan una vez y llegan por «portrait».
+ */
+function castOf(engine: Engine, characterId: Id, ill: Illustrator | null, slug: string): { master: { id: Id; name: string; avatar: string | null }; me: { id: Id; name: string; avatar: string | null } } {
+  const c = engine.world.character(characterId);
+  const avatar = (id: Id, make: () => EntityInput | null): string | null => {
+    if (!ill) return null;
+    const img = ill.entityImage('portrait', id);
+    if (img) return imageSrc(img, slug);
+    const input = make();
+    if (input) void ill.illustrateEntity(input);
+    return null;
+  };
+  const loc = engine.world.characterSpot(c)?.location_id ?? '';
+  const name = engine.world.campaign.master.name.trim() || 'el Narrador';
+  return {
+    master: { id: MASTER_PORTRAIT_ID, name: name.charAt(0).toUpperCase() + name.slice(1), avatar: avatar(MASTER_PORTRAIT_ID, () => masterPortraitOf(engine, loc)) },
+    me: { id: c.id, name: c.name, avatar: avatar(c.id, () => portraitOf(engine, c.id, loc)) },
+  };
+}
+
+/** El mensaje con lo que ya esté ilustrado: retratos de quien habla y las imágenes de sus momentos. */
+function withImages(m: WebMessage, ill: Illustrator | null, slug: string): WebMessage {
+  if (!ill || (!m.lines && !m.moments)) return m;
+  const out: WebMessage = { ...m };
+  if (m.lines) out.lines = m.lines.map((l) => { const img = ill.entityImage('portrait', l.id); return img ? { ...l, avatar: imageSrc(img, slug) } : l; });
+  if (m.moments) {
+    out.moments = m.moments.map((x) => {
+      const img = x.kind === 'scene' ? null : ill.entityImage(x.kind, x.entity_id);
+      return img ? { ...x, name: img.name, src: imageSrc(img, slug) } : x;
+    });
+  }
+  return out;
+}
+
+function imageSrc(img: SceneImage, slug: string): string {
+  return `/images/${img.file}?game=${encodeURIComponent(slug)}`;
 }
 
 /** Lo que pinta la página: el fichero descargado, servido por /images. */

@@ -29,6 +29,16 @@ export const SKILLS: Record<string, { ability: Ability; es: string }> = {
   survival: { ability: 'wis', es: 'Supervivencia' },
 };
 
+/** Clave de skill tal como la escriba el máster («animal handling», «Trato con animales») → la del sistema; si no casa, tal cual. */
+export function normalizeSkill(key: string): string {
+  const plain = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const k = plain(key);
+  const snake = k.replace(/[\s-]+/g, '_');
+  if (SKILLS[snake]) return snake;
+  const byEs = Object.entries(SKILLS).find(([, v]) => plain(v.es) === k);
+  return byEs ? byEs[0] : key;
+}
+
 export const ABILITY_ES: Record<Ability, string> = { str: 'Fuerza', dex: 'Destreza', con: 'Constitución', int: 'Inteligencia', wis: 'Sabiduría', cha: 'Carisma' };
 
 export type CheckKind = 'skill' | 'save' | 'ability' | 'attack';

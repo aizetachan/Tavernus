@@ -19,7 +19,8 @@ export type MoveError =
   | { code: 'spot_full'; spot_id: Id; capacity: number }
   | { code: 'not_active'; status: Character['status'] }
   | { code: 'not_driver'; vehicle_id: Id }
-  | { code: 'cannot_move'; reason: string };
+  | { code: 'cannot_move'; reason: string }
+  | { code: 'locked'; spot_id: Id; key_item_id: Id | null };
 
 export type MoveResult =
   | { ok: true; transit: Transit; total_s: number }
@@ -67,12 +68,25 @@ function spotVisibleTo(spot: Spot, c: Character): boolean {
   return !spot.hidden || spot.discovered_by.includes(c.id);
 }
 
+/**
+ * Punto cerrado con llave para este PJ: `state.locked === true` y ni lo tiene
+ * abierto (`state.unlocked_for`, p. ej. al pagar la noche) ni lleva encima la
+ * llave (`state.key_item_id`). Salir de él nunca está cerrado.
+ */
+export function spotLockedFor(world: World, spot: Spot, c: Character): boolean {
+  if (spot.state['locked'] !== true) return false;
+  const open = spot.state['unlocked_for'];
+  if (Array.isArray(open) && open.includes(c.id)) return false;
+  const key = spot.state['key_item_id'];
+  return !(typeof key === 'string' && world.itemsCarriedBy(c.id).some((i) => i.item_id === key));
+}
+
 interface Edge { to: Id; distance_m: number; duration_s: number; via_exit_id?: Id }
 
 function edgesFrom(world: World, c: Character, vehicle: Vehicle | null, spot: Spot, speed: number): Edge[] {
   const out: Edge[] = [];
   for (const v of world.spotsOf(spot.location_id)) {
-    if (v.id === spot.id || !spotVisibleTo(v, c) || !vehicleCanEnter(vehicle, v)) continue;
+    if (v.id === spot.id || !spotVisibleTo(v, c) || !vehicleCanEnter(vehicle, v) || spotLockedFor(world, v, c)) continue;
     const d = distance(spot, v);
     out.push({ to: v.id, distance_m: d, duration_s: d / (speed * v.terrain_multiplier) + v.entry_cost_s });
   }
@@ -252,6 +266,7 @@ export function moveTo(world: World, characterId: Id, targetSpotId: Id, pace: Pa
   }
 
   if (!spotVisibleTo(target, c)) return { ok: false, error: { code: 'unknown_spot', spot_id: targetSpotId } };
+  if (spotLockedFor(world, target, c)) return { ok: false, error: { code: 'locked', spot_id: target.id, key_item_id: typeof target.state['key_item_id'] === 'string' ? target.state['key_item_id'] : null } };
   if (target.capacity !== null && occupants(world, target.id) >= target.capacity) {
     return { ok: false, error: { code: 'spot_full', spot_id: target.id, capacity: target.capacity } };
   }
@@ -289,6 +304,31 @@ export function interruptTransit(world: World, c: Character, nowGameS: number): 
   c.transit = null;
   world.touch('characters', c.id);
   return stop;
+}
+
+/** Lo que tarda y recorre un acercamiento dentro de la localización (approachSpot). */
+export interface Approach { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number }
+
+/**
+ * Acercamiento dentro de la misma localización: lo que hace el motor cuando
+ * el PJ habla o trata con alguien que está a unos metros (el máster lo narró
+ * como si estuvieran juntos). Mismo cálculo de tiempo que moveTo, pero el PJ
+ * queda ya en el punto: unos segundos de juego que caben en la propia acción.
+ * null si no aplica (en camino, a caballo, otra localización, cerrado, lleno).
+ */
+export function approachSpot(world: World, c: Character, targetSpotId: Id): Approach | null {
+  if (c.status !== 'active' || c.transit || c.location.type !== 'spot') return null;
+  const here = world.characterSpot(c);
+  const target = world.spots.get(targetSpotId);
+  if (!here || !target || here.id === target.id || here.location_id !== target.location_id) return null;
+  if (!spotVisibleTo(target, c) || spotLockedFor(world, target, c)) return null;
+  if (target.capacity !== null && occupants(world, target.id) >= target.capacity) return null;
+  const speed = speedMps(world, c, 'walk');
+  if (speed <= 0) return null;
+  const duration_s = distance(here, target) / (speed * target.terrain_multiplier) + target.entry_cost_s;
+  place(world, c, target.id);
+  world.touch('characters', c.id);
+  return { from_spot_id: here.id, to_spot_id: target.id, distance_m: Math.round(distance(here, target) * 10) / 10, duration_s };
 }
 
 /** Tiempo de viaje estimado sin arrancarlo. */

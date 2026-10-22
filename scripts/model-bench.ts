@@ -18,7 +18,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { Engine } from '../src/engine/engine.js';
 import { MemoryRepository } from '../src/persistence/memory.js';
 import { makeSeed, SEED_REAL_EPOCH_MS } from '../src/data/seed/demo.js';
-import { liveClient, Master, type MasterClient, type MasterOutcome } from '../src/ai/master.js';
+import { liveClient, Master, type MasterClient, type MasterOutcome, type ToolCallRecord } from '../src/ai/master.js';
 import { seededRng } from '../src/engine/dice.js';
 import { BASELINE_CALL, CACHE_WRITE_MULT, costUsd, estimateRun, priceFor, usd, type TokenUsage } from './bench-prices.js';
 
@@ -33,6 +33,8 @@ export interface CallRecord {
   model: string | null;
   iterations: number;
   tools: string[];
+  /** Cada tool con su entrada y su resultado (el banco de creatividad mira si plant_rumor salió bien). */
+  tool_calls: ToolCallRecord[];
   usage: TokenUsage;
   ms: number;
   cost_usd: number | null;
@@ -114,7 +116,7 @@ function callRecord(kind: CallRecord['kind'], out: MasterOutcome, fallbackModel:
   const calls = out.calls ?? [];
   return {
     kind, ok: out.ok, reason: out.ok ? null : out.reason, message: out.ok ? null : out.message, model,
-    iterations: u.iterations, tools: calls.map((c) => c.name), usage, ms: u.ms,
+    iterations: u.iterations, tools: calls.map((c) => c.name), tool_calls: calls, usage, ms: u.ms,
     cost_usd: costUsd(usage, model ?? fallbackModel, writeMult),
     narration: out.ok ? out.closed.narration_private : null,
     suggested_actions: out.ok ? out.closed.suggested_actions : [],

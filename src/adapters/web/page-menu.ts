@@ -105,7 +105,10 @@ export const MENU = String.raw`<!doctype html>
   .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .modes label { margin: 0; cursor: pointer; padding: 10px 12px; border-radius: 16px; background: var(--platter); color: var(--text); font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; }
   .modes label small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.35; margin-top: 3px; }
+  .modes.two { grid-template-columns: repeat(2, 1fr); }
   .modes input { margin: 0 6px 0 0; accent-color: var(--accent); }
+  #world-opts[hidden], #hook-row[hidden] { display: none; }
+  .gen-note { margin-top: 10px; }
   .modes label:has(input:checked) { background: var(--accent-tint); box-shadow: inset 0 0 0 1.5px rgba(233,169,78,.55); }
   details { margin-top: 12px; color: var(--muted); font-size: 14px; }
   summary { cursor: pointer; }
@@ -167,10 +170,24 @@ export const MENU = String.raw`<!doctype html>
   <section id="new" role="dialog" aria-modal="true" aria-labelledby="new-title">
     <button class="x" type="button" id="close-new" aria-label="Cerrar"><svg class="i"><use href="#i-x"/></svg></button>
     <h2 id="new-title">Nueva partida</h2>
-    <p class="lead">Empieza en la taberna de la semilla, con los personajes de siempre y, si quieres, uno tuyo.</p>
+    <p class="lead" id="new-lead">Empieza en la taberna de la semilla, con los personajes de siempre y, si quieres, uno tuyo.</p>
     <form id="new-form" autocomplete="off">
       <label for="g-name">Nombre de la partida</label>
       <input id="g-name" type="text" maxlength="60" placeholder="La noche del Brezal" required>
+      <label>Mundo</label>
+      <div class="modes two">
+        <label><input type="radio" name="world" value="demo" checked>Brezal (demo)<small>La aldea de siempre, escrita a mano.</small></label>
+        <label><input type="radio" name="world" value="generated">Mundo nuevo (generado)<small>Otro lugar, otra historia, y tu personaje con un porqué.</small></label>
+      </div>
+      <div id="world-opts" hidden>
+        <div class="row">
+          <div><label for="g-tone">Tono</label><select id="g-tone"></select></div>
+          <div><label for="g-wseed">Semilla del mundo <span class="note">(vacía: al azar)</span></label><input id="g-wseed" type="number" min="0" max="4294967295" step="1" placeholder="al azar"></div>
+        </div>
+        <label for="g-setting">Ambientación <span class="note">(opcional)</span></label>
+        <input id="g-setting" type="text" maxlength="300" placeholder="Fantasía oscura, ciencia ficción, postapocalíptico…">
+        <p id="world-test" class="note warn" hidden>En offline es un mundo de prueba: la estructura cambia con la semilla, pero nombres y textos son de plantilla. Para un mundo escrito por Claude, elige «Real».</p>
+      </div>
       <label>Máster</label>
       <div class="modes">
         <label><input type="radio" name="mode" value="live" checked>Real<small>Claude narra en cada acción (gasta tokens).</small></label>
@@ -184,6 +201,10 @@ export const MENU = String.raw`<!doctype html>
         <select id="g-race" aria-label="Raza"></select>
         <select id="g-class" aria-label="Clase"></select>
       </div>
+      <div id="hook-row" hidden>
+        <label for="g-hook">¿Qué le trae aquí? <span class="note">(opcional: si lo dejas vacío, el mundo se lo inventa)</span></label>
+        <input id="g-hook" type="text" maxlength="400" placeholder="Busca a su hermano, que vino a este pueblo y no volvió">
+      </div>
       <details>
         <summary>Más opciones</summary>
         <label for="g-seed">Semilla de dados <span class="note">(vacía: al azar; al grabar se elige una sola)</span></label>
@@ -193,6 +214,7 @@ export const MENU = String.raw`<!doctype html>
         <button class="btn primary" type="submit">Crear y jugar</button>
         <span id="new-error" class="error" role="alert"></span>
       </div>
+      <p id="gen-note" class="note gen-note" hidden></p>
     </form>
   </section>
 </div>
@@ -285,6 +307,7 @@ export const MENU = String.raw`<!doctype html>
     info.appendChild(el('div', 'name', g.name));
     var meta = [when(g)];
     if (g.mode === 'record' || g.mode === 'replay') meta.push(g.cache_entries + ' respuestas grabadas');
+    if (g.world) meta.push('mundo generado · semilla ' + g.world.seed);
     var m = el('div', 'meta', meta.join(' · ')); m.title = m.textContent;
     info.appendChild(m);
     c.appendChild(info);
@@ -351,6 +374,7 @@ export const MENU = String.raw`<!doctype html>
       if (!$('g-race').options.length) {
         d.options.races.forEach(function (r) { $('g-race').add(new Option(r.name, r.id)); });
         d.options.classes.forEach(function (c) { $('g-class').add(new Option(c.name, c.id)); });
+        (d.options.tones || []).forEach(function (t) { $('g-tone').add(new Option(t.name, t.id)); });
       }
       var games = d.games;
       lists.continue = games.filter(function (g) { return !g.demo && g.mode !== 'record'; });
@@ -365,8 +389,23 @@ export const MENU = String.raw`<!doctype html>
   }
 
   function mode() { var c = document.querySelector('input[name=mode]:checked'); return c ? c.value : 'live'; }
-  function keyWarn() { $('key-warn').hidden = apiKey || mode() === 'offline'; }
+  function keyWarn() {
+    $('key-warn').hidden = apiKey || mode() === 'offline';
+    $('world-test').hidden = !(mode() === 'offline' || !apiKey);
+  }
   document.querySelectorAll('input[name=mode]').forEach(function (r) { r.addEventListener('change', function () { modeTouched = true; keyWarn(); }); });
+
+  /** Mundo: la semilla demo o uno generado (con tono, ambientación, semilla y el porqué del PJ). */
+  function generated() { var c = document.querySelector('input[name=world]:checked'); return !!c && c.value === 'generated'; }
+  function worldChanged() {
+    var gen = generated();
+    $('world-opts').hidden = !gen;
+    $('hook-row').hidden = !gen;
+    $('new-lead').textContent = gen
+      ? 'Un mundo distinto cada vez: un puerto, una mina, un monasterio, una caravana… con su gente, sus secretos y una situación inicial para tu personaje.'
+      : 'Empieza en la taberna de la semilla, con los personajes de siempre y, si quieres, uno tuyo.';
+  }
+  document.querySelectorAll('input[name=world]').forEach(function (r) { r.addEventListener('change', worldChanged); });
 
   function openNew() { $('sheet').hidden = false; $('g-name').focus(); }
   function closeNew() { $('sheet').hidden = true; }
@@ -380,14 +419,27 @@ export const MENU = String.raw`<!doctype html>
     var submit = e.target.querySelector('button[type=submit]');
     $('new-error').textContent = '';
     submit.disabled = true;
+    var gen = generated();
     var body = { name: $('g-name').value, mode: mode(), character: $('g-char').value, race: $('g-race').value, class: $('g-class').value, dice_seed: $('g-seed').value };
+    if (gen) {
+      body.world = { seed: $('g-wseed').value, tone: $('g-tone').value, setting: $('g-setting').value };
+      body.hook = $('g-hook').value;
+    }
+    // Generar con Claude tarda: el botón lo dice y una nota explica cuánto.
+    var label = submit.textContent, note = $('gen-note');
+    if (gen) {
+      submit.textContent = 'Generando mundo…';
+      note.hidden = false;
+      note.textContent = mode() === 'offline' ? 'Mundo de prueba, sin API: es un momento.' : 'Claude está escribiendo el lugar, su gente y tu situación inicial. Suele tardar uno o dos minutos.';
+    }
+    function done() { submit.disabled = false; submit.textContent = label; note.hidden = true; }
     fetch('/api/games', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json(); })
       .then(function (r) {
-        if (!r.ok) { $('new-error').textContent = r.text; submit.disabled = false; return; }
+        if (!r.ok) { $('new-error').textContent = r.text; done(); return; }
         open(r.game.slug, r.character_id);
       })
-      .catch(function () { $('new-error').textContent = 'No hay conexión con el servidor.'; submit.disabled = false; });
+      .catch(function () { $('new-error').textContent = 'No hay conexión con el servidor.'; done(); });
   });
 
   load();

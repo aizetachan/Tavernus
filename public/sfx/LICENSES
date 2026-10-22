@@ -1,0 +1,28 @@
+Sonidos de public/sfx — licencias y atribución
+==============================================
+
+Estado actual (2026-10-22): esta carpeta no tiene ficheros de audio de terceros.
+Todo el catálogo (efectos y ambientes) se sintetiza en el navegador con las
+recetas de src/adapters/web/sfx.ts, código propio del proyecto. No hay nada que
+atribuir.
+
+Cómo añadir un sonido de biblioteca
+-----------------------------------
+1. Nombre del fichero = clave del catálogo + extensión: puerta-abrir.ogg,
+   ambiente-taberna.mp3 (mp3, ogg, wav o webm). Las claves válidas están en
+   SOUND_KEYS (src/adapters/web/soundmap.ts). Un fichero sustituye a la receta;
+   si falla al cargar, se vuelve a la receta.
+2. Solo CC0 o CC-BY (nunca CC-BY-NC ni Sampling+ si el juego puede ser comercial).
+   Fuentes recomendadas en docs/SONIDO.md (Kenney, Freesound filtrado por
+   licencia, OpenGameArt filtrado por CC0).
+3. Añade aquí una entrada por fichero, aunque sea CC0:
+
+   <fichero>
+     Título:   <título original>
+     Autor:    <usuario o nombre>
+     Origen:   <URL de la página del sonido>
+     Licencia: CC0 1.0 | CC BY 4.0 (<URL de la licencia>)
+     Cambios:  <recortado, normalizado, convertido a ogg, bucle…>
+
+Los sonidos generados por IA no van aquí: se guardan por partida en
+data/games/<slug>/sfx (fuera del repositorio) con las condiciones del proveedor.

@@ -27,7 +27,7 @@ export class GameClock {
   constructor(
     private readonly ratio: number,
     private readonly realEpochMs: number,
-    private readonly gameEpochS: number,
+    private gameEpochS: number,
     private readonly calendar: Calendar,
   ) {
     if (ratio <= 0) throw new Error('time_ratio must be > 0');
@@ -38,6 +38,9 @@ export class GameClock {
   }
 
   get timeRatio(): number { return this.ratio; }
+
+  /** Solo depuración (/time +2h en offline): adelanta el reloj de juego. Quien lo llame guarda `game_epoch_s`. */
+  shift(gameSeconds: number): void { this.gameEpochS += gameSeconds; }
 
   /** Segundos de juego en un instante real. */
   gameNow(realMs: number = Date.now()): number {

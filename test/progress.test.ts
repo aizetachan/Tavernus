@@ -90,7 +90,7 @@ describe('progreso de la demo', () => {
     const coins = kael.coins;
     expect(sellToNpc(world, kael, 'npc_brenna', wood.id, 2)).toEqual({ ok: true, item: 'leña', quantity: 2, total: 40 });
     expect(kael.coins).toBe(coins + 40);
-    expect(buyFromNpc(world, kael, 'npc_brenna', 'it_cerveza', 1)).toEqual({ ok: true, item: 'jarra de cerveza', quantity: 1, total: 30 });
+    expect(buyFromNpc(world, kael, 'npc_brenna', 'it_cerveza', 1)).toEqual({ ok: true, item: 'jarra de cerveza', quantity: 1, total: 30, unlocked: [] });
     expect(kael.coins).toBe(coins + 10);
     expect(buyFromNpc(world, kael, 'npc_brenna', 'it_daga', 1)).toMatchObject({ ok: false });
     kael.coins = 5;

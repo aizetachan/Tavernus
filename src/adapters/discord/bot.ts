@@ -158,6 +158,10 @@ export class DiscordAdapter {
       if (this.povChannels.has(r.character_id)) void this.sendScene(r.character_id, r.image);
       else this.pendingScenes.set(r.character_id, r.image);
     });
+    // Retrato del NPC en el primer encuentro (momento del motor); solo ese, no en cada conversación.
+    illustratorOf(engine)?.onEntity((r) => {
+      if (r.image.kind === 'portrait' && r.moment_key && r.character_id && this.povChannels.has(r.character_id)) void this.sendPortrait(r.character_id, r.image);
+    });
     engine.events.onEvent((e) => {
       if (e.visibility === 'public' && this.tablon) void this.tablon.send(e.observable ?? e.narration_private);
     });
@@ -348,6 +352,16 @@ export class DiscordAdapter {
     const embed = new EmbedBuilder().setColor(COLOR_SYSTEM).setTitle(image.name).setImage(`attachment://${image.file}`);
     await ch.send({ embeds: [embed], files: [{ attachment: ill.pathOf(image), name: image.file }] })
       .catch((e) => console.error('[discord] ilustración:', e));
+  }
+
+  /** Retrato del primer encuentro: recuadro pequeño con el nombre y el JPEG como miniatura. */
+  private async sendPortrait(characterId: Id, image: SceneImage): Promise<void> {
+    const ch = this.povChannels.get(characterId);
+    const ill = illustratorOf(this.engine);
+    if (!ch || !ill) return;
+    const embed = new EmbedBuilder().setColor(COLOR_SYSTEM).setTitle(image.name).setThumbnail(`attachment://${image.file}`);
+    await ch.send({ embeds: [embed], files: [{ attachment: ill.pathOf(image), name: image.file }] })
+      .catch((e) => console.error('[discord] retrato:', e));
   }
 
   private masterEmbed(text: string): EmbedBuilder {

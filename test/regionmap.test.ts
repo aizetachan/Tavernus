@@ -154,7 +154,7 @@ describe('mapa de zona y región', () => {
   });
 
   it('de camino entre dos lugares: progreso sobre el camino', async () => {
-    const { engine, time } = await bootEngine(fakeTime(), { deterministic: true });
+    const { engine, time } = await bootEngine(fakeTime(), { deterministic: true, fastTravel: false });
     const world = engine.world;
     world.character('ch_kael').location = { type: 'spot', id: 'sp_pl_porton' };
     const r = await engine.act('ch_kael', 'Salir hacia Claro del Roble');

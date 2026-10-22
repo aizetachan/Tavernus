@@ -4,6 +4,7 @@
  */
 
 import type { MasterConfig, WorldSnapshot } from '../../engine/model.js';
+import type { NpcRoutine, ScheduledEvent } from '../../engine/schedule.js';
 
 /** Instante real de arranque del reloj: fijo para que los tests sean deterministas. */
 export const SEED_REAL_EPOCH_MS = Date.UTC(2026, 8, 1, 10, 0, 0);
@@ -27,6 +28,35 @@ export const DEFAULT_MASTER: MasterConfig = {
   improvisation: 3,
   max_tool_calls: 8,
 };
+
+/** Horario de NPC por franjas (schedule.ts), como propiedad opcional. */
+function routine(r: NpcRoutine): { routine: NpcRoutine } { return { routine: r }; }
+
+/** Lo que pasa a su hora en Brezal. Va antes que SEED porque SEED lo usa al construirse. */
+const DEMO_SCHEDULE: ScheduledEvent[] = [
+  {
+    id: 'se_mercado', title: 'el mercado', location_id: 'loc_plaza', spot_id: 'sp_pl_pozo',
+    start_h: 9, duration_min: 4 * 60, recurrence: 'daily',
+    description: 'Mercado de la mañana alrededor del pozo: buhoneros del valle con cestas, quesos, gallinas y cacharros; regateo a voces. Buen sitio para oír habladurías.',
+    npc_ids: [], crowd: [{ label: 'vecinos', count: 20 }, { label: 'buhoneros', count: 4 }],
+    effects: { noise: 0.5, state: { mercado: 'puestos de quesos, verdura y cacharros alrededor del pozo' } },
+    loudness: 3,
+    start_text: 'Llegan los buhoneros con sus cestas y montan los puestos alrededor del pozo. Empieza a llegar gente: la plaza se llena de voces y regateo.',
+    end_text: 'Los buhoneros recogen los puestos; la plaza se va vaciando y vuelve el silencio.',
+    source: 'seed',
+  },
+  {
+    id: 'se_misa', title: 'la misa de la tarde', location_id: 'loc_plaza', spot_id: 'sp_pl_pozo',
+    start_h: 20, duration_min: 60, recurrence: 'daily',
+    description: 'A las ocho, una vieja de la aldea dirige el rezo junto al pozo: velas en el brocal, cabezas gachas, un murmullo por los que no volvieron de Vharn. Brenna acude y no habla con nadie mientras dura.',
+    npc_ids: ['npc_brenna'], crowd: [{ label: 'feligreses', count: 12 }],
+    effects: { noise: 0.1, state: { velas: 'velas encendidas en el brocal del pozo' }, busy_npc_ids: ['npc_brenna'] },
+    loudness: 2,
+    start_text: 'Tañe la campanilla del pozo. Empieza a entrar gente en la plaza: una docena de vecinos se juntan junto al brocal con velas para la misa de la tarde.',
+    end_text: 'Termina el rezo. Se apagan las velas una a una y los vecinos vuelven a sus casas.',
+    source: 'seed',
+  },
+];
 
 export function makeSeed(): WorldSnapshot {
   return structuredClone(SEED);
@@ -93,6 +123,8 @@ const SEED: WorldSnapshot = {
     },
     progression: { practice_thresholds: [10, 30, 60], practice_min_dc: 10 },
     board: { active_job_ids: [], last_rotation_day: -1 },
+    // Agenda (schedule.ts): propiedad opcional, fuera del tipo.
+    ...{ schedule: DEMO_SCHEDULE },
   },
   regions: [{ id: 'rg_valle', name: 'Valle de Vharn' }],
   zones: [
@@ -157,6 +189,7 @@ const SEED: WorldSnapshot = {
       sells: [{ item_id: 'it_cerveza', price: 30 }, { item_id: 'it_antorcha', price: 10 }, { item_id: 'it_pocion', price: 2500 }],
       stats: { ac: 10, hp_max: 9, hp: 9, attack_bonus: 2, damage: '1d4', damage_type: 'bludgeoning', attack_name: 'jarra', xp: 10 },
       attitude: { default: 'neutral', by_character: {} },
+      ...routine({ day: 'sp_tab_barra', night: 'sp_tab_mesa' }),
     },
     {
       id: 'npc_doro', name: 'Doro', role: 'guardia', location: { type: 'spot', id: 'sp_pl_porton' }, status: 'alive', passive_perception: 15,
@@ -166,6 +199,7 @@ const SEED: WorldSnapshot = {
       memory: [], talking_to: null, buys: [], sells: [],
       stats: { ac: 16, hp_max: 11, hp: 11, attack_bonus: 3, damage: '1d6+1', damage_type: 'piercing', attack_name: 'lanza', xp: 25 },
       attitude: { default: 'neutral', by_character: {} },
+      ...routine({ day: 'sp_pl_porton' }),
     },
     {
       id: 'npc_lobo', name: 'un lobo gris', role: 'lobo', location: { type: 'spot', id: 'sp_cl_arroyo' }, status: 'alive', passive_perception: 13,
