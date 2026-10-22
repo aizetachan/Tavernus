@@ -580,7 +580,10 @@ ${PAINT_STYLE}
   .actions button.chosen:disabled { opacity: .75; border-color: rgba(230,183,90,.45); color: #e6c98a; }
   .actions button.chosen:disabled:not(.roll)::before { content: '✓'; margin-right: 6px; color: var(--accent); }
   .actions button.roll.chosen:disabled { background: var(--accent-tint); color: #e6c98a; }
-  .actions button.roll.landed.chosen:disabled { opacity: 1; }
+  .actions button.roll.landed.chosen:disabled { opacity: 1; background: var(--accent-tint); color: #e6c98a; }
+  /* Ya tirado: la cara blanca, muy transparente (estado desactivado). */
+  .actions button.roll.landed svg.d20 rect { fill: rgba(255,255,255,.12); stroke: rgba(230,183,90,.55); }
+  .actions button.roll.landed svg.d20 circle, .actions button.roll.landed svg.d20 text { fill: #e6c98a; }
   /* Secciones plegables del panel. */
   .col-t { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin-right: auto; padding: 4px 6px 4px 0; border: 0; background: transparent; color: var(--text); text-align: left; }
   .col-t b { font: 700 15px/1.2 var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

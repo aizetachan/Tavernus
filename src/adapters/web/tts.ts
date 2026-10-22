@@ -427,36 +427,49 @@ export const TTS_SCRIPT = String.raw`<script>
   window.TavernusTTS = {
     /** page.ts: cada mensaje pintado. Las narraciones del máster llevan su altavoz. */
     attach: function (div, m) {
-      if (!m || m.kind !== 'master' || !m.text) return;
+      if (!m || (m.kind !== 'master' && !m.narrator) || !m.text) return;
       div.ttsMsg = m;
       justAttached = div;
       setTimeout(function () { if (justAttached === div) justAttached = null; }, 0);
-      // El avatar del bocadillo es el botón de escuchar: lee esta narración y las que la siguen del mismo narrador
-      // (las agrupadas, que no muestran avatar). Si ya está leyendo, para.
-      var av = div.querySelector('.nv-av');
-      if (!av) {
-        // Sin avatar (capítulos: prólogo, «Donde lo dejamos»): el altavoz de siempre en su rótulo.
-        var who = div.querySelector('.who');
-        if (!who) return;
-        var b = document.createElement('button');
-        b.type = 'button'; b.className = 'tts-say'; b.title = 'Leer en alto'; b.setAttribute('aria-label', 'Leer en alto');
-        b.innerHTML = SPEAKER + BARS;
-        b.addEventListener('click', function () { if (playing && playing.div === div) stop(); else { unlock(); speak(div); } });
-        who.appendChild(b);
-        return;
-      }
-      div.classList.add('tts-able');
-      av.setAttribute('role', 'button'); av.tabIndex = 0;
-      av.title = 'Escuchar'; av.setAttribute('aria-label', 'Escuchar esta narración');
-      var go = function () {
-        var group = [div], n = div.nextElementSibling;
-        while (n && n.classList.contains('cont') && n.ttsMsg) { group.push(n); n = n.nextElementSibling; }
-        if (playing && group.indexOf(playing.div) >= 0) { stop(); return; }
-        unlock(); speak(div);
-        group.slice(1).forEach(enqueue);
-      };
-      av.addEventListener('click', go);
-      av.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+      // Los capítulos no tienen avatar: llevan el altavoz de siempre en su rótulo. El resto se escucha pulsando
+      // cualquier avatar del turno (bindAvatars, que llama novel.ts).
+      if (div.querySelector('.nv-av')) return;
+      var who = div.querySelector('.who');
+      if (!who) return;
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'tts-say'; b.title = 'Leer en alto'; b.setAttribute('aria-label', 'Leer en alto');
+      b.innerHTML = SPEAKER + BARS;
+      b.addEventListener('click', function () { if (playing && playing.div === div) stop(); else { unlock(); speak(div); } });
+      who.appendChild(b);
+    },
+    /**
+     * novel.ts: los bocadillos de un turno (narrador y personajes). Su avatar es el botón de escuchar: lee el turno
+     * (div, el que lleva la narración) y, a continuación, las narraciones agrupadas que lo siguen sin avatar visible.
+     * Si ya está leyendo ese grupo, para.
+     */
+    bindAvatars: function (rows, div) {
+      if (!div || !div.ttsMsg) return;
+      rows.forEach(function (row) {
+        var av = row.querySelector('.nv-av');
+        if (!av || row.classList.contains('mine') || av.getAttribute('data-tts') === '1') return;
+        av.setAttribute('data-tts', '1');
+        row.classList.add('tts-able');
+        av.setAttribute('role', 'button'); av.tabIndex = 0;
+        av.title = 'Escuchar'; av.setAttribute('aria-label', 'Escuchar este momento');
+        var go = function () {
+          var group = [div], n = (rows[rows.length - 1] || row).nextElementSibling;
+          while (n && (n.classList.contains('cont') || !n.classList.contains('row'))) {
+            if (n.ttsMsg && group.indexOf(n) < 0) group.push(n);
+            if (!n.classList.contains('row') && !n.classList.contains('actions') && !n.classList.contains('moment') && !n.classList.contains('scene')) break;
+            n = n.nextElementSibling;
+          }
+          if (playing && group.indexOf(playing.div) >= 0) { stop(); return; }
+          unlock(); speak(div);
+          group.slice(1).forEach(enqueue);
+        };
+        av.addEventListener('click', go);
+        av.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+      });
     },
     /** page.ts: llegó un mensaje en directo (no del historial). Con «leer automáticamente», a la cola. */
     fresh: function () { if (auto && justAttached) { enqueue(justAttached); justAttached = null; } },

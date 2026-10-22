@@ -384,6 +384,7 @@ export const NOVEL_JS = String.raw`
     if (m.scene) { showScene(m.scene); return; }
     if (m.chapter) { addChapter(m); return; }
     if (m.input) { clearPending(); markChosen(m.input); }
+    var before = log.lastElementChild;
     var lines = m.lines || [], main = null;
     var say = function (l, lead) {
       if (l.speaker === 'actor') return chatRow('mine', meWho(), escapeHtml(l.text));
@@ -423,7 +424,13 @@ export const NOVEL_JS = String.raw`
     last.setAttribute('data-seq', String(m.seq));
     // La voz lee la narración y los parlamentos del turno desde la burbuja del narrador.
     var div = main.classList.contains('master') ? main : last;
-    if (window.TavernusTTS) TavernusTTS.attach(div, m);
+    if (window.TavernusTTS) {
+      TavernusTTS.attach(div, m);
+      // Cualquier avatar de este turno (narrador o personajes) lo lee.
+      var rows = [], e = before ? before.nextElementSibling : log.firstElementChild;
+      while (e) { if (e.classList.contains('row')) rows.push(e); e = e.nextElementSibling; }
+      if (TavernusTTS.bindAvatars) TavernusTTS.bindAvatars(rows, div);
+    }
     if (m.moments) m.moments.forEach(function (x) { showMoment(x, m.seq); });
     var host = log.lastElementChild;
     if (m.decisive_s) {
