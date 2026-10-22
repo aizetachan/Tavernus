@@ -13,7 +13,7 @@ import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { World } from '../src/engine/world.js';
 import { buildSkeleton, generateSeed, TONES, type Tone } from '../src/worldgen/index.js';
-import { fillPrompt, fillSchema, FILL_SYSTEM, offlineFill } from '../src/worldgen/fill.js';
+import { offlineFill, PART_SCHEMAS, PART_SYSTEM, partPrompt, schemaChars, splitFill, type PartName } from '../src/worldgen/fill.js';
 import { situationText } from '../src/worldgen/index.js';
 
 const { values: a } = parseArgs({
@@ -36,10 +36,13 @@ const pcs = a.pc ? [{ name: a.pc, ...(a.hook ? { hook: a.hook } : {}) }] : [];
 
 if (a.dry) {
   const sk = buildSkeleton({ seed, tone, setting: a.setting });
-  const chars = { system: FILL_SYSTEM.length, prompt: fillPrompt(sk, pcs).length, schema: JSON.stringify(fillSchema(sk)).length, salida_offline: JSON.stringify(offlineFill(sk, pcs)).length };
-  // ~3,3 caracteres por token en castellano con JSON.
-  const tin = Math.round((chars.system + chars.prompt + chars.schema) / 3.3), tout = Math.round(chars.salida_offline / 3.3);
-  console.log({ chars, tokens_entrada_aprox: tin, tokens_salida_offline_aprox: tout, localizaciones: sk.locations.length, pistas: sk.clue_count, encargos: sk.jobs.length });
+  // Las tres partes, con lo ya escrito por las anteriores (del relleno offline, como medida). ~3,3 caracteres por token.
+  const done = splitFill(offlineFill(sk, pcs));
+  const parts = (['world', 'people', 'situations'] as PartName[]).map((p) => {
+    const input = PART_SYSTEM[p].length + partPrompt(p, sk, pcs, { world: done.world, people: done.people }).length + schemaChars(PART_SCHEMAS[p]);
+    return { parte: p, esquema: schemaChars(PART_SCHEMAS[p]), tokens_entrada_aprox: Math.round(input / 3.3), tokens_salida_offline_aprox: Math.round(JSON.stringify(done[p]).length / 3.3) };
+  });
+  console.log({ asentamiento: sk.settlement.label, partes: parts, localizaciones: sk.locations.length, pistas: sk.clue_count, encargos: sk.jobs.length });
   process.exit(0);
 }
 

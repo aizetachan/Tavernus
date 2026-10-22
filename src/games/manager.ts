@@ -20,12 +20,14 @@ import { Engine, type EngineOptions } from '../engine/engine.js';
 import { seededRng, type Rng } from '../engine/dice.js';
 import type { Id, WorldSnapshot } from '../engine/model.js';
 import { makeSeed } from '../data/seed/demo.js';
+import { authoredSeed, isAuthoredCampaign } from '../data/campaigns/index.js';
 import { CLASSES, RACES } from '../data/srd/index.js';
 import { JsonFileRepository } from '../persistence/jsonfile.js';
 import { claimSituation, generateSeed, TONES, type GenerateOptions, type Tone } from '../worldgen/index.js';
 import { Master } from '../ai/master.js';
 import { isMasterMode, masterCacheDir, masterModeFromEnv, masterOptionsFor, type MasterMode } from '../ai/mode.js';
 import { attachIllustrator, cloudflareFromEnv, imagesEnabled, Illustrator, type IllustratorOptions } from '../ai/illustrate.js';
+import { attachAvatars, avatarsOf, cleanLook } from '../ai/avatar.js';
 
 /**
  * En Windows, renombrar una carpeta falla con EPERM/EBUSY mientras algún
@@ -100,14 +102,14 @@ export interface GameInfo {
   cache_entries: number;
   open: boolean;
   /** Mundo generado (null: la semilla demo). */
-  world: { seed: number; tone: Tone } | null;
+  world: { seed: number; tone: Tone; /** Salió en modo plantilla (sin Claude). */ template: boolean } | null;
 }
 
 export interface CreateGameInput {
   name: string;
   mode: NewGameMode;
   /** `hook`: lo que el jugador cuenta de por qué viene; en un mundo generado entra en su situación inicial. */
-  character?: { name: string; race_id?: string; class_id?: string; hook?: string } | null;
+  character?: { name: string; race_id?: string; class_id?: string; hook?: string; /** Cómo se ve: alimenta su primer avatar (src/ai/avatar.ts). */ appearance?: string } | null;
   dice_seed?: number | null;
   campaign_id?: Id;
   /** Mundo nuevo generado en vez de la semilla demo. */
@@ -269,13 +271,13 @@ export class GameManager {
         const snap = JSON.parse(await readFile(join(p.data, `${m.campaign_id}.world.json`), 'utf8')) as WorldSnapshot;
         characters = snap.characters.filter((c) => c.status !== 'retired').map((c) => c.name);
       } catch { /* aún sin arrancar: la semilla */
-        characters = m.world ? [] : makeSeed().characters.map((c) => c.name);
+        characters = m.world || isAuthoredCampaign(m.campaign_id) ? [] : makeSeed().characters.map((c) => c.name);
       }
     }
     return {
       slug: m.slug, name: m.name, created_at: m.created_at, last_opened_at: m.last_opened_at, mode: m.mode, demo: m.demo, main: m.main,
       dice_seed: m.dice_seed, characters, cache_entries: m.mode === 'record' || m.mode === 'replay' ? await countJson(p.cache) : 0, open,
-      world: m.world ? { seed: m.world.seed, tone: m.world.tone } : null,
+      world: m.world ? { seed: m.world.seed, tone: m.world.tone, template: m.world.model === 'offline' } : null,
     };
   }
 
@@ -313,7 +315,9 @@ export class GameManager {
   private async boot(slug: string): Promise<Engine> {
     const m = await this.require(slug);
     const p = this.paths(m);
-    const seed = m.world ? JSON.parse(await readFile(join(p.dir, m.world.file), 'utf8')) as WorldSnapshot : makeSeed();
+    // Mundo generado (guardado junto a la partida), campaña escrita (src/data/campaigns) o la semilla de pruebas.
+    const seed = m.world ? JSON.parse(await readFile(join(p.dir, m.world.file), 'utf8')) as WorldSnapshot
+      : isAuthoredCampaign(m.campaign_id) ? authoredSeed(m.campaign_id, { now: this.now() }) : makeSeed();
     const engine = await Engine.boot({
       ...this.engineOpts,
       repo: new JsonFileRepository(p.data), campaignId: m.campaign_id,
@@ -324,10 +328,11 @@ export class GameManager {
     const master = this.masterFor(engine, m, p, m.dice_seed !== null ? seededRng((m.dice_seed ^ 0x9e3779b9) >>> 0) : undefined);
     engine.attachMaster(master);
     if (imagesEnabled(this.env, m.mode)) {
-      attachIllustrator(engine, new Illustrator({
+      const ill = attachIllustrator(engine, new Illustrator({
         dir: join(p.dir, 'images'), worldSeed: m.dice_seed ?? m.campaign_id,
         apiKey: this.env['POLLINATIONS_API_KEY'] ?? null, cloudflare: cloudflareFromEnv(this.env), log: this.log, ...this.illustratorOpts,
       }));
+      attachAvatars(engine, ill, { dir: join(p.dir, 'images'), log: this.log });
     }
     m.last_opened_at = this.now().toISOString();
     await this.writeManifest(m);
@@ -364,7 +369,7 @@ export class GameManager {
     const dice_seed = seedIn ?? (input.mode === 'record' ? Math.floor(Math.random() * 0xffffffff) : null);
     const game: GameManifest = {
       version: 1, slug, name, created_at: this.now().toISOString(), last_opened_at: null,
-      campaign_id: input.campaign_id ?? 'demo', mode: input.mode, demo: false, main: false,
+      campaign_id: input.campaign_id ?? 'brezal', mode: input.mode, demo: false, main: false,
       data_dir: 'data', cache_dir: 'master-cache', dice_seed, initial_dir: null, character_id: null,
     };
     await this.writeManifest(game);
@@ -375,11 +380,20 @@ export class GameManager {
         const hook = input.character?.hook?.trim().slice(0, 400);
         const race = RACES.find((r) => r.id === input.character?.race_id)?.name;
         const klass = CLASSES.find((c) => c.id === input.character?.class_id)?.name;
-        const snap = await this.worldgen({
-          ...world, env: { ...this.env, MASTER_MODE: game.mode }, log: this.log,
-          ...(game.mode === 'offline' ? { client: null } : {}),
-          characters: charName ? [{ name: charName, ...(race ? { race } : {}), ...(klass ? { class_name: klass } : {}), ...(hook ? { hook } : {}) }] : [],
-        });
+        let snap: WorldSnapshot;
+        try {
+          snap = await this.worldgen({
+            ...world, env: { ...this.env, MASTER_MODE: game.mode }, log: this.log,
+            ...(game.mode === 'offline' ? { client: null } : {}),
+            characters: charName ? [{ name: charName, ...(race ? { race } : {}), ...(klass ? { class_name: klass } : {}), ...(hook ? { hook } : {}) }] : [],
+          });
+        } catch (e) {
+          this.log(`[partidas] no se pudo generar el mundo: ${(e as Error).message}`);
+          throw new GameError(`No se pudo generar el mundo: ${worldgenCause(e)}`, 502);
+        }
+        if (game.mode !== 'offline' && snap.campaign.generation?.model === 'offline') {
+          this.log('[partidas] mundo en modo plantilla: no hay clave de API para generarlo con Claude');
+        }
         await writeFile(join(this.dirOf(slug), WORLD_FILE), JSON.stringify(snap), 'utf8');
         game.campaign_id = snap.campaign.id;
         game.world = { file: WORLD_FILE, seed: world.seed, tone: world.tone, setting: world.setting, model: snap.campaign.generation?.model ?? 'offline' };
@@ -390,10 +404,11 @@ export class GameManager {
         const r = await engine.createCharacter(`web:${slug}`, charName, {
           ...(input.character?.race_id ? { race_id: input.character.race_id } : {}),
           ...(input.character?.class_id ? { class_id: input.character.class_id } : {}),
+          ...(cleanLook(input.character?.appearance ?? '') ? { appearance: cleanLook(input.character!.appearance!) } : {}),
         });
         if (!r.ok) throw new GameError(r.reason);
         game.character_id = r.character.id;
-        if (game.world) claimSituation(engine.world, r.character.id, engine.gameNow(), input.character?.hook);
+        if (game.world || isAuthoredCampaign(game.campaign_id)) claimSituation(engine.world, r.character.id, engine.gameNow(), input.character?.hook);
       }
       await engine.flush();
       if (input.mode === 'record') {
@@ -404,6 +419,8 @@ export class GameManager {
       }
       game.last_opened_at = this.now().toISOString();
       await this.writeManifest(game);
+      // Su avatar se pinta de fondo: la partida se abre sin esperarlo y llega por el stream («portrait»).
+      if (game.character_id) void avatarsOf(engine)?.ensure(game.character_id);
       return { game, character_id: game.character_id };
     } catch (e) {
       await this.close(slug).catch(() => {});
@@ -489,6 +506,19 @@ export class GameManager {
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, MANIFEST), JSON.stringify(m, null, 2), 'utf8');
   }
+}
+
+/** La causa de un fallo de generación, corta y en castellano, para el formulario. */
+export function worldgenCause(e: unknown): string {
+  const err = e as { status?: number; message?: string; errors?: string[] };
+  const msg = String(err?.message ?? e);
+  if (/grammar is too large/i.test(msg)) return 'el esquema es demasiado grande para la API.';
+  if (err?.status === 401 || err?.status === 403) return 'la clave de API no vale o no tiene permiso.';
+  if (err?.status === 429) return 'la API está saturada o sin saldo; prueba en un rato.';
+  if (err?.status !== undefined && err.status >= 500) return 'la API no responde ahora mismo; prueba en un rato.';
+  if (/timeout|timed out|ETIMEDOUT/i.test(msg)) return 'la API ha tardado demasiado.';
+  const first = err?.errors?.[0];
+  return (first ? `${msg} (${first})` : msg).replace(/^\d{3}\s+/, '').slice(0, 200);
 }
 
 /** Valida lo que llega del formulario: semilla entera (vacía = al azar), tono conocido, ambientación corta. */

@@ -186,6 +186,64 @@
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
         "DISCORD_TOKEN": ""
       }
+    },
+    {
+      "name": "tavernus-web-prologo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web:watch"
+      ],
+      "port": 3197,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3197",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/prologo",
+        "GAMES_DIR": "./data/local/prologo/games",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "off"
+      }
+    },
+    {
+      "name": "tavernus-prologo-haiku",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--env-file-if-exists=.env",
+        "--import",
+        "tsx",
+        "data/local/prologo-haiku/serve.ts"
+      ],
+      "port": 3198,
+      "env": {
+        "MASTER_MODEL": "claude-haiku-5-5",
+        "DATA_DIR": "./data/local/prologo-haiku",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "off"
+      }
+    },
+    {
+      "name": "tavernus-web-brezal-haiku",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web:watch"
+      ],
+      "port": 3147,
+      "env": {
+        "MASTER_MODE": "live",
+        "MASTER_MODEL": "claude-haiku-5-5",
+        "MASTER_EFFORT": "low",
+        "WEB_PORT": "3147",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/brezal-haiku",
+        "GAMES_DIR": "./data/local/brezal-haiku/games",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "off"
+      }
     }
   ]
 }

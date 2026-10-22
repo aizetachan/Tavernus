@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -8,11 +9,12 @@ import { moveTo, settleTransit } from '../src/engine/movement.js';
 import { MemoryRepository } from '../src/persistence/memory.js';
 import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
-import { GameManager, type MasterFactory } from '../src/games/manager.js';
-import { buildSkeleton, claimSituation, generateSeed, offlineFill, TONES, validateFill, type FillClient, type WorldFill } from '../src/worldgen/index.js';
+import { GameError, GameManager, type MasterFactory } from '../src/games/manager.js';
+import { createWebServer } from '../src/adapters/web/server.js';
+import { buildSkeleton, buildSnapshot, claimSituation, generateSeed, offlineFill, TONES, validateFill, type FillClient, type WorldFill } from '../src/worldgen/index.js';
 import { SETTLEMENTS } from '../src/worldgen/catalog.js';
 import { SEED_REAL_EPOCH_MS } from '../src/data/seed/demo.js';
-import { fillWorld, fillSchema } from '../src/worldgen/fill.js';
+import { assembleFill, extractJson, fillWorld, MAX_PART_SCHEMA_CHARS, PART_SCHEMAS, schemaChars, splitFill, TRADE_ITEMS, type PeoplePart } from '../src/worldgen/fill.js';
 import { generateMap, mapInputOf } from '../src/adapters/web/mapgen.js';
 import { fakeTime } from './helpers.js';
 
@@ -138,45 +140,49 @@ describe('validador', () => {
 describe('relleno con la API (cliente falso)', () => {
   const sk = buildSkeleton({ seed: 11, ...IN });
   const pcs = [{ name: 'Ana' }];
+  const parts = () => splitFill(offlineFill(sk, pcs));
 
-  function fake(replies: WorldFill[]): FillClient & { calls: Anthropic.Beta.MessageCreateParamsNonStreaming[] } {
+  /** Responde en orden: un objeto es la respuesta JSON; un Error, el fallo de la API. */
+  function fake(replies: (object | Error)[]): FillClient & { calls: Anthropic.Beta.MessageCreateParamsNonStreaming[] } {
     const calls: Anthropic.Beta.MessageCreateParamsNonStreaming[] = [];
     return {
       calls,
       async create(p) {
         calls.push(structuredClone(p));
-        const f = replies[calls.length - 1]!;
+        const r = replies[calls.length - 1]!;
+        if (r instanceof Error) throw r;
         return {
           id: `m${calls.length}`, type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', stop_reason: 'end_turn', stop_sequence: null,
-          content: [{ type: 'text', text: JSON.stringify(f), citations: null }],
-          usage: { input_tokens: 5000, output_tokens: 8000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+          content: [{ type: 'text', text: JSON.stringify(r), citations: null }],
+          usage: { input_tokens: 2000, output_tokens: 3000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
         } as unknown as Anthropic.Beta.BetaMessage;
       },
     };
   }
+  const grammarError = () => Object.assign(new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"The compiled grammar is too large, which would cause performance issues."}}'), { status: 400 });
 
-  it('salida estructurada con esquema estricto, sin prefill; reintenta una vez con los errores', async () => {
-    const bad = offlineFill(sk, pcs);
+  it('tres partes, cada una con su esquema estricto pequeño y sin prefill; reintenta solo la parte que falla', async () => {
+    const { world, people, situations } = parts();
+    const bad = structuredClone(people);
     bad.npcs[1]!.name = bad.npcs[0]!.name;
-    const client = fake([bad, offlineFill(sk, pcs)]);
+    const client = fake([world, bad, people, situations]);
     const r = await fillWorld(sk, pcs, { client, model: 'claude-sonnet-5-5' });
-    expect(r.attempts).toBe(2);
-    expect(r.usage).toEqual({ input: 10000, output: 16000 });
-    expect(r.cost_usd).toBeCloseTo(2 * (5000 * 2 + 8000 * 10) / 1e6, 6);
-    const [first, second] = client.calls;
-    expect(first!.output_config?.format).toEqual({ type: 'json_schema', schema: fillSchema(sk) });
-    expect(first!.messages.at(-1)!.role).toBe('user');
-    expect(second!.messages.at(-1)!.role).toBe('user');
-    expect(String(second!.messages.at(-1)!.content)).toMatch(/repetido/);
+    expect(r.attempts).toBe(4);
+    expect(r.usage).toEqual({ input: 8000, output: 12000 });
+    expect(r.cost_usd).toBeCloseTo((8000 * 2 + 12000 * 10) / 1e6, 6);
+    expect(client.calls.map((c) => c.output_config?.format)).toEqual([
+      { type: 'json_schema', schema: PART_SCHEMAS.world }, { type: 'json_schema', schema: PART_SCHEMAS.people },
+      { type: 'json_schema', schema: PART_SCHEMAS.people }, { type: 'json_schema', schema: PART_SCHEMAS.situations },
+    ]);
+    for (const c of client.calls) expect(c.messages.at(-1)!.role).toBe('user');
+    expect(String(client.calls[2]!.messages.at(-1)!.content)).toMatch(/repetido/);
+    // La gente lee el mundo ya escrito; las situaciones, el mundo y la gente.
+    expect(String(client.calls[1]!.messages[0]!.content)).toContain(world.town_name);
+    expect(String(client.calls[3]!.messages[0]!.content)).toContain(people.npcs[0]!.name);
+    expect(validateFill(sk, r.fill, pcs)).toEqual([]);
   });
 
-  it('se rinde si tras corregir sigue mal', async () => {
-    const bad = offlineFill(sk, pcs);
-    bad.situations = [];
-    await expect(fillWorld(sk, pcs, { client: fake([bad, bad]) })).rejects.toThrow(/no valida/);
-  });
-
-  it('el esquema es estricto: todo objeto cierra propiedades y las exige todas', () => {
+  it('cada esquema cabe con margen en lo que hoy acepta la API, y todos son estrictos', () => {
     const walk = (s: unknown): void => {
       if (!s || typeof s !== 'object') return;
       const o = s as Record<string, unknown>;
@@ -186,7 +192,72 @@ describe('relleno con la API (cliente falso)', () => {
       }
       Object.values(o).forEach(walk);
     };
-    walk(fillSchema(sk));
+    for (const [name, schema] of Object.entries(PART_SCHEMAS)) {
+      walk(schema);
+      expect(schemaChars(schema), name).toBeLessThanOrEqual(MAX_PART_SCHEMA_CHARS);
+    }
+  });
+
+  it('el código pone ids de encargos, precios en banda, actitudes y horas sin preguntar al modelo', async () => {
+    const { world, people, situations } = parts();
+    const loose = structuredClone(people) as PeoplePart & { jobs: { id?: string }[] };
+    for (const j of loose.jobs) delete j.id;
+    loose.trade[0]!.price = 999999;
+    loose.trade[0]!.buys_or_sells = 'compra';
+    loose.npcs[0]!.attitude = 'amistosa';
+    const sits = structuredClone(situations);
+    sits.situations[0]!.start_hour = 77;
+    const r = await fillWorld(sk, pcs, { client: fake([world, loose, sits]) });
+    expect(r.attempts).toBe(3);
+    expect(r.fill.jobs.map((j) => j.id)).toEqual(sk.jobs.map((j) => j.id));
+    expect(r.fill.trade[0]!.price).toBeLessThanOrEqual(TRADE_ITEMS.find((d) => d.id === r.fill.trade[0]!.item_id)!.value * 3);
+    expect(r.fill.trade[0]!.buys_or_sells).toBe('buys');
+    expect(r.fill.npcs[0]!.attitude).toMatch(/neutral|hostile/);
+    expect(r.fill.situations[0]!.start_hour).toBeGreaterThanOrEqual(0);
+    expect(r.fill.situations[0]!.start_hour).toBeLessThanOrEqual(23);
+  });
+
+  it('si una parte no cabe como gramática, la pide como JSON sin gramática y la valida igual', async () => {
+    const { world, people, situations } = parts();
+    const logs: string[] = [];
+    const client = fake([world, grammarError(), people, situations]);
+    const r = await fillWorld(sk, pcs, { client, log: (m) => logs.push(m) });
+    expect(r.unstrict).toEqual(['people']);
+    expect(client.calls[2]!.output_config?.format).toBeUndefined();
+    expect(String(client.calls[2]!.system)).toContain('JSON Schema');
+    expect(logs.join(' ')).toMatch(/no cabe/);
+    expect(validateFill(sk, r.fill, pcs)).toEqual([]);
+  });
+
+  it('MASTER_MODEL=Haiku no cambia el modelo de los mundos (WORLDGEN_MODEL o Sonnet); sin clave sale de plantilla y lo dice', async () => {
+    const { world, people, situations } = parts();
+    const client = fake([world, people, situations]);
+    await generateSeed({ seed: 11, ...IN, characters: pcs, client, env: { MASTER_MODEL: 'claude-haiku-5-5', ANTHROPIC_API_KEY: 'x' }, now: EPOCH });
+    expect(client.calls.map((c) => c.model)).toEqual(['claude-sonnet-5-5', 'claude-sonnet-5-5', 'claude-sonnet-5-5']);
+    const c2 = fake([world, people, situations]);
+    await generateSeed({ seed: 11, ...IN, characters: pcs, client: c2, env: { WORLDGEN_MODEL: 'claude-opus-5-5' }, now: EPOCH });
+    expect(c2.calls[0]!.model).toBe('claude-opus-5-5');
+    const logs: string[] = [];
+    const snap = await generateSeed({ seed: 11, ...IN, characters: pcs, env: { MASTER_MODE: 'live', MASTER_MODEL: 'claude-haiku-5-5' }, log: (m) => logs.push(m), now: EPOCH });
+    expect(snap.campaign.generation?.model).toBe('offline');
+    expect(logs.join(' ')).toMatch(/sin clave de API/);
+  });
+
+  it('el JSON sin gramática se lee aunque venga entre ```json y con texto alrededor', () => {
+    expect(extractJson('Aquí va:\n```json\n{"a": 1}\n```')).toEqual({ a: 1 });
+  });
+
+  it('se rinde si tras corregir sigue mal', async () => {
+    const { world, people } = parts();
+    const bad = { situations: [] };
+    await expect(fillWorld(sk, pcs, { client: fake([world, people, bad, bad]) })).rejects.toThrow(/no valida/);
+  });
+
+  it('juntar las tres partes da el mismo mundo que el relleno entero', () => {
+    const f = offlineFill(sk, pcs);
+    const p = splitFill(f);
+    const gen = { seed: 11, tone: 'grim' as const, setting: '', model: 'offline', generated_at: new Date(SEED_REAL_EPOCH_MS).toISOString(), attempts: 0, usage: { input: 0, output: 0 }, cost_usd: 0, skeleton_version: sk.version };
+    expect(buildSnapshot(sk, assembleFill(p.world, p.people, p.situations), gen)).toEqual(buildSnapshot(sk, f, gen));
   });
 });
 
@@ -274,7 +345,7 @@ describe('menú: nueva partida en un mundo generado', () => {
     expect(c.situation?.start_spot_id).toBe(c.location.id);
     expect(c.backstory).toMatch(/^Busca a su hermano\./);
     const info = (await games.list())[0]!;
-    expect(info.world).toEqual({ seed: 31337, tone: 'horror' });
+    expect(info.world).toEqual({ seed: 31337, tone: 'horror', template: true });
     // Al reabrir arranca de lo guardado, no de la demo.
     await games.close(game.slug);
     const again = await games.open(game.slug);
@@ -282,6 +353,30 @@ describe('menú: nueva partida en un mundo generado', () => {
     expect(again.world.character(character_id!).situation).toEqual(c.situation);
     const saved = JSON.parse(await readFile(join(games.paths(game).dir, 'world.seed.json'), 'utf8'));
     expect(saved.campaign.generation.seed).toBe(31337);
+  });
+
+  it('si la generación falla: 502 con la causa corta, en el gestor y por HTTP, y sin carpeta a medias', async () => {
+    const failing = new GameManager({
+      root: join(dir, 'games'), env: { DATA_DIR: join(dir, 'local') }, masterFor: noApi, engine: { deterministic: false }, log: () => {},
+      worldgen: async () => { throw Object.assign(new Error('400 The compiled grammar is too large, which would cause performance issues.'), { status: 400 }); },
+    });
+    const err = await failing.create({ name: 'Rota', mode: 'live', world: { tone: 'grim' } }).catch((e: unknown) => e as GameError);
+    expect(err).toBeInstanceOf(GameError);
+    expect(err.status).toBe(502);
+    expect(err.message).toMatch(/^No se pudo generar el mundo: el esquema es demasiado grande/);
+    expect(await readdir(join(dir, 'games')).catch(() => [])).not.toContain('rota');
+    const web = createWebServer(failing, { tickMs: 3_600_000 });
+    await new Promise<void>((resolve) => web.server.listen(0, '127.0.0.1', resolve));
+    try {
+      const r = await fetch(`http://127.0.0.1:${(web.server.address() as AddressInfo).port}/api/games`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Rota', mode: 'live', world: { tone: 'grim' } }),
+      });
+      expect(r.status).toBe(502);
+      expect(await r.json()).toMatchObject({ ok: false, text: expect.stringMatching(/^No se pudo generar el mundo/) });
+    } finally {
+      await web.stop();
+      await failing.closeAll();
+    }
   });
 
   it('valida la semilla y el tono', async () => {

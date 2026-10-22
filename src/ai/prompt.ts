@@ -17,12 +17,14 @@ import { attitudeOf } from '../engine/combat.js';
 import { describeHook } from '../engine/hooks.js';
 import { travelBlock } from '../engine/travel.js';
 import { scheduleContext } from '../engine/schedule.js';
+import { storyContext } from '../engine/story.js';
 import { worldLaws } from '../engine/laws.js';
 import { describeRumor, rumorBudget, rumorsHeardBy, rumorsIn } from '../engine/rumors.js';
 import { characterFacts, FACTS_IN_CONTEXT } from '../engine/facts.js';
 import { debtLine, openDebts } from '../engine/debts.js';
 import { spotLockedFor } from '../engine/movement.js';
 import { ROLL_CATEGORY, rollCategory } from '../engine/closecheck.js';
+import { conversationBlock, conversationOf } from '../engine/conversation.js';
 import { RULES_CHEATSHEET } from './rules-cheatsheet.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
@@ -70,6 +72,7 @@ export function systemPrompt(c: Campaign): string {
     'NPCs: interprétalos según su descripción, lo que quieren y lo que recuerdan. Si el actor habla con uno, pon su ID en npc_id; y solo si esa persona recordaría algo de la conversación, escríbelo en npc_memory_note con su importancia. Un NPC atiende a una persona a la vez: si está ocupado con otro, responde en ficción que espere, salvo motivo de peso.',
     'En log_event: narration_private para el actor; observable para testigos con detalle completo (tercera persona, con nombre); observable_vague para quien solo ve una figura. suggested_actions: 2-4 cosas que ESTE personaje querría hacer AHORA MISMO, en esta situación concreta y desde donde está: reacciones inmediatas a lo que acaba de pasar, no planes ni siguientes pasos de la historia. En infinitivo y breves ("Registrar el cofre", "Preguntar a Brenna por el incendio", "Guardar las bayas").',
     'DIÁLOGO: si alguien habla en voz alta en esta acción (un NPC o el propio actor), copia cada parlamento literal, en orden, en lines ({speaker: "npc" con su npc_id, o "actor"; text: solo las palabras dichas, sin comillas ni acotaciones}). Si el actor habla o pregunta, su frase va en lines como "actor", con sus palabras en primera persona. En narration_private las palabras dichas aparecen SOLO como esas mismas citas literales entre «»: nunca en estilo indirecto, resumidas ni parafraseadas; el resto de la narración es lo no verbal (gestos, acciones, ambiente, silencios). Bien: «¿Qué es el círculo vacío?», preguntas. Marisa apoya un dedo sobre el carbón. «Lo que aún no me has pagado.» Vuelve a su paño. Mal: Preguntas a la posadera por el círculo. Marisa te explica que es tu deuda. Sin diálogo, lines = null.',
+    'CONVERSACIÓN: si el contexto dice «En conversación con…», el turno es lo que dice el actor y lo que le responden, en lines. narration_private se limita a UNA de estas cosas, o va vacía (""): (a) la primera vez que ese personaje habla en la conversación, una frase que lo presenta; (b) una acción concreta y visible suya o de alguien presente que cambia la escena; (c) algo relevante para el jugador (una amenaza, una oportunidad, un cambio de actitud). Nunca ambiente de relleno ni gestos repetidos (el paño, la jarra, la mirada, encogerse de hombros). Si no hay nada de eso, narration_private vacía y solo lines. Cuando la narración presenta un parlamento, termina presentando a quien habla y con dos puntos («Adiel deja la jarra y se vuelve hacia ti:»), sin citar lo que dice: eso va en lines, y tras las líneas del actor la primera es la de ese personaje. Como mucho 40 palabras sin contar lo dicho. Fuera de conversación, la longitud de siempre.',
     '',
     RULES_CHEATSHEET,
   ].filter((l) => l !== undefined).join('\n');
@@ -135,7 +138,7 @@ function boardLine(jobs: string[]): string {
   return jobs.length ? `Tablón: ${jobs.join(' · ')}.` : 'Tablón: vacío.';
 }
 
-export function actionContext(engine: Engine, actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string }, scene?: Scene, decisive?: DecisiveResponse): string {
+export function actionContext(engine: Engine, actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string; prologue?: string }, scene?: Scene, decisive?: DecisiveResponse): string {
   const world = engine.world;
   const nowG = engine.nowFor(actor); // la hora del actor: la del mundo, o la de su llegada si ha viajado (travel.ts)
   const pos = positionOf(world, actor, nowG);
@@ -248,14 +251,26 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     return `- [${when}] ${i < recent.length - RECENT_FULL ? clip(d.text, OLD_EVENT_CHARS) : d.text}`;
   }).join('\n') : 'Ninguno.'));
 
+  // Conversación en curso (conversation.ts): el narrador solo entra cuando aporta.
+  const conv = intro || scene ? null : conversationOf(engine.events.all(), actor.id, pos);
+  const convNpc = conv ? world.npcs.get(conv.npc_id) : undefined;
+  if (conv && convNpc) L.push(conversationBlock(conv, actor.knows.includes(convNpc.id) ? convNpc.name : descriptorOf(world, convNpc.id)));
+
   if (intro) {
     L.push([
       '## Primera escena',
       `${actor.name} acaba de entrar en la partida. Origen: ${intro.origin}`,
-      `Acaba de leer esta bienvenida, en tono místico: «${intro.welcome.replace(/\s+/g, ' ')}». No repitas sus imágenes ni sus ideas: empieza donde eso termina, con tono serio y concreto.`,
+      intro.prologue
+        // Prólogo (docs/PROLOGO.md): el mundo, el sitio, el porqué y la amenaza ya están contados.
+        ? `Acaba de leer este prólogo: «${intro.prologue.replace(/\s+/g, ' ')}». No repitas nada de él: ni el mundo, ni por qué está aquí, ni la amenaza ni el plazo, ni la descripción del sitio. Empieza en el instante siguiente, con tono serio y concreto.`
+        : `Acaba de leer esta bienvenida, en tono místico: «${intro.welcome.replace(/\s+/g, ' ')}». No repitas sus imágenes ni sus ideas: empieza donde eso termina, con tono serio y concreto.`,
       'Quien lee no conoce todavía este mundo ni sus nombres, y quiere jugar YA. Por eso: nada de dichos, refranes, leyendas ni nombres de lugares como apertura. La primera frase es algo que le está pasando al personaje en este instante, en el cuerpo o en los sentidos (frío, hambre, un ruido, un olor, algo que ve moverse). Los nombres de sitios aparecen solo cuando importan y explicados por lo que son, no por lo que se cuenta de ellos.',
-      'Sitúalo donde está tal como está ahora (luz, quién anda por ahí) con dos o tres detalles concretos, no un inventario. Termina con un gancho: algo que acaba de ocurrir o está ocurriendo delante de él y que pide una decisión ahora mismo. La premisa de la campaña puede asomar en ese gancho, nunca explicada.',
-      'Exactamente dos párrafos cortos, 80 palabras en total como máximo. Sin tirada. Con 3-4 acciones sugeridas, concretas y con verbo. No lo hagas actuar ni hablar; solo llega.',
+      intro.prologue
+        ? 'Un detalle concreto de lo que tiene delante (luz, quién anda por ahí) y un gancho: algo que acaba de ocurrir o está ocurriendo delante de él y que pide una decisión ahora mismo.'
+        : 'Sitúalo donde está tal como está ahora (luz, quién anda por ahí) con dos o tres detalles concretos, no un inventario. Termina con un gancho: algo que acaba de ocurrir o está ocurriendo delante de él y que pide una decisión ahora mismo. La premisa de la campaña puede asomar en ese gancho, nunca explicada.',
+      intro.prologue
+        ? 'Un solo párrafo corto, 50 palabras como máximo. Sin tirada. Con 3-4 acciones sugeridas, concretas y con verbo. No lo hagas actuar ni hablar; solo llega.'
+        : 'Exactamente dos párrafos cortos, 80 palabras en total como máximo. Sin tirada. Con 3-4 acciones sugeridas, concretas y con verbo. No lo hagas actuar ni hablar; solo llega.',
     ].join('\n'));
   } else if (scene === 'decisive_timeout') {
     L.push([
@@ -291,6 +306,9 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   const planted = engine.hooksIn(loc.id).filter((h) => !firing.has(h.id));
   const agenda = scheduleContext(world, actor.id, loc.id, nowG);
   if (agenda) L.push(agenda);
+  // Campañas escritas (story.ts): misiones del actor con su paso en curso y la amenaza que avanza.
+  const story = storyContext(world, actor, nowG);
+  if (story) L.push(story);
   if (planted.length) L.push('## Ganchos sembrados aquí (solo tú los ves; el servidor los dispara; cancel_hook si ya no encajan)\n' + planted.map((h) => `- ${describeHook(world, h, (s) => engine.clock.format(s))}`).join('\n'));
   // Rumores (rumors.ts): lo que se dice aquí y lo que el actor ya sembró en otros sitios. Se cuentan como habladuría, nunca como hecho.
   const rumors = rumorsIn(world, loc.id, nowG);

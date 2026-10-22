@@ -14,6 +14,7 @@
  *     `payload.lines` (fecha, dónde, qué dijo el jugador y qué respondió), más
  *     lo que ese NPC recuerda del PJ (`npc.memory`).
  *   - Crónica: resumen por día de juego, por plantilla, del log de eventos.
+ *     El prólogo (prologue.ts) abre la del primer día como entrada `chapter`.
  *   - Lugares: localizaciones conocidas con su estado de descubrimiento.
  *
  * Qué encargos ha «visto» el PJ: cada evento `board` abre un intervalo en el
@@ -30,6 +31,7 @@ import type { Character, GameEvent, Id, Job, Npc } from './model.js';
 import type { DialogueLine } from './moments.js';
 import { activeJobs } from './progress.js';
 import { rumorsHeardBy, rumorsIn, type Rumor } from './rumors.js';
+import { questsOf } from './story.js';
 
 export type QuestStatus = 'available' | 'active' | 'completed' | 'expired';
 
@@ -48,7 +50,7 @@ export interface JournalRumor {
 
 export interface JournalQuest {
   id: Id;
-  kind: 'main' | 'job' | 'achievement' | 'debt';
+  kind: 'main' | 'job' | 'achievement' | 'debt' | 'story';
   title: string;
   text: string;
   status: QuestStatus;
@@ -95,7 +97,7 @@ export interface JournalConversation {
   last_game_s: number;
 }
 
-export type ChronicleKind = 'place' | 'person' | 'item' | 'roll' | 'combat' | 'progress' | 'rumor' | 'travel' | 'board' | 'note';
+export type ChronicleKind = 'chapter' | 'place' | 'person' | 'item' | 'roll' | 'combat' | 'progress' | 'rumor' | 'travel' | 'board' | 'note';
 
 export interface ChronicleEntry { game_s: number; time: string; kind: ChronicleKind; text: string }
 
@@ -336,6 +338,27 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     });
   }
 
+  // Historia escrita (story.ts): las misiones que el PJ conoce, con los pasos dados y el de ahora (los siguientes, no).
+  const storyTimes = mine.filter((e) => e.action_type === 'progress_story' && e.actor_id === c.id);
+  for (const v of questsOf(w, c)) {
+    const q = v.quest;
+    const told = storyTimes.filter((e) => e.narration_private.includes(`«${q.title}»`)).map((e) => e.timestamp_game_s);
+    const seen = told[0] ?? born;
+    const completed = v.status === 'completed' ? told.at(-1) ?? seen : null;
+    const updated = Math.max(seen, ...storyTimes.filter((e) => e.narration_private.includes(q.title)).map((e) => e.timestamp_game_s));
+    const giver = q.giver_npc_id ? w.npcs.get(q.giver_npc_id) ?? null : null;
+    const r = q.reward;
+    quests.push({
+      id: q.id, kind: 'story', title: `${['', 'I', 'II', 'III'][q.act]} · ${q.title}`, text: q.text, status: v.status,
+      giver: giver ? npcLabel(c, giver) : null, giver_npc_id: giver?.id ?? null,
+      reward: [r.coins ? `${r.coins} monedas` : '', r.reputation ? `+${r.reputation} de reputación` : '', r.xp ? `${r.xp} PX` : ''].filter(Boolean).join(' · ') || null,
+      seen_game_s: seen, seen: fmt(seen), completed_game_s: completed, completed: completed === null ? null : fmt(completed),
+      updated_game_s: updated, updated: fmt(updated),
+      steps: v.steps.map((s) => ({ text: s.step.text, done: s.done })),
+      clock: null, antagonist: null, paths: [], rumors: questRumors([q.title, q.text]), pinned: false,
+    });
+  }
+
   const byRecent = (x: JournalQuest, y: JournalQuest) => Number(y.pinned) - Number(x.pinned) || y.updated_game_s - x.updated_game_s || x.title.localeCompare(y.title);
   const active = quests.filter((q) => q.status !== 'completed').sort(byRecent);
   const completed = quests.filter((q) => q.status === 'completed').sort((x, y) => (y.completed_game_s ?? 0) - (x.completed_game_s ?? 0));
@@ -435,6 +458,7 @@ function chronicleOf(engine: Engine, c: Character, mine: readonly GameEvent[], f
   const metNpc = new Set<Id>();
   const talkedToday = new Set<string>();
   let lastLoc: Id | null = null;
+  let joinedAt: number | null = null;
   const locName = (id: Id) => w.locations.get(id)?.name ?? id;
 
   for (const e of mine) {
@@ -445,7 +469,14 @@ function chronicleOf(engine: Engine, c: Character, mine: readonly GameEvent[], f
       case e.action_type === 'character_joined' && own:
         add(t, 'place', `Llegas a ${locName(e.location_id)}.`);
         lastLoc = e.location_id;
+        joinedAt = t;
         break;
+      case e.action_type === 'prologue' && own: {
+        // La primera página: va antes que la llegada aunque se escriba un instante después.
+        const title = typeof e.payload['title'] === 'string' ? e.payload['title'] : 'Prólogo';
+        add(joinedAt === null ? t : Math.min(t, joinedAt), 'chapter', `${title}. ${firstSentence(e.narration_private)}`);
+        break;
+      }
       case /^(arrived|master_arrival)$/.test(e.action_type) && own: {
         if (e.location_id !== lastLoc) {
           const sp = e.spot_id ? w.spots.get(e.spot_id) : undefined;
@@ -508,7 +539,7 @@ function chronicleOf(engine: Engine, c: Character, mine: readonly GameEvent[], f
 
   const out = [...days.values()].sort((x, y) => y.day_index - x.day_index);
   for (const d of out) {
-    d.entries.sort((x, y) => x.game_s - y.game_s);
+    d.entries.sort((x, y) => x.game_s - y.game_s || Number(y.kind === 'chapter') - Number(x.kind === 'chapter'));
     const n = (k: ChronicleKind) => d.entries.filter((e) => e.kind === k).length;
     const bits = [
       n('place') ? `${n('place')} lugar${n('place') === 1 ? '' : 'es'}` : '',

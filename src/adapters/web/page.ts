@@ -4,6 +4,8 @@ import { VOICE_SCRIPT, VOICE_STYLE } from './voice-input.js';
 import { NOVEL_JS, NOVEL_STYLE } from './novel.js';
 import { TTS_SCRIPT, TTS_STYLE } from './tts.js';
 import { SFX_SCRIPT, SFX_STYLE } from './sfx.js';
+import { PAINT_JS, PAINT_STYLE } from './paint.js';
+import { AVATAR_SCRIPT, AVATAR_STYLE } from './avatar.js';
 
 export const PAGE = String.raw`<!doctype html>
 <html lang="es">
@@ -306,7 +308,9 @@ export const PAGE = String.raw`<!doctype html>
 ${VOICE_STYLE}
 ${TTS_STYLE}
 ${SFX_STYLE}
+${AVATAR_STYLE}
 ${NOVEL_STYLE}
+${PAINT_STYLE}
 </style>
 </head>
 <body>
@@ -427,6 +431,7 @@ ${NOVEL_STYLE}
     return div;
   }
 ${NOVEL_JS}
+${PAINT_JS}
   /** Cada mensaje del stream entra en el hilo tipo chat (novel.ts): avatar, burbuja, botones e imágenes. */
   function renderMessage(m, live) { chatMessage(m, live); }
 
@@ -1203,6 +1208,7 @@ ${NOVEL_JS}
     stream.addEventListener('sheet', loadSheet);
     stream.addEventListener('moment', function (e) { var x = JSON.parse(e.data); showMoment(x, x.seq); });
     stream.addEventListener('portrait', function (e) { setPortrait(JSON.parse(e.data)); });
+    paintConnect(stream);
     stream.addEventListener('journal', loadJournal);
     loadSheet();
     loadScene();
@@ -1273,6 +1279,7 @@ ${NOVEL_JS}
 ${VOICE_SCRIPT}
 ${TTS_SCRIPT}
 ${SFX_SCRIPT}
+${AVATAR_SCRIPT}
 </body>
 </html>
 `;
