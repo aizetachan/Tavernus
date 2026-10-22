@@ -159,6 +159,26 @@ export const MENU = String.raw`<!doctype html>
   #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 30; padding: 10px 16px; border-radius: 999px; background: var(--bubble); box-shadow: var(--shadow); color: #ff9d94; font-size: 14px; }
   #toast[hidden] { display: none; }
 
+  /* Escritorio: la imagen ocupa toda la pantalla y el panel de partidas flota encima como cristal (liquid glass):
+     gris claro translúcido, el fondo desenfocado detrás y brillos suaves de luz. Sin bordes. */
+  @media (min-width: 821px) {
+    main { position: fixed; inset: 0; z-index: 0; }
+    body.new-open main { z-index: 3; }
+    .hero .cap, .hero > .body, .hero > .intro { padding-left: 440px; }
+    .hero::after { background: linear-gradient(90deg, rgba(11,13,12,.25) 0, rgba(11,13,12,.25) 400px, rgba(11,13,12,.82) 400px, rgba(11,13,12,.55) 720px, rgba(11,13,12,.1) 1000px, rgba(11,13,12,0) 1200px), linear-gradient(to top, rgba(11,13,12,.5), rgba(11,13,12,0) 35%); }
+    aside { position: relative; z-index: 2; border-right: 0; isolation: isolate;
+      background:
+        radial-gradient(120% 55% at 0% 0%, rgba(255,255,255,.16), rgba(255,255,255,0) 60%),
+        radial-gradient(90% 40% at 100% 100%, rgba(255,255,255,.08), rgba(255,255,255,0) 70%),
+        linear-gradient(180deg, rgba(210,214,220,.16), rgba(210,214,220,.08));
+      -webkit-backdrop-filter: blur(32px) saturate(1.5) brightness(.85); backdrop-filter: blur(32px) saturate(1.5) brightness(.85); }
+    .search { background: rgba(255,255,255,.08); }
+    .row { border-bottom-color: rgba(255,255,255,.07); }
+    .row:hover { background: rgba(255,255,255,.06); }
+    .row.on { background: rgba(255,255,255,.12); }
+    .row .l2, .row .l1 time, #status { color: #c9c3b9; }
+    .filters button { box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); color: #d9d3c8; }
+  }
   @media (max-width: 820px) {
     aside { flex: 1; border-right: 0; }
     main { display: none; }
@@ -350,11 +370,14 @@ export const MENU = String.raw`<!doctype html>
     var W = node.clientWidth, H = node.clientHeight;
     if (!W || !H) return;
     var zoom = Number(node.getAttribute('data-zoom')) || 1;
-    // Lo justo para cubrir el hueco y, además, para que la casa pueda ponerse en el centro sin dejar bordes vacíos.
-    var k = Math.max(W / ART.w, H / ART.h, H / (2 * Math.min(ART.y, 1 - ART.y) * ART.h), W / (2 * Math.min(ART.x, 1 - ART.x) * ART.w)) * zoom;
+    // data-left: lo que tapa el panel de cristal a la izquierda; la casa se centra en lo que queda a la vista.
+    var L = window.matchMedia('(max-width: 820px)').matches ? 0 : Number(node.getAttribute('data-left')) || 0;
+    var cx = L + (W - L) / 2, cy = H / 2;
+    // Lo justo para cubrir el hueco y, además, para que la casa pueda ponerse en ese centro sin dejar bordes vacíos.
+    var k = Math.max(W / ART.w, H / ART.h, cy / (ART.y * ART.h), (H - cy) / ((1 - ART.y) * ART.h), cx / (ART.x * ART.w), (W - cx) / ((1 - ART.x) * ART.w)) * zoom;
     var iw = ART.w * k, ih = ART.h * k;
     var clamp = function (v, lo) { return Math.min(0, Math.max(lo, v)); };
-    var x = clamp(W / 2 - ART.x * iw, W - iw), y = clamp(H / 2 - ART.y * ih, H - ih);
+    var x = clamp(cx - ART.x * iw, W - iw), y = clamp(cy - ART.y * ih, H - ih);
     node.style.backgroundSize = Math.round(iw) + 'px ' + Math.round(ih) + 'px';
     node.style.backgroundPosition = Math.round(x) + 'px ' + Math.round(y) + 'px';
   }
@@ -436,7 +459,7 @@ export const MENU = String.raw`<!doctype html>
     var p = $('pick');
     p.innerHTML = '';
     if (!g) {
-      var hero = el('div', 'hero art');
+      var hero = el('div', 'hero art'); hero.setAttribute('data-left', '400');
       hero.innerHTML = '<div class="cap"><span class="eyebrow">Tavernus</span><h2>Rol por chat con un máster de IA</h2></div>';
       p.appendChild(hero);
       var box = el('div', 'intro');
@@ -446,7 +469,7 @@ export const MENU = String.raw`<!doctype html>
       art(hero);
       return;
     }
-    var hero2 = el('div', 'hero art');
+    var hero2 = el('div', 'hero art'); hero2.setAttribute('data-left', '400');
     var cap = el('div', 'cap');
     cap.appendChild(el('span', 'eyebrow', tab === 'continue' && !first ? 'Partida en curso' : EYEBROW[tab]));
     cap.appendChild(el('h2', '', g.name));
