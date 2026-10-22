@@ -126,9 +126,10 @@ export const TTS_STYLE = String.raw`
   .msg.tts-able > .nv-av { cursor: pointer; transition: box-shadow .2s, transform .15s; }
   .msg.tts-able > .nv-av:hover, .msg.tts-able > .nv-av:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent), 0 0 0 5px var(--accent-tint); }
   .msg.tts-able > .nv-av:active { transform: scale(.94); }
-  .msg.tts-on > .nv-av { box-shadow: 0 0 0 2px var(--accent); animation: tts-pulse 1.4s ease-out infinite; }
-  @keyframes tts-pulse { 0% { box-shadow: 0 0 0 2px var(--accent), 0 0 0 0 rgba(233,169,78,.45); } 100% { box-shadow: 0 0 0 2px var(--accent), 0 0 0 10px rgba(233,169,78,0); } }
-  @media (prefers-reduced-motion: reduce) { .msg.tts-on > .nv-av { animation: none; } }
+  /* Mientras habla, el borde ámbar del avatar late con la voz: --lvl (0-1) lo mueve el script con cada palabra
+     (voz del navegador) o con el volumen real del audio (voz en la nube). */
+  .msg .nv-av.tts-voice, .msg.tts-able > .nv-av.tts-voice:hover { --lvl: 0; box-shadow: 0 0 0 2px var(--accent), 0 0 0 calc(2px + var(--lvl) * 9px) rgba(233,169,78, calc(.12 + var(--lvl) * .38)); transition: none; }
+  @media (prefers-reduced-motion: reduce) { .nv-av.tts-voice { box-shadow: 0 0 0 2px var(--accent); } }
   .msg .who .tts-say { margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; margin-top: -6px; margin-bottom: -6px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
   .msg .who .tts-say:hover { background: var(--hover); color: var(--text); }
   .msg.tts-on .who .tts-say { color: var(--accent); background: var(--accent-tint); }
@@ -183,6 +184,52 @@ export const TTS_SCRIPT = String.raw`<script>
   var rate = Number(store('tavernus.tts.rate')) || 1;
   var awake = store('tavernus.tts.awake') === '1';
   var queue = [];          // divs de narraciones pendientes
+  // --- El borde del avatar late con la voz ------------------------------------------------------------
+  var voiceAv = null, clickedAv = null, lvl = 0, lastBeat = 0, raf = null, analyser = null, actx = null, abuf = null;
+  /** El avatar que late: el que se pulsó o, si no, el visible más cercano de esa narración (las agrupadas no lo muestran). */
+  function avatarFor(div) {
+    var n = div;
+    while (n && n.classList.contains('cont')) n = n.previousElementSibling;
+    return n && n.classList.contains('row') ? n.querySelector('.nv-av') : null;
+  }
+  function setVoiceAv(av) {
+    if (voiceAv === av) return;
+    if (voiceAv) { voiceAv.classList.remove('tts-voice'); voiceAv.style.removeProperty('--lvl'); }
+    voiceAv = av;
+    if (av) av.classList.add('tts-voice');
+  }
+  /** Un golpe de voz (una palabra): el borde salta y se va apagando. */
+  function beat(v) { lvl = Math.max(lvl, v); lastBeat = Date.now(); }
+  function pulseLoop() {
+    raf = null;
+    if (!playing || !voiceAv) return;
+    if (analyser) {
+      analyser.getByteTimeDomainData(abuf);
+      var sum = 0;
+      for (var i = 0; i < abuf.length; i++) { var x = (abuf[i] - 128) / 128; sum += x * x; }
+      beat(Math.min(1, Math.sqrt(sum / abuf.length) * 4.5));
+    } else if (Date.now() - lastBeat > 380) {
+      // La voz no avisa de las palabras: un ritmo de habla parecido.
+      beat(.45 + Math.random() * .45);
+    }
+    lvl *= .86;
+    voiceAv.style.setProperty('--lvl', lvl.toFixed(3));
+    raf = requestAnimationFrame(pulseLoop);
+  }
+  function startPulse() { if (!raf) raf = requestAnimationFrame(pulseLoop); }
+  /** Voz en la nube: el volumen real del <audio> con un analizador (se crea dentro de un gesto, en unlock). */
+  function hookAnalyser() {
+    if (analyser || !audio) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+      actx = new AC();
+      var src = actx.createMediaElementSource(audio);
+      analyser = actx.createAnalyser(); analyser.fftSize = 512;
+      abuf = new Uint8Array(analyser.fftSize);
+      src.connect(analyser); analyser.connect(actx.destination);
+    } catch (e) { analyser = null; }
+  }
   var playing = null;      // { div, steps, i }
   var justAttached = null; // la que acaba de pintarse (para «leer automáticamente»)
   var audio = null, prefetch = null, lock = null;
@@ -243,9 +290,11 @@ export const TTS_SCRIPT = String.raw`<script>
     playing = null;
     while (queue.length && !document.body.contains(queue[0])) queue.shift();
     var div = queue.shift();
-    if (!div) { ui(); release(); return; }
+    if (!div) { setVoiceAv(null); clickedAv = null; ui(); release(); return; }
     playing = { div: div, steps: stepsOf(div), i: 0 };
     div.classList.add('tts-on');
+    setVoiceAv(clickedAv && document.body.contains(clickedAv) ? clickedAv : avatarFor(div));
+    lvl = 0; lastBeat = Date.now(); startPulse();
     ui(); keepAwake();
     if (div.getBoundingClientRect().top > log.getBoundingClientRect().bottom || div.getBoundingClientRect().bottom < log.getBoundingClientRect().top) div.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     step();
@@ -262,6 +311,7 @@ export const TTS_SCRIPT = String.raw`<script>
     var p = playing;
     playing = null;
     if (p) p.div.classList.remove('tts-on');
+    setVoiceAv(null); clickedAv = null;
     if (synth) synth.cancel();
     if (audio) { audio.pause(); audio.removeAttribute('src'); }
     prefetch = null;
@@ -274,6 +324,7 @@ export const TTS_SCRIPT = String.raw`<script>
     if (v.voice) { u.voice = v.voice; u.lang = v.voice.lang; } else u.lang = 'es-ES';
     u.pitch = v.pitch; u.rate = rate;
     u.onend = function () { if (playing === p) step(); };
+    u.onboundary = function (e) { if (playing === p && (!e.name || e.name === 'word')) beat(.75 + Math.random() * .25); };
     u.onerror = function (e) {
       if (playing !== p) return;
       if (e.error === 'not-allowed') { hint('Toca la página una vez para que el navegador deje leer en alto.'); stop(); return; }
@@ -307,6 +358,8 @@ export const TTS_SCRIPT = String.raw`<script>
       audio.src = URL.createObjectURL(blob);
       audio.playbackRate = rate;
       mediaSession();
+      hookAnalyser();
+      if (actx && actx.state === 'suspended') actx.resume();
       return audio.play();
     }).catch(function (e) {
       if (playing !== p) return;
@@ -464,7 +517,7 @@ export const TTS_SCRIPT = String.raw`<script>
             n = n.nextElementSibling;
           }
           if (playing && group.indexOf(playing.div) >= 0) { stop(); return; }
-          unlock(); speak(div);
+          unlock(); speak(div); clickedAv = av; setVoiceAv(av);
           group.slice(1).forEach(enqueue);
         };
         av.addEventListener('click', go);
