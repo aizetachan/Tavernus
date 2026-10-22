@@ -189,7 +189,7 @@ export const PAGE = String.raw`<!doctype html>
   #party button.on { color: var(--accent); background-color: #2a1d05; border-color: var(--accent); position: relative; z-index: 1; }
   .chat-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   /* Fondo con motivos tenues, como el papel de WhatsApp. */
-  .chat-body::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .07; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' fill='none' stroke='%23e6b75a' stroke-width='1.2'%3E%3Cpath d='M20 20l8-6 8 6-8 6z'/%3E%3Cpath d='M70 30c8-10 18-8 20 0-8 2-14 0-20 0z'/%3E%3Cpath d='M30 80h6v-6'/%3E%3Ccircle cx='90' cy='85' r='4'/%3E%3Cpath d='M60 60l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z'/%3E%3C/svg%3E"); }
+  .chat-body::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .08; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900' fill='none' stroke='%23e6b75a' stroke-width='1.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='translate(537 498) rotate(-31 12 12) scale(1.67)'%3E%3Ccircle cx='7.5' cy='12' r='4'/%3E%3Cpath d='M11.5 12H21M18 12v3M15 12v2'/%3E%3C/g%3E%3Cg transform='translate(61 201) rotate(4 12 12) scale(1.45)'%3E%3Cpath d='M6 5h11a2 2 0 0 1 2 2v12H8a2 2 0 0 1-2-2z'/%3E%3Cpath d='M6 5a2 2 0 0 0-2 2v2h2M10 10h6M10 13h6M10 16h4'/%3E%3C/g%3E%3Cg transform='translate(364 463) rotate(5 12 12) scale(1.18)'%3E%3Ccircle cx='12' cy='14' r='6'/%3E%3Cpath d='M9.5 5h5L12 8z'/%3E%3C/g%3E%3Cg transform='translate(579 105) rotate(5 12 12) scale(1.44)'%3E%3Cpath d='M10 3h4M10.5 3v5L6 16a4 4 0 0 0 3.5 5h5a4 4 0 0 0 3.5-5L13.5 8V3'/%3E%3Cpath d='M8 15h8'/%3E%3C/g%3E%3Cg transform='translate(100 604) rotate(5 12 12) scale(1.21)'%3E%3Cpath d='M6 21L18 6'/%3E%3Cpath d='M14 4c3-1 6 1 6 4-2 0-4 1-5 3l-3-3c1-2 2-3 2-4z'/%3E%3C/g%3E%3Cg transform='translate(402 777) rotate(-10 12 12) scale(1.57)'%3E%3Cpath d='M4 20h16'/%3E%3Cpath d='M6 20c1-6 3-11 7-16 1 4 3 7 5 9-2 1-3 3-3 7'/%3E%3Cpath d='M10 14l1 .5'/%3E%3C/g%3E%3Cg transform='translate(440 155) rotate(-11 12 12) scale(1.14)'%3E%3Cpath d='M6 16v-5a6 6 0 0 1 12 0v5h-2v3H8v-3z'/%3E%3Ccircle cx='9.5' cy='11.5' r='1.3'/%3E%3Ccircle cx='14.5' cy='11.5' r='1.3'/%3E%3C/g%3E%3Cg transform='translate(478 667) rotate(22 12 12) scale(1.15)'%3E%3Cpath d='M4 17h16l1-10-5 4-4-6-4 6-5-4z'/%3E%3Cpath d='M4 20h16'/%3E%3C/g%3E%3Cg transform='translate(256 625) rotate(-7 12 12) scale(1.23)'%3E%3Cpath d='M6 5h11a2 2 0 0 1 2 2v12H8a2 2 0 0 1-2-2z'/%3E%3Cpath d='M6 5a2 2 0 0 0-2 2v2h2M10 10h6M10 13h6M10 16h4'/%3E%3C/g%3E%3Cg transform='translate(248 132) rotate(-5 12 12) scale(1.34)'%3E%3Cpath d='M6 21L18 6'/%3E%3Cpath d='M14 4c3-1 6 1 6 4-2 0-4 1-5 3l-3-3c1-2 2-3 2-4z'/%3E%3C/g%3E%3Cg transform='translate(599 829) rotate(13 12 12) scale(1.43)'%3E%3Cpath d='M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z'/%3E%3Cpath d='M12 7v10M8 11h8'/%3E%3C/g%3E%3Cg transform='translate(123 725) rotate(32 12 12) scale(1.29)'%3E%3Cpath d='M12 2l9 5v10l-9 5-9-5V7z'/%3E%3Cpath d='M12 2v6M3 7l9 5 9-5M12 12v10M7.5 9.5l4.5 8 4.5-8z'/%3E%3C/g%3E%3Cg transform='translate(627 394) rotate(26 12 12) scale(1.49)'%3E%3Cpath d='M15 4a8 8 0 1 0 5 13A7 7 0 0 1 15 4z'/%3E%3C/g%3E%3Cg transform='translate(642 264) rotate(10 12 12) scale(1.65)'%3E%3Cpath d='M14.5 3.5L20 3l-.5 5.5L9 19l-4-4z'/%3E%3Cpath d='M5 15l-2 2 4 4 2-2M7.5 12.5l4 4'/%3E%3C/g%3E%3Cg transform='translate(666 642) rotate(-21 12 12) scale(1.47)'%3E%3Cpath d='M4 17h16l1-10-5 4-4-6-4 6-5-4z'/%3E%3Cpath d='M4 20h16'/%3E%3C/g%3E%3Cg transform='translate(516 302) rotate(22 12 12) scale(1.22)'%3E%3Cpath d='M6 16v-5a6 6 0 0 1 12 0v5h-2v3H8v-3z'/%3E%3Ccircle cx='9.5' cy='11.5' r='1.3'/%3E%3Ccircle cx='14.5' cy='11.5' r='1.3'/%3E%3C/g%3E%3Cg transform='translate(104 405) rotate(-11 12 12) scale(1.15)'%3E%3Cpath d='M10 3h4M10.5 3v5L6 16a4 4 0 0 0 3.5 5h5a4 4 0 0 0 3.5-5L13.5 8V3'/%3E%3Cpath d='M8 15h8'/%3E%3C/g%3E%3Cg transform='translate(828 520) rotate(-35 12 12) scale(1.39)'%3E%3Ccircle cx='7.5' cy='12' r='4'/%3E%3Cpath d='M11.5 12H21M18 12v3M15 12v2'/%3E%3C/g%3E%3Cg transform='translate(470 38) rotate(21 12 12) scale(1.19)'%3E%3Cpath d='M4 20h16'/%3E%3Cpath d='M6 20c1-6 3-11 7-16 1 4 3 7 5 9-2 1-3 3-3 7'/%3E%3Cpath d='M10 14l1 .5'/%3E%3C/g%3E%3Cg transform='translate(829 180) rotate(26 12 12) scale(1.18)'%3E%3Cpath d='M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z'/%3E%3Cpath d='M12 7v10M8 11h8'/%3E%3C/g%3E%3Cg transform='translate(657 519) rotate(19 12 12) scale(1.62)'%3E%3Cpath d='M15 4a8 8 0 1 0 5 13A7 7 0 0 1 15 4z'/%3E%3C/g%3E%3Cg transform='translate(753 72) rotate(-12 12 12) scale(1.12)'%3E%3Cpath d='M14.5 3.5L20 3l-.5 5.5L9 19l-4-4z'/%3E%3Cpath d='M5 15l-2 2 4 4 2-2M7.5 12.5l4 4'/%3E%3C/g%3E%3Cg transform='translate(223 449) rotate(26 12 12) scale(1.40)'%3E%3Cpath d='M12 2l9 5v10l-9 5-9-5V7z'/%3E%3Cpath d='M12 2v6M3 7l9 5 9-5M12 12v10M7.5 9.5l4.5 8 4.5-8z'/%3E%3C/g%3E%3Cg transform='translate(777 752) rotate(-21 12 12) scale(1.66)'%3E%3Ccircle cx='12' cy='14' r='6'/%3E%3Cpath d='M9.5 5h5L12 8z'/%3E%3C/g%3E%3C/svg%3E"); background-size: 900px 900px; }
   #log { position: relative; flex: 1; overflow-y: auto; padding: 16px max(24px, calc((100% - 980px) / 2)) 16px; display: flex; flex-direction: column; gap: 6px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.14) transparent; }
   .msg { max-width: 720px; word-wrap: break-word; }
   #log > * { flex-shrink: 0; }
@@ -262,15 +262,17 @@ export const PAGE = String.raw`<!doctype html>
   #cube-scrim { display: none; }
 
   /* Hoja, Diario y Mochila, en la misma columna del chat. */
-  #drawer { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; background: var(--panel); }
+  #drawer { position: absolute; top: 24px; bottom: 16px; left: 50%; z-index: 5; width: min(760px, calc(100% - 48px)); transform: translateX(-50%); display: flex; flex-direction: column; background: var(--panel); border-radius: 18px; border: 1px solid var(--line); box-shadow: 0 24px 64px rgba(0,0,0,.6); overflow: hidden; }
   #drawer[hidden] { display: none; }
-  #drawer-scrim { display: none; }
+  #drawer-scrim { position: absolute; inset: 0; z-index: 4; display: block; border: 0; background: rgba(5,6,6,.62); }
+  #drawer-scrim[hidden] { display: none; }
   .dr-grab { display: none; }
   .dr-head { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--sep); flex: none; flex-wrap: wrap; }
   .dr-back { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px 0 8px; border: 0; border-radius: 999px; background: rgba(255,255,255,.06); color: var(--text); font-size: 13px; font-weight: 500; }
   .dr-back:hover { background: rgba(255,255,255,.1); }
   #dr-title { margin: 0 0 0 4px; font: 700 16px/1.2 var(--display); letter-spacing: -.02em; }
   .dr-head .seg { margin-left: auto; }
+  .dr-head { padding-left: 20px; }
   .dr-head .seg button { position: relative; }
   .dr-head .seg button.new::after { content: ''; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
   .dr-x { display: none; }
@@ -410,11 +412,11 @@ export const PAGE = String.raw`<!doctype html>
     #cube-menu small { display: none; }
     #drawer-scrim { position: absolute; inset: 0; z-index: 4; display: block; border: 0; background: rgba(5,6,6,.6); }
     #drawer-scrim[hidden] { display: none; }
-    #drawer { top: 24px; z-index: 5; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 24px rgba(0,0,0,.5); }
+    #drawer { top: 24px; bottom: 0; left: 0; width: 100%; transform: none; z-index: 5; border: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 24px rgba(0,0,0,.5); }
     .dr-grab { display: block; align-self: center; width: 40px; height: 4px; margin: 8px 0 0; border-radius: 999px; background: rgba(255,255,255,.2); }
-    .dr-back, #dr-title { display: none; }
+    #dr-title { display: none; }
+    .dr-head { padding-left: 16px; }
     .dr-head .seg { margin-left: 0; }
-    .dr-x { display: inline-grid; margin-left: auto; background: rgba(255,255,255,.06); color: var(--text); }
     body.map-big #map, body.board-big #board { inset: 12px; }
   }
 ${VOICE_STYLE}
@@ -460,8 +462,45 @@ ${PAINT_STYLE}
   /* Micrófono y pincel dentro del cuadro de redacción, del mismo tamaño que el cubo. */
   form .mic, form .brush { width: 42px; height: 42px; margin: 0; }
   form .mic svg.i, form .brush svg.i { width: 20px; height: 20px; }
+
+  /* Secciones plegables del panel. */
+  .col-t { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin-right: auto; padding: 4px 6px 4px 0; border: 0; background: transparent; color: var(--text); text-align: left; }
+  .col-t b { font: 700 15px/1.2 var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .col-t .chev, .sec-t .chev { width: 14px; height: 14px; color: var(--faint); transform: rotate(90deg); transition: transform .2s; }
+  button.sec-t { width: 100%; border: 0; background: transparent; cursor: pointer; text-align: left; }
+  button.sec-t:hover, .col-t:hover { color: var(--text); }
+  body.col-view .col-t .chev, body.col-near #near .sec-t .chev, body.col-quest #quest .sec-t .chev { transform: none; }
+  body.col-view .pane, body.col-view .views .seg { display: none; }
+  body.col-near #near .sec-b, body.col-quest #quest .sec-b { display: none; }
+  /* Tablero y mapa: un clic los amplía; en el panel no hace falta el botón. */
+  body:not(.board-big) #board [data-toggle-big], body:not(.map-big) #map [data-map-big] { display: none; }
+  body:not(.board-big) #board svg, body:not(.map-big) #map svg { cursor: zoom-in; }
+  /* Micrófono dentro del cuadro de texto, a la derecha. */
+  .inwrap { position: relative; flex: 1; min-width: 0; display: flex; }
+  .inwrap input { padding-right: 48px; }
+  .inwrap .mic { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 36px !important; height: 36px !important; }
+  /* El cubo se vuelve X mientras el menú o el contenido están abiertos: ese botón es el que cierra. */
+  #cube .ic-x { display: none; }
+  #cube.on .ic-x { display: block; } #cube.on .ic-cube { display: none; }
+  /* Engranaje del panel: ajustes de la voz del narrador. */
+  #side-gear { position: relative; display: inline-flex; }
+  #side-gear .tts-more { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; }
+  #side-gear .tts-more:hover { background: var(--hover); color: var(--text); }
+  #side-gear .tts-pop { top: 46px; right: 0; z-index: 40; }
+  /* Narrador y sonido: un grupo ámbar, redondeado sin ser redondo. */
+  .chat-head .tts { order: 3; margin-left: 0; gap: 0; }
+  .chat-head .sfx { order: 4; margin-left: -12px; }
+  .chat-head .tts > button, .chat-head .sfx > button { height: 36px; border-radius: 0; background: var(--accent-tint); color: var(--accent); }
+  .chat-head .tts > button:hover, .chat-head .sfx > button:hover { background: rgba(230,183,90,.24); color: var(--glow); }
+  .chat-head .tts > button:first-child:not([hidden]), .chat-head .tts > .tts-stop[hidden] + .tts-auto { border-radius: 12px 0 0 12px; }
+  .chat-head .tts > .tts-auto { width: 40px; padding: 0; justify-content: center; }
+  .chat-head .tts > .tts-auto:not(.on) { color: var(--muted); background: rgba(230,183,90,.07); }
+  .chat-head .sfx > .sfx-toggle { width: 40px; padding: 0; justify-content: center; border-left: 1px solid rgba(230,183,90,.18); }
+  .chat-head .sfx:not(.on) > .sfx-toggle { color: var(--muted); background: rgba(230,183,90,.07); }
+  .chat-head .sfx > .sfx-more { width: 30px; padding: 0; border-radius: 0 12px 12px 0; border-left: 1px solid rgba(230,183,90,.18); }
+  .chat-head .sfx, .chat-head .sfx.on { height: 36px; background: transparent; border-radius: 12px; }
+  #party { order: 2; margin-right: 6px; }
   @media (max-width: 820px) {
-    .tts > .tts-more { display: none; }
     .sfx > .sfx-toggle, .tts > .tts-auto { width: 34px; }
     .nv-av { width: 28px; height: 28px; }
     .msg.scene, .msg.moment, #log > .actions { margin-left: 36px; }
@@ -490,6 +529,7 @@ ${PAINT_STYLE}
   <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.5 10h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3H15"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
 </svg>
 <aside id="side" aria-label="La partida">
   <div class="side-head">
@@ -498,13 +538,13 @@ ${PAINT_STYLE}
       <span id="game-name">Tavernus</span>
       <div class="sub"><span id="game-mode" class="badge" hidden></span><span id="game-when"></span></div>
     </div>
-    <a class="ib" href="/" title="Menú de partidas" aria-label="Menú de partidas"><svg class="i"><use href="#i-home"/></svg></a>
+    <span id="side-gear"></span>
     <button type="button" class="ib" id="side-close" title="Volver al chat" aria-label="Volver al chat"><svg class="i"><use href="#i-chat"/></svg></button>
   </div>
   <div class="side-scroll">
     <div id="card" class="card" title="Abrir la hoja de personaje"></div>
     <div class="views">
-      <b id="view-place">Tablero</b>
+      <button type="button" class="col-t" data-col="view" aria-expanded="true"><svg class="i chev"><use href="#i-chev"/></svg><b id="view-place">Tablero</b></button>
       <div class="seg" role="tablist" aria-label="Vista del sitio">
         <button type="button" role="tab" data-view-tab="board">Tablero</button>
         <button type="button" role="tab" data-view-tab="map">Mapa</button>
@@ -531,14 +571,12 @@ ${PAINT_STYLE}
     <section id="drawer" hidden aria-labelledby="dr-title">
       <span class="dr-grab" aria-hidden="true"></span>
       <div class="dr-head">
-        <button type="button" class="dr-back" data-dr-close><svg class="i"><use href="#i-back"/></svg>Volver a la conversación</button>
         <h2 id="dr-title">Hoja</h2>
         <div class="seg" role="tablist" aria-label="Contenido de la partida">
           <button type="button" role="tab" data-dr="sheet">Hoja</button>
           <button type="button" role="tab" data-dr="journal">Diario</button>
           <button type="button" role="tab" data-dr="pack">Mochila</button>
         </div>
-        <button type="button" class="ib dr-x" data-dr-close aria-label="Cerrar"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
       <div class="dr-body">
         <div class="dr-pane" data-drpane="sheet"><div id="sheet"></div><p class="none">Cargando la hoja…</p></div>
@@ -554,8 +592,8 @@ ${PAINT_STYLE}
       <button data-cmd="tablon">/tablon</button><button data-cmd="progress">/progress</button>
     </div>
     <form id="form" autocomplete="off">
-      <input id="input" placeholder="¿Qué haces?" aria-label="Acción">
-      <button type="button" id="cube" aria-haspopup="menu" aria-expanded="false" aria-controls="cube-menu" title="Hoja, diario y mochila" aria-label="Menú de la partida: hoja, diario y mochila"><svg class="i"><use href="#i-cube"/></svg></button>
+      <span class="inwrap"><input id="input" placeholder="¿Qué haces?" aria-label="Acción"></span>
+      <button type="button" id="cube" aria-haspopup="menu" aria-expanded="false" aria-controls="cube-menu" title="Hoja, diario y mochila" aria-label="Menú de la partida: hoja, diario y mochila"><svg class="i ic-cube"><use href="#i-cube"/></svg><svg class="i ic-x"><use href="#i-x"/></svg></button>
       <button type="submit" aria-label="Enviar" title="Enviar"><svg class="i"><use href="#i-send"/></svg></button>
     </form>
   </div>
@@ -1264,6 +1302,7 @@ ${PAINT_JS}
     var vb = ev.target.closest('[data-view]');
     if (vb) { mapView = vb.getAttribute('data-view'); store('tavernus.mapview', mapView); if (mapData) renderMap(mapData); return; }
     if (ev.target.closest('[data-map-big]')) { toggleMapBig(!document.body.classList.contains('map-big')); return; }
+    if (!document.body.classList.contains('map-big')) { if (mapData && ev.target.closest('svg')) toggleMapBig(true); return; }
     if (busy || !mapData || mapView === 'world') return;
     var ne = ev.target.closest('[data-node]');
     if (!ne) return;
@@ -1327,6 +1366,7 @@ ${PAINT_JS}
   board.addEventListener('mouseleave', function () { var tip = board.querySelector('.tip'); if (tip) tip.style.display = 'none'; });
   board.addEventListener('click', function (ev) {
     if (ev.target.closest('[data-toggle-big]')) { toggleBig(!document.body.classList.contains('board-big')); return; }
+    if (!document.body.classList.contains('board-big')) { if (boardData && ev.target.closest('svg')) toggleBig(true); return; }
     if (busy || !boardData) return;
     var se = ev.target.closest('[data-spot]'), ee = ev.target.closest('[data-exit]');
     if (se) {
@@ -1543,7 +1583,7 @@ ${PAINT_JS}
         '<span class="tt"><b>' + escapeHtml(sp.name) + '</b><small>' + escapeHtml(sp.description || '') + '</small></span><span class="m">' + (here ? 'Aquí' : fmtM(d)) + '</span></button>' });
     });
     rows.sort(function (x, y) { return x.d - y.d; });
-    $('near').innerHTML = rows.length ? '<div class="sec-t">Cerca de ti<span>' + rows.length + '</span></div>' + rows.slice(0, 8).map(function (r) { return r.html; }).join('') : '';
+    $('near').innerHTML = rows.length ? '<button type="button" class="sec-t" data-col="near" aria-expanded="' + !document.body.classList.contains('col-near') + '"><svg class="i chev"><use href="#i-chev"/></svg>Cerca de ti<span>' + rows.length + '</span></button><div class="sec-b">' + rows.slice(0, 8).map(function (r) { return r.html; }).join('') + '</div>' : '';
   }
   $('near').addEventListener('click', function (ev) {
     var go = ev.target.closest('[data-go]'), talk = ev.target.closest('[data-talk]');
@@ -1553,16 +1593,28 @@ ${PAINT_JS}
   /** La misión en curso (la fijada o la primera activa): título, plazo y pasos hechos; abre el Diario. */
   function renderQuest(j) {
     var qs = j.quests.active, live = qs.filter(function (x) { return x.status === 'active'; }), q = qs.filter(function (x) { return x.pinned; })[0] || live.filter(function (x) { return x.kind === 'main'; })[0] || live[0] || qs.filter(function (x) { return x.status !== 'expired'; })[0];
-    var h = '<div class="sec-t">Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</div>';
-    if (!q) { $('quest').innerHTML = h + '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button>'; return; }
+    var h = '<button type="button" class="sec-t" data-col="quest" aria-expanded="' + !document.body.classList.contains('col-quest') + '"><svg class="i chev"><use href="#i-chev"/></svg>Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</button><div class="sec-b">';
+    if (!q) { $('quest').innerHTML = h + '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button></div>'; return; }
     var done = q.steps.filter(function (s) { return s.done; }).length, total = q.steps.length;
     var sub = [q.giver ? 'lo pide ' + q.giver : '', q.reward || ''].filter(Boolean).join(' · ');
     var when = q.clock ? (q.clock.days_left <= 0 ? 'plazo vencido' : q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) : '';
     h += '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>' + escapeHtml(q.title) + (store(journalKey()) !== j.version ? '<span class="pill-new">Novedad</span>' : '') + '</b>' +
       (sub ? '<small>' + escapeHtml(sub) + '</small>' : '') +
       (total ? '<span class="prog"><i><span style="width:' + Math.round(100 * done / total) + '%"></span></i><small>' + done + ' de ' + total + (when ? ' · ' + escapeHtml(when) : '') + '</small></span>' : (when ? '<small>' + escapeHtml(when) + '</small>' : '')) + '</span></button>';
-    $('quest').innerHTML = h;
+    $('quest').innerHTML = h + '</div>';
   }
+  /** Cabeceras plegables del panel (tablero, cerca, misión); se recuerda cuáles están cerradas. */
+  function setCol(k, closed) {
+    document.body.classList.toggle('col-' + k, closed);
+    store('tavernus.col.' + k, closed ? '1' : '0');
+    document.querySelectorAll('[data-col="' + k + '"]').forEach(function (b) { b.setAttribute('aria-expanded', closed ? 'false' : 'true'); });
+    if (!closed && k === 'view') { if (view === 'board' && boardData) renderBoard(boardData); if (view === 'map' && mapData) renderMap(mapData); }
+  }
+  ['view', 'near', 'quest'].forEach(function (k) { if (store('tavernus.col.' + k) === '1') setCol(k, true); });
+  $('side').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-col]');
+    if (b) { var k = b.getAttribute('data-col'); setCol(k, !document.body.classList.contains('col-' + k)); }
+  });
   $('quest').addEventListener('click', function (ev) { if (ev.target.closest('[data-quest]')) { showSide(false); openDrawer('journal'); } });
 
   // --- El cubo: Hoja, Diario y Mochila en la misma columna del chat ---------------------
@@ -1582,6 +1634,8 @@ ${PAINT_JS}
     document.querySelectorAll('[data-dr]').forEach(function (b) { var on = b.getAttribute('data-dr') === k; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
     document.querySelectorAll('[data-drpane]').forEach(function (p) { p.hidden = p.getAttribute('data-drpane') !== k; });
     cube.classList.add('on');
+    cube.setAttribute('aria-label', 'Cerrar ' + DR_TITLE[k].toLowerCase()); cube.title = 'Cerrar';
+    if (k === 'sheet' && sheetData) renderSheet(sheetData);
     if (k === 'journal') { markJournalSeen(); if (journalData) renderQuest(journalData); }
   }
   function closeDrawer() {
@@ -1589,13 +1643,16 @@ ${PAINT_JS}
     drawer.hidden = true; $('drawer-scrim').hidden = true;
     document.body.classList.remove('drawer-open');
     cube.classList.remove('on');
+    cube.setAttribute('aria-label', 'Menú de la partida: hoja, diario y mochila'); cube.title = 'Hoja, diario y mochila';
     input.focus();
   }
-  cube.addEventListener('click', function () { setMenu(cubeMenu.hidden); });
+  cube.addEventListener('click', function () {
+    if (drawerKey) { closeDrawer(); return; }
+    setMenu(cubeMenu.hidden);
+  });
   $('cube-scrim').addEventListener('click', function () { setMenu(false); });
   cubeMenu.addEventListener('click', function (ev) { var b = ev.target.closest('[data-open]'); if (b) openDrawer(b.getAttribute('data-open')); });
   document.querySelectorAll('[data-dr]').forEach(function (b) { b.addEventListener('click', function () { openDrawer(b.getAttribute('data-dr')); }); });
-  document.querySelectorAll('[data-dr-close]').forEach(function (b) { b.addEventListener('click', closeDrawer); });
   $('drawer-scrim').addEventListener('click', closeDrawer);
   document.addEventListener('click', function (ev) { if (!cubeMenu.hidden && !ev.target.closest('#cube-menu') && !ev.target.closest('#cube')) setMenu(false); });
   document.addEventListener('keydown', function (ev) {
@@ -1604,7 +1661,19 @@ ${PAINT_JS}
     else if (drawerKey && !document.body.classList.contains('board-big') && !document.body.classList.contains('map-big')) closeDrawer();
   });
   // El micrófono y el pincel se añaden delante de Enviar (voice-input.ts, paint.ts): el cubo, siempre pegado a Enviar.
-  document.addEventListener('DOMContentLoaded', function () { var f = $('form'); f.insertBefore(cube, f.querySelector('button[type=submit]')); });
+  document.addEventListener('DOMContentLoaded', function () {
+    var f = $('form');
+    f.insertBefore(cube, f.querySelector('button[type=submit]'));
+    var mic = f.querySelector('.mic');
+    if (mic) document.querySelector('.inwrap').appendChild(mic);
+    // Ajustes de la voz (tts.ts): el engranaje va en la cabecera del panel, donde estaba la casa.
+    var more = document.querySelector('.chat-head .tts-more'), pop = document.querySelector('.chat-head .tts-pop'), gear = $('side-gear');
+    if (more && pop) {
+      more.innerHTML = '<svg class="i"><use href="#i-gear"/></svg>';
+      more.title = 'Ajustes de la voz del narrador'; more.setAttribute('aria-label', more.title);
+      gear.appendChild(more); gear.appendChild(pop);
+    }
+  });
 
   /** Avatares del grupo arriba a la derecha: cambian de personaje como el desplegable (que queda oculto). */
   function renderParty() {

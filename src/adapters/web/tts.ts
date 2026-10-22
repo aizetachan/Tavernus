@@ -395,7 +395,8 @@ export const TTS_SCRIPT = String.raw`<script>
   stopBtn.addEventListener('click', stop);
   autoBtn.addEventListener('click', function () { setAuto(!auto); });
   moreBtn.addEventListener('click', function (ev) { ev.stopPropagation(); pop.hidden = !pop.hidden; moreBtn.setAttribute('aria-expanded', String(!pop.hidden)); if (!pop.hidden) fillVoices(); });
-  document.addEventListener('click', function (ev) { if (!pop.hidden && !box.contains(ev.target)) { pop.hidden = true; moreBtn.setAttribute('aria-expanded', 'false'); } });
+  // La página puede llevar el botón y el panel a otro sitio (el engranaje del panel): se cierra al tocar fuera de los tres.
+  document.addEventListener('click', function (ev) { if (!pop.hidden && !box.contains(ev.target) && !pop.contains(ev.target) && !moreBtn.contains(ev.target)) { pop.hidden = true; moreBtn.setAttribute('aria-expanded', 'false'); } });
   pop.addEventListener('change', function (ev) {
     var k = ev.target.getAttribute('data-k');
     if (k === 'voice' || k === 'npcvoice') store('tavernus.tts.' + k, ev.target.value);
