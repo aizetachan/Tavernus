@@ -476,7 +476,11 @@ ${PAINT_STYLE}
   body.boot form input::placeholder { color: transparent; }
   .inwrap .mic { transition: opacity .3s ease .55s; }
   body.boot .inwrap .mic { opacity: 0; pointer-events: none; transition: none; }
-  body.boot .chat-body { clip-path: inset(calc(100% - 44px) 0 0 0); }
+  body.boot .chat-body { clip-path: inset(calc(100% - 1px) 0 0 0); opacity: 0; }
+  /* El cuadro y la ventana no se ven mientras carga: aparecen justo al empezar a moverse. */
+  .chat-body { transition: clip-path .75s cubic-bezier(.22,.9,.25,1) .1s, opacity .15s ease .1s; }
+  .inwrap { transition: max-width .65s cubic-bezier(.2,.8,.2,1), opacity .15s ease; }
+  body.boot .inwrap { opacity: 0; }
   /* Mientras carga, la columna lleva el gris del panel para que se vea la ventana negra abrirse; vuelve al negro
      justo cuando la ventana termina de abrirse. */
   .chat-body { background: var(--chat); }
@@ -484,6 +488,9 @@ ${PAINT_STYLE}
   body.boot #play, body.boot .compose { background-color: var(--panel); transition: none; }
   body.boot #log, body.boot #thinking, body.boot .chips { opacity: 0; }
   body.boot .side-head, body.boot .side-scroll > *, body.boot .chat-head > * { opacity: 0; }
+  /* Llegada desde el menú: la página aparece desde negro. */
+  body::before { content: ''; position: fixed; inset: 0; z-index: 100; background: #000; pointer-events: none; animation: from-black .6s ease .05s both; }
+  @keyframes from-black { from { opacity: 1; } to { opacity: 0; visibility: hidden; } }
   @keyframes boot-shine { from { background-position: 100% 0; } to { background-position: -50% 0; } }
   @keyframes enter-pop { 0% { opacity: 0; transform: translateY(16px) scale(.98); } 65% { opacity: 1; transform: translateY(-4px) scale(1.005); } 82% { transform: translateY(1.5px); } 100% { opacity: 1; transform: none; } }
   @keyframes enter-fade { from { opacity: 0; } to { opacity: 1; } }
@@ -538,6 +545,7 @@ ${PAINT_STYLE}
   @media (prefers-reduced-motion: reduce) {
     .inwrap, .chat-body, #log { transition: none; }
     body.boot form input { animation: none; }
+    body::before { animation-duration: .01s; }
     body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chips, body.entered .chips button, body.entered form > button, body.entered #card .stats > div, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
   }
   /* Secciones plegables del panel. */

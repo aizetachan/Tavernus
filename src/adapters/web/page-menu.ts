@@ -159,6 +159,9 @@ export const MENU = String.raw`<!doctype html>
   .new-foot .grow { flex: 1; min-width: 160px; }
   #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 30; padding: 10px 16px; border-radius: 999px; background: var(--bubble); box-shadow: var(--shadow); color: #ff9d94; font-size: 14px; }
   #toast[hidden] { display: none; }
+  /* Al entrar en una partida: fundido a negro. */
+  body::after { content: ''; position: fixed; inset: 0; z-index: 200; background: #000; opacity: 0; pointer-events: none; transition: opacity .45s ease; }
+  body.leaving::after { opacity: 1; pointer-events: auto; }
 
   /* Escritorio: la imagen ocupa toda la pantalla y el panel de partidas flota encima como cristal (liquid glass):
      gris claro translúcido, el fondo desenfocado detrás y brillos suaves de luz. Sin bordes. */
@@ -338,9 +341,15 @@ export const MENU = String.raw`<!doctype html>
   }
   /** Solo la fecha: «21 oct 2026». */
   function day(iso) { try { return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return iso; } }
+  /** Entrar en una partida: fundido a negro y, al terminar, la página de la partida (que aparece desde negro). */
   function open(slug, character) {
-    location.href = '/?game=' + encodeURIComponent(slug) + (character ? '&character=' + encodeURIComponent(character) : '');
+    var url = '/?game=' + encodeURIComponent(slug) + (character ? '&character=' + encodeURIComponent(character) : '');
+    if (document.body.classList.contains('leaving')) return;
+    document.body.classList.add('leaving');
+    setTimeout(function () { location.href = url; }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 480);
   }
+  // Si se vuelve con «atrás» y el navegador restaura la página, se quita el negro.
+  window.addEventListener('pageshow', function () { document.body.classList.remove('leaving'); });
   function call(method, path) {
     return fetch(path, { method: method }).then(function (r) { return r.json(); }).catch(function () { return { ok: false, text: 'No hay conexión con el servidor.' }; });
   }
