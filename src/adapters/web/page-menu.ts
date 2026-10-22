@@ -42,7 +42,7 @@ export const MENU = String.raw`<!doctype html>
   .ib { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 50%; background: transparent; color: #b8b1a6; }
   .ib:hover { background: var(--hover); color: var(--text); }
   /* La imagen de cada partida: un rincón de la taberna, siempre el mismo para la misma partida. */
-  .art { background: url(/assets/taberna.jpg) center 45% / 260% no-repeat #1b1712; }
+  .art { background: url(/assets/taberna.jpg) 22% 20% / 260% no-repeat #1b1712; }
 
   /* Lista de partidas. */
   aside { flex: 0 0 400px; display: flex; flex-direction: column; min-width: 0; background: var(--panel); border-right: 1px solid var(--sep); }
@@ -89,7 +89,7 @@ export const MENU = String.raw`<!doctype html>
   main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--chat); }
   #pick { flex: 1; min-height: 0; overflow-y: auto; }
   #pick[hidden] { display: none; }
-  .hero { position: relative; height: 46vh; min-height: 280px; max-height: 460px; background-size: cover; background-position: center 45%; }
+  .hero { position: relative; height: 46vh; min-height: 280px; max-height: 460px; background-size: cover; background-position: 22% 20%; }
   .hero::after { content: ''; position: absolute; inset: 40% 0 0; background: linear-gradient(to top, var(--chat), rgba(11,13,12,0)); }
   .hero .cap { position: absolute; left: 40px; right: 40px; bottom: 24px; z-index: 1; display: flex; flex-direction: column; gap: 8px; }
   .eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
@@ -167,7 +167,7 @@ export const MENU = String.raw`<!doctype html>
     #open-new { display: none; }
     #fab { position: fixed; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 10; display: inline-flex; align-items: center; gap: 8px; height: 56px; padding: 0 20px 0 16px; border-radius: 18px; background: var(--accent); color: var(--accent-ink); font-weight: 600; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
     .scroll { padding-bottom: 96px; }
-    #resume { position: relative; display: block; height: 190px; margin: 4px 12px 14px; border-radius: 18px; overflow: hidden; color: var(--text); text-decoration: none; background-size: cover; background-position: center 45%; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: calc(100% - 24px); text-align: left; }
+    #resume { position: relative; display: block; height: 190px; margin: 4px 12px 14px; border-radius: 18px; overflow: hidden; color: var(--text); text-decoration: none; background-size: cover; background-position: 22% 20%; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: calc(100% - 24px); text-align: left; }
     #resume[hidden] { display: none; }
     #resume::after { content: ''; position: absolute; inset: 25% 0 0; background: linear-gradient(to top, rgba(11,13,12,.95), rgba(11,13,12,0)); }
     #resume .cap { position: absolute; left: 16px; right: 16px; bottom: 14px; z-index: 1; display: flex; flex-direction: column; gap: 4px; }
@@ -322,11 +322,11 @@ export const MENU = String.raw`<!doctype html>
   }
   function badge(g) { return el('span', 'badge ' + g.mode, (MODE[g.mode] || g.mode) + (g.main ? ' · principal' : '')); }
   function when(g) { return g.last_opened_at ? 'Jugada ' + ago(g.last_opened_at) : 'Creada ' + ago(g.created_at) + ' · sin jugar'; }
-  /** Cada partida enseña otro rincón del paisaje, siempre el mismo para la misma partida. */
-  function art(node, g) {
-    var h = 0; for (var i = 0; i < g.slug.length; i++) h = (h * 31 + g.slug.charCodeAt(i)) >>> 0;
+  /** La taberna, siempre con el mismo encuadre (el que se eligió en las pruebas), sea cual sea la partida. */
+  var ART_POS = '22% 20%';
+  function art(node) {
     node.style.backgroundImage = 'url(/assets/taberna.jpg)';
-    node.style.backgroundPosition = (h % 101) + '% ' + (25 + (h >> 8) % 40) + '%';
+    node.style.backgroundPosition = ART_POS;
   }
   function summary(g) {
     var bits = [];
