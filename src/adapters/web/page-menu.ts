@@ -42,7 +42,7 @@ export const MENU = String.raw`<!doctype html>
   .ib { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 50%; background: transparent; color: #b8b1a6; }
   .ib:hover { background: var(--hover); color: var(--text); }
   /* La imagen de cada partida: un rincón de la taberna, siempre el mismo para la misma partida. */
-  .art { background: url(/assets/taberna.jpg) 22% 20% / 260% no-repeat #1b1712; }
+  .art { background-color: #1b1712; }
 
   /* Lista de partidas. */
   aside { flex: 0 0 400px; display: flex; flex-direction: column; min-width: 0; background: var(--panel); border-right: 1px solid var(--sep); }
@@ -89,7 +89,7 @@ export const MENU = String.raw`<!doctype html>
   main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--chat); }
   #pick { flex: 1; min-height: 0; overflow-y: auto; }
   #pick[hidden] { display: none; }
-  .hero { position: relative; height: 46vh; min-height: 280px; max-height: 460px; background-size: cover; background-position: 22% 20%; }
+  .hero { position: relative; height: 46vh; min-height: 280px; max-height: 460px; }
   .hero::after { content: ''; position: absolute; inset: 40% 0 0; background: linear-gradient(to top, var(--chat), rgba(11,13,12,0)); }
   .hero .cap { position: absolute; left: 40px; right: 40px; bottom: 24px; z-index: 1; display: flex; flex-direction: column; gap: 8px; }
   .eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
@@ -98,7 +98,10 @@ export const MENU = String.raw`<!doctype html>
   .chips span { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; background: rgba(14,15,16,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); font-size: 12.5px; color: #d9d3c8; }
   .chips .badge { height: 28px; padding: 0 10px; border-radius: 999px; background: rgba(14,15,16,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
   .body { max-width: 760px; padding: 6px 40px 40px; display: flex; flex-direction: column; gap: 16px; }
-  .cta { display: flex; flex-wrap: wrap; gap: 10px; }
+  .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .gear-wrap { position: relative; display: inline-flex; }
+  .ib.gear { width: 44px; height: 44px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+  .gear-wrap .menu-pop { left: 0; right: auto; top: 52px; }
   .kv-t { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
   .facts { color: var(--muted); font-size: 13.5px; }
   .intro { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; max-width: 520px; padding: 0 40px; }
@@ -170,7 +173,7 @@ export const MENU = String.raw`<!doctype html>
     #open-new { display: none; }
     #fab { position: fixed; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 10; display: inline-flex; align-items: center; gap: 8px; height: 56px; padding: 0 20px 0 16px; border-radius: 18px; background: var(--accent); color: var(--accent-ink); font-weight: 600; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
     .scroll { padding-bottom: 96px; }
-    #resume { position: relative; display: block; height: 190px; margin: 4px 12px 14px; border-radius: 18px; overflow: hidden; color: var(--text); text-decoration: none; background-size: cover; background-position: 22% 20%; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: calc(100% - 24px); text-align: left; }
+    #resume { position: relative; display: block; height: 190px; margin: 4px 12px 14px; border-radius: 18px; overflow: hidden; color: var(--text); text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: calc(100% - 24px); text-align: left; }
     #resume[hidden] { display: none; }
     #resume::after { content: ''; position: absolute; inset: 25% 0 0; background: linear-gradient(to top, rgba(11,13,12,.95), rgba(11,13,12,0)); }
     #resume .cap { position: absolute; left: 16px; right: 16px; bottom: 14px; z-index: 1; display: flex; flex-direction: column; gap: 4px; }
@@ -188,6 +191,7 @@ export const MENU = String.raw`<!doctype html>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
 </svg>
 <aside>
@@ -327,12 +331,29 @@ export const MENU = String.raw`<!doctype html>
   }
   function badge(g) { return el('span', 'badge ' + g.mode, (MODE[g.mode] || g.mode) + (g.main ? ' · principal' : '')); }
   function when(g) { return g.last_opened_at ? 'Jugada ' + ago(g.last_opened_at) : 'Creada ' + ago(g.created_at) + ' · sin jugar'; }
-  /** La taberna, siempre con el mismo encuadre (el que se eligió en las pruebas), sea cual sea la partida. */
-  var ART_POS = '22% 20%';
+  /**
+   * La taberna es por ahora la imagen de todas las partidas. Se encuadra para que la casa quede en el centro del
+   * hueco en cualquier pantalla: la imagen cubre el hueco (y, en las miniaturas, se acerca data-zoom veces) y se
+   * desplaza en píxeles para llevar el centro de la casa al centro. Si no cabe, se queda lo más cerca posible.
+   */
+  var ART = { w: 1920, h: 1071, x: 0.497, y: 0.324 };
   function art(node) {
     node.style.backgroundImage = 'url(/assets/taberna.jpg)';
-    node.style.backgroundPosition = ART_POS;
+    node.style.backgroundRepeat = 'no-repeat';
+    fitArt(node);
   }
+  function fitArt(node) {
+    var W = node.clientWidth, H = node.clientHeight;
+    if (!W || !H) return;
+    var zoom = Number(node.getAttribute('data-zoom')) || 1;
+    var k = Math.max(W / ART.w, H / ART.h) * zoom, iw = ART.w * k, ih = ART.h * k;
+    var clamp = function (v, lo) { return Math.min(0, Math.max(lo, v)); };
+    var x = clamp(W / 2 - ART.x * iw, W - iw), y = clamp(H / 2 - ART.y * ih, H - ih);
+    node.style.backgroundSize = Math.round(iw) + 'px ' + Math.round(ih) + 'px';
+    node.style.backgroundPosition = Math.round(x) + 'px ' + Math.round(y) + 'px';
+  }
+  var fitTimer = null;
+  window.addEventListener('resize', function () { clearTimeout(fitTimer); fitTimer = setTimeout(function () { document.querySelectorAll('.art').forEach(fitArt); }, 100); });
   function summary(g) {
     var bits = [];
     if (g.characters.length) bits.push(g.characters.join(', '));
@@ -377,7 +398,7 @@ export const MENU = String.raw`<!doctype html>
     var r = el('div', 'row' + (g.slug === selected ? ' on' : ''));
     r.setAttribute('role', 'button'); r.tabIndex = 0;
     r.setAttribute('aria-label', g.name + '. ' + when(g));
-    var pic = el('span', 'pic art'); art(pic, g); r.appendChild(pic);
+    var pic = el('span', 'pic art'); pic.setAttribute('data-zoom', '2.6'); r.appendChild(pic); art(pic);
     var tt = el('span', 'tt');
     var l1 = el('span', 'l1'); l1.appendChild(el('b', '', g.name)); l1.appendChild(el('time', '', stamp(g.last_opened_at || g.created_at))); tt.appendChild(l1);
     var l2 = el('span', 'l2'); l2.appendChild(el('span', '', summary(g))); l2.appendChild(badge(g)); tt.appendChild(l2);
@@ -409,16 +430,17 @@ export const MENU = String.raw`<!doctype html>
     var p = $('pick');
     p.innerHTML = '';
     if (!g) {
-      var hero = el('div', 'hero art'); hero.style.backgroundImage = 'url(/assets/taberna.jpg)';
+      var hero = el('div', 'hero art');
       hero.innerHTML = '<div class="cap"><span class="eyebrow">Tavernus</span><h2>Rol por chat con un máster de IA</h2></div>';
       p.appendChild(hero);
+      art(hero);
       var box = el('div', 'intro');
       box.appendChild(el('p', '', EMPTY[tab]));
       if (tab === 'continue') box.appendChild(button('Nueva partida', 'btn primary', openNew));
       p.appendChild(box);
       return;
     }
-    var hero2 = el('div', 'hero art'); art(hero2, g); hero2.style.backgroundSize = 'cover';
+    var hero2 = el('div', 'hero art');
     var cap = el('div', 'cap');
     cap.appendChild(el('span', 'eyebrow', tab === 'continue' && !first ? 'Partida en curso' : EYEBROW[tab]));
     cap.appendChild(el('h2', '', g.name));
@@ -432,12 +454,21 @@ export const MENU = String.raw`<!doctype html>
     else if (tab === 'continue') cap.appendChild(el('p', 'synopsis', g.characters.length ? 'Tu grupo te espera donde lo dejasteis.' : 'La partida está lista: entra y crea tu personaje.'));
     hero2.appendChild(cap);
     p.appendChild(hero2);
+    art(hero2);
     var body = el('div', 'body');
     var cta = el('div', 'cta');
     var go = el('button', 'btn primary'); go.type = 'button'; go.innerHTML = icon('i-play') + CTA[tab];
     go.addEventListener('click', function () { open(g.slug); });
     cta.appendChild(go);
-    extras(g, 'btn ghost').forEach(function (b) { cta.appendChild(b); });
+    // Ajustes de la partida: un botón redondo con su menú (de momento, borrar; en demos y grabaciones, sus extras).
+    var wrap = el('span', 'gear-wrap');
+    var gear = el('button', 'ib gear'); gear.type = 'button'; gear.innerHTML = icon('i-gear');
+    gear.title = 'Ajustes de la partida'; gear.setAttribute('aria-label', gear.title); gear.setAttribute('aria-haspopup', 'menu'); gear.setAttribute('aria-expanded', 'false');
+    var menu = el('div', 'menu-pop'); menu.hidden = true; menu.setAttribute('role', 'menu');
+    extras(g, '').forEach(function (b) { b.setAttribute('role', 'menuitem'); menu.appendChild(b); });
+    gear.addEventListener('click', function (ev) { ev.stopPropagation(); var was = menu.hidden; closeMenus(); menu.hidden = !was; gear.setAttribute('aria-expanded', String(was)); });
+    wrap.appendChild(gear); wrap.appendChild(menu);
+    cta.appendChild(wrap);
     body.appendChild(cta);
     var meta = el('div', 'meta-line');
     if (g.characters.length) {
@@ -461,13 +492,14 @@ export const MENU = String.raw`<!doctype html>
     if (!games.some(function (g) { return g.slug === selected; })) selected = games[0] ? games[0].slug : null;
     if (!games.length) box.appendChild(el('p', 'empty', query ? 'Ninguna partida coincide.' : EMPTY[tab]));
     games.forEach(function (g) { box.appendChild(row(g)); });
+    box.querySelectorAll('.art').forEach(fitArt);
     var g = games.filter(function (x) { return x.slug === selected; })[0];
     detail(g, g && lists.continue[0] && g.slug === lists.continue[0].slug);
     // Móvil: la última partida jugada, en grande arriba, para seguir con un toque.
     var last = tab === 'continue' && !query ? lists.continue[0] : null, resume = $('resume');
     resume.hidden = !last;
     if (last) {
-      art(resume, last); resume.style.backgroundSize = 'cover';
+      art(resume);
       $('resume-name').textContent = last.name;
       $('resume-meta').textContent = [MODE[last.mode], when(last)].join(' · ');
       resume.onclick = function () { open(last.slug); };
