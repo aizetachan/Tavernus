@@ -481,15 +481,16 @@ ${PAINT_STYLE}
   .chat-body { transition: clip-path .75s cubic-bezier(.22,.9,.25,1) .1s, opacity .15s ease .1s; }
   .inwrap { transition: max-width .65s cubic-bezier(.2,.8,.2,1), opacity .15s ease; }
   body.boot .inwrap { opacity: 0; }
-  /* Mientras carga, la columna lleva el gris del panel para que se vea la ventana negra abrirse; vuelve al negro
-     justo cuando la ventana termina de abrirse. */
+  /* Mientras se monta todo es negro (no gris); cuando ya está montado, panel, cabecera y barra vuelven a su gris. */
   .chat-body { background: var(--chat); }
-  #play, .compose { transition: background-color 0s linear .85s; }
-  body.boot #play, body.boot .compose { background-color: var(--panel); transition: none; }
+  aside, .chat-head, form, #play, .compose { transition: background-color .8s ease; }
+  body.boot aside, body.boot .chat-head, body.boot form, body.boot #play, body.boot .compose,
+  body.entered aside, body.entered .chat-head, body.entered form, body.entered #play, body.entered .compose { background-color: #000; box-shadow: none; }
+  body.boot aside, body.boot .chat-head, body.boot form, body.boot #play, body.boot .compose { transition: none; }
   body.boot #log, body.boot #thinking, body.boot .chips { opacity: 0; }
   body.boot .side-head, body.boot .side-scroll > *, body.boot .chat-head > * { opacity: 0; }
   /* Llegada desde el menú: la página aparece desde negro. */
-  body::before { content: ''; position: fixed; inset: 0; z-index: 100; background: #000; pointer-events: none; animation: from-black .6s ease .05s both; }
+  body::before { content: ''; position: fixed; inset: 0; z-index: 100; background: #000; pointer-events: none; animation: from-black .7s ease 1.2s both; }
   @keyframes from-black { from { opacity: 1; } to { opacity: 0; visibility: hidden; } }
   @keyframes boot-shine { from { background-position: 100% 0; } to { background-position: -50% 0; } }
   @keyframes enter-pop { 0% { opacity: 0; transform: translateY(16px) scale(.98); } 65% { opacity: 1; transform: translateY(-4px) scale(1.005); } 82% { transform: translateY(1.5px); } 100% { opacity: 1; transform: none; } }
