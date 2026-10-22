@@ -768,8 +768,8 @@ ${PAINT_STYLE}
     if (/→\s*(impacta|éxito)\b/i.test(t) || /^✓/.test(t)) return 'good';
     return 'info';
   }
-  // Icono del dado de veinte caras (botón de tirar).
-  var D20_ICON = '<svg class="i d20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l9 5.2v9.6L12 22l-9-5.2V7.2z"/><path d="M12 6.4l5 8.4H7z"/><path d="M12 2v4.4M3 7.2l4 7.6M21 7.2l-4 7.6M3 16.8l4-2M21 16.8l-4-2M12 22l-5-7.2M12 22l5-7.2"/></svg>';
+  // Icono del botón de tirar: un dado clásico con sus puntos, el que todo el mundo asocia a «tirar».
+  var D20_ICON = '<svg class="i d20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.3" cy="8.3" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.7" cy="8.3" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.3" cy="15.7" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.7" cy="15.7" r="1.5" fill="currentColor" stroke="none"/></svg>';
   /** Un mensaje: la burbuja (.body) y, debajo, lo que se le añada (aviso, acciones). El del máster lleva su rótulo. */
   function add(kind, text, extra) {
     var div = document.createElement('div');
