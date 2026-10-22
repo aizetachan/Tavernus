@@ -439,8 +439,8 @@ export const NOVEL_JS = String.raw`
     if (m.roll) {
       var b = document.createElement('button');
       b.className = 'roll';
-      b.innerHTML = D20_ICON + '<span>Tirar d20' + (m.roll.dc ? ' · CD ' + m.roll.dc : '') + '</span>';
-      b.title = 'Tirar el dado'; b.setAttribute('aria-label', 'Tirar el dado de veinte caras' + (m.roll.dc ? ', dificultad ' + m.roll.dc : ''));
+      b.innerHTML = D20_ICON;
+      b.title = 'Tirar d20' + (m.roll.dc ? ' · CD ' + m.roll.dc : ''); b.setAttribute('aria-label', 'Tirar el dado de veinte caras' + (m.roll.dc ? ', dificultad ' + m.roll.dc : ''));
       b.onclick = function () { b.classList.add('chosen'); spendButtons(); roll(); };
       row.appendChild(b);
     } else {
