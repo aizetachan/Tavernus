@@ -6,6 +6,7 @@ import {
   CLOUDFLARE_MODEL, Limiter, MIN_INTERVAL_MS, Illustrator, PollinationsQueue, cloudflareFromEnv, POLLINATIONS_BASE, STYLE, illustratorOf, imagesEnabled, pollinationsUrl, retryAfterMs,
   sceneKey, sceneOf, scenePrompt, sceneSeed, type SceneInput,
 } from '../src/ai/illustrate.js';
+import { avatarsOf } from '../src/ai/avatar.js';
 import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
 import { GameManager, type MasterFactory } from '../src/games/manager.js';
@@ -242,7 +243,7 @@ describe('disparador en el motor', () => {
       illustrator: { fetch: f.fetch, minIntervalMs: 0, queue: new PollinationsQueue() },
     });
     try {
-      const live = await games.create({ name: 'Con imágenes', mode: 'live', character: { name: 'Ana' } });
+      const live = await games.create({ name: 'Con imágenes', mode: 'live', campaign_id: 'demo', character: { name: 'Ana' } });
       const engine = await games.open(live.game.slug);
       const ill = illustratorOf(engine);
       expect(ill).not.toBeNull();
@@ -254,18 +255,21 @@ describe('disparador en el motor', () => {
       expect(ill!.imageFor(loc)).toEqual(img);
       expect(img?.file).toMatch(/\.jpg$/);
       expect(await stat(join(games.paths(live.game).dir, 'images', img!.file!))).toBeTruthy();
-      expect(f.calls).toHaveLength(1);
+      await avatarsOf(engine)!.settled(live.character_id!);
+      expect(f.calls).toHaveLength(2); // la llegada y el avatar de Ana
 
-      const off = await games.create({ name: 'Sin red', mode: 'offline', character: { name: 'Bo' } });
-      expect(illustratorOf(await games.open(off.game.slug))).not.toBeNull();
-      expect(f.calls).toHaveLength(2); // la llegada de Bo también se ilustra en offline
+      const off = await games.create({ name: 'Sin red', mode: 'offline', campaign_id: 'demo', character: { name: 'Bo' } });
+      const offEngine = await games.open(off.game.slug);
+      expect(illustratorOf(offEngine)).not.toBeNull();
+      await avatarsOf(offEngine)!.settled(off.character_id!);
+      expect(f.calls).toHaveLength(4); // la llegada y el avatar de Bo también se ilustran en offline
 
       const apagado = new GameManager({
         root: join(dir, 'games-off'), env: { DATA_DIR: join(dir, 'local-off') }, masterFor: noApi, engine: { deterministic: false }, log: () => {},
         illustrator: { fetch: f.fetch, minIntervalMs: 0, queue: new PollinationsQueue() },
       });
       try {
-        const sin = await apagado.create({ name: 'Sin imágenes', mode: 'offline', character: { name: 'Cas' } });
+        const sin = await apagado.create({ name: 'Sin imágenes', mode: 'offline', campaign_id: 'demo', character: { name: 'Cas' } });
         expect(illustratorOf(await apagado.open(sin.game.slug))).toBeNull();
       } finally {
         await apagado.closeAll();
@@ -390,13 +394,14 @@ describe('Cloudflare Workers AI', () => {
       illustrator: { fetch: f.fetch, minIntervalMs: 0, queue: new PollinationsQueue(), cloudflareLimit: new Limiter(2) },
     });
     try {
-      const live = await games.create({ name: 'Con Cloudflare', mode: 'live', character: { name: 'Ana' } });
+      const live = await games.create({ name: 'Con Cloudflare', mode: 'live', campaign_id: 'demo', character: { name: 'Ana' } });
       const engine = await games.open(live.game.slug);
       const ill = illustratorOf(engine)!;
       expect(ill.provider).toBe('cloudflare');
       const loc = engine.world.characterSpot(engine.world.character(live.character_id!))!.location_id;
       expect((await ill.illustrate(sceneOf(engine, loc)))?.provider).toBe('cloudflare');
-      expect(f.cf).toHaveLength(1);
+      await avatarsOf(engine)!.settled(live.character_id!);
+      expect(f.cf).toHaveLength(2); // la llegada y el avatar
       expect(f.polli).toHaveLength(0);
     } finally {
       await games.closeAll();

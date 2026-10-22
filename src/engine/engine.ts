@@ -17,6 +17,7 @@ import { aEs, arrivalNarration, describeSurroundings, fmtDuration, whereAmI, who
 import { encounterChance, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
 import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { tickSchedule } from './schedule.js';
+import { tickStory, type StoryOutput } from './story.js';
 import { aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
 import { seededRng, type Rng } from './dice.js';
 import { harvest } from './resources.js';
@@ -31,6 +32,7 @@ import { ABILITIES, backgroundById, classById, raceById, STANDARD_ARRAY } from '
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
+import { absence, absenceRule, acceptPrologue, acceptRecap, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
 
 export interface ActionResult {
   ok: boolean;
@@ -60,7 +62,9 @@ export interface CharacterSpec {
 
 /** Contrato mínimo del master para el motor (implementado en src/ai/master.ts). */
 export interface MasterLike {
-  resolve(actor: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<MasterResolution>;
+  resolve(actor: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string; prologue?: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<MasterResolution>;
+  /** Texto libre en una llamada corta y sin tools (prólogo, recapitulación). null si no hay texto (offline). */
+  write?(req: { system: string; prompt: string; max_tokens?: number }): Promise<{ text: string; model: string; usage: { input: number; output: number } } | null>;
 }
 /** `hook`: salta un gancho sembrado (hooks.ts) sin acción del jugador. */
 export type MasterScene = 'arrival' | 'decisive_timeout' | 'hook';
@@ -168,7 +172,8 @@ export class Engine {
     this.world.onChange((c) => this.pending.set(`${c.collection}/${c.id}`, c));
     // Antes de persistir y entregar: el evento sale ya con sus momentos en el payload.
     this.events.onEvent((e) => this.noteMoments(e));
-    this.events.onEvent((e) => { void this.repo.appendEvent(e); });
+    // Sin esperar; si falla (la partida se borró mientras narraba), se avisa y no tumba el proceso.
+    this.events.onEvent((e) => { this.repo.appendEvent(e).catch((err: Error) => console.warn(`[engine] evento ${e.id} sin guardar: ${err.message}`)); });
   }
 
   /** Momentos ilustrables de un evento: se anotan en `payload.moments` y se avisa a los oyentes (ilustrador). */
@@ -462,6 +467,7 @@ export class Engine {
       this.settleAll(nowG);
       // Agenda (schedule.ts): eventos a su hora y horarios de NPC, sin IA.
       tickSchedule(this.world, nowG, (i, s) => { this.events.emit(i, this.clock.realAt(s)); });
+      this.advanceStory(nowG);
       for (const id of this.presence.keys()) this.refreshConnection(id);
       this.checkDecisiveWindows();
       this.fireTimeHooks(nowG);
@@ -553,6 +559,7 @@ export class Engine {
         r = this.resolveAction(c, clean);
       }
       this.settleAll(this.gameNow()); // viaje rápido: si la acción (o un tool del master) lo puso en camino, llega ya
+      this.advanceStory(this.gameNow());
       await this.flush();
       return r;
     });
@@ -766,6 +773,7 @@ export class Engine {
       let r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result });
       if (!r.ok && r.text === '') r = { ok: false, text: `${shown}\nEl narrador no responde; inténtalo de nuevo.` };
       this.settleAll(this.gameNow());
+      this.advanceStory(this.gameNow());
       await this.flush();
       return r;
     });
@@ -822,13 +830,33 @@ export class Engine {
     }
   }
 
+  /** Historia escrita (story.ts): la amenaza que avanza y las misiones de cada PJ. Sin historia, nada. */
+  private advanceStory(nowG: number): void {
+    this.emitStory(tickStory(this.world, nowG));
+  }
+
+  /** Avisos de la historia: los del PJ como progreso privado; los del mundo, a quien esté en el lugar (o a todos). */
+  emitStory(out: StoryOutput): void {
+    for (const p of out.personal) {
+      const c = this.world.characters.get(p.character_id);
+      if (c) this.emitProgress(c, p.events);
+    }
+    for (const a of out.announcements) {
+      const spot = this.world.spots.get(a.spot_id ?? this.world.location(a.location_id).default_spot_id)!;
+      this.events.emit({
+        actor_id: null, at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
+        action_type: 'story', narration_private: '', observable: a.text, visibility: a.public ? 'public' : 'location', loudness: 5, tags: ['story'], payload: {},
+      }, this.now());
+    }
+  }
+
   /** Estado del tablón para /tablon. */
   boardText(): string {
     const jobs = activeJobs(this.world);
     return jobs.length ? jobs.map((j) => `• **${j.title}** — ${j.text} (${j.reward_coins} monedas; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n') : 'El tablón está vacío.';
   }
 
-  private async resolveWithMaster(c: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<ActionResult> {
+  private async resolveWithMaster(c: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string; prologue?: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<ActionResult> {
     const t0 = Date.now();
     const out = await this.master!.resolve(c, text, roll, intro, scene, decisive);
     if (out.ok) { this.masterOk.push({ ts: Date.now(), ms: Date.now() - t0 }); if (this.masterOk.length > 500) this.masterOk.shift(); }
@@ -1016,22 +1044,78 @@ export class Engine {
   }
 
   /**
-   * Primera escena (SPEC §11.2.1): el master narra la llegada con el origen del
-   * punto de inicio, la premisa como ambiente y un gancho. El adaptador la pide
-   * cuando el canal del jugador ya existe. Sin master, no hay intro.
+   * Primera escena (SPEC §11.2.1): antes, el prólogo (docs/PROLOGO.md), una vez
+   * por PJ; después el master narra la llegada con el origen del punto de inicio
+   * y un gancho, sin repetir el prólogo. El adaptador la pide cuando el canal del
+   * jugador ya existe. Sin master, solo el prólogo de plantilla.
    */
   async introduce(characterId: Id): Promise<ActionResult | null> {
-    if (!this.master) return null;
     await this.tick();
     const c = this.world.character(characterId);
     const spot = this.world.characterSpot(c)!;
     const origin = this.world.campaign.starting_points.find((p) => p.spot_id === spot.id)?.origin ?? c.backstory;
     const locId = spot.location_id;
     return this.runInLocation(locId, async () => {
-      const r = await this.resolveWithMaster(c, '(primera escena)', undefined, { origin, welcome: this.world.campaign.welcome.replaceAll('{name}', c.name) });
+      const prologue = await this.writePrologue(c);
+      if (!this.master) { await this.flush(); return null; }
+      const r = await this.resolveWithMaster(c, '(primera escena)', undefined, { origin, welcome: this.world.campaign.welcome.replaceAll('{name}', c.name), ...(prologue ? { prologue: prologue.narration_private } : {}) });
       await this.flush();
       return r.ok ? r : null;
     });
+  }
+
+  private prologuing = new Set<Id>();
+  /** El prólogo del PJ (evento `prologue`): el máster lo escribe una vez; si no puede, la plantilla. null si ya lo tenía. */
+  private async writePrologue(c: Character): Promise<GameEvent | null> {
+    const has = () => this.events.all().some((e) => e.action_type === 'prologue' && e.actor_id === c.id);
+    if (has() || this.prologuing.has(c.id)) return null;
+    this.prologuing.add(c.id);
+    try {
+      const facts = prologueFacts(this, c);
+      let text: string | null = null;
+      let meta: Record<string, unknown> = {};
+      if (this.master?.write) {
+        const r = await this.master.write(prologuePrompt(facts)).catch(() => null);
+        text = acceptPrologue(r?.text);
+        if (text && r) meta = { master: { model: r.model, usage: r.usage } };
+      }
+      if (has()) return null;
+      return this.events.emit({
+        actor_id: c.id, action_type: 'prologue', narration_private: forReader(this, c, text ?? prologueTemplate(facts)), observable: null,
+        tags: ['prologue'], payload: { title: facts.title, source: text ? 'master' : 'template', ...meta },
+      }, this.stampFor(c));
+    } finally { this.prologuing.delete(c.id); }
+  }
+
+  private recapping = new Set<Id>();
+  /**
+   * «Donde lo dejamos» (docs/PROLOGO.md): si el PJ lleva más de RECAP_AFTER_HOURS
+   * horas reales (72) o 7 días de juego sin un evento suyo, un evento `recap` con
+   * lo esencial, por plantilla. Con RECAP_POLISH=on y máster, pulido en prosa.
+   * El adaptador lo pide al abrir la partida. null si no toca.
+   */
+  async welcomeBack(characterId: Id, env: NodeJS.ProcessEnv = process.env): Promise<GameEvent | null> {
+    const c = this.world.characters.get(characterId);
+    if (!c || c.status === 'dead' || c.status === 'retired' || this.recapping.has(c.id)) return null;
+    this.recapping.add(c.id);
+    try {
+      await this.tick();
+      const gone = absence(this, c, this.now(), absenceRule(env));
+      if (!gone) return null;
+      let text = recapTemplate(this, c, gone.since, gone.hours);
+      let meta: Record<string, unknown> = {};
+      if (env['RECAP_POLISH'] === 'on' && this.master?.write) {
+        const r = await this.master.write(recapPrompt(text)).catch(() => null);
+        const polished = acceptRecap(r?.text);
+        if (polished && r) { text = forReader(this, c, polished); meta = { master: { model: r.model, usage: r.usage } }; }
+      }
+      const e = this.events.emit({
+        actor_id: c.id, action_type: 'recap', narration_private: text, observable: null, tags: ['recap'],
+        payload: { title: RECAP_TITLE, source: meta['master'] ? 'master' : 'template', away_hours: Math.round(gone.hours), away_game_days: Math.round(gone.game_days * 10) / 10, since_event_id: gone.since.id, ...meta },
+      }, this.stampFor(c));
+      await this.flush();
+      return e;
+    } finally { this.recapping.delete(c.id); }
   }
 
   /** Baja definitiva (válvula de admin, fase 1). Los eventos quedan; el PJ y sus cosas desaparecen. */

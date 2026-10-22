@@ -82,7 +82,7 @@ describe('gestor de partidas', () => {
     const games = manager();
     await expect(games.create({ name: '  ', mode: 'offline' })).rejects.toThrow(/nombre/);
     await expect(games.create({ name: 'X', mode: 'replay' as never })).rejects.toThrow(/Modo/);
-    await expect(games.create({ name: 'Dup', mode: 'offline', character: { name: 'Kael' } })).rejects.toThrow(/en uso/);
+    await expect(games.create({ name: 'Dup', mode: 'offline', campaign_id: 'demo', character: { name: 'Kael' } })).rejects.toThrow(/en uso/);
     expect(await games.list()).toEqual([]);
     expect(await readdir(join(dir, 'games'))).toEqual([]);
   });
@@ -153,7 +153,7 @@ describe('gestor de partidas', () => {
 
     // Lo jugado queda aparte; la demo arranca desde la foto inicial, con el mismo PJ y la caché.
     const p = games.paths(demo);
-    expect(await exists(join(p.dir, 'recorded', 'demo.world.json'))).toBe(true);
+    expect(await exists(join(p.dir, 'recorded', `${game.campaign_id}.world.json`))).toBe(true);
     const replay = await games.open(game.slug);
     expect(replay.world.characters.has(character_id!)).toBe(true);
     expect(replay.events.lastSeq).toBeLessThan(seqPlayed);

@@ -199,7 +199,10 @@ describe('primera escena', () => {
   it('al crear un personaje con master, la llegada la narra el master con el origen del punto de inicio', async () => {
     const { engine } = await bootEngine();
     const seen = collect(engine);
+    // Primero el prólogo (una llamada sin tools; docs/PROLOGO.md), luego la primera escena.
+    const prologue = `${'El frío baja de la montaña y Brezal cierra pronto. '.repeat(14)}Ana acaba de llegar.`;
     const { client, requests } = fakeClient([
+      msg([{ type: 'text', text: prologue, citations: null }], 'end_turn'),
       msg([logEvent('Bajas al claro con el estómago vacío. Junto al roble, alguien ha dejado un hacha clavada en un tocón reciente.', 'Una figura baja por el sendero.')]),
     ]);
     engine.attachMaster(new Master(engine, { client }));
@@ -211,8 +214,12 @@ describe('primera escena', () => {
     expect(intro?.ok).toBe(true);
     expect(intro!.event!.action_type).toBe('master_intro');
     expect(seen(r.character.id).at(-1)).toContain('Bajas al claro');
-    const ctx = requests[0]!.messages[0]!.content as string;
+    expect(seen(r.character.id)[0]).toBe(prologue);
+    expect(requests[0]!.tools).toBeUndefined();
+    expect(requests[0]!.messages[0]!.content as string).toMatch(/^## Prólogo/);
+    const ctx = requests[1]!.messages[0]!.content as string;
     expect(ctx).toContain('## Primera escena');
+    expect(ctx).toContain('Acaba de leer este prólogo');
     expect(ctx).toContain('Ha pasado la noche en el bosque de Fresnos');
     expect(ctx).not.toContain('## Acción del jugador');
   });

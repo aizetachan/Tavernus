@@ -1,0 +1,46 @@
+{
+  "campaigns": ["brezal", "demo"],
+  "scene": {
+    "loc_taberna": "vista/loc_taberna.jpg",
+    "loc_plaza": "vista/loc_plaza.jpg",
+    "loc_claro": "vista/loc_claro.jpg"
+  },
+  "portrait": {
+    "npc_brenna": "retrato/npc_brenna.jpg",
+    "npc_doro": "retrato/npc_doro.jpg",
+    "npc_lobo": "retrato/npc_lobo.jpg",
+    "master": "retrato/master.jpg",
+    "pc:human": "retrato/pc-human.jpg",
+    "pc:elf": "retrato/pc-elf.jpg",
+    "pc:dwarf": "retrato/pc-dwarf.jpg",
+    "pc:halfling": "retrato/pc-halfling.jpg",
+    "pc:gnome": "retrato/pc-gnome.jpg",
+    "pc:half-elf": "retrato/pc-half-elf.jpg",
+    "pc:half-orc": "retrato/pc-half-orc.jpg",
+    "pc:tiefling": "retrato/pc-tiefling.jpg",
+    "pc:dragonborn": "retrato/pc-dragonborn.jpg"
+  },
+  "item": {
+    "it_cofre": "objeto/it_cofre.jpg",
+    "it_hacha": "objeto/it_hacha.jpg",
+    "it_llave_vharn": "objeto/it_llave_vharn.jpg"
+  },
+  "discovery": {
+    "clue_hacha": "descubrimiento/clue_hacha.jpg",
+    "clue_pozo": "descubrimiento/clue_pozo.jpg",
+    "clue_doro": "descubrimiento/clue_doro.jpg",
+    "clue_brenna": "descubrimiento/clue_brenna.jpg",
+    "clue_trampilla": "descubrimiento/clue_trampilla.jpg",
+    "sp_tab_trampilla": "descubrimiento/clue_trampilla.jpg"
+  },
+  "combat": {
+    "npc_lobo": "combate/npc_lobo.jpg"
+  },
+  "region_map": "mapa/region.jpg",
+  "map_backgrounds": {
+    "loc_taberna": "plano/loc_taberna.jpg",
+    "loc_plaza": "plano/loc_plaza.jpg",
+    "loc_claro": "plano/loc_claro.jpg"
+  },
+  "maps": {}
+}

@@ -9,7 +9,7 @@ import { spawnItem, transferItem } from './inventory.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
 import type { World } from './world.js';
 
-export interface ProgressEvent { kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement'; text: string; public?: string }
+export interface ProgressEvent { kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story'; text: string; public?: string }
 
 export function addReputation(world: World, c: Character, factionId: Id, delta: number): number {
   c.reputation[factionId] = (c.reputation[factionId] ?? 0) + delta;
@@ -86,7 +86,17 @@ export function checkAchievement(world: World, c: Character): ProgressEvent | nu
   if (c.achievements.some((x) => x.id === a.id)) return null;
   if (c.clues.length < a.clues_required || (c.reputation[a.faction_id] ?? 0) < a.reputation_required) return null;
   c.achievements.push({ id: a.id, game_s: 0 });
-  if (a.reward_item_id) spawnItem(world, a.reward_item_id, 1, { type: 'character', id: c.id, slot: { kind: 'pocket' } });
+  if (a.reward_item_id) {
+    // Al bolsillo; si no cabe, a una mano libre o a sus pies: el premio no se pierde.
+    const spot = world.characterSpot(c);
+    const targets: Placement[] = [
+      { type: 'character', id: c.id, slot: { kind: 'pocket' } },
+      { type: 'character', id: c.id, slot: { kind: 'hand', which: 'off' } },
+      { type: 'character', id: c.id, slot: { kind: 'hand', which: 'main' } },
+      ...(spot ? [{ type: 'spot' as const, id: spot.id }] : []),
+    ];
+    targets.some((t) => spawnItem(world, a.reward_item_id!, 1, t).ok);
+  }
   if (a.reward_spot_id) {
     const sp = world.spot(a.reward_spot_id);
     if (!sp.discovered_by.includes(c.id)) { sp.discovered_by.push(c.id); world.touch('spots', sp.id); }

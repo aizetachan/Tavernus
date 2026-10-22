@@ -78,8 +78,11 @@ export interface Campaign {
   laws?: string[];
   /** Procedencia: cómo y con qué se generó este mundo. */
   generation?: GenerationInfo;
-  /** Situaciones iniciales aún sin dueño: la de cada PJ anunciado al generar y alguna de reserva. */
-  situations?: { for_name: string; situation: InitialSituation }[];
+  /**
+   * Situaciones iniciales aún sin dueño: la de cada PJ anunciado al generar y alguna de reserva.
+   * Campañas escritas: `for_classes` la reserva a esas clases (ids SRD) y `keep` la deja en la bolsa para el siguiente.
+   */
+  situations?: { for_name: string; for_classes?: string[]; keep?: boolean; situation: InitialSituation }[];
 }
 
 /** Evento de generación de un mundo (src/worldgen). */
@@ -124,6 +127,10 @@ export interface InitialSituation {
   opening: string;
   /** Instante de juego en que vence el plazo (lo fija el alta del PJ). */
   deadline_game_s?: number;
+  /** Campañas escritas: deuda con la que empieza (vence con el plazo), objetos que trae y a quién conoce ya. */
+  debt?: { npc_id: Id; amount: number; reason: string };
+  items?: { item_id: Id; quantity: number }[];
+  knows?: Id[];
 }
 
 export interface Faction { id: Id; name: string; description: string }

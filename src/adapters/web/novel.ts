@@ -77,8 +77,11 @@ export function cleanProse(narration: string, lines: readonly DialogueLine[]): s
   }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-/** Un trozo del turno en el orden en que pasa: narración o un parlamento (índice en `lines`; `text` si es solo un trozo de la línea). */
-export type NovelBlock = { kind: 'prose'; text: string } | { kind: 'line'; line: number; text?: string };
+/**
+ * Un trozo del turno en el orden en que pasa: narración o un parlamento (índice en `lines`; `text` si es solo un trozo de la línea).
+ * `lead`: la narración presenta el parlamento que sigue («Adiel deja la jarra y se vuelve hacia ti:») y se pinta pegada a él.
+ */
+export type NovelBlock = { kind: 'prose'; text: string; lead?: true } | { kind: 'line'; line: number; text?: string };
 
 /** Una cita tal como aparece en la narración: dónde empieza y acaba y qué dice. */
 interface QuoteSpan { start: number; end: number; text: string }
@@ -141,7 +144,8 @@ function stripQuoteMarks(text: string): string {
  * un personaje diga su frase en dos trozos); si ninguna línea casa, va a la
  * última persona que habló. La prosa entre citas pasa por cleanProse. Las
  * líneas que no aparecen citadas: las del jugador delante, el resto al final.
- * La prosa vacía entre dos parlamentos no genera bloque.
+ * La prosa vacía entre dos parlamentos no genera bloque. La prosa que termina en
+ * dos puntos justo antes de lo que dice un personaje lo presenta (`lead`).
  */
 export function novelBlocks(narration: string, lines: readonly DialogueLine[]): NovelBlock[] {
   const out: NovelBlock[] = [];
@@ -184,7 +188,12 @@ export function novelBlocks(narration: string, lines: readonly DialogueLine[]): 
   const missing = lines.map((_, i) => i).filter((i) => !placed.has(i));
   const front = missing.filter((i) => lines[i]!.speaker === 'actor').map((i): NovelBlock => ({ kind: 'line', line: i }));
   const back = missing.filter((i) => lines[i]!.speaker !== 'actor').map((i): NovelBlock => ({ kind: 'line', line: i }));
-  return [...front, ...out, ...back];
+  const all = [...front, ...out, ...back];
+  all.forEach((b, i) => {
+    const next = all[i + 1];
+    if (b.kind === 'prose' && /:$/.test(b.text) && next?.kind === 'line' && lines[next.line]?.speaker !== 'actor') b.lead = true;
+  });
+  return all;
 }
 
 /** Lo que lee el narrador de voz: los bloques tal como se pintan, con cada parlamento entre «». Lo que dice el propio jugador no se lee: ya lo ha escrito él. */
@@ -208,6 +217,8 @@ export const NOVEL_STYLE = String.raw`
   .msg.row.master .body, .msg.row.npc .body { background: var(--control); color: var(--text); font: inherit; letter-spacing: inherit; }
   .msg.row.mine .body { background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 24px rgba(233,169,78,.16), inset 0 1px 1px rgba(255,255,255,.25); }
   .msg.row.mine.act .body { font-style: italic; }
+  /* La frase del narrador que presenta a quien habla, dentro de su misma burbuja. */
+  .msg.row .lead { margin: 0 0 3px; font-style: italic; color: var(--muted); }
   .msg.row.pending { opacity: .55; }
   .msg.row .who { display: flex; align-items: center; gap: 6px; margin: 0 0 2px; font-size: 12.5px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--accent); }
   .msg.row.npc .who { color: var(--npc, #e6a587); }
@@ -241,6 +252,20 @@ export const NOVEL_STYLE = String.raw`
   .moment figcaption b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .moment figcaption span { font-size: 12px; font-weight: 500; color: var(--muted); }
   #log > .actions { margin: 6px 0 0 42px; }
+  /* Prólogo y «Donde lo dejamos»: página de libro, centrada, con título de capítulo. */
+  .msg.chapter { position: relative; align-self: center; width: min(600px, 100%); margin: 18px 0 14px; padding: 22px 28px 14px; border-radius: 8px;
+    background: linear-gradient(180deg, rgba(247,231,201,.07), rgba(247,231,201,.025)); box-shadow: inset 0 0 0 1px rgba(233,169,78,.18); animation: nv-in .6s ease-out; }
+  .msg.chapter .who { display: flex; justify-content: center; font: 600 11px/1 var(--sans); letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
+  .msg.chapter .who .tts-say { position: absolute; top: 14px; right: 14px; margin: 0; }
+  .msg.chapter h2 { margin: 10px 0 16px; text-align: center; font: 500 22px/1.25 Georgia, 'Iowan Old Style', 'Palatino Linotype', serif; letter-spacing: .01em; color: var(--accent); }
+  .msg.chapter h2::after { content: ''; display: block; width: 44px; height: 1px; margin: 14px auto 0; background: currentColor; opacity: .45; }
+  .msg.chapter .body { font: 16px/1.65 Georgia, 'Iowan Old Style', 'Palatino Linotype', serif; color: var(--text); text-align: justify; hyphens: auto; }
+  .msg.chapter .body p { margin: 0 0 .8em; text-indent: 1.4em; }
+  .msg.chapter .body p:first-child, .msg.chapter.recap .body p { text-indent: 0; }
+  .msg.chapter.prologue .body p:first-child::first-letter { float: left; font-size: 3.2em; line-height: .86; padding: 5px 8px 0 0; color: var(--accent); }
+  .msg.chapter.recap .body strong { font-weight: 600; color: var(--accent); }
+  #journal .en.chapter > span:last-child { font-family: Georgia, 'Iowan Old Style', serif; font-style: italic; color: var(--accent); }
+  @media (max-width: 820px) { .msg.chapter { padding: 18px 18px 10px; } .msg.chapter .body { font-size: 15px; text-align: left; } }
   @media (max-width: 820px) {
     .msg.row { max-width: 100%; }
     .nv-av { width: 30px; height: 30px; }
@@ -255,7 +280,7 @@ export const NOVEL_JS = String.raw`
   var cast = { master: { id: 'master', name: 'El Narrador', avatar: null }, me: { id: '', name: '', avatar: null } };
   /** Retratos ya hechos por id (NPC, PJ o «master»); llegan en los mensajes y por el evento «portrait». */
   var portraits = {};
-  var MOMENT_LABEL = { portrait: 'Retrato', item: 'Objeto', combat: 'Combate', discovery: 'Descubrimiento' };
+  var MOMENT_LABEL = { portrait: 'Retrato', item: 'Objeto', combat: 'Combate', discovery: 'Descubrimiento', manual: 'Momento' };
   var NPC_COLORS = ['#e6a587', '#8fc7a0', '#9bb8ef', '#d7a6e3', '#e3c27a', '#7fd0d0', '#ef9a9a'];
   function npcColor(id) { var h = 0; for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return NPC_COLORS[h % NPC_COLORS.length]; }
 
@@ -333,15 +358,30 @@ export const NOVEL_JS = String.raw`
   }
 
   /** Un mensaje del stream en el hilo: lo del PJ a la derecha, la narración y los NPCs a la izquierda. */
+  /** Prólogo o «Donde lo dejamos» (docs/PROLOGO.md): una página de libro a todo el ancho, sin avatar, con su título. */
+  var CHAPTER_KICKER = { prologue: 'Prólogo', recap: 'Recapitulación' };
+  function addChapter(m) {
+    var div = document.createElement('article');
+    div.className = 'msg chapter ' + m.chapter.kind;
+    div.setAttribute('data-seq', String(m.seq));
+    div.innerHTML = '<div class="who"><span class="kicker"></span></div><h2></h2><div class="body">' + format(m.text) + '</div>';
+    div.querySelector('.kicker').textContent = CHAPTER_KICKER[m.chapter.kind] || '';
+    div.querySelector('h2').textContent = m.chapter.title;
+    log.appendChild(div);
+    if (window.TavernusTTS) TavernusTTS.attach(div, m);
+    scroll();
+  }
+
   function chatMessage(m, live) {
     if (m.notice) { addNotice(m.notice); return; }
     if (m.scene) { showScene(m.scene); return; }
+    if (m.chapter) { addChapter(m); return; }
     if (m.input) clearPending();
     var lines = m.lines || [], main = null;
-    var say = function (l) {
+    var say = function (l, lead) {
       if (l.speaker === 'actor') return chatRow('mine', meWho(), escapeHtml(l.text));
       if (l.avatar) portraits[l.id] = l.avatar;
-      return chatRow('npc', { id: l.id, name: l.name, avatar: l.avatar }, escapeHtml(l.text));
+      return chatRow('npc', { id: l.id, name: l.name, avatar: l.avatar }, (lead ? '<div class="lead">' + escapeHtml(lead) + '</div>' : '') + escapeHtml(l.text));
     };
     var narrate = function (text) {
       if (m.narrator || m.kind === 'master') return chatRow('master', cast.master, format(text));
@@ -351,9 +391,14 @@ export const NOVEL_JS = String.raw`
     if (m.input && !lines.some(function (l) { return l.speaker === 'actor'; })) chatRow('mine', meWho(), format(m.input), { act: true });
     if (m.blocks && m.blocks.length) {
       // El turno en su orden real: narrador, personaje, narrador… cada trozo en su burbuja.
+      // La frase que presenta a quien habla (lead) va dentro de la burbuja de ese personaje.
+      var lead = null;
       m.blocks.forEach(function (b) {
+        if (b.kind === 'prose' && b.lead) { lead = b.text; return; }
         if (b.kind === 'prose') { var r = narrate(b.text); if (!main) main = r; }
-        else if (lines[b.line]) say(b.text ? Object.assign({}, lines[b.line], { text: b.text }) : lines[b.line]);
+        else if (lines[b.line]) say(b.text ? Object.assign({}, lines[b.line], { text: b.text }) : lines[b.line], lead);
+        else if (lead) { var rl = narrate(lead); if (!main) main = rl; }
+        lead = null;
       });
     } else {
       // Mensajes sin bloques (anteriores): las frases del jugador primero, luego narración y el resto.

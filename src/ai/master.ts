@@ -91,7 +91,29 @@ export class Master {
   }
 
   /** Resuelve una acción (o la continuación tras una tirada). */
-  async resolve(actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string }, scene?: Scene, decisive?: DecisiveResponse): Promise<MasterOutcome> {
+  /**
+   * Texto libre en una sola llamada, sin tools (prólogo, recapitulación; docs/PROLOGO.md).
+   * null si no sale texto: el cliente offline solo cierra con log_event, y entonces el motor usa su plantilla.
+   */
+  async write(req: { system: string; prompt: string; max_tokens?: number }): Promise<{ text: string; model: string; usage: { input: number; output: number } } | null> {
+    const { model } = effectiveModel(this.engine.world.campaign.master);
+    try {
+      const res = await this.client.create({
+        // La familia 5 piensa siempre (Opus 5.5 no deja apagarlo): esfuerzo bajo y margen para que quede sitio al texto.
+        model, max_tokens: req.max_tokens ?? 4000,
+        output_config: { effort: 'low' },
+        system: [{ type: 'text', text: req.system }],
+        messages: [{ role: 'user', content: req.prompt }],
+      });
+      const text = res.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('\n').trim();
+      return text ? { text, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens } } : null;
+    } catch (e) {
+      console.warn(`[master] write: ${e instanceof Anthropic.APIError ? `${e.status} ${e.message}` : (e as Error).message}`);
+      return null;
+    }
+  }
+
+  async resolve(actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string; prologue?: string }, scene?: Scene, decisive?: DecisiveResponse): Promise<MasterOutcome> {
     const { engine } = this;
     const cfg = engine.world.campaign.master;
     const { model, effort } = effectiveModel(cfg);

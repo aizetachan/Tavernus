@@ -25,6 +25,8 @@
  *   POST /api/command  {character, name}
  *   GET  /api/tts/config  ·  POST /api/tts?game=SLUG   narrador de voz (tts.ts)
  *   GET  /api/sfx?character=ID  ·  GET /api/sfx?key=CLAVE   sonido: estado del PJ y ficheros (sfx.ts)
+ *   GET|POST /api/illustrate?character=ID  pincel: ilustrar el momento actual (paint.ts)
+ *   GET|POST /api/avatar?character=ID  avatar del PJ: versiones, «Otro», «Descríbelo», elegir (avatar.ts)
  *
  * Sin autenticación: escucha solo en 127.0.0.1 y cualquiera con la página juega con cualquier PJ.
  */
@@ -49,8 +51,10 @@ import { illustratorOf, MASTER_PORTRAIT_ID, masterPortraitOf, portraitOf, sceneO
 import { type DialogueLine, type Moment } from '../../engine/moments.js';
 import { blocksSpeech, novelBlocks, type NovelBlock } from './novel.js';
 import { handleJournalRequest, noticeOf, touchesJournal, type WebNotice } from './journal.js';
+import { handlePaintRequest } from './paint.js';
+import { handleAvatarRequest } from './avatar.js';
 
-const MASTER_TYPES = new Set(['master', 'master_roll_outcome', 'master_intro', 'master_arrival']);
+const MASTER_TYPES = new Set(['master', 'master_roll_outcome', 'master_intro', 'master_arrival', 'prologue', 'recap']);
 const HISTORY = 200;
 /** Avisos fuera de la ficción: tiradas, progreso, anuncios, tablón. Lo demás lo cuenta el narrador. */
 const SYSTEM_TYPES = /^(roll|progress_|announcement|board|admin_|decisive_expired)/;
@@ -86,6 +90,8 @@ interface WebMessage {
   sfx?: string[];
   /** Aviso de una línea en lugar de burbuja (tablón, progreso): lleva al Diario. */
   notice?: WebNotice;
+  /** Prólogo o «Donde lo dejamos» (docs/PROLOGO.md): página de libro con su título, sin avatar. */
+  chapter?: { kind: 'prologue' | 'recap'; title: string };
 }
 
 /** Lo que la web cuelga de cada motor abierto: conexiones SSE e historial en memoria. */
@@ -237,6 +243,8 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
     if (req.method === 'GET' && url.pathname === '/api/stream') {
       const id = characterOr404(engine, characterParam, res);
       if (!id) return;
+      // Vuelve tras días sin jugar: «Donde lo dejamos» entra en el historial antes de mandarlo.
+      await engine.welcomeBack(id).catch((e) => console.error('[web] recap:', e));
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
       const ill = illustratorOf(engine);
       rt.offerScene(id);
@@ -252,6 +260,8 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
     }
     if (req.method === 'GET' && url.pathname === '/api/board') { handleBoardRequest(engine, req, res, url); return; }
     if (req.method === 'GET' && url.pathname === '/api/journal') { handleJournalRequest(engine, req, res, url, slug); return; }
+    if (url.pathname === '/api/avatar') { await handleAvatarRequest(engine, req, res, url, slug); return; }
+    if (url.pathname === '/api/illustrate') { await handlePaintRequest(engine, req, res, url, slug, rt.streams); return; }
     if (req.method === 'GET' && url.pathname === '/api/map') { handleMapRequest(engine, req, res, url); return; }
     if (req.method === 'GET' && url.pathname === '/api/sfx') { await handleSfxRequest(engine, res, url, games.paths((await games.get(slug))!).dir); return; }
     if (req.method === 'GET' && url.pathname === '/api/scene') {
@@ -325,7 +335,7 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
       const dice_seed = seedRaw === null || seedRaw === undefined || seedRaw === '' ? null : Number(seedRaw);
       const created = await games.create({
         name: str('name'), mode: mode as NewGameMode, dice_seed,
-        character: str('character') ? { name: str('character'), ...(str('race') ? { race_id: str('race') } : {}), ...(str('class') ? { class_id: str('class') } : {}), ...(str('hook') ? { hook: str('hook') } : {}) } : null,
+        character: str('character') ? { name: str('character'), ...(str('race') ? { race_id: str('race') } : {}), ...(str('class') ? { class_id: str('class') } : {}), ...(str('hook') ? { hook: str('hook') } : {}), ...(str('appearance') ? { appearance: str('appearance') } : {}) } : null,
         // Mundo nuevo generado (src/worldgen); lo valida el gestor.
         world: body['world'] && typeof body['world'] === 'object' ? body['world'] as WorldInput : null,
       });
@@ -401,6 +411,11 @@ function toMessage(d: Delivery, engine: Engine): WebMessage {
   if (notice) { m.text = ''; m.notice = notice; return m; }
   if (!SYSTEM_TYPES.test(e.action_type)) m.narrator = true;
   if (e.actor_id !== d.character_id) return m;
+  if (e.action_type === 'prologue' || e.action_type === 'recap') {
+    m.chapter = { kind: e.action_type, title: typeof e.payload['title'] === 'string' ? e.payload['title'] : '' };
+    m.speech = `${m.chapter.title}. ${d.text.replace(/\*\*/g, '')}`;
+    return m;
+  }
   // La tirada y su desenlace no repiten la acción: ya salió en el mensaje que pidió la tirada.
   if (e.input_text && e.action_type !== 'master_roll_outcome' && !e.input_text.startsWith('(')) m.input = e.input_text;
   const sfx = soundCuesOf(engine, e);
