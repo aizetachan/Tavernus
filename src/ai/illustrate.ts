@@ -44,12 +44,13 @@
  * retrato > objeto > escena, sin saltarse los 45 s ni la cuota.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Engine, FirstVisit, MomentNotice } from '../engine/engine.js';
 import type { Campaign, GameEvent, Id, LightLevel } from '../engine/model.js';
 import { lightAt } from '../engine/perception.js';
 import type { MasterMode } from './mode.js';
+import { assetsFor, writtenImage, type AssetManifest } from './assets.js';
 
 export const POLLINATIONS_BASE = 'https://image.pollinations.ai/prompt/';
 export const STYLE = 'fantasy illustration, medieval, painterly';
@@ -60,7 +61,8 @@ export const CLOUDFLARE_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 export const CLOUDFLARE_STEPS = 4;
 const CLOUDFLARE_MAX_PROMPT = 2048;
 
-export type ImageProvider = 'cloudflare' | 'pollinations';
+/** `written`: activo hecho a mano (src/ai/assets.ts), no generado. */
+export type ImageProvider = 'cloudflare' | 'pollinations' | 'written';
 export interface CloudflareCreds { accountId: string; apiToken: string }
 
 /** Credenciales de Cloudflare del entorno; null si falta alguna. */
@@ -74,7 +76,7 @@ export function cloudflareUrl(accountId: string): string {
   return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${CLOUDFLARE_MODEL}`;
 }
 
-const LIGHT_EN: Record<LightLevel, string> = {
+export const LIGHT_EN: Record<LightLevel, string> = {
   day: 'daylight',
   twilight: 'dim warm light, dusk',
   night_moon: 'night, pale moonlight',
@@ -89,12 +91,12 @@ export interface SceneInput {
   indoor: boolean;
 }
 
-/** Qué muestra la imagen. Las de índices antiguos no lo llevan: son escenas. */
-export type ImageKind = 'scene' | 'portrait' | 'item' | 'combat' | 'discovery';
+/** Qué muestra la imagen. Las de índices antiguos no lo llevan: son escenas. `manual`: el pincel del jugador (src/ai/paint.ts). */
+export type ImageKind = 'scene' | 'portrait' | 'item' | 'combat' | 'discovery' | 'manual';
 export type EntityKind = Exclude<ImageKind, 'scene'>;
 
-/** Orden en la cola: retrato > objeto > escena. */
-export const PRIORITY: Record<ImageKind, number> = { portrait: 3, item: 2, scene: 1, combat: 1, discovery: 1 };
+/** Orden en la cola: retrato > objeto = pincel (lo espera el jugador) > escena. */
+export const PRIORITY: Record<ImageKind, number> = { portrait: 3, item: 2, manual: 2, scene: 1, combat: 1, discovery: 1 };
 
 export interface SceneImage {
   key: string;
@@ -129,6 +131,8 @@ export interface EntityInput {
   name: string;
   location_id: Id;
   prompt: string;
+  /** Otros ids con los que buscar un activo escrito si no hay uno de `entity_id` (`pc:<raza>-<clase>`, el punto descubierto…). */
+  asset_ids?: Id[];
 }
 
 /** ¿Ilustraciones activas? Solo con IMAGES=on; el modo del máster no influye (`mode` se conserva por compatibilidad). */
@@ -204,7 +208,7 @@ export function entityKey(kind: EntityKind, entityId: Id, seed: number): string 
 
 /** Tamaño en Pollinations (Cloudflare siempre devuelve 1024x1024). */
 const SIZE: Record<EntityKind, { width: number; height: number }> = {
-  portrait: { width: 512, height: 640 }, item: { width: 512, height: 512 }, combat: { width: 768, height: 512 }, discovery: { width: 768, height: 512 },
+  portrait: { width: 512, height: 640 }, item: { width: 512, height: 512 }, combat: { width: 768, height: 512 }, discovery: { width: 768, height: 512 }, manual: { width: 768, height: 512 },
 };
 
 export function pollinationsUrl(prompt: string, seed: number, opts: { width?: number; height?: number; nologo?: boolean } = {}): string {
@@ -332,9 +336,13 @@ export class Illustrator {
   private listeners: IllustratedListener[] = [];
   /** Retratos, objetos y escenas de momento por `<kind>:<entity_id>`. */
   private readonly byEntity = new Map<string, SceneImage>();
+  /** Versión elegida de un retrato (avatar del PJ, src/ai/avatar.ts): manda sobre la de `byEntity`. */
+  private readonly pinned = new Map<string, SceneImage>();
   private entityListeners: EntityListener[] = [];
   /** Peticiones de red hechas (para /estado y tests). */
   requests = 0;
+  /** Activos escritos de la campaña: si hay uno, se sirve ese y no se pide nada (lo pone attachIllustrator). */
+  assets: AssetManifest | null = null;
 
   constructor(opts: IllustratorOptions) {
     this.opts = {
@@ -354,6 +362,9 @@ export class Illustrator {
 
   /** Proveedor principal. */
   get provider(): ImageProvider { return this.opts.cloudflare ? 'cloudflare' : 'pollinations'; }
+
+  /** Cuota diaria de Cloudflare agotada (hasta la medianoche UTC); siempre false sin Cloudflare. */
+  get cloudflareExhausted(): boolean { return this.opts.cloudflare !== null && this.opts.now() < this.cloudflareDownUntil; }
 
   onIllustrated(l: IllustratedListener): () => void {
     this.listeners.push(l);
@@ -390,7 +401,14 @@ export class Illustrator {
   }
 
   /** Retrato u objeto ya hecho (combat/discovery: la del evento). */
-  entityImage(kind: EntityKind, entityId: Id): SceneImage | null { return this.byEntity.get(`${kind}:${entityId}`) ?? null; }
+  entityImage(kind: EntityKind, entityId: Id): SceneImage | null { return this.pinned.get(`${kind}:${entityId}`) ?? this.byEntity.get(`${kind}:${entityId}`) ?? null; }
+
+  /** Fija qué imagen representa a la entidad (la versión elegida de un avatar) y avisa a los oyentes. */
+  pin(kind: EntityKind, entityId: Id, image: SceneImage): void {
+    const shown = { ...image, entity_id: entityId };
+    this.pinned.set(`${kind}:${entityId}`, shown);
+    for (const l of this.entityListeners) l({ image: shown, character_id: null, event_seq: null, moment_key: null });
+  }
 
   /**
    * Ilustra una entidad una sola vez (retrato de NPC o PJ, tipo de objeto, escena
@@ -400,10 +418,12 @@ export class Illustrator {
     const seed = sceneSeed(this.opts.worldSeed, e.entity_id);
     const key = entityKey(e.kind, e.entity_id, seed);
     const image = await this.obtain(key, e.name, () => this.produce(key, seed, e.prompt,
-      { location_id: e.location_id, name: e.name, kind: e.kind, entity_id: e.entity_id }, SIZE[e.kind], PRIORITY[e.kind]));
+      { location_id: e.location_id, name: e.name, kind: e.kind, entity_id: e.entity_id }, SIZE[e.kind], PRIORITY[e.kind], e.asset_ids));
     if (image) {
       this.byEntity.set(`${e.kind}:${e.entity_id}`, image);
-      for (const l of this.entityListeners) l({ image, character_id: from?.character_id ?? null, event_seq: from?.event_seq ?? null, moment_key: from?.moment_key ?? null });
+      // Si hay una versión elegida, el aviso lleva esa (el retrato de base no la pisa en el hilo).
+      const shown = this.pinned.get(`${e.kind}:${e.entity_id}`) ?? image;
+      for (const l of this.entityListeners) l({ image: shown, character_id: from?.character_id ?? null, event_seq: from?.event_seq ?? null, moment_key: from?.moment_key ?? null });
     }
     return image;
   }
@@ -424,7 +444,25 @@ export class Illustrator {
     return p;
   }
 
-  private async produce(key: string, seed: number, prompt: string, meta: Pick<SceneImage, 'location_id' | 'name' | 'kind' | 'entity_id'>, size: { width: number; height: number }, priority: number): Promise<SceneImage> {
+  /** Activo escrito: manda sobre la caché y sobre la IA. Se copia a la carpeta de la partida para servirlo como las demás. */
+  private async fromAssets(key: string, seed: number, prompt: string, meta: Pick<SceneImage, 'location_id' | 'name' | 'kind' | 'entity_id'>, alt: Id[]): Promise<SceneImage | null> {
+    // El pincel del jugador (src/ai/paint.ts) pinta un turno concreto: nunca hay activo escrito.
+    if (meta.kind === 'manual') return null;
+    const found = writtenImage(this.assets, meta.kind ?? 'scene', [meta.entity_id ?? meta.location_id, ...alt]);
+    if (!found) return null;
+    const index = await this.loadIndex();
+    const file = `${key}-escrito.jpg`;
+    await mkdir(this.opts.dir, { recursive: true });
+    await copyFile(found.file, join(this.opts.dir, file));
+    const image: SceneImage = { key, ...meta, seed, prompt, provider: 'written', url: `asset:${found.rel}`, file };
+    index[key] = image;
+    await this.saveIndex();
+    return image;
+  }
+
+  private async produce(key: string, seed: number, prompt: string, meta: Pick<SceneImage, 'location_id' | 'name' | 'kind' | 'entity_id'>, size: { width: number; height: number }, priority: number, alt: Id[] = []): Promise<SceneImage> {
+    const written = await this.fromAssets(key, seed, prompt, meta, alt);
+    if (written) return written;
     const index = await this.loadIndex();
     const cached = index[key];
     if (cached) return cached;
@@ -586,7 +624,7 @@ export function portraitOf(engine: Engine, id: Id, locationId: Id): EntityInput 
   const npc = w.npcs.get(id);
   if (npc) return { kind: 'portrait', entity_id: id, name: npc.name, location_id: locationId, prompt: portraitPrompt({ name: npc.name, role: npc.role, description: npc.description }, style) };
   const c = w.characters.get(id);
-  if (c) return { kind: 'portrait', entity_id: id, name: c.name, location_id: locationId, prompt: portraitPrompt({ name: c.name, role: `${c.race} ${c.class_name}`, description: c.appearance }, style) };
+  if (c) return { kind: 'portrait', entity_id: id, name: c.name, location_id: locationId, prompt: portraitPrompt({ name: c.name, role: `${c.race} ${c.class_name}`, description: c.appearance }, style), asset_ids: [`pc:${c.race_id}-${c.class_id}`, `pc:${c.race_id}`] };
   return null;
 }
 
@@ -619,10 +657,17 @@ export function entityOf(engine: Engine, m: MomentNotice['moment'], e: GameEvent
       const loc = w.locations.get(e.location_id);
       if (!loc) return null;
       const spot = m.subject ? w.spots.get(m.subject) : undefined;
-      const what = spot ? `${spot.name}: ${spot.description}` : (e.observable ?? e.narration_private);
-      const fallen = m.kind === 'combat' && m.subject ? (w.npcs.get(m.subject)?.name ?? w.characters.get(m.subject)?.name) : undefined;
+      // Combate: quién lucha contra quién. El texto del evento de la tirada es la línea de dados («🎲 Ataque…: d20 [16] + 5»), no una escena.
+      const npc = m.kind === 'combat' && m.subject ? w.npcs.get(m.subject) : undefined;
+      const pc = m.kind === 'combat' && m.subject && !npc ? w.characters.get(m.subject) : undefined;
+      const foe = npc ? `${npc.name}, ${npc.role}: ${npc.description}` : pc ? `${pc.name}, ${pc.race} ${pc.class_name}: ${pc.appearance}` : null;
+      const attacker = w.characters.get(m.character_id);
+      const what = spot ? `${spot.name}: ${spot.description}`
+        : foe ? `${attacker ? `${attacker.name} (${attacker.race} ${attacker.class_name})` : 'A hero'} fighting ${foe}`
+        : (e.observable ?? e.narration_private);
+      const fallen = npc?.name ?? pc?.name;
       return {
-        kind: m.kind, entity_id: e.id, name: fallen ? `${loc.name} · ${fallen}` : spot?.name ?? loc.name, location_id: loc.id,
+        kind: m.kind, entity_id: e.id, name: fallen ? `${loc.name} · ${fallen}` : spot?.name ?? loc.name, location_id: loc.id, ...(m.subject ? { asset_ids: [m.subject] } : {}),
         prompt: momentPrompt({ place: `${loc.name} (${loc.indoor ? 'interior' : 'exterior'})`, what, light: lightAt(engine.clock, loc, e.timestamp_game_s), kind: m.kind }, style),
       };
     }
@@ -636,6 +681,7 @@ export function entityOf(engine: Engine, m: MomentNotice['moment'], e: GameEvent
  */
 export function attachIllustrator(engine: Engine, illustrator: Illustrator): Illustrator {
   attached.set(engine, illustrator);
+  illustrator.assets ??= assetsFor(engine.world.campaign.id);
   void illustrator.load();
   engine.onFirstVisit((v: FirstVisit) => {
     void illustrator.illustrate(sceneOf(engine, v.location_id, v.game_s), v.character_id);

@@ -16,6 +16,7 @@ import type { Id } from '../../engine/model.js';
 import { positionOf } from '../../engine/movement.js';
 import type { LocationMap } from '../../data/seed/maps.js';
 import { generateMap, mapInputOf } from './mapgen.js';
+import { assetsFor, writtenMap } from '../../ai/assets.js';
 
 export interface CachedMap {
   /** Plano entero, generado con la semilla de la campaña: sus límites no incluyen lo oculto y se amplían al descubrirlo. */
@@ -137,6 +138,9 @@ export class MapCache {
   }
 
   private build(locationId: Id): CachedMap {
+    // Plano escrito por el equipo (datos LocationMap del manifiesto de la campaña): manda sobre el generado.
+    const written = writtenMap(assetsFor(this.engine.world.campaign.id), locationId);
+    if (written) return { map: structuredClone(written) };
     const input = mapInputOf(this.engine.world, locationId);
     for (const dep of [...input.spots.map((s) => s.id), ...(input.exits ?? []).flatMap((e) => [e.id, e.to_location_id])]) {
       let set = this.deps.get(dep);

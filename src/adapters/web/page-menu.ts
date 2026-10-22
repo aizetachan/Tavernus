@@ -176,7 +176,7 @@ export const MENU = String.raw`<!doctype html>
       <input id="g-name" type="text" maxlength="60" placeholder="La noche del Brezal" required>
       <label>Mundo</label>
       <div class="modes two">
-        <label><input type="radio" name="world" value="demo" checked>Brezal (demo)<small>La aldea de siempre, escrita a mano.</small></label>
+        <label><input type="radio" name="world" value="demo" checked>Brezal (demo)<small>Campaña escrita: la aldea de siempre, con su historia en tres actos y tu personaje con un porqué.</small></label>
         <label><input type="radio" name="world" value="generated">Mundo nuevo (generado)<small>Otro lugar, otra historia, y tu personaje con un porqué.</small></label>
       </div>
       <div id="world-opts" hidden>
@@ -205,6 +205,8 @@ export const MENU = String.raw`<!doctype html>
         <label for="g-hook">¿Qué le trae aquí? <span class="note">(opcional: si lo dejas vacío, el mundo se lo inventa)</span></label>
         <input id="g-hook" type="text" maxlength="400" placeholder="Busca a su hermano, que vino a este pueblo y no volvió">
       </div>
+      <label for="g-look">Cómo se ve <span class="note">(opcional: de ahí sale su retrato; luego puedes pedir otro)</span></label>
+      <input id="g-look" type="text" maxlength="300" placeholder="Pelo cobrizo trenzado, cicatriz en la ceja, capa de lana verde">
       <details>
         <summary>Más opciones</summary>
         <label for="g-seed">Semilla de dados <span class="note">(vacía: al azar; al grabar se elige una sola)</span></label>
@@ -307,7 +309,7 @@ export const MENU = String.raw`<!doctype html>
     info.appendChild(el('div', 'name', g.name));
     var meta = [when(g)];
     if (g.mode === 'record' || g.mode === 'replay') meta.push(g.cache_entries + ' respuestas grabadas');
-    if (g.world) meta.push('mundo generado · semilla ' + g.world.seed);
+    if (g.world) meta.push((g.world.template ? 'mundo de plantilla' : 'mundo generado') + ' · semilla ' + g.world.seed);
     var m = el('div', 'meta', meta.join(' · ')); m.title = m.textContent;
     info.appendChild(m);
     c.appendChild(info);
@@ -420,7 +422,7 @@ export const MENU = String.raw`<!doctype html>
     $('new-error').textContent = '';
     submit.disabled = true;
     var gen = generated();
-    var body = { name: $('g-name').value, mode: mode(), character: $('g-char').value, race: $('g-race').value, class: $('g-class').value, dice_seed: $('g-seed').value };
+    var body = { name: $('g-name').value, mode: mode(), character: $('g-char').value, race: $('g-race').value, class: $('g-class').value, appearance: $('g-look').value, dice_seed: $('g-seed').value };
     if (gen) {
       body.world = { seed: $('g-wseed').value, tone: $('g-tone').value, setting: $('g-setting').value };
       body.hook = $('g-hook').value;
@@ -437,6 +439,13 @@ export const MENU = String.raw`<!doctype html>
       .then(function (r) { return r.json(); })
       .then(function (r) {
         if (!r.ok) { $('new-error').textContent = r.text; done(); return; }
+        // Pediste a Claude y salió de plantilla (sin clave de API): se dice antes de entrar.
+        if (gen && mode() !== 'offline' && r.game.world && r.game.world.template) {
+          note.hidden = false;
+          note.textContent = 'Sin clave de API: el mundo ha salido en modo plantilla (nombres y textos de prueba). Entrando…';
+          setTimeout(function () { open(r.game.slug, r.character_id); }, 3500);
+          return;
+        }
         open(r.game.slug, r.character_id);
       })
       .catch(function () { $('new-error').textContent = 'No hay conexión con el servidor.'; done(); });

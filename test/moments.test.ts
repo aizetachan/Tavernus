@@ -280,7 +280,7 @@ describe('hilo de la web', () => {
       masterFor: (engine) => new Master(engine, { client: offlineClient() }), engine: { deterministic: true },
       illustrator: { fetch: f, minIntervalMs: 0, queue: new PollinationsQueue(), cloudflareLimit: new Limiter(2) },
     });
-    const { game, character_id } = await games.create({ name: 'Hilo', mode: 'offline', character: { name: 'Ana' } });
+    const { game, character_id } = await games.create({ name: 'Hilo', mode: 'offline', campaign_id: 'demo', character: { name: 'Ana' } });
     web = createWebServer(games, { tickMs: 3_600_000 });
     await new Promise<void>((resolve) => web!.server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${(web.server.address() as import('node:net').AddressInfo).port}`;

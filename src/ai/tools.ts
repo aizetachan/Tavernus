@@ -13,9 +13,10 @@ import { perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
+import { advanceStory } from '../engine/story.js';
 import { attitudeOf, resolveAttack } from '../engine/combat.js';
 import { characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
-import { fmtDuration } from '../engine/narrate.js';
+import { descriptorOf, fmtDuration } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
 import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
 import { addScheduledEvent, listSchedule, RECURRENCES } from '../engine/schedule.js';
@@ -24,6 +25,7 @@ import type { DialogueLine } from '../engine/moments.js';
 import { fmtCoins, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
 import { inventedPlaces } from '../engine/places.js';
 import { DEAL_REJECTION, dealWithoutState, outcomeMismatch, outcomeRejection, type RollCategory } from '../engine/closecheck.js';
+import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
 type Tool = Anthropic.Beta.BetaTool;
@@ -114,6 +116,9 @@ export const MASTER_TOOLS: Tool[] = [
   }),
   tool('complete_job', 'Cierra un encargo del tablón para el actor al entregárselo al NPC que lo pidió. El servidor valida entrega (quita los objetos), paga y sube reputación. Para encargos narrativos, llámalo solo cuando el objetivo se haya cumplido de verdad en la ficción.', {
     character_id: str('ID del personaje'), job_id: str('ID del encargo'), npc_id: str('ID del NPC al que se entrega'),
+  }),
+  tool('advance_story', 'Campañas escritas: marca como dado el paso NARRATIVO en curso de una misión del actor (lo dice «Historia escrita» en el contexto: «lo decides tú con advance_story»), SOLO cuando se ha cumplido de verdad en la ficción. Los demás pasos los detecta el servidor solo.', {
+    quest_id: str('ID de la misión (q_…)'), step_id: str('ID del paso en curso'),
   }),
   tool('sell_item', 'Vende un objeto a un NPC que lo compre, al precio de su lista. Cobra en el acto.', {
     character_id: str('ID del personaje'), npc_id: str('ID del NPC'), instance_id: str('ID del ejemplar'), quantity: nnum('Cantidad, o null para todo'),
@@ -226,7 +231,7 @@ export const MASTER_TOOLS: Tool[] = [
 
 /** Tools que cambian el mundo: si fallan, eso no ha ocurrido y no se puede narrar (master.ts). */
 export const WRITE_TOOLS = new Set([
-  'move_to', 'transfer_item', 'spawn_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job',
+  'move_to', 'transfer_item', 'spawn_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story',
   'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
 ]);
 
@@ -258,6 +263,8 @@ export interface ToolContext {
   /** Cierres rechazados por trato sin estado o por desenlace contra la tirada (uno de cada como mucho). */
   deal_rejections?: number;
   outcome_rejections?: number;
+  /** Cierres rechazados por narración de relleno en conversación (conversation.ts; uno como mucho). */
+  conversation_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -602,6 +609,14 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       ctx.progress.push(...r.events);
       return { ok: true, events: r.events.map((e) => e.text) };
     }
+    case 'advance_story': {
+      const r = advanceStory(world, actor, s('quest_id'), s('step_id'), nowGameS);
+      if (!r.ok) return { error: r.error };
+      const mine = r.output.personal.filter((p) => p.character_id === actor.id).flatMap((p) => p.events);
+      ctx.progress.push(...mine);
+      engine.emitStory({ personal: r.output.personal.filter((p) => p.character_id !== actor.id), announcements: r.output.announcements });
+      return { ok: true, events: mine.map((e) => e.text) };
+    }
     case 'complete_job': {
       const missJ = s('character_id') === actor.id ? reachNpc(ctx, world.npc(s('npc_id'))) : null;
       if (missJ) return missJ;
@@ -740,6 +755,18 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: `La narración cita ${invented.map((w) => `«${w}»`).join(', ')}, que no existe en ${world.location(here()).name}. ${hereList(ctx)} Reescribe log_event sin ese lugar: si el jugador lo busca, di en ficción que no lo hay (o lo que sí hay).` };
         }
       }
+      // En conversación el narrador solo entra cuando aporta: relleno o narración larga se reescriben una vez; vacía con lines vale.
+      if ((ctx.conversation_rejections ?? 0) < 1) {
+        const conv = conversationOf(engine.events.all(), actor.id, positionOf(world, actor, nowGameS));
+        const npcId = input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null;
+        const lines = parseLines(input['lines'], npcId, (id) => world.npcs.has(id));
+        const p = conversationCheck({ conversation: conv, narration: s('narration_private'), lines, npcId, okTools: ctx.ok_tools ?? [], attack: req?.kind === 'attack', rollOutcome: Boolean(ctx.roll_category) });
+        if (p && conv) {
+          ctx.conversation_rejections = (ctx.conversation_rejections ?? 0) + 1;
+          const npc = world.npcs.get(conv.npc_id);
+          return { error: conversationRejection(p, !npc ? 'ese personaje' : actor.knows.includes(npc.id) ? npc.name : descriptorOf(world, npc.id)) };
+        }
+      }
       if (input['npc_id']) {
         const npc = world.npcs.get(s('npc_id'));
         // Habla con alguien de la sala que está a unos metros: el motor lo acerca antes (si no es hostil).
@@ -785,8 +812,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         }
       }
       const approached = ctx.approach && !/\bacerc/i.test(s('narration_private')) ? `Te acercas a ${world.spot(ctx.approach.to_spot_id).name}. ` : '';
+      const closingNpc = input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null;
+      const closingLines = parseLines(input['lines'], closingNpc, (id) => world.npcs.has(id));
       ctx.closed = {
-        narration_private: approached + cleanText(s('narration_private')),
+        // Lo dicho que no va citado en la narración (en conversación puede ir vacía) se guarda como citas.
+        narration_private: approached + narrationWithLines(cleanText(s('narration_private')), closingLines),
         observable: input['observable'] == null ? null : cleanText(s('observable')) || null,
         observable_vague: input['observable_vague'] == null ? null : cleanText(s('observable_vague')) || null,
         loudness: Number(input['loudness']) || 1,
@@ -794,8 +824,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter(Boolean).slice(0, 4),
         requires_roll: req,
         decisive: input['decisive_threat'] ? { threat: cleanText(s('decisive_threat')), npc_id: input['decisive_npc_id'] ? s('decisive_npc_id') : null } : null,
-        npc_id: input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null,
-        lines: parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id)),
+        npc_id: closingNpc,
+        lines: closingLines,
       };
       return { ok: true, closed: true };
     }

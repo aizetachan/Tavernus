@@ -1,8 +1,8 @@
 /**
  * Generador de campaña: sustituye a la semilla fija (src/data/seed/demo.ts).
  *
- *   esqueleto (skeleton.ts, código + semilla) → relleno (fill.ts, una llamada
- *   a la API o plantilla offline) → validación → WorldSnapshot
+ *   esqueleto (skeleton.ts, código + semilla) → relleno (fill.ts, tres llamadas
+ *   pequeñas a la API —mundo, gente, situaciones— o plantilla offline) → validación → WorldSnapshot
  *
  * `generateSeed` devuelve lo mismo que `makeSeed()`, así que Engine.boot lo
  * acepta tal cual. La Biblia, las leyes, la semilla y la procedencia viajan
@@ -15,10 +15,14 @@ import type { World } from '../engine/world.js';
 import { DEFAULT_MASTER, makeSeed } from '../data/seed/demo.js';
 import { buildSkeleton, type Skeleton, type Tone } from './skeleton.js';
 import { lockedRoomState, ROOM_NIGHT_ITEM_ID, ROOM_NIGHT_PRICE, roomSeller } from './rooms.js';
-import { CATALOG, DEFAULT_WORLDGEN_MODEL, fillWorld, GENRE_DEFAULT, liveFillClient, type FillClient, type PcBrief, type WorldFill } from './fill.js';
+import { CATALOG, DEFAULT_WORLDGEN_MODEL, FillError, fillWorld, GENRE_DEFAULT, liveFillClient, type FillClient, type PcBrief, type WorldFill } from './fill.js';
+import { validateSnapshot } from './validate.js';
+import { setDebt } from '../engine/debts.js';
+import { spawnItem } from '../engine/inventory.js';
 
 export { buildSkeleton, TONES, type Skeleton, type Tone } from './skeleton.js';
 export { FillError, offlineFill, validateFill, type FillClient, type PcBrief, type WorldFill } from './fill.js';
+export { validateSnapshot } from './validate.js';
 
 export const REWARD_ITEM_ID = 'it_reward';
 const DAY_S = 24 * 3600;
@@ -75,10 +79,14 @@ export async function generateSeed(opts: GenerateOptions): Promise<WorldSnapshot
   const model = opts.model ?? (env['WORLDGEN_MODEL']?.trim() || DEFAULT_WORLDGEN_MODEL);
   const r = await fillWorld(sk, pcs, { client, model, log });
   log(`[worldgen] mundo ${sk.campaign_id} (semilla ${sk.seed}): «${r.fill.campaign_name}» con ${r.model}${r.attempts ? `, ${r.usage.input} in / ${r.usage.output} out, ${r.cost_usd} $` : ''}`);
-  return buildSnapshot(sk, r.fill, {
+  const snap = buildSnapshot(sk, r.fill, {
     seed: sk.seed, tone: sk.tone, setting: sk.setting, model: r.model, generated_at: (opts.now?.() ?? new Date()).toISOString(),
     attempts: r.attempts, usage: r.usage, cost_usd: r.cost_usd, skeleton_version: sk.version, settlement: sk.settlement.label, genre: sk.genre,
   });
+  // El mismo validador que las campañas escritas (src/data/campaigns): un mundo incoherente no se juega.
+  const errs = validateSnapshot(snap);
+  if (errs.length) throw new FillError(`El mundo generado no es coherente: ${errs[0]}`, errs);
+  return snap;
 }
 
 /** Esqueleto + relleno validado → snapshot del mundo. Puro. */
@@ -139,6 +147,8 @@ export function buildSnapshot(sk: Skeleton, f: WorldFill, generation: Generation
       board: { active_job_ids: [], last_rotation_day: -1 },
       bible: [...f.bible], laws: [...f.laws], generation,
       situations: f.situations.map(({ for_name, ...s }) => ({ for_name: for_name.trim(), situation: { ...s, paths: [...s.paths] } })),
+      // La agenda de la demo apunta a puntos de Brezal: un mundo generado empieza sin ella.
+      ...{ schedule: [] },
     },
     regions: [{ id: sk.region_id, name: `la comarca de ${town}` }],
     zones: sk.zones.map((z) => ({
@@ -209,17 +219,31 @@ export function claimSituation(world: World, characterId: Id, nowGameS: number, 
   const c = world.characters.get(characterId);
   if (!c) return null;
   const pool = camp.situations;
+  // Por nombre; si no, la reservada a su clase (campañas escritas); si no, una de reserva sin clase.
   let i = pool.findIndex((s) => s.for_name && norm(s.for_name) === norm(c.name));
+  if (i < 0) i = pool.findIndex((s) => !s.for_name && s.for_classes?.includes(c.class_id));
+  if (i < 0) i = pool.findIndex((s) => !s.for_name && !s.for_classes?.length);
   if (i < 0) i = pool.findIndex((s) => !s.for_name);
-  const picked = i >= 0 ? pool.splice(i, 1)[0]!.situation : templateSituation(world, c);
+  const entry = i >= 0 ? pool[i]! : null;
+  if (entry && !entry.keep) pool.splice(i, 1);
+  const picked = entry ? structuredClone(entry.situation) : templateSituation(world, c);
   const situation: InitialSituation = { ...picked, deadline_game_s: nowGameS + picked.clock_days * DAY_S };
   world.touch('campaign', camp.id);
 
   c.situation = situation;
   if (world.spots.has(situation.start_spot_id)) c.location = { type: 'spot', id: situation.start_spot_id };
-  if (world.npcs.has(situation.antagonist_npc_id) && !c.knows.includes(situation.antagonist_npc_id)) c.knows.push(situation.antagonist_npc_id);
+  for (const id of [situation.antagonist_npc_id, ...(situation.knows ?? [])]) if (world.npcs.has(id) && !c.knows.includes(id)) c.knows.push(id);
   c.backstory = [hook?.trim(), situationText(world, situation)].filter(Boolean).join('\n');
   world.touch('characters', c.id);
+  // Campañas escritas: lo que debe (vence con el plazo) y lo que trae encima.
+  if (situation.debt) setDebt(world, c, { ...situation.debt, due_game_s: situation.deadline_game_s ?? null }, nowGameS);
+  for (const it of situation.items ?? []) {
+    if (!world.itemDefs.has(it.item_id)) continue;
+    const spot = world.characterSpot(c);
+    if (!spawnItem(world, it.item_id, it.quantity, { type: 'character', id: c.id, slot: { kind: 'pocket' } }).ok && spot) {
+      spawnItem(world, it.item_id, it.quantity, { type: 'spot', id: spot.id });
+    }
+  }
 
   // Conoce el pueblo de oídas; donde empieza, de vista.
   const start = world.spots.get(c.location.id);
