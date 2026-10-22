@@ -89,22 +89,26 @@ export const MENU = String.raw`<!doctype html>
   main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--chat); }
   #pick { flex: 1; min-height: 0; overflow-y: auto; }
   #pick[hidden] { display: none; }
-  .hero { position: relative; height: 46vh; min-height: 280px; max-height: 460px; }
-  .hero::after { content: ''; position: absolute; inset: 40% 0 0; background: linear-gradient(to top, var(--chat), rgba(11,13,12,0)); }
-  .hero .cap { position: absolute; left: 40px; right: 40px; bottom: 24px; z-index: 1; display: flex; flex-direction: column; gap: 8px; }
+  /* La imagen ocupa toda la columna, con la casa en su centro; el texto va encima, abajo a la izquierda. */
+  #pick { position: relative; }
+  .hero { position: relative; min-height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
+  .hero::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, var(--chat) 0%, rgba(11,13,12,.88) 26%, rgba(11,13,12,.25) 52%, rgba(11,13,12,0) 70%); }
+  .hero .cap { position: relative; z-index: 1; padding: 0 40px; display: flex; flex-direction: column; gap: 8px; }
+  .hero > .body, .hero > .intro { position: relative; z-index: 1; }
   .eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
   .hero h2 { margin: 0; font: 800 clamp(28px, 3.4vw, 36px)/1.1 var(--display); letter-spacing: -.02em; overflow-wrap: anywhere; text-shadow: 0 2px 18px rgba(0,0,0,.5); }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chips span { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; background: rgba(14,15,16,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); font-size: 12.5px; color: #d9d3c8; }
   .chips .badge { height: 28px; padding: 0 10px; border-radius: 999px; background: rgba(14,15,16,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
-  .body { max-width: 760px; padding: 6px 40px 40px; display: flex; flex-direction: column; gap: 16px; }
+  .body { max-width: 760px; padding: 18px 40px 44px; display: flex; flex-direction: column; gap: 16px; }
   .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .gear-wrap { position: relative; display: inline-flex; }
   .ib.gear { width: 44px; height: 44px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
-  .gear-wrap .menu-pop { left: 0; right: auto; top: 52px; }
+  .gear-wrap .menu-pop { left: 50%; right: auto; top: 52px; transform: translateX(-50%); min-width: 140px; }
+  .gear-wrap .menu-pop button { text-align: center; white-space: nowrap; padding: 0 16px; }
   .kv-t { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
   .facts { color: var(--muted); font-size: 13.5px; }
-  .intro { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; max-width: 520px; padding: 0 40px; }
+  .intro { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; max-width: 520px; padding: 18px 40px 44px; }
   .intro p { margin: 0; color: var(--muted); }
 
   /* Nueva partida, en la misma columna (en el móvil, una hoja desde abajo). */
@@ -346,7 +350,9 @@ export const MENU = String.raw`<!doctype html>
     var W = node.clientWidth, H = node.clientHeight;
     if (!W || !H) return;
     var zoom = Number(node.getAttribute('data-zoom')) || 1;
-    var k = Math.max(W / ART.w, H / ART.h) * zoom, iw = ART.w * k, ih = ART.h * k;
+    // Lo justo para cubrir el hueco y, además, para que la casa pueda ponerse en el centro sin dejar bordes vacíos.
+    var k = Math.max(W / ART.w, H / ART.h, H / (2 * Math.min(ART.y, 1 - ART.y) * ART.h), W / (2 * Math.min(ART.x, 1 - ART.x) * ART.w)) * zoom;
+    var iw = ART.w * k, ih = ART.h * k;
     var clamp = function (v, lo) { return Math.min(0, Math.max(lo, v)); };
     var x = clamp(W / 2 - ART.x * iw, W - iw), y = clamp(H / 2 - ART.y * ih, H - ih);
     node.style.backgroundSize = Math.round(iw) + 'px ' + Math.round(ih) + 'px';
@@ -433,11 +439,11 @@ export const MENU = String.raw`<!doctype html>
       var hero = el('div', 'hero art');
       hero.innerHTML = '<div class="cap"><span class="eyebrow">Tavernus</span><h2>Rol por chat con un máster de IA</h2></div>';
       p.appendChild(hero);
-      art(hero);
       var box = el('div', 'intro');
       box.appendChild(el('p', '', EMPTY[tab]));
       if (tab === 'continue') box.appendChild(button('Nueva partida', 'btn primary', openNew));
-      p.appendChild(box);
+      hero.appendChild(box);
+      art(hero);
       return;
     }
     var hero2 = el('div', 'hero art');
@@ -454,7 +460,6 @@ export const MENU = String.raw`<!doctype html>
     else if (tab === 'continue') cap.appendChild(el('p', 'synopsis', g.characters.length ? 'Tu grupo te espera donde lo dejasteis.' : 'La partida está lista: entra y crea tu personaje.'));
     hero2.appendChild(cap);
     p.appendChild(hero2);
-    art(hero2);
     var body = el('div', 'body');
     var cta = el('div', 'cta');
     var go = el('button', 'btn primary'); go.type = 'button'; go.innerHTML = icon('i-play') + CTA[tab];
@@ -478,7 +483,8 @@ export const MENU = String.raw`<!doctype html>
     }
     meta.appendChild(el('span', 'facts', 'Creada el ' + day(g.created_at)));
     body.appendChild(meta);
-    p.appendChild(body);
+    hero2.appendChild(body);
+    art(hero2);
   }
 
   function visible() {
