@@ -92,8 +92,9 @@ describe('acciones triviales sin master', () => {
     expect(r.ok).toBe(true);
     expect(r.event!.tags).toContain('deterministic');
     expect(r.text).toContain('Plaza del Pozo');
-    expect(engine.world.character('ch_kael').transit?.destination_spot_id).toBe('sp_pl_taberna');
-    time.advanceGame(60);
+    // Viaje rápido: llega en la misma acción, sin esperar tiempo real.
+    expect(engine.world.character('ch_kael').transit).toBeNull();
+    expect(engine.world.character('ch_kael').location.id).toBe('sp_pl_taberna');
     await engine.tick();
     await drain(engine);
     expect(calls).toHaveLength(0);
@@ -108,7 +109,7 @@ describe('acciones triviales sin master', () => {
     engine.attachMaster(forbidden);
     const r = await engine.act('ch_kael', 'Salir hacia Plaza del Pozo');
     expect(r.event!.tags).toContain('deterministic');
-    expect(engine.world.character('ch_kael').transit?.destination_spot_id).toBe('sp_pl_taberna');
+    expect(engine.world.character('ch_kael').location.id).toBe('sp_pl_taberna');
   });
 
   it('"coger la jarra" en el punto actual la mete en el inventario; "soltar la jarra" la deja', async () => {

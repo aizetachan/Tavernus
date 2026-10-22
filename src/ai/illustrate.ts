@@ -33,12 +33,21 @@
  * Lo dispara el motor (primera llegada de un PJ a una localización), no el máster.
  * Solo con IMAGES=on, en cualquier modo del máster (también offline: el modo
  * decide si se usa la API de Anthropic, no si hay imágenes).
+ *
+ * Además de la vista de cada sitio, los momentos significativos (src/engine/moments.ts):
+ *   - retrato de un NPC (primer encuentro) y del PJ que le habla: uno por entidad;
+ *   - objeto cogido o examinado: uno por tipo de objeto;
+ *   - escena de combate o descubrimiento: una por evento.
+ * El prompt sale de lo guardado (descripción, rol, tipo) y de la biblia de estilo de
+ * la campaña; la seed, de la semilla del mundo + el id. Misma caché e índice
+ * (<dir>/index.json, con `kind` y `entity_id`). En la cola manda la prioridad:
+ * retrato > objeto > escena, sin saltarse los 45 s ni la cuota.
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Engine, FirstVisit } from '../engine/engine.js';
-import type { Id, LightLevel } from '../engine/model.js';
+import type { Engine, FirstVisit, MomentNotice } from '../engine/engine.js';
+import type { Campaign, GameEvent, Id, LightLevel } from '../engine/model.js';
 import { lightAt } from '../engine/perception.js';
 import type { MasterMode } from './mode.js';
 
@@ -80,11 +89,22 @@ export interface SceneInput {
   indoor: boolean;
 }
 
+/** Qué muestra la imagen. Las de índices antiguos no lo llevan: son escenas. */
+export type ImageKind = 'scene' | 'portrait' | 'item' | 'combat' | 'discovery';
+export type EntityKind = Exclude<ImageKind, 'scene'>;
+
+/** Orden en la cola: retrato > objeto > escena. */
+export const PRIORITY: Record<ImageKind, number> = { portrait: 3, item: 2, scene: 1, combat: 1, discovery: 1 };
+
 export interface SceneImage {
   key: string;
+  /** Localización (escena) o donde ocurrió el momento. */
   location_id: Id;
-  /** Nombre de la localización, para el pie de la imagen. */
+  /** Nombre de la localización, del NPC, del objeto…, para el pie de la imagen. */
   name: string;
+  kind?: ImageKind;
+  /** NPC, PJ, tipo de objeto o evento ilustrado (todo menos escenas). */
+  entity_id?: Id;
   seed: number;
   prompt: string;
   /** Quién la generó (índices antiguos: Pollinations). */
@@ -97,6 +117,19 @@ export interface SceneImage {
 
 export interface Illustrated { image: SceneImage; character_id: Id }
 export type IllustratedListener = (r: Illustrated) => void;
+
+/** Retrato, objeto o escena de momento ya en disco; con PJ y evento si viene de un momento. */
+export interface EntityIllustrated { image: SceneImage; character_id: Id | null; event_seq: number | null; moment_key: string | null }
+export type EntityListener = (r: EntityIllustrated) => void;
+
+/** Lo que se ilustra de una entidad: el prompt ya montado (determinista) y su tamaño en Pollinations. */
+export interface EntityInput {
+  kind: EntityKind;
+  entity_id: Id;
+  name: string;
+  location_id: Id;
+  prompt: string;
+}
 
 /** ¿Ilustraciones activas? Solo con IMAGES=on; el modo del máster no influye (`mode` se conserva por compatibilidad). */
 export function imagesEnabled(env: NodeJS.ProcessEnv, _mode?: MasterMode): boolean {
@@ -126,6 +159,54 @@ export function scenePrompt(s: SceneInput): string {
   return [`${s.name} (${place})`, short, LIGHT_EN[s.light], STYLE, SUFFIX].filter(Boolean).join('. ');
 }
 
+const TONE_EN: Record<Campaign['tone'], string> = {
+  epic: 'heroic, epic', grim: 'grim, gritty, muted colors', comedy: 'whimsical, warm colors', horror: 'eerie, dark, unsettling', pulp: 'pulp adventure, vivid colors',
+};
+
+/**
+ * Biblia de estilo de la campaña: el estilo fijo más el tono. Si la campaña trae
+ * `art_style` (texto libre), manda ese en lugar del fijo.
+ */
+export function styleBible(c: Pick<Campaign, 'tone'> & { art_style?: unknown }): string {
+  const custom = typeof c.art_style === 'string' && c.art_style.trim() ? c.art_style.trim() : STYLE;
+  return [custom, TONE_EN[c.tone]].filter(Boolean).join(', ');
+}
+
+function clip(s: string, n = 220): string {
+  const t = s.replace(/\s+/g, ' ').trim().replace(/[.\s]+$/, '');
+  return t.length > n ? `${t.slice(0, n).replace(/\s+\S*$/, '')}…` : t;
+}
+
+/** Retrato de busto de un NPC o PJ, desde lo guardado (nombre, rol, descripción). */
+export function portraitPrompt(p: { name: string; role: string; description: string }, style: string): string {
+  return [`Portrait of ${p.name}, ${p.role}`, clip(p.description), 'head and shoulders, facing the viewer, dark plain background', style, 'no text, no watermark'].filter(Boolean).join('. ');
+}
+
+const ITEM_EN: Record<string, string> = {
+  weapon: 'weapon', armor: 'armor', consumable: 'consumable', tool: 'tool', quest: 'curious object', treasure: 'treasure', misc: 'object', container: 'container',
+};
+
+/** El objeto en la mano: nombre y tipo del catálogo. */
+export function itemPrompt(p: { name: string; type: string }, style: string): string {
+  return [`${p.name} (${ITEM_EN[p.type] ?? 'object'})`, 'a single object held in a hand, close-up still life, dark background', style, 'no text, no watermark'].join('. ');
+}
+
+/** Escena de un momento (combate, descubrimiento): dónde y qué pasó. */
+export function momentPrompt(p: { place: string; what: string; light: LightLevel; kind: 'combat' | 'discovery' }, style: string): string {
+  const mood = p.kind === 'combat' ? 'dramatic fight scene, motion' : 'moment of discovery, focused light on the find';
+  return [p.place, clip(p.what), LIGHT_EN[p.light], mood, style, 'no text, no watermark'].filter(Boolean).join('. ');
+}
+
+/** Clave y fichero de una entidad: `<kind>-<id>-<seed>`. */
+export function entityKey(kind: EntityKind, entityId: Id, seed: number): string {
+  return `${kind}-${entityId.replace(/[^a-zA-Z0-9_-]/g, '_')}-${seed}`;
+}
+
+/** Tamaño en Pollinations (Cloudflare siempre devuelve 1024x1024). */
+const SIZE: Record<EntityKind, { width: number; height: number }> = {
+  portrait: { width: 512, height: 640 }, item: { width: 512, height: 512 }, combat: { width: 768, height: 512 }, discovery: { width: 768, height: 512 },
+};
+
 export function pollinationsUrl(prompt: string, seed: number, opts: { width?: number; height?: number; nologo?: boolean } = {}): string {
   const q = new URLSearchParams({ width: String(opts.width ?? 768), height: String(opts.height ?? 512), seed: String(seed) });
   if (opts.nologo) q.set('nologo', 'true');
@@ -146,37 +227,58 @@ export function retryAfterMs(header: string | null, nowMs: number): number | nul
   return Number.isFinite(at) ? Math.max(0, at - nowMs) : null;
 }
 
+/** Esperas ordenadas por prioridad (mayor primero) y, a igualdad, por llegada. */
+class Waiters {
+  private list: { priority: number; n: number; go: () => void }[] = [];
+  private n = 0;
+  get size(): number { return this.list.length; }
+  push(priority: number, go: () => void): void {
+    this.list.push({ priority, n: this.n++, go });
+    this.list.sort((a, b) => b.priority - a.priority || a.n - b.n);
+  }
+  next(): void { this.list.shift()?.go(); }
+}
+
 /**
  * Cola de peticiones a Pollinations: una cada vez y no antes de `readyAt`. El
  * límite anónimo es por IP, así que todas las partidas del proceso comparten la
- * misma (`SHARED_QUEUE`) salvo que se pase otra (tests).
+ * misma (`SHARED_QUEUE`) salvo que se pase otra (tests). Entre las que esperan,
+ * pasa antes la de más prioridad (retrato > objeto > escena).
  */
 export class PollinationsQueue {
-  private chain: Promise<unknown> = Promise.resolve();
+  private busy = false;
+  private readonly waiting = new Waiters();
   readyAt = 0;
 
-  /** De una en una: cada trabajo espera a que termine el anterior. */
-  run<T>(job: () => Promise<T>): Promise<T> {
-    const run = this.chain.then(job, job);
-    this.chain = run.catch(() => undefined);
-    return run;
+  /** De una en una: cada trabajo espera a que termine el que está en marcha. */
+  async run<T>(job: () => Promise<T>, priority = 0): Promise<T> {
+    // Un microtask antes de arrancar: lo encolado a la vez se ordena por prioridad.
+    await Promise.resolve();
+    // El turno se pasa de mano en mano: quien termina se lo da al siguiente sin soltarlo.
+    if (this.busy) await new Promise<void>((r) => this.waiting.push(priority, r));
+    else this.busy = true;
+    try { return await job(); } finally {
+      if (this.waiting.size) this.waiting.next();
+      else this.busy = false;
+    }
   }
 }
 
 export const SHARED_QUEUE = new PollinationsQueue();
 
-/** Como mucho `max` trabajos a la vez (Cloudflare admite 720/min; no hace falta más). */
+/** Como mucho `max` trabajos a la vez (Cloudflare admite 720/min; no hace falta más), por prioridad. */
 export class Limiter {
   private active = 0;
-  private waiters: (() => void)[] = [];
+  private readonly waiting = new Waiters();
   constructor(readonly max: number) {}
 
-  async run<T>(job: () => Promise<T>): Promise<T> {
-    while (this.active >= this.max) await new Promise<void>((r) => this.waiters.push(r));
-    this.active++;
+  async run<T>(job: () => Promise<T>, priority = 0): Promise<T> {
+    // Un hueco que se libra pasa directo al siguiente que espera (sin que otro se cuele entre medias).
+    if (this.active >= this.max) await new Promise<void>((r) => this.waiting.push(priority, r));
+    else this.active++;
     try { return await job(); } finally {
-      this.active--;
-      this.waiters.shift()?.();
+      if (this.waiting.size) this.waiting.next();
+      else this.active--;
     }
   }
 }
@@ -228,6 +330,9 @@ export class Illustrator {
   private index: Record<string, SceneImage> | null = null;
   private indexWrite: Promise<void> = Promise.resolve();
   private listeners: IllustratedListener[] = [];
+  /** Retratos, objetos y escenas de momento por `<kind>:<entity_id>`. */
+  private readonly byEntity = new Map<string, SceneImage>();
+  private entityListeners: EntityListener[] = [];
   /** Peticiones de red hechas (para /estado y tests). */
   requests = 0;
 
@@ -270,18 +375,8 @@ export class Illustrator {
   async illustrate(scene: SceneInput, characterId: Id | null = null): Promise<SceneImage | null> {
     const seed = sceneSeed(this.opts.worldSeed, scene.location_id);
     const key = sceneKey(scene.location_id, seed);
-    const retryAt = this.failedUntil.get(key);
-    if (retryAt !== undefined && this.opts.now() >= retryAt) { this.failedUntil.delete(key); this.memory.delete(key); }
-    let p = this.memory.get(key);
-    if (!p) {
-      p = this.produce(key, seed, scene).catch((e) => {
-        this.opts.log(`[imágenes] ${scene.name}: ${(e as Error).message}; se reintentará más tarde`);
-        this.failedUntil.set(key, this.opts.now() + this.opts.failureCooldownMs);
-        return null;
-      });
-      this.memory.set(key, p);
-    }
-    const image = await p;
+    const image = await this.obtain(key, scene.name, () => this.produce(key, seed, scenePrompt(scene),
+      { location_id: scene.location_id, name: scene.name }, { width: this.opts.width, height: this.opts.height }, PRIORITY.scene));
     if (image) {
       this.byLocation.set(image.location_id, image);
       if (characterId) for (const l of this.listeners) l({ image, character_id: characterId });
@@ -289,19 +384,58 @@ export class Illustrator {
     return image;
   }
 
-  private async produce(key: string, seed: number, scene: SceneInput): Promise<SceneImage> {
+  onEntity(l: EntityListener): () => void {
+    this.entityListeners.push(l);
+    return () => { this.entityListeners = this.entityListeners.filter((x) => x !== l); };
+  }
+
+  /** Retrato u objeto ya hecho (combat/discovery: la del evento). */
+  entityImage(kind: EntityKind, entityId: Id): SceneImage | null { return this.byEntity.get(`${kind}:${entityId}`) ?? null; }
+
+  /**
+   * Ilustra una entidad una sola vez (retrato de NPC o PJ, tipo de objeto, escena
+   * de un evento) y avisa a los oyentes; `from` dice qué PJ y evento la trajeron.
+   */
+  async illustrateEntity(e: EntityInput, from: { character_id: Id; event_seq: number; moment_key: string } | null = null): Promise<SceneImage | null> {
+    const seed = sceneSeed(this.opts.worldSeed, e.entity_id);
+    const key = entityKey(e.kind, e.entity_id, seed);
+    const image = await this.obtain(key, e.name, () => this.produce(key, seed, e.prompt,
+      { location_id: e.location_id, name: e.name, kind: e.kind, entity_id: e.entity_id }, SIZE[e.kind], PRIORITY[e.kind]));
+    if (image) {
+      this.byEntity.set(`${e.kind}:${e.entity_id}`, image);
+      for (const l of this.entityListeners) l({ image, character_id: from?.character_id ?? null, event_seq: from?.event_seq ?? null, moment_key: from?.moment_key ?? null });
+    }
+    return image;
+  }
+
+  /** Una sola petición por clave aunque la pidan varios a la vez; si falla, no se reintenta hasta pasado el enfriamiento. */
+  private obtain(key: string, label: string, make: () => Promise<SceneImage>): Promise<SceneImage | null> {
+    const retryAt = this.failedUntil.get(key);
+    if (retryAt !== undefined && this.opts.now() >= retryAt) { this.failedUntil.delete(key); this.memory.delete(key); }
+    let p = this.memory.get(key);
+    if (!p) {
+      p = make().catch((e) => {
+        this.opts.log(`[imágenes] ${label}: ${(e as Error).message}; se reintentará más tarde`);
+        this.failedUntil.set(key, this.opts.now() + this.opts.failureCooldownMs);
+        return null;
+      });
+      this.memory.set(key, p);
+    }
+    return p;
+  }
+
+  private async produce(key: string, seed: number, prompt: string, meta: Pick<SceneImage, 'location_id' | 'name' | 'kind' | 'entity_id'>, size: { width: number; height: number }, priority: number): Promise<SceneImage> {
     const index = await this.loadIndex();
     const cached = index[key];
     if (cached) return cached;
 
-    const prompt = scenePrompt(scene);
     const file = `${key}.jpg`;
     let image: SceneImage | null = null;
     const cf = this.opts.cloudflare;
     if (cf && this.opts.now() >= this.cloudflareDownUntil) {
       try {
-        await this.generateCloudflare(cf, prompt, file);
-        image = { key, location_id: scene.location_id, name: scene.name, seed, prompt, provider: 'cloudflare', url: `cloudflare:${CLOUDFLARE_MODEL}`, file };
+        await this.generateCloudflare(cf, prompt, file, priority);
+        image = { key, ...meta, seed, prompt, provider: 'cloudflare', url: `cloudflare:${CLOUDFLARE_MODEL}`, file };
       } catch (e) {
         const quota = e instanceof CloudflareError && e.quota;
         if (quota) this.cloudflareDownUntil = nextUtcMidnight(this.opts.now());
@@ -309,10 +443,9 @@ export class Illustrator {
       }
     }
     if (!image) {
-      const { width, height } = this.opts;
-      const url = pollinationsUrl(prompt, seed, { width, height, nologo: this.keyed });
-      await this.download(url, file);
-      image = { key, location_id: scene.location_id, name: scene.name, seed, prompt, provider: 'pollinations', url, file };
+      const url = pollinationsUrl(prompt, seed, { ...size, nologo: this.keyed });
+      await this.download(url, file, priority);
+      image = { key, ...meta, seed, prompt, provider: 'pollinations', url, file };
     }
     index[key] = image;
     await this.saveIndex();
@@ -320,7 +453,7 @@ export class Illustrator {
   }
 
   /** Cloudflare Workers AI: JSON con el JPEG en base64. Sin espaciado; como mucho 2 a la vez. */
-  private generateCloudflare(cf: CloudflareCreds, prompt: string, file: string): Promise<void> {
+  private generateCloudflare(cf: CloudflareCreds, prompt: string, file: string, priority = 0): Promise<void> {
     return this.opts.cloudflareLimit.run(async () => {
       this.requests++;
       let res: Response;
@@ -347,10 +480,10 @@ export class Illustrator {
       await mkdir(this.opts.dir, { recursive: true });
       await writeFile(join(this.opts.dir, file), bytes);
       this.opts.log(`[imágenes] ${file} (${Math.round(bytes.length / 1024)} KB, cloudflare)`);
-    });
+    }, priority);
   }
 
-  private download(url: string, file: string): Promise<void> {
+  private download(url: string, file: string, priority = 0): Promise<void> {
     const q = this.opts.queue;
     return q.run(async () => {
       for (let attempt = 0; ; attempt++) {
@@ -391,7 +524,7 @@ export class Illustrator {
         this.opts.log(`[imágenes] ${file} (${Math.round(bytes.length / 1024)} KB, pollinations${this.keyed ? '' : ' anónimo'})`);
         return;
       }
-    });
+    }, priority);
   }
 
   private async loadIndex(): Promise<Record<string, SceneImage>> {
@@ -404,7 +537,10 @@ export class Illustrator {
     // Otra llamada pudo cargarlo mientras se leía.
     if (this.index) return this.index;
     this.index = loaded;
-    for (const img of Object.values(loaded)) if (!this.byLocation.has(img.location_id)) this.byLocation.set(img.location_id, img);
+    for (const img of Object.values(loaded)) {
+      if (img.kind && img.kind !== 'scene') { if (img.entity_id) this.byEntity.set(`${img.kind}:${img.entity_id}`, img); }
+      else if (!this.byLocation.has(img.location_id)) this.byLocation.set(img.location_id, img);
+    }
     return loaded;
   }
 
@@ -443,12 +579,75 @@ export function sceneOf(engine: Engine, locationId: Id, gameS: number = engine.g
   };
 }
 
-/** Engancha un ilustrador al motor: cada primera llegada de un PJ a una localización encola su escena. */
+/** Retrato de un NPC o de un PJ desde lo guardado; null si no existe. */
+export function portraitOf(engine: Engine, id: Id, locationId: Id): EntityInput | null {
+  const w = engine.world;
+  const style = styleBible(w.campaign);
+  const npc = w.npcs.get(id);
+  if (npc) return { kind: 'portrait', entity_id: id, name: npc.name, location_id: locationId, prompt: portraitPrompt({ name: npc.name, role: npc.role, description: npc.description }, style) };
+  const c = w.characters.get(id);
+  if (c) return { kind: 'portrait', entity_id: id, name: c.name, location_id: locationId, prompt: portraitPrompt({ name: c.name, role: `${c.race} ${c.class_name}`, description: c.appearance }, style) };
+  return null;
+}
+
+/** Id del retrato del narrador en la caché (no es un NPC ni un PJ). */
+export const MASTER_PORTRAIT_ID = 'master';
+
+/** Retrato del narrador como un «ente»: su nombre y su voz de la configuración del máster. */
+export function masterPortraitOf(engine: Engine, locationId: Id): EntityInput {
+  const m = engine.world.campaign.master;
+  const name = m.name.trim() || 'el Narrador';
+  return {
+    kind: 'portrait', entity_id: MASTER_PORTRAIT_ID, name, location_id: locationId,
+    prompt: portraitPrompt({ name, role: 'the spirit who narrates this tale, a hooded ethereal being of candle smoke and starlight', description: m.voice[0] ?? '' }, styleBible(engine.world.campaign)),
+  };
+}
+
+/** Qué ilustrar para un momento del motor (la vista del sitio la pone la primera visita, aquí no). */
+export function entityOf(engine: Engine, m: MomentNotice['moment'], e: GameEvent): EntityInput | null {
+  const w = engine.world;
+  const style = styleBible(w.campaign);
+  switch (m.kind) {
+    case 'scene': return null;
+    case 'portrait': return portraitOf(engine, m.entity_id, e.location_id);
+    case 'item': {
+      const def = w.itemDefs.get(m.entity_id);
+      return def ? { kind: 'item', entity_id: def.id, name: def.name, location_id: e.location_id, prompt: itemPrompt({ name: def.name, type: def.type }, style) } : null;
+    }
+    case 'combat':
+    case 'discovery': {
+      const loc = w.locations.get(e.location_id);
+      if (!loc) return null;
+      const spot = m.subject ? w.spots.get(m.subject) : undefined;
+      const what = spot ? `${spot.name}: ${spot.description}` : (e.observable ?? e.narration_private);
+      const fallen = m.kind === 'combat' && m.subject ? (w.npcs.get(m.subject)?.name ?? w.characters.get(m.subject)?.name) : undefined;
+      return {
+        kind: m.kind, entity_id: e.id, name: fallen ? `${loc.name} · ${fallen}` : spot?.name ?? loc.name, location_id: loc.id,
+        prompt: momentPrompt({ place: `${loc.name} (${loc.indoor ? 'interior' : 'exterior'})`, what, light: lightAt(engine.clock, loc, e.timestamp_game_s), kind: m.kind }, style),
+      };
+    }
+  }
+}
+
+/**
+ * Engancha un ilustrador al motor: cada primera llegada de un PJ a una localización
+ * encola su escena, y cada momento significativo su retrato, objeto o escena. En el
+ * primer encuentro con un NPC también se hace el retrato del PJ (para el diálogo).
+ */
 export function attachIllustrator(engine: Engine, illustrator: Illustrator): Illustrator {
   attached.set(engine, illustrator);
   void illustrator.load();
   engine.onFirstVisit((v: FirstVisit) => {
     void illustrator.illustrate(sceneOf(engine, v.location_id, v.game_s), v.character_id);
+  });
+  engine.onMoment(({ moment, event }) => {
+    const input = entityOf(engine, moment, event);
+    if (!input) return;
+    void illustrator.illustrateEntity(input, { character_id: moment.character_id, event_seq: event.seq, moment_key: moment.key });
+    if (moment.kind === 'portrait') {
+      const pc = portraitOf(engine, moment.character_id, event.location_id);
+      if (pc) void illustrator.illustrateEntity(pc);
+    }
   });
   return illustrator;
 }

@@ -8,6 +8,7 @@ import type { Character, Id } from './model.js';
 import { positionOf } from './movement.js';
 import { lightAt, perceive } from './perception.js';
 import { describeNode } from './resources.js';
+import { presenceLine } from './schedule.js';
 import type { World } from './world.js';
 
 const LIGHT_ES = { day: 'Es de día', twilight: 'La luz es escasa', night_moon: 'Es de noche, con algo de luna', night_dark: 'Es noche cerrada' } as const;
@@ -50,6 +51,9 @@ export function describeSurroundings(world: World, clock: GameClock, c: Characte
     else if (p.sight === 'vague') people.push(`alguien ${where}`);
   }
   if (people.length) lines.push(`Ves: ${people.join('; ')}.`);
+  // Gente de la agenda (schedule.ts): el mercado, la misa… como presencia del lugar.
+  const crowd = presenceLine(world, loc.id, nowGameS);
+  if (crowd) lines.push(crowd);
 
   // Cosas en este punto.
   const items = world.itemsIn({ type: 'spot', id: spot.id }).map((i) => {
@@ -96,6 +100,8 @@ export function arrivalNarration(world: World, clock: GameClock, c: Character, n
       .slice(0, 3).map((s) => s.name);
     if (others.length) lines.push(`Más allá: ${listEs(others)}.`);
     if (people.length) lines.push(`Ves ${listEs(people.map(aEs))}.`);
+    const crowd = presenceLine(world, loc.id, nowGameS);
+    if (crowd) lines.push(crowd);
     const exits = new Set<string>();
     for (const s of world.spotsOf(loc.id)) for (const { to_spot_id } of world.exitsFrom(s.id)) exits.add(world.locationOfSpot(to_spot_id).name);
     if (exits.size) lines.push(`Salidas: ${listEs([...exits])}.`);

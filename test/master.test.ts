@@ -134,7 +134,8 @@ describe('Master', () => {
     engine.attachMaster(new Master(engine, { client }));
     const r = await engine.act('ch_kael', 'salgo a la plaza, hacia el pozo');
     expect(r.ok).toBe(true);
-    expect(engine.world.character('ch_kael').transit?.destination_spot_id).toBe('sp_pl_pozo');
+    // Viaje rápido: al acabar la acción ya está en el pozo.
+    expect(engine.world.character('ch_kael').location.id).toBe('sp_pl_pozo');
   });
 
   it('si termina sin log_event, el texto vale como narración privada y queda marcado', async () => {

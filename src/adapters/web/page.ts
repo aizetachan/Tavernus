@@ -1,5 +1,10 @@
 /** Página del adaptador web: HTML, CSS y JS en un solo string para que funcione igual con tsx y con dist/. */
 
+import { VOICE_SCRIPT, VOICE_STYLE } from './voice-input.js';
+import { NOVEL_JS, NOVEL_STYLE } from './novel.js';
+import { TTS_SCRIPT, TTS_STYLE } from './tts.js';
+import { SFX_SCRIPT, SFX_STYLE } from './sfx.js';
+
 export const PAGE = String.raw`<!doctype html>
 <html lang="es">
 <head>
@@ -203,6 +208,79 @@ export const PAGE = String.raw`<!doctype html>
   /* Tablero o mapa en grande: una hoja de vidrio sobre la partida atenuada. */
   body.map-big::after, body.board-big::after { content: ''; position: fixed; inset: 0; z-index: 19; background: rgba(5,5,13,.55); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
   body.map-big #map, body.board-big #board { position: fixed; inset: 64px 24px 24px; z-index: 21; margin: 0; padding: 16px 18px; border-radius: 34px; overflow: auto; background: linear-gradient(180deg, #1a1b21, #121318); box-shadow: var(--window-shadow); }
+  /* Indicador de novedad en la pestaña del Diario. */
+  .tabs button, .mtabs button { position: relative; }
+  .tabs button.new::after, .mtabs button.new::after { content: ''; position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg), 0 0 10px var(--glow); }
+  .tabs button.new::after { top: 6px; right: 10px; }
+  .mtabs button.new::after { top: 8px; right: 18px; }
+  /* Aviso de una línea en el hilo (tablón, progreso): nada de burbuja, solo un enlace al Diario. */
+  .msg.notice { align-self: center; display: flex; flex-wrap: wrap; justify-content: center; gap: 0 6px; margin: 6px 0 0; font-size: 12px; font-weight: 500; color: var(--faint); text-align: center; }
+  .msg.notice .link { border: 0; padding: 0; background: none; color: var(--accent); font-size: 12px; font-weight: 500; }
+  .msg.notice .link::before { content: '· '; color: var(--faint); }
+  .msg.notice .link:hover { text-decoration: underline; }
+  /* Diario: misiones, conversaciones, crónica y lugares. */
+  #journal .jnav { display: flex; gap: 4px; padding: 3px; margin: 0 0 10px; border-radius: 999px; background: var(--platter); }
+  #journal .jnav button { flex: 1; height: 28px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; }
+  #journal .jnav button.on { background: var(--control); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.2), inset 0 1px 1px rgba(255,255,255,.1); }
+  #journal h3 { display: flex; align-items: baseline; gap: 6px; margin: 14px 2px 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  #journal h3:first-child { margin-top: 2px; }
+  #journal h3 span { font-weight: 500; letter-spacing: 0; text-transform: none; }
+  #journal .empty { margin: 4px 2px 10px; color: var(--faint); font-size: 13px; }
+  #journal details { margin: 0 0 6px; border-radius: 16px; background: var(--platter); overflow: hidden; }
+  #journal details[open] { background: rgba(255,255,255,.06); }
+  #journal summary { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; list-style: none; }
+  #journal summary::-webkit-details-marker { display: none; }
+  #journal summary .tt { flex: 1; min-width: 0; }
+  #journal summary b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #journal summary small { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #journal summary .st { flex: none; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--control); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 20px; white-space: nowrap; }
+  #journal .q.active summary .st { color: var(--accent); background: var(--accent-tint); }
+  #journal .q.completed summary .st { color: var(--ok); background: rgba(48,209,89,.14); }
+  #journal .q.expired summary .st { color: var(--faint); }
+  #journal .q.main summary .st { color: var(--accent-ink); background: var(--accent); }
+  #journal .q.main summary b { color: var(--accent); }
+  #journal summary .chev { flex: none; width: 14px; height: 14px; color: var(--faint); transition: transform .2s; }
+  #journal details[open] summary .chev { transform: rotate(90deg); }
+  #journal .qb { padding: 0 12px 12px; font-size: 13px; }
+  #journal .qb p { margin: 0 0 8px; }
+  #journal .qb .muted { color: var(--muted); }
+  #journal .clock { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 5px 10px; border-radius: 999px; background: var(--accent-tint); color: var(--accent); font-size: 12px; font-weight: 600; }
+  #journal .clock.late { background: rgba(255,69,59,.14); color: #ff8a80; }
+  #journal .steps { margin: 0 0 8px; padding: 0; list-style: none; }
+  #journal .steps li { display: flex; gap: 8px; padding: 3px 0; }
+  #journal .steps li::before { content: ''; flex: none; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--faint); }
+  #journal .steps li.done { color: var(--muted); text-decoration: line-through; }
+  #journal .steps li.done::before { background: var(--ok); box-shadow: none; }
+  #journal .paths b, #journal .mem b { display: block; margin: 8px 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  #journal .paths ol { margin: 0 0 8px; padding-left: 18px; color: var(--muted); }
+  #journal .paths li { padding: 2px 0; }
+  #journal .rumor { margin: 0 0 8px; padding: 8px 10px; border-radius: 12px; background: var(--platter); color: var(--muted); font-size: 12.5px; font-style: italic; }
+  #journal .rumor b { color: var(--text); font-style: normal; font-weight: 600; }
+  #journal .rumor small { display: block; margin-top: 3px; font-style: normal; color: var(--faint); }
+  #journal .dates { margin-top: 6px; font-size: 11.5px; color: var(--faint); }
+  #journal .pt { position: relative; flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; overflow: hidden; background: rgba(255,255,255,.06); color: var(--npc, #e6a587); box-shadow: inset 0 0 0 1.5px currentColor; font-size: 13px; font-weight: 600; }
+  #journal .pt img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #journal .ex { padding: 0 12px 10px; }
+  #journal .exh { padding: 8px 0; border-top: 1px solid var(--sep); }
+  #journal .exh .when { display: block; margin-bottom: 4px; font-size: 11.5px; color: var(--faint); }
+  #journal .exh .me, #journal .exh .them { position: relative; margin: 3px 0; padding-left: 14px; font-size: 13px; }
+  #journal .exh .me { color: var(--muted); }
+  #journal .exh .me::before, #journal .exh .them::before { content: ''; position: absolute; left: 2px; top: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  #journal .exh .them::before { background: var(--npc, #e6a587); }
+  #journal .mem { padding: 6px 12px 12px; border-top: 1px solid var(--sep); }
+  #journal .mem ul { margin: 0; padding-left: 16px; color: var(--muted); font-size: 12.5px; }
+  #journal .mem li { padding: 2px 0; }
+  #journal .mem small { color: var(--faint); }
+  #journal .day summary b { white-space: normal; }
+  #journal .en { display: flex; gap: 10px; padding: 5px 12px; font-size: 13px; }
+  #journal .en:last-child { padding-bottom: 12px; }
+  #journal .en .t { flex: none; width: 38px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); letter-spacing: 0; padding-top: 2px; }
+  #journal .en.progress { color: var(--accent); } #journal .en.combat { color: #ff8a80; } #journal .en.roll { color: var(--muted); } #journal .en.rumor, #journal .en.note { color: var(--muted); font-style: italic; }
+  #journal .pl { display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin-bottom: 6px; border-radius: 14px; background: var(--platter); }
+  #journal .pl i { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--muted); background: #17181d; }
+  #journal .pl.visited i { border-color: var(--ok); } #journal .pl.heard_of i { border-style: dashed; }
+  #journal .pl.here i { border-color: var(--accent); box-shadow: 0 0 8px var(--glow); }
+  #journal .pl b { display: block; font-size: 13.5px; font-weight: 600; } #journal .pl small { color: var(--muted); font-size: 12px; }
   .mtabs { display: none; }
   @media (max-width: 820px) {
     header { padding: 10px 12px 0; min-height: 52px; gap: 8px; }
@@ -225,6 +303,10 @@ export const PAGE = String.raw`<!doctype html>
     aside .tabs { display: none; }
     body.map-big #map, body.board-big #board { inset: 12px; }
   }
+${VOICE_STYLE}
+${TTS_STYLE}
+${SFX_STYLE}
+${NOVEL_STYLE}
 </style>
 </head>
 <body>
@@ -240,6 +322,8 @@ export const PAGE = String.raw`<!doctype html>
   <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></symbol>
   <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4l-5 2v14l5-2 6 2 5-2V4l-5 2z"/><path d="M9 4v14M15 6v14"/></symbol>
   <symbol id="i-sheet" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/><path d="M10 12h5M10 16h5"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
 </svg>
 <header>
   <div class="bar glass">
@@ -280,10 +364,12 @@ export const PAGE = String.raw`<!doctype html>
       <button type="button" data-tab="board"><svg class="i"><use href="#i-grid"/></svg>Tablero</button>
       <button type="button" data-tab="map"><svg class="i"><use href="#i-map"/></svg>Mapa</button>
       <button type="button" data-tab="sheet"><svg class="i"><use href="#i-sheet"/></svg>Hoja</button>
+      <button type="button" data-tab="journal"><svg class="i"><use href="#i-book"/></svg>Diario</button>
     </div>
     <div class="pane" data-pane="board"><div id="board"></div><p class="none">Este lugar no tiene tablero.</p></div>
     <div class="pane" data-pane="map"><div id="map"></div><p class="none">Aún no hay mapa de la zona.</p></div>
     <div class="pane" data-pane="sheet"><div id="sheet"></div><p class="none">Cargando la hoja…</p></div>
+    <div class="pane" data-pane="journal"><div id="journal"></div><p class="none">El diario está en blanco.</p></div>
   </aside>
 </main>
 <nav class="mtabs glass" aria-label="Vistas">
@@ -291,6 +377,7 @@ export const PAGE = String.raw`<!doctype html>
   <button type="button" data-mtab="board"><svg class="i"><use href="#i-grid"/></svg>Tablero</button>
   <button type="button" data-mtab="map"><svg class="i"><use href="#i-map"/></svg>Mapa</button>
   <button type="button" data-mtab="sheet"><svg class="i"><use href="#i-sheet"/></svg>Hoja</button>
+  <button type="button" data-mtab="journal"><svg class="i"><use href="#i-book"/></svg>Diario</button>
 </nav>
 <div id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Ilustración ampliada">
   <img alt="">
@@ -339,37 +426,9 @@ export const PAGE = String.raw`<!doctype html>
     scroll();
     return div;
   }
-
-  function renderMessage(m, live) {
-    var div = add(m.kind, m.text);
-    if (m.decisive_s) {
-      var d = document.createElement('div');
-      d.className = 'decisive';
-      d.textContent = '⏳ Tienes ' + m.decisive_s + ' segundos para reaccionar. Si no, la amenaza se cumple.';
-      div.appendChild(d);
-    }
-    if (!m.roll && !(m.suggested && m.suggested.length)) return;
-    if (live) spendButtons();
-    var row = document.createElement('div');
-    row.className = 'actions';
-    if (m.roll) {
-      var b = document.createElement('button');
-      b.className = 'roll';
-      b.textContent = '🎲 Tirar' + (m.roll.dc ? ' · CD ' + m.roll.dc : '');
-      b.onclick = function () { spendButtons(); roll(); };
-      row.appendChild(b);
-    } else {
-      m.suggested.forEach(function (a) {
-        var b = document.createElement('button');
-        b.textContent = a;
-        b.onclick = function () { spendButtons(); act(a); };
-        row.appendChild(b);
-      });
-    }
-    div.appendChild(row);
-    if (!live) row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
-    scroll();
-  }
+${NOVEL_JS}
+  /** Cada mensaje del stream entra en el hilo tipo chat (novel.ts): avatar, burbuja, botones e imágenes. */
+  function renderMessage(m, live) { chatMessage(m, live); }
 
   function setBusy(on) {
     busy = on;
@@ -398,9 +457,10 @@ export const PAGE = String.raw`<!doctype html>
 
   function act(text) {
     if (busy) return;
-    add('player', text);
+    // Sin burbuja de «prompt»: mientras piensa el narrador se ve atenuado; luego lo sustituye lo que el PJ dice o hace.
+    pendingMine(text);
     setBusy(true);
-    post('/api/act', { text: text }).then(handleReply).finally(function () { setBusy(false); loadSheet(); });
+    post('/api/act', { text: text }).then(handleReply).finally(function () { clearPending(); setBusy(false); loadSheet(); });
   }
   function roll() {
     if (busy) return;
@@ -461,7 +521,7 @@ export const PAGE = String.raw`<!doctype html>
     sceneSrc = s.src;
     var fig = document.createElement('figure');
     fig.className = 'msg scene loading';
-    fig.innerHTML = '<div class="who">' + SPARK + 'Escena</div><button type="button" class="shot" title="Ver en grande"><img alt=""><figcaption><b></b><span>Ilustración</span></figcaption>' +
+    fig.innerHTML = '<button type="button" class="shot" title="Ver en grande"><img alt=""><figcaption><b></b><span>Escena</span></figcaption>' +
       '<span class="zoom glass"><svg class="i"><use href="#i-max"/></svg></span></button>';
     var img = fig.querySelector('img');
     fig.querySelector('figcaption b').textContent = s.name;
@@ -484,15 +544,15 @@ export const PAGE = String.raw`<!doctype html>
   function closeLightbox() { lightbox.hidden = true; }
   lightbox.addEventListener('click', function (ev) { if (ev.target !== lbImg) closeLightbox(); });
   document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeLightbox(); });
+  /**
+   * La escena es un mensaje del hilo (llega por el stream, en su sitio, y se queda en el historial).
+   * Esto solo avisa al servidor para que la pinte si aún no existe (partidas de antes de IMAGES=on).
+   */
   function loadScene() {
     if (!current) return;
     var id = current;
     clearTimeout(sceneTimer);
-    sceneTimer = setTimeout(function () {
-      fetch(api('/api/scene?character=' + encodeURIComponent(id))).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-        if (d && id === current) showScene(d.image);
-      }).catch(function () {});
-    }, 250);
+    sceneTimer = setTimeout(function () { fetch(api('/api/scene?character=' + encodeURIComponent(id))).catch(function () {}); }, 250);
   }
 
   var board = $('board'), boardData = null, boardSeq = 0, boardTimer = null;
@@ -1016,6 +1076,109 @@ export const PAGE = String.raw`<!doctype html>
   var resizeTimer = null;
   window.addEventListener('resize', function () { clearTimeout(resizeTimer); resizeTimer = setTimeout(function () { if (boardData) renderBoard(boardData); if (mapData) renderMap(mapData); }, 150); });
 
+  // --- Diario -----------------------------------------------------------------
+  // Misiones (activas / completadas), conversaciones por personaje, crónica por
+  // día y lugares, servido por /api/journal desde los datos del motor. El
+  // stream avisa con «journal» cuando cambia algo; un punto en la pestaña marca
+  // lo que no se ha leído (la versión vista se guarda en localStorage).
+  var journalEl = $('journal'), journalData = null, journalSeq = 0;
+  var JSECTIONS = [['quests', 'Misiones'], ['talks', 'Charlas'], ['chronicle', 'Crónica'], ['places', 'Lugares']];
+  var journalSection = JSECTIONS.some(function (s) { return s[0] === store('tavernus.journal.section'); }) ? store('tavernus.journal.section') : 'quests';
+  var JSTATUS = { available: 'disponible', active: 'en curso', completed: 'completada', expired: 'caducada' };
+
+  function journalKey() { return 'tavernus.journal.seen.' + game + '.' + current; }
+  function journalVisible() { return tab === 'journal' && (document.body.classList.contains('tab-side') || !window.matchMedia('(max-width: 820px)').matches); }
+  function setJournalNew(on) { document.querySelectorAll('[data-tab="journal"], [data-mtab="journal"]').forEach(function (b) { b.classList.toggle('new', on); }); }
+  function markJournalSeen() { if (!journalData) return; store(journalKey(), journalData.version); setJournalNew(false); }
+
+  function loadJournal() {
+    if (!current) return;
+    var seq = ++journalSeq, id = current;
+    fetch(api('/api/journal?character=' + encodeURIComponent(id))).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (seq !== journalSeq || id !== current || !j || !j.character) return;
+      journalData = j;
+      renderJournal(j);
+      if (journalVisible()) markJournalSeen();
+      else setJournalNew(store(journalKey()) !== j.version);
+    }).catch(function () {});
+  }
+
+  var CHEV = '<svg class="i chev"><use href="#i-chev"/></svg>';
+  function questHtml(q) {
+    var sub = [q.giver && q.kind !== 'debt' ? 'lo pide ' + q.giver : '', q.reward || '', q.kind === 'main' ? 'misión principal' : '', q.kind === 'achievement' ? 'logro' : '', q.kind === 'debt' ? 'deuda' : ''].filter(Boolean).join(' · ');
+    var h = '<details class="q ' + q.status + (q.kind === 'main' ? ' main' : '') + '"' + (q.pinned ? ' open' : '') + '><summary><span class="st">' + escapeHtml(JSTATUS[q.status] || q.status) + '</span>' +
+      '<span class="tt"><b>' + escapeHtml(q.title) + '</b>' + (sub ? '<small>' + escapeHtml(sub) + '</small>' : '') + '</span>' + CHEV + '</summary><div class="qb">';
+    if (q.text) h += '<p>' + escapeHtml(q.text) + '</p>';
+    if (q.clock) {
+      var late = q.clock.days_left <= 0;
+      h += '<div class="clock' + (late ? ' late' : '') + '"><svg class="i" style="width:13px;height:13px"><use href="#i-clock"/></svg>' + (late ? 'Plazo vencido' : 'Quedan ' + q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) + ' · vence ' + escapeHtml(q.clock.deadline) + '</div>';
+      h += '<p class="muted">Si vence: ' + escapeHtml(q.clock.runs_out) + '</p>';
+    }
+    if (q.antagonist) h += '<p class="muted">Se te opone: <b>' + escapeHtml(q.antagonist.name) + '</b> (' + escapeHtml(q.antagonist.role) + ')</p>';
+    if (q.steps.length) h += '<ul class="steps">' + q.steps.map(function (s) { return '<li class="' + (s.done ? 'done' : '') + '">' + escapeHtml(s.text) + '</li>'; }).join('') + '</ul>';
+    if (q.paths.length) h += '<div class="paths"><b>Caminos</b><ol>' + q.paths.map(function (p) { return '<li>' + escapeHtml(p) + '</li>'; }).join('') + '</ol></div>';
+    q.rumors.forEach(function (r) { h += rumorHtml(r); });
+    var dates = [q.seen ? (q.kind === 'job' ? 'Visto en el tablón: ' : 'Desde: ') + q.seen : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean);
+    if (dates.length) h += '<div class="dates">' + escapeHtml(dates.join(' · ')) + '</div>';
+    return h + '</div></details>';
+  }
+  function rumorHtml(r) {
+    return '<div class="rumor"><b>' + (r.said_by ? 'Lo dice ' + escapeHtml(r.said_by) + ':' : 'Se dice:') + '</b> «' + escapeHtml(r.name) + '». ' + escapeHtml(r.hint) +
+      (r.where ? ' Dónde, según dicen: ' + escapeHtml(r.where) + '.' : '') + '<small>' + escapeHtml(r.when) + (r.mentions > 1 ? ' · ha salido ' + r.mentions + ' veces' : '') + '</small></div>';
+  }
+  function talkHtml(c, i) {
+    var color = npcColor(c.npc_id);
+    var pt = '<span class="pt" style="--npc:' + color + '">' + (c.portrait ? '<img alt="" src="' + escapeHtml(c.portrait) + '">' : escapeHtml(initial(c.name))) + '</span>';
+    var last = c.exchanges[c.exchanges.length - 1];
+    var h = '<details class="talk" style="--npc:' + color + '"' + (i === 0 ? ' open' : '') + '><summary>' + pt + '<span class="tt"><b>' + escapeHtml(c.name) + '</b><small>' +
+      escapeHtml([c.known ? c.role : 'nombre desconocido', c.exchanges.length + (c.exchanges.length === 1 ? ' intercambio' : ' intercambios'), last ? last.when : ''].filter(Boolean).join(' · ')) + '</small></span>' + CHEV + '</summary><div class="ex">';
+    c.exchanges.forEach(function (x) {
+      h += '<div class="exh"><span class="when">' + escapeHtml(x.when + ' · ' + x.location) + '</span>' +
+        x.said.map(function (s) { return '<div class="me">' + escapeHtml(s) + '</div>'; }).join('') +
+        x.replied.map(function (s) { return '<div class="them">' + escapeHtml(s) + '</div>'; }).join('') + '</div>';
+    });
+    h += '</div>';
+    if (c.memory.length) h += '<div class="mem"><b>Lo que recuerda de ti</b><ul>' + c.memory.map(function (m) { return '<li>' + escapeHtml(m.note) + ' <small>' + escapeHtml(m.when) + '</small></li>'; }).join('') + '</ul></div>';
+    return h + '</details>';
+  }
+  function dayHtml(d, i) {
+    return '<details class="day"' + (i === 0 ? ' open' : '') + '><summary><span class="tt"><b>' + escapeHtml(d.label) + '</b>' + (d.summary ? '<small>' + escapeHtml(d.summary) + '</small>' : '') + '</span>' + CHEV + '</summary>' +
+      d.entries.map(function (e) { return '<div class="en ' + e.kind + '"><span class="t">' + escapeHtml(e.time) + '</span><span>' + escapeHtml(e.text) + '</span></div>'; }).join('') + '</details>';
+  }
+  function placeHtml(p) {
+    var sub = [p.zone, p.here ? 'estás aquí' : p.status === 'visited' ? 'visitado' : 'de oídas', p.first_visit ? 'desde ' + p.first_visit : ''].filter(Boolean).join(' · ');
+    return '<div class="pl ' + p.status + (p.here ? ' here' : '') + '"><i></i><span><b>' + escapeHtml(p.name) + '</b><small>' + escapeHtml(sub) + '</small></span></div>';
+  }
+
+  function renderJournal(j) {
+    var h = '<div class="jnav">' + JSECTIONS.map(function (s) { return '<button type="button" data-jsec="' + s[0] + '"' + (s[0] === journalSection ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('') + '</div>';
+    if (journalSection === 'quests') {
+      h += '<h3>Activas <span>' + j.quests.active.length + '</span></h3>';
+      h += j.quests.active.length ? j.quests.active.map(questHtml).join('') : '<p class="empty">Nada entre manos. Mira el tablón o habla con la gente.</p>';
+      if (j.rumors.length) h += '<h3>Se dice</h3>' + j.rumors.map(rumorHtml).join('');
+      h += '<h3>Completadas <span>' + j.quests.completed.length + '</span></h3>';
+      h += j.quests.completed.length ? j.quests.completed.map(questHtml).join('') : '<p class="empty">Todavía ninguna.</p>';
+    } else if (journalSection === 'talks') {
+      h += '<h3>Conversaciones <span>' + j.conversations.length + '</span></h3>';
+      h += j.conversations.length ? j.conversations.map(talkHtml).join('') : '<p class="empty">Aún no has hablado con nadie.</p>';
+    } else if (journalSection === 'chronicle') {
+      h += '<h3>Crónica <span>' + j.chronicle.length + (j.chronicle.length === 1 ? ' día' : ' días') + '</span></h3>';
+      h += j.chronicle.length ? j.chronicle.map(dayHtml).join('') : '<p class="empty">Todavía no ha pasado nada.</p>';
+    } else {
+      h += '<h3>Lugares <span>' + j.places.length + '</span></h3>';
+      h += j.places.length ? j.places.map(placeHtml).join('') : '<p class="empty">No conoces ningún sitio.</p>';
+    }
+    journalEl.innerHTML = h;
+  }
+  journalEl.addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-jsec]');
+    if (!b) return;
+    journalSection = b.getAttribute('data-jsec'); store('tavernus.journal.section', journalSection);
+    if (journalData) renderJournal(journalData);
+  });
+  /** Abre una pestaña del panel desde el hilo (en el móvil, la vista entera). */
+  function goTab(t) { if (window.matchMedia('(max-width: 820px)').matches) setMobile(t); else setTab(t); }
+
   function connect(id) {
     current = id;
     store('tavernus.character.' + game, id);
@@ -1023,22 +1186,27 @@ export const PAGE = String.raw`<!doctype html>
     log.innerHTML = '';
     board.innerHTML = ''; boardData = null; clearTimeout(boardTimer); document.body.classList.remove('board-big');
     mapEl.innerHTML = ''; mapData = null; document.body.classList.remove('map-big');
+    journalEl.innerHTML = ''; journalData = null; setJournalNew(false);
     showScene(null);
     $('card').innerHTML = ''; $('sheet').innerHTML = '';
     renderParty();
+    if (window.TavernusSfx) TavernusSfx.character(id);
     stream = new EventSource(api('/api/stream?character=' + encodeURIComponent(id)));
     stream.addEventListener('history', function (e) {
       log.innerHTML = '';
       var h = JSON.parse(e.data);
       h.forEach(function (m, i) { renderMessage(m, i === h.length - 1); });
-      if (sceneLast) { var last = sceneLast; sceneSrc = null; showScene(last); }
-      if (!h.length) command('look');
+      if (!h.some(function (m) { return !m.scene; })) command('look');
     });
-    stream.addEventListener('message', function (e) { renderMessage(JSON.parse(e.data), true); loadBoard(); loadScene(); });
+    stream.addEventListener('cast', function (e) { setCast(JSON.parse(e.data)); });
+    stream.addEventListener('message', function (e) { var m = JSON.parse(e.data); renderMessage(m, true); if (window.TavernusTTS) TavernusTTS.fresh(); if (window.TavernusSfx) TavernusSfx.cue(m.sfx); loadBoard(); loadScene(); });
     stream.addEventListener('sheet', loadSheet);
-    stream.addEventListener('scene', function (e) { showScene(JSON.parse(e.data)); });
+    stream.addEventListener('moment', function (e) { var x = JSON.parse(e.data); showMoment(x, x.seq); });
+    stream.addEventListener('portrait', function (e) { setPortrait(JSON.parse(e.data)); });
+    stream.addEventListener('journal', loadJournal);
     loadSheet();
     loadScene();
+    loadJournal();
     input.focus();
   }
 
@@ -1047,8 +1215,9 @@ export const PAGE = String.raw`<!doctype html>
     var text = input.value.trim();
     if (!text || busy) return;
     input.value = '';
-    if (text.charAt(0) === '/') { add('player', text); command(text.split(/\s+/)[0]); }
-    else if (text === 'tirar' || text === 'roll') { add('player', text); spendButtons(); roll(); }
+    // Ni las consultas ni la tirada salen como mensaje del jugador: solo su respuesta.
+    if (text.charAt(0) === '/') command(text.split(/\s+/)[0]);
+    else if (text === 'tirar' || text === 'roll') { spendButtons(); roll(); }
     else act(text);
   });
   document.querySelectorAll('.chips button').forEach(function (b) {
@@ -1057,13 +1226,14 @@ export const PAGE = String.raw`<!doctype html>
   select.addEventListener('change', function () { connect(select.value); });
 
   // Pestañas del panel (Tablero, Mapa, Hoja). En el móvil, la barra de abajo elige entre la partida y una de ellas.
-  var tab = ['board', 'map', 'sheet'].indexOf(store('tavernus.tab')) >= 0 ? store('tavernus.tab') : 'board';
+  var tab = ['board', 'map', 'sheet', 'journal'].indexOf(store('tavernus.tab')) >= 0 ? store('tavernus.tab') : 'board';
   function setTab(t) {
     tab = t; store('tavernus.tab', t);
     document.querySelectorAll('.tabs [data-tab]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === t); });
     document.querySelectorAll('.pane').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== t; });
     if (t === 'board' && boardData) renderBoard(boardData);
     if (t === 'map' && mapData) renderMap(mapData);
+    if (journalVisible()) markJournalSeen();
   }
   function setMobile(v) {
     document.body.classList.toggle('tab-side', v !== 'play');
@@ -1100,6 +1270,9 @@ export const PAGE = String.raw`<!doctype html>
   });
 })();
 </script>
+${VOICE_SCRIPT}
+${TTS_SCRIPT}
+${SFX_SCRIPT}
 </body>
 </html>
 `;

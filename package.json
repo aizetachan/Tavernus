@@ -15,9 +15,13 @@
     "start": "node --env-file-if-exists=.env dist/index.js",
     "dev": "node --env-file-if-exists=.env --import tsx src/index.ts",
     "web": "node --env-file-if-exists=.env --import tsx src/index.ts --web",
+    "web:watch": "node --watch --watch-preserve-output --env-file-if-exists=.env --import tsx src/index.ts --web",
     "rules:ingest": "node --import tsx scripts/ingest-rules.ts",
     "bench": "node --env-file-if-exists=.env --import tsx scripts/model-bench.ts",
-    "bench:report": "node --import tsx scripts/bench-report.ts"
+    "bench:report": "node --import tsx scripts/bench-report.ts",
+    "bench:creativity": "node --env-file-if-exists=.env --import tsx scripts/creativity-bench.ts",
+    "autoplay": "node --env-file-if-exists=.env --import tsx scripts/autoplay.ts",
+    "judge": "node --env-file-if-exists=.env --import tsx scripts/judge.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

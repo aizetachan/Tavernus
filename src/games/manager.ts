@@ -7,6 +7,7 @@
  *   initial/       copia del estado recién creado (grabaciones y demos), para reiniciar
  *   recorded/      la partida grabada tal como quedó al convertirla en demo
  *   images/        ilustraciones de escena (IMAGES=on; src/ai/illustrate.ts)
+ *   world.seed.json mundo generado (src/worldgen): la semilla de la que arranca, en vez de la demo
  *
  * Las rutas del manifiesto son relativas a la carpeta de la partida (o absolutas):
  * la partida «principal» migrada apunta a DATA_DIR sin mover nada de sitio.
@@ -21,11 +22,30 @@ import type { Id, WorldSnapshot } from '../engine/model.js';
 import { makeSeed } from '../data/seed/demo.js';
 import { CLASSES, RACES } from '../data/srd/index.js';
 import { JsonFileRepository } from '../persistence/jsonfile.js';
+import { claimSituation, generateSeed, TONES, type GenerateOptions, type Tone } from '../worldgen/index.js';
 import { Master } from '../ai/master.js';
 import { isMasterMode, masterCacheDir, masterModeFromEnv, masterOptionsFor, type MasterMode } from '../ai/mode.js';
 import { attachIllustrator, cloudflareFromEnv, imagesEnabled, Illustrator, type IllustratorOptions } from '../ai/illustrate.js';
 
+/**
+ * En Windows, renombrar una carpeta falla con EPERM/EBUSY mientras algún
+ * descriptor de ficheros recién cerrado sigue vivo unos milisegundos.
+ * Reintenta con esperas cortas y, si no hay manera, copia y borra.
+ */
+async function renameWithRetry(from: string, to: string, attempts = 8): Promise<void> {
+  for (let i = 0; i < attempts; i++) {
+    try { await rename(from, to); return; } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'ENOTEMPTY') throw e;
+      await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+    }
+  }
+  await cp(from, to, { recursive: true });
+  await rm(from, { recursive: true, force: true });
+}
+
 export const MANIFEST = 'game.json';
+export const WORLD_FILE = 'world.seed.json';
 export const MAIN_SLUG = 'principal';
 export const INITIAL_DEMO_SLUG = 'demo-inicial';
 /** Modos que se eligen al crear; `replay` solo lo tienen las demos. */
@@ -52,7 +72,19 @@ export interface GameManifest {
   initial_dir: string | null;
   /** Personaje creado con la partida, si se creó alguno. */
   character_id: Id | null;
+  /** Mundo generado: de qué semilla y dónde está guardado. Sin él (o null), la semilla demo. */
+  world?: GameWorld | null;
 }
+
+export interface GameWorld { file: string; seed: number; tone: Tone; setting: string; model: string }
+
+/** Lo que pide el formulario para generar un mundo. Semilla vacía o null: al azar. */
+export interface WorldInput { seed?: number | string | null; tone?: string; setting?: string }
+
+/** Tonos para el menú, en castellano. */
+export const TONE_OPTIONS: { id: Tone; name: string }[] = [
+  { id: 'grim', name: 'Sombrío' }, { id: 'epic', name: 'Épico' }, { id: 'horror', name: 'Terror' }, { id: 'pulp', name: 'Pulp' }, { id: 'comedy', name: 'Cómico' },
+];
 
 export interface GameInfo {
   slug: string;
@@ -67,14 +99,19 @@ export interface GameInfo {
   /** Respuestas guardadas en la caché (grabaciones y demos). */
   cache_entries: number;
   open: boolean;
+  /** Mundo generado (null: la semilla demo). */
+  world: { seed: number; tone: Tone } | null;
 }
 
 export interface CreateGameInput {
   name: string;
   mode: NewGameMode;
-  character?: { name: string; race_id?: string; class_id?: string } | null;
+  /** `hook`: lo que el jugador cuenta de por qué viene; en un mundo generado entra en su situación inicial. */
+  character?: { name: string; race_id?: string; class_id?: string; hook?: string } | null;
   dice_seed?: number | null;
   campaign_id?: Id;
+  /** Mundo nuevo generado en vez de la semilla demo. */
+  world?: WorldInput | null;
 }
 
 export interface GamePaths { dir: string; data: string; cache: string; initial: string | null }
@@ -94,6 +131,8 @@ export interface GameManagerOptions {
   log?: (msg: string) => void;
   /** Opciones extra del ilustrador con IMAGES=on (fetch simulado en tests). */
   illustrator?: Partial<IllustratorOptions>;
+  /** Generador de mundos (por defecto src/worldgen); inyectable en tests. */
+  worldgen?: (opts: GenerateOptions) => Promise<WorldSnapshot>;
 }
 
 export class GameError extends Error {
@@ -122,6 +161,7 @@ export class GameManager {
   private readonly masterFor: MasterFactory;
   private readonly engineOpts: Partial<EngineOptions>;
   private readonly illustratorOpts: Partial<IllustratorOptions>;
+  private readonly worldgen: (opts: GenerateOptions) => Promise<WorldSnapshot>;
   private readonly now: () => Date;
   private readonly log: (msg: string) => void;
   private readonly engines = new Map<string, Promise<Engine>>();
@@ -133,13 +173,14 @@ export class GameManager {
     this.masterFor = opts.masterFor ?? defaultMasterFactory(this.env);
     this.engineOpts = opts.engine ?? {};
     this.illustratorOpts = opts.illustrator ?? {};
+    this.worldgen = opts.worldgen ?? generateSeed;
     this.now = opts.now ?? (() => new Date());
     this.log = opts.log ?? ((m) => console.log(m));
   }
 
   /** Opciones del formulario de nueva partida. */
-  static characterOptions(): { races: { id: string; name: string }[]; classes: { id: string; name: string }[] } {
-    return { races: RACES.map((r) => ({ id: r.id, name: r.name })), classes: CLASSES.map((c) => ({ id: c.id, name: c.name })) };
+  static characterOptions(): { races: { id: string; name: string }[]; classes: { id: string; name: string }[]; tones: { id: Tone; name: string }[] } {
+    return { races: RACES.map((r) => ({ id: r.id, name: r.name })), classes: CLASSES.map((c) => ({ id: c.id, name: c.name })), tones: TONE_OPTIONS };
   }
 
   // -------------------------------------------------------------------------
@@ -228,12 +269,13 @@ export class GameManager {
         const snap = JSON.parse(await readFile(join(p.data, `${m.campaign_id}.world.json`), 'utf8')) as WorldSnapshot;
         characters = snap.characters.filter((c) => c.status !== 'retired').map((c) => c.name);
       } catch { /* aún sin arrancar: la semilla */
-        characters = makeSeed().characters.map((c) => c.name);
+        characters = m.world ? [] : makeSeed().characters.map((c) => c.name);
       }
     }
     return {
       slug: m.slug, name: m.name, created_at: m.created_at, last_opened_at: m.last_opened_at, mode: m.mode, demo: m.demo, main: m.main,
       dice_seed: m.dice_seed, characters, cache_entries: m.mode === 'record' || m.mode === 'replay' ? await countJson(p.cache) : 0, open,
+      world: m.world ? { seed: m.world.seed, tone: m.world.tone } : null,
     };
   }
 
@@ -271,7 +313,7 @@ export class GameManager {
   private async boot(slug: string): Promise<Engine> {
     const m = await this.require(slug);
     const p = this.paths(m);
-    const seed = makeSeed();
+    const seed = m.world ? JSON.parse(await readFile(join(p.dir, m.world.file), 'utf8')) as WorldSnapshot : makeSeed();
     const engine = await Engine.boot({
       ...this.engineOpts,
       repo: new JsonFileRepository(p.data), campaignId: m.campaign_id,
@@ -315,6 +357,7 @@ export class GameManager {
     const seedIn = input.dice_seed;
     if (seedIn !== undefined && seedIn !== null && (!Number.isInteger(seedIn) || seedIn < 0 || seedIn > 0xffffffff)) throw new GameError('La semilla de dados debe ser un entero entre 0 y 4294967295.');
     const charName = input.character?.name?.trim() ?? '';
+    const world = input.world ? parseWorldInput(input.world) : null;
 
     const slug = await this.freeSlug(slugify(name));
     // Una grabación siempre lleva semilla: así la demo tira los mismos dados.
@@ -327,6 +370,21 @@ export class GameManager {
     await this.writeManifest(game);
 
     try {
+      if (world) {
+        // Mundo nuevo: se genera con el PJ dentro (para que nazca con su situación) y se guarda junto a la partida.
+        const hook = input.character?.hook?.trim().slice(0, 400);
+        const race = RACES.find((r) => r.id === input.character?.race_id)?.name;
+        const klass = CLASSES.find((c) => c.id === input.character?.class_id)?.name;
+        const snap = await this.worldgen({
+          ...world, env: { ...this.env, MASTER_MODE: game.mode }, log: this.log,
+          ...(game.mode === 'offline' ? { client: null } : {}),
+          characters: charName ? [{ name: charName, ...(race ? { race } : {}), ...(klass ? { class_name: klass } : {}), ...(hook ? { hook } : {}) }] : [],
+        });
+        await writeFile(join(this.dirOf(slug), WORLD_FILE), JSON.stringify(snap), 'utf8');
+        game.campaign_id = snap.campaign.id;
+        game.world = { file: WORLD_FILE, seed: world.seed, tone: world.tone, setting: world.setting, model: snap.campaign.generation?.model ?? 'offline' };
+        await this.writeManifest(game);
+      }
       const engine = await this.open(slug);
       if (charName) {
         const r = await engine.createCharacter(`web:${slug}`, charName, {
@@ -335,6 +393,7 @@ export class GameManager {
         });
         if (!r.ok) throw new GameError(r.reason);
         game.character_id = r.character.id;
+        if (game.world) claimSituation(engine.world, r.character.id, engine.gameNow(), input.character?.hook);
       }
       await engine.flush();
       if (input.mode === 'record') {
@@ -373,7 +432,7 @@ export class GameManager {
     await this.close(slug);
     const recorded = join(p.dir, 'recorded');
     await rm(recorded, { recursive: true, force: true });
-    if (await exists(p.data)) await rename(p.data, recorded);
+    if (await exists(p.data)) await renameWithRetry(p.data, recorded);
     await this.restoreInitial(m);
     m.mode = 'replay';
     m.demo = true;
@@ -430,6 +489,18 @@ export class GameManager {
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, MANIFEST), JSON.stringify(m, null, 2), 'utf8');
   }
+}
+
+/** Valida lo que llega del formulario: semilla entera (vacía = al azar), tono conocido, ambientación corta. */
+export function parseWorldInput(w: WorldInput): { seed: number; tone: Tone; setting: string } {
+  const raw = typeof w.seed === 'string' ? w.seed.trim() : w.seed;
+  const seed = raw === undefined || raw === null || raw === '' ? Math.floor(Math.random() * 0xffffffff) : Number(raw);
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new GameError('La semilla del mundo debe ser un entero entre 0 y 4294967295.');
+  const tone = (w.tone || 'grim') as Tone;
+  if (!TONES.includes(tone)) throw new GameError(`Tono no válido: ${String(w.tone)} (${TONES.join(' | ')}).`);
+  const setting = (w.setting ?? '').trim().replace(/\s+/g, ' ');
+  if (setting.length > 300) throw new GameError('La ambientación no puede pasar de 300 caracteres.');
+  return { seed, tone, setting };
 }
 
 function relPath(from: string, to: string): string {

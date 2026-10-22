@@ -9,7 +9,9 @@ import type { Engine } from '../engine/engine.js';
 import { defaultRng, type Rng, type RollResult } from '../engine/dice.js';
 import type { Character } from '../engine/model.js';
 import { actionContext, systemPrompt, type DecisiveResponse, type RollContext, type Scene } from './prompt.js';
-import { executeTool, MASTER_TOOLS, type LogEventInput, type ToolContext } from './tools.js';
+import { executeTool, MASTER_TOOLS, WRITE_TOOLS, type LogEventInput, type ToolContext } from './tools.js';
+import type { Approach } from '../engine/movement.js';
+import { rollCategory } from '../engine/closecheck.js';
 import type { ProgressEvent } from '../engine/progress.js';
 
 export interface MasterClient {
@@ -20,8 +22,24 @@ export interface MasterUsage { input: number; output: number; cache_read: number
 
 export interface ToolCallRecord { name: string; input: Record<string, unknown>; result: string }
 
+/** Un tool de escritura que falló en esta acción: lo que el máster no puede narrar como hecho. */
+export interface ToolFailure { name: string; input: Record<string, unknown>; error: string }
+
+/** Razón legible de un resultado de error: código, motivo y pista. */
+export function failureReason(result: string): string {
+  try {
+    const r = JSON.parse(result) as { error?: unknown; detail?: { reason?: unknown }; hint?: unknown };
+    return [r.error, r.detail?.reason, r.hint].filter((x) => typeof x === 'string' && x).join(': ') || result;
+  } catch { return result; }
+}
+
+/** Aviso al máster tras un tool de escritura fallido (va antes de que siga). */
+export function failureNotice(f: { name: string; error: string }): string {
+  return `El tool ${f.name} falló: ${failureReason(f.error)}. Narra que NO ha ocurrido o pide lo que falta; no narres el efecto.`;
+}
+
 export type MasterOutcome =
-  | { ok: true; closed: LogEventInput; usage: MasterUsage; calls: ToolCallRecord[]; rolls: RollResult[]; context: string; model: string; progress: ProgressEvent[] }
+  | { ok: true; closed: LogEventInput; usage: MasterUsage; calls: ToolCallRecord[]; rolls: RollResult[]; context: string; model: string; progress: ProgressEvent[]; tool_errors?: ToolFailure[]; approach?: Approach }
   | { ok: false; reason: 'refusal' | 'no_log_event' | 'api_error' | 'max_iterations' | 'not_configured'; message: string; usage?: MasterUsage; calls?: ToolCallRecord[] };
 
 export interface MasterOptions {
@@ -81,8 +99,14 @@ export class Master {
       ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }
       : {};
     const context = actionContext(engine, actor, text, roll, intro, scene, decisive);
-    const ctx: ToolContext = { engine, actor, nowGameS: engine.gameNow(), rng: this.rng, closed: null, rolls: [], progress: [] };
+    const ctx: ToolContext = { engine, actor, nowGameS: engine.nowFor(actor), rng: this.rng, closed: null, rolls: [], progress: [], action_text: roll?.original_text ?? (intro || scene ? null : text), roll_category: roll && !/^ataque/i.test(roll.result.label) ? rollCategory(roll.result) : null };
     const calls: ToolCallRecord[] = [];
+    const failures: ToolFailure[] = [];
+    /** Cierre aceptado: con tool_failed y los errores si algo de escritura falló por el camino. */
+    const done = (closed: LogEventInput, m: string): MasterOutcome => ({
+      ok: true, closed: failures.length ? { ...closed, tags: [...closed.tags, 'tool_failed'] } : closed, usage, calls, rolls: ctx.rolls, context, model: m, progress: ctx.progress,
+      ...(failures.length ? { tool_errors: failures } : {}), ...(ctx.approach ? { approach: ctx.approach } : {}),
+    });
     const usage: MasterUsage = { input: 0, output: 0, cache_read: 0, cache_write: 0, iterations: 0, ms: 0 };
     const t0 = Date.now();
 
@@ -116,22 +140,33 @@ export class Master {
           const txt = res.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('\n').trim();
           usage.ms = Date.now() - t0;
           if (!txt) return { ok: false, reason: 'no_log_event', message: 'respuesta vacía', usage, calls };
-          return { ok: true, closed: { narration_private: txt, observable: null, observable_vague: null, loudness: 1, tags: ['no_log_event'], suggested_actions: [], requires_roll: null, decisive: null }, usage, calls, rolls: ctx.rolls, context, model: res.model, progress: ctx.progress };
+          return done({ narration_private: txt, observable: null, observable_vague: null, loudness: 1, tags: ['no_log_event'], suggested_actions: [], requires_roll: null, decisive: null }, res.model);
         }
 
         messages.push({ role: 'assistant', content: res.content });
-        const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
-        for (const tu of toolUses) {
+        // log_event va el último: si un tool de escritura de este mismo mensaje falla, el cierre se rechaza.
+        const byId = new Map<string, string>();
+        const failedNow: ToolFailure[] = [];
+        for (const tu of [...toolUses.filter((t) => t.name !== 'log_event'), ...toolUses.filter((t) => t.name === 'log_event')]) {
           const input = (tu.input ?? {}) as Record<string, unknown>;
-          const result = executeTool(ctx, tu.name, input);
+          const result = tu.name === 'log_event' && failedNow.length
+            ? JSON.stringify({ error: `log_event rechazado: ${failedNow.map((f) => f.name).join(', ')} falló en este mismo mensaje, así que no ha ocurrido. Vuelve a cerrar con log_event narrando que NO ha pasado (o pidiendo lo que falta).` })
+            : executeTool(ctx, tu.name, input);
           calls.push({ name: tu.name, input, result });
-          results.push({ type: 'tool_result', tool_use_id: tu.id, content: result, is_error: result.startsWith('{"error"') });
+          byId.set(tu.id, result);
+          if (WRITE_TOOLS.has(tu.name) && result.startsWith('{"error"')) failedNow.push({ name: tu.name, input, error: result });
         }
-        messages.push({ role: 'user', content: results });
+        failures.push(...failedNow);
+        const results: Anthropic.Beta.BetaToolResultBlockParam[] = toolUses.map((tu) => {
+          const result = byId.get(tu.id)!;
+          return { type: 'tool_result', tool_use_id: tu.id, content: result, is_error: result.startsWith('{"error"') };
+        });
+        const notices: Anthropic.Beta.BetaTextBlockParam[] = failedNow.map((f) => ({ type: 'text', text: failureNotice(f) }));
+        messages.push({ role: 'user', content: [...results, ...notices] });
 
         if (ctx.closed) {
           usage.ms = Date.now() - t0;
-          return { ok: true, closed: ctx.closed, usage, calls, rolls: ctx.rolls, context, model: res.model, progress: ctx.progress };
+          return done(ctx.closed, res.model);
         }
       }
       // Tope alcanzado: una última llamada solo con log_event para que cierre narrando lo conseguido y lo que falló.
@@ -152,7 +187,7 @@ export class Master {
         calls.push({ name: tu.name, input, result: executeTool(ctx, tu.name, input) });
       }
       usage.ms = Date.now() - t0;
-      if (ctx.closed) return { ok: true, closed: { ...ctx.closed, tags: [...ctx.closed.tags, 'max_iterations'] }, usage, calls, rolls: ctx.rolls, context, model: fin.model, progress: ctx.progress };
+      if (ctx.closed) return done({ ...ctx.closed, tags: [...ctx.closed.tags, 'max_iterations'] }, fin.model);
       console.warn('[master] llamadas:', JSON.stringify(calls.map((c) => ({ name: c.name, input: c.input, result: c.result.slice(0, 120) }))));
       return { ok: false, reason: 'max_iterations', message: `más de ${cfg.max_tool_calls} llamadas a tools sin cerrar`, usage, calls };
     } catch (e) {

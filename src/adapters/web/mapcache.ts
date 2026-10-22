@@ -14,13 +14,12 @@
 import type { Engine } from '../../engine/engine.js';
 import type { Id } from '../../engine/model.js';
 import { positionOf } from '../../engine/movement.js';
-import { DEMO_MAPS, type LocationMap } from '../../data/seed/maps.js';
+import type { LocationMap } from '../../data/seed/maps.js';
 import { generateMap, mapInputOf } from './mapgen.js';
 
 export interface CachedMap {
+  /** Plano entero, generado con la semilla de la campaña: sus límites no incluyen lo oculto y se amplían al descubrirlo. */
   map: LocationMap;
-  /** Generado (no dibujado a mano): sus límites no incluyen lo oculto y se amplían al descubrirlo. */
-  generated: boolean;
 }
 
 type EngineLike = Pick<Engine, 'world' | 'gameNow'>;
@@ -34,7 +33,7 @@ export class MapCache {
   /** Planos generados desde que existe la caché (para tests y diagnóstico). */
   generatedCount = 0;
 
-  constructor(private readonly engine: EngineLike, private readonly hand: Record<Id, LocationMap> = DEMO_MAPS) {
+  constructor(private readonly engine: EngineLike) {
     const world = engine.world;
     this.off = world.onChange(({ collection, id, doc }) => {
       switch (collection) {
@@ -63,6 +62,10 @@ export class MapCache {
           return;
         case 'characters':
           this.preloadFor(id);
+          return;
+        case 'campaign':
+          // La semilla del mundo puede haber cambiado: todos de nuevo.
+          for (const l of [...this.maps.keys()]) this.invalidate(l);
           return;
       }
     });
@@ -134,8 +137,6 @@ export class MapCache {
   }
 
   private build(locationId: Id): CachedMap {
-    const hand = this.hand[locationId];
-    if (hand) return { map: hand, generated: false };
     const input = mapInputOf(this.engine.world, locationId);
     for (const dep of [...input.spots.map((s) => s.id), ...(input.exits ?? []).flatMap((e) => [e.id, e.to_location_id])]) {
       let set = this.deps.get(dep);
@@ -143,7 +144,7 @@ export class MapCache {
       set.add(locationId);
     }
     this.generatedCount++;
-    return { map: generateMap(input), generated: true };
+    return { map: generateMap(input) };
   }
 }
 

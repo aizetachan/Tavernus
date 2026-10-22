@@ -6,17 +6,24 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Engine } from '../engine/engine.js';
 import { rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
-import { inventoryDetailed, inventoryView, spawnItem, transferItem } from '../engine/inventory.js';
-import type { Character, Id, Placement } from '../engine/model.js';
-import { moveTo, positionOf } from '../engine/movement.js';
+import { inventoryDetailed, inventoryView, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
+import type { Character, Id, Npc, Placement } from '../engine/model.js';
+import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
 import { perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
 import { attitudeOf, resolveAttack } from '../engine/combat.js';
-import { characterCheck, SKILLS, type CheckKind } from '../engine/rules.js';
+import { characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
 import { fmtDuration } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
+import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
+import { addScheduledEvent, listSchedule, RECURRENCES } from '../engine/schedule.js';
+import { characterFacts, recordFact } from '../engine/facts.js';
+import type { DialogueLine } from '../engine/moments.js';
+import { fmtCoins, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
+import { inventedPlaces } from '../engine/places.js';
+import { DEAL_REJECTION, dealWithoutState, outcomeMismatch, outcomeRejection, type RollCategory } from '../engine/closecheck.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
 type Tool = Anthropic.Beta.BetaTool;
@@ -114,6 +121,18 @@ export const MASTER_TOOLS: Tool[] = [
   tool('buy_item', 'Compra a un NPC algo de su lista de venta. Descuenta monedas y lo pone en manos/bolsillo (o en el suelo si no cabe).', {
     character_id: str('ID del personaje'), npc_id: str('ID del NPC'), item_id: str('ID del catálogo'), quantity: num('Cantidad'),
   }),
+  tool('set_debt', 'Anota lo que el actor debe a un NPC (una cuenta, un préstamo, un precio fiado) o corrige la deuda abierta con él. Lo que se debe es estado del mundo, no solo narración: sin esto no se puede pagar ni reclamar.', {
+    npc_id: str('ID del NPC al que debe'), amount: num('Monedas que debe en total'), reason: str('Por qué, corto: «la cuenta de la posada»'),
+    due_in_hours: nnum('Horas de juego hasta que vence (de la noche a mañana por la mañana ≈ 10); null = sin plazo'),
+  }),
+  tool('pawn_item', 'El actor deja un objeto suyo en prenda a un NPC: el objeto pasa al NPC y queda ligado a la deuda; vuelve al saldarla. Con for_item_id, a cambio de algo que el NPC vende (una noche de posada): se lo entrega fiado y la deuda es su precio. Sin for_item_id, la prenda garantiza la deuda anotada o una nueva de amount.', {
+    npc_id: str('ID del NPC que guarda la prenda'), instance_id: str('ID del ejemplar que deja (inventario del actor)'),
+    for_item_id: nstr('ID del catálogo de lo que recibe fiado (de su lista «Vende»), o null'), amount: nnum('Sin for_item_id: monedas que garantiza; null si ya hay deuda anotada'),
+    reason: str('Por qué, corto: «fianza por una noche»'), due_in_hours: nnum('Horas de juego hasta que vence; null = sin plazo'),
+  }),
+  tool('settle_debt', 'Salda (o rebaja) la deuda del actor con un NPC: coins paga con sus monedas (amount o todo), work la da por pagada con un trabajo ya hecho, forfeit la da por perdida y el NPC se queda la prenda. Al saldarla, la prenda vuelve al actor.', {
+    npc_id: str('ID del NPC'), how: enm([...SETTLE_HOW], 'coins (paga), work (trabajo hecho), forfeit (pierde la prenda)'), amount: nnum('Solo coins: monedas que paga; null = todo'),
+  }),
   tool('attack', 'Ataque de un NPC (o de un PJ fuera del flujo de tirada del jugador). El servidor tira contra la CA, calcula y aplica el daño. Para el ataque del propio jugador usa requires_roll con kind=attack y requires_roll_target.', {
     attacker_id: str('ID del que ataca (NPC o personaje)'), target_id: str('ID del objetivo'), advantage: enm(ADV, 'Ventaja o desventaja'),
   }),
@@ -138,6 +157,39 @@ export const MASTER_TOOLS: Tool[] = [
     expires_in_minutes: nnum('Caduca a los N minutos de juego; null = por defecto (1 día, o 1 h después de la hora)'),
   }),
   tool('cancel_hook', 'Anula un gancho sembrado que ya no tiene sentido.', { hook_id: str('ID del gancho (hk_…)') }),
+  tool('plant_rumor', 'Siembra un rumor cuando el jugador busca, afirma o inventa algo plausible del mundo compartido que no está en los datos (un tesoro, alguien, un sitio, un pasadizo, un encargo). No crea nada real: queda que «se dice» algo, circulando por esta localización, para que la historia pueda retomarlo. Con el mismo nombre que uno que ya corre aquí, lo retoma sin gastar presupuesto. Presupuesto: pocos rumores nuevos por personaje y día de juego; si se agota, devuelve error.', {
+    kind: enm([...RUMOR_KINDS], 'rumor (habladuría), place (lugar), person (persona), item (objeto), quest (empresa o encargo)'),
+    name: str('Cómo lo llama la gente, corto: «el tesoro de la croqueta dorada»'),
+    hint: str('Lo que se dice, en una frase. Habladuría, no hecho; sin revelar secretos de la campaña'),
+    where: nstr('Dónde dicen que está, en palabras de la gente («más allá del portón norte»); null si nadie lo sabe'),
+    said_by_actor: bool('true si es el propio personaje quien lo afirma o lo inventa («he oído que…», «en mi pueblo se contaba…»): queda como «lo dice él», sin confirmar. false si es habladuría del mundo'),
+  }),
+  tool('record_character_fact', 'Guarda algo que el jugador cuenta de SU personaje y que solo le toca a él: su pasado, un recuerdo, alguien de su vida que no está aquí. Se acepta como verdad de ese personaje, no del mundo; no da objetos, monedas, competencias ni favores. Lo que afirme del mundo compartido va con plant_rumor.', {
+    kind: enm(['background', 'memory', 'relationship'], 'background (pasado, oficio, origen), memory (un recuerdo), relationship (alguien de su vida fuera de escena)'),
+    text: str('En tercera persona y una frase: «Su padre era herrero en la capital y le enseñó a juzgar el acero»'),
+  }),
+
+  tool('schedule_event', 'Programa algo que pasa a una hora en un sitio (una misa, un mercado, una reunión, una llegada), sobre todo cuando un NPC lo anuncia: a su hora el servidor trae a la gente y a los NPC, aplica el ruido y lo cuenta a quien esté. Si ya existe uno con ese título en ese sitio, no lo duplica: lo devuelve y anota que el actor lo sabe.', {
+    title: str('Con artículo, corto: «la misa», «el mercado», «la reunión del concejo»'),
+    location_id: nstr('Localización; null = la del actor'),
+    spot_id: nstr('Punto donde se junta la gente; null = el punto principal'),
+    start_hour: num('Hora de juego de inicio, decimal: 8, 20.5 (20:30)'),
+    duration_min: num('Duración en minutos de juego (5-1380)'),
+    recurrence: enm([...RECURRENCES], 'daily (cada día), weekly (un día de la semana), once (una vez)'),
+    weekday: nstr('Solo weekly: nombre del día; null en los demás'),
+    days_from_now: nnum('Solo once: 0 = hoy (o mañana si ya pasó la hora), 1 = mañana…; null en los demás'),
+    description: str('Qué pasa, para ti: quién lo dirige, qué se hace, qué se oye'),
+    npc_ids: str('NPC con ficha que acuden, IDs separados por comas; cadena vacía si ninguno'),
+    crowd: nstr('Figurantes sin ficha: «feligreses ×12; un fraile ×1»; null si nadie más'),
+    noise: nnum('Ruido del lugar mientras dura, 0-1 (mercado 0.5, misa 0.15); null = sin cambio'),
+    busy_npc_ids: str('NPC ocupados mientras dura (el que oficia), IDs separados por comas; cadena vacía si ninguno'),
+    start_text: nstr('Lo que ve quien está allí al empezar, en tercera persona; null = texto por defecto'),
+    end_text: nstr('Lo que ve quien está allí al acabar; null = texto por defecto'),
+    told_actor: bool('true si en esta escena se lo han dicho al actor (un NPC se lo anuncia)'),
+  }),
+  tool('get_schedule', 'Agenda del mundo: qué pasa, dónde, cada cuánto, cuándo es lo próximo y si está en marcha.', {
+    location_id: nstr('"here", un ID de localización o null para toda la agenda'),
+  }),
 
   tool('log_event', 'CIERRE OBLIGATORIO de cada acción. Registra lo ocurrido y lo entrega a cada personaje según lo que percibe. Tras llamarlo, termina.', {
     narration_private: str('Lo que ve el actor. Segunda persona. Breve.'),
@@ -159,8 +211,24 @@ export const MASTER_TOOLS: Tool[] = [
     names_learned: nstr('IDs (separados por comas) de NPCs o personajes cuyo NOMBRE el actor ha aprendido en esta acción porque se presentaron o alguien los nombró. null si ninguno.'),
     places_learned: nstr('IDs (separados por comas) de localizaciones de las que el actor ha oído hablar en esta acción porque alguien nombró el sitio o lo leyó en un cartel o mapa. null si ninguna.'),
     introduces_self: bool('true si el actor ha dicho su propio nombre en voz alta en esta acción (los presentes lo aprenden).'),
+    lines: {
+      type: ['array', 'null'],
+      description: 'Parlamentos literales de esta acción, en orden (modo novela). speaker "npc" con su npc_id, o "actor" (npc_id null). text: solo las palabras dichas, sin comillas ni acotaciones. null si nadie habla.',
+      items: {
+        type: 'object',
+        properties: { speaker: { type: 'string', enum: ['npc', 'actor'] }, npc_id: { type: ['string', 'null'] }, text: { type: 'string' } },
+        required: ['speaker', 'npc_id', 'text'],
+        additionalProperties: false,
+      },
+    },
   }),
 ];
+
+/** Tools que cambian el mundo: si fallan, eso no ha ocurrido y no se puede narrar (master.ts). */
+export const WRITE_TOOLS = new Set([
+  'move_to', 'transfer_item', 'spawn_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job',
+  'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
+]);
 
 export const MEMORY_CAP_PER_CHARACTER = 8;
 export const MEMORY_CAP_PER_NPC = 40;
@@ -177,6 +245,19 @@ export interface ToolContext {
   rolls: RollResult[];
   /** Avisos de progreso (pista, encargo, práctica, logro) para emitir como sistema tras la acción. */
   progress: ProgressEvent[];
+  /** Texto de la acción del jugador, como procedencia de lo que se siembre (rumores). */
+  action_text?: string | null;
+  /** Acercamiento que ha hecho el motor en esta acción para que el actor alcance a un NPC. */
+  approach?: Approach | null;
+  /** Veces que se ha rechazado el cierre por citar un lugar que no existe (una como mucho). */
+  place_rejections?: number;
+  /** Tools de escritura que han salido bien en esta acción (para el detector de tratos). */
+  ok_tools?: string[];
+  /** Si es la continuación de una tirada: su categoría (closecheck.ts). */
+  roll_category?: RollCategory | null;
+  /** Cierres rechazados por trato sin estado o por desenlace contra la tirada (uno de cada como mucho). */
+  deal_rejections?: number;
+  outcome_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -188,6 +269,31 @@ export interface LogEventInput {
   suggested_actions: string[];
   requires_roll: { kind: CheckKind; key: string; dc: number | null; advantage: Advantage; target?: string } | null;
   decisive: { threat: string; npc_id: string | null } | null;
+  /** NPC con quien ha hablado el actor (para el retrato del primer encuentro). */
+  npc_id?: string | null;
+  /** Parlamentos literales (modo novela); narration_private sigue siendo el texto completo. */
+  lines?: DialogueLine[];
+}
+
+/** Parlamentos válidos del cierre: hablante conocido, texto limpio; como mucho 12. Acepta lista o JSON en texto. */
+export function parseLines(raw: unknown, fallbackNpc: string | null, isNpc: (id: string) => boolean): DialogueLine[] {
+  let list: unknown = raw;
+  if (typeof list === 'string') { try { list = JSON.parse(list); } catch { return []; } }
+  if (!Array.isArray(list)) return [];
+  const out: DialogueLine[] = [];
+  for (const l of list) {
+    if (!l || typeof l !== 'object') continue;
+    const r = l as Record<string, unknown>;
+    const text = cleanText(String(r['text'] ?? '')).replace(/^[«"“—-]\s*|\s*[»"”]$/g, '').trim().slice(0, 600);
+    if (!text) continue;
+    if (r['speaker'] === 'actor') out.push({ speaker: 'actor', text });
+    else if (r['speaker'] === 'npc') {
+      const id = typeof r['npc_id'] === 'string' && isNpc(r['npc_id']) ? r['npc_id'] : fallbackNpc;
+      if (id) out.push({ speaker: 'npc', npc_id: id, text });
+    }
+    if (out.length >= 12) break;
+  }
+  return out;
 }
 
 /** PJs que oyen al actor con detalle (banda full de oído). */
@@ -215,10 +321,59 @@ export function resetRulesIndex(): void {
 export function executeTool(ctx: ToolContext, name: string, input: Record<string, unknown>): string {
   try {
     const out = run(ctx, name, input);
-    return typeof out === 'string' ? out : JSON.stringify(out);
+    const res = typeof out === 'string' ? out : JSON.stringify(out);
+    if (WRITE_TOOLS.has(name) && !res.startsWith('{"error"')) (ctx.ok_tools ??= []).push(name);
+    return res;
   } catch (e) {
-    return JSON.stringify({ error: (e as Error).message });
+    return JSON.stringify({ error: unknownIdError(ctx, (e as Error).message) });
   }
+}
+
+/** Lo que hay aquí, para los errores de «eso no existe»: el máster lo lee y no inventa. */
+function hereList(ctx: ToolContext): string {
+  const w = ctx.engine.world;
+  const loc = positionOf(w, ctx.actor, ctx.nowGameS).location_id;
+  const spots = w.spotsOf(loc).filter((sp) => !sp.hidden || sp.discovered_by.includes(ctx.actor.id)).map((sp) => `${sp.name} [${sp.id}]`);
+  const exits = w.spotsOf(loc).flatMap((sp) => w.exitsFrom(sp.id).map(({ to_spot_id }) => `${w.locationOfSpot(to_spot_id).name} [${to_spot_id}]`));
+  return `Puntos de aquí: ${spots.join(', ')}.${exits.length ? ` Salidas: ${exits.join(', ')}.` : ''}`;
+}
+
+/** «spot not found: sp_cocina» → un mensaje que diga qué hay y que no se invente. */
+function unknownIdError(ctx: ToolContext, msg: string): string {
+  const m = /^(spot|location|npc|item_instance|character) not found: (.+)$/.exec(msg);
+  if (!m) return msg;
+  const what = { spot: 'el punto', location: 'la localización', npc: 'el NPC', item_instance: 'el objeto', character: 'el personaje' }[m[1] as 'spot'];
+  return `No existe ${what} ${m[2]} en los datos: no está en el mundo. ${m[1] === 'spot' || m[1] === 'location' ? `${hereList(ctx)} ` : ''}Narra que no hay nada así; no lo inventes.`;
+}
+
+/** Dónde está un punto respecto al actor: nombre, ID y metros. */
+function whereIs(ctx: ToolContext, spotId: Id): { spot_id: Id; name: string; distance_m: number } {
+  const w = ctx.engine.world;
+  const sp = w.spot(spotId);
+  const pos = positionOf(w, ctx.actor, ctx.nowGameS);
+  return { spot_id: sp.id, name: sp.name, distance_m: Math.round(Math.hypot(sp.x - pos.x, sp.y - pos.y)) };
+}
+
+/**
+ * Para tratar con un NPC hay que estar en su punto. Si está en la misma
+ * localización y no es hostil, el motor acerca al actor (unos segundos de
+ * juego) y lo anota para el evento. Devuelve null si ya lo alcanza, o el
+ * error con la distancia y adónde ir.
+ */
+function reachNpc(ctx: ToolContext, npc: Npc): Record<string, unknown> | null {
+  const w = ctx.engine.world;
+  if (w.characterSpot(ctx.actor)?.id === npc.location.id) return null;
+  const at = whereIs(ctx, npc.location.id);
+  const sameLoc = w.spot(npc.location.id).location_id === positionOf(w, ctx.actor, ctx.nowGameS).location_id;
+  if (sameLoc && npc.status === 'alive' && attitudeOf(npc, ctx.actor.id) !== 'hostile') {
+    const a = approachSpot(w, ctx.actor, npc.location.id);
+    if (a) { ctx.approach = ctx.approach ? { ...ctx.approach, to_spot_id: a.to_spot_id, duration_s: ctx.approach.duration_s + a.duration_s } : a; return null; }
+  }
+  return {
+    error: 'not_reachable',
+    detail: { reason: sameLoc ? `${npc.name} está en ${at.name}, a ${at.distance_m} m: fuera de alcance` : `${npc.name} no está en esta localización`, distance_m: sameLoc ? at.distance_m : null, go_to: sameLoc ? at.spot_id : null },
+    hint: sameLoc ? `move_to ${at.spot_id} primero; hasta que llegue, no ha ocurrido` : 'no está aquí: no lo narres como presente',
+  };
 }
 
 function run(ctx: ToolContext, name: string, input: Record<string, unknown>): unknown {
@@ -229,7 +384,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
 
   switch (name) {
     case 'get_location': {
-      const id = s('location_id') === 'here' ? here() : s('location_id');
+      // Un ID de punto en vez de localización: la suya (el modelo los confunde).
+      const id = s('location_id') === 'here' ? here() : world.spots.get(s('location_id'))?.location_id ?? s('location_id');
       const loc = world.location(id);
       const spots = world.spotsOf(id).filter((sp) => !sp.hidden || sp.discovered_by.includes(actor.id)).map((sp) => ({
         id: sp.id, name: sp.name, description: sp.description, x: sp.x, y: sp.y, tags: sp.tags, state: sp.state,
@@ -249,7 +405,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const pos = positionOf(world, c, nowGameS);
       const pub = { id: c.id, name: c.name, race: c.race, class_name: c.class_name, appearance: c.appearance, status: c.status, spot_id: pos.spot_id, hands: inv.hands, equipped: inv.equipped, conditions: c.conditions.map((x) => x.name), hp_hint: c.hp_current >= c.hp_max ? 'ileso' : c.hp_current > c.hp_max / 2 ? 'herido' : 'malherido' };
       if (c.id !== actor.id) return pub;
-      return { ...pub, level: c.level, abilities: c.abilities, hp: `${c.hp_current}/${c.hp_max}`, proficiencies: c.proficiencies, inventory: inventoryDetailed(world, c.id), coins: c.coins, encumbrance: inv.encumbrance.level, backstory: c.backstory };
+      return { ...pub, level: c.level, abilities: c.abilities, hp: `${c.hp_current}/${c.hp_max}`, proficiencies: c.proficiencies, inventory: inventoryDetailed(world, c.id), coins: c.coins, encumbrance: inv.encumbrance.level, backstory: c.backstory, facts: characterFacts(c).map((f) => f.text) };
     }
     case 'get_npc': {
       const n = world.npc(s('npc_id'));
@@ -322,6 +478,37 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return r.ok ? { ok: true, hook_id: r.hook.id } : { error: r.error };
     }
     case 'cancel_hook': return cancelHook(world, s('hook_id')) ? { ok: true } : { error: `no hay gancho ${s('hook_id')}` };
+    case 'plant_rumor': {
+      const r = plantRumor(world, {
+        kind: s('kind'), name: s('name'), hint: s('hint'), where: input['where'] == null ? null : s('where'),
+        location_id: here(), actor_id: actor.id, action: ctx.action_text ?? null, said_by_actor: input['said_by_actor'] === true,
+      }, nowGameS);
+      if (!r.ok) return { error: r.error };
+      return { ok: true, rumor_id: r.rumor.id, existing: r.existing, mentions: r.rumor.mentions, left_today: rumorBudget(world, actor.id, nowGameS).left, note: r.rumor.said_by ? `Es lo que dice ${r.rumor.said_by.name}, no algo que está: no lo confirmes ni lo desmientas; el mundo dirá.` : 'Es algo que se dice, no algo que está: cuéntalo como habladuría y deja a quién preguntar.' };
+    }
+    case 'record_character_fact': {
+      const r = recordFact(world, actor.id, { kind: s('kind'), text: s('text'), action: ctx.action_text ?? null }, nowGameS);
+      if (!r.ok) return { error: r.error };
+      return { ok: true, fact_id: r.fact.id, existing: r.existing, note: 'Verdad para este personaje, no para el mundo: no le da nada gratis.' };
+    }
+    case 'schedule_event': {
+      const opt = (k: string) => (input[k] == null || input[k] === '' ? null : String(input[k]));
+      const ids = (k: string) => s(k).split(',').map((x) => x.trim()).filter(Boolean);
+      const r = addScheduledEvent(world, {
+        title: s('title'), location_id: opt('location_id') ?? here(), spot_id: opt('spot_id'),
+        start_h: Number(input['start_hour']), duration_min: Number(input['duration_min']), recurrence: s('recurrence'),
+        weekday: opt('weekday'), days_from_now: input['days_from_now'] == null ? null : Number(input['days_from_now']),
+        description: s('description'), npc_ids: ids('npc_ids'), crowd: opt('crowd'),
+        noise: input['noise'] == null ? null : Number(input['noise']), busy_npc_ids: ids('busy_npc_ids'),
+        start_text: opt('start_text'), end_text: opt('end_text'), announced_to: input['told_actor'] === true ? actor.id : null,
+      }, nowGameS);
+      if (!r.ok) return { error: r.error };
+      return { ok: true, event_id: r.event.id, existing: r.existing, schedule: listSchedule(world, nowGameS, r.event.location_id).find((x) => x['id'] === r.event.id) };
+    }
+    case 'get_schedule': {
+      const loc = input['location_id'] == null || input['location_id'] === '' ? null : s('location_id') === 'here' ? here() : s('location_id');
+      return { events: listSchedule(world, nowGameS, loc) };
+    }
     case 'lookup_rule': {
       const book = s('book') === 'phb' || s('book') === 'dmg' ? s('book') : null;
       const index = rulesIndex();
@@ -335,14 +522,16 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     }
     case 'roll_check': {
       const c = world.character(s('character_id'));
-      const r: CheckResult & { label: string } = characterCheck(c, s('kind') as CheckKind, s('key'), input['dc'] == null ? null : Number(input['dc']), (s('advantage') || 'none') as Advantage, ctx.rng);
+      const r: CheckResult & { label: string } = characterCheck(c, s('kind') as CheckKind, s('kind') === 'skill' ? normalizeSkill(s('key')) : s('key'), input['dc'] == null ? null : Number(input['dc']), (s('advantage') || 'none') as Advantage, ctx.rng);
       ctx.rolls.push(r);
       return { character: c.name, check: r.label, breakdown: r.breakdown, total: r.total, success: r.success, natural: r.natural ?? null };
     }
     case 'move_to': {
       const r = moveTo(world, s('character_id'), s('target_spot_id'), s('pace') as 'walk', nowGameS);
+      if (!r.ok && r.error.code === 'unknown_spot') return { error: 'unknown_spot', detail: r.error, hint: `${s('target_spot_id')} no es un punto que el actor conozca. ${hereList(ctx)} Narra que no hay nada así; no lo inventes.` };
+      if (!r.ok && r.error.code === 'locked') return { error: 'locked', detail: r.error, hint: `${world.spot(r.error.spot_id).name} está cerrado con llave para el actor: hace falta ${r.error.key_item_id ? world.itemDefs.get(r.error.key_item_id)?.name ?? r.error.key_item_id : 'la llave'} (la da quien vende su servicio, con buy_item o pawn_item)` };
       if (!r.ok) return { error: r.error.code, detail: r.error };
-      return { ok: true, destination: world.spot(r.transit.destination_spot_id).name, game_time: fmtDuration(r.total_s), real_time: fmtDuration(engine.clock.gameToReal(r.total_s)), legs: r.transit.legs.map((l) => world.spot(l.to_spot_id).name) };
+      return { ok: true, destination: world.spot(r.transit.destination_spot_id).name, game_time: fmtDuration(r.total_s), real_time: engine.fastTravel && r.transit.legs.some((l) => l.via_exit_id) ? 'ninguno: viaje rápido, llega al acabar esta acción (no le hagas esperar)' : fmtDuration(engine.clock.gameToReal(r.total_s)), legs: r.transit.legs.map((l) => world.spot(l.to_spot_id).name) };
     }
     case 'transfer_item': {
       const toType = s('to_type');
@@ -354,7 +543,22 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           : { kind: 'hand' as const, which: (slot === 'hand_off' ? 'off' : slot === 'hand_both' ? 'both' : 'main') as 'main' };
         to = { type: 'character', id: s('to_id'), slot: carry };
       } else to = { type: toType as 'spot', id: s('to_id') };
+      if (toType === 'npc') {
+        const miss = reachNpc(ctx, world.npc(s('to_id')));
+        if (miss) return miss;
+      }
       const r = transferItem(world, s('instance_id'), to, input['quantity'] == null ? undefined : Number(input['quantity']));
+      if (!r.ok && r.error.code === 'not_reachable' && r.error.reason === 'no está a tu alcance') {
+        // Lo que no está en el punto del actor: dónde está y adónde ir.
+        const inst = world.itemInstances.get(s('instance_id'));
+        const mine = world.characterSpot(actor)?.id;
+        const from = inst ? world.spotOfItem(inst)?.id : undefined;
+        const far = from && from !== mine ? from : spotOfPlacement(world, to)?.id;
+        if (far) {
+          const at = whereIs(ctx, far);
+          return { error: 'not_reachable', detail: { reason: `está en ${at.name}, a ${at.distance_m} m: fuera de alcance`, distance_m: at.distance_m, go_to: at.spot_id }, hint: `move_to ${at.spot_id} primero; hasta que llegue, no ha ocurrido` };
+        }
+      }
       if (!r.ok) return { error: r.error.code, detail: r.error };
       return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity };
     }
@@ -399,20 +603,61 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return { ok: true, events: r.events.map((e) => e.text) };
     }
     case 'complete_job': {
+      const missJ = s('character_id') === actor.id ? reachNpc(ctx, world.npc(s('npc_id'))) : null;
+      if (missJ) return missJ;
       const r = completeJob(world, world.character(s('character_id')), s('job_id'), s('npc_id'));
       if (!r.ok) return { error: r.reason };
       ctx.progress.push(...r.events);
       return { ok: true, events: r.events.map((e) => e.text), board: activeJobs(world).map((j) => j.title) };
     }
     case 'sell_item': {
+      const missS = s('character_id') === actor.id ? reachNpc(ctx, world.npc(s('npc_id'))) : null;
+      if (missS) return missS;
       const r = sellToNpc(world, world.character(s('character_id')), s('npc_id'), s('instance_id'), input['quantity'] == null ? undefined : Number(input['quantity']));
       return r.ok ? { ok: true, sold: `${r.item} ×${r.quantity}`, total: r.total } : { error: r.reason };
     }
     case 'buy_item': {
+      const missB = s('character_id') === actor.id ? reachNpc(ctx, world.npc(s('npc_id'))) : null;
+      if (missB) return missB;
       const r = buyFromNpc(world, world.character(s('character_id')), s('npc_id'), s('item_id'), Number(input['quantity']) || 1);
-      return r.ok ? { ok: true, bought: `${r.item} ×${r.quantity}`, total: r.total } : { error: r.reason };
+      return r.ok ? { ok: true, bought: `${r.item} ×${r.quantity}`, total: r.total, ...(r.unlocked.length ? { unlocked: r.unlocked } : {}) } : { error: r.reason };
+    }
+    case 'set_debt': {
+      const due = input['due_in_hours'] == null ? null : nowGameS + Math.max(0, Number(input['due_in_hours'])) * 3600;
+      const r = setDebt(world, actor, { npc_id: s('npc_id'), amount: input['amount'], reason: s('reason'), due_game_s: due }, nowGameS);
+      return r.ok ? { ok: true, debt_id: r.debt.id, existing: r.existing, owes: fmtCoins(r.debt.amount) } : { error: r.error };
+    }
+    case 'pawn_item': {
+      const npc = world.npc(s('npc_id'));
+      const miss = reachNpc(ctx, npc);
+      if (miss) return miss;
+      const due = input['due_in_hours'] == null ? null : nowGameS + Math.max(0, Number(input['due_in_hours'])) * 3600;
+      const r = pawnItem(world, actor, { npc_id: npc.id, instance_id: s('instance_id'), for_item_id: input['for_item_id'] ? s('for_item_id') : null, amount: input['amount'], reason: s('reason'), due_game_s: due }, nowGameS);
+      if (!r.ok) return { error: r.error };
+      return { ok: true, pawned: r.item, held_by: npc.name, received: r.received, ...(r.unlocked.length ? { unlocked: r.unlocked } : {}), owes: fmtCoins(r.debt.amount), debt_id: r.debt.id };
+    }
+    case 'settle_debt': {
+      const npc = world.npc(s('npc_id'));
+      if (s('how') !== 'forfeit') { const miss = reachNpc(ctx, npc); if (miss) return miss; }
+      const r = settleDebt(world, actor, { npc_id: npc.id, how: s('how'), amount: input['amount'] }, nowGameS);
+      if (!r.ok) return { error: r.error };
+      return { ok: true, paid: r.paid, remaining: r.remaining, settled: r.settled, returned: r.returned, kept_by_npc: r.kept, coins_left: actor.coins };
     }
     case 'attack': {
+      const atk = world.characters.get(s('attacker_id'));
+      if (atk) {
+        // Cuerpo a cuerpo hay que estar en el mismo punto; a distancia basta la misma localización.
+        const tc = world.characters.get(s('target_id'));
+        const tgtSpot = world.npcs.get(s('target_id'))?.location.id ?? (tc ? world.characterSpot(tc)?.id : undefined);
+        const mine = world.characterSpot(atk);
+        if (tgtSpot && mine && tgtSpot !== mine.id) {
+          const t = world.spot(tgtSpot);
+          const d = Math.round(distance(mine, t));
+          const ranged = world.itemsCarriedBy(atk.id).some((i) => i.location.type === 'character' && i.location.slot.kind === 'hand' && world.itemDef(i.item_id).weapon?.ranged);
+          if (t.location_id !== mine.location_id) return { error: 'not_reachable', detail: { reason: 'el objetivo no está en esta localización', distance_m: null, go_to: null } };
+          if (!ranged) return { error: 'not_reachable', detail: { reason: `el objetivo está en ${t.name}, a ${d} m: fuera del alcance de un arma cuerpo a cuerpo`, distance_m: d, go_to: t.id }, hint: `move_to ${t.id} primero (o un arma a distancia); hasta que llegue, no ha atacado` };
+        }
+      }
       const r = resolveAttack(world, s('attacker_id'), s('target_id'), (ADV.includes(s('advantage')) ? s('advantage') : 'none') as Advantage, ctx.rng);
       if ('error' in r) return { error: r.error };
       ctx.rolls.push({ expr: 'attack', total: r.attack_total, breakdown: r.attack_breakdown, rolls: [] });
@@ -467,13 +712,38 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     case 'log_event': {
       const kind = input['requires_roll_kind'];
       const req = kind && ROLL_KINDS.includes(String(kind))
-        ? { kind: String(kind) as CheckKind, key: s('requires_roll_key'), dc: input['requires_roll_dc'] == null ? null : Number(input['requires_roll_dc']), advantage: (ADV.includes(s('requires_roll_advantage')) ? s('requires_roll_advantage') : 'none') as Advantage, ...(input['requires_roll_target'] ? { target: s('requires_roll_target') } : {}) }
+        ? { kind: String(kind) as CheckKind, key: String(kind) === 'skill' ? normalizeSkill(s('requires_roll_key')) : s('requires_roll_key'), dc: input['requires_roll_dc'] == null ? null : Number(input['requires_roll_dc']), advantage: (ADV.includes(s('requires_roll_advantage')) ? s('requires_roll_advantage') : 'none') as Advantage, ...(input['requires_roll_target'] ? { target: s('requires_roll_target') } : {}) }
         : null;
       if (req?.kind === 'attack' && !req.target) return { error: 'un ataque necesita requires_roll_target (ID del objetivo)' };
       if (req?.target && !world.npcs.has(req.target) && !world.characters.has(req.target)) return { error: `objetivo desconocido: ${req.target}` };
       if (req && req.kind === 'skill' && !SKILLS[req.key]) return { error: `skill desconocida: ${req.key}. Válidas: ${Object.keys(SKILLS).join(', ')}` };
+      // Trato cerrado en la narración sin tool que lo registre, y desenlace que no respeta la tirada: se reescribe una vez cada uno.
+      if ((ctx.deal_rejections ?? 0) < 1) {
+        const deal = dealWithoutState({ narration: s('narration_private'), lines: parseLines(input['lines'], null, (id) => world.npcs.has(id)), okTools: ctx.ok_tools ?? [], pendingRoll: req !== null, hasOpenDebt: openDebts(actor).length > 0 });
+        if (deal.length) {
+          ctx.deal_rejections = (ctx.deal_rejections ?? 0) + 1;
+          return { error: `${DEAL_REJECTION} (La narración dice ${deal.map((w) => `«${w}»`).join(', ')}.)` };
+        }
+      }
+      if ((ctx.outcome_rejections ?? 0) < 1 && ctx.roll_category) {
+        const bad = outcomeMismatch(ctx.roll_category, s('narration_private'));
+        if (bad.length) {
+          ctx.outcome_rejections = (ctx.outcome_rejections ?? 0) + 1;
+          return { error: outcomeRejection(ctx.roll_category, bad) };
+        }
+      }
+      // Lugares que la narración da por existentes y no están en los datos: se reescribe una vez.
+      if ((ctx.place_rejections ?? 0) < 1) {
+        const invented = inventedPlaces(world, here(), [s('narration_private'), input['observable'] == null ? '' : s('observable')].join('\n'));
+        if (invented.length) {
+          ctx.place_rejections = (ctx.place_rejections ?? 0) + 1;
+          return { error: `La narración cita ${invented.map((w) => `«${w}»`).join(', ')}, que no existe en ${world.location(here()).name}. ${hereList(ctx)} Reescribe log_event sin ese lugar: si el jugador lo busca, di en ficción que no lo hay (o lo que sí hay).` };
+        }
+      }
       if (input['npc_id']) {
         const npc = world.npcs.get(s('npc_id'));
+        // Habla con alguien de la sala que está a unos metros: el motor lo acerca antes (si no es hostil).
+        if (npc && npc.status === 'alive' && world.spot(npc.location.id).location_id === here()) reachNpc(ctx, npc);
         if (npc) {
           npc.talking_to = { character_id: actor.id, since_game_s: nowGameS };
           const note = input['npc_memory_note'] == null ? '' : cleanText(s('npc_memory_note'));
@@ -514,8 +784,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           if (!w.knows.includes(actor.id)) { w.knows.push(actor.id); world.touch('characters', w.id); }
         }
       }
+      const approached = ctx.approach && !/\bacerc/i.test(s('narration_private')) ? `Te acercas a ${world.spot(ctx.approach.to_spot_id).name}. ` : '';
       ctx.closed = {
-        narration_private: cleanText(s('narration_private')),
+        narration_private: approached + cleanText(s('narration_private')),
         observable: input['observable'] == null ? null : cleanText(s('observable')) || null,
         observable_vague: input['observable_vague'] == null ? null : cleanText(s('observable_vague')) || null,
         loudness: Number(input['loudness']) || 1,
@@ -523,6 +794,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter(Boolean).slice(0, 4),
         requires_roll: req,
         decisive: input['decisive_threat'] ? { threat: cleanText(s('decisive_threat')), npc_id: input['decisive_npc_id'] ? s('decisive_npc_id') : null } : null,
+        npc_id: input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null,
+        lines: parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id)),
       };
       return { ok: true, closed: true };
     }

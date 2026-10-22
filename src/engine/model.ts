@@ -71,6 +71,59 @@ export interface Campaign {
   progression: { practice_thresholds: number[]; practice_min_dc: number };
   /** Estado vivo del tablón. */
   board: { active_job_ids: Id[]; last_rotation_day: number };
+  // Mundo generado (src/worldgen). Todo opcional: la semilla demo no lo trae.
+  /** Biblia: verdades ocultas del mundo que explican pistas y secretos. Consulta; no va al system prompt. */
+  bible?: string[];
+  /** Leyes del mundo, una frase cada una (las lee src/engine/laws.ts). */
+  laws?: string[];
+  /** Procedencia: cómo y con qué se generó este mundo. */
+  generation?: GenerationInfo;
+  /** Situaciones iniciales aún sin dueño: la de cada PJ anunciado al generar y alguna de reserva. */
+  situations?: { for_name: string; situation: InitialSituation }[];
+}
+
+/** Evento de generación de un mundo (src/worldgen). */
+export interface GenerationInfo {
+  seed: number;
+  tone: Campaign['tone'];
+  setting: string;
+  /** Modelo que escribió el relleno, u 'offline' para el relleno determinista. */
+  model: string;
+  generated_at: string;
+  /** Llamadas a la API (1, o 2 si hubo que corregir). 0 offline. */
+  attempts: number;
+  usage: { input: number; output: number };
+  cost_usd: number;
+  skeleton_version: number;
+  /** Tipo de asentamiento y género que eligió el esqueleto. */
+  settlement?: string;
+  genre?: string;
+}
+
+/**
+ * Situación inicial de un PJ en un mundo generado: su porqué. La primera escena
+ * del máster parte de aquí.
+ */
+export interface InitialSituation {
+  why_here: string;
+  wants: string;
+  threat: string;
+  /** Plazo, en días de juego, antes de que la amenaza se cumpla. */
+  clock_days: number;
+  /** Qué pasa si vence el plazo. */
+  clock_runs_out: string;
+  /** NPC cercano que se le opone (no tiene por qué mostrarse hostil). */
+  antagonist_npc_id: Id;
+  /** Dónde empieza. */
+  start_spot_id: Id;
+  /** A qué hora de juego (0-23). Fija el reloj del mundo al nacer; quien llega después comparte el reloj. */
+  start_hour?: number;
+  /** Tres caminos posibles, distintos entre sí. */
+  paths: string[];
+  /** Lo que le está pasando en el primer instante. */
+  opening: string;
+  /** Instante de juego en que vence el plazo (lo fija el alta del PJ). */
+  deadline_game_s?: number;
 }
 
 export interface Faction { id: Id; name: string; description: string }
@@ -295,6 +348,25 @@ export interface Character {
   recap_from: { event_id: Id | null } | null;
   connected: boolean;
   veiled: boolean;
+  /** Mundo generado: su situación inicial (src/worldgen). */
+  situation?: InitialSituation;
+  /** Lo que debe a NPCs (debts.ts): abiertas y, para el Diario, las últimas saldadas. */
+  debts?: Debt[];
+}
+
+/** Una deuda con un NPC, con su prenda si dejó algo a cambio (debts.ts). */
+export interface Debt {
+  id: Id;
+  npc_id: Id;
+  amount: number;
+  reason: string;
+  /** Instante de juego en que vence; null = sin plazo. */
+  due_game_s: number | null;
+  /** Ejemplar que el NPC guarda en prenda; vuelve al PJ al saldarla. */
+  collateral_instance_id?: Id;
+  created_game_s: number;
+  /** Saldada: cuándo y cómo (pagada, trabajada o perdida la prenda). */
+  settled?: { game_s: number; how: 'coins' | 'work' | 'forfeit' };
 }
 
 /** Lo que un NPC recuerda de un PJ (SPEC §3.3). Lo escribe el master solo cuando hablan. */
@@ -381,6 +453,12 @@ export interface ItemDef {
   weapon?: { damage: string; damage_type: string; finesse?: boolean; ranged?: boolean; two_handed?: boolean };
   /** Fuente de luz cuando `state.lit === true` (antorcha, farol). */
   light_source?: boolean;
+  /**
+   * Servicio (una noche de posada): no se lleva encima. Al comprarlo se entrega
+   * `gives_item_id` (la llave) y se abren para el comprador los puntos del
+   * vendedor cerrados con esa llave (`spot.state.key_item_id`).
+   */
+  service?: { gives_item_id: Id };
   origin: 'srd' | 'custom';
 }
 

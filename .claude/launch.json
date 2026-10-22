@@ -2,11 +2,29 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "tavernus-web-sfx",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web:watch"
+      ],
+      "port": 3137,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3137",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/sfx",
+        "GAMES_DIR": "./data/local/sfx/games",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": ""
+      }
+    },
+    {
       "name": "tavernus-web",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
-        "web"
+        "web:watch"
       ],
       "port": 3000,
       "env": {
@@ -20,7 +38,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
-        "web"
+        "web:watch"
       ],
       "port": 3107,
       "env": {
@@ -39,7 +57,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
-        "web"
+        "web:watch"
       ],
       "port": 3108,
       "env": {
@@ -54,11 +72,30 @@
       }
     },
     {
+      "name": "tavernus-web-diario",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web:watch"
+      ],
+      "port": 3187,
+      "env": {
+        "MASTER_MODE": "live",
+        "MASTER_MODEL": "claude-haiku-5-5",
+        "MASTER_EFFORT": "low",
+        "WEB_PORT": "3187",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/haiku",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "on"
+      }
+    },
+    {
       "name": "tavernus-web-offline-2",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
-        "web"
+        "web:watch"
       ],
       "port": 3117,
       "env": {
@@ -76,7 +113,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
-        "web"
+        "web:watch"
       ],
       "port": 3127,
       "env": {
@@ -90,6 +127,64 @@
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
         "DISCORD_TOKEN": "",
         "POLLINATIONS_API_KEY": ""
+      }
+    },
+    {
+      "name": "tavernus-web-novela",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web:watch"
+      ],
+      "port": 3177,
+      "env": {
+        "IMAGES": "on",
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3177",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/novela",
+        "GAMES_DIR": "./data/local/novela/games",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": ""
+      }
+    },
+    {
+      "name": "tavernus-web-viaje",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web:watch"
+      ],
+      "port": 3167,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3167",
+        "TAVERNUS_SEED": "13",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/viaje",
+        "GAMES_DIR": "./data/local/viaje/games",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": ""
+      }
+    },
+    {
+      "name": "tavernus-web-agenda",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web:watch"
+      ],
+      "port": 3157,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3157",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/agenda",
+        "GAMES_DIR": "./data/local/agenda/games",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": ""
       }
     }
   ]

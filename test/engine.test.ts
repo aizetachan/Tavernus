@@ -46,9 +46,9 @@ describe('Engine: fase 1 sin IA', () => {
     expect(repo.events.map((e) => e.action_type)).toEqual(['board', 'move', 'arrived']);
   });
 
-  it('un viaje largo se vive por tramos y se puede parar', async () => {
+  it('sin viaje rápido, un viaje largo se vive por tramos y se puede parar', async () => {
     const time = fakeTime();
-    const { engine } = await bootEngine(time);
+    const { engine } = await bootEngine(time, { fastTravel: false });
     const seen = collect(engine);
     const r = await engine.act('ch_kael', 'ir al claro del roble');
     expect(r.ok).toBe(true);
@@ -255,7 +255,7 @@ describe('Engine: fase 1 sin IA', () => {
 
 describe('resolución de destinos lejanos', () => {
   it('desde la taberna, "ir al pozo" va al pozo de la plaza, no a la entrada', async () => {
-    const { engine } = await bootEngine();
+    const { engine } = await bootEngine(fakeTime(), { fastTravel: false }); // la segunda orden se da aún desde la taberna
     const r = await engine.act('ch_kael', 'ir al pozo');
     expect(r.ok).toBe(true);
     expect(engine.world.character('ch_kael').transit!.destination_spot_id).toBe('sp_pl_pozo');

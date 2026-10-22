@@ -53,6 +53,15 @@ export class EventLog {
     this.seq = lastSeq;
   }
 
+  /**
+   * Carga los eventos persistidos al arrancar, sin volver a entregarlos: así el
+   * historial, el recap y el contexto del máster sobreviven a un reinicio.
+   */
+  restore(past: readonly GameEvent[]): void {
+    this.events = [...past].sort((a, b) => a.seq - b.seq);
+    this.seq = Math.max(this.seq, this.events.at(-1)?.seq ?? 0);
+  }
+
   onDelivery(l: DeliveryListener): () => void {
     this.deliveryListeners.push(l);
     return () => { this.deliveryListeners = this.deliveryListeners.filter((x) => x !== l); };

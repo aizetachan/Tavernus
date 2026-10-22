@@ -13,6 +13,8 @@ export const OFFLINE_MODEL = 'offline';
 
 /** Palabras del texto de la acción que piden una tirada de ataque. */
 const ATTACK_RE = /\batac\w*|\bataqu\w*/i;
+/** Verbos de habla: con un solo NPC delante, se entiende que es a él. */
+const TALK_RE = /\b(habl\w*|salud\w*|pregunt\w*|dig\w*|dic\w*|charl\w*)/i;
 
 interface ParsedContext {
   actor: string;
@@ -95,6 +97,21 @@ export function offlineLogEvent(context: string): Record<string, unknown> {
           };
         }
         return { ...base, narration_private: `Buscas a quién atacar, pero no hay nadie a tu alcance en ${here}.`, suggested_actions: sug };
+      }
+      // Hablar con un NPC presente (por su nombre, o con un verbo de habla y uno solo delante): diálogo en modo novela.
+      const named = p.npcs.find((n) => action.toLowerCase().includes(n.name.toLowerCase()));
+      const talkTo = named ?? (TALK_RE.test(action) && p.npcs.length === 1 ? p.npcs[0] : undefined);
+      if (talkTo) {
+        // El contexto corta la acción en el primer «»: la comilla de cierre puede faltar.
+        const said = /[«"“]([^«»"“”]+)/.exec(action)?.[1]?.trim();
+        const reply = 'Bienvenido. Aquí no se pregunta de dónde viene nadie: se paga y se bebe. ¿Qué te pongo?';
+        return {
+          ...base, tags: 'offline,social', npc_id: talkTo.id,
+          narration_private: `${said ? `«${said}», dices. ` : ''}${talkTo.name} levanta la vista. «${reply}»`,
+          observable: `${p.actor} habla con ${talkTo.name}.`,
+          lines: [...(said ? [{ speaker: 'actor', npc_id: null, text: said }] : []), { speaker: 'npc', npc_id: talkTo.id, text: reply }],
+          suggested_actions: sug,
+        };
       }
       return { ...base, narration_private: `Haces ${lower(action)}. Nada cambia.`, suggested_actions: sug };
     }
