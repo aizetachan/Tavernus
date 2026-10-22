@@ -464,6 +464,82 @@ ${PAINT_STYLE}
   form .mic, form .brush { width: 32px; height: 32px; margin: 0; }
   form .mic svg.i, form .brush svg.i { width: 18px; height: 18px; }
 
+  /* Entrada en la partida. Mientras carga (body.boot): el cuadro de texto encogido a la izquierda con un brillo de
+     carga, la ventana del chat vacía y reducida a una franja abajo, y el panel sin contenido. Al llegar el historial
+     (body.entered): el cuadro crece, la ventana se abre hacia arriba, los mensajes aparecen con un fundido y los
+     bloques del panel entran uno tras otro con un pequeño rebote. */
+  .inwrap { max-width: 100%; transition: max-width .65s cubic-bezier(.2,.8,.2,1); }
+  .chat-body { clip-path: inset(0 0 0 0); transition: clip-path .75s cubic-bezier(.22,.9,.25,1) .1s; }
+  #log { transition: opacity .55s ease .7s; }
+  body.boot .inwrap { max-width: 48px; }
+  body.boot form input { color: transparent; pointer-events: none; background: linear-gradient(100deg, rgba(255,255,255,.05) 30%, rgba(240,197,107,.22) 50%, rgba(255,255,255,.05) 70%) 0 0 / 300% 100%; animation: boot-shine 1.2s linear infinite; }
+  body.boot form input::placeholder { color: transparent; }
+  .inwrap .mic { transition: opacity .3s ease .55s; }
+  body.boot .inwrap .mic { opacity: 0; pointer-events: none; transition: none; }
+  body.boot .chat-body { clip-path: inset(calc(100% - 44px) 0 0 0); }
+  /* Mientras carga, la columna lleva el gris del panel para que se vea la ventana negra abrirse; vuelve al negro
+     justo cuando la ventana termina de abrirse. */
+  .chat-body { background: var(--chat); }
+  #play, .compose { transition: background-color 0s linear .85s; }
+  body.boot #play, body.boot .compose { background-color: var(--panel); transition: none; }
+  body.boot #log, body.boot #thinking, body.boot .chips { opacity: 0; }
+  body.boot .side-head, body.boot .side-scroll > *, body.boot .chat-head > * { opacity: 0; }
+  @keyframes boot-shine { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+  @keyframes enter-pop { 0% { opacity: 0; transform: translateY(16px) scale(.98); } 65% { opacity: 1; transform: translateY(-4px) scale(1.005); } 82% { transform: translateY(1.5px); } 100% { opacity: 1; transform: none; } }
+  @keyframes enter-fade { from { opacity: 0; } to { opacity: 1; } }
+  body.entered .side-head, body.entered .side-scroll > * { animation: enter-pop .62s cubic-bezier(.2,.8,.25,1) both; }
+  body.entered .side-head { animation-delay: .15s; }
+  body.entered #card { animation-delay: .25s; }
+  body.entered .views { animation-delay: .35s; }
+  body.entered .pane { animation-delay: .43s; }
+  body.entered #near { animation-delay: .53s; }
+  body.entered #quest { animation-delay: .63s; }
+  body.entered .chat-head > * { animation: enter-fade .45s ease .25s both; }
+  body.entered .chips { animation: enter-fade .45s ease .85s both; }
+  body.boot form > button { opacity: 0; }
+  body.entered form > button { animation: enter-fade .35s ease both; }
+  body.entered form > button:nth-of-type(1) { animation-delay: 0.68s; }
+  body.entered form > button:nth-of-type(2) { animation-delay: 0.78s; }
+  body.entered form > button:nth-of-type(3) { animation-delay: 0.88s; }
+  body.entered form > button:nth-of-type(4) { animation-delay: 0.98s; }
+  body.entered form > button:nth-of-type(5) { animation-delay: 1.08s; }
+  body.entered #card .stats > div { animation: enter-pop .55s cubic-bezier(.2,.8,.25,1) both; }
+  body.entered #card .stats > div:nth-child(1) { animation-delay: 0.38s; }
+  body.entered #card .stats > div:nth-child(2) { animation-delay: 0.45s; }
+  body.entered #card .stats > div:nth-child(3) { animation-delay: 0.52s; }
+  body.entered #card .stats > div:nth-child(4) { animation-delay: 0.59s; }
+  body.entered #card .stats > div:nth-child(5) { animation-delay: 0.66s; }
+  body.entered #near, body.entered #quest { animation: none; }
+  body.entered .sec-t, body.entered .sec-b > .prow { animation: enter-pop .55s cubic-bezier(.2,.8,.25,1) both; }
+  body.entered #near .sec-t { animation-delay: .58s; }
+  body.entered #near .sec-b > .prow:nth-child(1) { animation-delay: 0.64s; }
+  body.entered #near .sec-b > .prow:nth-child(2) { animation-delay: 0.70s; }
+  body.entered #near .sec-b > .prow:nth-child(3) { animation-delay: 0.76s; }
+  body.entered #near .sec-b > .prow:nth-child(4) { animation-delay: 0.82s; }
+  body.entered #near .sec-b > .prow:nth-child(5) { animation-delay: 0.88s; }
+  body.entered #near .sec-b > .prow:nth-child(6) { animation-delay: 0.94s; }
+  body.entered #near .sec-b > .prow:nth-child(7) { animation-delay: 1.00s; }
+  body.entered #near .sec-b > .prow:nth-child(8) { animation-delay: 1.06s; }
+  body.entered #quest .sec-t { animation-delay: 1.1s; }
+  body.entered #quest .sec-b > .prow { animation-delay: 1.16s; }
+  body.entered .chips { animation: none; }
+  body.boot .chips button { opacity: 0; }
+  body.entered .chips button { animation: enter-pop .5s cubic-bezier(.2,.8,.25,1) both; }
+  body.entered .chips button:nth-child(1) { animation-delay: 0.95s; }
+  body.entered .chips button:nth-child(2) { animation-delay: 1.00s; }
+  body.entered .chips button:nth-child(3) { animation-delay: 1.05s; }
+  body.entered .chips button:nth-child(4) { animation-delay: 1.10s; }
+  body.entered .chips button:nth-child(5) { animation-delay: 1.15s; }
+  body.entered .chips button:nth-child(6) { animation-delay: 1.20s; }
+  body.entered .chips button:nth-child(7) { animation-delay: 1.25s; }
+  body.entered .chips button:nth-child(8) { animation-delay: 1.30s; }
+  body.entered .chips button:nth-child(9) { animation-delay: 1.35s; }
+  body.entered .chips button:nth-child(10) { animation-delay: 1.40s; }
+  @media (prefers-reduced-motion: reduce) {
+    .inwrap, .chat-body, #log { transition: none; }
+    body.boot form input { animation: none; }
+    body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chips, body.entered .chips button, body.entered form > button, body.entered #card .stats > div, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
+  }
   /* Secciones plegables del panel. */
   .col-t { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin-right: auto; padding: 4px 6px 4px 0; border: 0; background: transparent; color: var(--text); text-align: left; }
   .col-t b { font: 700 15px/1.2 var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -509,7 +585,7 @@ ${PAINT_STYLE}
   }
 </style>
 </head>
-<body>
+<body class="boot">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></symbol>
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
@@ -628,6 +704,20 @@ ${PAINT_STYLE}
     document.title = g.name + ' — Tavernus';
   }).catch(function () {});
   var log = $('log'), input = $('input'), select = $('character'), thinking = $('thinking');
+  /** Entrada en la partida: al llegar el historial (con un mínimo para que se vea la carga) se quita body.boot y
+   *  se pone body.entered, que abre la ventana del chat, ensancha el cuadro y hace entrar el panel (ver CSS). */
+  var bootStart = Date.now(), entered = false;
+  function enterGame() {
+    if (entered) return;
+    entered = true;
+    setTimeout(function () {
+      document.body.classList.remove('boot');
+      document.body.classList.add('entered');
+      setTimeout(function () { scroll(); input.focus(); }, 760);
+      setTimeout(function () { document.body.classList.remove('entered'); }, 2600);
+    }, Math.max(0, 2200 - (Date.now() - bootStart)));
+  }
+  setTimeout(enterGame, 6000);
   var current = null, stream = null, busy = false, dots = null;
 
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
@@ -1519,6 +1609,7 @@ ${PAINT_JS}
       var h = JSON.parse(e.data);
       h.forEach(function (m, i) { renderMessage(m, i === h.length - 1); });
       if (!h.some(function (m) { return !m.scene; })) command('look');
+      enterGame();
     });
     stream.addEventListener('cast', function (e) { setCast(JSON.parse(e.data)); });
     stream.addEventListener('message', function (e) { var m = JSON.parse(e.data); renderMessage(m, true); if (window.TavernusTTS) TavernusTTS.fresh(); if (window.TavernusSfx) TavernusSfx.cue(m.sfx); loadBoard(); loadScene(); });
