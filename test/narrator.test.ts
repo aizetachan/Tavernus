@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
-import { AZURE_DEFAULTS, azureSsml, ELEVENLABS_DEFAULTS, hashIndex, narratorFromEnv, type NarratorProvider, type SpeechRequest } from '../src/ai/narrator.js';
+import { AZURE_DEFAULTS, azureSsml, ELEVENLABS_DEFAULTS, hashIndex, narratorFromEnv, stripId3, type NarratorProvider, type SpeechRequest } from '../src/ai/narrator.js';
 import { GameManager, type MasterFactory } from '../src/games/manager.js';
 import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
 import { setNarratorForTests } from '../src/adapters/web/tts.js';
@@ -61,6 +61,12 @@ describe('ElevenLabs', () => {
     expect(body).toEqual({ text: 'La luna asoma.\n\nEntre los robles.', model_id: ELEVENLABS_DEFAULTS.model });
     // La voz y el modelo forman parte de la clave de la caché.
     expect(p.voiceFor({ text: 'x', role: 'narrator', speaker: null })).toBe(`narr@${ELEVENLABS_DEFAULTS.model}@1`);
+  });
+
+  it('al unir los mp3, quita la etiqueta ID3 de todos menos el primero', () => {
+    const tag = Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 3, 9, 9, 9]);
+    expect([...stripId3(Buffer.concat([tag, Buffer.from([0xff, 0xfb])]))]).toEqual([0xff, 0xfb]);
+    expect([...stripId3(Buffer.from([0xff, 0xfb, 1]))]).toEqual([0xff, 0xfb, 1]);
   });
 
   it('un error de la API se convierte en una excepción con el código', async () => {

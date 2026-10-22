@@ -155,11 +155,21 @@ export function elevenLabsNarrator(o: ElevenLabsNarratorOptions, fetchImpl: type
           signal: AbortSignal.timeout(45_000),
         });
         if (!r.ok) throw new Error(`ElevenLabs ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200) || r.statusText}`);
-        chunks.push(Buffer.from(await r.arrayBuffer()));
+        const buf = Buffer.from(await r.arrayBuffer());
+        // Cada mp3 trae su etiqueta ID3 delante: solo se deja la del primero, para que el audio unido no se corte.
+        chunks.push(chunks.length ? stripId3(buf) : buf);
       }
       return Buffer.concat(chunks);
     },
   };
+}
+
+/** Quita la etiqueta ID3v2 del principio de un mp3 (tamaño «synchsafe» de 4 bytes; +10 si lleva pie). */
+export function stripId3(buf: Buffer): Buffer {
+  if (buf.length < 10 || buf.toString('latin1', 0, 3) !== 'ID3') return buf;
+  const size = ((buf[6]! & 0x7f) << 21) | ((buf[7]! & 0x7f) << 14) | ((buf[8]! & 0x7f) << 7) | (buf[9]! & 0x7f);
+  const footer = (buf[5]! & 0x10) ? 10 : 0;
+  return buf.subarray(Math.min(buf.length, 10 + size + footer));
 }
 
 /** Un <voice> por trozo (Azure admite hasta 50 por petición); pausa algo más larga entre párrafos. */
