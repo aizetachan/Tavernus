@@ -31,15 +31,16 @@ export const MENU = String.raw`<!doctype html>
   button:disabled { opacity: .5; cursor: default; }
   svg.i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 999px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 999px; font-size: 13.5px; font-weight: 600; white-space: nowrap; text-decoration: none; }
   .btn.primary { background: var(--accent); color: var(--accent-ink); }
   .btn.primary:hover:not(:disabled) { background: var(--glow); }
   .btn.ghost { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); font-weight: 500; }
   .btn.ghost:hover:not(:disabled) { background: var(--hover); }
   .btn.danger { color: #ff9d94; }
   .btn.danger.armed { background: rgba(255,107,94,.16); box-shadow: none; }
-  .btn.sm { height: 38px; padding: 0 14px; font-size: 13.5px; }
-  .ib { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 50%; background: transparent; color: #b8b1a6; }
+  .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+  .btn svg.i, .ib svg.i { width: 16px; height: 16px; }
+  .ib { display: inline-grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: transparent; color: #b8b1a6; }
   .ib:hover { background: var(--hover); color: var(--text); }
   /* La imagen de cada partida: un rincón de la taberna, siempre el mismo para la misma partida. */
   .art { background-color: #1b1712; }
@@ -47,14 +48,14 @@ export const MENU = String.raw`<!doctype html>
   /* Lista de partidas. */
   aside { flex: 0 0 400px; display: flex; flex-direction: column; min-width: 0; background: var(--panel); border-right: 1px solid var(--sep); }
   .head { display: flex; align-items: center; gap: 12px; padding: 16px 12px 10px 16px; }
-  .mark { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 11px; background: var(--accent-tint); color: var(--accent); font: 800 18px/1 var(--display); }
+  .mark { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 9px; background: var(--accent-tint); color: var(--accent); font: 800 18px/1 var(--display); }
   h1 { margin: 0; flex: 1; font: 800 20px/1.2 var(--display); letter-spacing: -.02em; }
   #status { display: flex; align-items: center; gap: 6px; padding: 0 16px 10px; font-size: 12.5px; color: var(--muted); }
   #status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
   #status.off::before { background: var(--info); }
   #status[hidden] { display: none; }
-  .search { margin: 0 12px 10px; display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 14px; border-radius: 10px; background: var(--control); color: var(--muted); }
-  .search input, .search input[type=text] { flex: 1; min-width: 0; height: 36px; padding: 0; border: 0; background: transparent; color: var(--text); outline: none; font-size: 14px; }
+  .search { margin: 0 12px 10px; display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 12px; border-radius: 10px; background: var(--control); color: var(--muted); }
+  .search input, .search input[type=text] { flex: 1; min-width: 0; height: 30px; padding: 0; border: 0; background: transparent; color: var(--text); outline: none; font-size: 14px; }
   .search input::placeholder { color: var(--faint); }
   .filters { display: flex; gap: 8px; padding: 0 12px 10px; overflow-x: auto; scrollbar-width: none; }
   .filters button { flex: none; height: 32px; padding: 0 14px; border-radius: 999px; background: transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); color: var(--muted); font-size: 13px; font-weight: 500; }
@@ -77,7 +78,7 @@ export const MENU = String.raw`<!doctype html>
   .row .more { display: none; }
   .menu-pop { position: absolute; right: 12px; top: 56px; z-index: 5; display: flex; flex-direction: column; min-width: 220px; padding: 6px; border-radius: 14px; background: var(--bubble); box-shadow: var(--shadow); }
   .menu-pop[hidden] { display: none; }
-  .menu-pop button { text-align: left; height: 40px; padding: 0 12px; border-radius: 10px; background: transparent; font-size: 14px; }
+  .menu-pop button { text-align: left; height: 32px; padding: 0 12px; border-radius: 10px; background: transparent; font-size: 14px; }
   .menu-pop button:hover:not(:disabled) { background: var(--hover); }
   .menu-pop button.danger { color: #ff9d94; }
   .menu-pop button.danger.armed { background: rgba(255,107,94,.16); }
@@ -103,7 +104,7 @@ export const MENU = String.raw`<!doctype html>
   .body { max-width: 760px; padding: 18px 40px 0; display: flex; flex-direction: column; gap: 16px; }
   .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .gear-wrap { position: relative; display: inline-flex; }
-  .ib.gear { width: 44px; height: 44px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+  .ib.gear { width: 32px; height: 32px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
   .gear-wrap .menu-pop { left: 50%; right: auto; top: 52px; transform: translateX(-50%); min-width: 140px; }
   .gear-wrap .menu-pop button { text-align: center; white-space: nowrap; padding: 0 16px; }
   .kv-t { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
@@ -168,14 +169,14 @@ export const MENU = String.raw`<!doctype html>
     .hero::after { background: linear-gradient(90deg, rgba(11,13,12,.25) 0, rgba(11,13,12,.25) 400px, rgba(11,13,12,.82) 400px, rgba(11,13,12,.55) 720px, rgba(11,13,12,.1) 1000px, rgba(11,13,12,0) 1200px), linear-gradient(to top, rgba(11,13,12,.5), rgba(11,13,12,0) 35%); }
     aside { position: relative; z-index: 2; border-right: 0; isolation: isolate;
       background:
-        radial-gradient(120% 55% at 0% 0%, rgba(255,255,255,.16), rgba(255,255,255,0) 60%),
-        radial-gradient(90% 40% at 100% 100%, rgba(255,255,255,.08), rgba(255,255,255,0) 70%),
-        linear-gradient(180deg, rgba(210,214,220,.16), rgba(210,214,220,.08));
-      -webkit-backdrop-filter: blur(32px) saturate(1.5) brightness(.85); backdrop-filter: blur(32px) saturate(1.5) brightness(.85); }
-    .search { background: rgba(255,255,255,.08); }
+        radial-gradient(120% 55% at 0% 0%, rgba(255,255,255,.07), rgba(255,255,255,0) 60%),
+        radial-gradient(90% 40% at 100% 100%, rgba(255,255,255,.04), rgba(255,255,255,0) 70%),
+        linear-gradient(180deg, rgba(10,11,12,.66), rgba(10,11,12,.74));
+      -webkit-backdrop-filter: blur(36px) saturate(1.3); backdrop-filter: blur(36px) saturate(1.3); }
+    .search { background: rgba(255,255,255,.07); }
     .row { border-bottom-color: rgba(255,255,255,.07); }
     .row:hover { background: rgba(255,255,255,.06); }
-    .row.on { background: rgba(255,255,255,.12); }
+    .row.on { background: rgba(255,255,255,.09); }
     .row .l2, .row .l1 time, #status { color: #c9c3b9; }
     .filters button { box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); color: #d9d3c8; }
   }
@@ -195,7 +196,7 @@ export const MENU = String.raw`<!doctype html>
     .new-foot .btn.ghost { display: none; }
     .new-foot .grow:has(#new-error:empty) { display: none; }
     #open-new { display: none; }
-    #fab { position: fixed; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 10; display: inline-flex; align-items: center; gap: 8px; height: 56px; padding: 0 20px 0 16px; border-radius: 18px; background: var(--accent); color: var(--accent-ink); font-weight: 600; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
+    #fab { position: fixed; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 10; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px 0 10px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 600; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
     .scroll { padding-bottom: 96px; }
     #resume { position: relative; display: block; height: 190px; margin: 4px 12px 14px; border-radius: 18px; overflow: hidden; color: var(--text); text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: calc(100% - 24px); text-align: left; }
     #resume[hidden] { display: none; }
@@ -204,7 +205,7 @@ export const MENU = String.raw`<!doctype html>
     #resume b { font: 800 20px/1.2 var(--display); letter-spacing: -.02em; }
     #resume .go { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #d9d3c8; }
     #resume .go span:first-child { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #resume .go span:last-child { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px 0 10px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; }
+    #resume .go span:last-child { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 10px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; }
     .row .more { display: inline-grid; }
   }
 </style>
@@ -235,7 +236,7 @@ export const MENU = String.raw`<!doctype html>
     <button type="button" id="resume" class="art" hidden><span class="cap"><span class="eyebrow">Continúa tu historia</span><b id="resume-name"></b><span class="go"><span id="resume-meta"></span><span><svg class="i" style="width:14px;height:14px"><use href="#i-play"/></svg>Continuar</span></span></span></button>
     <div id="list"></div>
   </div>
-  <button type="button" id="fab"><svg class="i" style="width:22px;height:22px"><use href="#i-plus"/></svg>Nueva partida</button>
+  <button type="button" id="fab"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button>
 </aside>
 <main>
   <section id="pick" aria-live="polite"></section>

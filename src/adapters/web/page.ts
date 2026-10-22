@@ -40,15 +40,16 @@ export const PAGE = String.raw`<!doctype html>
   svg.i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .glass { background: rgba(14,15,16,.75); box-shadow: var(--control-shadow); }
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .ib { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; text-decoration: none; }
+  .ib { display: inline-grid; place-items: center; width: 32px; height: 32px; flex: none; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; text-decoration: none; }
   .ib:hover { background: var(--hover); color: var(--text); }
+  .ib svg.i { width: 16px; height: 16px; }
   .sec-t { display: flex; align-items: center; gap: 8px; padding: 14px 14px 6px 16px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
   .sec-t span { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
 
   /* Panel de la partida. */
   aside { flex: 0 0 380px; display: flex; flex-direction: column; min-width: 0; background: var(--panel); border-right: 1px solid var(--sep); }
   .side-head { display: flex; align-items: center; gap: 10px; padding: 14px 8px 10px 16px; flex: none; }
-  .side-head .mark { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 11px; background: var(--accent-tint); color: var(--accent); font: 800 18px/1 var(--display); text-decoration: none; }
+  .side-head .mark { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 9px; background: var(--accent-tint); color: var(--accent); font: 800 18px/1 var(--display); text-decoration: none; }
   .side-head .t { min-width: 0; flex: 1; }
   #game-name { display: block; font: 700 18px/1.2 var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .side-head .sub { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; }
@@ -203,7 +204,7 @@ export const PAGE = String.raw`<!doctype html>
   .msg.error .body { color: var(--error); }
   .decisive { display: inline-flex; gap: 6px; margin-top: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(255,107,94,.12); color: #ff9d94; font-size: 13px; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .actions button, .chips button { display: inline-flex; align-items: center; height: 34px; padding: 0 14px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px; background: rgba(20,22,23,.9); color: #e6c98a; font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: 0 1px 1px rgba(0,0,0,.4); }
+  .actions button, .chips button { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px; background: rgba(20,22,23,.9); color: #e6c98a; font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: 0 1px 1px rgba(0,0,0,.4); }
   .actions button:hover:not(:disabled), .chips button:hover:not(:disabled) { background: #22262a; }
   .actions button.roll { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 600; }
   /* Ilustración de la escena: dentro del chat; un clic la abre en grande. */
@@ -216,13 +217,13 @@ export const PAGE = String.raw`<!doctype html>
   .scene figcaption b { display: block; font-weight: 600; }
   .scene figcaption span { font-size: 12px; font-weight: 500; color: #d9d3c8; }
   .scene.loading figcaption span::after { content: ' · ilustrando…'; }
-  .scene .zoom { position: absolute; top: 10px; right: 10px; z-index: 1; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--text); }
+  .scene .zoom { position: absolute; top: 10px; right: 10px; z-index: 1; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: var(--text); }
   #lightbox { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 72px 40px 40px; background: rgba(5,6,6,.85); }
   #lightbox[hidden] { display: none; }
   #lightbox img { max-width: min(1120px, 100%); max-height: calc(100% - 60px); border-radius: 16px; box-shadow: var(--window-shadow); }
   #lightbox .cap { display: flex; gap: 12px; align-items: baseline; font-size: 12px; font-weight: 500; color: var(--muted); }
   #lightbox .cap b { font-size: 15px; font-weight: 600; color: var(--text); }
-  #lightbox .close { position: absolute; top: 28px; right: 28px; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; color: var(--text); }
+  #lightbox .close { position: absolute; top: 28px; right: 28px; display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; color: var(--text); }
   #thinking { position: relative; min-height: 0; padding: 0 max(24px, calc((100% - 980px) / 2)); color: var(--muted); font-size: 13px; }
   #thinking:not(:empty) { padding-bottom: 8px; }
 
@@ -232,15 +233,15 @@ export const PAGE = String.raw`<!doctype html>
   .chips button { border-color: rgba(255,255,255,.1); color: #b8b1a6; font-family: var(--mono); font-size: 12px; letter-spacing: 0; }
   body.drawer-open .chips { display: none; }
   form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 16px; background: var(--panel); border-top: 1px solid var(--sep); }
-  form input { flex: 1; min-width: 0; height: 42px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--control); outline: none; font-size: 15px; }
+  form input { flex: 1; min-width: 0; height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--control); outline: none; font-size: 15px; }
   form input::placeholder { color: var(--faint); }
   form input:focus { box-shadow: 0 0 0 1.5px rgba(230,183,90,.55); }
-  form button { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; }
+  form button { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; }
   form button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
   form button[type=submit] { background: var(--accent); color: var(--accent-ink); }
   form button[type=submit]:hover:not(:disabled) { background: var(--glow); color: var(--accent-ink); }
-  form button[type=submit] svg.i { width: 20px; height: 20px; }
-  #cube svg.i { width: 22px; height: 22px; }
+  form button[type=submit] svg.i { width: 16px; height: 16px; }
+  #cube svg.i { width: 18px; height: 18px; }
   #cube.on { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.5); }
   #cube { position: relative; }
   #cube.new::after { content: ''; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
@@ -248,9 +249,9 @@ export const PAGE = String.raw`<!doctype html>
   /* Menú del cubo: Hoja, Diario y Mochila. */
   #cube-menu { position: absolute; right: 58px; bottom: 66px; z-index: 25; width: 270px; padding: 6px; border-radius: 16px; background: var(--bubble); border: 1px solid var(--line); box-shadow: var(--window-shadow); }
   #cube-menu[hidden] { display: none; }
-  #cube-menu button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 6px 10px; border: 0; border-radius: 12px; background: transparent; color: var(--text); text-align: left; }
+  #cube-menu button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 10px; border: 0; border-radius: 12px; background: transparent; color: var(--text); text-align: left; }
   #cube-menu button:hover, #cube-menu button:focus-visible { background: var(--hover); outline: none; }
-  #cube-menu .bub { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 50%; }
+  #cube-menu .bub { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; }
   #cube-menu .bub svg.i { stroke-width: 2; }
   #cube-menu .bub.sheet { background: var(--accent); color: var(--accent-ink); }
   #cube-menu .bub.journal { background: #6cc7b8; color: #0d2a26; }
@@ -268,7 +269,7 @@ export const PAGE = String.raw`<!doctype html>
   #drawer-scrim[hidden] { display: none; }
   .dr-grab { display: none; }
   .dr-head { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--sep); flex: none; flex-wrap: wrap; }
-  .dr-back { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px 0 8px; border: 0; border-radius: 999px; background: rgba(255,255,255,.06); color: var(--text); font-size: 13px; font-weight: 500; }
+  .dr-back { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 8px; border: 0; border-radius: 999px; background: rgba(255,255,255,.06); color: var(--text); font-size: 13px; font-weight: 500; }
   .dr-back:hover { background: rgba(255,255,255,.1); }
   #dr-title { margin: 0 0 0 4px; font: 700 16px/1.2 var(--display); letter-spacing: -.02em; }
   .dr-head .seg { margin-left: auto; }
@@ -405,10 +406,10 @@ export const PAGE = String.raw`<!doctype html>
     #cube-scrim[hidden] { display: none; }
     #cube-menu { right: 50px; left: auto; bottom: 74px; width: auto; padding: 0; background: transparent; border: 0; box-shadow: none; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
     #cube-menu[hidden] { display: none; }
-    #cube-menu button { flex-direction: row-reverse; width: auto; min-height: 52px; padding: 0; gap: 10px; background: transparent; }
+    #cube-menu button { flex-direction: row-reverse; width: auto; min-height: 32px; padding: 0; gap: 10px; background: transparent; }
     #cube-menu button:hover { background: transparent; }
-    #cube-menu .bub { width: 52px; height: 52px; box-shadow: 0 6px 16px rgba(0,0,0,.55); }
-    #cube-menu .lbl { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--bubble); box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+    #cube-menu .bub { width: 32px; height: 32px; box-shadow: 0 6px 16px rgba(0,0,0,.55); }
+    #cube-menu .lbl { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--bubble); box-shadow: 0 4px 12px rgba(0,0,0,.5); }
     #cube-menu small { display: none; }
     #drawer-scrim { position: absolute; inset: 0; z-index: 4; display: block; border: 0; background: rgba(5,6,6,.6); }
     #drawer-scrim[hidden] { display: none; }
@@ -447,21 +448,21 @@ ${PAINT_STYLE}
   .msg.chapter .body { font: 16px/1.65 var(--sans); background: none; box-shadow: none; text-align: left; hyphens: manual; }
   #journal .en.chapter > span:last-child { font-family: var(--sans); }
   /* Sonido y narrador en la cabecera del chat: botones redondos, sin texto. */
-  .chat-head .sfx { margin-left: 0; height: 36px; background: transparent; }
+  .chat-head .sfx { margin-left: 0; height: 32px; background: transparent; }
   .chat-head .sfx + .tts { margin-left: 0; }
   .chat-head .tts { margin-left: 0; gap: 2px; }
-  .sfx > button, .tts > button { height: 36px; background: transparent; }
+  .sfx > button, .tts > button { height: 32px; background: transparent; }
   .sfx > .sfx-toggle span, .tts > .tts-auto span { display: none; }
-  .sfx > .sfx-toggle { width: 36px; padding: 0; justify-content: center; border-radius: 50%; }
+  .sfx > .sfx-toggle { width: 32px; padding: 0; justify-content: center; border-radius: 50%; }
   .sfx > .sfx-more { width: 22px; padding: 0; border-radius: 50%; }
-  .tts > .tts-auto, .tts > .tts-more { width: 36px; padding: 0; justify-content: center; border-radius: 50%; }
+  .tts > .tts-auto, .tts > .tts-more { width: 32px; padding: 0; justify-content: center; border-radius: 50%; }
   .tts > .tts-stop { border-radius: 999px; }
   .sfx.on { background: transparent; }
   .sfx.on > .sfx-toggle, .tts > button.on { background: var(--accent-tint); }
   .tts-pop, .sfx-pop { top: 44px; border-radius: 16px; background: var(--bubble); box-shadow: var(--window-shadow); }
   /* Micrófono y pincel dentro del cuadro de redacción, del mismo tamaño que el cubo. */
-  form .mic, form .brush { width: 42px; height: 42px; margin: 0; }
-  form .mic svg.i, form .brush svg.i { width: 20px; height: 20px; }
+  form .mic, form .brush { width: 32px; height: 32px; margin: 0; }
+  form .mic svg.i, form .brush svg.i { width: 18px; height: 18px; }
 
   /* Secciones plegables del panel. */
   .col-t { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin-right: auto; padding: 4px 6px 4px 0; border: 0; background: transparent; color: var(--text); text-align: left; }
@@ -478,30 +479,30 @@ ${PAINT_STYLE}
   /* Micrófono dentro del cuadro de texto, a la derecha. */
   .inwrap { position: relative; flex: 1; min-width: 0; display: flex; }
   .inwrap input { padding-right: 48px; }
-  .inwrap .mic { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 36px !important; height: 36px !important; }
+  .inwrap .mic { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 28px !important; height: 28px !important; }
   /* El cubo se vuelve X mientras el menú o el contenido están abiertos: ese botón es el que cierra. */
   #cube .ic-x { display: none; }
   #cube.on .ic-x { display: block; } #cube.on .ic-cube { display: none; }
   /* Engranaje del panel: ajustes de la voz del narrador. */
   #side-gear { position: relative; display: inline-flex; }
-  #side-gear .tts-more { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; }
+  #side-gear .tts-more { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; }
   #side-gear .tts-more:hover { background: var(--hover); color: var(--text); }
   #side-gear .tts-pop { top: 46px; right: 0; z-index: 40; }
   /* Narrador y sonido: un grupo ámbar, redondeado sin ser redondo. */
   .chat-head .tts { order: 3; margin-left: 0; gap: 0; }
   .chat-head .sfx { order: 4; margin-left: -12px; }
-  .chat-head .tts > button, .chat-head .sfx > button { height: 36px; border-radius: 0; background: var(--accent-tint); color: var(--accent); }
+  .chat-head .tts > button, .chat-head .sfx > button { height: 32px; border-radius: 0; background: var(--accent-tint); color: var(--accent); }
   .chat-head .tts > button:hover, .chat-head .sfx > button:hover { background: rgba(230,183,90,.24); color: var(--glow); }
   .chat-head .tts > button:first-child:not([hidden]), .chat-head .tts > .tts-stop[hidden] + .tts-auto { border-radius: 12px 0 0 12px; }
-  .chat-head .tts > .tts-auto { width: 40px; padding: 0; justify-content: center; }
+  .chat-head .tts > .tts-auto { width: 32px; padding: 0; justify-content: center; }
   .chat-head .tts > .tts-auto:not(.on) { color: var(--muted); background: rgba(230,183,90,.07); }
-  .chat-head .sfx > .sfx-toggle { width: 40px; padding: 0; justify-content: center; border-left: 1px solid rgba(230,183,90,.18); }
+  .chat-head .sfx > .sfx-toggle { width: 32px; padding: 0; justify-content: center; border-left: 1px solid rgba(230,183,90,.18); }
   .chat-head .sfx:not(.on) > .sfx-toggle { color: var(--muted); background: rgba(230,183,90,.07); }
-  .chat-head .sfx > .sfx-more { width: 30px; padding: 0; border-radius: 0 12px 12px 0; border-left: 1px solid rgba(230,183,90,.18); }
-  .chat-head .sfx, .chat-head .sfx.on { height: 36px; background: transparent; border-radius: 12px; }
+  .chat-head .sfx > .sfx-more { width: 26px; padding: 0; border-radius: 0 12px 12px 0; border-left: 1px solid rgba(230,183,90,.18); }
+  .chat-head .sfx, .chat-head .sfx.on { height: 32px; background: transparent; border-radius: 12px; }
   #party { order: 2; margin-right: 6px; }
   @media (max-width: 820px) {
-    .sfx > .sfx-toggle, .tts > .tts-auto { width: 34px; }
+    .sfx > .sfx-toggle, .tts > .tts-auto { width: 32px; }
     .nv-av { width: 28px; height: 28px; }
     .msg.scene, .msg.moment, #log > .actions { margin-left: 36px; }
     form .mic, form .brush { width: 38px; }
