@@ -561,12 +561,26 @@ ${PAINT_STYLE}
   .actions button.roll:not(:disabled) svg.d20 { animation: d20-wiggle 2.4s ease-in-out infinite; transform-origin: 50% 55%; }
   .actions button.roll:not(:disabled):hover svg.d20 { animation-duration: .6s; }
   @keyframes d20-wiggle { 0%, 70%, 100% { transform: rotate(0); } 76% { transform: rotate(-16deg); } 84% { transform: rotate(14deg); } 92% { transform: rotate(-6deg); } }
+  .actions button.roll svg.d20 rect { fill: none; transition: fill .15s; }
+  .actions button.roll svg.d20 circle, .actions button.roll svg.d20 text { fill: currentColor; stroke: none; }
+  .actions button.roll svg.d20 text { font: 800 9px/1 var(--display); }
+  /* Hover: el botón se ilumina y la cara del dado se vuelve blanca, con el borde y los puntos negros. */
+  .actions button.roll:hover:not(:disabled) { background: var(--glow); }
+  .actions button.roll:hover:not(:disabled) svg.d20 rect, .actions button.roll.rolling svg.d20 rect, .actions button.roll.landed svg.d20 rect { fill: #fff; stroke: #2a1d05; }
+  .actions button.roll:hover:not(:disabled) svg.d20 circle, .actions button.roll.rolling svg.d20 circle, .actions button.roll.landed svg.d20 circle, .actions button.roll.landed svg.d20 text { fill: #2a1d05; }
+  .actions button.roll.rolling svg.d20 { animation: die-shake .24s linear infinite; }
+  .actions button.roll.landed:disabled { opacity: 1; background: var(--accent); color: var(--accent-ink); }
+  .actions button.roll.landed svg.d20 { animation: die-land .4s cubic-bezier(.2,1.5,.35,1); }
+  @keyframes die-shake { 0% { transform: rotate(-14deg) translateY(0); } 25% { transform: rotate(10deg) translateY(-1.5px); } 50% { transform: rotate(-8deg) translateY(.5px); } 75% { transform: rotate(14deg) translateY(-1px); } 100% { transform: rotate(-14deg) translateY(0); } }
+  @keyframes die-land { 0% { transform: scale(.8) rotate(-12deg); } 100% { transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .actions button.roll svg.d20 { animation: none !important; } }
   /* Opciones usadas: desaparecen las que no se eligieron; la elegida queda, desactivada y marcada. */
   .actions button:disabled:not(.chosen) { display: none; }
   .actions:not(:has(button:enabled)):not(:has(button.chosen)) { display: none; }
   .actions button.chosen:disabled { opacity: .75; border-color: rgba(230,183,90,.45); color: #e6c98a; }
   .actions button.chosen:disabled:not(.roll)::before { content: '✓'; margin-right: 6px; color: var(--accent); }
   .actions button.roll.chosen:disabled { background: var(--accent-tint); color: #e6c98a; }
+  .actions button.roll.landed.chosen:disabled { opacity: 1; }
   /* Secciones plegables del panel. */
   .col-t { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin-right: auto; padding: 4px 6px 4px 0; border: 0; background: transparent; color: var(--text); text-align: left; }
   .col-t b { font: 700 15px/1.2 var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -769,7 +783,36 @@ ${PAINT_STYLE}
     return 'info';
   }
   // Icono del botón de tirar: un dado clásico con sus puntos, el que todo el mundo asocia a «tirar».
-  var D20_ICON = '<svg class="i d20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.3" cy="8.3" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.7" cy="8.3" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.3" cy="15.7" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.7" cy="15.7" r="1.5" fill="currentColor" stroke="none"/></svg>';
+  var D20_ICON = '<svg class="i d20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle data-p="tl" cx="8.3" cy="8.3" r="1.5"/><circle data-p="tr" cx="15.7" cy="8.3" r="1.5"/><circle data-p="ml" cx="8.3" cy="12" r="1.5" style="display:none"/><circle data-p="mr" cx="15.7" cy="12" r="1.5" style="display:none"/><circle data-p="c" cx="12" cy="12" r="1.5"/><circle data-p="bl" cx="8.3" cy="15.7" r="1.5"/><circle data-p="br" cx="15.7" cy="15.7" r="1.5"/><text x="12" y="12.6" text-anchor="middle" dominant-baseline="middle" style="display:none">20</text></svg>';
+  /** Caras del dado: qué puntos se ven con cada valor del 1 al 6. */
+  var DIE_FACES = { 1: ['c'], 2: ['tl', 'br'], 3: ['tl', 'c', 'br'], 4: ['tl', 'tr', 'bl', 'br'], 5: ['tl', 'tr', 'c', 'bl', 'br'], 6: ['tl', 'tr', 'ml', 'mr', 'bl', 'br'] };
+  function dieFace(svg, n) {
+    svg.querySelector('text').style.display = 'none';
+    svg.querySelectorAll('[data-p]').forEach(function (c) { c.style.display = DIE_FACES[n].indexOf(c.getAttribute('data-p')) >= 0 ? '' : 'none'; });
+  }
+  /** Al tirar, los puntos saltan de cara en cara; al llegar el resultado (aviso «🎲 … d20 [N]») se queda en él:
+   *  del 1 al 6 con sus puntos y, por encima, con el número en la cara (un d6 no tiene más puntos). */
+  var rollBtn = null, rolling = null;
+  function startRoll(b) {
+    stopRoll();
+    if (!b || !b.querySelector('svg.d20')) return;
+    var svg = b.querySelector('svg.d20');
+    b.classList.add('rolling');
+    rolling = { b: b, svg: svg, start: Date.now(), t: setInterval(function () { dieFace(svg, 1 + Math.floor(Math.random() * 6)); }, 80) };
+  }
+  function landRoll(n) {
+    if (!rolling) return;
+    var r = rolling; rolling = null;
+    setTimeout(function () {
+      clearInterval(r.t);
+      r.b.classList.remove('rolling');
+      if (n >= 1 && n <= 6) dieFace(r.svg, n);
+      else { r.svg.querySelectorAll('[data-p]').forEach(function (c) { c.style.display = 'none'; }); var t = r.svg.querySelector('text'); t.textContent = String(n); t.style.display = ''; }
+      r.b.classList.add('landed');
+      r.b.title = 'Ha salido ' + n;
+    }, Math.max(0, 700 - (Date.now() - r.start)));
+  }
+  function stopRoll() { if (!rolling) return; clearInterval(rolling.t); rolling.b.classList.remove('rolling'); dieFace(rolling.svg, 5); rolling = null; }
   /** Un mensaje: la burbuja (.body) y, debajo, lo que se le añada (aviso, acciones). El del máster lleva su rótulo. */
   function add(kind, text, extra) {
     var div = document.createElement('div');
@@ -778,6 +821,8 @@ ${PAINT_STYLE}
     log.appendChild(div);
     if (kind === 'system' && /🎲/.test(text)) {
       var rb = log.querySelectorAll('.actions button.roll'); if (rb.length) rb[rb.length - 1].classList.add('chosen');
+      var rolled = String(text).match(/d20\s*\[(\d+)/);
+      if (rolled) landRoll(Number(rolled[1])); else stopRoll();
     }
     scroll();
     return div;
@@ -831,7 +876,9 @@ ${PAINT_JS}
   function roll() {
     if (busy) return;
     setBusy(true);
-    post('/api/roll', {}).then(handleReply).finally(function () { setBusy(false); loadSheet(); });
+    var rbs = log.querySelectorAll('.actions button.roll');
+    startRoll(rollBtn || rbs[rbs.length - 1]); rollBtn = null;
+    post('/api/roll', {}).then(function (r) { if (!r.ok) stopRoll(); handleReply(r); }).finally(function () { setBusy(false); loadSheet(); });
   }
   function command(name) {
     if (busy) return;
