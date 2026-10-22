@@ -152,23 +152,23 @@ export const PAGE = String.raw`<!doctype html>
   body.map-big #map, body.board-big #board { position: fixed; inset: 40px; z-index: 21; margin: 0; padding: 16px 18px; border-radius: 20px; overflow: auto; background: var(--panel); box-shadow: var(--window-shadow); }
 
   /* Listas del panel: «Cerca de ti» y la misión, filas como las de WhatsApp. */
-  .row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 14px 8px 16px; border: 0; border-bottom: 1px solid rgba(255,255,255,.05); background: transparent; color: var(--text); text-align: left; }
-  button.row:hover { background: rgba(255,255,255,.04); }
-  .row.here { background: rgba(230,183,90,.08); }
-  .row:disabled { opacity: 1; cursor: default; }
+  .prow { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 14px 8px 16px; border: 0; border-bottom: 1px solid rgba(255,255,255,.05); background: transparent; color: var(--text); text-align: left; }
+  button.prow:hover { background: rgba(255,255,255,.04); }
+  .prow.here { background: rgba(230,183,90,.08); }
+  .prow:disabled { opacity: 1; cursor: default; }
   #board .where b { display: none; }
-  .row .ico { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 50%; background: var(--control); border: 1px solid var(--line); color: #b8b1a6; font-size: 13px; font-weight: 600; }
-  .row.here .ico { background: var(--accent-tint); border-color: rgba(230,183,90,.3); color: var(--accent); }
-  .row .ico.npc { color: var(--npc, #e6a587); background: rgba(255,255,255,.04); border-color: currentColor; }
-  .row .tt { min-width: 0; flex: 1; }
-  .row .tt b { display: block; font-size: 14.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .row .tt small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .row .m { flex: none; font-size: 12px; color: var(--muted); }
-  .row.here .m { color: var(--accent); font-weight: 500; }
-  .row .prog { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
-  .row .prog i { flex: 1; height: 4px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
-  .row .prog i span { display: block; height: 100%; background: var(--accent); }
-  .row .prog small { margin: 0; font-size: 11px; }
+  .prow .ico { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 50%; background: var(--control); border: 1px solid var(--line); color: #b8b1a6; font-size: 13px; font-weight: 600; }
+  .prow.here .ico { background: var(--accent-tint); border-color: rgba(230,183,90,.3); color: var(--accent); }
+  .prow .ico.npc { color: var(--npc, #e6a587); background: rgba(255,255,255,.04); border-color: currentColor; }
+  .prow .tt { min-width: 0; flex: 1; }
+  .prow .tt b { display: block; font-size: 14.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow .tt small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow .m { flex: none; font-size: 12px; color: var(--muted); }
+  .prow.here .m { color: var(--accent); font-weight: 500; }
+  .prow .prog { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+  .prow .prog i { flex: 1; height: 4px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+  .prow .prog i span { display: block; height: 100%; background: var(--accent); }
+  .prow .prog small { margin: 0; font-size: 11px; }
   .pill-new { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; margin-left: 6px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 10.5px; font-weight: 600; vertical-align: 1px; }
   #near:empty, #quest:empty { display: none; }
 
@@ -190,8 +190,9 @@ export const PAGE = String.raw`<!doctype html>
   .chat-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   /* Fondo con motivos tenues, como el papel de WhatsApp. */
   .chat-body::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .07; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' fill='none' stroke='%23e6b75a' stroke-width='1.2'%3E%3Cpath d='M20 20l8-6 8 6-8 6z'/%3E%3Cpath d='M70 30c8-10 18-8 20 0-8 2-14 0-20 0z'/%3E%3Cpath d='M30 80h6v-6'/%3E%3Ccircle cx='90' cy='85' r='4'/%3E%3Cpath d='M60 60l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z'/%3E%3C/svg%3E"); }
-  #log { position: relative; flex: 1; overflow-y: auto; padding: 16px max(24px, calc((100% - 760px) / 2)) 12px; display: flex; flex-direction: column; gap: 6px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.14) transparent; }
-  .msg { max-width: 560px; word-wrap: break-word; }
+  #log { position: relative; flex: 1; overflow-y: auto; padding: 16px max(24px, calc((100% - 980px) / 2)) 16px; display: flex; flex-direction: column; gap: 6px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.14) transparent; }
+  .msg { max-width: 720px; word-wrap: break-word; }
+  #log > * { flex-shrink: 0; }
   .msg .body { padding: 8px 12px 7px; border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
   .msg p { margin: 0 0 .6em; } .msg p:last-child { margin: 0; }
   .msg .who { display: flex; align-items: center; gap: 5px; margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--accent); }
@@ -222,12 +223,12 @@ export const PAGE = String.raw`<!doctype html>
   #lightbox .cap { display: flex; gap: 12px; align-items: baseline; font-size: 12px; font-weight: 500; color: var(--muted); }
   #lightbox .cap b { font-size: 15px; font-weight: 600; color: var(--text); }
   #lightbox .close { position: absolute; top: 28px; right: 28px; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; color: var(--text); }
-  #thinking { position: relative; min-height: 0; padding: 0 max(24px, calc((100% - 760px) / 2)); color: var(--muted); font-size: 13px; }
+  #thinking { position: relative; min-height: 0; padding: 0 max(24px, calc((100% - 980px) / 2)); color: var(--muted); font-size: 13px; }
   #thinking:not(:empty) { padding-bottom: 8px; }
 
   /* Redacción: atajos, cuadro de texto, micrófono y pincel, el cubo y Enviar. */
   .compose { position: relative; z-index: 3; flex: none; background: var(--chat); }
-  .chips { display: flex; gap: 8px; padding: 8px max(16px, calc((100% - 760px) / 2)) 10px; overflow-x: auto; scrollbar-width: none; }
+  .chips { display: flex; gap: 8px; padding: 8px max(16px, calc((100% - 980px) / 2)) 10px; overflow-x: auto; scrollbar-width: none; }
   .chips button { border-color: rgba(255,255,255,.1); color: #b8b1a6; font-family: var(--mono); font-size: 12px; letter-spacing: 0; }
   body.drawer-open .chips { display: none; }
   form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 16px; background: var(--panel); border-top: 1px solid var(--sep); }
@@ -423,7 +424,9 @@ ${AVATAR_STYLE}
 ${NOVEL_STYLE}
 ${PAINT_STYLE}
   /* B5 sobre los módulos (novel, tts, sfx, voz, pincel, avatar): mismas piezas, otra piel. */
-  .msg.row { gap: 8px; margin-top: 8px; max-width: min(620px, 100%); }
+  .msg.row { gap: 8px; margin-top: 8px; max-width: min(760px, 100%); }
+  .msg.scene, .moment.combat, .moment.discovery, .moment.manual { width: min(640px, calc(100% - 42px)); }
+  .msg.system { max-width: min(720px, 100%); }
   .msg.row .body { padding: 8px 12px 7px; border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
   .msg.row:not(.cont):not(.mine) .body { border-top-left-radius: 4px; }
   .msg.row.mine:not(.cont) .body { border-top-right-radius: 4px; }
@@ -1531,12 +1534,12 @@ ${PAINT_JS}
     var rows = [], dist = function (sp) { return Math.hypot(sp.x - b.actor.x, sp.y - b.actor.y); };
     b.presences.filter(function (p) { return !p.moving && p.level !== 'hint'; }).forEach(function (p) {
       var sp = spotById(p.spot_id), d = sp ? dist(sp) : 0;
-      rows.push({ d: d - 0.01, html: '<button type="button" class="row" data-talk="' + escapeHtml(p.label) + '"><span class="ico npc" style="--npc:' + (p.kind === 'character' ? '#9cb08a' : '#e6a587') + '">' + escapeHtml(p.level === 'full' ? initial(p.label) : '?') + '</span>' +
+      rows.push({ d: d - 0.01, html: '<button type="button" class="prow" data-talk="' + escapeHtml(p.label) + '"><span class="ico npc" style="--npc:' + (p.kind === 'character' ? '#9cb08a' : '#e6a587') + '">' + escapeHtml(p.level === 'full' ? initial(p.label) : '?') + '</span>' +
         '<span class="tt"><b>' + escapeHtml(p.label) + '</b><small>' + escapeHtml(sp ? sp.name : '') + '</small></span><span class="m">' + (d < 1.6 ? 'Aquí' : fmtM(d)) + '</span></button>' });
     });
     b.spots.forEach(function (sp) {
       var here = isHere(sp), d = dist(sp);
-      rows.push({ d: here ? -1 : d, html: '<button type="button" class="row' + (here ? ' here' : '') + '" data-go="' + escapeHtml(sp.id) + '"' + (here ? ' disabled' : '') + '><span class="ico"><svg class="i"><use href="#i-pin"/></svg></span>' +
+      rows.push({ d: here ? -1 : d, html: '<button type="button" class="prow' + (here ? ' here' : '') + '" data-go="' + escapeHtml(sp.id) + '"' + (here ? ' disabled' : '') + '><span class="ico"><svg class="i"><use href="#i-pin"/></svg></span>' +
         '<span class="tt"><b>' + escapeHtml(sp.name) + '</b><small>' + escapeHtml(sp.description || '') + '</small></span><span class="m">' + (here ? 'Aquí' : fmtM(d)) + '</span></button>' });
     });
     rows.sort(function (x, y) { return x.d - y.d; });
@@ -1551,11 +1554,11 @@ ${PAINT_JS}
   function renderQuest(j) {
     var qs = j.quests.active, live = qs.filter(function (x) { return x.status === 'active'; }), q = qs.filter(function (x) { return x.pinned; })[0] || live.filter(function (x) { return x.kind === 'main'; })[0] || live[0] || qs.filter(function (x) { return x.status !== 'expired'; })[0];
     var h = '<div class="sec-t">Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</div>';
-    if (!q) { $('quest').innerHTML = h + '<button type="button" class="row" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button>'; return; }
+    if (!q) { $('quest').innerHTML = h + '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button>'; return; }
     var done = q.steps.filter(function (s) { return s.done; }).length, total = q.steps.length;
     var sub = [q.giver ? 'lo pide ' + q.giver : '', q.reward || ''].filter(Boolean).join(' · ');
     var when = q.clock ? (q.clock.days_left <= 0 ? 'plazo vencido' : q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) : '';
-    h += '<button type="button" class="row" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>' + escapeHtml(q.title) + (store(journalKey()) !== j.version ? '<span class="pill-new">Novedad</span>' : '') + '</b>' +
+    h += '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>' + escapeHtml(q.title) + (store(journalKey()) !== j.version ? '<span class="pill-new">Novedad</span>' : '') + '</b>' +
       (sub ? '<small>' + escapeHtml(sub) + '</small>' : '') +
       (total ? '<span class="prog"><i><span style="width:' + Math.round(100 * done / total) + '%"></span></i><small>' + done + ' de ' + total + (when ? ' · ' + escapeHtml(when) : '') + '</small></span>' : (when ? '<small>' + escapeHtml(when) + '</small>' : '')) + '</span></button>';
     $('quest').innerHTML = h;
