@@ -549,6 +549,12 @@ ${PAINT_STYLE}
     body::before { animation-duration: .01s; }
     body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chips, body.entered .chips button, body.entered form > button, body.entered #card .stats > div, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
   }
+  /* Avisos del sistema (tiradas, consultas): una pastilla centrada de color muy suave; verde si sale bien, azul si
+     es neutro y rojo si sale mal. */
+  .msg.system { margin: 8px 0 2px; }
+  .msg.system .body { display: inline-block; padding: 5px 14px; border-radius: 999px; font-size: 13px; line-height: 1.45; box-shadow: none; background: rgba(99,170,255,.09); border: 1px solid rgba(99,170,255,.22); color: #b4d3f7; }
+  .msg.system.tone-good .body { background: rgba(79,191,122,.10); border-color: rgba(79,191,122,.26); color: #a6dfbb; }
+  .msg.system.tone-bad .body, .msg.system.error .body { background: rgba(255,107,94,.10); border-color: rgba(255,107,94,.26); color: #ffb0a8; }
   /* Secciones plegables del panel. */
   .col-t { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin-right: auto; padding: 4px 6px 4px 0; border: 0; background: transparent; color: var(--text); text-align: left; }
   .col-t b { font: 700 15px/1.2 var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -742,10 +748,18 @@ ${PAINT_STYLE}
   function spendButtons() { log.querySelectorAll('.actions button').forEach(function (b) { b.disabled = true; }); }
 
   var SPARK = '<svg class="i" style="width:12px;height:12px"><use href="#i-spark"/></svg>';
+  /** Tono de un aviso del sistema: bueno (verde), normal (azul) o malo (rojo), por el resultado que anuncia. */
+  function toneOf(text, extra) {
+    if (extra && extra.error) return 'bad';
+    var t = String(text || '');
+    if (/^✗/.test(t) || /→\s*(falla|fallo)\b/i.test(t)) return 'bad';
+    if (/→\s*(impacta|éxito)\b/i.test(t) || /^✓/.test(t)) return 'good';
+    return 'info';
+  }
   /** Un mensaje: la burbuja (.body) y, debajo, lo que se le añada (aviso, acciones). El del máster lleva su rótulo. */
   function add(kind, text, extra) {
     var div = document.createElement('div');
-    div.className = 'msg ' + kind + (extra && extra.error ? ' error' : '');
+    div.className = 'msg ' + kind + (extra && extra.error ? ' error' : '') + (kind === 'system' ? ' tone-' + toneOf(text, extra) : '');
     div.innerHTML = (kind === 'master' ? '<div class="who">' + SPARK + 'Máster</div>' : '') + '<div class="body">' + format(text) + '</div>';
     log.appendChild(div);
     scroll();
