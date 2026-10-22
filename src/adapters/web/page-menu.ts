@@ -97,28 +97,26 @@ export const MENU = String.raw`<!doctype html>
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chips span { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; background: rgba(14,15,16,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); font-size: 12.5px; color: #d9d3c8; }
   .chips .badge { height: 28px; padding: 0 10px; border-radius: 999px; background: rgba(14,15,16,.72); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
-  .body { max-width: 760px; padding: 8px 40px 40px; display: flex; flex-direction: column; gap: 26px; }
+  .body { max-width: 760px; padding: 6px 40px 40px; display: flex; flex-direction: column; gap: 16px; }
   .cta { display: flex; flex-wrap: wrap; gap: 10px; }
   .kv-t { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
-  .people > div { display: flex; align-items: center; gap: 12px; min-height: 54px; border-bottom: 1px solid rgba(255,255,255,.05); }
-  .people .av { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 50%; background: #22262a; box-shadow: inset 0 0 0 2px currentColor; font-weight: 600; font-size: 14px; }
-  .people .av.c0 { color: var(--accent); } .people .av.c1 { color: #8fe3ad; } .people .av.c2 { color: #9ccbff; } .people .av.c3 { color: #e6a587; }
-  .people b { font-weight: 500; }
   .facts { color: var(--muted); font-size: 13.5px; }
   .intro { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; max-width: 520px; padding: 0 40px; }
   .intro p { margin: 0; color: var(--muted); }
 
   /* Nueva partida, en la misma columna (en el móvil, una hoja desde abajo). */
-  #new { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--panel); }
+  /* Escritorio: una modal centrada sobre el menú atenuado (no hace falta más sitio). */
+  #new { position: fixed; top: 50%; left: 50%; z-index: 30; width: min(640px, calc(100vw - 48px)); max-height: min(860px, calc(100vh - 48px)); transform: translate(-50%, -50%); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 64px rgba(0,0,0,.6); overflow: hidden; }
   #new[hidden] { display: none; }
-  #new-scrim { display: none; }
+  #new-scrim { display: none; position: fixed; inset: 0; z-index: 29; border: 0; background: rgba(5,6,6,.62); }
+  body.new-open #new-scrim { display: block; }
   .grab { display: none; }
   .new-head { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 16px 0 24px; border-bottom: 1px solid var(--sep); flex: none; }
   .new-head h2 { margin: 0; font: 700 18px/1.2 var(--display); letter-spacing: -.02em; }
   .new-head .ib { margin-left: auto; background: rgba(255,255,255,.06); color: var(--text); }
   #new-form { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0; }
   .new-body { flex: 1; min-height: 0; overflow-y: auto; }
-  .new-in { max-width: 720px; padding: 22px 24px 28px; display: flex; flex-direction: column; gap: 22px; }
+  .new-in { padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 20px; }
   .lead { margin: 0; color: var(--muted); font-size: 14px; }
   .fld { display: flex; flex-direction: column; gap: 8px; }
   .lbl { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
@@ -129,6 +127,12 @@ export const MENU = String.raw`<!doctype html>
   input::placeholder { color: var(--faint); }
   input:focus, select:focus { border-color: rgba(230,183,90,.6); }
   .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .synopsis { margin: 2px 0 0; max-width: 620px; font-size: 15px; line-height: 1.5; color: #d9d3c8; text-shadow: 0 1px 10px rgba(0,0,0,.6); }
+  .meta-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .avs { display: flex; align-items: center; }
+  .avs span { display: grid; place-items: center; width: 30px; height: 30px; margin-left: -6px; border-radius: 50%; background: #22262a; border: 2px solid var(--chat); box-shadow: inset 0 0 0 1.5px currentColor; font-size: 12px; font-weight: 600; }
+  .avs span:first-child { margin-left: 0; }
+  .avs .c0 { color: var(--accent); } .avs .c1 { color: #8fe3ad; } .avs .c2 { color: #9ccbff; } .avs .c3 { color: #e6a587; }
   .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .opt { position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 88px; padding: 12px 14px; border-radius: 14px; background: var(--platter); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; }
   .opt input { position: absolute; opacity: 0; pointer-events: none; }
@@ -153,8 +157,7 @@ export const MENU = String.raw`<!doctype html>
     main { display: none; }
     body.new-open main { display: flex; position: fixed; inset: 0; z-index: 20; background: transparent; }
     body.new-open #pick { display: none; }
-    #new-scrim { display: block; position: absolute; inset: 0; border: 0; background: rgba(5,6,6,.6); }
-    #new { position: absolute; left: 0; right: 0; top: 64px; bottom: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 24px rgba(0,0,0,.5); }
+    #new { top: 64px; left: 0; right: 0; bottom: 0; width: auto; max-height: none; transform: none; border: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 24px rgba(0,0,0,.5); }
     .grab { display: block; align-self: center; width: 40px; height: 4px; margin: 8px 0 0; border-radius: 999px; background: rgba(255,255,255,.2); }
     .new-head { min-height: 52px; padding: 0 8px 0 16px; }
     .new-in { padding: 8px 16px 20px; }
@@ -304,6 +307,8 @@ export const MENU = String.raw`<!doctype html>
     if (days < 7) return d.toLocaleDateString('es-ES', { weekday: 'short' });
     return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
   }
+  /** Solo la fecha: «21 oct 2026». */
+  function day(iso) { try { return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return iso; } }
   function open(slug, character) {
     location.href = '/?game=' + encodeURIComponent(slug) + (character ? '&character=' + encodeURIComponent(character) : '');
   }
@@ -423,6 +428,8 @@ export const MENU = String.raw`<!doctype html>
     if (g.world) chips.appendChild(el('span', '', (g.world.template ? 'Mundo de plantilla' : 'Mundo generado') + ' · semilla ' + g.world.seed));
     if (g.mode === 'record' || g.mode === 'replay') chips.appendChild(el('span', '', g.cache_entries + ' respuestas grabadas'));
     cap.appendChild(chips);
+    if (g.synopsis) cap.appendChild(el('p', 'synopsis', g.synopsis));
+    else if (tab === 'continue') cap.appendChild(el('p', 'synopsis', g.characters.length ? 'Tu grupo te espera donde lo dejasteis.' : 'La partida está lista: entra y crea tu personaje.'));
     hero2.appendChild(cap);
     p.appendChild(hero2);
     var body = el('div', 'body');
@@ -432,20 +439,14 @@ export const MENU = String.raw`<!doctype html>
     cta.appendChild(go);
     extras(g, 'btn ghost').forEach(function (b) { cta.appendChild(b); });
     body.appendChild(cta);
-    var people = el('div');
-    people.appendChild(el('div', 'kv-t', 'Grupo'));
+    var meta = el('div', 'meta-line');
     if (g.characters.length) {
-      var list = el('div', 'people');
-      g.characters.forEach(function (n, i) {
-        var line = el('div');
-        line.appendChild(el('span', 'av c' + (i % 4), n.charAt(0).toUpperCase()));
-        line.appendChild(el('b', '', n));
-        list.appendChild(line);
-      });
-      people.appendChild(list);
-    } else people.appendChild(el('p', 'facts', 'La partida está lista: entra y crea tu personaje.'));
-    body.appendChild(people);
-    body.appendChild(el('p', 'facts', 'Creada ' + fmt(g.created_at) + (g.last_opened_at ? ' · última vez ' + fmt(g.last_opened_at) : '')));
+      var avs = el('span', 'avs'); avs.setAttribute('aria-label', 'Grupo: ' + g.characters.join(', '));
+      g.characters.forEach(function (n, i) { var a = el('span', 'c' + (i % 4), n.charAt(0).toUpperCase()); a.title = n; avs.appendChild(a); });
+      meta.appendChild(avs);
+    }
+    meta.appendChild(el('span', 'facts', 'Creada el ' + day(g.created_at)));
+    body.appendChild(meta);
     p.appendChild(body);
   }
 
@@ -461,7 +462,7 @@ export const MENU = String.raw`<!doctype html>
     if (!games.length) box.appendChild(el('p', 'empty', query ? 'Ninguna partida coincide.' : EMPTY[tab]));
     games.forEach(function (g) { box.appendChild(row(g)); });
     var g = games.filter(function (x) { return x.slug === selected; })[0];
-    if ($('new').hidden) detail(g, g && lists.continue[0] && g.slug === lists.continue[0].slug);
+    detail(g, g && lists.continue[0] && g.slug === lists.continue[0].slug);
     // Móvil: la última partida jugada, en grande arriba, para seguir con un toque.
     var last = tab === 'continue' && !query ? lists.continue[0] : null, resume = $('resume');
     resume.hidden = !last;
@@ -522,13 +523,13 @@ export const MENU = String.raw`<!doctype html>
   document.querySelectorAll('input[name=world]').forEach(function (r) { r.addEventListener('change', worldChanged); });
 
   function openNew() {
-    $('new').hidden = false; $('pick').hidden = true;
+    $('new').hidden = false;
     document.body.classList.add('new-open');
     setTimeout(function () { $('g-name').focus(); }, 30);
   }
   function closeNew() {
     if ($('new').hidden) return;
-    $('new').hidden = true; $('pick').hidden = false;
+    $('new').hidden = true;
     document.body.classList.remove('new-open');
     render();
   }
