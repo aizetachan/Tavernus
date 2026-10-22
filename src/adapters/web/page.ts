@@ -555,6 +555,38 @@ ${PAINT_STYLE}
   .msg.system .body { display: inline-block; padding: 5px 14px; border-radius: 999px; font-size: 13px; line-height: 1.45; box-shadow: none; background: rgba(99,170,255,.09); border: 1px solid rgba(99,170,255,.22); color: #b4d3f7; }
   .msg.system.tone-good .body { background: rgba(79,191,122,.10); border-color: rgba(79,191,122,.26); color: #a6dfbb; }
   .msg.system.tone-bad .body, .msg.system.error .body { background: rgba(255,107,94,.10); border-color: rgba(255,107,94,.26); color: #ffb0a8; }
+  /* Tirar: el botón lleva un d20 que se balancea para invitar a pulsarlo; al tirar, un d20 grande rueda en el hilo
+     y se detiene en el número que ha salido de verdad (el que trae el aviso «🎲 … d20 [N]» del servidor). */
+  .actions button.roll { gap: 6px; padding-left: 10px; }
+  .actions button.roll svg.d20 { width: 18px; height: 18px; stroke-width: 1.6; }
+  .actions button.roll:not(:disabled) svg.d20 { animation: d20-wiggle 2.4s ease-in-out infinite; transform-origin: 50% 55%; }
+  .actions button.roll:not(:disabled):hover svg.d20 { animation-duration: .6s; }
+  @keyframes d20-wiggle { 0%, 70%, 100% { transform: rotate(0); } 76% { transform: rotate(-16deg); } 84% { transform: rotate(14deg); } 92% { transform: rotate(-6deg); } }
+  /* Opciones usadas: desaparecen las que no se eligieron; la elegida queda, desactivada y marcada. */
+  .actions button:disabled:not(.chosen) { display: none; }
+  .actions:not(:has(button:enabled)):not(:has(button.chosen)) { display: none; }
+  .actions button.chosen:disabled { opacity: .75; border-color: rgba(230,183,90,.45); color: #e6c98a; }
+  .actions button.chosen:disabled:not(.roll)::before { content: '✓'; margin-right: 6px; color: var(--accent); }
+  .actions button.roll.chosen:disabled { background: var(--accent-tint); color: #e6c98a; }
+  .die-roll { align-self: center; display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 14px 0 6px; perspective: 500px; transition: opacity .5s ease, transform .5s ease; }
+  .die-roll .die3d { width: 76px; height: 76px; transform-style: preserve-3d; filter: drop-shadow(0 10px 14px rgba(0,0,0,.55)); animation: die-tumble .75s linear infinite; }
+  .die-roll svg { display: block; width: 100%; height: 100%; }
+  .die-roll .num { font: 800 22px/1 var(--display); fill: #2a1d05; }
+  .die-roll .cap { font-size: 12px; color: var(--muted); }
+  .die-roll.landed .die3d { animation: die-land .55s cubic-bezier(.2,1.4,.35,1) both; }
+  .die-roll.crit .die3d { filter: drop-shadow(0 0 16px rgba(240,197,107,.75)) drop-shadow(0 10px 14px rgba(0,0,0,.55)); }
+  .die-roll.fumble .num { fill: #7a1408; }
+  .die-roll.gone { opacity: 0; transform: scale(.85); }
+  /* Rueda sin ponerse nunca de canto: gira entero sobre sí y se inclina hacia los lados como mucho 45°. */
+  @keyframes die-tumble {
+    0% { transform: translateY(0) rotateZ(0) rotateX(20deg) rotateY(-25deg); }
+    25% { transform: translateY(-14px) rotateZ(90deg) rotateX(-40deg) rotateY(30deg); }
+    50% { transform: translateY(0) rotateZ(180deg) rotateX(35deg) rotateY(40deg); }
+    75% { transform: translateY(-8px) rotateZ(270deg) rotateX(-30deg) rotateY(-40deg); }
+    100% { transform: translateY(0) rotateZ(360deg) rotateX(20deg) rotateY(-25deg); }
+  }
+  @keyframes die-land { 0% { transform: rotateX(55deg) rotateZ(-25deg) scale(.9); } 60% { transform: rotateX(-8deg) rotateZ(4deg) scale(1.08); } 100% { transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .die-roll .die3d, .die-roll.landed .die3d, .actions button.roll svg.d20 { animation: none !important; } }
   /* Secciones plegables del panel. */
   .col-t { display: inline-flex; align-items: center; gap: 6px; min-width: 0; margin-right: auto; padding: 4px 6px 4px 0; border: 0; background: transparent; color: var(--text); text-align: left; }
   .col-t b { font: 700 15px/1.2 var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -606,7 +638,7 @@ ${PAINT_STYLE}
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2l-7 20-4-9-9-4z"/><path d="M22 2L11 13"/></symbol>
-  <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 2L3 7v10l9 5 9-5V7z"/><path d="M12 12L3 7M12 12l9-5M12 12v10"/></symbol>
+  <symbol id="i-cube" viewBox="0 0 24 24"><path d="M9 6V5a3 3 0 0 1 6 0v1"/><path d="M5 10a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/><path d="M8 13h8v4H8zM12 13v2"/></symbol>
   <symbol id="i-max" viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></symbol>
@@ -756,12 +788,46 @@ ${PAINT_STYLE}
     if (/→\s*(impacta|éxito)\b/i.test(t) || /^✓/.test(t)) return 'good';
     return 'info';
   }
+  // --- El dado: un d20 que rueda en el hilo mientras el servidor tira y se para en el número que salió ----------
+  var D20_ICON = '<svg class="i d20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l9 5.2v9.6L12 22l-9-5.2V7.2z"/><path d="M12 6.4l5 8.4H7z"/><path d="M12 2v4.4M3 7.2l4 7.6M21 7.2l-4 7.6M3 16.8l4-2M21 16.8l-4-2M12 22l-5-7.2M12 22l5-7.2"/></svg>';
+  var DIE_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true"><g stroke="#3a2708" stroke-width="1.6" stroke-linejoin="round"><polygon points="50,4 10,27 50,22" fill="#c8963f"/><polygon points="50,4 90,27 50,22" fill="#e0ad55"/><polygon points="10,27 24,66 50,22" fill="#b98635"/><polygon points="90,27 76,66 50,22" fill="#d9a54c"/><polygon points="10,27 10,73 24,66" fill="#9c6f2a"/><polygon points="90,27 90,73 76,66" fill="#b7843a"/><polygon points="10,73 50,96 24,66" fill="#8a6125"/><polygon points="90,73 50,96 76,66" fill="#a27532"/><polygon points="24,66 76,66 50,96" fill="#946a2a"/><polygon points="50,22 76,66 24,66" fill="#f3cf7d"/></g><text class="num" x="50" y="56" text-anchor="middle" dominant-baseline="middle">20</text></svg>';
+  var die = null;
+  function startDie() {
+    cancelDie();
+    var el = document.createElement('div');
+    el.className = 'die-roll'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
+    el.innerHTML = '<div class="die3d">' + DIE_SVG + '</div><span class="cap">Tirando…</span>';
+    log.appendChild(el); scroll();
+    var num = el.querySelector('.num');
+    die = { el: el, start: Date.now(), timer: setInterval(function () { num.textContent = String(1 + Math.floor(Math.random() * 20)); }, 85) };
+  }
+  /** El número llega en el aviso de la tirada; el dado rueda al menos un segundo y luego se para en él. */
+  function landDie(n) {
+    if (!die) return;
+    var d = die; die = null;
+    setTimeout(function () {
+      clearInterval(d.timer);
+      d.el.querySelector('.num').textContent = String(n);
+      d.el.querySelector('.cap').textContent = n === 20 ? '¡Crítico!' : n === 1 ? 'Pifia' : 'Ha salido ' + n;
+      d.el.classList.add('landed');
+      if (n === 20) d.el.classList.add('crit');
+      if (n === 1) d.el.classList.add('fumble');
+      setTimeout(function () { d.el.classList.add('gone'); setTimeout(function () { d.el.remove(); }, 520); }, 2200);
+    }, Math.max(0, 1000 - (Date.now() - d.start)));
+  }
+  function cancelDie() { if (!die) return; clearInterval(die.timer); die.el.remove(); die = null; }
+
   /** Un mensaje: la burbuja (.body) y, debajo, lo que se le añada (aviso, acciones). El del máster lleva su rótulo. */
   function add(kind, text, extra) {
     var div = document.createElement('div');
     div.className = 'msg ' + kind + (extra && extra.error ? ' error' : '') + (kind === 'system' ? ' tone-' + toneOf(text, extra) : '');
     div.innerHTML = (kind === 'master' ? '<div class="who">' + SPARK + 'Máster</div>' : '') + '<div class="body">' + format(text) + '</div>';
     log.appendChild(div);
+    if (kind === 'system' && /🎲/.test(text)) {
+      var rolled = String(text).match(/d20\s*\[(\d+)/);
+      if (rolled) landDie(Number(rolled[1])); else cancelDie();
+      var rb = log.querySelectorAll('.actions button.roll'); if (rb.length) rb[rb.length - 1].classList.add('chosen');
+    }
     scroll();
     return div;
   }
@@ -814,7 +880,8 @@ ${PAINT_JS}
   function roll() {
     if (busy) return;
     setBusy(true);
-    post('/api/roll', {}).then(handleReply).finally(function () { setBusy(false); loadSheet(); });
+    startDie();
+    post('/api/roll', {}).then(function (r) { if (!r.ok) cancelDie(); handleReply(r); }).finally(function () { setBusy(false); loadSheet(); if (die && Date.now() - die.start > 8000) cancelDie(); });
   }
   function command(name) {
     if (busy) return;

@@ -122,6 +122,13 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 
 export const TTS_STYLE = String.raw`
   /* Narrador de voz: altavoz en el rótulo de cada narración y controles en la cabecera del chat. */
+  /* Escuchar una narración: se pulsa el avatar del bocadillo; mientras lee, el avatar late en ámbar. */
+  .msg.tts-able > .nv-av { cursor: pointer; transition: box-shadow .2s, transform .15s; }
+  .msg.tts-able > .nv-av:hover, .msg.tts-able > .nv-av:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent), 0 0 0 5px var(--accent-tint); }
+  .msg.tts-able > .nv-av:active { transform: scale(.94); }
+  .msg.tts-on > .nv-av { box-shadow: 0 0 0 2px var(--accent); animation: tts-pulse 1.4s ease-out infinite; }
+  @keyframes tts-pulse { 0% { box-shadow: 0 0 0 2px var(--accent), 0 0 0 0 rgba(233,169,78,.45); } 100% { box-shadow: 0 0 0 2px var(--accent), 0 0 0 10px rgba(233,169,78,0); } }
+  @media (prefers-reduced-motion: reduce) { .msg.tts-on > .nv-av { animation: none; } }
   .msg .who .tts-say { margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; margin-top: -6px; margin-bottom: -6px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
   .msg .who .tts-say:hover { background: var(--hover); color: var(--text); }
   .msg.tts-on .who .tts-say { color: var(--accent); background: var(--accent-tint); }
@@ -424,13 +431,32 @@ export const TTS_SCRIPT = String.raw`<script>
       div.ttsMsg = m;
       justAttached = div;
       setTimeout(function () { if (justAttached === div) justAttached = null; }, 0);
-      var who = div.querySelector('.who');
-      if (!who) return;
-      var b = document.createElement('button');
-      b.type = 'button'; b.className = 'tts-say'; b.title = 'Leer en alto'; b.setAttribute('aria-label', 'Leer en alto');
-      b.innerHTML = SPEAKER + BARS;
-      b.addEventListener('click', function () { if (playing && playing.div === div) stop(); else { unlock(); speak(div); } });
-      who.appendChild(b);
+      // El avatar del bocadillo es el botón de escuchar: lee esta narración y las que la siguen del mismo narrador
+      // (las agrupadas, que no muestran avatar). Si ya está leyendo, para.
+      var av = div.querySelector('.nv-av');
+      if (!av) {
+        // Sin avatar (capítulos: prólogo, «Donde lo dejamos»): el altavoz de siempre en su rótulo.
+        var who = div.querySelector('.who');
+        if (!who) return;
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'tts-say'; b.title = 'Leer en alto'; b.setAttribute('aria-label', 'Leer en alto');
+        b.innerHTML = SPEAKER + BARS;
+        b.addEventListener('click', function () { if (playing && playing.div === div) stop(); else { unlock(); speak(div); } });
+        who.appendChild(b);
+        return;
+      }
+      div.classList.add('tts-able');
+      av.setAttribute('role', 'button'); av.tabIndex = 0;
+      av.title = 'Escuchar'; av.setAttribute('aria-label', 'Escuchar esta narración');
+      var go = function () {
+        var group = [div], n = div.nextElementSibling;
+        while (n && n.classList.contains('cont') && n.ttsMsg) { group.push(n); n = n.nextElementSibling; }
+        if (playing && group.indexOf(playing.div) >= 0) { stop(); return; }
+        unlock(); speak(div);
+        group.slice(1).forEach(enqueue);
+      };
+      av.addEventListener('click', go);
+      av.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
     },
     /** page.ts: llegó un mensaje en directo (no del historial). Con «leer automáticamente», a la cola. */
     fresh: function () { if (auto && justAttached) { enqueue(justAttached); justAttached = null; } },

@@ -372,11 +372,18 @@ export const NOVEL_JS = String.raw`
     scroll();
   }
 
+  /** Opciones ya usadas: queda marcada la que coincide con lo que hizo el jugador (también al restaurar el historial). */
+  function markChosen(text) {
+    var rows = log.querySelectorAll('.actions'), row = rows[rows.length - 1], t = String(text).trim().toLowerCase();
+    if (!row) return;
+    row.querySelectorAll('button').forEach(function (b) { if (b.textContent.trim().toLowerCase() === t) b.classList.add('chosen'); });
+  }
+
   function chatMessage(m, live) {
     if (m.notice) { addNotice(m.notice); return; }
     if (m.scene) { showScene(m.scene); return; }
     if (m.chapter) { addChapter(m); return; }
-    if (m.input) clearPending();
+    if (m.input) { clearPending(); markChosen(m.input); }
     var lines = m.lines || [], main = null;
     var say = function (l, lead) {
       if (l.speaker === 'actor') return chatRow('mine', meWho(), escapeHtml(l.text));
@@ -432,14 +439,15 @@ export const NOVEL_JS = String.raw`
     if (m.roll) {
       var b = document.createElement('button');
       b.className = 'roll';
-      b.textContent = '🎲 Tirar' + (m.roll.dc ? ' · CD ' + m.roll.dc : '');
-      b.onclick = function () { spendButtons(); roll(); };
+      b.innerHTML = D20_ICON + '<span>Tirar d20' + (m.roll.dc ? ' · CD ' + m.roll.dc : '') + '</span>';
+      b.title = 'Tirar el dado'; b.setAttribute('aria-label', 'Tirar el dado de veinte caras' + (m.roll.dc ? ', dificultad ' + m.roll.dc : ''));
+      b.onclick = function () { b.classList.add('chosen'); spendButtons(); roll(); };
       row.appendChild(b);
     } else {
       m.suggested.forEach(function (a) {
         var b = document.createElement('button');
         b.textContent = a;
-        b.onclick = function () { spendButtons(); act(a); };
+        b.onclick = function () { b.classList.add('chosen'); spendButtons(); act(a); };
         row.appendChild(b);
       });
     }
