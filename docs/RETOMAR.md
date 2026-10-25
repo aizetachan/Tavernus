@@ -74,6 +74,10 @@ se cierra la tapa sin corriente, el juego se para y nadie recibe aviso. Por eso 
 
 ## Lo siguiente: mover el bot a la VM de Google
 
+> **Superado (25 de octubre de 2026):** la web se despliega en el VPS propio con
+> [`DESPLIEGUE.md`](DESPLIEGUE.md). Los scripts de esta sección están ahora en `deploy/gcp/`
+> (`deploy/gcp/create-vm.sh`, `deploy/gcp/push.sh`…) y no se mantienen.
+
 Coste: la máquina es gratuita (nivel gratuito permanente). Lo único que se paga sigue siendo la API
 de Claude.
 

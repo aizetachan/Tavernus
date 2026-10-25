@@ -290,6 +290,7 @@ export const MENU = String.raw`<!doctype html>
             <label class="sub">¿Qué le trae aquí? · si lo dejas vacío, el mundo se lo inventa<input id="g-hook" type="text" maxlength="400" placeholder="Busca a su hermano, que vino a este pueblo y no volvió"></label>
           </div>
           <label class="sub">Cómo se ve · de aquí sale su retrato; luego puedes pedir otro<input id="g-look" type="text" maxlength="300" placeholder="Pelo cobrizo trenzado, cicatriz en la ceja, capa de lana verde"></label>
+          <label class="sub">Plazas para amigos · un enlace de invitación por plaza; luego puedes añadir más en «Invitaciones»<input id="g-seats" type="number" min="0" max="7" step="1" value="1"></label>
         </div>
         <details>
           <summary>Opciones avanzadas</summary>
@@ -430,7 +431,11 @@ export const MENU = String.raw`<!doctype html>
       }),
       deleteButton(g, cls + ' danger'),
     ];
-    return [deleteButton(g, cls + ' danger')];
+    return [invitesButton(g, cls), deleteButton(g, cls + ' danger')];
+  }
+  /** Asientos y enlaces de invitación de la partida (page-access.ts). */
+  function invitesButton(g, cls) {
+    return button('Invitaciones', cls, function () { location.href = '/invitaciones?game=' + encodeURIComponent(g.slug); });
   }
 
   function row(g) {
@@ -617,7 +622,7 @@ export const MENU = String.raw`<!doctype html>
     $('new-error').textContent = '';
     submit.disabled = true;
     var gen = generated();
-    var body = { name: $('g-name').value, mode: mode(), character: $('g-char').value, race: $('g-race').value, class: $('g-class').value, appearance: $('g-look').value, dice_seed: $('g-seed').value };
+    var body = { name: $('g-name').value, mode: mode(), character: $('g-char').value, race: $('g-race').value, class: $('g-class').value, appearance: $('g-look').value, dice_seed: $('g-seed').value, seats: Math.max(0, Math.min(7, parseInt($('g-seats').value, 10) || 0)) };
     if (gen) {
       body.world = { seed: $('g-wseed').value, tone: $('g-tone').value, setting: $('g-setting').value };
       body.hook = $('g-hook').value;

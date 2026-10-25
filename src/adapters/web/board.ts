@@ -22,6 +22,17 @@ import { positionOf } from '../../engine/movement.js';
 import { descriptorOf } from '../../engine/narrate.js';
 import { lightAt, perceive } from '../../engine/perception.js';
 import { describeNode } from '../../engine/resources.js';
+import { talkersOf } from '../../engine/scene.js';
+import { pcName } from '../../engine/party.js';
+
+/** «Aren» o «tú y Aren»: quién habla con ese NPC, visto por el lector. */
+function talkingLabel(engine: Engine, readerId: Id, npcId: Id): { talking_with?: string } {
+  const w = engine.world;
+  const npc = w.npcs.get(npcId)!;
+  const ids = talkersOf(w, engine.events.recentInLocation(w.spot(npc.location.id).location_id, 60), npc, engine.gameNow());
+  if (!ids.length) return {};
+  return { talking_with: ids.map((id) => (id === readerId ? 'tú' : pcName(w, readerId, w.character(id)))).join(' y ') };
+}
 import type { LocationMap, MapPoint } from '../../data/seed/maps.js';
 import { mapCacheOf } from './mapcache.js';
 import { generateMap, mapExtent, mapInputOf } from './mapgen.js';
@@ -61,6 +72,10 @@ export interface BoardPresence {
   label: string;
   asleep: boolean;
   moving: boolean;
+  /** NPC: el PJ (o los PJ) que hablan con él ahora, como los conoce el lector (scene.ts). */
+  talking_with?: string;
+  /** PJ: su jugador se ha ido y el personaje se queda, ausente. */
+  away?: boolean;
 }
 
 export interface BoardState {
@@ -143,8 +158,10 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
     if (p.level === 'none') continue;
     presences.push({
       id: other.id, kind: 'character', spot_id: opos.spot_id, x: opos.x, y: opos.y, level: p.level,
-      label: labelFor(p.level, c.knows.includes(other.id) ? other.name : descriptorOf(world, other.id)),
+      // Los PJ de una partida se conocen siempre por su nombre (docs/MULTIJUGADOR.md).
+      label: labelFor(p.level, other.name),
       asleep: other.status === 'asleep', moving: other.transit !== null,
+      ...(other.away ? { away: true } : {}),
     });
   }
   for (const n of world.npcs.values()) {
@@ -157,6 +174,7 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
       id: n.id, kind: 'npc', spot_id: ns.id, x: ns.x, y: ns.y, level: p.level,
       label: labelFor(p.level, c.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)),
       asleep: false, moving: false,
+      ...(p.level === 'full' ? talkingLabel(engine, c.id, n.id) : {}),
     });
   }
 

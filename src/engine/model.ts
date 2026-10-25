@@ -82,7 +82,7 @@ export interface Campaign {
    * Situaciones iniciales aún sin dueño: la de cada PJ anunciado al generar y alguna de reserva.
    * Campañas escritas: `for_classes` la reserva a esas clases (ids SRD) y `keep` la deja en la bolsa para el siguiente.
    */
-  situations?: { for_name: string; for_classes?: string[]; keep?: boolean; situation: InitialSituation }[];
+  situations?: { for_name: string; for_classes?: string[]; keep?: boolean; companion_of?: string; situation: InitialSituation }[];
 }
 
 /** Evento de generación de un mundo (src/worldgen). */
@@ -108,6 +108,10 @@ export interface GenerationInfo {
  * del máster parte de aquí.
  */
 export interface InitialSituation {
+  /** Para no repetirla a dos PJ de la partida y para enlazar las de compañero (`companion_of` en la bolsa). */
+  id?: string;
+  /** Situación de compañero: el PJ con quien llegó (comparte lugar y reloj). */
+  companion_of_character_id?: Id;
   why_here: string;
   wants: string;
   threat: string;
@@ -359,6 +363,34 @@ export interface Character {
   situation?: InitialSituation;
   /** Lo que debe a NPCs (debts.ts): abiertas y, para el Diario, las últimas saldadas. */
   debts?: Debt[];
+  /** Entre jugadores (party.ts): ofertas que le han hecho y esperan su respuesta. */
+  offers?: Offer[];
+  /** A quién sigue en cada desplazamiento (party.ts); null o ausente, a nadie. */
+  following?: Id | null;
+  /**
+   * Su jugador se ha ido (sin pestañas pasado el margen): el PJ se queda, ausente.
+   * Se defiende pero no actúa; a los 30 min, el velo (`veiled`). null o ausente: está.
+   */
+  away?: { since_real_ms: number; since_game_s: number; spot_id: Id | null } | null;
+  /** Ayuda de otro PJ (regla de ayuda del SRD): ventaja en su siguiente tirada hasta ese instante de juego. */
+  helped_by?: { character_id: Id; expires_game_s: number } | null;
+}
+
+/** Algo que un PJ ofrece a otro: un objeto, monedas o ambas cosas. Se cumple solo si el otro acepta (party.ts). */
+export interface Offer {
+  id: Id;
+  from_id: Id;
+  to_id: Id;
+  /** Ejemplar ofrecido y cuántos (de una pila); null si solo son monedas. */
+  instance_id: Id | null;
+  quantity: number;
+  coins: number;
+  /** Cómo se lee: «una daga», «20 monedas», «una daga y 20 monedas». */
+  label: string;
+  created_real_ms: number;
+  expires_real_ms: number;
+  /** Evento que la anuncia (para que la web ponga los botones en su sitio). */
+  event_id?: Id;
 }
 
 /** Una deuda con un NPC, con su prenda si dejó algo a cambio (debts.ts). */
@@ -398,7 +430,7 @@ export interface Npc {
   secret: string;
   memory: NpcMemory[];
   /** Cola de conversación (SPEC §9.6): con quién habla ahora. */
-  talking_to: { character_id: Id; since_game_s: number } | null;
+  talking_to: { character_id: Id; since_game_s: number; /** Otros PJ unidos a la charla (scene.ts). */ with?: Id[]; /** Turno guardado para quien esperaba: aún no ha hablado. */ reserved?: boolean } | null;
   /** Comercio (SPEC §5.6): qué compra y a qué precio; qué vende. */
   buys: { item_id: Id; price: number }[];
   sells: { item_id: Id; price: number }[];
@@ -524,7 +556,7 @@ export interface GameEvent {
   visibility: Visibility;
   tags: string[];
   /** A quién se ha entregado y con qué nivel de percepción. */
-  delivered_to: { character_id: Id; level: PerceptionLevel }[];
+  delivered_to: { character_id: Id; level: PerceptionLevel; sound?: PerceptionLevel }[];
   payload: Record<string, unknown>;
 }
 

@@ -244,6 +244,50 @@
         "DISCORD_TOKEN": "",
         "IMAGES": "off"
       }
+    },
+    {
+      "name": "tavernus-web-multi",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web:watch"
+      ],
+      "port": 3207,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3207",
+        "WEB_ACCESS": "invite",
+        "ADMIN_TOKEN": "admin-local-de-pruebas-multijugador",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/multi",
+        "GAMES_DIR": "./data/local/multi/games",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "off"
+      }
+    },
+    {
+      "name": "tavernus-web-party",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
+      "port": 3217,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3217",
+        "WEB_ACCESS": "invite",
+        "ADMIN_TOKEN": "admin-local-de-pruebas-entre-jugadores",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/party",
+        "GAMES_DIR": "./data/local/party/games",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "off"
+      }
     }
   ]
 }

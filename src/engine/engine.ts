@@ -11,9 +11,13 @@ import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, transferItem, type InventoryView, type TransferError } from './inventory.js';
-import type { Character, GameEvent, Id, Npc, Pace, Placement, WorldSnapshot } from './model.js';
-import { interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
-import { aEs, arrivalNarration, describeSurroundings, fmtDuration, whereAmI, whoIsHere } from './narrate.js';
+import type { Character, GameEvent, Id, Npc, Offer, Pace, Placement, WorldSnapshot } from './model.js';
+import { approachSpot, interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
+import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, parseGive, parseParty, parseSay, pcName, SAY_LOUDNESS, type SayMode } from './party.js';
+import { witnesses } from './perception.js';
+import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
+import { bounceOff, parseCrossing } from './barrier.js';
+import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, whereAmI, whoIsHere } from './narrate.js';
 import { encounterChance, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
 import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { tickSchedule } from './schedule.js';
@@ -41,6 +45,8 @@ export interface ActionResult {
   event?: GameEvent;
   suggested_actions?: string[];
   requires_roll?: RequiresRoll;
+  /** «hablar con <PJ>» sin frase: la web abre el modo Decir hacia ese PJ (party.ts). */
+  say_to?: { id: Id; name: string };
 }
 
 export interface RequiresRoll { kind: CheckKind; key: string; dc: number | null; advantage: Advantage; target?: Id }
@@ -79,10 +85,20 @@ export interface SceneHints {
   encounter: { chance: number; roll: number } | null;
   /** Viaje rápido (travel.ts): encuentro en el camino o tiempo que ha costado la llegada. */
   travel?: TravelHint;
+  /** Conversación de grupo (scene.ts): lo que ha dicho cada PJ a ese NPC en la ventana. */
+  group?: { npc_id: Id; members: { id: Id; name: string; text: string }[] };
+  /** Ronda en escena tensa (scene.ts): la acción de cada PJ y quién duda. */
+  round?: { n: number; members: { id: Id; name: string; text: string }[]; hesitant: { id: Id; name: string }[] };
 }
 
+/** Banner de ronda para la web: quién ha actuado, a quién se espera y hasta cuándo. */
+export interface SceneNotice { kind: 'round'; location_id: Id; n: number; acted: Id[]; waiting: Id[]; deadline_ms: number; open: boolean }
+export type SceneListener = (n: SceneNotice) => void;
+interface Batch { items: { id: Id; text: string }[]; members: Id[]; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; timer: NodeJS.Timeout }
+interface Round { n: number; items: Map<Id, string>; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; deadline_ms: number; timer: NodeJS.Timeout }
+
 export type MasterResolution =
-  | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[] }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number } }
+  | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number } }
   | { ok: false; reason: string; message: string; usage?: unknown; calls?: unknown };
 
 /** Un PJ pisa una localización por primera vez (para ilustrarla, src/ai/illustrate.ts). */
@@ -110,6 +126,10 @@ export interface EngineOptions {
    * el viaje se espera en tiempo real como antes.
    */
   fastTravel?: boolean;
+  /** Ventana para juntar frases de una conversación de grupo (ms; GROUP_WINDOW_S, 8 s por defecto). */
+  groupWindowMs?: number;
+  /** Tiempo de una ronda en escena tensa (ms; ROUND_SECONDS, 60 s por defecto). */
+  roundMs?: number;
 }
 
 export class Engine {
@@ -127,6 +147,8 @@ export class Engine {
   private readonly rng: Rng;
   readonly deterministic: boolean;
   readonly fastTravel: boolean;
+  readonly groupWindowMs: number;
+  readonly roundMs: number;
   private hints = new Map<Id, SceneHints>();
   /** Localización desde la que salió cada viaje iniciado por el motor (para saber si la llegada cruza a otra). */
   private tripFrom = new Map<Id, Id>();
@@ -165,6 +187,9 @@ export class Engine {
     this.rng = opts.rng ?? (process.env['TAVERNUS_SEED'] && Number.isFinite(seed) ? seededRng(seed) : Math.random);
     this.deterministic = opts.deterministic ?? true;
     this.fastTravel = opts.fastTravel ?? true;
+    const env = (k: string, d: number) => { const v = Number(process.env[k]); return Number.isFinite(v) && v > 0 ? v * 1000 : d; };
+    this.groupWindowMs = opts.groupWindowMs ?? env('GROUP_WINDOW_S', GROUP_WINDOW_MS);
+    this.roundMs = opts.roundMs ?? env('ROUND_SECONDS', ROUND_MS);
     this.realClock = !opts.now;
     this.world = new World(snapshot);
     this.clock = GameClock.fromCampaign(this.world.campaign);
@@ -218,6 +243,8 @@ export class Engine {
     const past = await opts.repo.loadEvents(opts.campaignId, 0);
     const lastSeq = past.reduce((m, e) => Math.max(m, e.seq), 0);
     const engine = new Engine(snapshot, opts, lastSeq);
+    // Partidas de antes de la regla: los PJ se conocen por su nombre desde que coinciden en la partida.
+    engine.meetAll();
     engine.events.restore(past);
     engine.seedMoments(past);
     await engine.installTickers();
@@ -308,6 +335,13 @@ export class Engine {
     return Math.max(this.now(), this.clock.realAt(this.nowFor(c)));
   }
 
+  /** Sello real del último evento de un PJ: una llegada nunca va antes que la acción que la provocó. */
+  private lastStamp(c: Character): number {
+    const all = this.events.all();
+    for (let i = all.length - 1; i >= 0 && i >= all.length - 50; i--) if (all[i]!.actor_id === c.id) return all[i]!.timestamp_real_ms;
+    return 0;
+  }
+
   /**
    * Consolida viajes de todos los PJs y emite llegadas. Con viaje rápido, un
    * tránsito que cruza de localización (o cualquiera, si el PJ ya va por
@@ -315,7 +349,11 @@ export class Engine {
    * queda en el destino o en el punto de camino, y su reloj, en esa hora.
    */
   private settleAll(nowGameS: number): void {
-    for (const c of this.world.characters.values()) {
+    this.syncFollowers(nowGameS);
+    // Los líderes antes que quien les sigue: un encuentro en el camino para a los dos.
+    const met = new Map<Id, { enc: TravelEncounter; destination: Id }>();
+    const order = [...this.world.characters.values()].sort((a, b) => Number(Boolean(a.following)) - Number(Boolean(b.following)));
+    for (const c of order) {
       if (clearAheadIfCaught(c, nowGameS)) this.world.touch('characters', c.id);
       if (!c.transit) continue;
       const startLoc = this.world.characterSpot(c)?.location_id;
@@ -323,8 +361,12 @@ export class Engine {
       let encounter: TravelEncounter | null = null;
       const departed = journeyOf(c)?.started_game_s ?? c.transit.departed_game_s;
       const pace = c.transit.pace;
+      const lead = c.following ? met.get(c.following) : undefined;
+      const behind = lead && lead.destination === c.transit.destination_spot_id && c.transit.legs.some((l) => l.via_exit_id === lead.enc.exit_id) ? lead.enc : null;
       if (this.fastTravel && (crossesLocations(c.transit) || (aheadUntil(c) ?? -Infinity) > nowGameS)) {
-        if (crossesLocations(c.transit)) encounter = rollTravelEncounter(this.world, this.clock, c.transit, this.rng);
+        if (behind) encounter = behind;
+        else if (crossesLocations(c.transit)) encounter = rollTravelEncounter(this.world, this.clock, c.transit, this.rng);
+        if (encounter && !behind) met.set(c.id, { enc: encounter, destination: c.transit.destination_spot_id });
         if (encounter) stopAtEncounter(this.world, c, encounter);
         settleAt = c.transit.arrives_game_s;
         setAhead(c, settleAt, nowGameS);
@@ -336,7 +378,7 @@ export class Engine {
         const firstVisit = loc.discovery[c.id] !== 'visited';
         if (firstVisit) { loc.discovery[c.id] = 'visited'; this.world.touch('locations', loc.id); }
         const last = r.arrived && reached === r.reached[r.reached.length - 1];
-        if (last && encounter) { this.tripFrom.delete(c.id); this.stopOnTheRoad(c, encounter, departed, pace); continue; }
+        if (last && encounter) { this.tripFrom.delete(c.id); this.stopOnTheRoad(c, encounter, departed, pace, behind ? c.following ?? null : null); continue; }
         if (last && !isWaypoint(spot)) setJourney(c, null);
         // Con master, la llegada al destino la narra él (escena de llegada) salvo que sea trivial: entonces, plantilla.
         // El aviso plano queda para los tramos intermedios y para quien no está mirando.
@@ -353,7 +395,7 @@ export class Engine {
           at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
           action_type: last ? 'arrived' : 'passed',
           narration_private: template ? [note, arrivalNarration(this.world, this.clock, c, reached.at_game_s, crossed)].filter(Boolean).join('\n')
-            : plan ? note : last ? [note, `Llegas a ${spot.name}.`].filter(Boolean).join(' ') : `Pasas por ${spot.name}.`,
+            : plan ? note : last ? [note, `Llegas ${aEs(spot.name)}.`].filter(Boolean).join(' ') : `Pasas por ${spot.name}.`,
           observable: last ? `${c.name} llega ${aEs(spot.name)}.` : `${c.name} pasa por ${spot.name}.`,
           tags: template ? ['movement', 'deterministic'] : ['movement'],
           payload: {
@@ -361,7 +403,7 @@ export class Engine {
             ...(template ? { master: null, suggested_actions: suggestActions(this.world, this.clock, c, reached.at_game_s) } : {}),
             ...(travel ? { travel: { departed_game_s: departed, arrived_game_s: reached.at_game_s } } : {}),
           },
-        }, this.clock.realAt(reached.at_game_s));
+        }, Math.max(this.clock.realAt(reached.at_game_s), this.lastStamp(c)));
         if (firstVisit && !isWaypoint(spot)) this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: reached.at_game_s });
         if (plan?.kind === 'master') this.narrateArrival(c, travel ? { hooks: [], encounter: null, ...plan.hints, travel } : plan.hints);
       }
@@ -373,13 +415,23 @@ export class Engine {
    * medias. Lo primero que lee sale de la tabla (sin IA); la escena la narra
    * el master con el encuentro delante. Sin master, «Continuar el viaje».
    */
-  private stopOnTheRoad(c: Character, enc: TravelEncounter, departed: number, pace: Pace): void {
+  private stopOnTheRoad(c: Character, enc: TravelEncounter, departed: number, pace: Pace, leaderId: Id | null = null): void {
     const prev = journeyOf(c);
     setJourney(c, {
       destination_spot_id: enc.destination_spot_id, origin_spot_id: prev?.origin_spot_id ?? enc.origin_spot_id,
       pace, started_game_s: departed, waypoint_spot_id: enc.waypoint_spot_id, encounter_id: enc.entry.id,
     });
     this.world.touch('characters', c.id);
+    // Quien sigue a otro se para con él; la escena la narra el máster para el líder.
+    const leader = leaderId ? this.world.characters.get(leaderId) : null;
+    if (leader) {
+      const who = pcName(this.world, c.id, leader);
+      this.events.emit({
+        actor_id: c.id, action_type: 'travel_encounter', narration_private: `${who.charAt(0).toUpperCase()}${who.slice(1)} se detiene en el camino y tú con él.`,
+        observable: null, tags: ['movement', 'travel', 'party'], payload: { master: null, suggested_actions: ['Continuar el viaje'] },
+      }, this.clock.realAt(enc.at_game_s));
+      return;
+    }
     const live = this.master !== null && c.status === 'active' && c.connected;
     const suggested = encounterSuggestions(this.world, enc);
     this.events.emit({
@@ -450,7 +502,7 @@ export class Engine {
       const r = await this.resolveWithHints(c, '(llegada)', hints, 'arrival');
       if (!r.ok) {
         const spot = this.world.characterSpot(c)!;
-        this.events.emit({ actor_id: c.id, action_type: 'arrived', narration_private: `Llegas a ${spot.name}.\n${describeSurroundings(this.world, this.clock, c, this.nowFor(c))}`, observable: null, tags: ['movement'] }, this.stampFor(c));
+        this.events.emit({ actor_id: c.id, action_type: 'arrived', narration_private: `Llegas ${aEs(spot.name)}.\n${describeSurroundings(this.world, this.clock, c, this.nowFor(c))}`, observable: null, tags: ['movement'] }, this.stampFor(c));
       }
       await this.flush();
     }).catch((e) => console.error('[engine] llegada:', e));
@@ -469,6 +521,8 @@ export class Engine {
       tickSchedule(this.world, nowG, (i, s) => { this.events.emit(i, this.clock.realAt(s)); });
       this.advanceStory(nowG);
       for (const id of this.presence.keys()) this.refreshConnection(id);
+      this.expireOffers();
+      this.serveQueues();
       this.checkDecisiveWindows();
       this.fireTimeHooks(nowG);
       pruneHooks(this.world, nowG);
@@ -507,7 +561,7 @@ export class Engine {
   }
 
   async flush(): Promise<void> {
-    if (this.pending.size === 0) return;
+    if (this.pending.size === 0) { await (this.repo as { settled?: () => Promise<void> }).settled?.(); return; }
     const changes = [...this.pending.values()];
     this.pending.clear();
     await this.repo.write(this.world.campaign.id, changes);
@@ -518,6 +572,24 @@ export class Engine {
   // Cola por localización (SPEC §9): una acción a la vez por localización.
   // -------------------------------------------------------------------------
 
+  /** Escrituras lanzadas sin esperar (avisos de presencia): cerrar la partida espera a que acaben. */
+  private floating = new Set<Promise<unknown>>();
+  private background(p: Promise<unknown>): void {
+    const q = p.catch((e: Error) => console.warn(`[engine] ${e.message}`)).finally(() => this.floating.delete(q));
+    this.floating.add(q);
+  }
+
+  /** Espera a que se vacíen las colas de todas las localizaciones (al cerrar la partida). Como mucho `maxMs`. */
+  async settle(maxMs = 5000): Promise<void> {
+    const until = Date.now() + maxMs;
+    // Varias vueltas: lo que esperaba al tick (una presentación, una acción) entra en la cola después.
+    for (let i = 0; i < 4 && Date.now() < until; i++) {
+      const all = Promise.all([...this.queues.values(), this.tickerTask, ...this.floating]).then(() => undefined);
+      await Promise.race([all, new Promise<void>((r) => setTimeout(r, Math.max(1, until - Date.now())))]);
+      await new Promise((r) => setImmediate(r));
+    }
+  }
+
   private runInLocation<T>(locationId: Id, fn: () => Promise<T>): Promise<T> {
     const prev = this.queues.get(locationId) ?? Promise.resolve();
     const next = prev.then(fn, fn);
@@ -527,11 +599,21 @@ export class Engine {
 
   /** Punto de entrada de cualquier cliente: texto libre de un jugador. */
   async act(characterId: Id, text: string): Promise<ActionResult> {
+    // Una frase dicha («— hola», «"hola"») no espera a la cola ni al máster.
+    const said = parseSay(text);
+    if (said) return this.say(characterId, text);
     await this.tick();
     const c = this.world.character(characterId);
     this.lastAction.set(c.id, this.now());
     if (!c.connected) this.setConnected(c.id, true);
     const locId = positionOf(this.world, c, this.gameNow()).location_id;
+    // Varios a la vez (scene.ts): ronda, conversación de grupo o NPC ocupado. Lo de entre jugadores sigue sin máster.
+    const t0 = text.trim();
+    const give = parseGive(t0);
+    const party = parseParty(t0);
+    const betweenPcs = (give && findPresentPc(this.world, c, give.to)) || (party && (party.kind === 'unfollow' || findPresentPc(this.world, c, party.who)));
+    const scene = betweenPcs ? null : this.sceneRoute(c, t0);
+    if (scene) return scene;
     return this.runInLocation(locId, async () => {
       const clean = text.trim();
       // Llegó «del futuro» a donde otro PJ vive una hora anterior: espera a que el reloj lo alcance (irse sí puede).
@@ -546,7 +628,9 @@ export class Engine {
         decisive = { seconds, speed: seconds < Engine.DECISIVE_FAST_S ? 'fast' : 'normal', threat: c.decisive.threat };
         this.closeDecisive(c);
       }
-      const fast = decisive ? null : (travel ? this.tryTravel(c, clean, travel) : null) ?? await this.tryTrivial(c, clean);
+      // Quien sigue a otro y se mueve por su cuenta deja de seguirle.
+      if (c.following && (travel || this.isMove(c, clean))) { c.following = null; this.world.touch('characters', c.id); }
+      const fast = decisive ? null : this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? await this.tryTrivial(c, clean);
       if (fast) {
         r = fast;
       } else if (this.master && c.status === 'active' && !Engine.MECHANICAL.test(clean)) {
@@ -584,6 +668,11 @@ export class Engine {
     return `⏳ Has llegado antes que el resto: para ti son las ${hhmm(mine)} y aquí aún son las ${hhmm(theirs)}. Podrás actuar en ${fmtDuration(this.clock.gameToReal(mine - g))} reales (marcharte, ya).`;
   }
 
+  /** ¿Es moverse (a otro punto o a otra localización)? */
+  private isMove(c: Character, text: string): boolean {
+    return parseTrivial(this.world, c, text)?.kind === 'move';
+  }
+
   /** ¿Es salir hacia otra localización? Eso lo puede hacer aunque vaya por delante del reloj. */
   private isLeaving(c: Character, text: string): boolean {
     const intent = parseTrivial(this.world, c, text);
@@ -617,6 +706,20 @@ export class Engine {
     const dest = this.world.locationOfSpot(move.spot_id);
     return this.emitTrivial(c, text, 'move', 'movement', `Te pones en camino hacia ${dest.name} con cuidado, atento a cada ruido (unos ${fmtDuration(res.total_s)} de juego).`,
       `${c.name} se marcha hacia ${dest.name} con paso cauteloso.`, 'Una figura se marcha despacio.');
+  }
+
+  /**
+   * Intentar cruzar una barrera que rebota (barrier.ts, el Cerco de Ceniza):
+   * el PJ se mete, pierde el tiempo de la barrera y sale por donde entró. Sin
+   * master, aunque la escena esté tensa: la niebla no negocia.
+   */
+  private tryBarrier(c: Character, text: string): ActionResult | null {
+    if (c.status !== 'active') return null;
+    const exitId = parseCrossing(this.world, c, text);
+    if (!exitId) return null;
+    const b = bounceOff(this.world, c, exitId, this.gameNow());
+    if (!b) return null;
+    return this.emitTrivial(c, text, 'rebound', 'movement', b.text, b.observable, b.observable ? 'Una figura se mete en la niebla y vuelve a salir.' : null, undefined, { lost_s: b.lost_s });
   }
 
   private static readonly REST = /^(dormir|duermo|me duermo|descansar|descanso|sleep)\b/i;
@@ -709,7 +812,7 @@ export class Engine {
   }
 
   /** Mano libre o bolsillo (bulto: las dos manos), como el parser plano. */
-  private takeToHands(c: Character, instanceId: Id): 'hand' | 'pocket' | null {
+  private takeToHands(c: Character, instanceId: Id, quantity?: number): 'hand' | 'pocket' | null {
     const def = this.world.itemDef(this.world.itemInstance(instanceId).item_id);
     const targets: Placement[] = def.size === 'bulky'
       ? [{ type: 'character', id: c.id, slot: { kind: 'hand', which: 'both' } }]
@@ -719,7 +822,7 @@ export class Engine {
         { type: 'character', id: c.id, slot: { kind: 'pocket' } },
       ];
     for (const t of targets) {
-      if (transferItem(this.world, instanceId, t).ok) return t.type === 'character' && t.slot.kind === 'pocket' ? 'pocket' : 'hand';
+      if (transferItem(this.world, instanceId, t, quantity).ok) return t.type === 'character' && t.slot.kind === 'pocket' ? 'pocket' : 'hand';
     }
     return null;
   }
@@ -745,6 +848,9 @@ export class Engine {
       const pending = this.pendingRolls.get(c.id);
       if (!pending) return { ok: false, text: 'No tienes ninguna tirada pendiente.' };
       this.pendingRolls.delete(c.id);
+      // Ayuda de otro PJ (SRD): ventaja en esta tirada; con desventaja, se anulan.
+      const helper = this.takeHelp(c);
+      if (helper) pending.roll = { ...pending.roll, advantage: pending.roll.advantage === 'disadvantage' ? 'none' : 'advantage' };
       let result: CheckResult & { label: string };
       let shown: string;
       let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean } | undefined;
@@ -762,6 +868,7 @@ export class Engine {
         result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage);
         shown = `🎲 ${result.label}: ${result.breakdown.replace(/ vs CD \d+$/, '')} → ${result.success === null ? '—' : result.success ? 'éxito' : 'fallo'}${result.natural ? ` (${result.natural} natural)` : ''}`;
       }
+      if (helper) shown += ` · con la ayuda de ${pcName(this.world, c.id, helper)}`;
       this.events.emit({
         actor_id: c.id, action_type: 'roll', input_text: null, narration_private: shown, observable: null,
         tags: ['roll'], payload: { roll: { ...result, dc: undefined }, ...(attack ? { attack } : {}) },
@@ -803,7 +910,8 @@ export class Engine {
     await this.runInLocation(locId, async () => {
       if (!c.decisive || c.decisive.event_id !== eventId) return; // respondió justo antes
       this.pendingRolls.delete(c.id);
-      const r = await this.resolveWithMaster(c, '(sin respuesta)', undefined, undefined, 'decisive_timeout');
+      // Ausente: no se queda sin acción, se defiende (CA y salvaciones normales); el contexto lo dice.
+      const r = await this.resolveWithMaster(c, c.away ? '(ausente: se defiende)' : '(sin respuesta)', undefined, undefined, 'decisive_timeout');
       this.closeDecisive(c);
       if (!r.ok && c.decisive === null) {
         this.events.emit({ actor_id: c.id, action_type: 'decisive_expired', narration_private: 'No reaccionas a tiempo.', observable: null, tags: ['combat'] }, this.now());
@@ -877,13 +985,19 @@ export class Engine {
       ...(k.decisive ? { decisive: { threat: k.decisive.threat, window_s: Engine.DECISIVE_WINDOW_S } } : {}),
       ...(k.npc_id ? { npc_id: k.npc_id } : {}),
       ...(k.lines?.length ? { lines: k.lines } : {}),
+      // Otro jugador al que se dirige: lo lee en segunda persona y recibe «Responder a…» (party.ts).
+      ...(k.target_character_id ? { target_character_id: k.target_character_id, ...(k.observable_target ? { observable_target: k.observable_target } : {}) } : {}),
       // Tools de escritura que fallaron (el cierre lleva tag tool_failed) y acercamiento que hizo el motor.
       ...(out.tool_errors?.length ? { tool_errors: out.tool_errors } : {}),
       ...(out.approach ? { approach: out.approach } : {}),
     };
+    // Turno compartido (grupo o ronda): lo reciben todos los que participan, con lo que escribió cada uno.
+    const share = this.sharing.get(c.id);
+    if (share) { payload['group'] = share.ids; payload['group_inputs'] = share.inputs; }
     const event = this.events.emit({
-      actor_id: c.id, action_type: intro ? 'master_intro' : scene === 'arrival' ? 'master_arrival' : scene === 'hook' ? 'master_hook' : roll ? 'master_roll_outcome' : 'master', input_text: intro || scene ? null : text,
-      narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags], payload,
+      actor_id: c.id, action_type: intro ? 'master_intro' : scene === 'arrival' ? 'master_arrival' : scene === 'hook' ? 'master_hook' : roll ? 'master_roll_outcome' : 'master', input_text: intro || scene ? null : share ? share.inputs[c.id] ?? text : text,
+      narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags, ...(share ? ['shared'] : [])], payload,
+      ...(share ? { also_to: share.ids.filter((id) => id !== c.id) } : {}),
     }, this.stampFor(c));
     if (k.requires_roll) this.pendingRolls.set(c.id, { text, roll: k.requires_roll, event_id: event.id });
     if (k.decisive && scene !== 'decisive_timeout' && c.status === 'active') this.openDecisive(c, k.decisive, event.id);
@@ -949,7 +1063,12 @@ export class Engine {
    * calcula derivados y crea el equipo inicial. Lo que falte de `spec`: humano guerrero
    * soldado con el array recomendado (para pruebas y el REPL).
    */
-  async createCharacter(userId: Id, name: string, spec?: Partial<CharacterSpec>): Promise<{ ok: true; character: Character } | { ok: false; reason: string }> {
+  /**
+   * `opts.place` coloca al PJ recién creado (situación inicial, junto a otro PJ…)
+   * antes de anunciar su llegada: así el aviso «llega a…» y la primera visita
+   * salen en el sitio donde de verdad empieza, no en el punto de inicio genérico.
+   */
+  async createCharacter(userId: Id, name: string, spec?: Partial<CharacterSpec>, opts: { place?: (c: Character) => void } = {}): Promise<{ ok: true; character: Character } | { ok: false; reason: string }> {
     const clean = name.trim().replace(/\s+/g, ' ');
     if (clean.length < 2 || clean.length > 24) return { ok: false, reason: 'El nombre debe tener entre 2 y 24 caracteres.' };
     if (this.characterByUser(userId)) return { ok: false, reason: 'Ya tienes un personaje.' };
@@ -996,6 +1115,7 @@ export class Engine {
     c.passive_perception = passivePerception(c);
     this.world.characters.set(c.id, c);
     this.world.touch('characters', c.id);
+    opts.place?.(c);
     const start = this.world.spot(c.location.id);
     const loc = this.world.location(start.location_id);
     loc.discovery[c.id] = 'visited';
@@ -1025,9 +1145,10 @@ export class Engine {
 
     this.events.emit({
       actor_id: c.id, action_type: 'character_joined', narration_private: this.master ? '' : `Llegas a ${loc.name}.`,
-      observable: `${c.name} llega a ${start.name}.`, tags: ['milestone:join'], payload: { observable_vague: 'Alguien llega.' },
+      observable: `${c.name} llega ${aEs(start.name)}.`, tags: ['milestone:join'], payload: { observable_vague: 'Alguien llega.' },
     }, this.now());
     this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: this.gameNow() });
+    this.meetAll();
     await this.flush();
     return { ok: true, character: c };
   }
@@ -1183,6 +1304,606 @@ export class Engine {
       this.world.touch('characters', c.id);
     }
     return missed;
+  }
+
+  // -------------------------------------------------------------------------
+  // Entre jugadores (party.ts, docs/MULTIJUGADOR.md): decir, ofertas, seguir y ayudar. Sin máster.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Decir sin máster: la frase literal del PJ, al instante. No espera a la cola
+   * del sitio (no cambia nada del mundo salvo quién conoce a quién). Llega por el
+   * oído: quien la oye bien recibe la frase; quien oye poco, un murmullo. Con
+   * destinatario (`to`: id o nombre), él recibe «Responder a…» en su hilo.
+   * Quien la oye bien aprende el nombre del que habla si lo dice, y el del
+   * destinatario si lo nombra.
+   */
+  async say(characterId: Id, text: string, opts: { to?: Id | null; mode?: SayMode } = {}): Promise<ActionResult> {
+    const c = this.world.character(characterId);
+    this.lastAction.set(c.id, this.now());
+    if (!c.connected) this.setConnected(c.id, true);
+    if (c.status !== 'active') return { ok: false, text: c.status === 'asleep' ? 'Estás dormido.' : `No puedes hablar (${c.status}).` };
+    const parsed = parseSay(text, true);
+    if (!parsed) return { ok: false, text: '¿Qué dices?' };
+    const mode = opts.mode ?? parsed.mode;
+    let target: Character | null = null;
+    const toId = opts.to ?? null;
+    if (toId || parsed.to) {
+      target = toId ? this.world.characters.get(toId) ?? null : findPresentPc(this.world, c, parsed.to!);
+      if (!target || target.id === c.id || this.world.characterSpot(target)?.location_id !== this.world.characterSpot(c)?.location_id) {
+        return { ok: false, text: `No ves aquí a ${parsed.to ?? 'esa persona'}.` };
+      }
+    }
+    const said = parsed.text;
+    const nowG = this.nowFor(c);
+    const at = positionOf(this.world, c, nowG);
+    const loudness = SAY_LOUDNESS[mode];
+    // Lo que se oye bien enseña nombres: el de quien habla si lo dice y el del destinatario si lo nombra.
+    const named = (n: string) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(said);
+    for (const w of witnesses(this.world, this.clock, at, nowG, loudness, c.id)) {
+      if (w.perceived.sound !== 'full') continue;
+      const learn = [named(c.name) ? c.id : null, target && target.id !== w.character.id && named(target.name) ? target.id : null].filter((x): x is Id => x !== null);
+      for (const id of learn) if (!w.character.knows.includes(id)) { w.character.knows.push(id); this.world.touch('characters', w.character.id); }
+    }
+    if (target && named(target.name) && !c.knows.includes(target.id)) { c.knows.push(target.id); this.world.touch('characters', c.id); }
+    const verb = { say: ['Dices', 'dice'], shout: ['Gritas', 'grita'], whisper: ['Susurras', 'susurra'] }[mode];
+    const toMe = target ? ` a ${pcName(this.world, c.id, target)}` : '';
+    const event = this.events.emit({
+      actor_id: c.id, action_type: mode, input_text: said, channel: 'sound', loudness,
+      narration_private: `${verb[0]}${toMe}: «${said}»`,
+      observable: `${c.name} ${verb[1]}${target ? ` a ${target.name}` : ''}: «${said}»`,
+      tags: ['deterministic', 'social', 'say'],
+      payload: {
+        master: null, say: { text: said, mode, to: target?.id ?? null }, lines: [{ speaker: 'actor', text: said }],
+        ...(target ? { target_character_id: target.id } : {}),
+        observable_vague: mode === 'shout' ? `Alguien grita: «${said}»` : mode === 'whisper' ? 'Alguien susurra algo que no alcanzas a oír.' : 'Oyes a alguien hablar, pero no entiendes qué dice.',
+        observable_hint: mode === 'shout' ? 'Oyes un grito a lo lejos.' : 'Oyes un murmullo de voces.',
+      },
+    }, this.stampFor(c));
+    await this.flush();
+    return { ok: true, text: event.narration_private, event };
+  }
+
+  /**
+   * «hablar con <PJ>», «seguir a <PJ>», «dejar de seguir», «ayudar a <PJ>» y
+   * «dar <algo> a <PJ>». Deterministas; null si no es nada de eso (o el otro
+   * no es un PJ presente) y sigue el camino de siempre.
+   */
+  private tryParty(c: Character, text: string): ActionResult | null {
+    if (c.status !== 'active') return null;
+    const give = parseGive(text);
+    if (give) {
+      const to = findPresentPc(this.world, c, give.to);
+      if (!to) return null;
+      const coins = coinsIn(give.what);
+      let instance: Id | null = null;
+      if (coins === null) {
+        const item = resolveItem(this.world, c, give.what, 'carried');
+        if (item.kind === 'none') return { ok: false, text: `No llevas «${give.what}».` };
+        if (item.kind === 'many') return this.ambiguous(item);
+        instance = item.value;
+      }
+      const r = this.offer(c.id, to.id, { instance_id: instance, coins: coins ?? 0 }, text);
+      return r.ok ? r.result : { ok: false, text: r.error };
+    }
+    const intent = parseParty(text);
+    if (!intent) return null;
+    if (intent.kind === 'unfollow') {
+      const leader = c.following ? this.world.characters.get(c.following) : null;
+      if (!leader) return { ok: false, text: 'No sigues a nadie.' };
+      c.following = null;
+      this.world.touch('characters', c.id);
+      return this.emitTrivial(c, text, 'unfollow', 'party', `Dejas de seguir a ${pcName(this.world, c.id, leader)}.`, `${c.name} deja de seguir a ${leader.name}.`, null);
+    }
+    const who = findPresentPc(this.world, c, intent.who);
+    if (!who) return null;
+    const name = pcName(this.world, c.id, who);
+    if (intent.kind === 'talk') {
+      return { ok: true, text: `¿Qué le dices a ${name}? Escríbelo con «Decir» (o empieza por una raya: «— Hola»).`, say_to: { id: who.id, name } };
+    }
+    if (intent.kind === 'follow') {
+      if (who.following === c.id) return { ok: false, text: `${name.charAt(0).toUpperCase() + name.slice(1)} ya te sigue a ti.` };
+      c.following = who.id;
+      this.world.touch('characters', c.id);
+      return this.emitTrivial(c, text, 'follow', 'party', `Te pones detrás de ${name}: irás donde vaya hasta que digas «dejar de seguir».`,
+        `${c.name} se pone detrás de ${who.name}, dispuesto a seguirle.`, 'Una figura se pone detrás de otra.', undefined,
+        { target_character_id: who.id, observable_target: `${c.name} se pone detrás de ti: te seguirá adonde vayas.` });
+    }
+    // Ayudar (SRD): ventaja en la siguiente prueba o ataque del ayudado.
+    who.helped_by = { character_id: c.id, expires_game_s: this.nowFor(who) + HELP_TTL_S };
+    this.world.touch('characters', who.id);
+    return this.emitTrivial(c, text, 'help', 'party', `Te pones al lado de ${name} para echarle una mano: su próxima tirada irá con ventaja.`,
+      `${c.name} se pone al lado de ${who.name} para echarle una mano.`, null, undefined,
+      { target_character_id: who.id, observable_target: `${c.name} se pone a tu lado para echarte una mano: tu próxima tirada irá con ventaja.` });
+  }
+
+  /**
+   * Oferta de un PJ a otro (party.ts): un ejemplar que lleva encima, monedas o
+   * ambas cosas. No mueve nada: el otro acepta o rechaza con botones en su hilo
+   * y caduca a los OFFER_TTL_MS. Si están en puntos distintos de la sala, el que
+   * da se acerca. La usan «dar X a <PJ>» y el transfer_item del máster.
+   */
+  offer(fromId: Id, toId: Id, what: { instance_id: Id | null; quantity?: number; coins: number }, input: string | null = null): { ok: true; offer: Offer; result: ActionResult } | { ok: false; error: string } {
+    const from = this.world.character(fromId);
+    const to = this.world.characters.get(toId);
+    if (!to || to.id === from.id) return { ok: false, error: 'No hay a quién dárselo.' };
+    const toName = pcName(this.world, from.id, to);
+    const here = this.world.characterSpot(from);
+    const there = this.world.characterSpot(to);
+    if (!here || !there || here.location_id !== there.location_id) return { ok: false, error: `${toName} no está aquí.` };
+    if (to.status !== 'active') return { ok: false, error: `${toName} no está en condiciones de recibir nada.` };
+    const coins = Math.max(0, Math.floor(what.coins));
+    if (coins > from.coins) return { ok: false, error: `No tienes ${coins} monedas (llevas ${from.coins}).` };
+    let label = '';
+    let quantity = 0;
+    if (what.instance_id) {
+      const inst = this.world.itemInstances.get(what.instance_id);
+      if (!inst || !this.world.itemsCarriedBy(from.id).some((i) => i.id === inst.id)) return { ok: false, error: 'No llevas eso encima.' };
+      quantity = Math.max(1, Math.min(inst.quantity, Math.floor(what.quantity ?? inst.quantity)));
+      const def = this.world.itemDef(inst.item_id);
+      label = quantity > 1 ? `${def.name} ×${quantity}` : def.name;
+    }
+    if (coins) label = label ? `${label} y ${coins} monedas` : `${coins} monedas`;
+    if (!label) return { ok: false, error: '¿Qué le das?' };
+    if (here.id !== there.id) approachSpot(this.world, from, there.id);
+    const nowMs = this.now();
+    const offer: Offer = {
+      id: `of_${nowMs.toString(36)}_${Math.floor(this.rng() * 1e6).toString(36)}`, from_id: from.id, to_id: to.id,
+      instance_id: what.instance_id, quantity, coins, label, created_real_ms: nowMs, expires_real_ms: nowMs + OFFER_TTL_MS,
+    };
+    to.offers = [...(to.offers ?? []), offer];
+    this.world.touch('characters', to.id);
+    const min = Math.round(OFFER_TTL_MS / 60000);
+    const event = this.events.emit({
+      actor_id: from.id, action_type: 'offer', input_text: input, also_to: [to.id],
+      narration_private: `Le tiendes ${label} a ${toName}. Es suyo si lo acepta (tiene ${min} minutos).`,
+      observable: `${from.name} le tiende ${label} a ${to.name}.`,
+      tags: ['deterministic', 'party', 'inventory'],
+      payload: { master: null, offer: { id: offer.id, to: to.id, label }, target_character_id: to.id, observable_target: `${from.name} te ofrece ${label}.`, observable_vague: 'Una figura le tiende algo a otra.' },
+    }, this.stampFor(from));
+    offer.event_id = event.id;
+    return { ok: true, offer, result: { ok: true, text: event.narration_private, event } };
+  }
+
+  /**
+   * Aceptar o rechazar una oferta. Síncrono de principio a fin: comprueba que
+   * sigue en pie (no caducada, los dos en la misma sala, el que da aún lo lleva
+   * y le llegan las monedas) y transfiere todo o nada. No espera a la cola: entre
+   * comprobar y mover no corre nada más.
+   */
+  async answerOffer(characterId: Id, offerId: Id, accept: boolean): Promise<ActionResult> {
+    const c = this.world.character(characterId);
+    const offer = c.offers?.find((o) => o.id === offerId);
+    if (!offer) return { ok: false, text: 'Esa oferta ya no está en pie.' };
+    dropOffer(this.world, c, offer.id);
+    const from = this.world.characters.get(offer.from_id);
+    const fromName = from ? pcName(this.world, c.id, from) : 'alguien';
+    const done = async (r: ActionResult) => { await this.flush(); return r; };
+    if (!from) return done({ ok: false, text: 'Quien te lo ofrecía ya no está.' });
+    if (offer.expires_real_ms <= this.now()) return done({ ok: false, text: `La oferta de ${fromName} ha caducado.` });
+    const emit = (type: string, priv: string, obs: string, mine: string) => this.events.emit({
+      actor_id: c.id, action_type: type, also_to: [from.id], narration_private: priv, observable: obs, tags: ['deterministic', 'party'],
+      payload: { master: null, offer: { id: offer.id, to: c.id, label: offer.label, answer: type }, target_character_id: from.id, observable_target: mine },
+    }, this.stampFor(c));
+    if (!accept) {
+      const e = emit('offer_declined', `Rechazas ${offer.label} de ${fromName}.`, `${c.name} rechaza lo que le ofrece ${from.name}.`, `${c.name} no acepta lo que le ofreces (${offer.label}).`);
+      return done({ ok: true, text: e.narration_private, event: e });
+    }
+    const failed = (why: string) => {
+      const e = emit('offer_failed', `No llega a pasar a tus manos: ${why}.`, `${c.name} alarga la mano, pero no llega a coger lo que le ofrece ${from.name}.`, `${c.name} quería aceptar ${offer.label}, pero no ha podido: ${why}.`);
+      return done({ ok: false, text: e.narration_private, event: e });
+    };
+    const mySpot = this.world.characterSpot(c);
+    const theirSpot = this.world.characterSpot(from);
+    if (!mySpot || !theirSpot || mySpot.location_id !== theirSpot.location_id || from.transit) return failed(`${fromName} ya no está aquí`);
+    if (offer.coins > from.coins) return failed(`${fromName} ya no tiene esas monedas`);
+    const inst = offer.instance_id ? this.world.itemInstances.get(offer.instance_id) : null;
+    if (offer.instance_id && (!inst || !this.world.itemsCarriedBy(from.id).some((i) => i.id === inst.id) || inst.quantity < offer.quantity)) return failed(`${fromName} ya no lo tiene`);
+    if (mySpot.id !== theirSpot.id) approachSpot(this.world, c, theirSpot.id);
+    if (inst && !this.takeToHands(c, inst.id, offer.quantity)) return failed('no tienes dónde llevarlo');
+    if (offer.coins) { from.coins -= offer.coins; c.coins += offer.coins; this.world.touch('characters', from.id); this.world.touch('characters', c.id); }
+    const e = emit('offer_accepted', `Aceptas ${offer.label} de ${fromName}.`, `${c.name} acepta ${offer.label} de ${from.name}.`, `${c.name} acepta lo que le ofreces: ${offer.label}.`);
+    return done({ ok: true, text: e.narration_private, event: e });
+  }
+
+  /** Ofertas caducadas: fuera, y aviso a los dos (desde el tick). */
+  private expireOffers(): void {
+    const nowMs = this.now();
+    for (const c of this.world.characters.values()) {
+      for (const o of (c.offers ?? []).filter((x) => x.expires_real_ms <= nowMs)) {
+        dropOffer(this.world, c, o.id);
+        const from = this.world.characters.get(o.from_id);
+        if (!from) continue;
+        this.events.emit({
+          actor_id: c.id, action_type: 'offer_expired', also_to: [from.id], narration_private: `Dejas pasar la oferta de ${pcName(this.world, c.id, from)} (${o.label}).`, observable: null,
+          tags: ['deterministic', 'party'], payload: { master: null, offer: { id: o.id, to: c.id, label: o.label, answer: 'offer_expired' }, target_character_id: from.id, observable_target: `${c.name} no ha respondido a tu oferta (${o.label}): sigue siendo tuyo.` },
+        }, nowMs);
+      }
+    }
+  }
+
+  /**
+   * Seguir (party.ts): quien sigue a un líder que se ha puesto en camino sale
+   * tras él hacia el mismo sitio, al mismo paso. Si no puede (salida cerrada para
+   * él, el líder en otra sala, dormido), deja de seguirle y se le dice por qué.
+   */
+  private syncFollowers(nowGameS: number): void {
+    for (const f of this.world.characters.values()) {
+      if (!f.following) continue;
+      const leader = this.world.characters.get(f.following);
+      const stop = (why: string) => {
+        f.following = null;
+        this.world.touch('characters', f.id);
+        this.events.emit({ actor_id: f.id, action_type: 'unfollow', narration_private: why, observable: null, tags: ['deterministic', 'party'], payload: { master: null } }, this.stampFor(f));
+      };
+      if (!leader || leader.status === 'dead' || leader.status === 'retired') { stop('Ya no tienes a quién seguir.'); continue; }
+      const t = leader.transit;
+      if (!t || f.status !== 'active') continue;
+      if (f.transit?.destination_spot_id === t.destination_spot_id) continue;
+      const name = pcName(this.world, f.id, leader);
+      const origin = this.world.spot(t.origin_spot_id).location_id;
+      if (positionOf(this.world, f, nowFor(f, nowGameS)).location_id !== origin) { stop(`Pierdes de vista a ${name}: dejas de seguirle.`); continue; }
+      const res = moveTo(this.world, f.id, t.destination_spot_id, t.pace, nowFor(f, nowGameS));
+      if (!res.ok) { stop(`No puedes seguir a ${name}: ${moveErrorText(this.world, res.error).replace(/\.$/, '')}. Te quedas aquí.`); continue; }
+      this.tripFrom.set(f.id, this.world.characterSpot(f)?.location_id ?? origin);
+      const dest = this.world.spot(t.destination_spot_id);
+      const crossing = dest.location_id !== origin;
+      this.events.emit({
+        actor_id: f.id, action_type: 'follow_move', narration_private: `Sigues a ${name} hacia ${crossing ? this.world.location(dest.location_id).name : dest.name}.`,
+        observable: `${f.name} sigue a ${leader.name}.`, tags: ['deterministic', 'movement', 'party'],
+        payload: { master: null, target_character_id: leader.id, observable_target: `${f.name} va detrás de ti.`, observable_vague: 'Una figura va detrás de otra.' },
+      }, this.stampFor(f));
+    }
+  }
+
+  /** Ayuda vigente de otro PJ (y la consume): ventaja para esta tirada. */
+  private takeHelp(c: Character): Character | null {
+    const h = c.helped_by;
+    if (!h) return null;
+    c.helped_by = null;
+    this.world.touch('characters', c.id);
+    const helper = this.world.characters.get(h.character_id);
+    return helper && h.expires_game_s >= this.nowFor(c) ? helper : null;
+  }
+
+  /**
+   * Los PJ de una misma partida se conocen siempre por su nombre, sin presentarse
+   * (docs/MULTIJUGADOR.md): al arrancar (migra las partidas de antes) y al entrar uno nuevo.
+   */
+  meetAll(): void {
+    const pcs = [...this.world.characters.values()].filter((c) => c.status !== 'retired');
+    for (const c of pcs) {
+      const missing = pcs.filter((o) => o.id !== c.id && !c.knows.includes(o.id));
+      if (!missing.length) continue;
+      c.knows.push(...missing.map((o) => o.id));
+      this.world.touch('characters', c.id);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Desconexiones (docs/MULTIJUGADOR.md, «Desconexiones»): el PJ del que se va se queda, ausente.
+  // -------------------------------------------------------------------------
+
+  /** Rondas seguidas que un ausente lleva dudando (a la segunda sale de la ronda). */
+  private awayHesitations = new Map<Id, number>();
+  static readonly AWAY_ROUNDS_OUT = 2;
+
+  /**
+   * El jugador se va (sin pestañas pasado el margen) o vuelve. Su PJ se queda
+   * donde estaba, ausente: los presentes lo leen en el hilo; sale de la
+   * conversación de grupo y de las colas de turno; quien le seguía deja de
+   * hacerlo y él deja de seguir; las ofertas pendientes con él se cancelan.
+   * A los 30 min llega el velo (setPresence/setConnected, SPEC §9.1).
+   */
+  setAway(characterId: Id, away: boolean): void {
+    const c = this.world.characters.get(characterId);
+    if (!c || c.status === 'dead' || c.status === 'retired' || Boolean(c.away) === away) return;
+    const spot = this.world.characterSpot(c);
+    const present = spot ? this.world.charactersInLocation(spot.location_id).filter((o) => o.id !== c.id && o.status !== 'dead' && o.status !== 'retired').map((o) => o.id) : [];
+    const at = spot ? { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id } : undefined;
+    if (!away) {
+      c.away = null;
+      this.awayHesitations.delete(c.id);
+      this.world.touch('characters', c.id);
+      if (at) this.events.emit({ actor_id: c.id, at, action_type: 'back', narration_private: '', observable: `${c.name} ha vuelto.`, also_to: present, tags: ['presence'], payload: { master: null } }, this.now());
+      this.background(this.flush());
+      return;
+    }
+    c.away = { since_real_ms: this.now(), since_game_s: this.gameNow(), spot_id: spot?.id ?? null };
+    this.world.touch('characters', c.id);
+    if (at) {
+      this.events.emit({
+        actor_id: c.id, at, action_type: 'away', narration_private: '', also_to: present, tags: ['presence'],
+        observable: `${c.name} se ha ido; su personaje se queda ${spot ? `en ${spot.name}` : 'donde estaba'}.`, payload: { master: null },
+      }, this.now());
+    }
+    // Conversación de grupo y colas: fuera; el NPC sigue con los que quedan.
+    this.leaveTalk(c, false);
+    // Seguir: quien le seguía deja de hacerlo, con aviso; él se queda donde está.
+    if (c.following) { c.following = null; this.world.touch('characters', c.id); }
+    for (const f of this.world.characters.values()) {
+      if (f.following !== c.id) continue;
+      f.following = null;
+      this.world.touch('characters', f.id);
+      this.events.emit({ actor_id: f.id, action_type: 'unfollow', narration_private: `${pcName(this.world, f.id, c).replace(/^./, (x) => x.toUpperCase())} se ha ido: dejas de seguirle.`, observable: null, tags: ['deterministic', 'party'], payload: { master: null } }, this.stampFor(f));
+    }
+    // Ofertas pendientes con él, en cualquier sentido: se cancelan y se avisa a los dos.
+    for (const to of this.world.characters.values()) {
+      for (const o of [...(to.offers ?? [])]) {
+        if (o.to_id !== c.id && o.from_id !== c.id) continue;
+        dropOffer(this.world, to, o.id);
+        const from = this.world.characters.get(o.from_id);
+        if (!from) continue;
+        const other = from.id === c.id ? to : from;
+        this.events.emit({
+          actor_id: other.id, action_type: 'offer_cancelled', also_to: [c.id], tags: ['deterministic', 'party'],
+          narration_private: `La oferta ${from.id === c.id ? `de ${pcName(this.world, other.id, c)}` : `que le hiciste a ${pcName(this.world, other.id, c)}`} (${o.label}) se cancela: se ha ido.`,
+          observable: null, payload: { master: null, offer: { id: o.id, to: to.id, label: o.label, answer: 'offer_cancelled' }, target_character_id: c.id, observable_target: `Tu oferta pendiente (${o.label}) se canceló al irte.` },
+        }, this.now());
+      }
+    }
+    this.background(this.flush());
+  }
+
+  /** PJ que cuentan para cerrar una ronda: los presentes, menos los ausentes que ya han dudado AWAY_ROUNDS_OUT rondas seguidas. */
+  private roundMembers(locationId: Id): Character[] {
+    return presentPcs(this.world, locationId).filter((p) => !(p.away && (this.awayHesitations.get(p.id) ?? 0) >= Engine.AWAY_ROUNDS_OUT));
+  }
+
+  // -------------------------------------------------------------------------
+  // Varios a la vez en el mismo sitio (scene.ts): turno con el NPC, conversación de grupo y rondas.
+  // -------------------------------------------------------------------------
+
+  /** Quien espera turno con cada NPC, en orden (en memoria: un reinicio vacía las colas). */
+  private turnQueue = new Map<Id, Id[]>();
+  /** Frases de una conversación de grupo que se juntan antes de llamar al máster, por NPC. */
+  private batches = new Map<Id, Batch>();
+  /** Ronda abierta por localización (escena tensa con varios PJ) y número de la última. */
+  private rounds = new Map<Id, Round>();
+  private roundNo = new Map<Id, number>();
+  /** Quién comparte el turno que está narrando el máster (grupo o ronda), por actor. */
+  private sharing = new Map<Id, { ids: Id[]; inputs: Record<Id, string> }>();
+  private sceneListeners: SceneListener[] = [];
+
+  /** La web pinta el banner de ronda con esto. */
+  onScene(l: SceneListener): () => void {
+    this.sceneListeners.push(l);
+    return () => { this.sceneListeners = this.sceneListeners.filter((x) => x !== l); };
+  }
+
+  /** Ronda abierta en una localización (para la web al conectar). */
+  roundIn(locationId: Id): SceneNotice | null {
+    const r = this.rounds.get(locationId);
+    return r ? this.roundNotice(locationId, r, true) : null;
+  }
+
+  private roundNotice(locationId: Id, r: Round, open: boolean): SceneNotice {
+    const present = this.roundMembers(locationId);
+    return { kind: 'round', location_id: locationId, n: r.n, acted: [...r.items.keys()], waiting: present.filter((p) => !r.items.has(p.id)).map((p) => p.id), deadline_ms: r.deadline_ms, open };
+  }
+
+  private notifyScene(n: SceneNotice): void { for (const l of this.sceneListeners) l(n); }
+
+  /**
+   * Antes de la cola: ronda en escena tensa, conversación de grupo, NPC ocupado
+   * con otro PJ, esperar turno, unirse o dejar la conversación. null si la acción
+   * sigue el camino de siempre.
+   */
+  private sceneRoute(c: Character, text: string): Promise<ActionResult> | null {
+    if (!this.master || c.status !== 'active' || Engine.MECHANICAL.test(text)) return null;
+    const nowG = this.nowFor(c);
+    const locId = positionOf(this.world, c, nowG).location_id;
+    const events = this.events.recentInLocation(locId, 60);
+    // Escena tensa con dos o más jugadores: todo va a la ronda (sin contar a los ausentes que ya salieron de ella).
+    if (this.rounds.has(locId) || (tenseScene(this.world, locId, this.recentTags([locId])) && this.roundMembers(locId).length >= 2)) return this.joinRound(c, text, locId);
+    if (isLeaveTalk(text)) return Promise.resolve(this.leaveTalk(c, true));
+    // Esperar o unirse, con el botón o con sus palabras: sin máster y sin repetir el gesto del NPC.
+    const turn = parseTurn(text);
+    if (turn && (!turn.loose || this.busyNpcFor(c, turn.who, events, nowG))) return Promise.resolve(this.takeTurn(c, turn.kind, turn.who, events, nowG));
+    const current = talkingWith(this.world, events, c, nowG);
+    const target = npcTarget(this.world, events, c, text, nowG);
+    // Moverse o dirigirse a otro NPC: deja la conversación en la que estaba.
+    if (current && (this.isMove(c, text) || parseTravel(text) || (target && target.id !== current.id))) this.leaveTalk(c, false);
+    if (!target || this.isMove(c, text)) return null;
+    const talkers = talkersOf(this.world, events, target, nowG);
+    if (talkers.length && !talkers.includes(c.id)) {
+      // Ya en la cola: no se repite el gesto; se le recuerda que espera.
+      if (this.turnQueue.get(target.id)?.includes(c.id)) return Promise.resolve(this.emitScene(c, text, 'npc_wait', `Sigues esperando tu turno con ${this.npcLabel(c, target)}.`, null, [`Unirme a la conversación con ${this.npcLabel(c, target)}`], { npc_id: target.id }));
+      return Promise.resolve(this.npcBusy(c, target, talkers, text));
+    }
+    if (talkers.includes(c.id) && talkers.length > 1) return this.groupTalk(c, target, text, talkers);
+    return null;
+  }
+
+  private npcLabel(c: Character, n: Npc): string {
+    return c.knows.includes(n.id) ? n.name : descriptorOf(this.world, n.id);
+  }
+
+  /** Evento sin máster con sus propias opciones. */
+  private emitScene(c: Character, input: string | null, type: string, priv: string, obs: string | null, suggested: string[], extra: Record<string, unknown> = {}): ActionResult {
+    const event = this.events.emit({
+      actor_id: c.id, action_type: type, input_text: input, narration_private: priv, observable: obs, tags: ['deterministic', 'social', 'scene'],
+      payload: { master: null, suggested_actions: suggested, ...extra },
+    }, this.stampFor(c));
+    return { ok: true, text: priv, event, suggested_actions: suggested };
+  }
+
+  /** El NPC ocupado con otro PJ al que se refiere el texto (o el único ocupado de la sala). */
+  private busyNpcFor(c: Character, who: string, events: readonly GameEvent[], nowG: number): Npc | null {
+    const busy = npcsHere(this.world, c).filter((n) => { const t = talkersOf(this.world, events, n, nowG); return t.length > 0 && !t.includes(c.id); });
+    const named = who ? namedNpc(this.world, c, who) : null;
+    if (named) return busy.includes(named) ? named : null;
+    return busy.length === 1 ? busy[0]! : null;
+  }
+
+  /** El NPC está con otro PJ: no se llama al máster; un gesto y dos botones. */
+  private npcBusy(c: Character, n: Npc, talkers: Id[], input: string): ActionResult {
+    const who = talkers.map((id) => pcName(this.world, c.id, this.world.character(id)));
+    const label = this.npcLabel(c, n);
+    const Label = label.charAt(0).toUpperCase() + label.slice(1);
+    return this.emitScene(c, input, 'npc_busy', `${Label} está con ${who.join(' y ')}; te hace un gesto para que esperes.`,
+      `${c.name} espera a que ${n.name} termine.`, [`Esperar turno con ${label}`, `Unirme a la conversación con ${label}`], { npc_id: n.id, notice_for_others: true });
+  }
+
+  /** «Esperar turno» (cola real: aviso cuando quede libre) o «Unirme a la conversación». */
+  private takeTurn(c: Character, kind: 'wait' | 'join', who: string, events: readonly GameEvent[], nowG: number): ActionResult {
+    const named = who ? namedNpc(this.world, c, who) : null;
+    const busy = npcsHere(this.world, c).filter((n) => talkersOf(this.world, events, n, nowG).length > 0);
+    const n = named ?? (busy.length === 1 ? busy[0]! : null);
+    if (!n) return { ok: false, text: '¿Con quién?' };
+    const label = this.npcLabel(c, n);
+    const talkers = talkersOf(this.world, events, n, nowG);
+    if (!talkers.length || talkers.includes(c.id)) {
+      if (talkers.includes(c.id)) return { ok: false, text: `Ya estás hablando con ${label}.` };
+      this.turnQueue.delete(n.id);
+      return this.emitScene(c, null, 'npc_free', `${label.charAt(0).toUpperCase()}${label.slice(1)} ya puede atenderte.`, null, [`Hablar con ${label}`], { npc_id: n.id });
+    }
+    const names = talkers.map((id) => pcName(this.world, c.id, this.world.character(id))).join(' y ');
+    if (kind === 'wait') {
+      const q = this.turnQueue.get(n.id) ?? [];
+      if (!q.includes(c.id)) q.push(c.id);
+      this.turnQueue.set(n.id, q);
+      return this.emitScene(c, null, 'npc_wait', `Esperas tu turno con ${label}, a un paso. Te aviso cuando pueda atenderte.`, `${c.name} espera su turno con ${n.name}.`, [`Unirme a la conversación con ${label}`], { npc_id: n.id, notice_for_others: true });
+    }
+    n.talking_to = { ...n.talking_to!, with: [...new Set([...(n.talking_to!.with ?? []), c.id])] };
+    const q = this.turnQueue.get(n.id);
+    if (q?.includes(c.id)) q.splice(q.indexOf(c.id), 1);
+    this.world.touch('npcs', n.id);
+    const main = this.world.character(talkers[0]!);
+    return this.emitScene(c, null, 'npc_join', `Te unes a la conversación de ${names} con ${label}. Lo que digáis a la vez se lo responde de una.`,
+      `${c.name} se une a la conversación con ${n.name}.`, [], { npc_id: n.id, target_character_id: main.id, observable_target: `${c.name} se une a vuestra conversación con ${n.name}.` });
+  }
+
+  /** Deja la conversación (al irse, al hablar con otro o a petición). Si llevaba la charla, pasa al siguiente unido. */
+  private leaveTalk(c: Character, explicit: boolean): ActionResult {
+    const nowG = this.nowFor(c);
+    const events = this.events.recentInLocation(positionOf(this.world, c, nowG).location_id, 60);
+    let left: Npc | null = null;
+    for (const n of this.world.npcs.values()) {
+      const t = n.talking_to;
+      if (!t || (t.character_id !== c.id && !t.with?.includes(c.id))) continue;
+      const rest = (t.with ?? []).filter((id) => id !== c.id);
+      n.talking_to = t.character_id === c.id ? (rest.length ? { character_id: rest[0]!, since_game_s: nowG, ...(rest.length > 1 ? { with: rest.slice(1) } : {}) } : null) : { ...t, with: rest };
+      this.world.touch('npcs', n.id);
+      left = n;
+    }
+    for (const q of this.turnQueue.values()) { const i = q.indexOf(c.id); if (i >= 0) q.splice(i, 1); }
+    // Primero se cuenta que se va; después, al que esperaba, que ya le toca.
+    let r: ActionResult = { ok: true, text: '' };
+    if (explicit) r = left ? this.emitScene(c, null, 'npc_leave', `Dejas la conversación con ${this.npcLabel(c, left)}.`, `${c.name} deja la conversación con ${left.name}.`, []) : { ok: false, text: 'No estás hablando con nadie.' };
+    this.serveQueues();
+    return r;
+  }
+
+  /** NPC que han quedado libres: el primero que esperaba pasa a tener su turno guardado y se le avisa. */
+  private serveQueues(): void {
+    for (const [npcId, q] of this.turnQueue) {
+      const n = this.world.npcs.get(npcId);
+      if (!n || n.status !== 'alive') { this.turnQueue.delete(npcId); continue; }
+      const loc = this.world.spot(n.location.id).location_id;
+      const nowG = this.gameNow();
+      if (talkersOf(this.world, this.events.recentInLocation(loc, 60), n, nowG).length) continue;
+      while (q.length) {
+        const c = this.world.characters.get(q.shift()!);
+        if (!c || c.status !== 'active' || this.world.characterSpot(c)?.location_id !== loc) continue;
+        n.talking_to = { character_id: c.id, since_game_s: this.nowFor(c), reserved: true };
+        this.world.touch('npcs', n.id);
+        const label = this.npcLabel(c, n);
+        this.emitScene(c, null, 'npc_free', `${label.charAt(0).toUpperCase()}${label.slice(1)} ya puede atenderte.`, null, [`Hablar con ${label}`], { npc_id: n.id });
+        break;
+      }
+      if (!q.length) this.turnQueue.delete(npcId);
+    }
+  }
+
+  /**
+   * Conversación de grupo: las frases dirigidas al NPC dentro de la ventana
+   * (GROUP_WINDOW_MS) se juntan y el máster responde una vez a todas. Se cierra
+   * antes si ya han hablado todos. Todos reciben la misma respuesta.
+   */
+  private groupTalk(c: Character, n: Npc, text: string, members: Id[]): Promise<ActionResult> {
+    let b = this.batches.get(n.id);
+    if (!b) {
+      let resolve!: (r: ActionResult) => void;
+      const done = new Promise<ActionResult>((r) => { resolve = r; });
+      b = { items: [], done, resolve, timer: setTimeout(() => void this.flushBatch(n.id), this.groupWindowMs), members };
+      this.batches.set(n.id, b);
+    }
+    const prev = b.items.find((i) => i.id === c.id);
+    if (prev) prev.text = `${prev.text} / ${text}`; else b.items.push({ id: c.id, text });
+    if (b.members.every((id) => b!.items.some((i) => i.id === id))) void this.flushBatch(n.id);
+    return b.done;
+  }
+
+  private async flushBatch(npcId: Id): Promise<void> {
+    const b = this.batches.get(npcId);
+    if (!b) return;
+    this.batches.delete(npcId);
+    clearTimeout(b.timer);
+    const n = this.world.npc(npcId);
+    const actor = this.world.character(b.items[0]!.id);
+    const members = b.items.map((i) => ({ id: i.id, name: this.world.character(i.id).name, text: i.text }));
+    const ids = [...new Set([...b.members, ...b.items.map((i) => i.id)])];
+    const text = `(conversación de grupo con ${n.name}) ${members.map((m) => `${m.name}: ${m.text}`).join(' / ')}`;
+    const r = await this.shared(actor, ids, Object.fromEntries(b.items.map((i) => [i.id, i.text])), text, { hooks: [], encounter: null, group: { npc_id: n.id, members } });
+    b.resolve(r);
+  }
+
+  /**
+   * Ronda (escena tensa con varios PJ): cada presente manda su acción; cuando han
+   * actuado todos o vence ROUND_MS, el máster resuelve la ronda entera. Quien no
+   * actuó duda y pierde la ronda, sin bloquear a nadie.
+   */
+  private joinRound(c: Character, text: string, locId: Id): Promise<ActionResult> {
+    let r = this.rounds.get(locId);
+    if (!r) {
+      let resolve!: (x: ActionResult) => void;
+      const done = new Promise<ActionResult>((x) => { resolve = x; });
+      const n = (this.roundNo.get(locId) ?? 0) + 1;
+      this.roundNo.set(locId, n);
+      r = { n, items: new Map(), done, resolve, deadline_ms: Date.now() + this.roundMs, timer: setTimeout(() => void this.flushRound(locId), this.roundMs) };
+      this.rounds.set(locId, r);
+    }
+    if (r.items.has(c.id)) return Promise.resolve({ ok: false, text: `Ya has actuado en la ronda ${r.n}: espera a que se resuelva.` });
+    r.items.set(c.id, text);
+    this.notifyScene(this.roundNotice(locId, r, true));
+    this.awayHesitations.delete(c.id);
+    if (this.roundMembers(locId).every((p) => r!.items.has(p.id))) void this.flushRound(locId);
+    return r.done;
+  }
+
+  private async flushRound(locId: Id): Promise<void> {
+    const r = this.rounds.get(locId);
+    if (!r) return;
+    this.rounds.delete(locId);
+    clearTimeout(r.timer);
+    const present = this.roundMembers(locId);
+    this.notifyScene({ ...this.roundNotice(locId, r, false), waiting: [] });
+    const members = [...r.items].map(([id, text]) => ({ id, name: this.world.character(id).name, text }));
+    const hesitant = present.filter((p) => !r.items.has(p.id));
+    // El ausente duda y no bloquea; tras AWAY_ROUNDS_OUT rondas seguidas, sale de la ronda.
+    for (const h of hesitant) if (h.away) this.awayHesitations.set(h.id, (this.awayHesitations.get(h.id) ?? 0) + 1);
+    for (const m of members) { const c = this.world.character(m.id); if (c.decisive) this.closeDecisive(c); }
+    const actor = this.world.character(members[0]!.id);
+    const text = `(ronda ${r.n}) ${members.map((m) => `${m.name}: ${m.text}`).join(' / ')}${hesitant.length ? ` / dudan: ${hesitant.map((h) => h.name).join(', ')}` : ''}`;
+    const res = await this.shared(actor, [...members.map((m) => m.id), ...hesitant.map((h) => h.id)], Object.fromEntries(r.items), text,
+      { hooks: [], encounter: null, round: { n: r.n, members, hesitant: hesitant.map((h) => ({ id: h.id, name: h.name })) } });
+    r.resolve(res);
+  }
+
+  /** Un turno compartido (grupo o ronda): una llamada al máster, en la cola del sitio, que reciben todos. */
+  private shared(actor: Character, ids: Id[], inputs: Record<Id, string>, text: string, hints: SceneHints): Promise<ActionResult> {
+    const locId = positionOf(this.world, actor, this.gameNow()).location_id;
+    return this.runInLocation(locId, async () => {
+      this.sharing.set(actor.id, { ids, inputs });
+      let r: ActionResult;
+      try { r = await this.resolveWithHints(actor, text, hints); } finally { this.sharing.delete(actor.id); }
+      if (!r.ok && r.text === '') r = { ok: false, text: 'El narrador no responde ahora mismo. Espera un momento y vuelve a intentarlo.' };
+      this.settleAll(this.gameNow());
+      this.advanceStory(this.gameNow());
+      await this.flush();
+      return r;
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -1380,17 +2101,9 @@ export class Engine {
     const q = whom.trim().toLowerCase();
     const target = this.world.charactersAt(here.id).find((o) => o.id !== c.id && o.name.toLowerCase() === q);
     if (!target) return { ok: false, text: `Aquí no hay nadie que se llame «${whom}».` };
-    if (target.status !== 'active') return { ok: false, text: `${target.name} no está en condiciones de recibir nada.` };
-    const def = this.world.itemDef(this.world.itemInstance(item.value).item_id);
-    // Fase 1: sin doble confirmación (llega con la economía, fase 3). Va a la mano libre o al bolsillo.
-    for (const slot of [{ kind: 'hand', which: 'main' }, { kind: 'hand', which: 'off' }, { kind: 'pocket' }] as const) {
-      const res = transferItem(this.world, item.value, { type: 'character', id: target.id, slot });
-      if (res.ok) {
-        return this.emit(c, input, 'give', `Le das ${def.name} a ${target.name}.`, `${c.name} le da ${def.name} a ${target.name}.`, 1, {}, [target.id]);
-      }
-      if (res.error.code !== 'no_space') return { ok: false, text: transferErrorText(res.error) };
-    }
-    return { ok: false, text: `${target.name} no tiene dónde meterlo.` };
+    // Entre jugadores, con consentimiento: una oferta que el otro acepta (party.ts).
+    const off = this.offer(c.id, target.id, { instance_id: item.value, coins: 0 }, input);
+    return off.ok ? off.result : { ok: false, text: off.error };
   }
 
   private doHarvest(c: Character, input: string, what: string): ActionResult {

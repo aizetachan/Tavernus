@@ -133,7 +133,7 @@ function peopleSeen(world: World, clock: GameClock, c: Character, nowGameS: numb
     if (op.location_id !== pos.location_id || (spotId && op.spot_id !== spotId)) continue;
     const p = perceive(world, clock, c, op, nowGameS);
     const state = o.status === 'asleep' ? ', dormido' : '';
-    if (p.sight === 'full') out.push(`${c.knows.includes(o.id) ? o.name : descriptorOf(world, o.id)}${where(op.spot_id)}${state}`);
+    if (p.sight === 'full') out.push(`${o.name}${where(op.spot_id)}${state}`);
     else if (p.sight === 'vague') out.push(`una figura${where(op.spot_id)}`);
   }
   return out;
@@ -193,11 +193,10 @@ export function descriptorOf(world: World, id: Id): string {
 export function maskUnknownNames(world: World, readerId: Id, text: string): string {
   const reader = world.characters.get(readerId);
   if (!reader) return text;
+  // Lo citado son palabras de alguien: un nombre dicho en voz alta se oye tal cual.
+  if (/«[^»]*»/.test(text)) return text.split(/(«[^»]*»)/).map((part, i) => (i % 2 ? part : maskUnknownNames(world, readerId, part))).join('');
   let out = text;
-  for (const c of world.characters.values()) {
-    if (c.id === readerId || reader.knows.includes(c.id)) continue;
-    out = out.replace(new RegExp(`\\b${escapeRe(c.name)}\\b`, 'g'), descriptorOf(world, c.id));
-  }
+  // Los PJ de la partida se conocen siempre por su nombre: solo se enmascaran NPC.
   for (const n of world.npcs.values()) {
     if (reader.knows.includes(n.id)) continue;
     out = out.replace(new RegExp(`\\b${escapeRe(n.name)}\\b`, 'g'), descriptorOf(world, n.id));

@@ -42,6 +42,7 @@ export const PAGE = String.raw`<!doctype html>
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .ib { display: inline-grid; place-items: center; width: 32px; height: 32px; flex: none; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; text-decoration: none; }
   .ib:hover { background: var(--hover); color: var(--text); }
+  .ib[hidden] { display: none; }
   .ib svg.i { width: 16px; height: 16px; }
   .sec-t { display: flex; align-items: center; gap: 8px; padding: 14px 14px 6px 16px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
   .sec-t span { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
@@ -188,6 +189,21 @@ export const PAGE = String.raw`<!doctype html>
   #party button:first-child { margin-left: 0; }
   #party button:hover { color: var(--text); position: relative; z-index: 2; }
   #party button.on { color: var(--accent); background-color: #2a1d05; border-color: var(--accent); position: relative; z-index: 1; }
+  /* Presencia (docs/MULTIJUGADOR.md): los demás jugadores, con punto verde si están en línea; en la hoja, una línea cada uno. */
+  #presence { display: flex; align-items: center; flex: none; gap: 2px; }
+  #presence:empty { display: none; }
+  #presence span { position: relative; width: 30px; height: 30px; margin-left: -6px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--panel); background: #22262a; color: var(--muted); font-size: 11.5px; font-weight: 600; cursor: default; }
+  #presence span:first-child { margin-left: 0; }
+  #presence span.on { color: var(--text); }
+  #presence span.here { box-shadow: 0 0 0 1.5px rgba(230,183,90,.55); }
+  #presence span::after { content: ''; position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; background: #5b5f62; border: 2px solid var(--panel); }
+  #presence span.on::after { background: #4fbf7a; }
+  #group { margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid var(--sep); }
+  #group:empty { display: none; }
+  #group h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  #group div { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 2px 0; }
+  #group i { width: 8px; height: 8px; border-radius: 50%; background: #5b5f62; flex: none; }
+  #group i.on { background: #4fbf7a; }
   .chat-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   /* Fondo con motivos tenues, como el papel de WhatsApp. */
   .chat-body::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .08; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900' fill='none' stroke='%23e6b75a' stroke-width='1.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='translate(537 498) rotate(-31 12 12) scale(1.67)'%3E%3Ccircle cx='7.5' cy='12' r='4'/%3E%3Cpath d='M11.5 12H21M18 12v3M15 12v2'/%3E%3C/g%3E%3Cg transform='translate(61 201) rotate(4 12 12) scale(1.45)'%3E%3Cpath d='M6 5h11a2 2 0 0 1 2 2v12H8a2 2 0 0 1-2-2z'/%3E%3Cpath d='M6 5a2 2 0 0 0-2 2v2h2M10 10h6M10 13h6M10 16h4'/%3E%3C/g%3E%3Cg transform='translate(364 463) rotate(5 12 12) scale(1.18)'%3E%3Ccircle cx='12' cy='14' r='6'/%3E%3Cpath d='M9.5 5h5L12 8z'/%3E%3C/g%3E%3Cg transform='translate(579 105) rotate(5 12 12) scale(1.44)'%3E%3Cpath d='M10 3h4M10.5 3v5L6 16a4 4 0 0 0 3.5 5h5a4 4 0 0 0 3.5-5L13.5 8V3'/%3E%3Cpath d='M8 15h8'/%3E%3C/g%3E%3Cg transform='translate(100 604) rotate(5 12 12) scale(1.21)'%3E%3Cpath d='M6 21L18 6'/%3E%3Cpath d='M14 4c3-1 6 1 6 4-2 0-4 1-5 3l-3-3c1-2 2-3 2-4z'/%3E%3C/g%3E%3Cg transform='translate(402 777) rotate(-10 12 12) scale(1.57)'%3E%3Cpath d='M4 20h16'/%3E%3Cpath d='M6 20c1-6 3-11 7-16 1 4 3 7 5 9-2 1-3 3-3 7'/%3E%3Cpath d='M10 14l1 .5'/%3E%3C/g%3E%3Cg transform='translate(440 155) rotate(-11 12 12) scale(1.14)'%3E%3Cpath d='M6 16v-5a6 6 0 0 1 12 0v5h-2v3H8v-3z'/%3E%3Ccircle cx='9.5' cy='11.5' r='1.3'/%3E%3Ccircle cx='14.5' cy='11.5' r='1.3'/%3E%3C/g%3E%3Cg transform='translate(478 667) rotate(22 12 12) scale(1.15)'%3E%3Cpath d='M4 17h16l1-10-5 4-4-6-4 6-5-4z'/%3E%3Cpath d='M4 20h16'/%3E%3C/g%3E%3Cg transform='translate(256 625) rotate(-7 12 12) scale(1.23)'%3E%3Cpath d='M6 5h11a2 2 0 0 1 2 2v12H8a2 2 0 0 1-2-2z'/%3E%3Cpath d='M6 5a2 2 0 0 0-2 2v2h2M10 10h6M10 13h6M10 16h4'/%3E%3C/g%3E%3Cg transform='translate(248 132) rotate(-5 12 12) scale(1.34)'%3E%3Cpath d='M6 21L18 6'/%3E%3Cpath d='M14 4c3-1 6 1 6 4-2 0-4 1-5 3l-3-3c1-2 2-3 2-4z'/%3E%3C/g%3E%3Cg transform='translate(599 829) rotate(13 12 12) scale(1.43)'%3E%3Cpath d='M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z'/%3E%3Cpath d='M12 7v10M8 11h8'/%3E%3C/g%3E%3Cg transform='translate(123 725) rotate(32 12 12) scale(1.29)'%3E%3Cpath d='M12 2l9 5v10l-9 5-9-5V7z'/%3E%3Cpath d='M12 2v6M3 7l9 5 9-5M12 12v10M7.5 9.5l4.5 8 4.5-8z'/%3E%3C/g%3E%3Cg transform='translate(627 394) rotate(26 12 12) scale(1.49)'%3E%3Cpath d='M15 4a8 8 0 1 0 5 13A7 7 0 0 1 15 4z'/%3E%3C/g%3E%3Cg transform='translate(642 264) rotate(10 12 12) scale(1.65)'%3E%3Cpath d='M14.5 3.5L20 3l-.5 5.5L9 19l-4-4z'/%3E%3Cpath d='M5 15l-2 2 4 4 2-2M7.5 12.5l4 4'/%3E%3C/g%3E%3Cg transform='translate(666 642) rotate(-21 12 12) scale(1.47)'%3E%3Cpath d='M4 17h16l1-10-5 4-4-6-4 6-5-4z'/%3E%3Cpath d='M4 20h16'/%3E%3C/g%3E%3Cg transform='translate(516 302) rotate(22 12 12) scale(1.22)'%3E%3Cpath d='M6 16v-5a6 6 0 0 1 12 0v5h-2v3H8v-3z'/%3E%3Ccircle cx='9.5' cy='11.5' r='1.3'/%3E%3Ccircle cx='14.5' cy='11.5' r='1.3'/%3E%3C/g%3E%3Cg transform='translate(104 405) rotate(-11 12 12) scale(1.15)'%3E%3Cpath d='M10 3h4M10.5 3v5L6 16a4 4 0 0 0 3.5 5h5a4 4 0 0 0 3.5-5L13.5 8V3'/%3E%3Cpath d='M8 15h8'/%3E%3C/g%3E%3Cg transform='translate(828 520) rotate(-35 12 12) scale(1.39)'%3E%3Ccircle cx='7.5' cy='12' r='4'/%3E%3Cpath d='M11.5 12H21M18 12v3M15 12v2'/%3E%3C/g%3E%3Cg transform='translate(470 38) rotate(21 12 12) scale(1.19)'%3E%3Cpath d='M4 20h16'/%3E%3Cpath d='M6 20c1-6 3-11 7-16 1 4 3 7 5 9-2 1-3 3-3 7'/%3E%3Cpath d='M10 14l1 .5'/%3E%3C/g%3E%3Cg transform='translate(829 180) rotate(26 12 12) scale(1.18)'%3E%3Cpath d='M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z'/%3E%3Cpath d='M12 7v10M8 11h8'/%3E%3C/g%3E%3Cg transform='translate(657 519) rotate(19 12 12) scale(1.62)'%3E%3Cpath d='M15 4a8 8 0 1 0 5 13A7 7 0 0 1 15 4z'/%3E%3C/g%3E%3Cg transform='translate(753 72) rotate(-12 12 12) scale(1.12)'%3E%3Cpath d='M14.5 3.5L20 3l-.5 5.5L9 19l-4-4z'/%3E%3Cpath d='M5 15l-2 2 4 4 2-2M7.5 12.5l4 4'/%3E%3C/g%3E%3Cg transform='translate(223 449) rotate(26 12 12) scale(1.40)'%3E%3Cpath d='M12 2l9 5v10l-9 5-9-5V7z'/%3E%3Cpath d='M12 2v6M3 7l9 5 9-5M12 12v10M7.5 9.5l4.5 8 4.5-8z'/%3E%3C/g%3E%3Cg transform='translate(777 752) rotate(-21 12 12) scale(1.66)'%3E%3Ccircle cx='12' cy='14' r='6'/%3E%3Cpath d='M9.5 5h5L12 8z'/%3E%3C/g%3E%3C/svg%3E"); background-size: 900px 900px; }
@@ -460,6 +476,17 @@ ${PAINT_STYLE}
   .sfx.on { background: transparent; }
   .sfx.on > .sfx-toggle, .tts > button.on { background: var(--accent-tint); }
   .tts-pop, .sfx-pop { top: 44px; border-radius: 16px; background: var(--bubble); box-shadow: var(--window-shadow); }
+  /* Hacer / Decir: lo que escribes lo hace tu personaje (al narrador) o lo dice tal cual (a los demás, sin narrador). */
+  form button.mode { width: auto; min-width: 58px; white-space: nowrap; height: 32px; padding: 0 10px; border-radius: 16px; font: 600 12.5px/1 var(--sans); letter-spacing: 0; background: var(--control); color: #b8b1a6; }
+  form button.mode.say { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
+  form button.mode .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
+  form.say input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
+  /* Otro jugador escribiendo y la ronda de una escena tensa: una línea encima del cuadro. */
+  .typing { padding: 2px 18px 0; font-size: 12.5px; font-style: italic; color: var(--muted); min-height: 0; }
+  #presence span.away { opacity: .45; filter: grayscale(1); }
+  .round-banner { margin: 6px 16px 0; padding: 7px 12px; border-radius: 12px; font: 600 13px/1.3 var(--sans); background: rgba(214,96,74,.14); color: #f0b3a3; box-shadow: inset 0 0 0 1px rgba(214,96,74,.35); }
+  .round-banner.mine { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(230,183,90,.35); }
+  .actions.party button.accept { background: var(--accent); color: var(--accent-ink); }
   /* Micrófono y pincel dentro del cuadro de redacción, del mismo tamaño que el cubo. */
   form .mic, form .brush { width: 32px; height: 32px; margin: 0; }
   form .mic svg.i, form .brush svg.i { width: 18px; height: 18px; }
@@ -650,6 +677,7 @@ ${PAINT_STYLE}
   <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.5 10h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3H15"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-invite" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
 </svg>
 <aside id="side" aria-label="La partida">
@@ -659,6 +687,7 @@ ${PAINT_STYLE}
       <span id="game-name">Tavernus</span>
       <div class="sub"><span id="game-mode" class="badge" hidden></span><span id="game-when"></span></div>
     </div>
+    <a class="ib" id="side-invites" href="#" hidden title="Invitaciones: enlaces para tus amigos" aria-label="Invitaciones"><svg class="i"><use href="#i-invite"/></svg></a>
     <span id="side-gear"></span>
     <button type="button" class="ib" id="side-close" title="Volver al chat" aria-label="Volver al chat"><svg class="i"><use href="#i-chat"/></svg></button>
   </div>
@@ -682,6 +711,7 @@ ${PAINT_STYLE}
     <button type="button" class="ib" id="to-side" title="La partida: ficha, tablero y mapa" aria-label="Abrir la partida: ficha, tablero y mapa"><svg class="i"><use href="#i-grid"/></svg></button>
     <span class="dot" id="scene-dot"><svg class="i"><use href="#i-pin"/></svg></span>
     <div class="t"><div id="place">Tavernus</div><div id="place-sub"></div></div>
+    <div id="presence" role="status" aria-label="Quién más juega"></div>
     <div id="party" role="group" aria-label="Personaje"></div>
     <select id="character" class="vh" aria-label="Personaje" tabindex="-1"></select>
   </div>
@@ -700,19 +730,22 @@ ${PAINT_STYLE}
         </div>
       </div>
       <div class="dr-body">
-        <div class="dr-pane" data-drpane="sheet"><div id="sheet"></div><p class="none">Cargando la hoja…</p></div>
+        <div class="dr-pane" data-drpane="sheet"><div id="group" aria-live="polite"></div><div id="sheet"></div><p class="none">Cargando la hoja…</p></div>
         <div class="dr-pane" data-drpane="journal"><div id="journal"></div><p class="none">El diario está en blanco.</p></div>
         <div class="dr-pane" data-drpane="pack"><div id="pack"></div><p class="none">Cargando la mochila…</p></div>
       </div>
     </section>
   </div>
   <div class="compose">
+    <div id="round" class="round-banner" hidden role="status"></div>
+    <div id="typing" class="typing" hidden aria-live="polite"></div>
     <div class="chips">
       <button data-cmd="look">/look</button><button data-cmd="where">/where</button><button data-cmd="who">/who</button>
       <button data-cmd="inventory">/inventory</button><button data-cmd="recap">/recap</button><button data-cmd="time">/time</button>
       <button data-cmd="tablon">/tablon</button><button data-cmd="progress">/progress</button>
     </div>
     <form id="form" autocomplete="off">
+      <button type="button" id="saymode" class="mode" aria-pressed="false" title="Hacer: el narrador cuenta lo que haces. Decir: tu personaje lo dice tal cual, al instante y sin narrador.">Hacer</button>
       <span class="inwrap"><input id="input" placeholder="¿Qué haces?" aria-label="Acción"></span>
       <button type="button" id="cube" aria-haspopup="menu" aria-expanded="false" aria-controls="cube-menu" title="Hoja, diario y mochila" aria-label="Menú de la partida: hoja, diario y mochila"><svg class="i ic-cube"><use href="#i-cube"/></svg><svg class="i ic-x"><use href="#i-x"/></svg></button>
       <button type="submit" aria-label="Enviar" title="Enviar"><svg class="i"><use href="#i-send"/></svg></button>
@@ -739,13 +772,21 @@ ${PAINT_STYLE}
   /** Todas las rutas /api/* llevan la partida activa. */
   function api(path) { return path + (path.indexOf('?') < 0 ? '?' : '&') + 'game=' + encodeURIComponent(game); }
   var MODE_LABEL = { live: 'Máster real', offline: 'Offline', record: 'Grabando', replay: 'Demo' };
-  fetch('/api/games').then(function (r) { return r.json(); }).then(function (d) {
-    var g = (d.games || []).filter(function (x) { return x.slug === game; })[0];
+  // Quién soy en esta partida: anfitrión (puede cambiar de PJ) o jugador ligado a su asiento (access.ts).
+  var session = fetch(api('/api/session')).then(function (r) { return r.json(); }).catch(function () { return { ok: false }; });
+  session.then(function (d) {
+    var g = d && d.game;
     if (!g) return;
     $('game-name').textContent = g.name;
     var badge = $('game-mode');
     badge.textContent = MODE_LABEL[g.mode] || g.mode; badge.className = 'badge ' + g.mode; badge.hidden = false;
     document.title = g.name + ' — Tavernus';
+    // El anfitrión reparte los enlaces de invitación desde la propia partida (page-access.ts).
+    if (d.role === 'admin') {
+      var inv = $('side-invites');
+      inv.href = '/invitaciones?game=' + encodeURIComponent(g.slug);
+      inv.hidden = false;
+    }
   }).catch(function () {});
   var log = $('log'), input = $('input'), select = $('character'), thinking = $('thinking');
   /** Entrada en la partida: al llegar el historial (con un mínimo para que se vea la carga) se quita body.boot y
@@ -853,8 +894,28 @@ ${PAINT_JS}
     clearInterval(dots);
     if (!on) { thinking.textContent = ''; input.focus(); return; }
     var n = 0;
-    thinking.textContent = 'El narrador está pensando';
-    dots = setInterval(function () { n = (n + 1) % 4; thinking.textContent = 'El narrador está pensando' + '.'.repeat(n); }, 400);
+    waitingFor = [];
+    thinking.textContent = thinkingText();
+    dots = setInterval(function () { n = (n + 1) % 4; thinking.textContent = thinkingText() + '.'.repeat(n); }, 400);
+  }
+  /** Mientras la acción espera en la cola del sitio detrás de la de otro jugador, se dice a quién (SSE «queue»). */
+  var waitingFor = [];
+  function thinkingText() { return waitingFor.length ? 'Esperando a ' + waitingFor.join(' y ') : 'El narrador está pensando'; }
+
+  /** Los demás jugadores: en la cabecera, sus iniciales con un punto (verde = en línea); en la hoja, una línea cada uno. */
+  function renderPresence(list) {
+    var box = $('presence'), group = $('group');
+    box.innerHTML = ''; group.innerHTML = '';
+    if (!list || !list.length) return;
+    list.forEach(function (p) {
+      var sp = document.createElement('span');
+      sp.textContent = initial(p.name);
+      sp.className = (p.online ? 'on' : '') + (p.where === 'here' ? ' here' : '') + (p.away ? ' away' : '');
+      sp.title = p.text;
+      sp.setAttribute('aria-label', p.text);
+      box.appendChild(sp);
+    });
+    group.innerHTML = '<h4>Tu grupo</h4>' + list.map(function (p) { return '<div><i class="' + (p.online ? 'on' : '') + '"></i>' + escapeHtml(p.text) + '</div>'; }).join('');
   }
 
   function post(path, body) {
@@ -874,7 +935,73 @@ ${PAINT_JS}
     // Sin burbuja de «prompt»: mientras piensa el narrador se ve atenuado; luego lo sustituye lo que el PJ dice o hace.
     pendingMine(text);
     setBusy(true);
-    post('/api/act', { text: text }).then(handleReply).finally(function () { clearPending(); setBusy(false); loadSheet(); });
+    post('/api/act', { text: text }).then(function (r) {
+      // «hablar con <otro jugador>» sin frase: el servidor no lo narra; abre el modo Decir hacia él.
+      if (r.ok && r.say_to) { setSayMode(true, r.say_to); add('system', r.text); return; }
+      handleReply(r);
+    }).finally(function () { clearPending(); setBusy(false); loadSheet(); });
+  }
+
+  // --- Entre jugadores: Hacer / Decir (party.ts) -----------------------------------
+  /** Decir: lo escrito es la frase literal del PJ; llega al instante a quien la oiga, sin narrador ni coste. */
+  var sayMode = false, sayTo = null;
+  function setSayMode(on, to) {
+    sayMode = on; sayTo = on ? (to || null) : null;
+    var b = $('saymode');
+    b.classList.toggle('say', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.innerHTML = on ? 'Decir' + (sayTo ? '<span class="to"></span>' : '') : 'Hacer';
+    if (sayTo) b.querySelector('.to').textContent = 'a ' + sayTo.name;
+    $('form').classList.toggle('say', on);
+    input.placeholder = on ? (sayTo ? '¿Qué le dices a ' + sayTo.name + '?' : '¿Qué dices?') : '¿Qué haces?';
+    input.setAttribute('aria-label', on ? 'Lo que dices' : 'Acción');
+    input.focus();
+  }
+  // «Aren está escribiendo…» (SSE «typing»; caduca sola) y aviso propio, como mucho cada 2,5 s.
+  var typers = {}, typingTimer = null, lastTyping = 0;
+  function showTyping(t) {
+    typers[t.id] = { name: t.name, until: Date.now() + (t.ms || 4000) };
+    renderTyping();
+  }
+  function renderTyping() {
+    clearTimeout(typingTimer);
+    var now = Date.now(), names = [];
+    Object.keys(typers).forEach(function (id) { if (typers[id].until > now) names.push(typers[id].name); else delete typers[id]; });
+    var el = $('typing');
+    el.hidden = !names.length;
+    el.textContent = names.length ? names.join(' y ') + (names.length > 1 ? ' están' : ' está') + ' escribiendo…' : '';
+    if (names.length) typingTimer = setTimeout(renderTyping, 1000);
+  }
+  input.addEventListener('input', function () {
+    var v = input.value.trim();
+    if (!v || v.charAt(0) === '/' || Date.now() - lastTyping < 2500) return;
+    lastTyping = Date.now();
+    post('/api/typing', {});
+  });
+  // Ronda en escena tensa: «Ronda 2 · faltan Aren y Lys · 0:42».
+  var roundTimer = null, roundData = null;
+  function showRound(r) {
+    roundData = r && r.open ? r : null;
+    clearInterval(roundTimer);
+    renderRound();
+    if (roundData) roundTimer = setInterval(renderRound, 1000);
+  }
+  function renderRound() {
+    var el = $('round');
+    if (!roundData) { el.hidden = true; return; }
+    var left = Math.max(0, Math.round((roundData.deadline_ms - Date.now()) / 1000));
+    var w = roundData.waiting || [];
+    var who = roundData.acted ? (w.length ? 'faltan ' + w.join(' y ') : 'resolviendo') : 'te toca' + (w.length ? ' (y a ' + w.join(' y ') + ')' : '');
+    el.hidden = false;
+    el.classList.toggle('mine', !roundData.acted);
+    el.textContent = 'Ronda ' + roundData.n + ' · ' + who + ' · ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+    if (!left) clearInterval(roundTimer);
+  }
+  function say(text) {
+    post('/api/say', { text: text, to: sayTo ? sayTo.id : null }).then(function (r) { if (!r.ok) handleReply(r); });
+  }
+  function answerOffer(id, accept) {
+    post('/api/offer', { offer: id, accept: accept }).then(function (r) { if (!r.ok) handleReply(r); loadSheet(); });
   }
   function roll() {
     if (busy) return;
@@ -1259,7 +1386,7 @@ ${PAINT_JS}
       o.push('<text class="label" x="' + r1(px) + '" y="' + r1(py + markR + 8) + '">' + escapeHtml(sp.name) + '</text>');
       var others = ts.filter(function (t) { return t.kind !== 'actor'; });
       if (others.length) {
-        var who = others.map(function (t) { return t.label; }).join(', ');
+        var who = others.map(function (t) { return t.label + (t.away ? ' (ausente)' : '') + (t.talking_with ? (t.talking_with === 'tú' ? ' (contigo)' : ' (con ' + t.talking_with.replace(/^tú y /, 'contigo y ') + ')') : ''); }).join(', ');
         if (who.length > 36) who = who.slice(0, 35) + '…';
         o.push('<text class="who" x="' + r1(px) + '" y="' + r1(py + markR + 20) + '">' + escapeHtml(who) + '</text>');
       }
@@ -1694,11 +1821,14 @@ ${PAINT_JS}
     renderParty();
     if (window.TavernusSfx) TavernusSfx.character(id);
     stream = new EventSource(api('/api/stream?character=' + encodeURIComponent(id)));
+    // Personaje nuevo presentándose: su hilo empieza en el prólogo, que llega por el stream; no se pide /look.
+    var opening = false;
+    stream.addEventListener('opening', function () { opening = true; });
     stream.addEventListener('history', function (e) {
       log.innerHTML = '';
       var h = JSON.parse(e.data);
       h.forEach(function (m, i) { renderMessage(m, i === h.length - 1); });
-      if (!h.some(function (m) { return !m.scene; })) command('look');
+      if (!opening && !h.some(function (m) { return !m.scene; })) command('look');
       enterGame();
     });
     stream.addEventListener('cast', function (e) { setCast(JSON.parse(e.data)); });
@@ -1708,6 +1838,10 @@ ${PAINT_JS}
     stream.addEventListener('portrait', function (e) { setPortrait(JSON.parse(e.data)); });
     paintConnect(stream);
     stream.addEventListener('journal', loadJournal);
+    stream.addEventListener('presence', function (e) { renderPresence(JSON.parse(e.data)); });
+    stream.addEventListener('typing', function (e) { showTyping(JSON.parse(e.data)); });
+    stream.addEventListener('round', function (e) { showRound(JSON.parse(e.data)); });
+    stream.addEventListener('queue', function (e) { waitingFor = JSON.parse(e.data).waiting_for || []; if (busy) thinking.textContent = thinkingText(); });
     loadSheet();
     loadScene();
     loadJournal();
@@ -1721,9 +1855,12 @@ ${PAINT_JS}
     input.value = '';
     // Ni las consultas ni la tirada salen como mensaje del jugador: solo su respuesta.
     if (text.charAt(0) === '/') command(text.split(/\s+/)[0]);
+    else if (sayMode || /^[—–«"“-]/.test(text)) say(text);
     else if (text === 'tirar' || text === 'roll') { spendButtons(); roll(); }
     else act(text);
   });
+  // Hacer ⇄ Decir; con destinatario, el primer toque lo quita y el segundo vuelve a Hacer.
+  $('saymode').addEventListener('click', function () { if (sayMode && sayTo) setSayMode(true, null); else setSayMode(!sayMode); });
   document.querySelectorAll('.chips button').forEach(function (b) {
     b.addEventListener('click', function () { command(b.dataset.cmd); });
   });
@@ -1861,6 +1998,7 @@ ${PAINT_JS}
   function renderParty() {
     var party = $('party');
     party.innerHTML = '';
+    if (document.body.classList.contains('bound')) { $('game-when').textContent = ''; return; }
     [].forEach.call(select.options, function (o) {
       var b = document.createElement('button');
       b.type = 'button'; b.textContent = initial(o.textContent); b.title = o.textContent;
@@ -1873,7 +2011,13 @@ ${PAINT_JS}
     $('game-when').textContent = n > 1 ? '· ' + n + ' en el grupo' : '';
   }
 
-  fetch(api('/api/characters')).then(function (r) { return r.json(); }).then(function (list) {
+  Promise.all([session, fetch(api('/api/characters')).then(function (r) { return r.json(); })]).then(function (both) {
+    var me = both[0] || {}, list = both[1] || [];
+    // Invitado ligado a su asiento: sin selector; solo su PJ.
+    if (me.can_switch === false && me.character_id) {
+      list = list.filter(function (c) { return c.id === me.character_id; });
+      document.body.classList.add('bound');
+    }
     list.forEach(function (c) {
       var o = document.createElement('option');
       o.value = c.id; o.textContent = c.name;
