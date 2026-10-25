@@ -49,6 +49,7 @@ function browser() {
     jar,
     get: (path: string, init: RequestInit = {}) => fetch(base + path, { redirect: 'manual', ...init, headers: { cookie: cookie(), ...(init.headers ?? {}) } }).then(keep),
     post: (path: string, body: unknown = {}) => fetch(base + path, { method: 'POST', redirect: 'manual', headers: { cookie: cookie(), 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(keep),
+    del: (path: string) => fetch(base + path, { method: 'DELETE', redirect: 'manual', headers: { cookie: cookie() } }).then(keep),
   };
 }
 
@@ -143,6 +144,56 @@ describe('invitaciones por asiento', () => {
     const seats = (await (await host.get(`/api/seats${g}`)).json()) as { seats: { character_id: string | null }[] };
     expect(seats.seats.map((s) => s.character_id)).toEqual([created.character_id, null, null]);
     expect(((await (await host.get(`/api/session${g}`)).json()) as { character_id: string }).character_id).toBe(created.character_id);
+  });
+
+  it('la música del menú se sirve sin invitación, por rangos, y solo nombres planos', async () => {
+    await start(ACCESS);
+    const anyone = browser();
+    const full = await anyone.get('/music/menu-theme.mp3');
+    expect(full.status).toBe(200);
+    expect(full.headers.get('content-type')).toBe('audio/mpeg');
+    const size = Number(full.headers.get('content-length'));
+    expect(size).toBeGreaterThan(1000);
+    const part = await anyone.get('/music/menu-theme.mp3', { headers: { range: 'bytes=0-99' } });
+    expect(part.status).toBe(206);
+    expect(part.headers.get('content-range')).toBe(`bytes 0-99/${size}`);
+    expect((await part.arrayBuffer()).byteLength).toBe(100);
+    expect((await anyone.get('/music/..%2F..%2Fpackage.json')).status).toBe(404);
+    expect((await anyone.get('/music/no-existe.mp3')).status).toBe(404);
+  });
+
+  it('en modo público cada uno crea y ve sus partidas, y un enlace le une a la de otro', async () => {
+    await start({ ...ACCESS, mode: 'public' });
+    const ana = browser();
+    const bea = browser();
+    // Sin enlace: el menú, no la página de invitación.
+    expect(await (await ana.get('/')).text()).toContain('Nueva partida');
+    expect(((await (await ana.get('/api/games')).json()) as { games: unknown[] }).games).toEqual([]);
+
+    // Cada una crea la suya (en solitario y con una plaza) y solo ve la suya.
+    const sola = (await (await ana.post('/api/games', { name: 'Sola', mode: 'offline', character: 'Aren', seats: 0 })).json()) as { game: { slug: string } };
+    const mesa = (await (await bea.post('/api/games', { name: 'Mesa', mode: 'offline', character: 'Tor', seats: 1 })).json()) as { game: { slug: string } };
+    type L = { games: { slug: string; host: boolean }[] };
+    expect(((await (await ana.get('/api/games')).json()) as L).games.map((g) => g.slug)).toEqual([sola.game.slug]);
+    expect(((await (await bea.get('/api/games')).json()) as L).games.map((g) => g.slug)).toEqual([mesa.game.slug]);
+    // La partida ajena no se abre, ni se borra, ni se ven sus invitaciones; grabar demos tampoco.
+    const m = `?game=${mesa.game.slug}`;
+    expect((await ana.get(`/api/session${m}`)).status).toBe(403);
+    expect((await ana.get(`/api/seats${m}`)).status).toBe(403);
+    expect((await ana.del(`/api/games${m}`)).status).toBe(403);
+    expect((await ana.post('/api/games', { name: 'Demo', mode: 'record', character: 'X' })).status).toBe(403);
+
+    // Bea reparte su plaza; Ana entra con el enlace y la ve en su lista, sin poder gestionarla.
+    expect(((await (await bea.get(`/api/session${m}`)).json()) as { role: string }).role).toBe('admin');
+    const seats = (await (await bea.get(`/api/seats${m}`)).json()) as { seats: { character_id: string | null; link: string }[] };
+    expect((await ana.get(seats.seats.find((s) => !s.character_id)!.link)).status).toBe(302);
+    const listed = ((await (await ana.get('/api/games')).json()) as L).games;
+    expect(listed.map((g) => [g.slug, g.host]).sort()).toEqual([[mesa.game.slug, false], [sola.game.slug, true]].sort());
+    expect(((await (await ana.get(`/api/session${m}`)).json()) as { role: string }).role).toBe('player');
+    expect((await ana.get(`/api/seats${m}`)).status).toBe(403);
+    expect((await ana.del(`/api/games${m}`)).status).toBe(403);
+    // Su propia partida sí la puede borrar.
+    expect((await ana.del(`/api/games?game=${sola.game.slug}`)).status).toBe(200);
   });
 
   it('en modo abierto (local) todo sigue como antes', async () => {

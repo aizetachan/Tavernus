@@ -68,7 +68,7 @@ import { handleJournalRequest, noticeOf, touchesJournal, type WebNotice } from '
 import { handlePaintRequest } from './paint.js';
 import { handleAvatarRequest } from './avatar.js';
 import { journeyOf } from '../../engine/travel.js';
-import { accessFromEnv, checkSeatCookie, cookies, isAdmin, adminTokenMatches, newSeat, randomToken, SeatStore, seatCookieName, seatCookieValue, seatIdOf, setAdminCookie, setCookie, type AccessOptions, type Seat } from './access.js';
+import { accessFromEnv, checkSeatCookie, cookies, isAdmin, isHostSeat, adminTokenMatches, newSeat, randomToken, SeatStore, seatCookieName, seatCookieValue, seatIdOf, setAdminCookie, setCookie, type AccessOptions, type Seat } from './access.js';
 import { invitePage, joinPage, seatsPage } from './page-access.js';
 import { pcLabel, pcName } from '../../engine/party.js';
 import { talkingWith } from '../../engine/scene.js';
@@ -86,6 +86,8 @@ const ENGINE_OFFLINE_MS = 30 * 60 * 1000;
 /** Plazas libres que se crean con una partida nueva si no se dice otra cosa. */
 const DEFAULT_FREE_SEATS = 1;
 const MAX_SEATS = 8;
+/** Modo public: partidas nuevas al día que puede crear quien no es administrador (PUBLIC_GAMES_PER_DAY). */
+const PUBLIC_GAMES_PER_DAY = 20;
 
 /**
  * Un parlamento en modo novela: quién habla (nombre visible para este PJ) y su retrato pequeño si ya existe.
@@ -446,22 +448,26 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       return;
     }
     if (req.method === 'GET' && url.pathname.startsWith('/assets/')) { await serveAsset(res, url.pathname.slice('/assets/'.length)); return; }
+    if (req.method === 'GET' && url.pathname.startsWith('/music/')) { await serveMusic(req, res, url.pathname.slice('/music/'.length)); return; }
 
     const admin = isAdmin(access, req);
+    // Modo public: el menú es de todos y cada uno manda en las partidas que creó.
+    const pub = access.mode === 'public';
     const manifest = slug ? await games.get(slug) : null;
     const seat = manifest ? await seatOf(req, manifest.slug, games.paths(manifest).dir) : null;
     const allowed = admin || seat !== null;
+    const host = admin || (pub && isHostSeat(seat));
 
     if (req.method === 'GET' && url.pathname === '/') {
       if (!slug) {
-        if (admin) { html(res, 200, MENU); return; }
+        if (admin || pub) { html(res, 200, MENU); return; }
         // Un invitado que vuelve a la raíz: a su partida, si tiene una.
         const mine = await anySeatGame(req);
         if (mine) { res.writeHead(302, { location: `/?game=${encodeURIComponent(mine)}` }); res.end(); return; }
         html(res, 200, invitePage());
         return;
       }
-      if (!manifest) { if (admin) { res.writeHead(302, { location: '/' }); res.end(); } else html(res, 404, invitePage()); return; }
+      if (!manifest) { if (admin || pub) { res.writeHead(302, { location: '/' }); res.end(); } else html(res, 404, invitePage()); return; }
       if (!allowed) { html(res, 403, invitePage()); return; }
       if (seat && !seat.character_id) {
         const engine = (await runtime(manifest.slug)).engine;
@@ -475,18 +481,23 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       return;
     }
     if (req.method === 'GET' && url.pathname === '/invitaciones') {
-      if (!admin) { html(res, 403, invitePage()); return; }
+      if (!host) { html(res, 403, invitePage()); return; }
       if (!manifest) { res.writeHead(302, { location: '/' }); res.end(); return; }
       html(res, 200, seatsPage(manifest.slug));
       return;
     }
     if (url.pathname === '/api/games' || url.pathname.startsWith('/api/games/')) {
-      if (!admin) { json(res, 403, { ok: false, text: 'Solo quien organiza la partida puede ver y crear partidas.' }); return; }
-      await handleGames(req, res, url, slug);
+      if (!admin && !pub) { json(res, 403, { ok: false, text: 'Solo quien organiza la partida puede ver y crear partidas.' }); return; }
+      // Borrar o convertir una partida: solo su anfitrión.
+      if (!(url.pathname === '/api/games' && (req.method === 'GET' || req.method === 'POST')) && !host) {
+        json(res, 403, { ok: false, text: 'Solo quien creó la partida puede hacer eso.' });
+        return;
+      }
+      await handleGames(req, res, url, slug, admin);
       return;
     }
     if (url.pathname === '/api/seats' || url.pathname === '/api/seats/regenerate') {
-      if (!admin) { json(res, 403, { ok: false, text: 'Solo quien organiza la partida puede repartir invitaciones.' }); return; }
+      if (!host) { json(res, 403, { ok: false, text: 'Solo quien organiza la partida puede repartir invitaciones.' }); return; }
       if (!manifest) { json(res, 404, { ok: false, text: 'No existe esa partida.' }); return; }
       await handleSeats(req, res, url, manifest.slug, games.paths(manifest).dir);
       return;
@@ -513,7 +524,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const book = games.budgetOf(engine);
       const me = bound ?? null;
       json(res, 200, {
-        ok: true, access: access.mode, role: admin ? 'admin' : 'player', character_id: me, can_switch: !bound,
+        ok: true, access: access.mode, role: host ? 'admin' : 'player', character_id: me, can_switch: !bound,
         game: { slug: manifest.slug, name: manifest.name, mode: manifest.mode },
         seat: seat ? { id: seat.id, label: seat.label } : null,
         budget: me && book ? { ...book.of(me), limit_actions: book.limits.actions, limit_tokens: book.limits.tokens } : null,
@@ -724,15 +735,56 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     res.end(bytes);
   }
 
-  async function handleGames(req: IncomingMessage, res: ServerResponse, url: URL, slug: string | null): Promise<void> {
+  /**
+   * Música fija de la interfaz (public/music, p. ej. la del menú). Con Range: Safari no reproduce audio sin él,
+   * y así el navegador no baja la pista entera para empezar a sonar.
+   */
+  async function serveMusic(req: IncomingMessage, res: ServerResponse, name: string): Promise<void> {
+    if (!/^[a-z0-9-]+\.mp3$/.test(name)) { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
+    let bytes: Buffer;
+    try { bytes = await readFile(new URL('../../../public/music/' + name, import.meta.url)); } catch { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
+    const head = { 'content-type': 'audio/mpeg', 'accept-ranges': 'bytes', 'cache-control': 'public, max-age=604800' };
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''));
+    if (range && (range[1] || range[2])) {
+      const size = bytes.length;
+      let start = range[1] ? Number(range[1]) : size - Number(range[2]);
+      let end = range[1] && range[2] ? Number(range[2]) : size - 1;
+      start = Math.max(0, start); end = Math.min(size - 1, end);
+      if (start > end) { res.writeHead(416, { 'content-range': `bytes */${size}` }); res.end(); return; }
+      res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': end - start + 1 });
+      res.end(bytes.subarray(start, end + 1));
+      return;
+    }
+    res.writeHead(200, { ...head, 'content-length': bytes.length });
+    res.end(bytes);
+  }
+
+  async function handleGames(req: IncomingMessage, res: ServerResponse, url: URL, slug: string | null, admin: boolean): Promise<void> {
     if (url.pathname === '/api/games' && req.method === 'GET') {
-      json(res, 200, { games: await games.list(), options: GameManager.characterOptions(), api_key: Master.configured('live') });
+      // El administrador las ve todas; en modo public, cada navegador las suyas (donde tiene asiento).
+      const all = await games.list();
+      const list = [];
+      for (const g of all) {
+        if (admin) { list.push({ ...g, host: true }); continue; }
+        const m = await games.get(g.slug);
+        const s = m ? await seatOf(req, m.slug, games.paths(m).dir) : null;
+        if (s) list.push({ ...g, host: isHostSeat(s) });
+      }
+      json(res, 200, { games: list, options: GameManager.characterOptions(), api_key: Master.configured('live') });
       return;
     }
     if (url.pathname === '/api/games' && req.method === 'POST') {
       const body = await readJson(req);
       const mode = body['mode'];
       if (typeof mode !== 'string' || !(NEW_GAME_MODES as readonly string[]).includes(mode)) { json(res, 400, { ok: false, text: 'Elige un modo: real, offline o grabar demo.' }); return; }
+      if (!admin) {
+        if (mode === 'record') { json(res, 403, { ok: false, text: 'Grabar demos es solo para quien administra el servidor.' }); return; }
+        const perDay = Number(process.env['PUBLIC_GAMES_PER_DAY']) || PUBLIC_GAMES_PER_DAY;
+        const since = Date.now() - 24 * 3600 * 1000;
+        const today = (await games.list()).filter((g) => Date.parse(g.created_at) >= since).length;
+        if (today >= perDay) { json(res, 429, { ok: false, text: 'Hoy ya se han creado muchas partidas en este servidor. Prueba mañana o únete a una con un enlace.' }); return; }
+        if (typeof body['name'] !== 'string' || typeof body['character'] !== 'string' || !(body['character'] as string).trim()) { json(res, 400, { ok: false, text: 'Ponle nombre a tu personaje.' }); return; }
+      }
       const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '');
       const seedRaw = body['dice_seed'];
       const dice_seed = seedRaw === null || seedRaw === undefined || seedRaw === '' ? null : Number(seedRaw);
@@ -752,7 +804,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const free = Math.max(0, Math.min(MAX_SEATS - 1, Number.isInteger(body['seats']) ? body['seats'] as number : DEFAULT_FREE_SEATS));
       const dir = games.paths(created.game).dir;
       const host = await seats.update(dir, (list) => {
-        const mine = created.character_id ? newSeat('Anfitrión', created.character_id, new Date()) : null;
+        const mine = created.character_id ? newSeat('Anfitrión', created.character_id, new Date(), true) : null;
         if (mine) list.push(mine);
         for (let i = 0; i < free; i++) list.push(newSeat(`Plaza ${list.length + 1}`, null, new Date()));
         return mine;
@@ -804,7 +856,9 @@ export async function startWeb(games: GameManager, port: number, env: NodeJS.Pro
   await new Promise<void>((resolve) => web.server.listen(port, host, resolve));
   const base = (env['PUBLIC_URL']?.trim() || `http://localhost:${port}`).replace(/\/+$/, '');
   console.log(`[web] abre ${base}`);
-  if (access.mode === 'invite') {
+  if (access.mode === 'public') {
+    console.log(`[web] acceso público: cada navegador crea y ve sus partidas; los enlaces de invitación unen a otras. Administración (no la compartas): ${base}/admin?token=${access.adminToken}`);
+  } else if (access.mode === 'invite') {
     console.log(`[web] acceso por invitación. Enlace de administración (no lo compartas): ${base}/admin?token=${access.adminToken}`);
   } else {
     console.log('[web] acceso abierto: cualquiera que llegue a esta URL juega con cualquier personaje (WEB_ACCESS=invite o ADMIN_TOKEN para invitaciones)');

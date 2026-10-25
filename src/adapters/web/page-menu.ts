@@ -221,11 +221,14 @@ export const MENU = String.raw`<!doctype html>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></symbol>
+  <symbol id="i-music-off" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path d="M3 3l18 18"/></symbol>
 </svg>
 <aside>
   <div class="head">
     <span class="mark" aria-hidden="true">T</span>
     <h1>Tavernus</h1>
+    <button id="music" class="btn ghost sm" type="button" aria-pressed="true" title="Música del menú" aria-label="Música del menú"><svg class="i"><use href="#i-music"/></svg></button>
     <button id="open-new" class="btn primary sm" type="button"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button>
   </div>
   <div id="status" hidden></div>
@@ -418,6 +421,8 @@ export const MENU = String.raw`<!doctype html>
   }
   /** Acciones de cada lista además de «Abrir»: en el detalle (escritorio) o en el menú «⋮» de la fila (móvil). */
   function extras(g, cls) {
+    // Partidas a las que te uniste con un enlace: solo se abren (las gestiona quien las creó).
+    if (g.host === false) return [];
     if (tab === 'demos') return [
       button('Jugar desde el principio', cls, function (b) {
         b.disabled = true;
@@ -651,6 +656,55 @@ export const MENU = String.raw`<!doctype html>
       })
       .catch(function () { $('new-error').textContent = 'No hay conexión con el servidor.'; done(); });
   });
+
+  // Música del menú (public/music/menu-theme.mp3): en bucle y baja. El navegador no deja sonar nada antes
+  // de que la persona toque la página, así que, si no puede empezar sola, empieza al primer clic o tecla.
+  // El botón la silencia y se recuerda en este navegador.
+  (function () {
+    var KEY = 'tavernus.menuMusic';
+    var btn = $('music');
+    var on = true;
+    try { on = localStorage.getItem(KEY) !== 'off'; } catch (e) {}
+    var audio = new Audio('/music/menu-theme.mp3');
+    audio.loop = true; audio.preload = 'auto'; audio.volume = 0;
+    var fade = null;
+    function ramp(to, ms, then) {
+      clearInterval(fade);
+      var from = audio.volume, t0 = Date.now();
+      fade = setInterval(function () {
+        var k = Math.min(1, (Date.now() - t0) / ms);
+        audio.volume = Math.max(0, Math.min(1, from + (to - from) * k));
+        if (k >= 1) { clearInterval(fade); if (then) then(); }
+      }, 50);
+    }
+    function play() {
+      if (!on || !audio.paused) return;
+      var p = audio.play();
+      if (p && p.then) p.then(function () { ramp(0.35, 2500); }, function () {});
+      else ramp(0.35, 2500);
+    }
+    function paint() {
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.querySelector('use').setAttribute('href', on ? '#i-music' : '#i-music-off');
+      btn.title = on ? 'Silenciar la música' : 'Poner la música';
+    }
+    btn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      on = !on;
+      try { localStorage.setItem(KEY, on ? 'on' : 'off'); } catch (e) {}
+      paint();
+      if (on) play(); else ramp(0, 400, function () { audio.pause(); });
+    });
+    function firstTouch() {
+      document.removeEventListener('pointerdown', firstTouch, true);
+      document.removeEventListener('keydown', firstTouch, true);
+      play();
+    }
+    document.addEventListener('pointerdown', firstTouch, true);
+    document.addEventListener('keydown', firstTouch, true);
+    paint();
+    play();
+  })();
 
   load();
 })();
