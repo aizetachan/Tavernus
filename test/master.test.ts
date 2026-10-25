@@ -253,43 +253,45 @@ describe('memoria y cola de conversación de NPC', () => {
     expect(brenna.talking_to).toBeNull(); // la conversación caducó
   });
 
-  it('un NPC ocupado con otro aparece como OCUPADO en el contexto del segundo', async () => {
+  it('un NPC ocupado con otro no llama al máster para el segundo: gesto y «Esperar turno» / «Unirme» (scene.ts)', async () => {
     const { engine } = await bootEngine();
     engine.world.character('ch_mira').location = { type: 'spot', id: 'sp_tab_barra' };
     const { client, requests } = fakeClient([
-      msg([logEvent('Brenna te atiende.', 'Kael habla con Brenna.', { npc_id: 'npc_brenna' })]),
-      msg([logEvent('Brenna te hace un gesto: espera.', 'Mira intenta hablar con Brenna.', {})]),
+      msg([logEvent('Brenna te atiende. «¿Qué te pongo?»', 'Kael habla con Brenna.', { npc_id: 'npc_brenna', lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: '¿Qué te pongo?' }] })]),
     ]);
     engine.attachMaster(new Master(engine, { client }));
     await engine.act('ch_kael', 'hablo con Brenna');
-    await engine.act('ch_mira', 'hablo con Brenna');
-    expect(requests[1]!.messages[0]!.content as string).toContain('OCUPADO hablando con Kael');
+    const r = await engine.act('ch_mira', 'hablo con Brenna');
+    expect(requests).toHaveLength(1);
+    expect(r.text).toBe('Brenna está con Kael; te hace un gesto para que esperes.');
   });
 });
 
-describe('nombres: solo se conocen cuando se aprenden', () => {
-  it('el testigo ve una descripción hasta que el actor se presenta; los NPCs igual', async () => {
+describe('nombres: los PJ se conocen siempre; los NPC, cuando se aprenden', () => {
+  it('entre PJ, el nombre desde que coinciden en la partida; presentarse queda para los NPC', async () => {
     const { engine } = await bootEngine();
     const seen = collect(engine);
-    const r = await engine.createCharacter('u9', 'Tamsin'); // no conoce a nadie
+    const r = await engine.createCharacter('u9', 'Tamsin'); // conoce a los PJ de la partida desde que entra
     if (!r.ok) throw new Error(r.reason);
     const tam = r.character; // en el claro (menos poblado)
     engine.world.character('ch_kael').location = { type: 'spot', id: 'sp_cl_sendero' };
     engine.world.character('ch_mira').location = { type: 'spot', id: 'sp_cl_sendero' };
     const { client, requests } = fakeClient([
       msg([logEvent('Levantas la mano.', 'Tamsin levanta la mano hacia los dos.', { introduces_self: false })]),
-      msg([logEvent('Te presentas.', 'Tamsin dice: «Me llamo Tamsin». Kael asiente.', { introduces_self: true, names_learned: 'ch_kael' })]),
+      msg([logEvent('Te presentas.', 'Tamsin dice: «Me llamo Tamsin». El viento mueve las hojas del sendero.', { introduces_self: true, names_learned: 'ch_kael' })]),
     ]);
     engine.attachMaster(new Master(engine, { client }));
     await engine.act(tam.id, 'saludo con la mano');
-    expect(seen('ch_kael').at(-1)).toBe('un humano con pinta de guerrero levanta la mano hacia los dos.');
-    // En el contexto, Tamsin no conoce a Kael: aparece por descripción con aviso.
-    expect(requests[0]!.messages[0]!.content as string).toContain('(el actor NO sabe su nombre, que es Kael: no lo uses)');
+    expect(seen('ch_kael').at(-1)).toBe('Tamsin levanta la mano hacia los dos.');
+    expect(tam.knows).toEqual(expect.arrayContaining(['ch_kael', 'ch_mira']));
+    // En el contexto, Kael aparece por su nombre, sin «no sabe su nombre».
+    expect(requests[0]!.messages[0]!.content as string).toContain('Kael [ch_kael], humano guerrero');
+    expect(requests[0]!.messages[0]!.content as string).not.toContain('NO sabe su nombre, que es Kael');
     await engine.act(tam.id, 'me presento: soy Tamsin');
     expect(engine.world.character('ch_kael').knows).toContain(tam.id);
     expect(engine.world.character('ch_mira').knows).toContain(tam.id);
     expect(tam.knows).toContain('ch_kael');
-    expect(seen('ch_kael').at(-1)).toBe('Tamsin dice: «Me llamo Tamsin». Kael asiente.');
+    expect(seen('ch_kael').at(-1)).toBe('Tamsin dice: «Me llamo Tamsin». El viento mueve las hojas del sendero.');
   });
 });
 

@@ -196,10 +196,13 @@ export function novelBlocks(narration: string, lines: readonly DialogueLine[]): 
   return all;
 }
 
-/** Lo que lee el narrador de voz: los bloques tal como se pintan, con cada parlamento entre «». Lo que dice el propio jugador no se lee: ya lo ha escrito él. */
-export function blocksSpeech(blocks: readonly NovelBlock[], lines: readonly DialogueLine[]): string {
+/**
+ * Lo que lee el narrador de voz: los bloques tal como se pintan, con cada parlamento entre «». Lo que dice el propio
+ * jugador no se lee: ya lo ha escrito él. Con `others`, las líneas del actor son de otro jugador y sí se leen.
+ */
+export function blocksSpeech(blocks: readonly NovelBlock[], lines: readonly DialogueLine[], others = false): string {
   return blocks
-    .filter((b) => b.kind === 'prose' || lines[b.line]?.speaker !== 'actor')
+    .filter((b) => b.kind === 'prose' || others || lines[b.line]?.speaker !== 'actor')
     .map((b) => (b.kind === 'prose' ? b.text : `«${b.text ?? lines[b.line]!.text}»`)).join(' ');
 }
 
@@ -236,6 +239,7 @@ export const NOVEL_STYLE = String.raw`
   .nv-av img.on { opacity: 1; }
   /* Avisos fuera de la ficción (tiradas, progreso, consultas): centrados, discretos. */
   .msg.system { align-self: center; max-width: min(560px, 100%); margin: 8px 0 2px; }
+  .overheard { align-self: flex-start; margin: 10px 0 -4px 42px; font-size: 12px; font-style: italic; color: var(--muted); }
   .msg.system .body { padding: 8px 12px; border-radius: 14px; font-size: 12.5px; }
   /* Imágenes del narrador (escena, retrato, objeto…): bajo su avatar, como una foto en el chat. */
   .msg.scene, .msg.moment { margin: 4px 0 0 42px; animation: nv-in .5s ease-out; }
@@ -387,7 +391,9 @@ export const NOVEL_JS = String.raw`
     var before = log.lastElementChild;
     var lines = m.lines || [], main = null;
     var say = function (l, lead) {
-      if (l.speaker === 'actor') return chatRow('mine', meWho(), escapeHtml(l.text));
+      // A quién se lo dice (modo Decir dirigido): una línea pequeña encima de la frase.
+      if (l.to && !lead) lead = 'a ' + l.to;
+      if (l.speaker === 'actor') return chatRow('mine', meWho(), (l.to ? '<div class="lead">a ' + escapeHtml(l.to) + '</div>' : '') + escapeHtml(l.text));
       if (l.avatar) portraits[l.id] = l.avatar;
       return chatRow('npc', { id: l.id, name: l.name, avatar: l.avatar }, (lead ? '<div class="lead">' + escapeHtml(lead) + '</div>' : '') + escapeHtml(l.text));
     };
@@ -439,6 +445,23 @@ export const NOVEL_JS = String.raw`
       d.textContent = '⏳ Tienes ' + m.decisive_s + ' segundos para reaccionar. Si no, la amenaza se cumple.';
       (main.querySelector('.col') || main).appendChild(d);
     }
+    if (m.overheard) {
+      // Conversación ajena: «Escuchas» encima y el botón para unirse en cualquier momento.
+      var tag = document.createElement('div');
+      tag.className = 'overheard';
+      tag.textContent = m.overheard.well ? 'Escuchas la conversación con ' + m.overheard.npc : 'Oyes de lejos la conversación con ' + m.overheard.npc;
+      var first = before ? before.nextElementSibling : log.firstElementChild;
+      if (first) log.insertBefore(tag, first);
+      var jr = document.createElement('div');
+      jr.className = 'actions party';
+      var jb = document.createElement('button');
+      jb.type = 'button'; jb.textContent = m.overheard.join;
+      jb.onclick = function () { jb.classList.add('chosen'); jb.disabled = true; act(m.overheard.join); };
+      jr.appendChild(jb);
+      host.parentNode.insertBefore(jr, host.nextSibling);
+      if (!live) jb.disabled = true;
+    }
+    if (m.reply_to || m.offer) { partyButtons(m, host, live); }
     if (!m.roll && !(m.suggested && m.suggested.length)) { scroll(); return; }
     if (live) spendButtons();
     var row = document.createElement('div');
@@ -461,6 +484,30 @@ export const NOVEL_JS = String.raw`
     host.parentNode.insertBefore(row, host.nextSibling);
     if (!live) row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
     scroll();
+  }
+
+  /**
+   * Entre jugadores (party.ts): «Responder a…» abre el modo Decir hacia quien te habla; «Ignorarle» solo quita
+   * los botones (no hace nada en el juego). Una oferta: «Aceptar» o «Rechazar» mientras siga en pie.
+   */
+  function partyButtons(m, host, live) {
+    var row = document.createElement('div');
+    row.className = 'actions party';
+    var btn = function (label, fn, cls) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = label; if (cls) b.className = cls;
+      b.onclick = function () { b.classList.add('chosen'); row.querySelectorAll('button').forEach(function (x) { x.disabled = true; }); fn(); };
+      row.appendChild(b);
+    };
+    if (m.offer) {
+      btn('Aceptar', function () { answerOffer(m.offer.id, true); }, 'accept');
+      btn('Rechazar', function () { answerOffer(m.offer.id, false); });
+    } else {
+      btn('Responder a ' + m.reply_to.name, function () { setSayMode(true, m.reply_to); });
+      btn('Ignorarle', function () {});
+    }
+    host.parentNode.insertBefore(row, host.nextSibling);
+    if (!live || (m.offer && !m.offer.open)) row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
   }
 
   function setCast(c) {

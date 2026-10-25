@@ -1,0 +1,42 @@
+# Proxy inverso de Tavernus con HTTPS automático (Let's Encrypt).
+#
+# Las variables salen de /etc/tavernus/caddy.env (setup-vps.sh las escribe y un drop-in de
+# systemd se las pasa a Caddy):
+#   TAVERNUS_DOMAIN=tavernus.ejemplo.com   con dominio: HTTPS automático (80 redirige a 443)
+#   TAVERNUS_DOMAIN=203.0.113.7.sslip.io   sin dominio, con HTTPS (nombre gratis que apunta a la IP)
+#   TAVERNUS_DOMAIN=:80                    sin dominio y sin HTTPS: http://<IP> (el micrófono no va)
+#   WEB_PORT=3000                          el de /etc/tavernus/env
+#
+# Tras editarlo: sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+# (deploy/push.sh lo copia del repo y recarga Caddy en cada despliegue).
+
+{$TAVERNUS_DOMAIN::80} {
+	# Imágenes y JSON del juego: 10 MB de sobra (la web corta a 64 KB por petición hoy).
+	request_body {
+		max_size 10MB
+	}
+
+	# Compresión, salvo en el stream SSE: comprimirlo lo retiene en búfer.
+	@notstream not path /api/stream
+	encode @notstream zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# El dictado usa el micrófono de la propia página; nada más.
+		Permissions-Policy "microphone=(self), camera=(), geolocation=(), interest-cohort=()"
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:{$WEB_PORT:3000} {
+		# SSE (/api/stream): entregar cada evento en cuanto sale, sin búfer.
+		flush_interval -1
+		# Si la web se está reiniciando, esperar un poco en vez de dar 502 al momento.
+		lb_try_duration 10s
+	}
+
+	# Sin registro de accesos a propósito: las URLs llevan tokens de invitación y de admin.
+	# Los errores de Caddy van a journald: sudo journalctl -u caddy -f
+}

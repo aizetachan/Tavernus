@@ -1,0 +1,10 @@
+[Unit]
+Description=Tavernus: comprobación de salud de la web (reinicia y avisa si cae)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/tavernus/healthcheck.sh
+# Cada minuto: que no ensucie el journal con «Starting/Finished» si va todo bien.
+LogLevelMax=notice
+SyslogIdentifier=tavernus-health

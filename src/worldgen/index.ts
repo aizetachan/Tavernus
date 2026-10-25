@@ -213,21 +213,47 @@ const norm = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀
  * escribe la historia, que el máster ya lee en el contexto del actor. No hace
  * nada en mundos sin situaciones (la demo). Devuelve la situación o null.
  */
-export function claimSituation(world: World, characterId: Id, nowGameS: number, hook?: string): InitialSituation | null {
+export function claimSituation(world: World, characterId: Id, nowGameS: number, hook?: string, opts: { companionOf?: Id | null } = {}): InitialSituation | null {
   const camp = world.campaign;
   if (!camp.situations) return null;
   const c = world.characters.get(characterId);
   if (!c) return null;
   const pool = camp.situations;
-  // Por nombre; si no, la reservada a su clase (campañas escritas); si no, una de reserva sin clase.
-  let i = pool.findIndex((s) => s.for_name && norm(s.for_name) === norm(c.name));
-  if (i < 0) i = pool.findIndex((s) => !s.for_name && s.for_classes?.includes(c.class_id));
-  if (i < 0) i = pool.findIndex((s) => !s.for_name && !s.for_classes?.length);
-  if (i < 0) i = pool.findIndex((s) => !s.for_name);
-  const entry = i >= 0 ? pool[i]! : null;
-  if (entry && !entry.keep) pool.splice(i, 1);
-  const picked = entry ? structuredClone(entry.situation) : templateSituation(world, c);
-  const situation: InitialSituation = { ...picked, deadline_game_s: nowGameS + picked.clock_days * DAY_S };
+  // Multijugador: una situación personal no se repite a dos PJ de la partida si hay otra libre.
+  const taken = new Set([...world.characters.values()].filter((o) => o.id !== c.id && o.situation).map((o) => situationKey(o.situation!)));
+  const free = (e: (typeof pool)[number]) => !taken.has(situationKey(e.situation));
+  const leader = opts.companionOf ? world.characters.get(opts.companionOf) : undefined;
+  let picked: InitialSituation;
+  let deadline: number;
+  let entry: (typeof pool)[number] | null = null;
+  if (leader?.situation && leader.id !== c.id) {
+    // «Empezar junto a…»: la complementaria (llegasteis juntos), con su lugar y su reloj; si la campaña no la trae, plantilla.
+    const lead = leader.situation;
+    const i = pool.findIndex((s) => s.companion_of && s.companion_of === lead.id && free(s));
+    entry = i >= 0 ? pool[i]! : null;
+    if (entry && !entry.keep) pool.splice(i, 1);
+    picked = withCompanion(entry ? structuredClone(entry.situation) : companionSituation(world, lead), leader);
+    picked.start_spot_id = leader.location.type === 'spot' ? leader.location.id : lead.start_spot_id;
+    picked.clock_days = lead.clock_days;
+    deadline = lead.deadline_game_s ?? nowGameS + lead.clock_days * DAY_S;
+  } else {
+    // Por nombre; si no, la reservada a su clase (campañas escritas); si no, una de reserva sin clase. Primero las libres.
+    const solo = (s: (typeof pool)[number]) => !s.companion_of;
+    const rules: ((s: (typeof pool)[number]) => boolean)[] = [
+      (s) => Boolean(s.for_name) && norm(s.for_name) === norm(c.name),
+      (s) => !s.for_name && Boolean(s.for_classes?.includes(c.class_id)),
+      (s) => !s.for_name && !s.for_classes?.length,
+      (s) => !s.for_name,
+    ];
+    let i = -1;
+    for (const r of rules) { i = pool.findIndex((s) => solo(s) && r(s) && free(s)); if (i >= 0) break; }
+    if (i < 0) for (const r of rules) { i = pool.findIndex((s) => solo(s) && r(s)); if (i >= 0) break; }
+    entry = i >= 0 ? pool[i]! : null;
+    if (entry && !entry.keep) pool.splice(i, 1);
+    picked = entry ? structuredClone(entry.situation) : templateSituation(world, c);
+    deadline = nowGameS + picked.clock_days * DAY_S;
+  }
+  const situation: InitialSituation = { ...picked, deadline_game_s: deadline };
   world.touch('campaign', camp.id);
 
   c.situation = situation;
@@ -254,6 +280,42 @@ export function claimSituation(world: World, characterId: Id, nowGameS: number, 
     if (now && now !== before) { l.discovery[c.id] = now; world.touch('locations', l.id); }
   }
   return situation;
+}
+
+/** Lo que identifica una situación para no repetirla: su id o, si no lo tiene, su porqué. */
+function situationKey(s: InitialSituation): string {
+  return s.id ?? s.why_here;
+}
+
+/** Pone el nombre del compañero donde la situación dice {companion} y lo apunta. */
+function withCompanion(s: InitialSituation, leader: Character): InitialSituation {
+  const put = (t: string) => t.replaceAll('{companion}', leader.name);
+  return {
+    ...s, why_here: put(s.why_here), wants: put(s.wants), threat: put(s.threat), clock_runs_out: put(s.clock_runs_out),
+    paths: s.paths.map(put), opening: put(s.opening), companion_of_character_id: leader.id,
+  };
+}
+
+/**
+ * Situación de compañero de plantilla, para campañas y mundos que no la traen:
+ * llegó con el otro PJ, comparte su lugar, su antagonista y su reloj, y lo suyo
+ * es cubrirle la espalda. Sin deuda ni objetos (eso es del otro).
+ */
+function companionSituation(world: World, lead: InitialSituation): InitialSituation {
+  const ant = world.npcs.get(lead.antagonist_npc_id);
+  const who = ant ? `${ant.name} (${ant.role})` : 'quien le persigue';
+  return {
+    id: `${lead.id ?? 'situacion'}_companero`,
+    why_here: 'Has llegado con {companion}: le acompañas en lo suyo, y a estas alturas lo suyo ya es un poco tuyo.',
+    wants: 'Que {companion} salga de esta con lo que ha venido a buscar, y llevarte tu parte.',
+    threat: `${who} os ha visto llegar juntos: lo que amenaza a {companion} te amenaza a ti.`,
+    clock_days: lead.clock_days,
+    clock_runs_out: 'El plazo de {companion} vence, y tú estás en medio.',
+    antagonist_npc_id: lead.antagonist_npc_id, start_spot_id: lead.start_spot_id, ...(lead.start_hour !== undefined ? { start_hour: lead.start_hour } : {}),
+    paths: ['Cubrirle la espalda a {companion} y fijarte en quién os vigila.', `Averiguar por tu cuenta qué quiere ${ant?.name ?? 'quien le persigue'}.`, 'Buscar monedas o aliados por si las cosas se tuercen.'],
+    opening: 'Llegáis juntos, {companion} delante y tú un paso detrás. Lo que le espera aquí también te mira a ti.',
+    knows: lead.knows ?? [],
+  };
 }
 
 /** La situación en prosa, para la historia del PJ y el contexto del máster. */

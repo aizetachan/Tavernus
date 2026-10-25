@@ -1,0 +1,53 @@
+[Unit]
+Description=Tavernus: web (máster IA por chat)
+Documentation=file:///opt/tavernus/current/docs/DESPLIEGUE.md
+After=network-online.target
+Wants=network-online.target
+# Hasta el primer deploy/push.sh no hay código que arrancar.
+ConditionPathExists=/opt/tavernus/current/dist/index.js
+# Si se relanza 5 veces en 2 minutos, systemd se rinde y healthcheck.sh avisa.
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=tavernus
+Group=tavernus
+WorkingDirectory=/opt/tavernus/current
+EnvironmentFile=/etc/tavernus/env
+ExecStart=/usr/bin/node dist/index.js --web
+Restart=always
+RestartSec=5
+# SIGTERM: la web cierra los streams y guarda las partidas (startWeb en server.ts).
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+# Logs a journald: sudo journalctl -u tavernus-web -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tavernus-web
+
+# Memoria: con 1-2 GB de RAM, que una fuga no tumbe la máquina. NODE_OPTIONS en
+# /etc/tavernus/env pone el montón de V8 por debajo de esto.
+MemoryHigh=800M
+MemoryMax=1G
+TasksMax=256
+LimitNOFILE=8192
+
+# Endurecimiento: el código es de solo lectura; solo se escribe en /var/lib/tavernus.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/tavernus
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

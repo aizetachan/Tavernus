@@ -1,8 +1,16 @@
 /**
- * Brezal: el mapa. Tres zonas (la aldea, el bosque de Fresnos y la montaña de
- * Vharn), once localizaciones y sus puntos con coordenadas en metros, tags que
- * mapgen sabe dibujar y alias para que el jugador los nombre como quiera.
- * Las ids de la demo de siempre (taberna, plaza, claro) se conservan.
+ * Brezal sellada: el mapa. Una sola zona, la aldea, encerrada por el Cerco de
+ * Ceniza (un anillo de niebla a unos 600 m de la plaza): diez lugares, el
+ * sótano del Jabalí y sus puntos con coordenadas en metros, tags que mapgen
+ * sabe dibujar y alias para que el jugador los nombre como quiera.
+ * Lo que antes estaba fuera del pueblo se ha reubicado dentro del Cerco (el
+ * Soto, antes Claro del Roble; el Granero Quemado, antes Ruinas de Vharn) con
+ * sus ids de siempre; la Cuesta Gris y la Cripta se han cortado.
+ *
+ * Al otro lado de la niebla, el camino de Valcruz: un lugar sellado que solo
+ * existe para que el Cerco sea una salida bloqueada (barrier.ts: quien lo
+ * intenta, pierde una hora y vuelve por donde entró). La expansión lo abrirá
+ * con un exit_state.
  */
 
 import type { Region, Zone } from '../../../engine/model.js';
@@ -18,12 +26,22 @@ export const REGIONS: Region[] = [{ id: 'rg_valle', name: 'Valle de Vharn' }];
 
 export const ZONES: Zone[] = [
   { id: 'zn_brezal', region_id: 'rg_valle', name: 'Aldea de Brezal', kind: 'town' },
-  { id: 'zn_fresnos', region_id: 'rg_valle', name: 'Bosque de Fresnos', kind: 'forest' },
-  { id: 'zn_vharn', region_id: 'rg_valle', name: 'Montaña de Vharn', kind: 'mountain' },
+  // Sellada: no se juega en la demo.
+  { id: 'zn_fuera', region_id: 'rg_valle', name: 'Más allá del Cerco', kind: 'road' },
 ];
 
+/** El Cerco de Ceniza: salida bloqueada que rebota (barrier.ts). */
+export const CERCO = {
+  blocked_by: 'El Cerco de Ceniza',
+  rebound: {
+    hours: 1,
+    text: 'Te metes en la niebla. Dentro no hay viento ni sonido, solo gris; andas un rato largo con la mano por delante, sin tocar nada. Cuando por fin se aclara, estás otra vez en el Lindero, en el mismo sitio por el que entraste, con ceniza en el pelo y una hora menos de luz.',
+    observable: '{name} se mete en la niebla y, al cabo de un buen rato, sale por donde entró, con ceniza en el pelo.',
+    aliases: ['niebla', 'la niebla', 'cerco', 'el cerco', 'el cerco de ceniza', 'valle', 'el valle', 'fuera del valle', 'el otro lado', 'valcruz'],
+  },
+};
+
 export const LOCATIONS: AuthoredLocation[] = [
-  // --- Aldea de Brezal --------------------------------------------------------
   {
     id: 'loc_taberna', zone_id: 'zn_brezal', name: 'Taberna del Jabalí', indoor: true,
     description_base: 'Una sala baja de vigas negras, con olor a cerveza rancia y humo de leña. Un jabalí disecado mira desde encima de la barra con un ojo de cristal.',
@@ -56,18 +74,19 @@ export const LOCATIONS: AuthoredLocation[] = [
   },
   {
     id: 'loc_plaza', zone_id: 'zn_brezal', name: 'Plaza del Pozo', indoor: false,
-    description_base: 'La plaza empedrada de Brezal, con el pozo en el centro, el tablón de avisos junto a la herrería y la casona del regidor, la única de dos plantas, mirándolo todo.',
+    description_base: 'La plaza empedrada de Brezal, con el pozo en el centro, el tablón de avisos junto a la herrería y la casona del regidor, la única de dos plantas, mirándolo todo. Por encima de los tejados del norte se ve, quieta, una franja de niebla gris.',
     ambience: { light: 'natural', noise: 0.2 },
-    secret: 'El agua del pozo trae ceniza: la echa Tobías cada noche por encargo de Ysolde, y la Brasa calienta el manantial de arriba.',
+    secret: 'El agua del pozo trae ceniza: la echa Tobías cada noche por encargo de Ysolde, y el manantial pasa por debajo del granero de Vharn, donde duerme enterrada la Brasa.',
     spots: [
       S('sp_pl_taberna', 'la puerta de la taberna', ['taberna', 'puerta de la taberna', 'jabali', 'jabalí'], ['door'], 0, 0, 'El umbral de la Taberna del Jabalí, con un jabalí tallado sobre el dintel.'),
       S('sp_pl_pozo', 'el pozo', ['pozo', 'well', 'brocal'], ['well'], 15, 10, 'Un pozo de piedra con un cubo de madera. Hay cera de velas vieja en el brocal y el agua del cubo está turbia.'),
       S('sp_pl_tablon', 'el tablón', ['tablon', 'tablón de avisos', 'avisos', 'board'], ['notice'], 20, 4, 'Un tablón lleno de avisos clavados; el más nuevo, con el sello del regidor, anuncia el «diezmo de la ceniza».'),
-      S('sp_pl_porton', 'el portón norte', ['porton', 'portón', 'puerta norte', 'salida norte', 'north gate'], ['gate'], 30, 20, 'El portón que da al camino del bosque y, más allá, a la montaña.'),
+      S('sp_pl_porton', 'el portón norte', ['porton', 'portón', 'puerta norte', 'salida norte', 'north gate'], ['gate'], 30, 20, 'El portón del norte. El camino se parte enseguida: a un lado la arboleda del Soto, al otro el Lindero, donde empieza la niebla.'),
       S('sp_pl_herreria', 'la puerta de la herrería', ['fragua', 'martilleo'], ['door'], 24, -4, 'La puerta de la herrería de Hugo, con el hollín de veinte años en el dintel y el martilleo detrás.'),
-      S('sp_pl_casona', 'la puerta de la casona', ['casa del regidor', 'aldaba'], ['door'], 6, 22, 'La puerta de roble de la casona del regidor, con aldaba de hierro y un escalón de piedra nueva.'),
+      S('sp_pl_casona', 'la puerta de la casona', ['casa del regidor', 'aldaba'], ['door'], 6, 22, 'La puerta de roble de la casona del regidor, con aldaba de hierro y un escalón de piedra nueva. Encima, la torre del reloj.'),
       S('sp_pl_callejon', 'el callejón de las hierbas', ['callejón', 'callejon'], ['road'], -6, 14, 'Un callejón estrecho que huele a hierbas cocidas y lleva a la casa de la curandera.'),
       S('sp_pl_camino_molino', 'el camino del molino', ['camino del molino', 'huertos'], ['road'], 36, 6, 'Un camino de carro que baja entre huertos hacia el ruido del agua y la rueda del molino.'),
+      S('sp_pl_corrales', 'el camino de los corrales', ['camino de los corrales', 'cercas'], ['road'], -10, -6, 'Un camino de tierra entre cercas de piedra que huele a gallinero y lleva a la granja de la viuda Úrsula.'),
     ],
   },
   {
@@ -86,24 +105,29 @@ export const LOCATIONS: AuthoredLocation[] = [
   },
   {
     id: 'loc_casona', zone_id: 'zn_brezal', name: 'La casona', indoor: true,
-    description_base: 'Una casa de piedra con muebles demasiado buenos para Brezal: tapices, una alfombra de lana roja y un reloj de arena con pie de plata.',
+    description_base: 'Una casa de piedra con muebles demasiado buenos para Brezal: tapices, una alfombra de lana roja y un reloj de arena con pie de plata. Una escalera de caracol sube a la torre del reloj.',
     ambience: { light: 'twilight', noise: 0.1, smell: 'cera y lana' },
-    secret: 'En el arcón de los registros, con llave que lleva Garrán, una copa de plata con el sello de Vharn: lo último que Osric no se atrevió a fundir.',
+    secret: 'En el arcón de los registros, con llave que lleva Garrán, una copa de plata con el sello de Vharn: lo último que Osric no se atrevió a fundir. Tras un tabique de la despensa, una bodega tapiada donde Osric se escondería si le buscaran.',
     spots: [
       S('sp_ca_puerta', 'la puerta', ['puerta', 'entrada', 'zaguán'], ['door'], 0, 0, 'El zaguán, con una aldaba de hierro y un banco para quien espera.'),
       S('sp_ca_banco', 'el banco de espera', ['banco', 'banco de espera', 'espera'], ['stool'], 2, 4, 'Un banco de madera duro donde se sienta quien viene a pagar o a pedir.'),
       S('sp_ca_despacho', 'la mesa del despacho', ['despacho', 'mesa', 'escritorio', 'mesa del despacho'], ['table'], 7, 5, 'Una mesa ancha con libros de cuentas, un tintero y el sello del regidor.'),
       S('sp_ca_arcon', 'el arcón de los registros', ['arcón', 'arcon', 'registros', 'archivo'], ['chest'], 9, 8, 'Un arcón con herrajes nuevos y una cerradura que no se abre sin su llave.',
         { state: { locked: true, key_item_id: 'it_llave_arcon' }, capacity: 1 }),
-      S('sp_ca_alcoba', 'la alcoba de arriba', ['alcoba', 'arriba', 'dormitorio'], ['bed', 'stairs'], 5, 11, 'La alcoba del regidor, con una cama con dosel y una ventana que da a la montaña.',
+      S('sp_ca_alcoba', 'la alcoba de arriba', ['alcoba', 'dormitorio'], ['bed', 'stairs'], 5, 11, 'La alcoba del regidor, con una cama con dosel y una ventana que da al norte, a la niebla.',
         { entry_cost_s: 20, ...apart('sp_ca_puerta', 'sp_ca_banco', 'sp_ca_despacho', 'sp_ca_arcon') }),
+      S('sp_ca_torre', 'la torre del reloj', ['torre', 'torre del reloj', 'reloj', 'mirador', 'campanario'], ['stairs'], 1, 12,
+        'Lo alto de la torre, junto a la maquinaria del reloj parado. Desde aquí se ve Brezal entero, el humo del Granero Quemado y, alrededor de todo, la niebla, quieta como una pared.',
+        { entry_cost_s: 40, capacity: 2, ...apart('sp_ca_puerta', 'sp_ca_banco', 'sp_ca_despacho', 'sp_ca_arcon', 'sp_ca_alcoba') }),
+      S('sp_ca_bodega', 'la bodega tapiada', ['bodega', 'tabique', 'despensa'], ['barrel'], 10, 2, 'Tras un tabique de la despensa que suena a hueco, una bodega estrecha con dos toneles, una manta y una vela.',
+        { hidden: true, dc_to_find: 15, capacity: 2 }),
     ],
   },
   {
     id: 'loc_curandera', zone_id: 'zn_brezal', name: 'Casa de las hierbas', indoor: true,
     description_base: 'Una casa de una sola pieza llena de manojos de hierbas secándose del techo; huele a corteza cocida y a vela de sebo.',
     ambience: { light: 'twilight', noise: 0.05, smell: 'hierbas cocidas' },
-    secret: 'Ilse fue la última sacerdotisa de la llama de Vharn: sabe el rito que ata la Brasa y lo guarda en la memoria, no en papel.',
+    secret: 'Ilse fue la última sacerdotisa de la llama de Vharn: sabe las palabras que templan una ascua de la Brasa y reconoce en la niebla el cerrojo de sus antiguos maestros.',
     spots: [
       S('sp_cu_puerta', 'la puerta', ['puerta', 'entrada'], ['door'], 0, 0, 'Una puerta baja con un ramillete de ruda clavado.'),
       S('sp_cu_hierbas', 'las hierbas colgadas', ['hierbas', 'manojos', 'estantes'], ['shelf'], 3, 5, 'Estantes de tarros y manojos de hierbas; un tarro con ceniza lleva una etiqueta: «pozo, día 3».'),
@@ -113,71 +137,82 @@ export const LOCATIONS: AuthoredLocation[] = [
   },
   {
     id: 'loc_molino', zone_id: 'zn_brezal', name: 'El molino', indoor: true,
-    description_base: 'Un molino de piedra junto al arroyo que baja de la montaña. La rueda chirría y el agua del canal sale tibia y gris.',
+    description_base: 'Un molino de piedra junto al arroyo que baja del Soto. La rueda chirría y el agua del canal sale tibia y gris.',
     ambience: { light: 'twilight', noise: 0.4, smell: 'harina y agua estancada' },
-    secret: 'En el desván, bajo la paja, las cartas de Ysolde a Tobías y una bolsa de ceniza de la cripta.',
+    secret: 'En el desván, bajo la paja, las cartas de Ysolde a Tobías y una bolsa de ceniza del Granero Quemado.',
     spots: [
       S('sp_mo_puerta', 'la puerta', ['puerta', 'entrada'], ['door'], 0, 0, 'La puerta del molino, enharinada hasta la aldaba.'),
       S('sp_mo_muelas', 'las muelas', ['muelas', 'piedras', 'molienda'], ['rock'], 6, 4, 'Las muelas de piedra, que muelen a trompicones por la ceniza que trae el agua.'),
       S('sp_mo_sacos', 'los sacos de harina', ['sacos', 'harina', 'saco'], ['crate'], 3, 8, 'Sacos de harina apilados contra la pared, algunos con huellas de botas embarradas de gris.'),
-      S('sp_mo_rueda', 'la rueda', ['rueda', 'canal', 'arroyo', 'senda del arroyo'], ['water'], 10, 2, 'La rueda y el canal; de aquí sale la senda que remonta el arroyo hacia el bosque.', { terrain_multiplier: 0.8 }),
+      S('sp_mo_rueda', 'la rueda', ['rueda', 'canal', 'arroyo', 'senda del arroyo'], ['water'], 10, 2, 'La rueda y el canal; de aquí sale la senda que remonta el arroyo hacia el Soto.', { terrain_multiplier: 0.8 }),
       S('sp_mo_desvan', 'el desván', ['desván', 'desvan', 'altillo', 'paja'], ['stairs'], 8, 9, 'Un desván bajo con paja vieja, donde duerme Tobías cuando no quiere que le oigan llegar.',
         { hidden: true, dc_to_find: 12, capacity: 1 }),
+      S('sp_mo_tejado', 'el tejado del molino', ['tejado', 'tejado del molino', 'tejas'], ['stairs'], 4, 11, 'Por una escalera de mano se sale al tejado de lajas. Desde arriba se ve el Granero Quemado echando humo y, detrás, la niebla.',
+        { entry_cost_s: 30, capacity: 2 }),
     ],
   },
-  // --- Bosque de Fresnos ------------------------------------------------------
   {
-    id: 'loc_claro', zone_id: 'zn_fresnos', name: 'Claro del Roble', indoor: false,
-    description_base: 'Un claro amplio rodeado de fresnos. Un roble enorme domina el centro; se oye un arroyo que baja tibio de la montaña.',
-    ambience: { light: 'natural', noise: 0.1 },
-    secret: 'De noche Tobías cruza el claro por el arroyo hacia la cuesta; el hacha del sendero es suya.',
+    id: 'loc_corrales', zone_id: 'zn_brezal', name: 'Los Corrales', indoor: false,
+    description_base: 'La granja de la viuda Úrsula, en el borde del pueblo: cercas de piedra seca, un gallinero de tablas, un redil con una docena de ovejas grises de ceniza y un huerto de coles. Desde la cerca de atrás se ve la niebla.',
+    ambience: { light: 'natural', noise: 0.25, smell: 'gallinero y lana mojada' },
+    secret: 'Úrsula guarda bajo el colchón la última carta de su hijo Pol, que salió al mercado de Valcruz la víspera de que bajara la niebla. Cada noche deja un farol encendido en la cerca de atrás, por si vuelve.',
     spots: [
-      S('sp_cl_sendero', 'el sendero', ['sendero', 'camino', 'path'], ['road'], 0, 0, 'Donde el sendero desemboca en el claro; hay huellas de botas y de perro en el barro.'),
+      S('sp_co_cancela', 'la cancela', ['cancela', 'entrada', 'portilla'], ['gate'], 0, 0, 'Una cancela de palos atada con cuerda, con un cuenco de agua para los perros que ya no hay.'),
+      S('sp_co_gallinero', 'el gallinero', ['gallinero', 'gallinas', 'ponedero', 'huevos'], ['crate'], 8, 4, 'Un gallinero de tablas con una docena de gallinas pardas que cacarean en cuanto alguien se acerca.'),
+      S('sp_co_redil', 'el redil', ['redil', 'ovejas', 'corral', 'cerca'], ['dirt'], 18, 10, 'Un redil de piedra seca con ovejas que tosen como la gente; la cerca de atrás tiene un boquete tapado con ramas.'),
+      S('sp_co_huerto', 'el huerto', ['huerto', 'coles', 'hortalizas'], ['bush'], 6, 14, 'Un huerto de coles y nabos con una película gris en las hojas.'),
+      S('sp_co_casa', 'la casa de la granja', ['casa', 'casa de la granja', 'cocina'], ['building'], -4, 10, 'Una casa baja con la puerta abierta, olor a sopa y un farol apagado colgado junto a la ventana.'),
+    ],
+  },
+  {
+    id: 'loc_claro', zone_id: 'zn_brezal', name: 'El Soto', indoor: false,
+    description_base: 'Una arboleda de fresnos y alisos en el borde del pueblo, a un tiro de piedra de las últimas casas. Un roble enorme domina el centro; el arroyo baja tibio entre las raíces.',
+    ambience: { light: 'natural', noise: 0.1 },
+    secret: 'De noche Tobías cruza el Soto por el arroyo hacia el Granero Quemado; el hacha del sendero es suya. Al pie del roble, en una madriguera, la loba de ceniza tiene acorralado al perro de Brenna: tampoco ella puede salir del valle.',
+    spots: [
+      S('sp_cl_sendero', 'el sendero', ['sendero', 'camino', 'path'], ['road'], 0, 0, 'Donde el sendero del portón entra en la arboleda; hay huellas de botas y de perro en el barro.'),
       S('sp_cl_roble', 'el roble viejo', ['roble', 'árbol grande', 'arbol', 'old oak', 'oak'], ['tree', 'cover'], 25, 15, 'Un roble centenario de tronco retorcido, con muescas de hacha recientes.'),
+      S('sp_cs_cueva', 'la madriguera', ['madriguera', 'lobera', 'cueva', 'agujero', 'raíces'], ['rock', 'dirt'], 29, 20, 'Una boca de tierra entre las raíces del roble; huele a fiera y se oye gemir a un perro dentro.'),
       S('sp_cl_piedra', 'la piedra grande', ['piedra', 'roca', 'rock'], ['rock', 'bush'], 12, 20, 'Una piedra plana y musgosa, buena para sentarse, junto a un zarzal de bayas.'),
       S('sp_cl_arroyo', 'el arroyo', ['arroyo', 'agua', 'río', 'stream'], ['water'], 40, 5, 'Un arroyo somero de agua tibia, con una película gris en los remansos.', { terrain_multiplier: 0.5 }),
       S('sp_cl_choza', 'la choza de pieles', ['choza', 'cabaña', 'pieles'], ['building'], 30, 35, 'Una choza de troncos con pieles tendidas y un ahumadero; huele a carne y a resina.'),
-      S('sp_cl_cuesta', 'el arranque de la cuesta', ['cuesta', 'subida', 'camino de la montaña', 'montaña'], ['road'], 50, 30, 'Donde el bosque se acaba y empieza a subir una senda pedregosa, gris de ceniza vieja.'),
-    ],
-  },
-  // --- Montaña de Vharn -------------------------------------------------------
-  {
-    id: 'loc_cuesta', zone_id: 'zn_vharn', name: 'Cuesta Gris', indoor: false,
-    description_base: 'Una senda de pedregal que sube en zigzag entre troncos quemados. Todo es gris: la tierra, las piedras, el aire, que huele a azufre.',
-    ambience: { light: 'natural', noise: 0.05, smell: 'azufre y ceniza' },
-    secret: 'En la lobera vive la loba de ceniza, que bajó de la cumbre caliente; tiene acorralado al perro de Brenna.',
-    spots: [
-      S('sp_cs_pie', 'el pie de la cuesta', ['pie', 'pie de la cuesta', 'abajo'], ['road'], 0, 0, 'El pie de la cuesta, donde la ceniza empieza a cubrir las piedras.'),
-      S('sp_cs_mojon', 'el mojón quemado', ['mojón', 'mojon', 'piedra quemada'], ['rock'], 20, 25, 'Un mojón de piedra con el sello de Vharn ennegrecido; alguien deja aquí comida envuelta en paño.'),
-      S('sp_cs_cueva', 'la lobera', ['lobera', 'cueva', 'madriguera', 'agujero'], ['rock', 'dirt'], 12, 45, 'Una boca de roca entre raíces quemadas; huele a fiera y se oye gemir a un perro dentro.'),
-      S('sp_cs_mirador', 'el mirador', ['mirador', 'saliente', 'vista'], ['rock'], 35, 50, 'Un saliente desde el que se ve todo el valle: Brezal abajo, pequeño, y arriba las torres negras de Vharn.'),
-      S('sp_cs_alto', 'lo alto de la cuesta', ['alto', 'arriba', 'ciudadela', 'vharn'], ['road'], 40, 80, 'Donde la senda llega a la muralla rota de la ciudadela.'),
+      S('sp_cl_senda', 'la senda del granero', ['senda', 'senda del granero', 'granero'], ['road'], 50, 28, 'Una senda que sigue el arroyo hasta las ruinas negras del granero de Vharn, que asoman entre los alisos.'),
     ],
   },
   {
-    id: 'loc_ruinas', zone_id: 'zn_vharn', name: 'Ruinas de Vharn', indoor: false,
-    description_base: 'La ciudadela quemada: muros negros sin tejado, vigas caídas, un patio de armas cubierto de ceniza tibia. De alguna grieta sale un resplandor rojo que late.',
+    id: 'loc_ruinas', zone_id: 'zn_brezal', name: 'El Granero Quemado', indoor: false,
+    description_base: 'Las ruinas del granero de los señores de Vharn, en el borde del pueblo: muros negros sin tejado, vigas caídas, una era cubierta de ceniza tibia y una capilla derruida. De alguna grieta sale un resplandor rojo que late.',
     ambience: { light: 'natural', noise: 0.05, smell: 'ceniza caliente' },
-    secret: 'Ysolde Vharn vive en la torre hundida. La puerta de la cripta solo se abre con la llave de los Vharn, o rompiéndola.',
+    secret: 'Ysolde Vharn se esconde en el pajar hundido. Bajo el altar de la capilla, un pasadizo sellado con el sello de Vharn baja hacia la cripta derrumbada donde la Brasa grande duerme enterrada; solo lo abre la llave de los Vharn. Por las grietas del altar sale la ceniza que Tobías echa al pozo.',
     spots: [
-      S('sp_ru_puerta', 'la puerta rota', ['puerta rota', 'entrada', 'muralla'], ['gate'], 0, 0, 'Lo que queda de la puerta: dos goznes retorcidos y un arco de piedra negra.'),
-      S('sp_ru_patio', 'el patio quemado', ['patio', 'patio de armas', 'patio quemado'], ['dirt'], 15, 12, 'El patio de armas, con la ceniza tibia hasta el tobillo y huellas recientes de pies pequeños.'),
-      S('sp_ru_torre', 'la torre hundida', ['torre', 'torre hundida'], ['building'], 28, 6, 'Una torre sin techo con una lona tendida, un fuego pequeño y un catre: alguien vive aquí.'),
-      S('sp_ru_capilla', 'la capilla de los señores', ['capilla', 'altar'], ['building'], 8, 26, 'Una capilla sin bóveda donde aún se reconocen las tumbas de los Vharn; alguien ha dejado flores secas.'),
-      S('sp_ru_cripta', 'la puerta de la cripta', ['cripta', 'puerta de la cripta', 'escalera'], ['stairs'], 20, 30, 'Una puerta de hierro en el suelo, caliente al tacto, con el sello de Vharn como cerradura.',
+      S('sp_ru_puerta', 'el portalón caído', ['portalón', 'portalon', 'entrada', 'puerta rota'], ['gate'], 0, 0, 'Lo que queda del portalón: dos hojas de roble carbonizado tiradas en el barro.'),
+      S('sp_ru_patio', 'la era quemada', ['era', 'patio', 'era quemada'], ['dirt'], 15, 12, 'La era del granero, con la ceniza tibia hasta el tobillo y huellas recientes de pies pequeños.'),
+      S('sp_ru_torre', 'el pajar hundido', ['pajar', 'pajar hundido', 'altillo', 'torre'], ['building'], 28, 6, 'Un pajar con media techumbre, una lona tendida, un fuego pequeño y un catre: alguien vive aquí.'),
+      S('sp_ru_capilla', 'la capilla derruida', ['capilla', 'altar', 'tumbas'], ['building'], 8, 26, 'Una capilla sin bóveda pegada al granero, con las tumbas de los Vharn y un altar agrietado del que sale calor; alguien ha dejado flores secas.'),
+      S('sp_ru_cripta', 'el pasadizo bajo el altar', ['pasadizo', 'sello', 'losa del altar', 'escalera'], ['stairs'], 10, 30,
+        'Una losa de hierro detrás del altar, caliente al tacto, con el sello de Vharn como cerradura. Debajo, unos escalones bajan hasta un derrumbe: más allá duerme, enterrada, la Brasa grande.',
         { state: { locked: true, key_item_id: 'it_llave_vharn' } }),
     ],
   },
   {
-    id: 'loc_cripta', zone_id: 'zn_vharn', name: 'Cripta de la Brasa', indoor: true,
-    description_base: 'Una cripta abovedada que suda calor. En el centro, sobre un pedestal, la Brasa: una piedra del tamaño de un corazón que arde sin consumirse.',
-    ambience: { light: 'twilight', noise: 0.1, smell: 'hierro caliente' },
-    secret: 'Las cadenas de hierro frío que ataban la Brasa están rotas desde el incendio: faltan eslabones.',
+    id: 'loc_lindero', zone_id: 'zn_brezal', name: 'El Lindero', indoor: false,
+    description_base: 'El final del camino del norte, donde acaba el valle: una pared de niebla gris, quieta aunque sople el viento, que apaga los sonidos. Los pájaros no la cruzan y las gallinas ni se acercan.',
+    ambience: { light: 'twilight', noise: 0.02, smell: 'nada; la niebla no huele' },
+    secret: 'La niebla es el Cerco de Ceniza: la Guarda de Vharn, un conjuro de contención de los primeros señores, despertó hace tres semanas cuando Ysolde volvió con el ascua. El mojón con el sello es su primer anclaje.',
     spots: [
-      S('sp_cr_escalera', 'la escalera', ['escalera', 'escalones', 'salida'], ['stairs'], 0, 0, 'Escalones de piedra que suben a las ruinas.'),
-      S('sp_cr_cadenas', 'las cadenas rotas', ['cadenas', 'cadenas rotas', 'argollas'], ['rock'], 6, 6, 'Argollas en el suelo con cadenas de un hierro gris que no se calienta, rotas a la altura de un hombre.'),
-      S('sp_cr_brasa', 'la Brasa', ['brasa', 'la brasa', 'pedestal', 'piedra ardiente'], ['fireplace'], 10, 10, 'La Brasa sobre su pedestal: late como algo vivo y la ceniza del suelo se mueve a su ritmo.'),
-      S('sp_cr_altar', 'el altar de los Vharn', ['altar', 'altar de los vharn'], ['table'], 4, 12, 'Un altar de piedra con palabras grabadas en una lengua vieja que Ilse sabe leer.'),
+      S('sp_li_camino', 'el final del camino', ['final del camino', 'camino del norte', 'camino'], ['road'], 0, 0, 'El camino del norte, que sigue recto unos pasos más y se mete en la niebla como en el agua.'),
+      S('sp_li_barricada', 'la barricada', ['barricada', 'carros', 'hoguera'], ['crate'], 10, 8, 'Dos carros volcados y unos sacos que los vecinos pusieron «por si sale algo»; al lado, una hoguera y un banco.'),
+      S('sp_cs_mojon', 'el mojón de Vharn', ['mojón', 'mojon', 'sello', 'piedra del sello'], ['rock'], 22, 12, 'Un mojón de piedra con el sello de Vharn, tibio al tacto aunque haga frío; alguien deja aquí comida envuelta en paño.'),
+      S('sp_li_niebla', 'el borde de la niebla', ['borde de la niebla', 'borde', 'pared de niebla', 'linde'], ['dirt'], 16, 24, 'Donde empieza la niebla: un paso más y no se ve la mano. En el suelo, huellas que entran y salen por el mismo sitio.'),
+    ],
+  },
+  {
+    id: 'loc_valcruz', zone_id: 'zn_fuera', name: 'Camino de Valcruz', indoor: false,
+    description_base: 'El camino que sale del valle hacia el mercado de Valcruz. Desde Brezal no se ve: lo tapa la niebla.',
+    ambience: { light: 'natural', noise: 0.1 },
+    secret: 'Sellado en la demo: se abrirá en la expansión.',
+    spots: [
+      S('sp_va_camino', 'el camino de Valcruz', ['camino de valcruz', 'valcruz', 'mercado de valcruz'], ['road'], 0, 0, 'Un camino de carro entre campos, al otro lado de la niebla.'),
     ],
   },
 ];
@@ -189,9 +224,11 @@ export const EXITS: AuthoredCampaign['exits'] = [
   { id: 'ex_plaza_casona', from: 'sp_pl_casona', to: 'sp_ca_puerta', distance_m: 4 },
   { id: 'ex_plaza_curandera', from: 'sp_pl_callejon', to: 'sp_cu_puerta', distance_m: 25 },
   { id: 'ex_plaza_molino', from: 'sp_pl_camino_molino', to: 'sp_mo_puerta', distance_m: 150 },
-  { id: 'ex_plaza_claro', from: 'sp_pl_porton', to: 'sp_cl_sendero', distance_m: 600, terrain_multiplier: 0.9 },
-  { id: 'ex_molino_claro', from: 'sp_mo_rueda', to: 'sp_cl_arroyo', distance_m: 500, terrain_multiplier: 0.8 },
-  { id: 'ex_claro_cuesta', from: 'sp_cl_cuesta', to: 'sp_cs_pie', distance_m: 700, terrain_multiplier: 0.8 },
-  { id: 'ex_cuesta_ruinas', from: 'sp_cs_alto', to: 'sp_ru_puerta', distance_m: 400, terrain_multiplier: 0.7 },
-  { id: 'ex_ruinas_cripta', from: 'sp_ru_cripta', to: 'sp_cr_escalera', distance_m: 6 },
+  { id: 'ex_plaza_corrales', from: 'sp_pl_corrales', to: 'sp_co_cancela', distance_m: 180 },
+  { id: 'ex_plaza_claro', from: 'sp_pl_porton', to: 'sp_cl_sendero', distance_m: 250, terrain_multiplier: 0.9 },
+  { id: 'ex_plaza_lindero', from: 'sp_pl_porton', to: 'sp_li_camino', distance_m: 450, terrain_multiplier: 0.9 },
+  { id: 'ex_molino_claro', from: 'sp_mo_rueda', to: 'sp_cl_arroyo', distance_m: 220, terrain_multiplier: 0.8 },
+  { id: 'ex_corrales_claro', from: 'sp_co_redil', to: 'sp_cl_roble', distance_m: 200, terrain_multiplier: 0.9 },
+  { id: 'ex_claro_ruinas', from: 'sp_cl_senda', to: 'sp_ru_puerta', distance_m: 180, terrain_multiplier: 0.8 },
+  { id: 'ex_lindero_cerco', from: 'sp_li_niebla', to: 'sp_va_camino', distance_m: 600, state: CERCO },
 ];

@@ -204,14 +204,18 @@ describe('Engine: fase 1 sin IA', () => {
     expect(c.status).toBe('asleep');
   });
 
-  it('dar un objeto a otro PJ en el mismo punto', async () => {
+  it('dar un objeto a otro PJ en el mismo punto: oferta que el otro acepta', async () => {
     const { engine } = await bootEngine();
     const seen = collect(engine);
     engine.world.character('ch_mira').location = { type: 'spot', id: 'sp_tab_barra' };
     const r = await engine.act('ch_kael', 'dar daga a Mira');
-    expect(r.text).toBe('Le das daga a Mira.');
-    expect(seen('ch_mira').at(-1)).toBe('Kael le da daga a Mira.');
+    expect(r.text).toMatch(/^Le tiendes daga a Mira\. Es suyo si lo acepta/);
+    expect(seen('ch_mira').at(-1)).toBe('Kael te ofrece daga.');
+    expect(await engine.command('ch_mira', '/inventory')).not.toContain('daga');
+    const offer = engine.world.character('ch_mira').offers![0]!;
+    expect((await engine.answerOffer('ch_mira', offer.id, true)).text).toBe('Aceptas daga de Kael.');
     expect(await engine.command('ch_mira', '/inventory')).toContain('Manos: espada de Mira / daga');
+    expect(seen('ch_kael').at(-1)).toBe('Mira acepta lo que le ofreces: daga.');
   });
 
   it('ambigüedad: el servidor pregunta, no inventa', async () => {

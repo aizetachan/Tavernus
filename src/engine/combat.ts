@@ -92,7 +92,7 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
       let left = damage;
       const fromTemp = Math.min(c.hp_temp, left); c.hp_temp -= fromTemp; left -= fromTemp;
       c.hp_current = Math.max(0, c.hp_current - left);
-      if (c.hp_current === 0 && c.status === 'active') { c.status = 'unconscious'; down = true; }
+      if (c.hp_current === 0 && c.status === 'active') { c.status = 'unconscious'; down = true; stabilizeIfAway(c); }
       world.touch('characters', c.id);
     }
     targetHp = `${c.hp_current}/${c.hp_max}`;
@@ -121,3 +121,13 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
 }
 
 export function attitudeOf(n: Npc, characterId: Id) { return n.attitude.by_character[characterId] ?? n.attitude.default; }
+
+/**
+ * Un PJ ausente que cae a 0 PG queda estabilizado: no muere ausente
+ * (docs/MULTIJUGADOR.md, «Desconexiones»). Sigue inconsciente hasta que le curen
+ * o vuelva y alguien le atienda.
+ */
+export function stabilizeIfAway(c: Character): void {
+  if (!c.away || c.hp_current > 0 || c.conditions.some((x) => x.name === 'estable')) return;
+  c.conditions.push({ name: 'estable', source: 'cayó estando ausente: no muere ausente', expires_game_s: null });
+}

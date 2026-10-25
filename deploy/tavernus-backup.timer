@@ -1,0 +1,11 @@
+[Unit]
+Description=Tavernus: copia diaria de las partidas (04:30, hora del servidor)
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=10min
+# Si el servidor estaba apagado a esa hora, la hace al arrancar.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

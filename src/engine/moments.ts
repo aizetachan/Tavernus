@@ -34,8 +34,13 @@ export interface Moment {
 
 /** Un parlamento literal del cierre del máster (modo novela). */
 export interface DialogueLine {
-  speaker: 'npc' | 'actor';
+  /** `pc`: otro PJ que habla en un turno compartido (conversación de grupo o ronda, scene.ts). */
+  speaker: 'npc' | 'actor' | 'pc';
   npc_id?: Id;
+  /** Solo `pc`: qué PJ. */
+  character_id?: Id;
+  /** A quién se dirige una línea del NPC en un turno compartido. */
+  to?: Id;
   text: string;
 }
 

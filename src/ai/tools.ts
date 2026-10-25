@@ -14,9 +14,10 @@ import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
 import { advanceStory } from '../engine/story.js';
-import { attitudeOf, resolveAttack } from '../engine/combat.js';
+import { barrierToward, bounceOff } from '../engine/barrier.js';
+import { attitudeOf, resolveAttack, stabilizeIfAway } from '../engine/combat.js';
 import { characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
-import { descriptorOf, fmtDuration } from '../engine/narrate.js';
+import { aEs, descriptorOf, fmtDuration } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
 import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
 import { addScheduledEvent, listSchedule, RECURRENCES } from '../engine/schedule.js';
@@ -24,7 +25,9 @@ import { characterFacts, recordFact } from '../engine/facts.js';
 import type { DialogueLine } from '../engine/moments.js';
 import { fmtCoins, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
 import { inventedPlaces } from '../engine/places.js';
-import { DEAL_REJECTION, dealWithoutState, outcomeMismatch, outcomeRejection, type RollCategory } from '../engine/closecheck.js';
+import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, outcomeMismatch, outcomeRejection, type RollCategory } from '../engine/closecheck.js';
+import { othersForCheck, pcName } from '../engine/party.js';
+import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
@@ -216,12 +219,14 @@ export const MASTER_TOOLS: Tool[] = [
     names_learned: nstr('IDs (separados por comas) de NPCs o personajes cuyo NOMBRE el actor ha aprendido en esta acción porque se presentaron o alguien los nombró. null si ninguno.'),
     places_learned: nstr('IDs (separados por comas) de localizaciones de las que el actor ha oído hablar en esta acción porque alguien nombró el sitio o lo leyó en un cartel o mapa. null si ninguna.'),
     introduces_self: bool('true si el actor ha dicho su propio nombre en voz alta en esta acción (los presentes lo aprenden).'),
+    target_character_id: nstr('Si la acción se dirige a otro JUGADOR presente (le habla, le mira, se le acerca, le tiende algo): su ID. Recibirá observable_target y opciones para responder. null si no.'),
+    observable_target: nstr('Solo con target_character_id: lo que percibe ese jugador, en segunda persona («Kael se acerca a ti y te pregunta…»). Solo lo que hace el actor, nunca lo que hace o piensa ese jugador. null si no.'),
     lines: {
       type: ['array', 'null'],
       description: 'Parlamentos literales de esta acción, en orden (modo novela). speaker "npc" con su npc_id, o "actor" (npc_id null). text: solo las palabras dichas, sin comillas ni acotaciones. null si nadie habla.',
       items: {
         type: 'object',
-        properties: { speaker: { type: 'string', enum: ['npc', 'actor'] }, npc_id: { type: ['string', 'null'] }, text: { type: 'string' } },
+        properties: { speaker: { type: 'string', enum: ['npc', 'actor', 'pc'] }, npc_id: { type: ['string', 'null'] }, text: { type: 'string' }, character_id: { type: ['string', 'null'], description: 'Solo en conversación de grupo o ronda: speaker "pc" con el ID del PJ que habla.' }, to: { type: ['string', 'null'], description: 'Solo en conversación de grupo: ID del PJ al que responde esta línea del NPC.' } },
         required: ['speaker', 'npc_id', 'text'],
         additionalProperties: false,
       },
@@ -265,6 +270,8 @@ export interface ToolContext {
   outcome_rejections?: number;
   /** Cierres rechazados por narración de relleno en conversación (conversation.ts; uno como mucho). */
   conversation_rejections?: number;
+  /** Cierres rechazados por narrar lo que hace otro jugador (closecheck.ts; uno como mucho). */
+  others_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -280,10 +287,30 @@ export interface LogEventInput {
   npc_id?: string | null;
   /** Parlamentos literales (modo novela); narration_private sigue siendo el texto completo. */
   lines?: DialogueLine[];
+  /** Otro jugador al que se dirige la acción y lo que percibe él, en segunda persona (party.ts). */
+  target_character_id?: string | null;
+  observable_target?: string | null;
 }
 
+/** ¿Hay en la sala del actor un NPC hablando con otro PJ? */
+function busyHere(engine: Engine, actor: Character, nowGameS: number): boolean {
+  const loc = engine.world.characterSpot(actor)?.location_id;
+  if (!loc) return false;
+  const events = engine.events.recentInLocation(loc, 60);
+  return npcsHere(engine.world, actor).some((n) => { const t = talkersOf(engine.world, events, n, nowGameS); return t.length > 0 && !t.includes(actor.id); });
+}
+
+/** PJ que comparten el turno del actor (conversación de grupo o ronda, scene.ts); vacío si no. */
+function sharedWith(engine: Engine, actorId: string): string[] {
+  const h = engine.sceneHints(actorId);
+  return [...(h?.group?.members ?? []), ...(h?.round?.members ?? []), ...(h?.round?.hesitant ?? [])].map((m) => m.id);
+}
+
+/** Una «línea» del actor que es en realidad su intención («Hablar con Aren», «Preguntarle por…»): no es algo dicho. */
+export const INTENT_LINE = /^(?:hablar|hablarle|preguntar|preguntarle|decir|decirle|contar|contarle|saludar|saludarle|responder|responderle)\b/i;
+
 /** Parlamentos válidos del cierre: hablante conocido, texto limpio; como mucho 12. Acepta lista o JSON en texto. */
-export function parseLines(raw: unknown, fallbackNpc: string | null, isNpc: (id: string) => boolean): DialogueLine[] {
+export function parseLines(raw: unknown, fallbackNpc: string | null, isNpc: (id: string) => boolean, isPc: (id: string) => boolean = () => false): DialogueLine[] {
   let list: unknown = raw;
   if (typeof list === 'string') { try { list = JSON.parse(list); } catch { return []; } }
   if (!Array.isArray(list)) return [];
@@ -294,9 +321,11 @@ export function parseLines(raw: unknown, fallbackNpc: string | null, isNpc: (id:
     const text = cleanText(String(r['text'] ?? '')).replace(/^[«"“—-]\s*|\s*[»"”]$/g, '').trim().slice(0, 600);
     if (!text) continue;
     if (r['speaker'] === 'actor') out.push({ speaker: 'actor', text });
+    else if (r['speaker'] === 'pc' && typeof r['character_id'] === 'string' && isPc(r['character_id'])) out.push({ speaker: 'pc', character_id: r['character_id'], text });
     else if (r['speaker'] === 'npc') {
       const id = typeof r['npc_id'] === 'string' && isNpc(r['npc_id']) ? r['npc_id'] : fallbackNpc;
-      if (id) out.push({ speaker: 'npc', npc_id: id, text });
+      const to = typeof r['to'] === 'string' && isPc(r['to']) ? r['to'] : null;
+      if (id) out.push({ speaker: 'npc', npc_id: id, text, ...(to ? { to } : {}) });
     }
     if (out.length >= 12) break;
   }
@@ -534,6 +563,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return { character: c.name, check: r.label, breakdown: r.breakdown, total: r.total, success: r.success, natural: r.natural ?? null };
     }
     case 'move_to': {
+      // Hacia el otro lado de una barrera que rebota (el Cerco): se intenta, se pierde el tiempo y se vuelve.
+      const barrier = world.characters.has(s('character_id')) ? barrierToward(world, world.character(s('character_id')), s('target_spot_id')) : null;
+      const bounce = barrier ? bounceOff(world, world.character(s('character_id')), barrier, engine.gameNow()) : null;
+      if (bounce) return { ok: true, rebound: true, spot: world.spot(bounce.spot_id).name, game_time_lost: fmtDuration(bounce.lost_s), hint: `No se cruza: el motor ya lo ha resuelto. Narra esto, sin añadir otra salida: ${bounce.text}` };
       const r = moveTo(world, s('character_id'), s('target_spot_id'), s('pace') as 'walk', nowGameS);
       if (!r.ok && r.error.code === 'unknown_spot') return { error: 'unknown_spot', detail: r.error, hint: `${s('target_spot_id')} no es un punto que el actor conozca. ${hereList(ctx)} Narra que no hay nada así; no lo inventes.` };
       if (!r.ok && r.error.code === 'locked') return { error: 'locked', detail: r.error, hint: `${world.spot(r.error.spot_id).name} está cerrado con llave para el actor: hace falta ${r.error.key_item_id ? world.itemDefs.get(r.error.key_item_id)?.name ?? r.error.key_item_id : 'la llave'} (la da quien vende su servicio, con buy_item o pawn_item)` };
@@ -553,6 +586,15 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (toType === 'npc') {
         const miss = reachNpc(ctx, world.npc(s('to_id')));
         if (miss) return miss;
+      }
+      // A otro jugador no se le pone nada en la mano: se le ofrece y él decide (party.ts).
+      if (toType === 'character' && s('to_id') !== actor.id && world.characters.has(s('to_id'))) {
+        const inst = world.itemInstances.get(s('instance_id'));
+        if (!inst || !world.itemsCarriedBy(actor.id).some((i) => i.id === inst.id)) return { error: 'not_carried', hint: 'Solo el actor puede ofrecer a otro jugador algo que lleve encima.' };
+        const off = engine.offer(actor.id, s('to_id'), { instance_id: inst.id, ...(input['quantity'] == null ? {} : { quantity: Number(input['quantity']) }), coins: 0 }, ctx.action_text ?? null);
+        if (!off.ok) return { error: 'offer_failed', hint: off.error };
+        const to = world.character(s('to_id'));
+        return { ok: true, pending_offer: true, item: off.offer.label, hint: `Queda OFRECIDO, no entregado: ${pcName(world, actor.id, to)} es otro jugador y decide si lo acepta. Narra que se lo tiendes; no narres que lo coge ni cómo reacciona.` };
       }
       const r = transferItem(world, s('instance_id'), to, input['quantity'] == null ? undefined : Number(input['quantity']));
       if (!r.ok && r.error.code === 'not_reachable' && r.error.reason === 'no está a tu alcance') {
@@ -660,6 +702,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     }
     case 'attack': {
       const atk = world.characters.get(s('attacker_id'));
+      // Un PJ ausente no ataca ni gasta recursos: solo se defiende.
+      if (atk && atk.away) return { error: `${atk.name} está ausente: no ataca ni gasta recursos; si le atacan, se defiende solo` };
       if (atk) {
         // Cuerpo a cuerpo hay que estar en el mismo punto; a distancia basta la misma localización.
         const tc = world.characters.get(s('target_id'));
@@ -692,9 +736,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const fromTemp = Math.min(c.hp_temp, amount);
       c.hp_temp -= fromTemp; amount -= fromTemp;
       c.hp_current = Math.max(0, c.hp_current - amount);
-      if (c.hp_current === 0 && c.status === 'active') c.status = 'unconscious';
+      if (c.hp_current === 0 && c.status === 'active') { c.status = 'unconscious'; stabilizeIfAway(c); }
       world.touch('characters', c.id);
-      return { ok: true, hp: `${c.hp_current}/${c.hp_max}`, status: c.status };
+      return { ok: true, hp: `${c.hp_current}/${c.hp_max}`, status: c.status, ...(c.away ? { note: 'está ausente: si cae, queda estabilizado (no muere ausente)' } : {}) };
     }
     case 'heal': {
       const npcH = world.npcs.get(s('target_id'));
@@ -747,6 +791,18 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: outcomeRejection(ctx.roll_category, bad) };
         }
       }
+      // Otro jugador no lo mueve el máster: ni actos, ni palabras, ni miradas, ni esperas que no consten. Se reescribe una vez.
+      if ((ctx.others_rejections ?? 0) < 1) {
+        // En un turno compartido, los que participan han dicho qué hacen: se cuenta; los demás, no.
+        const shared = sharedWith(engine, actor.id);
+        const others = othersForCheck(world, engine.events.recentInLocation(here(), 30), actor).filter((o) => !shared.includes(o.id));
+        const npcRefs = [...world.npcs.values()].filter((n) => world.spot(n.location.id).location_id === here()).flatMap((n) => [n.name, n.role]);
+        const acted = actedForOthers({ texts: [s('narration_private'), input['observable'] == null ? '' : s('observable'), input['observable_target'] == null ? '' : s('observable_target')], others, actorRefs: [actor.name], npcRefs });
+        if (acted.length) {
+          ctx.others_rejections = (ctx.others_rejections ?? 0) + 1;
+          return { error: actedForRejection(acted) };
+        }
+      }
       // Lugares que la narración da por existentes y no están en los datos: se reescribe una vez.
       if ((ctx.place_rejections ?? 0) < 1) {
         const invented = inventedPlaces(world, here(), [s('narration_private'), input['observable'] == null ? '' : s('observable')].join('\n'));
@@ -772,7 +828,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         // Habla con alguien de la sala que está a unos metros: el motor lo acerca antes (si no es hostil).
         if (npc && npc.status === 'alive' && world.spot(npc.location.id).location_id === here()) reachNpc(ctx, npc);
         if (npc) {
-          npc.talking_to = { character_id: actor.id, since_game_s: nowGameS };
+          // Conversación de grupo (scene.ts): quien habla pasa a llevarla y los demás siguen unidos.
+          const prev = npc.talking_to;
+          const group = prev && (prev.character_id === actor.id || prev.with?.includes(actor.id)) ? [prev.character_id, ...(prev.with ?? [])].filter((id) => id !== actor.id) : [];
+          npc.talking_to = { character_id: actor.id, since_game_s: nowGameS, ...(group.length ? { with: group } : {}) };
           const note = input['npc_memory_note'] == null ? '' : cleanText(s('npc_memory_note'));
           if (note) {
             const imp = Math.min(3, Math.max(1, Math.round(Number(input['npc_memory_importance']) || 1))) as 1 | 2 | 3;
@@ -811,9 +870,14 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           if (!w.knows.includes(actor.id)) { w.knows.push(actor.id); world.touch('characters', w.id); }
         }
       }
-      const approached = ctx.approach && !/\bacerc/i.test(s('narration_private')) ? `Te acercas a ${world.spot(ctx.approach.to_spot_id).name}. ` : '';
+      const approached = ctx.approach && !/\bacerc/i.test(s('narration_private')) ? `Te acercas ${aEs(world.spot(ctx.approach.to_spot_id).name)}. ` : '';
       const closingNpc = input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null;
-      const closingLines = parseLines(input['lines'], closingNpc, (id) => world.npcs.has(id));
+      // «Hablar con Aren» es lo que quiere hacer, no algo que diga: fuera de lines.
+      const sharedIds = sharedWith(engine, actor.id);
+      const closingLines = parseLines(input['lines'], closingNpc, (id) => world.npcs.has(id), (id) => sharedIds.includes(id))
+        .map((l) => (l.speaker === 'pc' && l.character_id === actor.id ? { speaker: 'actor' as const, text: l.text } : l))
+        .filter((l) => l.speaker !== 'actor' || !INTENT_LINE.test(l.text));
+      const targetPc = input['target_character_id'] && world.characters.has(s('target_character_id')) && s('target_character_id') !== actor.id ? s('target_character_id') : null;
       ctx.closed = {
         // Lo dicho que no va citado en la narración (en conversación puede ir vacía) se guarda como citas.
         narration_private: approached + narrationWithLines(cleanText(s('narration_private')), closingLines),
@@ -821,11 +885,13 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         observable_vague: input['observable_vague'] == null ? null : cleanText(s('observable_vague')) || null,
         loudness: Number(input['loudness']) || 1,
         tags: s('tags').split(',').map((t) => t.trim()).filter(Boolean),
-        suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter(Boolean).slice(0, 4),
+        // Esperar o unirse a un NPC ocupado con otro jugador lo ofrecen los botones del motor (scene.ts), no el máster.
+        suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter(Boolean).filter((t) => !(busyHere(engine, actor, nowGameS) && /^(esperar|aguardar|unirme|unirse|sumarme)\b/i.test(t))).slice(0, 4),
         requires_roll: req,
         decisive: input['decisive_threat'] ? { threat: cleanText(s('decisive_threat')), npc_id: input['decisive_npc_id'] ? s('decisive_npc_id') : null } : null,
         npc_id: closingNpc,
         lines: closingLines,
+        ...(targetPc ? { target_character_id: targetPc, observable_target: input['observable_target'] == null ? null : cleanText(s('observable_target')) || null } : {}),
       };
       return { ok: true, closed: true };
     }

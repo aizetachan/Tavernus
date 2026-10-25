@@ -76,8 +76,9 @@ export const VOICE_SCRIPT = String.raw`<script>
   function locale(l) { l = String(l || '').trim(); return l.indexOf('-') > 0 ? l : (LOCALE[l.toLowerCase()] || 'es-ES'); }
   var lang = locale(document.documentElement.getAttribute('data-voice-lang') || document.documentElement.lang);
   var game = new URLSearchParams(location.search).get('game');
-  fetch('/api/games').then(function (r) { return r.json(); }).then(function (d) {
-    var g = (d.games || []).filter(function (x) { return x.slug === game; })[0];
+  // /api/session la puede leer también el invitado (el menú, /api/games, es del anfitrión).
+  fetch('/api/session?game=' + encodeURIComponent(game || '')).then(function (r) { return r.json(); }).then(function (d) {
+    var g = d && d.game;
     var l = g && (g.language || (g.campaign && g.campaign.language));
     if (l) lang = locale(l);
   }).catch(function () {});
