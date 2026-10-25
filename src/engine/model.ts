@@ -83,6 +83,22 @@ export interface Campaign {
    * Campañas escritas: `for_classes` la reserva a esas clases (ids SRD) y `keep` la deja en la bolsa para el siguiente.
    */
   situations?: { for_name: string; for_classes?: string[]; keep?: boolean; companion_of?: string; situation: InitialSituation }[];
+  /** Muerte y reaparición (SPEC §4.7, death.ts). Sin campo, los valores por defecto. */
+  death_rules?: Partial<DeathRules>;
+}
+
+/** Reglas de muerte de la campaña (SPEC §1.2 death_rule, §4.7). Esperas en tiempo real. */
+export interface DeathRules {
+  /** Segundos reales que espera un PJ casual antes de volver (2 h). */
+  casual_respawn_wait_s: number;
+  /** Segundos reales que espera un PJ hardcore (30 min). */
+  hardcore_respawn_wait_s: number;
+  /** Puntos que pierde un PJ hardcore en una característica al volver (1). */
+  hardcore_ability_penalty: number;
+  /** Dónde vuelve; null = el punto de inicio de la campaña. */
+  respawn_spot_id: Id | null;
+  /** Quién le encontró y le trajo, para la narración de la vuelta («Ilse te encontró…»). */
+  respawn_story: string;
 }
 
 /** Evento de generación de un mundo (src/worldgen). */
@@ -374,6 +390,54 @@ export interface Character {
   away?: { since_real_ms: number; since_game_s: number; spot_id: Id | null } | null;
   /** Ayuda de otro PJ (regla de ayuda del SRD): ventaja en su siguiente tirada hasta ese instante de juego. */
   helped_by?: { character_id: Id; expires_game_s: number } | null;
+  /** Descansos (rest.ts): dados de golpe gastados, recursos de clase usados y cuándo acabó el último descanso largo. */
+  rest?: RestState;
+  /** A 0 PG (death.ts): salvaciones contra muerte; o estable, hasta cuándo. null o ausente: no está cayendo. */
+  dying?: DyingState | null;
+  /** Muerto (death.ts, SPEC §4.7): cuándo vuelve, dónde quedó el cuerpo y qué se quedó en él. */
+  death?: DeathState | null;
+  /** Hardcore: puntos perdidos por característica al volver de la muerte (se recuperan al subir de nivel). */
+  ability_penalties?: Partial<Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>>;
+}
+
+export interface RestState {
+  hit_dice_used: number;
+  /** Usos gastados de cada recurso de clase (rest.ts, CLASS_RESOURCES). */
+  used: Record<string, number>;
+  last_long_rest_game_s: number | null;
+}
+
+export interface DyingState {
+  success: number;
+  fail: number;
+  since_game_s: number;
+  /** Próxima tirada fuera de rondas (instante de juego). */
+  next_game_s: number;
+  /** Estable: recupera 1 PG en este instante de juego (1d4 h). null: sigue tirando. */
+  stable_until_game_s: number | null;
+  /** Quién le estabilizó o curó (para el Diario). */
+  saved_by: string | null;
+  cause: string;
+  /** Ya tiene PG otra vez: el motor lo cuenta (quién le salvó) y borra el estado. */
+  revived?: 'heal' | 'save' | 'rest';
+  /** El motor ya ha avisado de la caída y de que está estable. */
+  told?: { down?: boolean; stable?: boolean };
+}
+
+export interface DeathState {
+  died_game_s: number;
+  died_real_ms: number;
+  respawn_real_ms: number;
+  mode: 'casual' | 'hardcore';
+  spot_id: Id;
+  /** El cuerpo (contenedor fijo en el sitio) con lo que llevaba. */
+  body_instance_id: Id | null;
+  cause: string;
+  /** Lo que quedó en el cuerpo, para el Diario y la vuelta. */
+  left: string[];
+  coins_left: number;
+  /** El motor ya ha contado la muerte (avisos, Diario). */
+  told?: boolean;
 }
 
 /** Algo que un PJ ofrece a otro: un objeto, monedas o ambas cosas. Se cumple solo si el otro acepta (party.ts). */

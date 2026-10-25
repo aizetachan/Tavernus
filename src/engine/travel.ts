@@ -240,7 +240,7 @@ export function encounterTable(world: World, kind: string): EncounterEntry[] {
   return DEFAULT_ENCOUNTERS;
 }
 
-function pickEntry(table: EncounterEntry[], night: boolean, rng: Rng): EncounterEntry | null {
+export function pickEntry(table: EncounterEntry[], night: boolean, rng: Rng): EncounterEntry | null {
   const fit = table.filter((e) => !e.when || (e.when === 'night') === night);
   const weights = fit.map((e) => (e.weight ?? 1) * (night ? e.night_weight ?? 1 : 1));
   const total = weights.reduce((a, w) => a + w, 0);

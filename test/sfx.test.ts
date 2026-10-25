@@ -1,10 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { RECIPE_KEYS, renderRecipe, recipeInfo, SFX_SCRIPT, SFX_STYLE, handleSfxRequest, setSoundProviderForTests } from '../src/adapters/web/sfx.js';
+import { RECIPE_KEYS, renderRecipe, recipeInfo, SFX_SCRIPT, SFX_STYLE, handleSfxRequest, setSoundProviderForTests, AMBIENT_TRACKS } from '../src/adapters/web/sfx.js';
 import { SOUND_KEYS } from '../src/adapters/web/soundmap.js';
-import { SOUND_PROMPTS, soundProviderFromEnv, elevenLabsSound, worldCostUSD, type SoundProvider } from '../src/ai/sound.js';
+import { SOUND_PROMPTS, SFX_AI_ENABLED, soundProviderFromEnv, elevenLabsSound, worldCostUSD, type SoundProvider } from '../src/ai/sound.js';
 import { PAGE } from '../src/adapters/web/page.js';
 import { bootEngine } from './helpers.js';
 
@@ -59,14 +59,42 @@ describe('página', () => {
   });
 });
 
-describe('proveedor de IA (apagado por defecto)', () => {
+describe('pistas de ambiente con licencia libre (public/sfx/ambient)', () => {
+  it('cada pista está en ogg y mp3, pesa poco y está atribuida en LICENSES', async () => {
+    const licenses = await readFile(new URL('../public/sfx/LICENSES', import.meta.url), 'utf8');
+    for (const t of AMBIENT_TRACKS) {
+      expect(SOUND_KEYS, t.key).toContain(t.key);
+      for (const ext of ['ogg', 'mp3']) {
+        const { size } = await stat(new URL(`../public/sfx/ambient/${t.key}.${ext}`, import.meta.url));
+        expect(size, `${t.key}.${ext}`).toBeGreaterThan(50_000);
+        expect(size, `${t.key}.${ext}`).toBeLessThan(1_500_000);
+      }
+      expect(licenses, t.key).toContain(`ambient/${t.key}.ogg`);
+      expect(licenses, t.key).toContain(t.url);
+      expect(licenses, t.key).toContain(t.author);
+    }
+  });
+
+  it('la taberna, la plaza y la herrería tienen pista grabada', () => {
+    for (const k of ['ambiente-taberna', 'ambiente-plaza', 'ambiente-herreria']) expect(AMBIENT_TRACKS.map((t) => t.key)).toContain(k);
+  });
+});
+
+describe('proveedor de IA (desactivado, para más adelante)', () => {
   afterEach(() => setSoundProviderForTests(undefined));
 
-  it('sin SFX_PROVIDER no hay proveedor aunque haya claves', () => {
+  it('desactivado: ni con SFX_PROVIDER y clave hay proveedor', () => {
+    expect(SFX_AI_ENABLED).toBe(false);
     expect(soundProviderFromEnv({ ELEVENLABS_API_KEY: 'x', STABILITY_API_KEY: 'y' })).toBeNull();
-    expect(soundProviderFromEnv({ SFX_PROVIDER: 'off' })).toBeNull();
-    expect(() => soundProviderFromEnv({ SFX_PROVIDER: 'elevenlabs' })).toThrow(/ELEVENLABS_API_KEY/);
-    expect(soundProviderFromEnv({ SFX_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k' })?.id).toBe('elevenlabs');
+    expect(soundProviderFromEnv({ SFX_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k' })).toBeNull();
+    expect(soundProviderFromEnv({ SFX_PROVIDER: 'stability', STABILITY_API_KEY: 'k' })).toBeNull();
+  });
+
+  it('encendido a propósito: hace falta elegirlo en el entorno', () => {
+    expect(soundProviderFromEnv({ ELEVENLABS_API_KEY: 'x', STABILITY_API_KEY: 'y' }, true)).toBeNull();
+    expect(soundProviderFromEnv({ SFX_PROVIDER: 'off' }, true)).toBeNull();
+    expect(() => soundProviderFromEnv({ SFX_PROVIDER: 'elevenlabs' }, true)).toThrow(/ELEVENLABS_API_KEY/);
+    expect(soundProviderFromEnv({ SFX_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k' }, true)?.id).toBe('elevenlabs');
   });
 
   it('ElevenLabs: pide el bucle para los ambientes y la duración pedida', async () => {
@@ -78,9 +106,9 @@ describe('proveedor de IA (apagado por defecto)', () => {
     expect(body['duration_seconds']).toBe(22);
   });
 
-  it('coste por mundo (26 claves, una vez): céntimos con ElevenLabs, unos 2 $ con Stable Audio', () => {
+  it('coste por mundo (27 claves, una vez): céntimos con ElevenLabs, unos 2 $ con Stable Audio', () => {
     expect(worldCostUSD('elevenlabs')).toBeLessThan(0.5);
-    expect(worldCostUSD('stability')).toBeCloseTo(26 * 0.08, 5);
+    expect(worldCostUSD('stability')).toBeCloseTo(Object.keys(SOUND_PROMPTS).length * 0.08, 5);
   });
 
   it('/api/sfx: estado sin IA y 404 para lo que se sintetiza; con proveedor, genera una vez y cachea', async () => {
@@ -95,7 +123,17 @@ describe('proveedor de IA (apagado por defecto)', () => {
       setSoundProviderForTests(null);
       let o = out();
       await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&character=ch_kael'), dir);
-      expect(JSON.parse(o.r.body.toString())).toMatchObject({ ambience: 'ambiente-taberna', ai: false });
+      const state = JSON.parse(o.r.body.toString());
+      expect(state).toMatchObject({ ambience: 'ambiente-taberna', ai: false });
+      // Las pistas de ambiente de public/sfx/ambient, con sus créditos.
+      for (const t of AMBIENT_TRACKS) expect(state.files, t.key).toContain(t.key);
+      expect(state.credits.map((c: { key: string }) => c.key)).toEqual(AMBIENT_TRACKS.map((t) => t.key));
+      for (const [fmt, type] of [['ogg', 'audio/ogg'], ['mp3', 'audio/mpeg']] as const) {
+        o = out();
+        await handleSfxRequest(engine, o.res, new URL(`http://x/api/sfx?game=g&key=ambiente-taberna&fmt=${fmt}`), dir);
+        expect(o.r.status).toBe(200);
+        expect(o.r.headers['content-type']).toBe(type);
+      }
       o = out();
       await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=puerta-abrir'), dir);
       expect(o.r.status).toBe(404);
@@ -116,7 +154,9 @@ describe('proveedor de IA (apagado por defecto)', () => {
       expect((await readFile(join(dir, 'sfx', 'puerta-abrir.mp3'))).toString()).toBe('ID3fake');
       o = out();
       await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&character=ch_kael'), dir);
-      expect(JSON.parse(o.r.body.toString())).toMatchObject({ ai: true, files: ['puerta-abrir'] });
+      const after = JSON.parse(o.r.body.toString());
+      expect(after.ai).toBe(true);
+      expect(after.files).toContain('puerta-abrir');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

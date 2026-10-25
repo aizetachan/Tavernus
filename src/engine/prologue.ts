@@ -189,7 +189,9 @@ export function forReader(engine: Engine, c: Character, text: string): string {
 /** Avisos de presencia (irse y volver): no son un turno suyo. */
 const PRESENCE = /^(away|back)$/;
 /** Lo que le llega a su nombre sin que actúe (historia, ofertas, seguir, turno libre): tampoco es un turno suyo. */
-const HAPPENS_TO = /^(away|back|progress_|offer_cancelled|offer_expired|unfollow|npc_free)/;
+const HAPPENS_TO = /^(away|back|progress_|offer_cancelled|offer_expired|unfollow|npc_free|down$|stabilized|revived|death|respawn|master_line)/;
+/** Caer, salvarse, morir y volver (death.ts): van en «Lo que te pasó». */
+const FATE = /^(down|stabilized|revived|death|respawn)$/;
 
 export function lastOwnEvent(engine: Engine, characterId: string): GameEvent | null {
   const all = engine.events.all();
@@ -217,7 +219,8 @@ export function relevantWhileAway(engine: Engine, c: Character, since: GameEvent
     const mine = e.actor_id === c.id;
     const hit = (e.payload['attack'] as { target_id?: string } | undefined)?.target_id === c.id;
     const shared = Array.isArray(e.payload['group']) && (e.payload['group'] as string[]).includes(c.id) && e.tags.includes('shared');
-    if (mine ? /^(offer_cancelled|unfollow|progress_story)$/.test(e.action_type) : (e.tags.includes('combat') || hit || shared || e.payload['target_character_id'] === c.id || e.action_type === 'offer_cancelled')) {
+    const looted = (e.payload['loot'] as { owner_id?: string } | undefined)?.owner_id === c.id;
+    if (mine ? /^(offer_cancelled|unfollow|progress_story)$/.test(e.action_type) || FATE.test(e.action_type) : (e.tags.includes('combat') || hit || shared || looted || e.payload['target_character_id'] === c.id || e.action_type === 'offer_cancelled')) {
       out.push(firstSentence(d.text.replace(/\*\*/g, '')));
     }
   }
@@ -273,6 +276,9 @@ export function recapTemplate(engine: Engine, c: Character, since: GameEvent, ho
     out.push(`**Lo primero.** Mientras no estabas, ${closers.length > 1 ? `${closers.slice(0, -1).join(', ')} y ${closers.at(-1)}` : closers[0]} cerr${closers.length > 1 ? 'aron' : 'ó'} «${f.quest.title}».${ending}${mine.length ? ` Para ti, eso cierra ${mine.join(' y ')}: el valle ya ha elegido.` : ''}`);
   }
 
+  const fate = fateSince(engine, c, since);
+  if (fate) out.push(`**Lo que te pasó.** ${fate}`);
+
   out.push(`**Dónde estás.** Han pasado ${agoText(hours)} desde la última vez. Es ${d.weekday.toLowerCase()} ${d.day_of_month} de ${d.month}, ${dayPart(d.hour)} (${hhmm}). ${spot ? `Estás en ${spot.name}${loc && loc.name !== spot.name ? `, en ${loc.name}` : ''}.` : ''}`.trim());
 
   // Último turno: lo que dijo o hizo y la primera frase de lo que pasó.
@@ -322,6 +328,42 @@ export function recapTemplate(engine: Engine, c: Character, since: GameEvent, ho
 }
 
 function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+/**
+ * Caídas, rescates, muerte y vuelta desde su último turno, con quién le salvó,
+ * dónde quedó su cuerpo y qué perdió (lo que ya no está en él). Si sigue
+ * muerto, cuánto falta. null si no le pasó nada de eso.
+ */
+export function fateSince(engine: Engine, c: Character, since: GameEvent): string | null {
+  const w = engine.world;
+  const out: string[] = [];
+  const evs = engine.events.all().filter((e) => e.seq > since.seq && e.actor_id === c.id && FATE.test(e.action_type));
+  for (const e of evs) {
+    const where = w.locations.get(e.location_id)?.name ?? '';
+    if (e.action_type === 'down') out.push(`Caíste a 0 PG en ${where}.`);
+    else if (e.action_type === 'stabilized' || e.action_type === 'revived') {
+      const r = e.payload['rescue'] as { by?: string | null; via?: string } | undefined;
+      out.push(r?.via === 'save' ? 'Saliste adelante tú solo.' : r?.by && r.by !== c.name ? `${r.by} te salvó.` : e.action_type === 'stabilized' ? 'Te estabilizaste.' : 'Volviste en ti.');
+    } else if (e.action_type === 'death') {
+      const d = e.payload['death'] as { spot_id?: string; left?: string[]; coins_left?: number; body_instance_id?: string | null; mode?: string } | undefined;
+      const sp = d?.spot_id ? w.spots.get(d.spot_id) : undefined;
+      out.push(`Moriste en ${where}${sp ? `, ${sp.name}` : ''}; tu cuerpo quedó allí.`);
+      const left = d?.left ?? [];
+      if (left.length || d?.coins_left) {
+        const body = d?.body_instance_id ? w.itemInstances.get(d.body_instance_id) : undefined;
+        const still = body ? w.itemsIn({ type: 'container', id: body.id }).map((i) => w.itemDef(i.item_id).name) : [];
+        const gone = left.filter((x) => !still.some((s) => x.startsWith(s)));
+        out.push(gone.length ? `De lo que llevabas, ya no está: ${gone.join(', ')}.` : d?.mode === 'hardcore' ? 'Lo que llevabas sigue allí, al alcance de cualquiera.' : 'Tus cosas siguen allí, esperándote.');
+      }
+    } else if (e.action_type === 'respawn') {
+      const r = e.payload['respawn'] as { spot_id?: string; penalty?: { label: string; amount: number } | null } | undefined;
+      const sp = r?.spot_id ? w.spots.get(r.spot_id) : undefined;
+      out.push(`Volviste de la muerte${sp ? ` en ${sp.name}` : ''}${r?.penalty ? `, con ${r.penalty.amount} menos de ${r.penalty.label}` : ''}.`);
+    }
+  }
+  if (c.status === 'dead') out.push(engine.downText(c).replace(/^☠\s*/, ''));
+  return out.length ? out.join(' ') : null;
+}
 
 /** Para pulir la recapitulación con el máster (RECAP_POLISH=on): en prosa, sin añadir nada. */
 export function recapPrompt(template: string): { system: string; prompt: string } {

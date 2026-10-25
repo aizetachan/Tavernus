@@ -8,12 +8,17 @@ import { inventoryView } from '../engine/inventory.js';
 import type { Id } from '../engine/model.js';
 import { positionOf } from '../engine/movement.js';
 import { ABILITY_ES, SKILLS, armorClass, saveModifier, skillModifier, type Ability } from '../engine/rules.js';
+import { isDying, isStable, respawnSpotId } from '../engine/death.js';
+import { hitDiceLeft, resourceLines } from '../engine/rest.js';
+import { hhmm } from '../engine/schedule.js';
 
 export interface SheetView {
   title: string;
   description: string;
   fields: { name: string; value: string; inline: boolean }[];
   footer: string;
+  /** Modo de muerte y estado de caída o muerte (la web pinta la cuenta atrás con `respawn_real_ms`). */
+  death: { mode: 'casual' | 'hardcore'; state: 'alive' | 'dying' | 'stable' | 'dead'; success?: number; fail?: number; stable_until?: string; respawn_real_ms?: number; respawn_place?: string };
 }
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : String(n));
@@ -25,7 +30,13 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
   const loc = engine.world.location(pos.location_id);
   const spot = engine.world.spot(pos.spot_id);
   const inv = inventoryView(engine.world, c.id);
-  const status = { active: 'despierto', asleep: c.veiled ? 'dormido (velo)' : 'dormido', unconscious: 'inconsciente', dead: 'muerto', retired: 'retirado' }[c.status];
+  const status = { active: 'despierto', asleep: c.veiled ? 'dormido (velo)' : 'dormido', unconscious: isStable(c) ? 'inconsciente, estable' : 'inconsciente, cayendo', dead: 'muerto', retired: 'retirado' }[c.status];
+  const death: SheetView['death'] = c.status === 'dead' && c.death
+    ? { mode: c.death_mode, state: 'dead', respawn_real_ms: c.death.respawn_real_ms, respawn_place: engine.world.spot(respawnSpotId(engine.world)).name }
+    : isDying(c) ? { mode: c.death_mode, state: 'dying', success: c.dying!.success, fail: c.dying!.fail }
+    : isStable(c) ? { mode: c.death_mode, state: 'stable', ...(c.dying?.stable_until_game_s ? { stable_until: hhmm(c.dying.stable_until_game_s) } : {}) }
+    : { mode: c.death_mode, state: 'alive' };
+  const deathLine = `Modo ${c.death_mode}${death.state === 'dying' ? ` · salvaciones: ${death.success} éxitos, ${death.fail} fallos` : death.state === 'stable' ? ` · estable${death.stable_until ? `, despierta hacia las ${death.stable_until}` : ''}` : death.state === 'dead' ? ` · muerto, vuelve en ${death.respawn_place}` : ''}`;
   const transit = c.transit ? `\nDe camino a ${engine.world.spot(c.transit.destination_spot_id).name}` : '';
   const ab = c.abilities;
   const saves = (['str', 'dex', 'con', 'int', 'wis', 'cha'] as Ability[]).filter((a) => c.proficiencies.saves.includes(a)).map((a) => `${ABILITY_ES[a].slice(0, 3)} ${fmt(saveModifier(c, a))}`).join(' · ');
@@ -36,6 +47,8 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
     description: `${status} · ${loc.name}, ${spot.name}${transit}`,
     fields: [
       { name: 'Combate', value: `PG ${c.hp_current}/${c.hp_max}${c.hp_temp ? ` (+${c.hp_temp})` : ''} · CA ${armorClass(engine.world, c)} · Velocidad ${c.speed_ft} ft · Percepción pasiva ${c.passive_perception}${c.conditions.length ? `\nCondiciones: ${c.conditions.map((x) => x.name).join(', ')}` : ''}`, inline: false },
+      { name: 'Descanso', value: `Dados de golpe ${hitDiceLeft(c)}/${c.level} (d${c.hit_die})${resourceLines(c).length ? `\n${resourceLines(c).join(' · ')}` : ''}`, inline: false },
+      { name: 'Muerte', value: deathLine, inline: false },
       { name: 'Características', value: `FUE ${ab.str} · DES ${ab.dex} · CON ${ab.con} · INT ${ab.int} · SAB ${ab.wis} · CAR ${ab.cha}\nSalvaciones: ${saves || '—'}`, inline: false },
       { name: 'Habilidades', value: skills || '—', inline: false },
       { name: 'Manos', value: `${inv.hands.main ?? '—'} / ${inv.hands.off ?? '—'}`, inline: true },
@@ -46,5 +59,6 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
       { name: 'Carga', value: load, inline: true },
     ],
     footer: engine.clock.format(nowG),
+    death,
   };
 }

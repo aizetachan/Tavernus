@@ -9,7 +9,7 @@ import { spawnItem, transferItem } from './inventory.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
 import type { World } from './world.js';
 
-export interface ProgressEvent { kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story'; text: string; public?: string }
+export interface ProgressEvent { kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story' | 'quest'; text: string; public?: string }
 
 export function addReputation(world: World, c: Character, factionId: Id, delta: number): number {
   c.reputation[factionId] = (c.reputation[factionId] ?? 0) + delta;

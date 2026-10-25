@@ -36,6 +36,10 @@ const HEAD = (title: string) => String.raw`<!doctype html>
   input[type=text], select { display: block; width: 100%; margin-top: 4px; height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bubble); }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .check { display: flex; gap: 8px; align-items: center; margin-top: 14px; color: var(--text); }
+  .death { border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px 12px; margin: 14px 0 0; }
+  .death legend { padding: 0 6px; color: var(--muted); font-size: 13px; }
+  .death .check { margin-top: 8px; align-items: flex-start; }
+  .death small { display: block; margin-top: 8px; }
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 999px; font-size: 14px; font-weight: 600; text-decoration: none; }
   .btn.primary { background: var(--accent); color: var(--accent-ink); }
   .btn.primary:hover:not(:disabled) { background: var(--glow); }
@@ -95,6 +99,11 @@ export function joinPage(input: JoinPageInput): string {
   </div>
   <label>¿Qué le trae aquí? · opcional<input type="text" id="hook" maxlength="400" placeholder="Busca a su hermano, que vino a este pueblo y no volvió"></label>
   <label>Cómo se ve · opcional<input type="text" id="look" maxlength="300" placeholder="Pelo cobrizo trenzado, cicatriz en la ceja"></label>
+  <fieldset class="death"><legend>Si muere</legend>
+    <label class="check"><input type="radio" name="death" value="casual" checked> <b>Casual</b> · vuelve a las 2 h con lo suyo esperándole</label>
+    <label class="check"><input type="radio" name="death" value="hardcore"> <b>Hardcore</b> · vuelve a los 30 min, sin nada y con una característica rebajada</label>
+    <small class="muted">Nadie muere para siempre: elige cuánto cuesta volver.</small>
+  </fieldset>
   <div id="near-row"></div>
   <div class="foot"><span class="error" id="err" role="alert"></span><button class="btn primary" type="submit">Entrar en la partida</button></div>
 </form>
@@ -116,7 +125,7 @@ export function joinPage(input: JoinPageInput): string {
     b.disabled = true; $('err').textContent = '';
     var near = $('near-on') && $('near-on').checked ? $('near').value : null;
     fetch('/api/seat/claim?game=' + encodeURIComponent(D.game.slug), { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: $('name').value, race: $('race').value, class: $('klass').value, hook: $('hook').value, appearance: $('look').value, near: near }) })
+      body: JSON.stringify({ name: $('name').value, race: $('race').value, class: $('klass').value, hook: $('hook').value, appearance: $('look').value, death_mode: (document.querySelector('input[name=death]:checked') || {}).value || 'casual', near: near }) })
       .then(function (r) { return r.json(); })
       .then(function (r) { if (!r.ok) { $('err').textContent = r.text; b.disabled = false; return; } location.href = '/?game=' + encodeURIComponent(D.game.slug); })
       .catch(function () { $('err').textContent = 'No hay conexión con el servidor.'; b.disabled = false; });

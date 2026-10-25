@@ -18,6 +18,7 @@ import { describeHook } from '../engine/hooks.js';
 import { travelBlock } from '../engine/travel.js';
 import { scheduleContext } from '../engine/schedule.js';
 import { storyContext } from '../engine/story.js';
+import { givenContext } from '../engine/quests.js';
 import { worldLaws } from '../engine/laws.js';
 import { describeRumor, rumorBudget, rumorsHeardBy, rumorsIn } from '../engine/rumors.js';
 import { characterFacts, FACTS_IN_CONTEXT } from '../engine/facts.js';
@@ -28,6 +29,9 @@ import { ROLL_CATEGORY, rollCategory } from '../engine/closecheck.js';
 import { conversationBlock, conversationOf } from '../engine/conversation.js';
 import { offersOf, pcName } from '../engine/party.js';
 import { RULES_CHEATSHEET } from './rules-cheatsheet.js';
+import { bodiesAt, bodyStateOf, isDying, isStable } from '../engine/death.js';
+import { hitDiceLeft, resourceLines } from '../engine/rest.js';
+import { hhmm } from '../engine/schedule.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
 const LENGTH_ES = { short: 'uno o dos párrafos cortos, unas 60-90 palabras; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
@@ -58,7 +62,7 @@ export function systemPrompt(c: Campaign): string {
     '3. Intención antes de efecto: si la acción es ambigua o le falta objetivo, no ejecutes nada; pregunta en la narración y ofrece opciones en suggested_actions.',
     '4. Si la acción tiene riesgo o resultado incierto, NO la resuelvas: cierra con log_event indicando requires_roll (tipo, skill, CD oculta). La narración de ese cierre describe el momento previo ("te agachas ante la cerradura…"). El servidor tirará y te llamará de nuevo con el resultado para que narres la consecuencia. Lo trivial (andar, hablar, mirar, coger algo del suelo) no requiere tirada.',
     '5. Percepción: el contexto te dice a qué nivel percibe el actor a cada presente (full/vague/hint). En vague no nombres a la persona; en hint solo hay movimiento. Los testigos recibirán tu texto "observable" solo si perciben la acción.',
-    '6. Moverse cuesta tiempo. Tras move_to, narra que se pone en camino con el tiempo que devuelve el tool; la llegada la narrará el servidor. Para hablar con alguien o darle algo hay que estar en su punto: acércate antes de interactuar (move_to), o deja que el motor lo haga, que acerca solo al actor a quien no es hostil y está en la misma sala.',
+    '6. Moverse cuesta tiempo. Para ir a otro sitio, move_to con target_location_id (entra hasta dentro, aunque haya que cruzar otros sitios); con target_spot_id, a un punto concreto. Tras move_to, narra que se pone en camino con el tiempo que devuelve el tool; la llegada la narrará el servidor. Para hablar con alguien o darle algo hay que estar en su punto: acércate antes de interactuar (move_to), o deja que el motor lo haga, que acerca solo al actor a quien no es hostil y está en la misma sala.',
     '7. No rompas la cuarta pared. No hables de tools, IDs, reglas ni de ti mismo como IA. Si el jugador escribe algo fuera de la ficción, responde brevemente en ficción o redirige.',
     '8. Cierra SIEMPRE con log_event, una sola vez, y no escribas texto fuera de él. Sin log_event la acción no existe.',
     '',
@@ -68,8 +72,8 @@ export function systemPrompt(c: Campaign): string {
     'GANCHOS: lo trivial (moverse entre puntos, salir por una salida, coger o soltar, esperar, llegar a un sitio ya visitado) lo resuelve el servidor sin llamarte. Para que el mundo siga vivo, siembra con plant_hook lo que deba pasar después: alguien que llega a una hora, una consecuencia al acercarse a un sitio o al coger algo. Con mesura: uno o dos por escena como mucho, y nunca para empujar al jugador hacia un secreto.',
     'AGENDA: lo que un NPC anuncia con hora (una misa, un mercado, una reunión, una llegada) prográmalo con schedule_event para que ocurra de verdad: a su hora el servidor trae a la gente y a los NPC, y lo cuenta a quien esté. Para saber qué hay y cuándo, get_schedule. No narres como presente lo que la agenda no tiene en marcha.',
     'IMPARCIALIDAD: sabes cosas que los personajes no saben (secretos, motivaciones). Eres neutral: no guías al jugador hacia ellas, no las insinúas con el ambiente ni con las acciones sugeridas, no premias ni castigas por acercarse. El mundo reacciona a lo que el jugador hace, no a lo que tú sabes.',
-    'COMBATE: no hay turnos; es conversación. Un NPC hostil en el mismo punto (o que llega hasta el actor) actúa: resuelve su ataque con attack y narra. El ataque del jugador va con requires_roll kind=attack y requires_roll_target; el servidor tira contra la CA y aplica el daño; tú narras el resultado que te devuelve. Huir es move_to (el enemigo puede perseguir). A 0 PG el PJ cae inconsciente. Ventana decisiva (decisive_threat): solo con una amenaza real e inmediata contra el actor, nunca dos seguidas; si no responde en 60 s, la amenaza se ejecuta.',
-    'PROGRESO: recolectar (harvest) tira solo y cuenta práctica. Los encargos del tablón se cierran con complete_job al entregarlos al NPC que los pidió; los de entrega los valida el servidor. Las pistas se conceden con grant_clue únicamente cuando el jugador las ha obtenido con sus actos. Vender y comprar: sell_item y buy_item con los precios del NPC; el master no negocia fuera de esa lista salvo una tirada de Persuasión que como mucho mueve un 10 %. El contexto solo trae las pistas de este lugar o de quien está delante y los títulos del tablón: si el jugador busca otra pista, pregunta por un encargo o va a entregarlo, consulta get_campaign_notes antes de responder.',
+    'COMBATE: no hay turnos; es conversación. Un NPC hostil en el mismo punto (o que llega hasta el actor) actúa: resuelve su ataque con attack y narra. El ataque del jugador va con requires_roll kind=attack y requires_roll_target; el servidor tira contra la CA y aplica el daño; tú narras el resultado que te devuelve. Huir es move_to (el enemigo puede perseguir). A 0 PG el PJ cae inconsciente y el servidor tira sus salvaciones contra muerte: tú no las tiras ni decides si muere. MUERTE: un PJ solo muere si attack o apply_damage devuelven died (o el contexto dice MUERTO); nunca narres por tu cuenta que un PJ muere, resucita o vuelve de la muerte: su vuelta la cuenta el servidor. Atender a un caído: stabilize; curarle: heal; descanso que pide la ficción: take_rest; recursos de clase: spend_resource. Ventana decisiva (decisive_threat): solo con una amenaza real e inmediata contra el actor, nunca dos seguidas; si no responde en 60 s, la amenaza se ejecuta.',
+    'PROGRESO: recolectar (harvest) tira solo y cuenta práctica. Los encargos no se aceptan: si un NPC le da uno al actor o le pide algo concreto que hacer, ya es suyo; no le preguntes si acepta ni esperes un «acepto», y hacerlo o no es cosa suya. Uno del tablón queda en su Diario con que lo hablen; cualquier otro, regístralo con give_quest en ese mismo turno (título corto, de qué va, quién lo da, objetivo y recompensa si se dijo), y cuando lo cumpla o ya no se pueda, finish_quest. Los encargos del tablón se cierran con complete_job al entregarlos al NPC que los pidió; los de entrega los valida el servidor. Las pistas se conceden con grant_clue únicamente cuando el jugador las ha obtenido con sus actos. Vender y comprar: sell_item y buy_item con los precios del NPC; el master no negocia fuera de esa lista salvo una tirada de Persuasión que como mucho mueve un 10 %. El contexto solo trae las pistas de este lugar o de quien está delante y los títulos del tablón: si el jugador busca otra pista, pregunta por un encargo o va a entregarlo, consulta get_campaign_notes antes de responder.',
     'NOMBRES: los jugadores de la partida se conocen siempre por su nombre: llámalos por él. De los NPC, el actor solo conoce los nombres marcados como conocidos; a los demás los nombras por lo que se ve (la tabernera, el guardia del portón), también en suggested_actions. El nombre de un NPC se aprende cuando se presenta o alguien lo nombra: entonces va en names_learned.',
     'NPCs: interprétalos según su descripción, lo que quieren y lo que recuerdan. Si el actor habla con uno, pon su ID en npc_id; y solo si esa persona recordaría algo de la conversación, escríbelo en npc_memory_note con su importancia. Un NPC atiende a una persona a la vez: si está ocupado con otro, responde en ficción que espere, salvo motivo de peso.',
     'En log_event: narration_private para el actor; observable para testigos con detalle completo (tercera persona, con nombre); observable_vague para quien solo ve una figura. suggested_actions: 2-4 cosas que ESTE personaje querría hacer AHORA MISMO, en esta situación concreta y desde donde está: reacciones inmediatas a lo que acaba de pasar, no planes ni siguientes pasos de la historia. En infinitivo y breves ("Registrar el cofre", "Preguntar a Brenna por el incendio", "Guardar las bayas").',
@@ -116,6 +120,13 @@ export function clip(text: string, max: number): string {
 }
 
 /** Lo que el actor tiene con otros jugadores: a quién sigue, quién le ayuda y qué le han ofrecido (party.ts). */
+/** Caído o estable: lo que el máster debe saber (y no decidir). */
+function downLine(c: Character): string {
+  if (isDying(c)) return ` A 0 PG, CAYENDO: salvaciones contra muerte ${c.dying!.success} éxitos / ${c.dying!.fail} fallos (las tira el servidor). Se le puede estabilizar (stabilize) o curar (heal).`;
+  if (isStable(c)) return ` A 0 PG, ESTABLE: inconsciente; recobra 1 PG${c.dying?.stable_until_game_s ? ` hacia las ${hhmm(c.dying.stable_until_game_s)}` : ' en unas horas'}.`;
+  return '';
+}
+
 function partyLines(engine: Engine, actor: Character, nowG: number): string[] {
   const w = engine.world;
   const name = (id: Id) => { const o = w.characters.get(id); return o ? pcName(w, actor.id, o) : id; };
@@ -204,7 +215,17 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     // Ausente (su jugador se ha ido) y, a los 30 min, bajo el velo (SPEC §9.1).
     const away = o.veiled ? ' BAJO EL VELO: no es objetivo válido; si alguien va a por él, narra que se aparta o se esconde.'
       : o.away ? ` AUSENTE: no ataca ni gasta recursos; si le atacan se defiende solo (CA y salvaciones normales)${o.status === 'unconscious' ? '; está a 0 PG, estabilizado' : ''}.` : '';
-    present.push(`- ${name} en ${world.spot(op.spot_id).name}, ${Math.round(p.distance_m ?? 0)} m, percepción ${p.level} (vista ${p.sight}, oído ${p.sound})${o.status === 'asleep' ? ', dormido' : ''}${o.transit ? ', en movimiento' : ''}. JUGADOR: no narres sus actos, palabras, gestos ni intenciones; solo lo que ya consta en los eventos.${away}${o.following === actor.id ? ' Sigue al actor allá donde va.' : ''}`);
+    present.push(`- ${name} en ${world.spot(op.spot_id).name}, ${Math.round(p.distance_m ?? 0)} m, percepción ${p.level} (vista ${p.sight}, oído ${p.sound})${o.status === 'asleep' ? ', dormido' : ''}${o.transit ? ', en movimiento' : ''}. JUGADOR: no narres sus actos, palabras, gestos ni intenciones; solo lo que ya consta en los eventos.${away}${downLine(o)}${o.following === actor.id ? ' Sigue al actor allá donde va.' : ''}`);
+  }
+  // Muertos y sus cuerpos: no se levantan por narración.
+  for (const sp of world.spotsOf(loc.id)) {
+    for (const b of bodiesAt(world, sp.id)) {
+      const st = bodyStateOf(b)!;
+      const owner = world.characters.get(st.owner_id);
+      if (!owner) continue;
+      const dead = owner.status === 'dead';
+      present.push(`- ${world.itemDef(b.item_id).name} [${b.id}] en ${sp.name}: ${dead ? `${owner.name} está MUERTO (modo ${st.mode}); vuelve solo, por el servidor; no narres que se levanta ni que resucita.` : `lo que ${owner.name} dejó al morir (ya ha vuelto).`} ${st.mode === 'casual' ? `Solo ${owner.name} puede coger lo que hay dentro.` : 'Cualquiera puede saquearlo.'}`);
+    }
   }
   for (const n of world.npcs.values()) {
     const ns = world.spot(n.location.id);
@@ -242,7 +263,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   const skills = Object.keys(SKILLS).filter((k) => actor.proficiencies.skills.includes(k) || actor.proficiencies.expert.includes(k)).map((k) => SKILLS[k]!.es);
   L.push([
     `## Actor: ${actor.name} [${actor.id}]`,
-    `${actor.race} ${actor.class_name} nivel ${actor.level}. PG ${actor.hp_current}/${actor.hp_max}${actor.hp_temp ? ` (+${actor.hp_temp} temp)` : ''}. CA ${armorClass(world, actor)}. Estado: ${actor.status}${actor.conditions.length ? `; condiciones: ${actor.conditions.map((x) => x.name).join(', ')}` : ''}.`,
+    `${actor.race} ${actor.class_name} nivel ${actor.level}. PG ${actor.hp_current}/${actor.hp_max}${actor.hp_temp ? ` (+${actor.hp_temp} temp)` : ''}. CA ${armorClass(world, actor)}. Estado: ${actor.status}${actor.conditions.length ? `; condiciones: ${actor.conditions.map((x) => x.name).join(', ')}` : ''}.${downLine(actor)} Modo de muerte: ${actor.death_mode}.`,
+    `Dados de golpe: ${hitDiceLeft(actor)}/${actor.level} (d${actor.hit_die}).${resourceLines(actor).length ? ` Recursos (spend_resource): ${resourceLines(actor).join('; ')}.` : ''}`,
     `FUE ${actor.abilities.str} DES ${actor.abilities.dex} CON ${actor.abilities.con} INT ${actor.abilities.int} SAB ${actor.abilities.wis} CAR ${actor.abilities.cha}. Competente en: ${skills.join(', ') || 'nada'}.`,
     actor.appearance ? `Aspecto: ${actor.appearance}` : '',
     actor.backstory ? `Historia: ${actor.backstory}` : '',
@@ -327,6 +349,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   if (hints?.hooks.length) L.push(`## Gancho que salta ahora\n${hints.hooks.map((h) => `- ${h.what}`).join('\n')}\nHazlo ocurrir ahora, encajado con lo que hace el actor (puedes interrumpir su movimiento o dejar la acción a medias). Ya está consumido: no lo repitas.`);
   if (hints?.encounter) L.push('## Imprevisto\nHa salido la tirada de imprevisto del servidor: mientras el actor hace esto pasa algo que no buscaba (alguien llega o se va, un ruido, un animal, un cambio de luz o de tiempo), acorde al lugar y la hora. Pequeño y concreto; combate solo si encaja. Resuelve también la acción.');
   if (hints?.travel) L.push(travelBlock(world, engine.clock, hints.travel));
+  if (hints?.rest) L.push(`## Descanso interrumpido\nEl actor ${hints.rest.kind === 'long' ? 'dormía' : 'descansaba'} y algo le despierta (ya se le ha dicho: «${hints.rest.teaser}»). Lo que pasa, para ti: ${hints.rest.what}. Narra lo que encuentra al despertar; el descanso ya está cortado y el tiempo ya ha pasado.`);
   if (hints?.group) {
     const n = world.npcs.get(hints.group.npc_id);
     L.push([`## Conversación de grupo con ${n?.name ?? hints.group.npc_id}: responde UNA vez a todos`,
@@ -347,6 +370,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   // Campañas escritas (story.ts): misiones del actor con su paso en curso y la amenaza que avanza.
   const story = storyContext(world, actor, nowG);
   if (story) L.push(story);
+  const given = givenContext(world, actor);
+  if (given) L.push(given);
   if (planted.length) L.push('## Ganchos sembrados aquí (solo tú los ves; el servidor los dispara; cancel_hook si ya no encajan)\n' + planted.map((h) => `- ${describeHook(world, h, (s) => engine.clock.format(s))}`).join('\n'));
   // Rumores (rumors.ts): lo que se dice aquí y lo que el actor ya sembró en otros sitios. Se cuentan como habladuría, nunca como hecho.
   const rumors = rumorsIn(world, loc.id, nowG);

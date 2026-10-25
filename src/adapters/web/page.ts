@@ -311,6 +311,8 @@ export const PAGE = String.raw`<!doctype html>
   .tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 10px 4px; border-radius: 12px; background: var(--platter); border: 1px solid var(--sep); text-align: center; }
   .tile b { font-size: 17px; font-weight: 600; }
   .tile small { font-size: 11px; color: var(--muted); }
+  .tile.death { border-color: #6b3a36; background: rgba(120, 40, 36, 0.18); }
+  #card .respawn { margin-top: 8px; padding: 6px 10px; border-radius: 10px; font-size: 12px; color: #e8c9c4; background: rgba(120, 40, 36, 0.25); }
   .tile.wide { grid-column: 1 / -1; align-items: stretch; text-align: left; padding: 12px 14px; gap: 8px; }
   .tile.wide .l { display: flex; font-size: 13px; color: #b8b1a6; } .tile.wide .l b { margin-left: auto; font-size: 13px; color: var(--text); }
   .tile.wide .bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
@@ -374,6 +376,39 @@ export const PAGE = String.raw`<!doctype html>
   #journal .rumor b { color: var(--text); font-style: normal; font-weight: 600; }
   #journal .rumor small { display: block; margin-top: 3px; font-style: normal; color: var(--faint); }
   #journal .dates { margin-top: 6px; font-size: 11.5px; color: var(--faint); }
+  /* Misiones: icono por estado, seguir una, novedad, resumen y lo que te dijeron. */
+  .qi { position: relative; flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--control); color: var(--muted); }
+  .qi svg.i { width: 16px; height: 16px; }
+  .qi.active { background: var(--accent-tint); color: var(--accent); }
+  .qi.completed { background: rgba(79,191,122,.14); color: var(--ok); }
+  .qi.expired { color: var(--faint); opacity: .7; }
+  #journal .qdrop { margin-top: 8px; background: none; border: 1px solid var(--line); color: var(--faint); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  #journal .qdrop:hover { color: var(--text); }
+  .qi.main { background: var(--accent); color: var(--accent-ink); }
+  .qi .nw { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 2px var(--panel); }
+  .qi .nw svg.i { width: 9px; height: 9px; stroke-width: 2.4; }
+  #journal .q.isnew { box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
+  #journal summary .trk { flex: none; display: grid; place-items: center; width: 30px; height: 30px; margin: -4px -4px -4px 0; border: 0; border-radius: 50%; background: transparent; color: var(--faint); cursor: pointer; }
+  #journal summary .trk:hover { background: var(--hover); color: var(--text); }
+  #journal summary .trk.on { color: var(--accent); }
+  #journal summary .trk.on svg { fill: currentColor; }
+  #journal .qb .sum { margin: 0 0 8px; color: var(--text); }
+  #journal .qb .now { display: flex; gap: 6px; margin: 0 0 8px; color: var(--accent); font-weight: 600; }
+  #journal .qb .now::before { content: '→'; }
+  #journal .told { margin: 0 0 6px; padding: 7px 10px; border-left: 2px solid rgba(230,183,90,.45); border-radius: 0 10px 10px 0; background: rgba(255,255,255,.035); font-size: 12.5px; color: var(--muted); }
+  #journal .told b { color: var(--text); font-weight: 600; }
+  #journal .told small { display: block; margin-top: 2px; color: var(--faint); }
+  #journal .qb .rw { margin-top: 6px; font-size: 11.5px; color: var(--faint); }
+  #journal details.rumors summary b { font-size: 13px; }
+  .sec-row { display: flex; align-items: center; gap: 6px; padding-right: 10px; }
+  .sec-row .sec-t { flex: 1; min-width: 0; }
+  .qnew { display: inline-flex; align-items: center; gap: 4px; height: 22px; margin-left: 6px; padding: 0 8px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 600 11px/1 var(--sans); cursor: pointer; vertical-align: 1px; }
+  .qnew svg.i { width: 11px; height: 11px; stroke-width: 2.2; }
+  /* «Cerca de ti» solo en el tablero o el mapa ampliados, como columna junto al plano. */
+  body:not(.board-big):not(.map-big) #near { display: none; }
+  body.board-big #near, body.map-big #near { position: fixed; top: 40px; right: 40px; bottom: 40px; z-index: 22; width: 300px; overflow: auto; padding: 14px 10px; border-radius: 0 20px 20px 0; background: var(--panel); box-shadow: inset 1px 0 0 var(--sep); }
+  body.board-big #board, body.map-big #map { right: 340px; border-radius: 20px 0 0 20px; }
+  body.board-big #near .sec-b, body.map-big #near .sec-b { display: block !important; }
   #journal .pt { position: relative; flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; overflow: hidden; background: rgba(255,255,255,.06); color: var(--npc, #e6a587); box-shadow: inset 0 0 0 1.5px currentColor; font-size: 13px; font-weight: 600; }
   #journal .pt img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   #journal .ex { padding: 0 12px 10px; }
@@ -434,7 +469,8 @@ export const PAGE = String.raw`<!doctype html>
     #dr-title { display: none; }
     .dr-head { padding-left: 16px; }
     .dr-head .seg { margin-left: 0; }
-    body.map-big #map, body.board-big #board { inset: 12px; }
+    body.map-big #map, body.board-big #board { inset: 12px; bottom: 42vh; border-radius: 20px 20px 0 0; }
+    body.board-big #near, body.map-big #near { top: auto; left: 12px; right: 12px; bottom: 12px; width: auto; height: calc(42vh - 12px); border-radius: 0 0 20px 20px; box-shadow: inset 0 1px 0 var(--sep); }
   }
 ${VOICE_STYLE}
 ${TTS_STYLE}
@@ -478,6 +514,7 @@ ${PAINT_STYLE}
   .tts-pop, .sfx-pop { top: 44px; border-radius: 16px; background: var(--bubble); box-shadow: var(--window-shadow); }
   /* Hacer / Decir: lo que escribes lo hace tu personaje (al narrador) o lo dice tal cual (a los demás, sin narrador). */
   form button.mode { width: auto; min-width: 58px; white-space: nowrap; height: 32px; padding: 0 10px; border-radius: 16px; font: 600 12.5px/1 var(--sans); letter-spacing: 0; background: var(--control); color: #b8b1a6; }
+  form button.mode[hidden] { display: none; }
   form button.mode.say { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
   form button.mode .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
   form.say input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
@@ -666,6 +703,11 @@ ${PAINT_STYLE}
   <symbol id="i-max" viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></symbol>
+  <symbol id="i-q-available" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" stroke-dasharray="3 3"/><path d="M12 8.5v4M12 15.5v.01"/></symbol>
+  <symbol id="i-q-active" viewBox="0 0 24 24"><path d="M6 21V4M6 4h10l-2 4 2 4H6"/></symbol>
+  <symbol id="i-q-completed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9.5"/></symbol>
+  <symbol id="i-q-expired" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></symbol>
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></symbol>
   <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></symbol>
   <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4l-5 2v14l5-2 6 2 5-2V4l-5 2z"/><path d="M9 4v14M15 6v14"/></symbol>
@@ -745,7 +787,7 @@ ${PAINT_STYLE}
       <button data-cmd="tablon">/tablon</button><button data-cmd="progress">/progress</button>
     </div>
     <form id="form" autocomplete="off">
-      <button type="button" id="saymode" class="mode" aria-pressed="false" title="Hacer: el narrador cuenta lo que haces. Decir: tu personaje lo dice tal cual, al instante y sin narrador.">Hacer</button>
+      <button type="button" id="saymode" class="mode" hidden aria-pressed="false" title="Hacer: el narrador cuenta lo que haces. Decir: tu personaje lo dice tal cual, al instante y sin narrador.">Hacer</button>
       <span class="inwrap"><input id="input" placeholder="¿Qué haces?" aria-label="Acción"></span>
       <button type="button" id="cube" aria-haspopup="menu" aria-expanded="false" aria-controls="cube-menu" title="Hoja, diario y mochila" aria-label="Menú de la partida: hoja, diario y mochila"><svg class="i ic-cube"><use href="#i-cube"/></svg><svg class="i ic-x"><use href="#i-x"/></svg></button>
       <button type="submit" aria-label="Enviar" title="Enviar"><svg class="i"><use href="#i-send"/></svg></button>
@@ -906,6 +948,10 @@ ${PAINT_JS}
   function renderPresence(list) {
     var box = $('presence'), group = $('group');
     box.innerHTML = ''; group.innerHTML = '';
+    // Hacer / Decir solo tiene sentido con más jugadores en la partida; en solitario, todo va al narrador.
+    var alone = !list || !list.length;
+    $('saymode').hidden = alone;
+    if (alone && sayMode) setSayMode(false);
     if (!list || !list.length) return;
     list.forEach(function (p) {
       var sp = document.createElement('span');
@@ -1029,6 +1075,26 @@ ${PAINT_JS}
   }
 
   function field(s, name) { return (s.fields.filter(function (f) { return f.name === name; })[0] || {}).value || ''; }
+  /** Caída y muerte (death.ts): salvaciones, estable o cuenta atrás hasta volver. */
+  var DEATH_MODE = { casual: 'Casual: si mueres, vuelves a las 2 h con lo tuyo esperándote.', hardcore: 'Hardcore: si mueres, vuelves a los 30 min, sin nada y con una característica rebajada.' };
+  function deathBlock(s) {
+    var d = s.death;
+    if (!d) return '';
+    if (d.state === 'dead') return '<div class="tile wide death"><span class="l">☠ Muerto · vuelves en ' + escapeHtml(d.respawn_place || '') + '<b data-respawn="' + Number(d.respawn_real_ms || 0) + '">—</b></span><small>' + escapeHtml(DEATH_MODE[d.mode] || '') + '</small></div>';
+    if (d.state === 'dying') return '<div class="tile wide death"><span class="l">A 0 PG, cayendo<b>' + d.success + ' ✔ · ' + d.fail + ' ✖</b></span><small>El servidor tira tus salvaciones contra muerte: tres éxitos te estabilizan, tres fallos te matan.</small></div>';
+    if (d.state === 'stable') return '<div class="tile wide death"><span class="l">Inconsciente, estable<b>' + escapeHtml(d.stable_until ? 'hacia las ' + d.stable_until : '') + '</b></span><small>Recobras el sentido con 1 PG; si alguien te cura, antes.</small></div>';
+    return '<p class="sh-foot" style="margin-top:8px">Modo de muerte · ' + escapeHtml(DEATH_MODE[d.mode] || d.mode) + '</p>';
+  }
+  function fmtLeft(ms) {
+    var s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+  }
+  setInterval(function () {
+    document.querySelectorAll('[data-respawn]').forEach(function (el) {
+      var at = Number(el.getAttribute('data-respawn'));
+      el.textContent = at ? (at > Date.now() ? fmtLeft(at - Date.now()) : 'volviendo…') : '—';
+    });
+  }, 1000);
   function combatOf(s) {
     var c = field(s, 'Combate'), m = function (re) { var x = c.match(re); return x ? x : null; };
     var hp = m(/PG (\d+)\/(\d+)/), ca = m(/CA (\d+)/), sp = m(/Velocidad (\d+) ft/), pp = m(/Percepción pasiva (\d+)/), cond = m(/Condiciones: (.+)/);
@@ -1046,7 +1112,9 @@ ${PAINT_JS}
     $('card').innerHTML = '<div class="top"><span class="av">' + escapeHtml(initial(t[0] || '?')) + '</span><div class="who"><div class="name">' + escapeHtml(t[0] || '') + '</div>' +
       '<div class="sub">' + escapeHtml(t.slice(1).join(' · ')) + '</div></div>' +
       (c.hp ? '<div class="hpbox"><span>' + c.hp[1] + ' / ' + c.hp[2] + '</span><span class="bar"><i class="' + c.cls + '" style="width:' + c.pct + '%"></i></span></div>' : '') + '</div>' +
-      '<div class="stats">' + stat(c.ca, 'CA') + stat(c.speed, 'Vel.') + stat(c.pp, 'Perc.') + stat(lvl || '—', 'Nivel') + stat(loadShort(s), 'Carga') + '</div>';
+      '<div class="stats">' + stat(c.ca, 'CA') + stat(c.speed, 'Vel.') + stat(c.pp, 'Perc.') + stat(lvl || '—', 'Nivel') + stat(loadShort(s), 'Carga') + '</div>' +
+      (s.death && s.death.state === 'dead' ? '<div class="respawn">☠ Muerto · vuelves en <b data-respawn="' + Number(s.death.respawn_real_ms || 0) + '">—</b></div>'
+        : s.death && s.death.state === 'dying' ? '<div class="respawn">A 0 PG · salvaciones ' + s.death.success + ' ✔ · ' + s.death.fail + ' ✖</div>' : '');
     // «despierto · Taberna, La barra»: el lugar a la cabecera del chat; debajo, la hora, el rincón y el estado.
     var d = s.description.split('\n')[0], i = d.indexOf(' · ');
     var where = i >= 0 ? d.slice(i + 3) : d, state = i >= 0 ? d.slice(0, i) : '';
@@ -1070,6 +1138,10 @@ ${PAINT_JS}
     h += '<div class="tiles">';
     if (c.hp) h += '<div class="tile wide"><span class="l">Puntos de golpe<b>' + c.hp[1] + ' / ' + c.hp[2] + '</b></span><span class="bar"><i class="' + c.cls + '" style="width:' + c.pct + '%"></i></span>' + (c.cond ? '<small>Condiciones: ' + escapeHtml(c.cond) + '</small>' : '') + '</div>';
     h += '<div class="tile"><b>' + escapeHtml(c.ca) + '</b><small>CA</small></div><div class="tile"><b>' + escapeHtml(c.speed) + '</b><small>Velocidad</small></div><div class="tile"><b>' + escapeHtml(c.pp) + '</b><small>Percepción pasiva</small></div></div>';
+    var dz = deathBlock(s);
+    if (dz) h += dz.indexOf('<div') === 0 ? '<div class="tiles">' + dz + '</div>' : dz;
+    var rest = field(s, 'Descanso');
+    if (rest) h += '<p class="sh-foot" style="margin-top:8px">' + escapeHtml(rest).replace(/\n/g, '<br>') + '</p>';
     var scores = {};
     ABILS.forEach(function (a) { var m = abl.match(new RegExp(a + ' (\\d+)')); if (m) scores[a] = m[1]; });
     var saves = (abl.split('\n')[1] || '').replace(/^Salvaciones:\s*/, '');
@@ -1098,7 +1170,7 @@ ${PAINT_JS}
   var SLOT_ES = { back: 'a la espalda', body: 'puesto', armor: 'armadura', head: 'cabeza', belt: 'cinturón', waist: 'cintura', feet: 'pies', hands: 'manos', neck: 'cuello', ring: 'anillo', shield: 'escudo', cloak: 'capa', shoulder: 'al hombro' };
   /** Mochila: carga y monedas arriba; lo que tienes en las manos, equipado, en los bolsillos y en cada contenedor. */
   function renderPack(s) {
-    var known = { Combate: 1, 'Características': 1, Habilidades: 1 };
+    var known = { Combate: 1, 'Características': 1, Habilidades: 1, Descanso: 1, Muerte: 1 };
     var list = function (v) { return v && v !== '—' && v !== 'vacía' ? v.split(', ') : []; };
     var rows = function (items, eq) {
       if (!items.length) return '<div class="empty">Nada.</div>';
@@ -1348,9 +1420,9 @@ ${PAINT_JS}
         var label = '→ ' + e.to_location_name + ' · ' + fmtM(e.distance_m) + (e.blocked ? ' · bloqueada' : '');
         var start = Math.min(14, t / 3);
         var seg = 'x1="' + r1(px + ux * start) + '" y1="' + r1(py + uy * start) + '" x2="' + r1(ex) + '" y2="' + r1(ey) + '"';
-        o.push('<g class="exit' + (e.blocked ? ' blocked' : '') + '" data-exit="' + escapeHtml(e.id) + '" data-side="' + side + '">' +
-          '<line class="hit" ' + seg + '/><line class="path" marker-end="url(#' + (e.blocked ? 'arr-x' : 'arr') + ')" ' + seg + '/>' +
-          '<text x="' + r1(lx) + '" y="' + r1(ly) + '" text-anchor="' + anchor + '">' + escapeHtml(label) + '</text></g>');
+        // Sin rótulo: el tablero solo nombra personajes. El destino sale al pasar el ratón (title) y la flecha sigue siendo clicable.
+        o.push('<g class="exit' + (e.blocked ? ' blocked' : '') + '" data-exit="' + escapeHtml(e.id) + '" data-side="' + side + '"><title>' + escapeHtml(label) + '</title>' +
+          '<line class="hit" ' + seg + '/><line class="path" marker-end="url(#' + (e.blocked ? 'arr-x' : 'arr') + ')" ' + seg + '/></g>');
       });
     });
 
@@ -1382,13 +1454,12 @@ ${PAINT_JS}
       var spread = ts.length > 1 ? tokR * 1.15 : 0;
       var markR = Math.max(8, (ts.length ? tokR + spread : tokR * 0.6) + 2);
       o.push('<g class="spot' + (here ? ' here' : '') + '" data-spot="' + escapeHtml(sp.id) + '">');
-      o.push('<circle class="hit" cx="' + r1(px) + '" cy="' + r1(py) + '" r="' + r1(markR) + '"/>');
-      o.push('<text class="label" x="' + r1(px) + '" y="' + r1(py + markR + 8) + '">' + escapeHtml(sp.name) + '</text>');
-      var others = ts.filter(function (t) { return t.kind !== 'actor'; });
-      if (others.length) {
-        var who = others.map(function (t) { return t.label + (t.away ? ' (ausente)' : '') + (t.talking_with ? (t.talking_with === 'tú' ? ' (contigo)' : ' (con ' + t.talking_with.replace(/^tú y /, 'contigo y ') + ')') : ''); }).join(', ');
-        if (who.length > 36) who = who.slice(0, 35) + '…';
-        o.push('<text class="who" x="' + r1(px) + '" y="' + r1(py + markR + 20) + '">' + escapeHtml(who) + '</text>');
+      // El tablero solo nombra personajes: el nombre del punto no se pinta (sale en el tooltip y en «Cerca de ti»).
+      o.push('<circle class="hit" cx="' + r1(px) + '" cy="' + r1(py) + '" r="' + r1(markR) + '"><title>' + escapeHtml(sp.name) + '</title></circle>');
+      if (ts.length) {
+        var who = ts.map(function (t) { return t.kind === 'actor' ? 'tú' : t.label + (t.away ? ' (ausente)' : '') + (t.talking_with ? (t.talking_with === 'tú' ? ' (contigo)' : ' (con ' + t.talking_with.replace(/^tú y /, 'contigo y ') + ')') : ''); }).join(', ');
+        if (who.length > 40) who = who.slice(0, 39) + '…';
+        o.push('<text class="who" x="' + r1(px) + '" y="' + r1(py + markR + 10) + '">' + escapeHtml(who) + '</text>');
       }
       o.push('</g>');
       ts.forEach(function (t, i) {
@@ -1424,6 +1495,7 @@ ${PAINT_JS}
     var hits = function (a) { return labels.some(function (l) { return a.x < l.x + l.width + 3 && l.x < a.x + a.width + 3 && a.y < l.y + l.height + 2 && l.y < a.y + a.height + 2; }); };
     board.querySelectorAll('svg .exit').forEach(function (g) {
       var t = g.querySelector('text');
+      if (!t) return; // las salidas ya no llevan rótulo (el tablero solo nombra personajes)
       clamp(t);
       if (!t.getBBox().width || !hits(t.getBBox())) return;
       var along = g.getAttribute('data-side') === 'top' || g.getAttribute('data-side') === 'bottom' ? 'x' : 'y';
@@ -1712,7 +1784,11 @@ ${PAINT_JS}
     var dot = document.querySelector('#cube-menu .dotnew');
     if (dot) dot.hidden = !on;
   }
-  function markJournalSeen() { if (!journalData) return; store(journalKey(), journalData.version); setJournalNew(false); }
+  function markJournalSeen() {
+    if (!journalData) return;
+    store(journalKey(), journalData.version); setJournalNew(false);
+    if (journalSection === 'quests') markQuestsSeen(journalData);
+  }
 
   function loadJournal() {
     if (!current) return;
@@ -1728,22 +1804,47 @@ ${PAINT_JS}
   }
 
   var CHEV = '<svg class="i chev"><use href="#i-chev"/></svg>';
-  function questHtml(q) {
-    var sub = [q.giver && q.kind !== 'debt' ? 'lo pide ' + q.giver : '', q.reward || '', q.kind === 'main' ? 'misión principal' : '', q.kind === 'achievement' ? 'logro' : '', q.kind === 'debt' ? 'deuda' : ''].filter(Boolean).join(' · ');
-    var h = '<details class="q ' + q.status + (q.kind === 'main' ? ' main' : '') + '"' + (q.pinned ? ' open' : '') + '><summary><span class="st">' + escapeHtml(JSTATUS[q.status] || q.status) + '</span>' +
-      '<span class="tt"><b>' + escapeHtml(q.title) + '</b>' + (sub ? '<small>' + escapeHtml(sub) + '</small>' : '') + '</span>' + CHEV + '</summary><div class="qb">';
-    if (q.text) h += '<p>' + escapeHtml(q.text) + '</p>';
-    if (q.clock) {
+
+  // Misión seguida (la del recuadro del panel) y misiones ya vistas, por partida y PJ (localStorage).
+  function trackKey() { return 'tavernus.track.' + game + '.' + current; }
+  function qseenKey() { return 'tavernus.qseen.' + game + '.' + current; }
+  function qseen() { try { return JSON.parse(store(qseenKey()) || 'null'); } catch (e) { return null; } }
+  /** Misiones que el PJ aún no ha mirado. La primera vez, todas las de ahora cuentan como vistas. */
+  function newQuests(j) {
+    var all = j.quests.active.concat(j.quests.completed), seen = qseen();
+    if (!seen) { store(qseenKey(), JSON.stringify(all.map(function (q) { return q.id + ':' + q.status; }))); return []; }
+    return all.filter(function (q) { return q.status !== 'expired' && seen.indexOf(q.id + ':' + q.status) < 0; });
+  }
+  function markQuestsSeen(j) { store(qseenKey(), JSON.stringify(j.quests.active.concat(j.quests.completed).map(function (q) { return q.id + ':' + q.status; }))); }
+  /** La seguida: la que eligió el jugador si sigue abierta; si no, la principal o la primera en curso. */
+  function trackedQuest(j) {
+    var qs = j.quests.active, id = store(trackKey());
+    var live = qs.filter(function (x) { return x.status === 'active'; });
+    return qs.filter(function (x) { return x.id === id && x.status !== 'expired'; })[0] || live.filter(function (x) { return x.kind === 'main'; })[0] || live[0] || qs.filter(function (x) { return x.status !== 'expired'; })[0] || null;
+  }
+  function questIcon(q, isNew) {
+    return '<span class="qi ' + q.status + (q.kind === 'main' && q.status === 'active' ? ' main' : '') + '" title="' + escapeHtml(JSTATUS[q.status] || q.status) + '"><svg class="i"><use href="#i-q-' + q.status + '"/></svg>' +
+      (isNew ? '<span class="nw"><svg class="i"><use href="#i-spark"/></svg></span>' : '') + '</span>';
+  }
+  function questHtml(q, ctx) {
+    var isNew = ctx && ctx.fresh.indexOf(q.id) >= 0, tracked = ctx && ctx.tracked === q.id;
+    var sub = [JSTATUS[q.status] || q.status, q.kind === 'main' ? 'misión principal' : q.kind === 'achievement' ? 'logro' : q.kind === 'debt' ? 'deuda' : q.giver ? 'lo pide ' + q.giver : ''].filter(Boolean).join(' · ');
+    var open = tracked || isNew;
+    var h = '<details class="q ' + q.status + (q.kind === 'main' ? ' main' : '') + (isNew ? ' isnew' : '') + '"' + (open ? ' open' : '') + '><summary>' + questIcon(q, isNew) +
+      '<span class="tt"><b>' + escapeHtml(q.title) + (isNew ? '<span class="pill-new">Nueva</span>' : '') + '</b><small>' + escapeHtml(sub) + '</small></span>' +
+      (q.status === 'completed' || q.status === 'expired' ? '' : '<button type="button" class="trk' + (tracked ? ' on' : '') + '" data-track="' + escapeHtml(q.id) + '" title="' + (tracked ? 'La sigues en el panel' : 'Seguir en el panel') + '" aria-pressed="' + tracked + '"><svg class="i"><use href="#i-star"/></svg></button>') +
+      CHEV + '</summary><div class="qb">';
+    var s = q.summary || { text: q.text, next: null, told: [] };
+    if (s.text) h += '<p class="sum">' + escapeHtml(s.text) + '</p>';
+    if (s.next) h += '<div class="now">' + escapeHtml(s.next) + '</div>';
+    if (q.clock && q.status !== 'completed') {
       var late = q.clock.days_left <= 0;
-      h += '<div class="clock' + (late ? ' late' : '') + '"><svg class="i" style="width:13px;height:13px"><use href="#i-clock"/></svg>' + (late ? 'Plazo vencido' : 'Quedan ' + q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) + ' · vence ' + escapeHtml(q.clock.deadline) + '</div>';
-      h += '<p class="muted">Si vence: ' + escapeHtml(q.clock.runs_out) + '</p>';
+      h += '<div class="clock' + (late ? ' late' : '') + '"><svg class="i" style="width:13px;height:13px"><use href="#i-clock"/></svg>' + (late ? 'Plazo vencido' : 'Quedan ' + q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) + '</div>';
     }
-    if (q.antagonist) h += '<p class="muted">Se te opone: <b>' + escapeHtml(q.antagonist.name) + '</b> (' + escapeHtml(q.antagonist.role) + ')</p>';
-    if (q.steps.length) h += '<ul class="steps">' + q.steps.map(function (s) { return '<li class="' + (s.done ? 'done' : '') + '">' + escapeHtml(s.text) + '</li>'; }).join('') + '</ul>';
-    if (q.paths.length) h += '<div class="paths"><b>Caminos</b><ol>' + q.paths.map(function (p) { return '<li>' + escapeHtml(p) + '</li>'; }).join('') + '</ol></div>';
-    q.rumors.forEach(function (r) { h += rumorHtml(r); });
-    var dates = [q.seen ? (q.kind === 'job' ? 'Visto en el tablón: ' : 'Desde: ') + q.seen : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean);
-    if (dates.length) h += '<div class="dates">' + escapeHtml(dates.join(' · ')) + '</div>';
+    (s.told || []).forEach(function (t) { h += '<div class="told"><b>' + escapeHtml(t.who) + ':</b> «' + escapeHtml(t.said) + '»<small>' + escapeHtml(t.when) + '</small></div>'; });
+    if (q.steps.length > 1) h += '<ul class="steps">' + q.steps.map(function (st) { return '<li class="' + (st.done ? 'done' : '') + '">' + escapeHtml(st.text) + '</li>'; }).join('') + '</ul>';
+    var foot = [q.reward ? 'Recompensa: ' + q.reward : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean).join(' · ');
+    if (foot) h += '<div class="rw">' + escapeHtml(foot) + '</div>';
     return h + '</div></details>';
   }
   function rumorHtml(r) {
@@ -1774,14 +1875,23 @@ ${PAINT_JS}
     return '<div class="pl ' + p.status + (p.here ? ' here' : '') + '"><i></i><span><b>' + escapeHtml(p.name) + '</b><small>' + escapeHtml(sub) + '</small></span></div>';
   }
 
+  /** «Dejar esta misión» al pie de las que se pueden dejar (encargos y misiones dadas en curso). */
+  function withDrop(html, q) {
+    if (!q.droppable) return html;
+    var btn = '<button type="button" class="qdrop" data-drop="' + escapeHtml(q.id) + '">Dejar esta misión</button>';
+    var end = html.lastIndexOf('</div></details>');
+    return end < 0 ? html : html.slice(0, end) + btn + html.slice(end);
+  }
   function renderJournal(j) {
     var h = '<div class="jnav">' + JSECTIONS.map(function (s) { return '<button type="button" data-jsec="' + s[0] + '"' + (s[0] === journalSection ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('') + '</div>';
     if (journalSection === 'quests') {
+      var tq = trackedQuest(j), ctx = { fresh: newQuests(j).map(function (q) { return q.id; }), tracked: tq ? tq.id : null };
+      var render = function (q) { return withDrop(questHtml(q, ctx), q); };
       h += '<h3>Activas <span>' + j.quests.active.length + '</span></h3>';
-      h += j.quests.active.length ? j.quests.active.map(questHtml).join('') : '<p class="empty">Nada entre manos. Mira el tablón o habla con la gente.</p>';
-      if (j.rumors.length) h += '<h3>Se dice</h3>' + j.rumors.map(rumorHtml).join('');
+      h += j.quests.active.length ? j.quests.active.map(render).join('') : '<p class="empty">Nada entre manos. Mira el tablón o habla con la gente.</p>';
       h += '<h3>Completadas <span>' + j.quests.completed.length + '</span></h3>';
-      h += j.quests.completed.length ? j.quests.completed.map(questHtml).join('') : '<p class="empty">Todavía ninguna.</p>';
+      h += j.quests.completed.length ? j.quests.completed.map(render).join('') : '<p class="empty">Todavía ninguna.</p>';
+      if (j.rumors.length) h += '<details class="rumors"><summary><span class="tt"><b>Se dice</b><small>' + j.rumors.length + (j.rumors.length === 1 ? ' rumor' : ' rumores') + '</small></span>' + CHEV + '</summary><div class="qb">' + j.rumors.map(rumorHtml).join('') + '</div></details>';
     } else if (journalSection === 'talks') {
       h += '<h3>Conversaciones <span>' + j.conversations.length + '</span></h3>';
       h += j.conversations.length ? j.conversations.map(talkHtml).join('') : '<p class="empty">Aún no has hablado con nadie.</p>';
@@ -1795,10 +1905,25 @@ ${PAINT_JS}
     journalEl.innerHTML = h;
   }
   journalEl.addEventListener('click', function (ev) {
+    var d = ev.target.closest('[data-drop]');
+    if (d) {
+      ev.preventDefault(); d.disabled = true;
+      post('/api/quest/drop', { quest: d.getAttribute('data-drop') }).then(function (r) { if (r && !r.ok) handleReply(r); loadJournal(); });
+      return;
+    }
+    // Estrella: seguir esta misión en el recuadro del panel.
+    var t = ev.target.closest('[data-track]');
+    if (t) {
+      ev.preventDefault(); ev.stopPropagation();
+      store(trackKey(), t.getAttribute('data-track'));
+      if (journalData) { renderJournal(journalData); renderQuest(journalData); }
+      return;
+    }
     var b = ev.target.closest('[data-jsec]');
     if (!b) return;
     journalSection = b.getAttribute('data-jsec'); store('tavernus.journal.section', journalSection);
     if (journalData) renderJournal(journalData);
+    if (journalData && journalSection === 'quests') { markQuestsSeen(journalData); renderQuest(journalData); }
   });
   /** Abre algo desde el hilo: Hoja, Diario o Mochila en la columna del chat; tablero o mapa en el panel. */
   function goTab(t) {
@@ -1854,8 +1979,9 @@ ${PAINT_JS}
     if (!text || busy) return;
     input.value = '';
     // Ni las consultas ni la tirada salen como mensaje del jugador: solo su respuesta.
-    if (text.charAt(0) === '/') command(text.split(/\s+/)[0]);
-    else if (sayMode || /^[—–«"“-]/.test(text)) say(text);
+    // Los de depuración en offline llevan argumento («/time +2h», «/daño 5»); los demás, solo el nombre.
+    if (text.charAt(0) === '/') command(/^\/(time|da[ñn]o)\s/i.test(text) ? text.trim() : text.split(/\s+/)[0]);
+    else if (sayMode || (!$('saymode').hidden && /^[—–«"“-]/.test(text))) say(text);
     else if (text === 'tirar' || text === 'roll') { spendButtons(); roll(); }
     else act(text);
   });
@@ -1906,20 +2032,31 @@ ${PAINT_JS}
   }
   $('near').addEventListener('click', function (ev) {
     var go = ev.target.closest('[data-go]'), talk = ev.target.closest('[data-talk]');
+    // «Cerca de ti» vive en el tablero o el mapa ampliados: al elegir algo, se cierra para ver el hilo.
+    if (go || talk) {
+      if (document.body.classList.contains('board-big')) toggleBig(false);
+      if (document.body.classList.contains('map-big')) toggleMapBig(false);
+    }
     if (go && !busy) { var sp = spotById(go.getAttribute('data-go')); if (sp && !isHere(sp)) { showSide(false); act('Ir a ' + sp.name); } }
     if (talk) { showSide(false); input.value = 'Hablo con ' + talk.getAttribute('data-talk') + ': '; input.focus(); }
   });
   /** La misión en curso (la fijada o la primera activa): título, plazo y pasos hechos; abre el Diario. */
+  /**
+   * Recuadro de misión del panel: la que el jugador sigue (estrella en el Diario) o, si no eligió, la principal.
+   * Con el estado como icono, lo que toca ahora y el plazo; si hay misiones nuevas, una pastilla para verlas.
+   */
   function renderQuest(j) {
-    var qs = j.quests.active, live = qs.filter(function (x) { return x.status === 'active'; }), q = qs.filter(function (x) { return x.pinned; })[0] || live.filter(function (x) { return x.kind === 'main'; })[0] || live[0] || qs.filter(function (x) { return x.status !== 'expired'; })[0];
-    var h = '<button type="button" class="sec-t" data-col="quest" aria-expanded="' + !document.body.classList.contains('col-quest') + '"><svg class="i chev"><use href="#i-chev"/></svg>Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</button><div class="sec-b">';
+    var live = j.quests.active.filter(function (x) { return x.status === 'active'; }), q = trackedQuest(j), fresh = newQuests(j);
+    var chip = fresh.length ? '<button type="button" class="qnew" data-qnew title="Ver qué hay de nuevo en el Diario"><svg class="i"><use href="#i-spark"/></svg>' + fresh.length + (fresh.length === 1 ? ' nueva' : ' nuevas') + '</button>' : '';
+    var h = '<div class="sec-row"><button type="button" class="sec-t" data-col="quest" aria-expanded="' + !document.body.classList.contains('col-quest') + '"><svg class="i chev"><use href="#i-chev"/></svg>Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</button>' + chip + '</div><div class="sec-b">';
     if (!q) { $('quest').innerHTML = h + '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button></div>'; return; }
     var done = q.steps.filter(function (s) { return s.done; }).length, total = q.steps.length;
-    var sub = [q.giver ? 'lo pide ' + q.giver : '', q.reward || ''].filter(Boolean).join(' · ');
-    var when = q.clock ? (q.clock.days_left <= 0 ? 'plazo vencido' : q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) : '';
-    h += '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>' + escapeHtml(q.title) + (store(journalKey()) !== j.version ? '<span class="pill-new">Novedad</span>' : '') + '</b>' +
-      (sub ? '<small>' + escapeHtml(sub) + '</small>' : '') +
-      (total ? '<span class="prog"><i><span style="width:' + Math.round(100 * done / total) + '%"></span></i><small>' + done + ' de ' + total + (when ? ' · ' + escapeHtml(when) : '') + '</small></span>' : (when ? '<small>' + escapeHtml(when) + '</small>' : '')) + '</span></button>';
+    var s = q.summary || { text: '', next: null };
+    var line = s.next || s.text || '';
+    var when = q.clock ? (q.clock.days_left <= 0 ? 'plazo vencido' : 'quedan ' + q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) : '';
+    h += '<button type="button" class="prow" data-quest title="Abrir en el Diario">' + questIcon(q, false) + '<span class="tt"><b>' + escapeHtml(q.title) + '</b>' +
+      (line ? '<small>' + escapeHtml(line) + '</small>' : '') +
+      (total > 1 ? '<span class="prog"><i><span style="width:' + Math.round(100 * done / total) + '%"></span></i><small>' + done + ' de ' + total + (when ? ' · ' + escapeHtml(when) : '') + '</small></span>' : (when ? '<small>' + escapeHtml(when) + '</small>' : '')) + '</span></button>';
     $('quest').innerHTML = h + '</div>';
   }
   /** Cabeceras plegables del panel (tablero, cerca, misión); se recuerda cuáles están cerradas. */
@@ -1934,7 +2071,14 @@ ${PAINT_JS}
     var b = ev.target.closest('[data-col]');
     if (b) { var k = b.getAttribute('data-col'); setCol(k, !document.body.classList.contains('col-' + k)); }
   });
-  $('quest').addEventListener('click', function (ev) { if (ev.target.closest('[data-quest]')) { showSide(false); openDrawer('journal'); } });
+  $('quest').addEventListener('click', function (ev) {
+    // La pastilla de novedades y el recuadro abren el Diario en Misiones (allí se ven marcadas las nuevas).
+    if (ev.target.closest('[data-qnew]') || ev.target.closest('[data-quest]')) {
+      ev.stopPropagation();
+      journalSection = 'quests'; store('tavernus.journal.section', journalSection);
+      showSide(false); openDrawer('journal');
+    }
+  });
 
   // --- El cubo: Hoja, Diario y Mochila en la misma columna del chat ---------------------
   var cube = $('cube'), cubeMenu = $('cube-menu'), drawer = $('drawer'), drawerKey = null;
@@ -1955,7 +2099,12 @@ ${PAINT_JS}
     cube.classList.add('on');
     cube.setAttribute('aria-label', 'Cerrar ' + DR_TITLE[k].toLowerCase()); cube.title = 'Cerrar';
     if (k === 'sheet' && sheetData) renderSheet(sheetData);
-    if (k === 'journal') { markJournalSeen(); if (journalData) renderQuest(journalData); }
+    if (k === 'journal') {
+      // Se pinta con las novedades marcadas y, ya vistas, dejan de contar en el recuadro del panel.
+      if (journalData) renderJournal(journalData);
+      markJournalSeen();
+      if (journalData) renderQuest(journalData);
+    }
   }
   function closeDrawer() {
     drawerKey = null;
