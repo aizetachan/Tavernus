@@ -348,6 +348,27 @@
         "DISCORD_TOKEN": "",
         "IMAGES": "off"
       }
+    },
+    {
+      "name": "tavernus-web-publico",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
+      "port": 3247,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3247",
+        "WEB_ACCESS": "public",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/publico",
+        "GAMES_DIR": "./data/local/publico/games",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "off"
+      }
     }
   ]
 }

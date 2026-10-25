@@ -11,6 +11,9 @@
  *   - open:   como antes, cualquiera juega con cualquier PJ (local, pruebas).
  *   - invite: sin enlace válido solo se ve «pide una invitación»; el menú y la
  *             creación quedan para el anfitrión (ADMIN_TOKEN).
+ *   - public: cualquiera entra al menú y crea sus partidas (queda de anfitrión en
+ *             ellas); cada navegador ve solo las suyas y aquellas a las que se unió
+ *             con un enlace. ADMIN_TOKEN sigue viéndolo todo.
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -19,7 +22,7 @@ import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Id } from '../../engine/model.js';
 
-export type AccessMode = 'open' | 'invite';
+export type AccessMode = 'open' | 'invite' | 'public';
 
 export interface AccessOptions {
   mode: AccessMode;
@@ -38,6 +41,8 @@ export interface Seat {
   character_id: Id | null;
   /** Para quién es («Anfitrión», «Plaza 2»…), solo para el anfitrión. */
   label: string;
+  /** Asiento de quien creó la partida: reparte invitaciones y puede borrarla (modo public). */
+  host?: boolean;
   created_at: string;
   last_seen_at: string | null;
 }
@@ -57,10 +62,10 @@ export function randomToken(bytes = 24): string {
 export async function accessFromEnv(env: NodeJS.ProcessEnv, root: string, host: string): Promise<AccessOptions> {
   const raw = env['WEB_ACCESS']?.trim().toLowerCase();
   const loopback = host === '127.0.0.1' || host === 'localhost' || host === '::1';
-  const mode: AccessMode = raw === 'open' || raw === 'invite' ? raw
+  const mode: AccessMode = raw === 'open' || raw === 'invite' || raw === 'public' ? raw
     : env['ADMIN_TOKEN']?.trim() || env['NODE_ENV'] === 'production' || !loopback ? 'invite' : 'open';
   const secret = env['SESSION_SECRET']?.trim() || await persisted(join(root, '.session-secret'));
-  const adminToken = env['ADMIN_TOKEN']?.trim() || (mode === 'invite' ? await persisted(join(root, '.admin-token')) : null);
+  const adminToken = env['ADMIN_TOKEN']?.trim() || (mode !== 'open' ? await persisted(join(root, '.admin-token')) : null);
   return { mode, adminToken, secret, secureCookies: env['WEB_SECURE_COOKIES'] === 'on' || (env['PUBLIC_URL'] ?? '').startsWith('https:') };
 }
 
@@ -111,8 +116,13 @@ export class SeatStore {
   }
 }
 
-export function newSeat(label: string, characterId: Id | null, now: Date): Seat {
-  return { id: randomToken(6), token: randomToken(), character_id: characterId, label, created_at: now.toISOString(), last_seen_at: null };
+export function newSeat(label: string, characterId: Id | null, now: Date, host = false): Seat {
+  return { id: randomToken(6), token: randomToken(), character_id: characterId, label, ...(host ? { host: true } : {}), created_at: now.toISOString(), last_seen_at: null };
+}
+
+/** ¿Es el asiento de quien creó la partida? (Los de antes de `host` se llamaban «Anfitrión».) */
+export function isHostSeat(seat: Seat | null): boolean {
+  return Boolean(seat && (seat.host || seat.label === 'Anfitrión'));
 }
 
 // ---------------------------------------------------------------------------
