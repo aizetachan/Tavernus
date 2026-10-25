@@ -83,7 +83,7 @@ export function spotLockedFor(world: World, spot: Spot, c: Character): boolean {
 
 interface Edge { to: Id; distance_m: number; duration_s: number; via_exit_id?: Id }
 
-function edgesFrom(world: World, c: Character, vehicle: Vehicle | null, spot: Spot, speed: number): Edge[] {
+function edgesFrom(world: World, c: Character, vehicle: Vehicle | null, spot: Spot, speed: number, ignoreBlocks = false): Edge[] {
   const out: Edge[] = [];
   for (const v of world.spotsOf(spot.location_id)) {
     if (v.id === spot.id || !spotVisibleTo(v, c) || !vehicleCanEnter(vehicle, v) || spotLockedFor(world, v, c)) continue;
@@ -91,7 +91,7 @@ function edgesFrom(world: World, c: Character, vehicle: Vehicle | null, spot: Sp
     out.push({ to: v.id, distance_m: d, duration_s: d / (speed * v.terrain_multiplier) + v.entry_cost_s });
   }
   for (const { exit, to_spot_id } of world.exitsFrom(spot.id)) {
-    if (exit.state.blocked_by || exit.state.locked) continue;
+    if (!ignoreBlocks && (exit.state.blocked_by || exit.state.locked)) continue;
     const v = world.spot(to_spot_id);
     if (!spotVisibleTo(v, c) || !vehicleCanEnter(vehicle, v)) continue;
     out.push({
@@ -107,7 +107,7 @@ function edgesFrom(world: World, c: Character, vehicle: Vehicle | null, spot: Sp
 /** Semilla de Dijkstra: un punto con un coste inicial ya pagado. */
 interface Seed { spot_id: Id; cost_s: number; partial?: TransitLeg }
 
-function dijkstra(world: World, c: Character, vehicle: Vehicle | null, seeds: Seed[], target: Id, speed: number):
+function dijkstra(world: World, c: Character, vehicle: Vehicle | null, seeds: Seed[], target: Id, speed: number, ignoreBlocks = false):
   { legs: TransitLeg[]; total_s: number } | null {
   const dist = new Map<Id, number>();
   const prev = new Map<Id, { from: Id; edge: Edge } | { seed: Seed }>();
@@ -124,7 +124,7 @@ function dijkstra(world: World, c: Character, vehicle: Vehicle | null, seeds: Se
     if (done.has(id)) continue;
     done.add(id);
     if (id === target) break;
-    for (const e of edgesFrom(world, c, vehicle, world.spot(id), speed)) {
+    for (const e of edgesFrom(world, c, vehicle, world.spot(id), speed, ignoreBlocks)) {
       const nc = cost + e.duration_s;
       if (nc < (dist.get(e.to) ?? Infinity)) {
         dist.set(e.to, nc);
@@ -340,4 +340,17 @@ export function estimateTravel(world: World, characterId: Id, targetSpotId: Id, 
   if (!target) return null;
   const r = dijkstra(world, c, vehicle, [{ spot_id: pos.spot_id, cost_s: 0 }], targetSpotId, speedMps(world, c, pace));
   return r ? r.total_s : null;
+}
+
+/**
+ * Ruta como si no hubiera salidas bloqueadas ni cerradas: sirve para saber
+ * hasta dónde puede llegar el PJ antes de toparse con una (goto.ts). Los
+ * tramos no llevan instantes sellados. null si ni así hay camino.
+ */
+export function routeIgnoringBlocks(world: World, characterId: Id, targetSpotId: Id, pace: Pace, nowGameS: number): TransitLeg[] | null {
+  const c = world.character(characterId);
+  const pos = positionOf(world, c, nowGameS);
+  const vehicle = c.location.type === 'vehicle' ? world.vehicle(c.location.id) : null;
+  if (!world.spots.has(targetSpotId) || pos.spot_id === targetSpotId) return null;
+  return dijkstra(world, c, vehicle, [{ spot_id: pos.spot_id, cost_s: 0 }], targetSpotId, speedMps(world, c, pace), true)?.legs ?? null;
 }

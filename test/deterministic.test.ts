@@ -228,14 +228,19 @@ describe('el mundo puede sorprender', () => {
   it('dormir: sin imprevisto no hay master; con imprevisto, el master', async () => {
     const quiet = await boot();
     quiet.engine.attachMaster(forbidden);
-    await quiet.engine.act('ch_kael', 'dormir');
-    expect(quiet.engine.world.character('ch_kael').status).toBe('asleep');
+    const k = quiet.engine.world.character('ch_kael');
+    k.hp_current = 3;
+    const r = await quiet.engine.act('ch_kael', 'dormir');
+    expect(r.text).toMatch(/^Duermes ocho horas/);
+    expect(k.hp_current).toBe(k.hp_max);
+    expect(k.status).toBe('active'); // el descanso entero, con su reloj adelantado 8 h
 
     const loud = await boot(ALWAYS_ENCOUNTER);
     const { master, calls } = recorder(loud.engine);
     loud.engine.attachMaster(master);
     await loud.engine.act('ch_kael', 'dormir');
     expect(calls).toHaveLength(1);
+    expect(calls[0]!.hints?.rest?.kind).toBe('long');
     expect(calls[0]!.hints?.encounter).not.toBeNull();
   });
 

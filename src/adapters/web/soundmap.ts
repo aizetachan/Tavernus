@@ -2,7 +2,7 @@
  * Sonido del juego: de cada evento del motor a una secuencia corta de claves
  * («pasos-madera», «puerta-abrir», «puerta-cerrar», «ambiente-plaza»). Las
  * claves se resuelven en el navegador contra el catálogo de sfx.ts (receta
- * procedural, fichero de biblioteca o audio generado por IA).
+ * procedural o pista grabada de public/sfx; la generación por IA está apagada).
  *
  * Dos piezas:
  *   - `cuesFor(input)`: función pura y determinista; es la que se prueba.
@@ -23,14 +23,14 @@ import { lightAt } from '../../engine/perception.js';
 export type Floor = 'madera' | 'piedra' | 'tierra' | 'hierba' | 'agua';
 
 /** Ambientes en bucle del catálogo (clave sin el prefijo «ambiente-»). */
-export type Ambience = 'taberna' | 'interior' | 'plaza' | 'plaza-noche' | 'bosque' | 'bosque-noche' | 'agua' | 'lluvia';
+export type Ambience = 'taberna' | 'herreria' | 'interior' | 'plaza' | 'plaza-noche' | 'bosque' | 'bosque-noche' | 'agua' | 'lluvia';
 
 export const EFFECT_KEYS = [
   'pasos-madera', 'pasos-piedra', 'pasos-tierra', 'pasos-hierba', 'pasos-agua',
   'puerta-abrir', 'puerta-cerrar', 'moneda', 'objeto-coger', 'objeto-soltar', 'dado',
   'espada-golpe', 'espada-fallo', 'dano', 'curar', 'hacha', 'descubrir', 'campana',
 ] as const;
-export const AMBIENCE_KEYS = ['taberna', 'interior', 'plaza', 'plaza-noche', 'bosque', 'bosque-noche', 'agua', 'lluvia'].map((a) => `ambiente-${a}`);
+export const AMBIENCE_KEYS = ['taberna', 'herreria', 'interior', 'plaza', 'plaza-noche', 'bosque', 'bosque-noche', 'agua', 'lluvia'].map((a) => `ambiente-${a}`);
 export const SOUND_KEYS: readonly string[] = [...EFFECT_KEYS, ...AMBIENCE_KEYS];
 
 /** Lo que el sonido necesita saber de un sitio. */
@@ -132,6 +132,8 @@ export function floorOf(world: World, spot: Spot): Floor {
 export function ambienceOf(world: World, engine: Pick<Engine, 'clock'>, loc: Location, nowGameS: number): Ambience {
   const weather = [loc.state['weather'], (world.campaign as { weather?: unknown }).weather].filter((x): x is string => typeof x === 'string');
   if (!loc.indoor && has(/\b(lluvia|llueve|tormenta|chubasco|rain|storm)/, ...weather)) return 'lluvia';
+  // Un taller de forja suena a fragua y martillo, dentro o fuera (va antes del ruido: una herrería es ruidosa, no una taberna).
+  if (has(/\b(herreria|herrero|forja|fragua|yunque|smithy|blacksmith|forge)\b/, loc.name, loc.id.replace(/_/g, ' '))) return 'herreria';
   if (loc.indoor) {
     const lively = loc.ambience.noise >= 0.25 || has(/\b(taberna|posada|meson|cantina|inn)\b/, loc.name, loc.id);
     return lively ? 'taberna' : 'interior';

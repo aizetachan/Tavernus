@@ -114,7 +114,7 @@ export interface CreateGameInput {
   name: string;
   mode: NewGameMode;
   /** `hook`: lo que el jugador cuenta de por qué viene; en un mundo generado entra en su situación inicial. */
-  character?: { name: string; race_id?: string; class_id?: string; hook?: string; /** Cómo se ve: alimenta su primer avatar (src/ai/avatar.ts). */ appearance?: string } | null;
+  character?: { name: string; race_id?: string; class_id?: string; hook?: string; /** Cómo se ve: alimenta su primer avatar (src/ai/avatar.ts). */ appearance?: string; /** Al morir (SPEC §4.7): casual por defecto. */ death_mode?: 'casual' | 'hardcore' } | null;
   dice_seed?: number | null;
   campaign_id?: Id;
   /** Mundo nuevo generado en vez de la semilla demo. */
@@ -386,6 +386,7 @@ export class GameManager {
       ...(input.race_id ? { race_id: input.race_id } : {}),
       ...(input.class_id ? { class_id: input.class_id } : {}),
       ...(cleanLook(input.appearance ?? '') ? { appearance: cleanLook(input.appearance!) } : {}),
+      death_mode: input.death_mode === 'hardcore' ? 'hardcore' : 'casual',
     }, {
       place: (c) => {
         const near = nearId ? engine.world.characters.get(nearId) : null;

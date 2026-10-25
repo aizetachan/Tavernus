@@ -13,6 +13,7 @@ import type { GameClock } from '../clock/clock.js';
 import { normalize } from './aliases.js';
 import { attitudeOf } from './combat.js';
 import type { Character, Id, Location, Pace } from './model.js';
+import { enterDestination, exitDestination, nameScore, npcDestination, resolveDestination } from './goto.js';
 import { positionOf } from './movement.js';
 import { aEs, descriptorOf } from './narrate.js';
 import { perceive } from './perception.js';
@@ -31,7 +32,12 @@ export type TrivialIntent =
  */
 const NOT_TRIVIAL = /\b(y|e|luego|despues|mientras|pero|para|hablar|hablo|decir|digo|preguntar|pregunto|gritar|grito|saludar|saludo|pedir|pido|comprar|compro|vender|vendo|atacar|ataco|golpear|golpeo|matar|mato|disparar|disparo|amenazar|amenazo|robar|robo|esconder|escondo|abrir|abro|forzar|fuerzo|buscar|busco|mirar|miro|examinar|examino)\b/;
 
-const MOVE = /^(?:ir|voy|vamos|ve|vete|me acerco|acercarme|me dirijo|dirigirme|camino|caminar|me muevo|moverme|cruzo|cruzar)\s+(.+)$/;
+const MOVE = /^(?:ir|voy|vamos|ve|vete|me acerco|acercarme|me dirijo|dirigirme|camino|caminar|me muevo|moverme|cruzo|cruzar|entrar|entro|entra|entramos|volver|vuelvo|vuelve|volvemos|regresar|regreso|regresa)\s+(.+)$/;
+const BARE_ENTER = /^(?:entrar|entro|entra|entramos|pasar dentro|paso dentro|entrar dentro|entro dentro)$/;
+const BARE_EXIT = /^(?:salir|salgo|sal|salimos|salir fuera|salgo fuera|salir de aqui|salgo de aqui)$/;
+const LEAVE = /^(?:salir|salgo|sal|salimos)\s+de(?:l)?\s+(.+)$/;
+/** «Ir a ver a Hugo», «voy donde Hugo», «ir con Hugo», «ir a buscar a Hugo». */
+const TO_NPC = /^(?:ir|voy|vamos|me voy|ve|vete)\s+(?:a ver a|a visitar a|a buscar a|con|donde|adonde esta|a donde esta|a casa de)\s+(.+)$/;
 const EXIT = /^(?:salir|salgo|sal|me voy|marcharme|me marcho|parto|partir)\s+(?:hacia|a|al|para|rumbo a)\s+(.+)$/;
 const TAKE = /^(?:coger|cojo|coge|recoger|recojo|recoge|tomar|tomo|agarrar|agarro|pillo|pillar)\s+(.+)$/;
 const DROP = /^(?:soltar|suelto|suelta|dejar|dejo|deja)\s+(.+)$/;
@@ -63,6 +69,13 @@ function matchScore(query: string, names: string[]): number {
   return best;
 }
 
+/** «Salir de la taberna» estando en la taberna: salir a secas. */
+function leavesHere(world: World, c: Character, body: string): boolean {
+  const m = body.match(LEAVE);
+  const here = world.characterSpot(c);
+  return Boolean(m && here && nameScore(m[1]!, [world.location(here.location_id).name, 'aqui']) > 0);
+}
+
 /** Exactamente una cosa con la mejor puntuación; si no, null. */
 function single(query: string, cands: Named[]): Id | null {
   let best = 0;
@@ -91,7 +104,7 @@ function mentionsSomeone(world: World, target: string): boolean {
 }
 
 /** Reconoce una acción trivial y resuelve su objetivo contra lo que el PJ tiene delante ahora. */
-export function parseTrivial(world: World, c: Character, text: string): TrivialIntent | null {
+export function parseTrivial(world: World, c: Character, text: string, nowGameS = 0): TrivialIntent | null {
   const t = clean(text);
   if (!t) return null;
   if (WAIT.test(t)) return { kind: 'wait' };
@@ -104,6 +117,12 @@ export function parseTrivial(world: World, c: Character, text: string): TrivialI
     pace = p[1] === 'corriendo' ? 'run' : p[1] === 'sigilosamente' || p[1] === 'con sigilo' ? 'stealth' : 'walk';
     body = body.slice(0, p.index).trim();
   }
+
+  // «Entrar», «salir», «salir de la taberna», «ir a ver a Hugo»: a dónde lleva lo dice el mundo.
+  const bare = BARE_ENTER.test(body) ? enterDestination(world, c, nowGameS)
+    : BARE_EXIT.test(body) || leavesHere(world, c, body) ? exitDestination(world, c, nowGameS)
+    : body.match(TO_NPC) ? npcDestination(world, c, body.match(TO_NPC)![1]!) : null;
+  if (bare) return { kind: 'move', spot_id: bare.spot_id, pace, exit: bare.location_id !== world.characterSpot(c)?.location_id };
 
   const exitM = body.match(EXIT);
   const moveM = exitM ? null : body.match(MOVE);
@@ -119,25 +138,10 @@ export function parseTrivial(world: World, c: Character, text: string): TrivialI
   if (!here) return null;
 
   if (exitM || moveM) {
-    const cands: Named[] = [];
-    const exits: Named[] = [];
-    if (moveM) {
-      for (const s of world.spotsOf(here.location_id)) {
-        if (s.hidden && !s.discovered_by.includes(c.id)) continue;
-        cands.push({ id: s.id, names: [s.name, ...s.aliases] });
-      }
-    }
-    for (const s of world.spotsOf(here.location_id)) {
-      for (const { exit, to_spot_id } of world.exitsFrom(s.id)) {
-        if (exit.state.blocked_by || exit.state.locked) continue; // una puerta cerrada es una situación: al master
-        const dest = world.spot(to_spot_id);
-        const loc = world.location(dest.location_id);
-        exits.push({ id: to_spot_id, names: [loc.name, dest.name, ...dest.aliases] });
-      }
-    }
-    const id = single(target, [...cands, ...exits]);
-    if (!id || id === here.id) return null;
-    return { kind: 'move', spot_id: id, pace, exit: world.spot(id).location_id !== here.location_id };
+    // Ir a un sitio es llegar y entrar (goto.ts): una localización lleva a su punto de entrada.
+    const d = resolveDestination(world, c, target, { spotsHere: Boolean(moveM), pace, nowGameS });
+    if (!d) return null;
+    return { kind: 'move', spot_id: d.spot_id, pace, exit: d.location_id !== here.location_id };
   }
 
   if (takeM) {
@@ -172,8 +176,9 @@ function singleItem(world: World, target: string, instanceIds: Id[]): Id | null 
 /**
  * Motivo por el que la escena NO está tranquila para este PJ en estas
  * localizaciones, o null si lo está. Con cualquier motivo, la acción va al master.
+ * `leaving`: el PJ se va a otra localización; alguien que solo recela no lo para.
  */
-export function tension(world: World, c: Character, locationIds: Id[], recentTags: string[]): string | null {
+export function tension(world: World, c: Character, locationIds: Id[], recentTags: string[], opts: { leaving?: boolean } = {}): string | null {
   if (c.status !== 'active') return `estado ${c.status}`;
   if (c.decisive) return 'ventana decisiva abierta';
   for (const n of world.npcs.values()) {
@@ -181,7 +186,8 @@ export function tension(world: World, c: Character, locationIds: Id[], recentTag
     if (n.talking_to?.character_id === c.id) return `conversación con ${n.name}`;
     if (!locationIds.includes(world.spot(n.location.id).location_id)) continue;
     const a = attitudeOf(n, c.id);
-    if (a === 'hostile' || a === 'unfriendly') return `${n.name} ${a}`;
+    // Quien solo recela (unfriendly) no impide marcharse a otro sitio; quien es hostil, sí.
+    if (a === 'hostile' || (a === 'unfriendly' && !opts.leaving)) return `${n.name} ${a}`;
   }
   if (recentTags.some((t) => t === 'combat' || t === 'danger' || t === 'threat')) return 'combate o peligro reciente';
   return null;

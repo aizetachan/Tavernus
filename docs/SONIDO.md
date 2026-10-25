@@ -2,6 +2,14 @@
 
 Fecha: 2026-10-22. Los precios y licencias se consultaron ese día en las páginas oficiales enlazadas al final. Lo que no viene de una fuente oficial va marcado como *sin verificar*.
 
+## Estado actual (2026-10-25): ambientes grabados, IA desactivada
+
+- **Ambientes:** pistas grabadas de Freesound con licencia CC0, en `public/sfx/ambient/<clave>.ogg` y `.mp3`. Son de 35 a 60 s, en bucle sin costura (fundido de igual potencia entre el final y el principio), igualadas a −24 dBFS RMS y de 400 KB a 1 MB cada una. Cubren la taberna, la herrería, el interior tranquilo (chimenea), la plaza de día y de noche, el bosque de día y de noche y el arroyo. La lluvia no tiene pista y sigue con su receta. Atribución completa en `public/sfx/LICENSES`. El panel «Sonido» de la cabecera del chat muestra los créditos con enlace a cada pista.
+- **El navegador** pide Vorbis (`?fmt=ogg`) si lo sabe tocar, porque no deja hueco al repetir, y si no, MP3. Del MP3 se recorta el silencio de relleno de los extremos para que el bucle no tenga hueco. Las pistas suenan bajas por defecto (ganancia 0,7 sobre −24 dBFS y ambiente al 50 %), se funden 2,5 s al cambiar de sitio y bajan mientras habla el narrador.
+- **Respaldo:** si una clave no tiene pista o el fichero falla, suena la receta procedural de siempre. Los efectos (pasos, puertas, monedas…) siguen sintetizados.
+- **Generación por IA: desactivada, para más adelante.** `SFX_AI_ENABLED = false` en `src/ai/sound.ts`. Mientras esté así no se crea ningún proveedor ni se llama a ninguna API, aunque haya `SFX_PROVIDER` y clave en el entorno (solo deja un aviso en el registro). El código de ElevenLabs y Stable Audio, las descripciones (`SOUND_PROMPTS`) y la caché por partida se quedan como están. Para recuperarla: poner `SFX_AI_ENABLED = true` y elegir el proveedor en el entorno como se explica más abajo. Lo generado tendría prioridad sobre las pistas, porque `data/games/<slug>/sfx` se mira antes que `public/sfx`.
+- **Cómo se prepararon las pistas:** las páginas de Freesound piden iniciar sesión para bajar el original, así que se usó la previsualización HQ pública de cada sonido (`cdn.freesound.org/previews/…-hq.ogg`, unos 190 kbps). La licencia del sonido cubre también la previsualización. Se recortó un tramo con el Python de Blender (módulo `aud` y numpy, porque en esta máquina no había ffmpeg), se le hizo el bucle con fundido, se igualó el nivel y se codificó en Vorbis y MP3 a 96–112 kbps estéreo.
+
 ## Qué queremos
 
 Al salir de la taberna se oyen pasos sobre madera, una puerta que se abre y se cierra y, después, el ambiente de la plaza. Para eso hacen falta dos capas:
@@ -9,9 +17,9 @@ Al salir de la taberna se oyen pasos sobre madera, una puerta que se abre y se c
 | Capa | Ejemplos | Características |
 |---|---|---|
 | **Efectos puntuales** | pasos (madera, piedra, tierra, hierba, agua), puerta (abrir y cerrar), moneda, coger y soltar, dado, espada (golpe y fallo), daño, curar, hacha, descubrir, campana | De 0,5 a 3 s. Se disparan desde eventos del motor y se tocan en secuencia. |
-| **Ambientes en bucle** | taberna, interior tranquilo, plaza (de día y de noche), bosque (de día y de noche), agua, lluvia | De 10 a 30 s y sin costura. Uno por localización, con fundido al cambiar. Bajan cuando habla el narrador. |
+| **Ambientes en bucle** | taberna, herrería, interior tranquilo, plaza (de día y de noche), bosque (de día y de noche), agua, lluvia | De 10 a 30 s y sin costura. Uno por localización, con fundido al cambiar. Bajan cuando habla el narrador. |
 
-El catálogo es **genérico**: las claves dependen del tipo de suelo y del arquetipo de lugar, no del mundo. Con unos 26 sonidos (18 efectos y 8 ambientes) se cubre cualquier mundo generado. Generar sonidos por mundo solo tiene sentido si se quiere un sabor propio, por ejemplo la taberna de un puerto pirata frente a un refugio de montaña.
+El catálogo es **genérico**: las claves dependen del tipo de suelo y del arquetipo de lugar, no del mundo. Con unos 27 sonidos (18 efectos y 9 ambientes) se cubre cualquier mundo generado. Generar sonidos por mundo solo tiene sentido si se quiere un sabor propio, por ejemplo la taberna de un puerto pirata frente a un refugio de montaña.
 
 ## Opciones comparadas
 
@@ -81,10 +89,11 @@ Todos los costes son **por mundo, generados una vez**, y nunca por acción. Desp
 - Botón de silencio y panel de volumen general y de ambiente en la cabecera del chat. Se recuerdan en `localStorage` (`tavernus.sfx.*`, con try/catch). Silenciado, el contexto se suspende.
 - Arranca solo tras el primer gesto (clic, tecla o toque), con un búfer mudo para iOS. Se suspende al ocultar la pestaña.
 - Comparte gestor con el narrador: baja el ambiente mientras `speechSynthesis` habla, y expone `TavernusAudio.duck(on)` para el narrador con audio de nube.
-- Cada clave se resuelve contra el catálogo: primero un fichero (`data/games/<slug>/sfx`, luego `public/sfx`, servidos por `/api/sfx?key=…`) y, si no lo hay o falla, la receta procedural. Hay 26 recetas: 18 efectos y 8 ambientes.
+- Cada clave se resuelve contra el catálogo: primero un fichero (`data/games/<slug>/sfx`, luego `public/sfx`, servidos por `/api/sfx?key=…`) y, si no lo hay o falla, la receta procedural. Hay 27 recetas: 18 efectos y 9 ambientes (la herrería se añadió el 2026-10-25).
 
-**Adaptador de IA preparado y apagado** (`src/ai/sound.ts`):
+**Adaptador de IA, desactivado para más adelante** (`src/ai/sound.ts`):
 
+- Desde el 2026-10-25 está desactivado en el código (`SFX_AI_ENABLED = false`): no se activa ni con el entorno. Lo que sigue describe cómo funciona cuando se vuelva a encender.
 - Se activa con `SFX_PROVIDER=elevenlabs` y `ELEVENLABS_API_KEY`, o con `SFX_PROVIDER=stability` y `STABILITY_API_KEY`. Tener la clave en el entorno no basta para activarlo.
 - Activado, `/api/sfx?key=…` genera la clave que falte una sola vez (las peticiones simultáneas se agrupan) y la guarda en `data/games/<slug>/sfx/<clave>.mp3`.
 - `SFX_MAX_GENERATIONS` (40 por defecto) limita las generaciones por arranque del servidor.

@@ -529,6 +529,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const id = await games.addCharacter(manifest.slug, `web:${manifest.slug}:${seat.id}`, {
         name: str('name'), ...(str('race') ? { race_id: str('race') } : {}), ...(str('class') ? { class_id: str('class') } : {}),
         ...(str('hook') ? { hook: str('hook') } : {}), ...(str('appearance') ? { appearance: str('appearance') } : {}),
+        death_mode: str('death_mode') === 'hardcore' ? 'hardcore' : 'casual',
       }, { near: str('near') || null });
       await seats.update(games.paths(manifest).dir, (list) => { const s = list.find((x) => x.id === seat.id); if (s) s.character_id = id; });
       rt.introduce(id);
@@ -546,7 +547,9 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       if (!id) return;
       // Vuelve tras días sin jugar: «Donde lo dejamos» entra en el historial antes de mandarlo.
       await engine.welcomeBack(id).catch((e) => console.error('[web] recap:', e));
-      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+      // no-transform y x-accel-buffering: que ningún proxy (túnel de Cloudflare, nginx) comprima ni retenga el stream; el relleno inicial fuerza el primer envío.
+      res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
+      res.write(':' + ' '.repeat(2048) + '\n\n');
       const ill = illustratorOf(engine);
       rt.offerScene(id);
       // En una sola escritura: quién habla y el historial llegan juntos.
@@ -624,6 +627,11 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         case '/api/roll': {
           if (!rt.begin(id)) { json(res, 409, { ok: false, text: 'Ya tienes una acción en curso: espera a que el narrador responda.' }); return; }
           try { json(res, 200, reply(await engine.rollPending(id))); } finally { rt.end(id); }
+          return;
+        }
+        case '/api/quest/drop': {
+          const quest = typeof body['quest'] === 'string' ? body['quest'] : '';
+          json(res, 200, await engine.dropQuest(id, quest));
           return;
         }
         case '/api/command': {
@@ -730,7 +738,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const dice_seed = seedRaw === null || seedRaw === undefined || seedRaw === '' ? null : Number(seedRaw);
       const created = await games.create({
         name: str('name'), mode: mode as NewGameMode, dice_seed,
-        character: str('character') ? { name: str('character'), ...(str('race') ? { race_id: str('race') } : {}), ...(str('class') ? { class_id: str('class') } : {}), ...(str('hook') ? { hook: str('hook') } : {}), ...(str('appearance') ? { appearance: str('appearance') } : {}) } : null,
+        character: str('character') ? { name: str('character'), ...(str('race') ? { race_id: str('race') } : {}), ...(str('class') ? { class_id: str('class') } : {}), ...(str('hook') ? { hook: str('hook') } : {}), ...(str('appearance') ? { appearance: str('appearance') } : {}), death_mode: str('death_mode') === 'hardcore' ? 'hardcore' : 'casual' } : null,
         // Mundo nuevo generado (src/worldgen); lo valida el gestor.
         world: body['world'] && typeof body['world'] === 'object' ? body['world'] as WorldInput : null,
       });

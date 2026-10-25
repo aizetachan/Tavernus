@@ -5,6 +5,7 @@
 
 import { abilityModifier, proficiencyBonus, rollD20, rollExpr, type Advantage, type Rng } from './dice.js';
 import type { Character, Id, Npc } from './model.js';
+import { damageCharacter } from './death.js';
 import { armorClass } from './rules.js';
 import type { World } from './world.js';
 
@@ -51,9 +52,11 @@ export interface AttackOutcome {
   target_down: boolean;
   target_dead: boolean;
   xp_gained: number;
+  /** Golpe a un PJ ya a 0 PG: fallos de salvación contra muerte que suma (2 si es crítico). */
+  death_save_failures?: number;
 }
 
-export function resolveAttack(world: World, attackerId: Id, targetId: Id, advantage: Advantage = 'none', rng?: Rng): AttackOutcome | { error: string } {
+export function resolveAttack(world: World, attackerId: Id, targetId: Id, advantage: Advantage = 'none', rng?: Rng, nowGameS?: number): AttackOutcome | { error: string } {
   const a = combatant(world, attackerId);
   const t = combatant(world, targetId);
   if (!a || !t) return { error: 'atacante u objetivo desconocido' };
@@ -61,6 +64,8 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
   if (t.kind === 'npc' && (!t.n.stats || t.n.status !== 'alive')) return { error: `${t.n.name} no es un objetivo válido` };
   if (t.kind === 'character' && (t.c.status === 'dead' || t.c.veiled)) return { error: t.c.veiled ? `${t.c.name} está bajo el velo: no puede recibir daño` : `${t.c.name} ya está muerto` };
   if (a.kind === 'character' && a.c.status !== 'active') return { error: `${a.c.name} no puede actuar (${a.c.status})` };
+  // SRD: contra alguien inconsciente, ventaja (y el golpe a 0 PG suma fallos de salvación).
+  if (t.kind === 'character' && t.c.status === 'unconscious' && advantage === 'none') advantage = 'advantage';
 
   // Ataque.
   let bonus: number; let dmgExpr: string; let dmgType: string; let weaponName: string; let dmgMod = 0;
@@ -85,15 +90,12 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
   }
 
   // Aplicar.
-  let targetHp = ''; let down = false; let dead = false; let xp = 0;
+  let targetHp = ''; let down = false; let dead = false; let xp = 0; let failures = 0;
   if (t.kind === 'character') {
     const c = t.c;
     if (hit) {
-      let left = damage;
-      const fromTemp = Math.min(c.hp_temp, left); c.hp_temp -= fromTemp; left -= fromTemp;
-      c.hp_current = Math.max(0, c.hp_current - left);
-      if (c.hp_current === 0 && c.status === 'active') { c.status = 'unconscious'; down = true; stabilizeIfAway(c); }
-      world.touch('characters', c.id);
+      const r = damageCharacter(world, c, damage, { crit: roll.natural === 20, cause: `${nameOfCombatant(a)} (${weaponName})`, ...(nowGameS === undefined ? {} : { nowGameS }) });
+      down = r.down; dead = r.died; failures = r.failures;
     }
     targetHp = `${c.hp_current}/${c.hp_max}`;
   } else {
@@ -117,17 +119,10 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
     attacker: nameOfCombatant(a), target: nameOfCombatant(t), weapon: weaponName,
     attack_breakdown: roll.breakdown, attack_total: roll.total, target_ac: ac, hit, natural: roll.natural ?? null,
     damage, damage_breakdown: dmgBreakdown, damage_type: dmgType, target_hp: targetHp, target_down: down, target_dead: dead, xp_gained: xp,
+    ...(failures ? { death_save_failures: failures } : {}),
   };
 }
 
 export function attitudeOf(n: Npc, characterId: Id) { return n.attitude.by_character[characterId] ?? n.attitude.default; }
 
-/**
- * Un PJ ausente que cae a 0 PG queda estabilizado: no muere ausente
- * (docs/MULTIJUGADOR.md, «Desconexiones»). Sigue inconsciente hasta que le curen
- * o vuelva y alguien le atienda.
- */
-export function stabilizeIfAway(c: Character): void {
-  if (!c.away || c.hp_current > 0 || c.conditions.some((x) => x.name === 'estable')) return;
-  c.conditions.push({ name: 'estable', source: 'cayó estando ausente: no muere ausente', expires_game_s: null });
-}
+export { stabilizeIfAway } from './death.js';

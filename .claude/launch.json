@@ -288,6 +288,66 @@
         "DISCORD_TOKEN": "",
         "IMAGES": "off"
       }
+    },
+    {
+      "name": "tavernus-web-goto",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
+      "port": 3227,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3227",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/goto",
+        "GAMES_DIR": "./data/local/goto/games",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "off"
+      }
+    },
+    {
+      "name": "tavernus-web-muerte",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
+      "port": 3237,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3237",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/muerte",
+        "GAMES_DIR": "./data/local/muerte/games",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "off"
+      }
+    },
+    {
+      "name": "tavernus-web-goto-haiku",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web"
+      ],
+      "port": 3228,
+      "env": {
+        "MASTER_MODE": "live",
+        "MASTER_MODEL": "claude-haiku-5-5",
+        "MASTER_EFFORT": "low",
+        "WEB_PORT": "3228",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/goto-haiku",
+        "GAMES_DIR": "./data/local/goto-haiku/games",
+        "DISCORD_TOKEN": "",
+        "IMAGES": "off"
+      }
     }
   ]
 }

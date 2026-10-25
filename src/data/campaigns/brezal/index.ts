@@ -48,6 +48,11 @@ export const BREZAL: AuthoredCampaign = {
     bible: BIBLE,
     laws: LAWS,
     situations: SITUATIONS,
+    // Quien muere vuelve en el camastro de Ilse (SPEC §4.7): ella le encontró.
+    death_rules: {
+      respawn_spot_id: 'sp_cu_camastro',
+      respawn_story: 'Ilse te encontró y te trajo a la Casa de las hierbas. Dice que tardaste mucho en volver a respirar, y no quiere hablar de lo que murmurabas.',
+    },
     schedule: SCHEDULE,
     encounters: ENCOUNTERS,
     story: STORY,

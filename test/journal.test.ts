@@ -125,6 +125,50 @@ describe('diario: misiones', () => {
   });
 });
 
+describe('diario: resumen de misiones', () => {
+  it('cada misión trae un resumen: de qué va, qué toca ahora y lo relevante que le dijeron; la amenaza ya no es un objetivo', async () => {
+    const time = fakeTime();
+    const { engine } = await bootEngine(time);
+    const kael = engine.world.character('ch_kael');
+    kael.situation = {
+      why_here: 'Llegas siguiendo a un arriero que te debe tres semanas de paga.', wants: 'Recuperar tu paga.', threat: 'Te quedan pocas monedas.',
+      clock_days: 5, clock_runs_out: 'Te echan de la posada.', antagonist_npc_id: 'npc_doro', start_spot_id: 'sp_tab_barra',
+      paths: ['Plantarte ante Doro.'], opening: 'Te despiertas en la barra.', deadline_game_s: engine.gameNow() + 5 * GAME_DAY,
+    };
+    const job = activeJobs(engine.world).find((x) => x.giver_npc_id === 'npc_brenna')!;
+    // Hablar con quien pide el encargo: su respuesta entra en el resumen de ese encargo.
+    talk(engine, 'ch_kael', `Acepto: ${job.title}`, 'Brenna asiente.', [
+      { speaker: 'actor', text: `Me encargo de ${job.title.toLowerCase()}.` }, { speaker: 'npc', npc_id: 'npc_brenna', text: 'Trato hecho. Vuelve antes del anochecer.' },
+    ], ['master', 'social', 'job']);
+    const j = journalOf(engine, 'ch_kael');
+    const main = j.quests.active.find((q) => q.kind === 'main')!;
+    expect(main.steps.map((s) => s.text)).toEqual(['Recuperar tu paga.']);
+    expect(main.summary).toMatchObject({ text: 'Recuperar tu paga.', next: null });
+    const mine = j.quests.active.find((q) => q.id === job.id)!;
+    expect(mine.summary.text.length).toBeGreaterThan(0);
+    expect(mine.summary.next).toBe(mine.steps.find((s) => !s.done)!.text);
+    expect(mine.summary.told).toEqual([expect.objectContaining({ said: 'Trato hecho. Vuelve antes del anochecer.' })]);
+  });
+
+  it('la vista web no manda al navegador los caminos, quién se opone, qué pasa si vence ni los rumores de cada misión', async () => {
+    const time = fakeTime();
+    const { engine } = await bootEngine(time);
+    engine.world.character('ch_kael').situation = {
+      why_here: 'Llegas siguiendo a un arriero.', wants: 'Recuperar tu paga.', threat: 'Te quedan pocas monedas.',
+      clock_days: 5, clock_runs_out: 'Te echan de la posada.', antagonist_npc_id: 'npc_doro', start_spot_id: 'sp_tab_barra',
+      paths: ['Plantarte ante Doro.'], opening: 'Te despiertas.', deadline_game_s: engine.gameNow() + 5 * GAME_DAY,
+    };
+    engine.world.character('ch_kael').knows.push('npc_doro');
+    let body = '';
+    const res = { writeHead: () => res, end: (b: string) => { body = b; } } as unknown as ServerResponse;
+    handleJournalRequest(engine, {} as IncomingMessage, res, new URL('http://x/api/journal?character=ch_kael'), 'demo');
+    expect(body).not.toContain('Plantarte ante Doro');
+    expect(body).not.toContain('Te echan de la posada');
+    const main = (JSON.parse(body) as { quests: { active: { kind: string; antagonist: unknown; paths: unknown[] }[] } }).quests.active.find((q) => q.kind === 'main')!;
+    expect(main).toMatchObject({ antagonist: null, paths: [] });
+  });
+});
+
 describe('diario: conversaciones', () => {
   it('cada intercambio con lines va a la conversación de su NPC: fecha, lugar, lo dicho y la respuesta; y lo que el NPC recuerda', async () => {
     const time = fakeTime();

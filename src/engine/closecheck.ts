@@ -314,3 +314,54 @@ export const RACE_WORDS: Record<string, string[]> = {
   human: ['hombre', 'mujer', 'humano', 'humana'], elf: ['elfo', 'elfa'], dwarf: ['enano', 'enana'], halfling: ['mediano', 'mediana'],
   gnome: ['gnomo', 'gnoma'], 'half-elf': ['semielfo', 'semielfa'], 'half-orc': ['semiorco', 'semiorca'], tiefling: ['tiefling'], dragonborn: ['draconido', 'draconida'],
 };
+
+// ---------------------------------------------------------------------------
+// Muerte y vuelta sin estado (death.ts)
+// ---------------------------------------------------------------------------
+
+/** Lo que niega, duda o compara: «casi muere», «parece muerto», «si no le atienden, morirá». */
+const DEATH_HEDGE = /\b(no|ni|casi|a punto de|podria\w*|puede\w*|si|como si|parece\w*|teme\w*|cree\w*|creia\w*|crees|quiza\w*|tal vez|salvo|sin)\b/;
+const DIES = '(?:muere|ha muerto|esta muert[oa]|cae muert[oa]|yace muert[oa]|queda muert[oa]|fallece|ha fallecido|deja de respirar|exhala su ultimo aliento|pierde la vida|se queda sin vida|yace sin vida)';
+const RISES = '(?:resucita|ha resucitado|revive|vuelve a la vida|regresa de (?:entre )?los muertos|vuelve de (?:la muerte|entre los muertos)|se levanta de entre los muertos)';
+const YOU_DIE = /\b(mueres|has muerto|estas muert[oa]|caes muert[oa]|dejas de respirar|exhalas tu ultimo aliento|pierdes la vida|te matan|te mata|te han matado|tu cadaver)\b/;
+const YOU_RISE = /\b(resucitas|has resucitado|revives|vuelves a la vida|regresas de (?:entre )?los muertos|vuelves de (?:la muerte|entre los muertos))\b/;
+
+export interface DeathHit { name: string; kind: 'death' | 'rise'; phrase: string }
+
+/**
+ * Frases que matan o devuelven a la vida a un PJ sin que el estado lo diga.
+ * Morir solo vale si el PJ ya está muerto (lo mató un tool en este turno o
+ * antes); volver de la muerte nunca: eso lo cuenta el servidor. El actor va en
+ * segunda persona («mueres»); los demás, por su nombre. Las frases que niegan
+ * o dudan no cuentan.
+ */
+export function deathNarration(input: { texts: readonly string[]; actor: { name: string; dead: boolean }; others: readonly { name: string; dead: boolean }[] }): DeathHit[] {
+  const out: DeathHit[] = [];
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const people = [{ ...input.actor, you: true }, ...input.others.map((o) => ({ ...o, you: false }))];
+  for (const raw of input.texts) {
+    for (const c of clauses(norm(raw).replace(/«[^»]*»/g, ' . '))) {
+      if (DEATH_HEDGE.test(c)) continue;
+      for (const p of people) {
+        const n = esc(norm(p.name));
+        const dies = new RegExp(`\\b${n}(?:\\s+[a-z]+){0,3}\\s+${DIES}\\b|\\b(?:mat\\w*|asesin\\w*) a ${n}\\b|\\b(?:cadaver|cuerpo sin vida) de ${n}\\b`).exec(c) ?? (p.you ? YOU_DIE.exec(c) : null);
+        if (dies && !p.dead) out.push({ name: p.name, kind: 'death', phrase: dies[0] });
+        const rises = new RegExp(`\\b${n}(?:\\s+[a-z]+){0,3}\\s+${RISES}\\b|\\bresucit\\w* a ${n}\\b`).exec(c) ?? (p.you ? YOU_RISE.exec(c) : null);
+        if (rises) out.push({ name: p.name, kind: 'rise', phrase: rises[0] });
+      }
+    }
+  }
+  return out;
+}
+
+export function deathRejection(hits: readonly DeathHit[]): string {
+  const list = hits.map((h) => `${h.name} (${h.kind === 'death' ? 'muerte' : 'vuelta de la muerte'}: «${h.phrase}»)`).join('; ');
+  return `Has narrado ${list} sin que el estado lo diga. La muerte de un PJ la deciden el servidor y las reglas (attack o apply_damage devuelven died; a 0 PG cae inconsciente y tira salvaciones), y su vuelta la cuenta el servidor cuando acaba su espera. Reescribe log_event sin eso: a 0 PG está inconsciente, malherido, no muerto.`;
+}
+
+/** Quita de un texto las frases con muerte o vuelta sin estado (última salida, si el máster insiste). */
+export function withoutDeathPhrases(text: string, hits: readonly DeathHit[]): string {
+  if (!hits.length) return text;
+  const bad = hits.map((h) => h.phrase);
+  return text.split(/(?<=[.!?…])\s+/).filter((s) => !bad.some((b) => norm(s).includes(b))).join(' ').trim();
+}

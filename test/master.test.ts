@@ -347,7 +347,7 @@ describe('combate', () => {
     const { engine } = await bootEngine();
     const kael = engine.world.character('ch_kael');
     kael.location = { type: 'spot', id: 'sp_cl_arroyo' };
-    kael.hp_current = 1;
+    kael.hp_current = 10; // un crítico máximo (18) deja 8 de sobra: cae, no muere en el acto (daño masivo)
     const { client } = fakeClient([
       msg([use('attack', { attacker_id: 'npc_lobo', target_id: 'ch_kael', advantage: 'none' })]),
       msg([logEvent('El lobo salta.', 'El lobo salta sobre Kael.')]),
