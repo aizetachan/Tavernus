@@ -90,6 +90,21 @@ describe('suelo, ambiente y puertas desde los datos del mundo', () => {
     expect(ambienceOf(world, e, world.location('loc_taberna'), night)).toBe('taberna');
   });
 
+  it('la herrería suena a fragua aunque sea un interior ruidoso; otro interior tranquilo, a interior', () => {
+    const { world, clock, t0 } = freshWorld();
+    const e = { clock };
+    const loc = world.location('loc_taberna');
+    loc.name = 'La herrería';
+    expect(ambienceOf(world, e, loc, t0)).toBe('herreria');
+    expect(ambienceOf(world, e, loc, t0 + 15 * 3600)).toBe('herreria');
+    loc.name = 'La casa del molinero';
+    loc.ambience.noise = 0.1;
+    expect(ambienceOf(world, e, loc, t0)).toBe('interior');
+    const fuera = world.location('loc_plaza');
+    fuera.name = 'La forja del camino';
+    expect(ambienceOf(world, e, fuera, t0)).toBe('herreria');
+  });
+
   it('la lluvia (location.state.weather) tapa el ambiente de fuera', () => {
     const { world, clock, t0 } = freshWorld();
     world.location('loc_plaza').state['weather'] = 'lluvia fina';

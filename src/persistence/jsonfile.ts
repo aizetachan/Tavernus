@@ -41,14 +41,26 @@ export class JsonFileRepository implements Repository {
 
   /** Llamado por el motor con el snapshot actual para volcar lo pendiente. */
   async flush(snapshot: WorldSnapshot): Promise<void> {
+    await this.appending;
     if (this.pending.size === 0) return;
     this.pending.clear();
     await this.saveSnapshot(snapshot);
   }
 
-  async appendEvent(event: GameEvent): Promise<void> {
-    await mkdir(this.dir, { recursive: true });
-    await writeFile(this.file(`${event.campaign_id}.events.jsonl`), JSON.stringify(event) + '\n', { flag: 'a' });
+  /** Escrituras del log en fila: dos eventos seguidos no se adelantan en el fichero (uno grande tarda más). */
+  private appending: Promise<void> = Promise.resolve();
+
+  /** Espera a que el log esté escrito (al cerrar la partida). */
+  settled(): Promise<void> { return this.appending; }
+
+  appendEvent(event: GameEvent): Promise<void> {
+    const line = JSON.stringify(event) + '\n';
+    const next = this.appending.then(async () => {
+      await mkdir(this.dir, { recursive: true });
+      await writeFile(this.file(`${event.campaign_id}.events.jsonl`), line, { flag: 'a' });
+    });
+    this.appending = next.catch(() => undefined);
+    return next;
   }
 
   async loadEvents(campaignId: Id, afterSeq: number): Promise<GameEvent[]> {

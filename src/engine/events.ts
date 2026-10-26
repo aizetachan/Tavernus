@@ -11,6 +11,7 @@ import type { Character, GameEvent, Id, PerceptionLevel, Visibility } from './mo
 import { positionOf, type Position } from './movement.js';
 import { witnesses } from './perception.js';
 import { maskUnknownNames } from './narrate.js';
+import { secondPerson } from './party.js';
 import type { World } from './world.js';
 
 export interface EmitInput {
@@ -85,8 +86,7 @@ export class EventLog {
       if (!started) { if (e.id === sinceEventId) started = true; continue; }
       const d = e.delivered_to.find((x) => x.character_id === characterId);
       if (!d) continue;
-      let text = textFor(e, characterId, d.level);
-      if (text && characterId !== e.actor_id) text = maskUnknownNames(this.world, characterId, text);
+      const text = readerText(this.world, e, characterId, d.level);
       if (text) out.push({ event: e, character_id: characterId, level: d.level, text });
     }
     return out;
@@ -104,6 +104,8 @@ export class EventLog {
     const visibility = input.visibility ?? 'location';
 
     const delivered = new Map<Id, PerceptionLevel>();
+    /** Lo que oye cada testigo (para dar la frase literal solo a quien la oye bien). */
+    const heard = new Map<Id, PerceptionLevel>();
     if (actor) delivered.set(actor.id, 'full');
     for (const id of input.also_to ?? []) delivered.set(id, 'full');
 
@@ -116,6 +118,7 @@ export class EventLog {
       for (const w of witnesses(this.world, this.clock, at, nowGameS, input.loudness ?? 1, actor?.id)) {
         const level = channel === 'sight' ? w.perceived.sight : channel === 'sound' ? w.perceived.sound : w.perceived.level;
         if (level !== 'none' && !delivered.has(w.character.id)) delivered.set(w.character.id, level);
+        if (channel !== 'sight') heard.set(w.character.id, w.perceived.sound);
       }
     }
 
@@ -135,16 +138,15 @@ export class EventLog {
       observable: input.observable ?? null,
       visibility,
       tags: input.tags ?? [],
-      delivered_to: [...delivered].map(([character_id, level]) => ({ character_id, level })),
+      delivered_to: [...delivered].map(([character_id, level]) => ({ character_id, level, ...(heard.has(character_id) ? { sound: heard.get(character_id)! } : {}) })),
       payload: input.payload ?? {},
     };
     this.events.push(event);
     for (const l of this.eventListeners) l(event);
 
     for (const [character_id, level] of delivered) {
-      let text = textFor(event, character_id, level);
+      const text = readerText(this.world, event, character_id, level);
       if (!text) continue;
-      if (character_id !== event.actor_id) text = maskUnknownNames(this.world, character_id, text);
       const d: Delivery = { event, character_id, level, text };
       for (const l of this.deliveryListeners) l(d);
       // Solo cuenta como "visto" si el jugador está conectado (SPEC §4.4, /recap al volver).
@@ -170,6 +172,26 @@ export function textFor(e: GameEvent, characterId: Id, level: PerceptionLevel): 
     case 'hint': return typeof e.payload['observable_hint'] === 'string' ? (e.payload['observable_hint'] as string) : 'Notas movimiento en la distancia.';
     case 'none': return null;
   }
+}
+
+/**
+ * Lo que lee un PJ concreto: su texto por banda, con los nombres que no conoce
+ * enmascarados y, si el evento le nombra a él, en segunda persona: el
+ * `observable_target` que escribió el máster para el destinatario o, si no hay,
+ * la reescritura mecánica («se acerca a Aren» → «se acerca a ti»).
+ */
+export function readerText(world: World, e: GameEvent, characterId: Id, level: PerceptionLevel): string | null {
+  if (characterId === e.actor_id) return textFor(e, characterId, level);
+  // Turno compartido (conversación de grupo o ronda, scene.ts): todos leen la misma narración, escrita para todos.
+  const group = e.payload['group'];
+  if (Array.isArray(group) && group.includes(characterId)) return maskUnknownNames(world, characterId, e.narration_private);
+  const target = e.payload['target_character_id'];
+  const own = e.payload['observable_target'];
+  let text = level === 'full' && target === characterId && typeof own === 'string' && own.trim() ? own : textFor(e, characterId, level);
+  if (!text) return null;
+  const reader = world.characters.get(characterId);
+  if (reader) text = secondPerson(text, reader.name);
+  return maskUnknownNames(world, characterId, text);
 }
 
 export function characterLabel(c: Character, level: PerceptionLevel): string {

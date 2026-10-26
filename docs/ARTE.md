@@ -119,13 +119,22 @@ Lo que aún no hace la web (issue aparte): pintar el mapa de región (`region_ma
 ## Fondos pintados
 
 Un plano escrito puede llevar debajo una imagen realista (`map_backgrounds`), hecha a partir del propio plano para
-que cada mueble, puerta y pared caiga justo en su punto y la cuadrícula encaje. Brezal tiene así sus 16 planos: los 11
-lugares y los 5 tramos de camino.
+que cada mueble, puerta y pared caiga justo en su punto y la cuadrícula encaje.
+
+Estado en Brezal sellada (26 de octubre de 2026): 19 planos congelados (12 lugares, contando el Camino de Valcruz, que
+está sellado tras el Cerco, y 7 tramos de camino). Tienen fondo pintado la taberna, el sótano, la herrería, la casa de
+las hierbas y el tramo plaza–molino. El resto perdió el fondo al cambiar sus puntos con Brezal sellada, o es nuevo:
+plaza, casona, molino, El Soto, el Granero Quemado, Los Corrales, El Lindero y los tramos plaza–Soto, molino–Soto,
+plaza–Corrales, plaza–Lindero, Corrales–Soto y Soto–Granero. Hasta que se pinten, el tablero dibuja su plano como
+antes.
 
 Los tramos de camino (`loc_way_<salida>`, src/engine/travel.ts) los crea el motor cuando un encuentro corta un viaje,
-a mitad de una salida de al menos 100 m entre dos localizaciones. Son siempre los mismos y salen siempre iguales, así que
-`scripts/plans.ts` los crea igual que el motor y los congela y pinta con los demás. En Brezal son plaza–molino,
-plaza–claro, molino–claro, claro–cuesta y cuesta–ruinas.
+a mitad de una salida de al menos 100 m entre dos localizaciones (no bloqueada). Son siempre los mismos y salen siempre
+iguales, así que `scripts/plans.ts` los crea igual que el motor y los congela y pinta con los demás.
+
+Si cambian los datos de la campaña: `node --import tsx scripts/plans.ts freeze brezal --sync` deja igual lo que no ha
+cambiado (con su fondo), vuelve a congelar lo cambiado y le quita el fondo, que ya no encajaría, y quita lo que ya no
+existe. Después, `reference` y repintar lo que no tenga fondo.
 
 1. **Congelar los planos:** `node --import tsx scripts/plans.ts freeze <campaña>` copia al manifiesto (`maps`) el
    plano que hoy genera `mapgen.ts`. Sus `bounds` ya incluyen lo oculto y todos los puntos: el tablero no crece al

@@ -1,0 +1,191 @@
+# Multijugador: qué funciona, qué falta y cómo jugar con un amigo
+
+Auditoría del 25 de octubre de 2026. El motor nació multijugador (SPEC §9 y §11): un mundo compartido, una cola de acciones por localización, percepción por bandas y relojes propios por personaje al viajar. La web no lo era: no tenía cuentas, cualquiera abría cualquier partida y elegía cualquier personaje, y daba a todos los PJ por conectados para siempre. Este documento cuenta qué se probó, qué funciona y qué falta, por prioridad, y qué se ha añadido para que dos o tres personas jueguen la misma partida sin pisarse.
+
+## Resumen
+
+- **Ya se puede jugar con un amigo.** El anfitrión crea la partida y reparte un enlace por asiento. Cada persona entra con el suyo, queda ligada a su personaje (cookie firmada) y no puede actuar por otro. Ve quién más está en línea y dónde («Kael está aquí», «Mira está en camino»). Su cuadro se bloquea mientras tiene una acción en curso, y si va detrás de otro jugador en la cola ve «Esperando a Kael». Con máster real, cada personaje tiene un cupo diario; al agotarlo, sigue jugando en modo offline.
+- **Lo que más falta para jugar en serio:** que un PJ a 0 PG pueda volver sin ayuda (muerte y reaparición, #23) y que el jugador que vuelve sepa qué pasó mientras no estaba (#19).
+- **Cómo se probó:** con un guion contra el motor real en offline (dos PJ, acciones a la vez, mismo NPC, mismo objeto, viaje), con tests nuevos (`test/multiplayer.test.ts`) y con dos pestañas del navegador en offline: el anfitrión en `localhost:3207` y el amigo en `127.0.0.1:3207`, para que no compartieran cookies. Hay capturas en la carpeta de notas de la sesión (`multijugador-capturas/`).
+
+## Auditoría, caso por caso
+
+Estados: **funciona**, **a medias** (funciona con matices), **fallaba** (corregido aquí), **no existe**.
+
+| Caso | Estado | Dónde y por qué |
+|---|---|---|
+| Dos acciones a la vez en el mismo sitio | **Funciona** | `engine.ts` `runInLocation`: cola FIFO por localización (promesa encadenada). Se resuelven en orden de llegada y el estado no se corrompe. Probado con dos «coger la jarra» a la vez: la jarra acaba en un solo inventario y la segunda acción va al máster (test «cola por localización en el motor»). |
+| Dos acciones a la vez en sitios distintos | **Funciona** | Cada localización tiene su cola y no se esperan entre sí. El tick global (`tick()`) es único y compartido, así que una acción lenta del máster no frena a la otra localización. |
+| Doble acción del mismo jugador (doble clic, dos pestañas) | **Fallaba → corregido** | La página solo se bloqueaba a sí misma: una segunda pestaña podía mandar otra acción del mismo PJ. Ahora `server.ts` (`begin`/`end`) responde 409 «Ya tienes una acción en curso». |
+| Qué ve cada uno de lo que hace el otro | **Funciona** (con máster real) | `events.ts` y `perception.ts`: cada evento se entrega por bandas (full, vague, hint) y por oído o vista. Los nombres que tu PJ no conoce se enmascaran («un humano con pinta de pícaro habla con la tabernera»). Llega por el SSE de cada PJ (`/api/stream`), así que cada pestaña solo recibe lo suyo. **En offline** la mayoría de las acciones no tienen texto observable («Haces X. Nada cambia.»), y el otro no ve casi nada salvo hablar y atacar. Es un límite del máster offline, no del reparto. |
+| Hablar con el mismo NPC a la vez | **A medias** | `npc.talking_to` se fija con el primero (`tools.ts`), y el máster real recibe «OCUPADO hablando con X» (`prompt.ts`) para hacer esperar al segundo. No hay cola de conversación real (SPEC §9.6): depende de que el máster obedezca. En offline el segundo recibe una respuesta genérica. |
+| Coger el mismo objeto a la vez | **Funciona** | Va por la cola, y `transfer_item` / `takeToHands` son atómicos dentro de ella. El segundo ya no lo encuentra. |
+| Viajar y el reloj propio | **Fallaba → corregido** | `travel.ts`: quien llega viajando vive «por delante» y espera si en el destino hay otro PJ **activo y conectado** que vive una hora anterior (`aheadWait`). Como la web marcaba a todos conectados para siempre, un amigo desconectado desde hacía días bloqueaba al viajero («Has llegado antes que el resto…») hasta que el reloj real lo alcanzara. Ahora la presencia del motor sigue a las pestañas abiertas: el desconectado deja de contar a los 30 min. |
+| Cerrar una pestaña y volver | **Funciona** | El historial se reconstruye del log de eventos al abrir la partida (`server.ts` `attach`), así que un reinicio tampoco lo borra. «Donde lo dejamos» sale tras 72 h reales o 7 días de juego (`welcomeBack`, `prologue.ts`). Nuevo: aviso en el hilo de los demás («Kael ha salido de la partida») a los 20 s sin pestañas (una recarga no cuenta), y al volver, «ha entrado». Los avisos de presencia viven en memoria: un reinicio del servidor los quita del hilo (los eventos del juego no). |
+| Presencia | **Fallaba → corregido** | `server.ts` llamaba a `engine.setPresence(id, true)` para todos al abrir y nunca a false. Ahora: true al abrir el SSE y false 30 min después de cerrar la última pestaña. Al volver dormido bajo el velo, el PJ se despierta solo. |
+| Ganchos con dos jugadores | **Funciona** | `hooks.ts` y `engine.ts` `fireTimeHooks`: un gancho de hora salta con su destinatario si lo tiene, o con el primer PJ despierto, conectado y presente. Lo ven todos los que lo perciben. Los ganchos de punto, objeto y lugar son del PJ que los dispara. Con la presencia arreglada ya no saltan para un jugador que no está mirando. |
+| Eventos programados (agenda) | **Funciona** | `schedule.ts`: los eventos y los horarios de los NPC van a su hora en el tick, sin IA, y se reparten por percepción a quien esté allí. |
+| La amenaza (historia) | **Funciona** | `story.ts`: la amenaza es del mundo, escala una sola vez y la evita cualquiera (`escalate`). Las misiones son de cada PJ (`advanceCharacter`): cada uno lleva las suyas. |
+| Identidad: quién puede actuar por quién | **No existía → hecho** | Cualquiera con la URL jugaba con cualquier PJ. Ver «Lo implementado». |
+| Entrar en una partida empezada | **No existía → hecho** | La web solo creaba un PJ al crear la partida. Ahora un asiento libre deja crear uno, por defecto junto al PJ del anfitrión (`manager.addCharacter`). |
+| Gasto con máster real | **No existía → hecho** | Sin límite por jugador (#17). Ahora hay cupo diario por PJ con caída a offline (`src/ai/budget.ts`). |
+
+## Lo que la spec promete y no está
+
+| Qué | Estado | Prioridad |
+|---|---|---|
+| **Muerte y reaparición** (§4.7, §10; issue #23) | A 0 PG el PJ queda `unconscious` (`combat.ts`, `tools.ts`) y no puede actuar («No puedes actuar (unconscious)»). Solo sale si otro le cura con el máster. No hay tiradas de muerte, ni `death_mode`, ni reaparición. | **Imprescindible** antes de la primera pelea seria. Si a un jugador lo tumban estando solo, se queda atascado. |
+| **Avisos de lo que pasa mientras no estás** (#19) | Hay `/recap` (lo percibido desde que te fuiste) y «Donde lo dejamos» tras 72 h, pero nada avisa fuera de la web: ni correo, ni push, ni marca de no leídos. | **Deseable**. Con dos amigos se avisan por su chat. |
+| **Velo al desconectar** (§9.1) | El motor ya lo tenía (`setConnected`: dormido y con velo; `combat.ts` impide el daño bajo el velo). Faltaba que la web dijera quién se desconecta: ahora lo dice, a los 30 min. No están las protecciones físicas (candados, llaves escondidas, guardias) ni el robo a un durmiente con tirada de Sigilo. | Velo: **hecho**. Robo al durmiente y protecciones: **después**. |
+| **Conectado pero dormido** (§9.1): notificación y ventana decisiva si te atacan dormido | No existe. | **Después**. |
+| **PvP, crimen y ley** (§9.4) | El ataque entre PJ existe por el máster (`resolveAttack` acepta personajes). No hay `crimes`, ni `wanted`, ni guardias que detengan, ni recompensas, ni multas. | **Después**. Entre amigos que juegan juntos, no hace falta. |
+| **Compañías** (§9.5) | No existe nada. | **Después**. |
+| **Cola de conversación con NPC** (§9.6) | A medias: `talking_to` más una instrucción al máster, sin cola real ni «te toca». | **Deseable**. |
+| **Ventana decisiva con varios jugadores** (§9.3): el orden de llegada decide | Las ventanas son por PJ (`openDecisive`). El orden lo da la cola, pero no hay recurso disputado explícito. | **Deseable**. |
+| **Dificultad según el número de PJ** (§10) | No existe: el máster no escala los encuentros. | **Deseable**. |
+| **Tiempo de juego divergente** (§10) | Resuelto con el reloj propio por PJ y la espera del adelantado (`travel.ts`). | Hecho. |
+| **Cuentas de verdad** (§11.1, issue #15: identidades, email, OAuth) | Ahora hay identidad ligera por enlace. Sin cuentas: perder el enlace es perder el acceso hasta que el anfitrión lo renueve. | Enlaces: **hecho**. Cuentas: **después**. |
+| **Límite de gasto** (#17) | Hecho, por PJ y día. Falta un tope global por partida o por servidor. | Por PJ: **hecho**. Global: **deseable**. |
+| **Reportar errores con ⚠️** (§11.2) | Era de Discord. En la web no existe. | **Deseable** para jugar con amigos y recoger fallos. |
+
+## Lo implementado
+
+### (a) Identidad ligera sin cuentas: asientos e invitaciones
+
+Código: `src/adapters/web/access.ts`, rutas en `server.ts`, páginas en `page-access.ts`.
+
+- **Asientos.** Cada partida guarda `seats.json` en su carpeta. Un asiento tiene un id, un token largo (32 caracteres aleatorios), su PJ o `null` si está libre, una etiqueta y su último uso.
+- **Al crear una partida** desde el menú se crean el asiento del anfitrión, con su PJ, y las plazas libres que pida el formulario («Plazas para amigos», 1 por defecto). El navegador que la crea queda ligado al PJ del anfitrión. Las partidas de antes reciben un asiento por PJ al abrir «Invitaciones».
+- **Enlace de invitación**: `/i/<partida>/<token>`. Al abrirlo, el servidor pone una cookie `tv_s_<partida>` (HttpOnly, SameSite=Lax y Secure si hay HTTPS). La cookie lleva el id del asiento y un HMAC-SHA256 de partida, asiento y token, firmado con `SESSION_SECRET`. Desde entonces, en esa partida, toda ruta con `?character=` o `{character}` distinto del suyo responde 403 «Solo puedes jugar con tu personaje»: acción, tirada, comandos, hoja, stream, avatar, pincel, mapa y diario. Sin `character`, se usa el suyo.
+- **Asiento libre**: quien entra ve un formulario (nombre, raza, clase, por qué viene, aspecto y «Empezar junto a…», marcado por defecto) y crea su PJ (`POST /api/seat/claim`). En campañas escritas y mundos generados recibe su situación inicial como el del anfitrión.
+- **Anfitrión**: `/admin?token=ADMIN_TOKEN` pone la cookie `tv_admin` y abre el menú. En cada partida, «⚙ → Invitaciones» (`/invitaciones?game=<partida>`) muestra los asientos con su enlace, «Copiar», «Renovar» (token nuevo: el enlace viejo y su cookie dejan de valer), quién está en línea y «Añadir asiento libre» (hasta 8). Si el anfitrión abre también el enlace de su PJ, juega ligado como los demás; sin él, puede mirar cualquier PJ con el selector, como antes.
+- **Sin enlace válido**: solo la página «Esta mesa es por invitación». El menú, crear o borrar partidas, `/api/games` y los asientos piden la cookie de anfitrión. Quien tiene asiento y entra en `/` va a su partida.
+- **Modos** (`WEB_ACCESS`): `invite`, `public` u `open`. En `public` cualquiera entra al menú y crea partidas, en las que queda de anfitrión (reparte invitaciones y puede borrarlas); cada navegador ve solo las suyas y aquellas a las que se unió con un enlace. El enlace de administración lo ve todo, y `PUBLIC_GAMES_PER_DAY` (20) limita las partidas nuevas al día de quien no es administrador. Por defecto es `invite` si hay `ADMIN_TOKEN`, si `NODE_ENV=production` o si la web escucha fuera de 127.0.0.1 (`WEB_HOST`); si no, `open`, como siempre en local, para no romper las configuraciones de prueba. En `invite` sin `ADMIN_TOKEN` se genera uno, se guarda en `<GAMES_DIR>/.admin-token` y se imprime el enlace al arrancar. `SESSION_SECRET`, si falta, va a `<GAMES_DIR>/.session-secret`.
+
+### (b) Sin selector para los invitados
+
+La página pide `/api/session` (rol, PJ ligado, `can_switch`). Si el jugador está ligado, desaparecen los avatares para cambiar de PJ y solo se conecta el suyo. Las pestañas de un mismo navegador comparten la cookie: para probar dos jugadores en un mismo equipo, usa dos perfiles, una ventana privada o `localhost` y `127.0.0.1`.
+
+### (c) Presencia
+
+- SSE `presence`: los demás PJ vistos desde el tuyo, con nombre, en línea o no, y dónde: `here` si está en tu localización, `travel` si está de viaje o con un viaje a medias, `away` si no. No dice en qué sitio está el otro: eso lo tiene que descubrir el juego.
+- **Cabecera**: las iniciales de los demás, con punto verde si están en línea y aro dorado si están contigo; al pasar el ratón, «Kael está aquí», «Mira está en camino (sin conexión)».
+- **Hoja**: bloque «Tu grupo» con una línea por jugador.
+- **Hilo**: «🟢 Kael ha entrado en la partida» y «⚪ Kael ha salido de la partida» en el hilo de quien esté en línea. La salida espera 20 s, así que recargar no cuenta.
+- **Motor**: `setPresence(true)` al abrir y `false` a los 30 min sin pestañas. A partir de ahí manda §9.1: dormido, con velo y sin contar para esperas ni ganchos. Al volver, se despierta solo.
+
+### (d) Bloqueo de doble acción y «esperando a…»
+
+Mientras un PJ tiene una acción o tirada en curso, su cuadro está deshabilitado (ya lo estaba en la pestaña que la mandó) y el servidor rechaza otra del mismo PJ con 409. Si otro PJ de la misma localización va delante en la cola, el servidor manda SSE `queue` con `waiting_for`, y la línea «El narrador está pensando…» pasa a «Esperando a Mira…» hasta que le toca. Las acciones del motor que no vienen de la web (llegadas narradas, ganchos de hora) también ocupan la cola, pero no se anuncian.
+
+### (e) Límite de gasto por personaje y día (#17)
+
+`src/ai/budget.ts`, conectado en `GameManager.boot` solo para partidas `live` y `record`:
+
+| Variable | Por defecto | Qué hace |
+|---|---|---|
+| `DAILY_MASTER_ACTIONS` | `200` | Llamadas al máster real por PJ y día (acciones, llegadas narradas, ganchos). `0` = sin límite. |
+| `DAILY_MASTER_TOKENS` | `0` | Tokens por PJ y día: entrada + salida + escritura de caché + una décima parte de la lectura de caché. `0` = sin límite. |
+| `BUDGET_TZ` | `Europe/Madrid` | Zona horaria en la que cambia el día. |
+
+Al pasar del cupo, ese PJ sigue jugando con el máster offline (narración sencilla, sin API) hasta medianoche. Recibe una vez al día, en su hilo, «⏳ Por hoy has gastado tu cupo…». Los demás PJ no se ven afectados. El recuento vive en `<partida>/budget.json`, así que reiniciar no regala cupo. El prólogo y la recapitulación pulida no cuentan, porque no son de un PJ. Con Haiku 5.5 (unos 0,12 céntimos por acción), 200 acciones son unos 0,25 € por PJ y día; con Opus 5.5, unos 6 €.
+
+## Entre jugadores (25-10-2026)
+
+Una prueba con dos jugadores en la herrería de Brezal (partida `la-noche-del-breazl`) enseñó que la interacción entre PJ no estaba diseñada: el máster narraba lo que hacía el otro («Aren aguarda… Tienes su atención»), lo que decía uno le llegaba al otro en estilo indirecto, cada frase entre ellos pasaba por el máster y gastaba, no se sabían el nombre, dar algo no pedía permiso y los dos empezaron con la misma situación personal. Código nuevo en `src/engine/party.ts`; el resto, en el motor, el cierre del máster y la web. Tests en `test/party.test.ts`, `test/closecheck.test.ts` (el log real como fixture) y `test/multiplayer.test.ts`.
+
+### Qué hay
+
+| Qué | Cómo | Coste |
+|---|---|---|
+| **Decir** | Botón «Hacer / Decir» a la izquierda del cuadro (o empezar por raya o comillas: `— hola`, `«hola»`; `— a Aren: ¿vienes?` lo dirige; `— (susurra) …` y `— (grita) …` cambian el volumen). `POST /api/say` → `engine.say`: evento `say` (`shout`, `whisper`) con la frase literal en `payload.lines` y `payload.say.to`. Va por el oído: quien la oye bien (banda `full` de sonido) la recibe literal, como parlamento del otro jugador con su avatar y el nombre que conoce; quien oye peor, «Oyes a alguien hablar, pero no entiendes qué dice». | Cero tokens. No llama al máster ni espera a la cola. |
+| **El máster no actúa por otro PJ** | Regla 1 del prompt; en «Presentes», cada PJ lleva «JUGADOR: no narres sus actos, palabras, gestos ni intenciones; solo lo que ya consta en los eventos». En el cierre, `actedForOthers` (`closecheck.ts`) rechaza una vez la narración que pone a otro PJ a mirar, esperar, hablar, hacer un gesto, moverse o querer algo que no consta en sus eventos desde la acción anterior del actor. Busca el sujeto delante del verbo (nombre, descriptor, raza o clase) o lo hereda en frases sin sujeto («Te devuelve la mirada», «Él no dice nada; espera»); tras preposición es objeto. Afinado con el log real: caza los turnos 23, 24, 25 y 26 y ninguno más. | Un reintento del máster como mucho. |
+| **Observables por lector** | Las dos cosas: el máster puede marcar `target_character_id` y escribir `observable_target` en segunda persona (lo lee solo ese PJ); si no lo hace, `secondPerson` reescribe para quien es nombrado («se acerca a Aren» → «se acerca a ti», «mira a Aren» → «te mira», «con Aren» → «contigo», «la mano de Aren» → «tu mano»; lo citado no se toca). Se eligen ambas porque la reescritura mecánica no puede con todo («Aren no se mueve») y el campo del máster no llega en los eventos sin máster ni en partidas viejas. Si el cierre trae `lines` del actor, el testigo que lo oye bien recibe sus palabras como parlamento (WebLine `speaker: 'pc'`) y la web quita el estilo indirecto («Aren pregunta al elfo si…»). Cada entrega guarda ahora `delivered_to[].sound`. | — |
+| **Conocerse** | «Empezar junto a…» deja a los dos PJ conocidos entre sí. Si no, se aprende el nombre al oírlo bien en un `say` (el del que habla si lo dice; el del destinatario si lo nombra), con `introduces_self` o con `names_learned`. Hasta entonces, contexto y narración usan el descriptor. La interfaz sigue enseñando los nombres reales en la cabecera y en «Tu grupo», fuera de la ficción. Un nombre dicho entre «» ya no se enmascara: se oye. | — |
+| **Dar con consentimiento** | «dar la daga a Aren», «darle 20 monedas a Aren» (y el `transfer_item` del máster hacia otro PJ) crean una oferta (`Character.offers` del que recibe): el que da se acerca si estaban en puntos distintos, el otro ve «Aceptar» y «Rechazar» en su hilo (`POST /api/offer`). Aceptar comprueba que sigue en pie (no caducada, los dos en la sala, el objeto y las monedas aún ahí) y transfiere todo o nada. Caduca a los 5 minutos reales (`OFFER_TTL_MS`) y se avisa a los dos. Intercambiar es dos ofertas, una de cada lado. | Cero. |
+| **Seguir** | «seguir a Aren» / «dejar de seguir». Cuando el líder se pone en camino, el seguidor sale tras él hacia el mismo sitio y al mismo paso (`syncFollowers`, al principio de `settleAll`); con viaje rápido llegan juntos y, si al líder le sale un encuentro, el seguidor se para con él. Si el seguidor no puede (salida bloqueada o cuarto cerrado para él, el líder en otra sala), deja de seguir y se le dice por qué. Moverse por su cuenta también lo suelta. | Cero. |
+| **Ayudar** | «ayudar a Aren»: ventaja en su siguiente tirada (regla de ayuda del SRD; con desventaja, se anulan), durante 10 minutos de juego. El servidor la aplica al tirar y el contexto del máster lo dice. | Cero. |
+| **Responder** | Si otro PJ se dirige a ti (`say` dirigido, `say` que oyes bien o cierre del máster con `target_character_id`), tu hilo trae «Responder a Aren» (abre Decir hacia él) e «Ignorarle» (solo quita los botones). «hablar con Aren» sin frase ya no va al máster: abre Decir hacia Aren. En los cierres, una «línea» del actor que es intención («Hablar con Aren») se descarta. | Cero. |
+| **Situaciones iniciales** | `claimSituation` no repite a dos PJ una situación personal si queda otra libre (por `id` o, sin él, por su porqué). Con «Empezar junto a…», la complementaria: la de compañero de la del otro (`companion_of`) con su mismo lugar y su mismo plazo; Brezal trae dos (`sit_herrero_companero`, `sit_carta_companero`) y, si no la hay, una de plantilla. | — |
+| **Detalles** | «llega al banco» (no «a el»); el log se escribe en fila (`jsonfile.ts`) y la llegada de un `move_to` lleva el sello de la acción que la provocó o uno posterior, así que nunca aparece antes. | — |
+
+### Dos acciones a la vez en el mismo sitio
+
+- **Acciones al máster** (lo que no es lo de arriba): cola FIFO por localización, como antes. La segunda espera a que se cierre la primera y la web dice «Esperando a…».
+- **Decir** no entra en la cola: se emite en el acto, también mientras el máster narra otra acción del sitio. Dos `say` a la vez salen en el orden en que llegan, con `seq` seguidos; el máster que estaba narrando ya tenía su contexto y no lo ve hasta su siguiente turno. Mientras tu propia acción está en curso no puedes escribir (el cuadro está bloqueado).
+- **Ofertas**: crear una es parte de una acción (cola); aceptarla o rechazarla no entra en la cola, pero es síncrona: entre comprobar y transferir no corre nada más, así que no hay estados a medias. Si el que da se ha ido (se movió, viajó), aceptar falla entero y el objeto sigue con él; si la acción del máster del que da gasta el objeto antes, también falla.
+- **Seguir** ocurre en el mismo `settleAll` que mueve al líder: tras su acción o en el tick. Si la salida se bloquea entre que el líder la cruza y el seguidor sale, el seguidor se queda y deja de seguir. Lo que el seguidor hace por su cuenta va por la cola como siempre.
+- **Ayudar** se guarda en el ayudado y se consume en su siguiente tirada, sea cuando sea.
+
+Tests de carrera en `test/party.test.ts`: dos `say` a la vez, oferta aceptada mientras el otro se mueve, seguir cruzando una salida que se bloquea y seguir a quien tiene la llave de un cuarto cerrado.
+
+### Lo que no cambia
+
+- La conversación con NPC (`conversation.ts`) y el narrador ligero siguen siendo con NPC: entre PJ no hace falta, porque hablan por Decir sin máster.
+- Los avisos de presencia y la cola de la web, como estaban.
+
+## Varios a la vez en el mismo sitio (25-10-2026)
+
+Que dos jugadores actuando a la vez en el mismo sitio no sea lioso. Código en `src/engine/scene.ts` (quién habla con quién, a quién va una acción, escena tensa) y en el motor (`sceneRoute`: colas, lotes y rondas, antes de la cola por localización). Tests en `test/scene.test.ts` y `test/multiplayer.test.ts`.
+
+| Qué | Cómo | Coste |
+|---|---|---|
+| **«está escribiendo…»** | La página avisa con `POST /api/typing` como mucho cada 2,5 s mientras se escribe; el servidor manda SSE `typing` a los demás PJ de la misma localización (con el nombre que conoce cada uno) y la línea encima del cuadro caduca a los 4 s. | Cero. |
+| **«hablando con…»** | Quién habla con cada NPC sale de `npc.talking_to` (lo fija el cierre del máster) mientras siga viva: el que habla sigue en la sala, quieto, su conversación (`conversation.ts`) sigue con ese NPC y no lleva más de 10 minutos de juego callado (`TALK_IDLE_S`). Se ve en la cabecera («Aren está aquí, hablando con Hugo», con el nombre o el oficio según lo que sepas) y en el tablero, junto al NPC («Hugo (con Aren)»). | Cero. |
+| **El NPC atiende a uno cada vez** | Si la acción va a un NPC (lo nombra o, sin nombrar a nadie, con quien ya hablas) y ese NPC está con otro PJ, no se llama al máster: «Hugo está con Aren; te hace un gesto para que esperes», con «Esperar turno con Hugo» y «Unirme a la conversación con Hugo». Esperar es una cola real: cuando el otro deja la conversación (se mueve, habla con otro, «dejar la conversación») o se calla 10 minutos de juego, el primero de la cola recibe «Hugo ya puede atenderte» y el turno queda guardado para él (`talking_to.reserved`). | Cero. |
+| **Conversación de grupo** | Al unirte, entras en `talking_to.with`. Las frases que los del grupo dirigen al NPC dentro de una ventana (8 s; `GROUP_WINDOW_S`) se juntan: una sola llamada al máster con lo de todos, y se cierra antes si ya han hablado todos. El contexto trae «Conversación de grupo con Hugo: responde UNA vez a todos»; el máster narra en plural, pone lo de cada PJ en `lines` como `speaker: "pc"` con su `character_id` y las respuestas del NPC con `to`. Todos reciben la respuesta completa (`payload.group`, `group_inputs`) y cada uno ve su frase como suya y las de los demás con su avatar. Se sale moviéndose, dirigiéndose a otro NPC o con «dejar la conversación»; si se va quien la llevaba, la lleva el siguiente. | Una llamada por ventana, no una por jugador. |
+| **Rondas en escenas tensas** | Con dos o más PJ activos, conectados y quietos en la localización y una escena tensa (combate en los últimos 10 minutos de juego, una ventana decisiva abierta o la marca `tense` de la localización, que pone la historia: en Brezal, la noche de la Brasa en la plaza, y la quitan los epílogos), cada acción entra en la ronda. Cuando han actuado todos, o vence el temporizador (60 s; `ROUND_SECONDS`), el máster resuelve la ronda entera en una narración para todos («Ronda 2 (escena tensa): resuélvela entera»), sin pedir tiradas al jugador: `roll_check` para las pruebas y `attack` con el PJ como atacante. Quien no actuó «duda» y pierde la ronda, sin bloquear a nadie; también recibe cómo se resolvió. Una segunda acción en la misma ronda se rechaza. Banner: «Ronda 2 · faltan Aren y Lys · 0:42» (SSE `round`; también al conectar). | Una llamada por ronda. |
+
+Lo que no entra en todo esto: **Decir** (sigue siendo inmediato, también en plena ronda), dar, seguir y ayudar a otro PJ (deterministas), y los comandos (`/look`…). Fuera de las escenas tensas, cada uno a su ritmo como antes.
+
+**Concurrencia.** Los lotes y las rondas viven antes de la cola por localización: las acciones que se juntan esperan en memoria hasta que se cierra el lote o la ronda, y entonces la llamada al máster entra en la cola como una acción más (así un lote no bloquea al resto del sitio mientras espera). La cola de turnos, los lotes y las rondas viven en memoria: un reinicio del servidor los vacía (las acciones en vuelo devuelven error y se reintentan). `talking_to` sí se guarda. El detector de «el máster actúa por otro jugador» no cuenta a los que participan en el turno compartido (han dicho qué hacen); sigue valiendo para los demás.
+
+## Desconexiones (25-10-2026)
+
+El mundo es abierto: el reloj sigue y cada uno entra cuando quiere. Estas reglas dicen qué pasa cuando un jugador se va en mitad de algo compartido. Código: `Engine.setAway` (motor), `stabilizeIfAway` (`combat.ts`), `roundMembers` (rondas), `markStep` y `complete` (`story.ts`: créditos y finales), `relevantWhileAway` y `absence` (`prologue.ts`). Tests: `test/away.test.ts`, una prueba por regla, con relojes simulados y dos PJ.
+
+**Cuándo se está ausente.** La presencia ya existía: al cerrar la última pestaña, pasado el margen de 20 s (una recarga no cuenta), el PJ queda **ausente** (`Character.away`, con desde cuándo y dónde). A los 30 minutos sin pestañas llega el velo de la spec (§9.1: dormido y velado), como antes. Al abrir una pestaña deja de estar ausente.
+
+| # | Regla | Cómo queda |
+|---|---|---|
+| 1 | **Aviso** | Los que están en su localización leen en el hilo, dentro de la ficción, «Leodhin se ha ido; su personaje se queda en el yunque» y, al volver, «Leodhin ha vuelto». Los que están en otro sitio reciben el aviso de siempre fuera de la ficción («ha salido / ha entrado en la partida»). El PJ no desaparece: se queda donde estaba, con «(ausente)» en la cabecera, en «Tu grupo» y junto a su ficha en el tablero (o «(ausente, bajo el velo)» a partir de los 30 min). |
+| 2 | **Combate** | Un ausente no ataca ni gasta recursos: `attack` con él como atacante se rechaza y el contexto del máster lo marca «AUSENTE: no ataca ni gasta recursos; si le atacan se defiende solo (CA y salvaciones normales)». Su ventana decisiva vencida no le deja sin acción: se resuelve con «se defiende» (la amenaza llega, contra su CA y sus salvaciones, sin quedar indefenso). A los 30 min, el velo: deja de ser objetivo válido (`resolveAttack` lo rechaza) y el contexto dice «BAJO EL VELO: … narra que se aparta o se esconde». Si cae a 0 PG estando ausente, o se va mientras está cayendo, queda inconsciente y **estable** (condición `estable`): no muere ausente, no tira salvaciones contra muerte y el daño no le suma fallos; recobra 1 PG a las 1d4 h de juego o antes si le curan (`death.ts`, ver «Muerte y descanso»). |
+| 3 | **Rondas** | El ausente cuenta para la ronda y **duda** cuando vence el temporizador, sin bloquear a nadie. Tras dos rondas seguidas ausente (`AWAY_ROUNDS_OUT`), sale de la ronda: las siguientes se cierran en cuanto actúan los demás y, si solo queda uno, se juega sin rondas. Al volver, vuelve a contar. |
+| 4 | **Conversación de grupo** | Sale de ella al irse (y de las colas de turno); el NPC sigue con los que quedan. Si era quien la llevaba, la lleva el siguiente. |
+| 5 | **Seguir** | Si se va el líder, quien le seguía deja de hacerlo, con aviso («Aren se ha ido: dejas de seguirle»). Si se va el seguidor, deja de seguir y se queda donde estaba. |
+| 6 | **Ofertas** | Las ofertas pendientes con un ausente, en cualquier sentido, se cancelan con aviso a los dos; el objeto o las monedas no se mueven. |
+| 7 | **Misiones y finales** | Cada paso de misión guarda quién lo dio y quién estaba (`story_state.credits`). Quien estaba presente (activo, no ausente, en la misma localización) y va por ese mismo paso de esa misión lo da también («✔ … (con Aren)»). Los finales excluyentes guardan quién los cerró y con quién (`story_state.finals`): si se cierra uno mientras otro jugador está ausente, su «Donde lo dejamos» empieza por eso: «**Lo primero.** Mientras no estabas, Aren cerró «…». (final). Para ti, eso cierra «…»: el valle ya ha elegido.» |
+| 8 | **Pestaña abierta sin actuar** | No es ausencia: en rondas y ventanas decisivas manda el temporizador (duda; la amenaza se cumple), pero nunca sale de la ronda. Fuera de eso, nada. |
+| 9 | **Al volver** | «Donde lo dejamos» sale también antes de las 72 h si se fue (hay un `away` suyo después de su último turno) y entretanto pasó algo que le afecta: combate en su sitio, rondas que se resolvieron con él dudando, algo dirigido a él o un ataque contra él, ofertas canceladas, seguir que se cortó, su historia (pasos compartidos, misiones que se cierran) o un final cerrado sin él. Eso va delante en «Entretanto». Una recarga o un rato fuera sin nada de eso no la provoca. Los avisos que le llegan a su nombre mientras no está (historia, ofertas, seguir) no cuentan como turno suyo. |
+
+## Muerte y descanso (25-10-2026, issue #23)
+
+Código: `src/engine/death.ts` (caer, salvaciones, muerte, cuerpo, vuelta), `src/engine/rest.ts` (descansos y recursos de clase), la sección «Descanso, caída, muerte y vuelta» de `Engine` (acciones sin IA, tick y avisos) y `deathNarration` en `closecheck.ts`. Tests: `test/death.test.ts`.
+
+| Qué | Cómo queda |
+|---|---|
+| **Descanso corto** | «descanso corto», «descansar» (o «descansar gastando 2 dados»): 1 h de juego; gasta dados de golpe (d de clase + CON) hasta curarse o los que pida y recupera los recursos de descanso corto (Tomar aliento, Oleada de acción, ki, pacto…). |
+| **Descanso largo** | «dormir», «descanso largo»: 8 h; PG completos, la mitad de los dados de golpe y todos los recursos; uno cada 24 h de juego y con al menos 1 PG. |
+| **Tiempo** | Corre en el reloj propio del PJ (como el viaje rápido): el descanso sale entero en el acto y su reloj queda adelantado. Si comparte localización con otro PJ despierto y conectado que va por detrás, espera a que el reloj le alcance (la regla de siempre: dos PJ juntos viven la misma hora). |
+| **Interrupción** | Con una amenaza delante (NPC hostil, combate reciente) no se descansa. En sitio inseguro, la agenda (algo ruidoso que empieza en el lugar) o la tabla de encuentros de la zona (probabilidad del lugar, doble en descanso largo) lo cortan: el tiempo pasa hasta ahí y no cura. Con máster, lo que le despierta lo narra él. Seguro: un cuarto con su llave encima, un sitio con `safe_rest` o la casa de un aliado (NPC aliado, o amistoso que duerme allí). |
+| **0 PG** | Inconsciente; el servidor tira las salvaciones contra muerte sin IA: una por ronda en escena con rondas; fuera, una por minuto de juego con amenaza y cada diez sin ella. 3 éxitos, estable; 3 fallos, muere; 1 natural, dos fallos; 20 natural, 1 PG. Daño a 0 PG, un fallo (crítico, dos); si el daño sobrante iguala sus PG máximos, muere en el acto. Estable: recobra 1 PG a las 1d4 h. |
+| **Otros PJ** | «estabilizar a Kael» (Medicina CD 10, tirada del servidor), curarle con el máster (`heal`, despierta) o atenderle por la ficción (`stabilize`). A un PJ vivo caído no se le quita nada sin su consentimiento (que te lo dé). |
+| **Muerte** | Nunca permanente. El cuerpo («cuerpo de X», contenedor fijo) queda donde cayó con todo lo que llevaba y sus monedas. Casual: vuelve a las 2 h reales (`casual_respawn_wait`) en el punto de reaparición de la campaña (`death_rules.respawn_spot_id`; Brezal: el camastro de la Casa de las hierbas, Ilse le encontró) con la mitad de sus PG; sus cosas le esperan («recoger mis cosas») y nadie más puede tocarlas. Hardcore: vuelve a los 30 min, sin nada y con −1 (`hardcore_ability_penalty`) en su mejor característica; su cuerpo lo saquea quien quiera («saquear el cuerpo de X»). Narración por plantilla de la muerte y de la vuelta (más una frase del máster si lo hay de verdad); aviso a los presentes en la ficción y a los demás jugadores fuera de ella. |
+| **Máster** | Ve el estado de muerte y salvaciones del actor y de los presentes, los cuerpos y su modo; tiene `stabilize`, `heal`, `take_rest` y `spend_resource`. No puede matar ni resucitar por narración: el cierre que narra la muerte de un PJ vivo, o cualquier vuelta de la muerte, se rechaza dos veces y a la tercera se quitan esas frases. |
+| **Diario y «Donde lo dejamos»** | La crónica cuenta la caída, quién le salvó, la muerte con dónde quedó el cuerpo y qué llevaba, y la vuelta. «Donde lo dejamos» abre con «Lo que te pasó»: lo mismo, más lo que ya no está en su cuerpo y, si sigue muerto, cuánto le falta. |
+| **Web** | Al crear el personaje (partida nueva e invitación) se elige el modo, casual por defecto, explicado en una frase. La hoja muestra el modo, las salvaciones o el estable y, muerto, la cuenta atrás hasta volver (también en la ficha de arriba). En offline, «/daño N» hiere al propio PJ y «/time +2h» acorta también la espera de quien ha muerto. |
+
+## Cómo jugar con un amigo (resumen; detalle en el README)
+
+1. En el servidor: `ADMIN_TOKEN=<algo largo>` y, detrás de HTTPS, `PUBLIC_URL=https://tu-dominio`. Arranca con `npm run web` (o el servicio); el log imprime el enlace de administración.
+2. Abre `https://tu-dominio/admin?token=…`, crea la partida con tu personaje y «Plazas para amigos: 1».
+3. En «⚙ → Invitaciones», copia el enlace del asiento libre y pásaselo a tu amigo. Guarda también el tuyo, para entrar desde otro dispositivo.
+4. Tu amigo abre el enlace, crea su personaje («Empezar junto a…» marcado) y ya estáis en el mismo sitio.
+
+## Siguiente, por prioridad
+
+1. ~~**Muerte y reaparición** (#23)~~: hecho, ver «Muerte y descanso».
+2. **Avisos fuera de la web** (#19): una marca de no leídos y, opcionalmente, una notificación push o por correo cuando otro jugador hace algo en tu sitio o te pasa algo dormido.
+3. **Tope global de gasto** por partida o servidor, además del de cada PJ.
+4. **Cola de conversación con NPC** con turno explícito, y dificultad según el número de PJ.
+5. **Reportar un error** desde la web (equivalente al ⚠️ de Discord).

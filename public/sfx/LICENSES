@@ -1,20 +1,107 @@
 Sonidos de public/sfx — licencias y atribución
 ==============================================
 
-Estado actual (2026-10-26): cuatro ambientes en bucle aportados por el equipo
-(lista al final). El resto del catálogo se sintetiza en el navegador con las
-recetas de src/adapters/web/sfx.ts, código propio del proyecto.
+Estado actual (2026-10-26): todo el catálogo tiene fichero en la raíz de
+public/sfx (lista en «Ficheros», al final): los 18 efectos y 9 ambientes. Los
+ambientes de la raíz mandan sobre las grabaciones de public/sfx/ambient
+(Freesound, abajo), que se quedan en el repositorio sin usarse mientras haya
+fichero en la raíz; el panel «Sonido» solo cita las que de verdad suenan.
+
+Grabaciones de public/sfx/ambient
+---------------------------------
+
+Todas las pistas actuales son CC0 1.0 (dominio público): no exigen atribución,
+pero se citan igual aquí y en los créditos del panel «Sonido» de la web.
+Licencia: https://creativecommons.org/publicdomain/zero/1.0/
+
+Origen común: Freesound (https://freesound.org). Las páginas piden iniciar
+sesión para bajar el original, así que se partió de la previsualización HQ
+pública de cada sonido (cdn.freesound.org/previews/…-hq.ogg, Vorbis de unos
+190 kbps). La licencia del sonido cubre también su previsualización.
+
+Cambios comunes a todas: recortado un tramo, hecho bucle sin costura con un
+fundido de igual potencia entre el final y el principio, nivel igualado (RMS
+entre −24 y −28 dBFS, techo de −1 dBFS) y codificado en Ogg Vorbis y MP3 a
+96–112 kbps estéreo. Hecho con el Python de Blender 5.2 (aud + numpy).
+
+
+ambient/ambiente-taberna.ogg · ambient/ambiente-taberna.mp3
+  Título:   Pirate Tavern
+  Autor:    brunoboselli
+  Origen:   https://freesound.org/people/brunoboselli/sounds/695295/
+  Licencia: CC0 1.0
+  Cambios:  tramo 0–55 s, bucle de 52 s con fundido de 3 s; mezclada con la
+            chimenea de «Fire crackling in fireplace» (Davor, abajo) 10 dB por
+            debajo, como fuego de fondo.
+
+ambient/ambiente-herreria.ogg · ambient/ambiente-herreria.mp3
+  Título:   traditionnal blacksmith
+  Autor:    bruno.auzet
+  Origen:   https://freesound.org/people/bruno.auzet/sounds/640197/
+  Licencia: CC0 1.0
+  Cambios:  tramo 4:05–5:04 (martillo espaciado y fuego), bucle de 55 s con
+            fundido de 4 s; mezclada con «Fire crackling in fireplace» (Davor,
+            abajo, tramo 0–59 s) para dar cuerpo a la fragua.
+
+ambient/ambiente-interior.ogg · ambient/ambiente-interior.mp3
+  Título:   Fire crackling in fireplace
+  Autor:    Davor
+  Origen:   https://freesound.org/people/Davor/sounds/382616/
+  Licencia: CC0 1.0
+  Cambios:  tramo 10–69 s, bucle de 55 s con fundido de 4 s. También se usa
+            como capa de fuego en la taberna y la herrería.
+
+ambient/ambiente-plaza.ogg · ambient/ambiente-plaza.mp3
+  Título:   medieval_village_atmosphere.wav
+  Autor:    ramonmineiro
+  Origen:   https://freesound.org/people/ramonmineiro/sounds/578072/
+  Licencia: CC0 1.0
+  Cambios:  tramo 0–40 s, bucle de 37 s con fundido de 3 s.
+
+ambient/ambiente-plaza-noche.ogg · ambient/ambiente-plaza-noche.mp3
+  Título:   Ambience Countryside Nightfall.wav
+  Autor:    Cristiano_Scherer
+  Origen:   https://freesound.org/people/Cristiano_Scherer/sounds/478788/
+  Licencia: CC0 1.0
+  Cambios:  tramo 0–59 s, bucle de 55 s con fundido de 4 s.
+
+ambient/ambiente-bosque.ogg · ambient/ambiente-bosque.mp3
+  Título:   sfx_amb_forest_spring_afternoon-01.wav
+  Autor:    bajko
+  Origen:   https://freesound.org/people/bajko/sounds/385280/
+  Licencia: CC0 1.0
+  Cambios:  tramo 1:20–2:14, bucle de 50 s con fundido de 4 s.
+
+ambient/ambiente-bosque-noche.ogg · ambient/ambiente-bosque-noche.mp3
+  Título:   AMBIENCE NIGHT FIELD CRICKET 01.wav
+  Autor:    sengjinn
+  Origen:   https://freesound.org/people/sengjinn/sounds/175020/
+  Licencia: CC0 1.0
+  Cambios:  tramo 0–58 s, bucle de 54 s con fundido de 4 s.
+
+ambient/ambiente-agua.ogg · ambient/ambiente-agua.mp3
+  Título:   small stream forest
+  Autor:    Yuval
+  Origen:   https://freesound.org/people/Yuval/sounds/197023/
+  Licencia: CC0 1.0
+  Cambios:  tramo 0–59 s, bucle de 55 s con fundido de 4 s; 96 kbps.
+
 
 Cómo añadir un sonido de biblioteca
 -----------------------------------
 1. Nombre del fichero = clave del catálogo + extensión: puerta-abrir.ogg,
-   ambiente-taberna.mp3 (mp3, ogg, wav o webm). Las claves válidas están en
-   SOUND_KEYS (src/adapters/web/soundmap.ts). Un fichero sustituye a la receta;
-   si falla al cargar, se vuelve a la receta.
-2. Solo CC0 o CC-BY (nunca CC-BY-NC ni Sampling+ si el juego puede ser comercial).
-   Fuentes recomendadas en docs/SONIDO.md (Kenney, Freesound filtrado por
-   licencia, OpenGameArt filtrado por CC0).
-3. Añade aquí una entrada por fichero, aunque sea CC0:
+   ambiente-taberna.mp3 (mp3, ogg, wav o webm). Los ambientes grabados de
+   terceros van en public/sfx/ambient, mejor en ogg y mp3 a la vez (el
+   navegador pide el que sabe tocar); un fichero con la misma clave en la raíz
+   manda sobre ellos. Las claves válidas están en SOUND_KEYS
+   (src/adapters/web/soundmap.ts). Un fichero sustituye a la receta; si falla
+   al cargar, se vuelve a la receta.
+2. Solo CC0 o CC-BY (nunca CC-BY-NC ni Sampling+ si el juego puede ser comercial),
+   o generado por el equipo con un proveedor cuyas condiciones lo permitan. Fuentes recomendadas en docs/SONIDO.md (Kenney,
+   Freesound filtrado por licencia, OpenGameArt filtrado por CC0).
+3. Añade aquí una entrada por fichero, aunque sea CC0, y en AMBIENT_TRACKS
+   (src/adapters/web/sfx.ts) si es un ambiente: de ahí salen los créditos de
+   la web, obligatorios para las CC-BY.
 
    <fichero>
      Título:   <título original>
@@ -23,10 +110,11 @@ Cómo añadir un sonido de biblioteca
      Licencia: CC0 1.0 | CC BY 4.0 (<URL de la licencia>)
      Cambios:  <recortado, normalizado, convertido a ogg, bucle…>
 
-Los sonidos que la IA genera durante una partida no van aquí: se guardan en
-data/games/<slug>/sfx (fuera del repositorio), con las condiciones del
-proveedor. Los que el equipo genera una vez para dejarlos fijos (con
-scripts/sfx-generate.ts) sí van aquí, y se apuntan abajo.
+Los sonidos que la IA generaría durante una partida no van aquí (hoy esa
+generación está desactivada): se guardarían en data/games/<slug>/sfx, fuera
+del repositorio. Los que el equipo genera una vez para dejarlos fijos (con
+scripts/sfx-generate.ts) sí van aquí, y se apuntan abajo: el equipo decidió
+el 2026-10-26 usar los suyos y los de ElevenLabs en lugar de las grabaciones.
 
 Ficheros
 --------

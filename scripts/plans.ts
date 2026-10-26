@@ -2,6 +2,7 @@
  * Planos escritos de una campaña: congelarlos y sacar sus referencias para pintar el fondo (docs/ARTE.md).
  *
  *   node --import tsx scripts/plans.ts freeze [campaña]      copia los planos generados al manifiesto ("maps")
+ *   node --import tsx scripts/plans.ts freeze [campaña] --sync  tras cambiar la campaña: rehace lo cambiado, quita lo que ya no está
  *   node --import tsx scripts/plans.ts reference [campaña]   dibuja cada plano del manifiesto sin cuadrícula
  *   node --import tsx scripts/plans.ts format [campaña]      reescribe el manifiesto con el formato de freeze
  *
@@ -40,18 +41,39 @@ const PX_PER_M = 40, MAX_SIDE = 2048;
 const world = new World(authoredSeed(campaign));
 // Tramos de camino posibles: uno por salida larga entre dos localizaciones.
 for (const ex of [...world.exits.values()]) {
+  // Una salida bloqueada (el Cerco de Ceniza) no se recorre: no hay viaje ni encuentro en ella.
+  if (ex.state['blocked_by'] || ex.state['locked']) continue;
   if (ex.distance_m >= MIN_DISTANCE_M && world.locationOfSpot(ex.from_spot_id).id !== world.locationOfSpot(ex.to_spot_id).id) ensureWaypoint(world, ex.id);
 }
 const manifest = JSON.parse(readFileSync(manifestFile, 'utf8')) as { maps?: Record<string, LocationMap>; [k: string]: unknown };
 
+/**
+ * Sin --sync: congela lo que aún no está (lo escrito no se toca; --force lo rehace todo).
+ * Con --sync (tras cambiar los datos de la campaña): lo que sigue igual se queda con su fondo; lo que ha cambiado se
+ * vuelve a congelar y pierde el fondo, que ya no encajaría (hay que repintarlo); lo que ya no existe se quita.
+ */
 function freeze(): void {
   const maps = (manifest.maps ??= {});
+  const backgrounds = (manifest['map_backgrounds'] ??= {}) as Record<string, string>;
+  const sync = flags.includes('--sync');
   for (const loc of world.locations.values()) {
-    if (maps[loc.id] && !flags.includes('--force')) { console.log(`${loc.id}: ya escrito, no se toca`); continue; }
     const base = generateMap(mapInputOf(world, loc.id));
-    const full = clipMap(base, world.spotsOf(loc.id));
-    maps[loc.id] = { ...base, bounds: full.bounds };
-    console.log(`${loc.id}: congelado, ${r1(full.bounds.w)} × ${r1(full.bounds.h)} m`);
+    const fresh = { ...base, bounds: clipMap(base, world.spotsOf(loc.id)).bounds };
+    const old = maps[loc.id];
+    if (old && JSON.stringify(old) === JSON.stringify(fresh)) { console.log(`${loc.id}: igual`); continue; }
+    if (old && !sync && !flags.includes('--force')) { console.log(`${loc.id}: ya escrito, no se toca`); continue; }
+    maps[loc.id] = fresh;
+    const stale = old && backgrounds[loc.id];
+    if (stale) delete backgrounds[loc.id];
+    console.log(`${loc.id}: ${old ? 'cambiado, congelado de nuevo' : 'congelado'}, ${r1(fresh.bounds.w)} × ${r1(fresh.bounds.h)} m${stale ? ' (fondo quitado: hay que repintarlo)' : ''}`);
+  }
+  if (sync) {
+    for (const id of Object.keys(maps)) {
+      if (world.locations.has(id)) continue;
+      delete maps[id];
+      delete backgrounds[id];
+      console.log(`${id}: ya no existe, quitado`);
+    }
   }
   writeFileSync(manifestFile, pretty(manifest) + '\n');
 }

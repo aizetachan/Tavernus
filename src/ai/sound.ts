@@ -4,12 +4,15 @@
  * genera una vez por partida y clave y se reutiliza (data/games/<slug>/sfx);
  * nunca por acción. Sin proveedor, la web sintetiza cada clave en el navegador.
  *
- * APAGADO por defecto: hace falta elegirlo a propósito, aunque haya claves de
- * API en el entorno para otras cosas.
+ * DESACTIVADO, para más adelante (2026-10-25): los ambientes son pistas
+ * grabadas con licencia libre (public/sfx/ambient) y lo demás se sintetiza.
+ * Mientras SFX_AI_ENABLED sea false no se crea ningún proveedor ni se llama a
+ * ninguna API, aunque haya SFX_PROVIDER y clave en el entorno. Para volver a
+ * encenderlo: SFX_AI_ENABLED = true y, además, elegirlo en el entorno:
  *
  *   SFX_PROVIDER=elevenlabs  ELEVENLABS_API_KEY   POST /v1/sound-generation (eleven_text_to_sound_v2, con bucle)
  *   SFX_PROVIDER=stability   STABILITY_API_KEY    POST /v2beta/audio/stable-audio-2/text-to-audio (stable-audio-2.5)
- *   SFX_MAX_GENERATIONS      tope de generaciones por arranque del servidor (40 por defecto; un mundo son 26)
+ *   SFX_MAX_GENERATIONS      tope de generaciones por arranque del servidor (40 por defecto; un mundo son 27)
  *
  * Precios, licencias y la comparación con bibliotecas libres: docs/SONIDO.md.
  */
@@ -56,7 +59,7 @@ export const SOUND_PROMPTS: Record<string, SoundPrompt> = {
   'descubrir': fx('Subtle discovery chime, two soft bell notes, fantasy game, short', 1.2),
   'campana': fx('Single distant village church bell strike with long decay, medieval', 3),
   'ambiente-taberna': amb('Medieval tavern ambience, low crowd murmur and indistinct chatter, crackling fireplace, occasional mugs clinking, no music, seamless loop'),
-  'ambiente-herreria': amb('Medieval blacksmith forge interior, roaring coal fire and bellows, hammer striking an anvil in slow rhythm, hot metal hissing in water, no music, seamless loop'),
+  'ambiente-herreria': amb('Medieval blacksmith forge interior, roaring forge fire and bellows, slow spaced hammer strikes on an anvil, no music, seamless loop'),
   'ambiente-interior': amb('Quiet old wooden house interior room tone, occasional floorboard creak, faint fire crackle, no music, seamless loop'),
   'ambiente-plaza': amb('Medieval village square during the day, light wind, distant people talking, birds, a far blacksmith hammer, no music, seamless loop'),
   'ambiente-plaza-noche': amb('Medieval village square at night, soft wind, a few crickets, very quiet, no music, seamless loop'),
@@ -103,10 +106,17 @@ export function stabilitySound(apiKey: string, fetchImpl: FetchLike = fetch as u
   };
 }
 
-/** El proveedor elegido en el entorno, o null (lo normal: sonido procedural, coste cero). */
-export function soundProviderFromEnv(env: Record<string, string | undefined> = process.env): SoundProvider | null {
+/** Interruptor de la generación por IA. Apagado: pistas libres y recetas, sin ninguna llamada (docs/SONIDO.md). */
+export const SFX_AI_ENABLED = false;
+
+/** El proveedor elegido en el entorno, o null (lo normal: pistas libres y recetas, coste cero). */
+export function soundProviderFromEnv(env: Record<string, string | undefined> = process.env, enabled: boolean = SFX_AI_ENABLED): SoundProvider | null {
   const id = (env['SFX_PROVIDER'] ?? '').trim().toLowerCase();
   if (!id || id === 'off' || id === 'procedural' || id === 'browser') return null;
+  if (!enabled) {
+    console.warn(`[sfx] SFX_PROVIDER=${id} ignorado: la generación de sonido por IA está desactivada (docs/SONIDO.md).`);
+    return null;
+  }
   if (id === 'elevenlabs') {
     const k = env['ELEVENLABS_API_KEY'];
     if (!k) throw new Error('SFX_PROVIDER=elevenlabs necesita ELEVENLABS_API_KEY');

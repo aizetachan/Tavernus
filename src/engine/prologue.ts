@@ -19,6 +19,7 @@ import type { Engine } from './engine.js';
 import { journalOf } from './journal.js';
 import type { Campaign, Character, GameEvent } from './model.js';
 import { descriptorOf, maskUnknownNames } from './narrate.js';
+import { characterStory, finalsMissedBy } from './story.js';
 
 export const PROLOGUE_WORDS = { min: 120, max: 200 } as const;
 export const RECAP_TITLE = 'Donde lo dejamos';
@@ -185,10 +186,45 @@ export function forReader(engine: Engine, c: Character, text: string): string {
 // ---------------------------------------------------------------------------
 
 /** El último evento del propio personaje: lo último que hizo o que le narraron como actor. */
+/** Avisos de presencia (irse y volver): no son un turno suyo. */
+const PRESENCE = /^(away|back)$/;
+/** Lo que le llega a su nombre sin que actúe (historia, ofertas, seguir, turno libre): tampoco es un turno suyo. */
+const HAPPENS_TO = /^(away|back|progress_|offer_cancelled|offer_expired|unfollow|npc_free|down$|stabilized|revived|death|respawn|master_line)/;
+/** Caer, salvarse, morir y volver (death.ts): van en «Lo que te pasó». */
+const FATE = /^(down|stabilized|revived|death|respawn)$/;
+
 export function lastOwnEvent(engine: Engine, characterId: string): GameEvent | null {
   const all = engine.events.all();
-  for (let i = all.length - 1; i >= 0; i--) if (all[i]!.actor_id === characterId) return all[i]!;
+  for (let i = all.length - 1; i >= 0; i--) {
+    const e = all[i]!;
+    if (e.actor_id === characterId && !HAPPENS_TO.test(e.action_type)) return e;
+    // Un turno compartido (ronda o conversación de grupo) en el que escribió también es suyo.
+    const inputs = e.payload['group_inputs'] as Record<string, string> | undefined;
+    if (inputs && typeof inputs[characterId] === 'string') return e;
+  }
   return null;
+}
+
+/**
+ * Lo que pasó mientras no estaba y le afecta (docs/MULTIJUGADOR.md, «Desconexiones»):
+ * combate en su sitio, rondas que se resolvieron con él dudando, lo que otros le
+ * hicieron a él (objetivo de una acción, un ataque), ofertas canceladas, seguir
+ * que se cortó y su historia (pasos compartidos, misiones que se cierran).
+ * Textos como los leyó él.
+ */
+export function relevantWhileAway(engine: Engine, c: Character, since: GameEvent): string[] {
+  const out: string[] = [];
+  for (const d of engine.events.forCharacter(c.id, since.id)) {
+    const e = d.event;
+    const mine = e.actor_id === c.id;
+    const hit = (e.payload['attack'] as { target_id?: string } | undefined)?.target_id === c.id;
+    const shared = Array.isArray(e.payload['group']) && (e.payload['group'] as string[]).includes(c.id) && e.tags.includes('shared');
+    const looted = (e.payload['loot'] as { owner_id?: string } | undefined)?.owner_id === c.id;
+    if (mine ? /^(offer_cancelled|unfollow|progress_story)$/.test(e.action_type) || FATE.test(e.action_type) : (e.tags.includes('combat') || hit || shared || looted || e.payload['target_character_id'] === c.id || e.action_type === 'offer_cancelled')) {
+      out.push(firstSentence(d.text.replace(/\*\*/g, '')));
+    }
+  }
+  return [...new Set(out)];
 }
 
 export interface AbsenceRule { hours: number; game_days: number }
@@ -204,11 +240,18 @@ export function absence(engine: Engine, c: Character, nowMs: number, rule: Absen
   if (!since) return null;
   const hours = (nowMs - since.timestamp_real_ms) / 3_600_000;
   const gameDays = (engine.nowFor(c) - since.timestamp_game_s) / GAME_DAY;
-  return hours >= rule.hours || gameDays >= rule.game_days ? { since, hours, game_days: gameDays } : null;
+  if (hours >= rule.hours || gameDays >= rule.game_days) return { since, hours, game_days: gameDays };
+  // Antes de las 72 h, solo si se fue (multijugador) y entretanto pasó algo que le afecta o se cerró un final sin él.
+  const left = engine.events.all().some((e) => e.actor_id === c.id && e.action_type === 'away' && e.seq > since.seq);
+  if (!left) return null;
+  const affected = relevantWhileAway(engine, c, since).length > 0 || finalsMissedBy(engine.world, c, since.timestamp_game_s).length > 0;
+  return affected ? { since, hours, game_days: gameDays } : null;
 }
 
 function agoText(hours: number): string {
-  if (hours < 48) return `${Math.max(1, Math.round(hours))} horas`;
+  if (hours < 1) { const m = Math.max(1, Math.round(hours * 60)); return `${m} minuto${m === 1 ? '' : 's'}`; }
+  if (hours < 1.5) return 'una hora';
+  if (hours < 48) return `${Math.round(hours)} horas`;
   const d = Math.round(hours / 24);
   return d >= 14 ? `${Math.round(d / 7)} semanas` : `${d} días`;
 }
@@ -224,13 +267,28 @@ export function recapTemplate(engine: Engine, c: Character, since: GameEvent, ho
   const j = journalOf(engine, c.id);
   const out: string[] = [];
 
+  // Un final excluyente que otro cerró mientras no estaba: lo primero, con quién y qué significa para él.
+  for (const f of finalsMissedBy(w, c, since.timestamp_game_s)) {
+    const who = (id: string) => w.characters.get(id)?.name ?? id;
+    const closers = [f.by, ...f.with].map(who);
+    const mine = f.quest.exclusive ? characterStory(c).expired.map((id) => (w.campaign as { story?: { quests: { id: string; title: string; exclusive?: string }[] } }).story?.quests.find((q) => q.id === id)).filter((q) => q && q.exclusive === f.quest.exclusive).map((q) => `«${q!.title}»`) : [];
+    const ending = f.quest.ending ? ` ${dot(f.quest.ending.replaceAll('{name}', who(f.by)))}` : '';
+    out.push(`**Lo primero.** Mientras no estabas, ${closers.length > 1 ? `${closers.slice(0, -1).join(', ')} y ${closers.at(-1)}` : closers[0]} cerr${closers.length > 1 ? 'aron' : 'ó'} «${f.quest.title}».${ending}${mine.length ? ` Para ti, eso cierra ${mine.join(' y ')}: el valle ya ha elegido.` : ''}`);
+  }
+
+  const fate = fateSince(engine, c, since);
+  if (fate) out.push(`**Lo que te pasó.** ${fate}`);
+
   out.push(`**Dónde estás.** Han pasado ${agoText(hours)} desde la última vez. Es ${d.weekday.toLowerCase()} ${d.day_of_month} de ${d.month}, ${dayPart(d.hour)} (${hhmm}). ${spot ? `Estás en ${spot.name}${loc && loc.name !== spot.name ? `, en ${loc.name}` : ''}.` : ''}`.trim());
 
   // Último turno: lo que dijo o hizo y la primera frase de lo que pasó.
-  const mine = engine.events.forCharacter(c.id, null).filter((x) => x.event.actor_id === c.id && !/^(prologue|recap)$/.test(x.event.action_type));
-  const lastTurn = [...mine].reverse().find((x) => x.event.input_text && !x.event.input_text.startsWith('(')) ?? mine.at(-1);
+  // Sus turnos, también los compartidos (ronda o grupo) en los que escribió: lo que escribió él.
+  const ownInput = (e: GameEvent) => (e.payload['group_inputs'] as Record<string, string> | undefined)?.[c.id] ?? (e.actor_id === c.id ? e.input_text : null);
+  const mine = engine.events.forCharacter(c.id, null).filter((x) => (x.event.actor_id === c.id || ownInput(x.event)) && !/^(prologue|recap)$/.test(x.event.action_type) && !HAPPENS_TO.test(x.event.action_type));
+  const lastTurn = [...mine].reverse().find((x) => { const t = ownInput(x.event); return t && !t.startsWith('('); }) ?? mine.at(-1);
   if (lastTurn) {
-    const said = lastTurn.event.input_text && !lastTurn.event.input_text.startsWith('(') ? `«${noDot(lastTurn.event.input_text)}». ` : '';
+    const own = ownInput(lastTurn.event);
+    const said = own && !own.startsWith('(') ? `«${noDot(own)}». ` : '';
     out.push(`**Qué estabas haciendo.** ${said}${firstSentence(lastTurn.text)}`);
   }
 
@@ -259,15 +317,53 @@ export function recapTemplate(engine: Engine, c: Character, since: GameEvent, ho
 
   // Lo que le llegó sin que él actuara desde su último evento: anuncios, tablón, lo que hicieron otros.
   const meanwhile = engine.events.forCharacter(c.id, since.id)
-    .filter((x) => x.event.actor_id !== c.id)
+    .filter((x) => x.event.actor_id !== c.id && !PRESENCE.test(x.event.action_type))
     .map((x) => (x.event.action_type === 'board' ? 'El tablón de avisos ha cambiado.' : firstSentence(x.text.replace(/\*\*/g, ''))));
-  const uniq = [...new Set(meanwhile)].slice(-4);
+  // Lo que le afecta va delante (combate en su sitio, lo que le hicieron, su historia); luego, lo último del resto.
+  const relevant = relevantWhileAway(engine, c, since);
+  const uniq = [...new Set([...relevant.slice(-6), ...meanwhile.filter((m) => !relevant.includes(m)).slice(-Math.max(0, 4 - relevant.length))])];
   out.push(`**Entretanto.** ${uniq.length ? uniq.join(' ') : 'Nada que te afecte de cerca ha cambiado mientras no estabas.'}`);
 
   return forReader(engine, c, out.join('\n\n'));
 }
 
 function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+/**
+ * Caídas, rescates, muerte y vuelta desde su último turno, con quién le salvó,
+ * dónde quedó su cuerpo y qué perdió (lo que ya no está en él). Si sigue
+ * muerto, cuánto falta. null si no le pasó nada de eso.
+ */
+export function fateSince(engine: Engine, c: Character, since: GameEvent): string | null {
+  const w = engine.world;
+  const out: string[] = [];
+  const evs = engine.events.all().filter((e) => e.seq > since.seq && e.actor_id === c.id && FATE.test(e.action_type));
+  for (const e of evs) {
+    const where = w.locations.get(e.location_id)?.name ?? '';
+    if (e.action_type === 'down') out.push(`Caíste a 0 PG en ${where}.`);
+    else if (e.action_type === 'stabilized' || e.action_type === 'revived') {
+      const r = e.payload['rescue'] as { by?: string | null; via?: string } | undefined;
+      out.push(r?.via === 'save' ? 'Saliste adelante tú solo.' : r?.by && r.by !== c.name ? `${r.by} te salvó.` : e.action_type === 'stabilized' ? 'Te estabilizaste.' : 'Volviste en ti.');
+    } else if (e.action_type === 'death') {
+      const d = e.payload['death'] as { spot_id?: string; left?: string[]; coins_left?: number; body_instance_id?: string | null; mode?: string } | undefined;
+      const sp = d?.spot_id ? w.spots.get(d.spot_id) : undefined;
+      out.push(`Moriste en ${where}${sp ? `, ${sp.name}` : ''}; tu cuerpo quedó allí.`);
+      const left = d?.left ?? [];
+      if (left.length || d?.coins_left) {
+        const body = d?.body_instance_id ? w.itemInstances.get(d.body_instance_id) : undefined;
+        const still = body ? w.itemsIn({ type: 'container', id: body.id }).map((i) => w.itemDef(i.item_id).name) : [];
+        const gone = left.filter((x) => !still.some((s) => x.startsWith(s)));
+        out.push(gone.length ? `De lo que llevabas, ya no está: ${gone.join(', ')}.` : d?.mode === 'hardcore' ? 'Lo que llevabas sigue allí, al alcance de cualquiera.' : 'Tus cosas siguen allí, esperándote.');
+      }
+    } else if (e.action_type === 'respawn') {
+      const r = e.payload['respawn'] as { spot_id?: string; penalty?: { label: string; amount: number } | null } | undefined;
+      const sp = r?.spot_id ? w.spots.get(r.spot_id) : undefined;
+      out.push(`Volviste de la muerte${sp ? ` en ${sp.name}` : ''}${r?.penalty ? `, con ${r.penalty.amount} menos de ${r.penalty.label}` : ''}.`);
+    }
+  }
+  if (c.status === 'dead') out.push(engine.downText(c).replace(/^☠\s*/, ''));
+  return out.length ? out.join(' ') : null;
+}
 
 /** Para pulir la recapitulación con el máster (RECAP_POLISH=on): en prosa, sin añadir nada. */
 export function recapPrompt(template: string): { system: string; prompt: string } {

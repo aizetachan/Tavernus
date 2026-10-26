@@ -1,0 +1,4 @@
+# Estos ficheros se ejecutan o se leen en Linux: siempre con LF, aunque el repo se clone en
+# Windows con core.autocrlf=true (si no, bash falla con «$'\r': command not found»).
+* text eol=lf
+*.ps1 text eol=crlf

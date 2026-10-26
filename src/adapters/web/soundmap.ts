@@ -2,7 +2,7 @@
  * Sonido del juego: de cada evento del motor a una secuencia corta de claves
  * («pasos-madera», «puerta-abrir», «puerta-cerrar», «ambiente-plaza»). Las
  * claves se resuelven en el navegador contra el catálogo de sfx.ts (receta
- * procedural, fichero de biblioteca o audio generado por IA).
+ * procedural o pista grabada de public/sfx; la generación por IA está apagada).
  *
  * Dos piezas:
  *   - `cuesFor(input)`: función pura y determinista; es la que se prueba.
@@ -132,8 +132,9 @@ export function floorOf(world: World, spot: Spot): Floor {
 export function ambienceOf(world: World, engine: Pick<Engine, 'clock'>, loc: Location, nowGameS: number): Ambience {
   const weather = [loc.state['weather'], (world.campaign as { weather?: unknown }).weather].filter((x): x is string => typeof x === 'string');
   if (!loc.indoor && has(/\b(lluvia|llueve|tormenta|chubasco|rain|storm)/, ...weather)) return 'lluvia';
+  // Un taller de forja suena a fragua y martillo, dentro o fuera (va antes del ruido: una herrería es ruidosa, no una taberna).
+  if (has(/\b(herreria|herrero|forja|fragua|yunque|smithy|blacksmith|forge)\b/, loc.name, loc.id.replace(/_/g, ' '))) return 'herreria';
   if (loc.indoor) {
-    if (has(/\b(herreria|fragua|forja|smithy|forge|blacksmith)\b/, loc.name, loc.id.replace(/_/g, ' '))) return 'herreria';
     const lively = loc.ambience.noise >= 0.25 || has(/\b(taberna|posada|meson|cantina|inn)\b/, loc.name, loc.id);
     return lively ? 'taberna' : 'interior';
   }
@@ -141,6 +142,8 @@ export function ambienceOf(world: World, engine: Pick<Engine, 'clock'>, loc: Loc
   // Un tramo de camino (travel.ts) se llama «Camino entre <A> y <B>»: suena como su zona, no como A o B.
   const own = loc.state['waypoint'] ? [] : [loc.name, loc.id.replace(/_/g, ' ')];
   if (has(/\b(rio|arroyo|orilla|lago|cascada|river)\b/, ...own)) return 'agua';
+  // Una arboleda suena a bosque aunque esté dentro del pueblo (El Soto de Brezal).
+  if (has(/\b(bosque|soto|arboleda|claro|fresneda|forest|woods|grove)\b/, ...own)) return night ? 'bosque-noche' : 'bosque';
   const zone = world.zones.get(loc.zone_id);
   const town = zone?.kind === 'town' || has(/\b(plaza|calle|mercado|aldea|pueblo|square|gate|porton|puerto)\b/, ...own);
   return town ? (night ? 'plaza-noche' : 'plaza') : (night ? 'bosque-noche' : 'bosque');

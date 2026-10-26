@@ -779,15 +779,19 @@ describe('tipos de lugar', () => {
 });
 
 describe('tramos de camino', () => {
-  it('el tramo entre la plaza y el claro es camino de bosque, no una plaza: sin edificios, y suena a bosque', () => {
+  it('un tramo se plantea y suena por su zona, no por su nombre («Camino entre Plaza…» no es una plaza)', () => {
     const world = new WorldClass(authoredSeed('brezal'));
     const spot = ensureWaypoint(world, 'ex_plaza_claro');
     const loc = world.location(spot.location_id);
-    expect(loc.name).toBe('Camino entre Plaza del Pozo y Claro del Roble');
+    expect(loc.name).toBe('Camino entre Plaza del Pozo y El Soto');
+    // Dentro de la aldea: una calle, no la plaza; y nada de arboleda por el «Soto» del nombre.
+    expect(placeTypeOf(mapInputOf(world, loc.id))).toBe('street');
+    const { clock, t0 } = freshWorld();
+    expect(['plaza', 'plaza-noche']).toContain(ambienceOf(world, { clock }, loc, t0));
+    // En una zona de bosque, el mismo tramo sería un sendero sin edificios.
+    world.zones.set(loc.zone_id, { ...world.zones.get(loc.zone_id)!, name: 'Bosque de Fresnos', kind: 'forest' });
     const input = mapInputOf(world, loc.id);
     expect(placeTypeOf(input)).toBe('forest');
     expect(generateMap(input).props.some((p) => p.kind === 'building')).toBe(false);
-    const { clock, t0 } = freshWorld();
-    expect(['bosque', 'bosque-noche']).toContain(ambienceOf(world, { clock }, loc, t0));
   });
 });

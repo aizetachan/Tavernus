@@ -28,6 +28,9 @@ import { Master } from '../ai/master.js';
 import { isMasterMode, masterCacheDir, masterModeFromEnv, masterOptionsFor, type MasterMode } from '../ai/mode.js';
 import { attachIllustrator, cloudflareFromEnv, imagesEnabled, Illustrator, type IllustratorOptions } from '../ai/illustrate.js';
 import { attachAvatars, avatarsOf, cleanLook } from '../ai/avatar.js';
+import { BudgetBook, budgetFromEnv, BudgetedMaster, type BudgetLimits } from '../ai/budget.js';
+import { offlineClient } from '../ai/offline.js';
+import type { MasterLike } from '../engine/engine.js';
 
 /**
  * En Windows, renombrar una carpeta falla con EPERM/EBUSY mientras algún
@@ -111,7 +114,7 @@ export interface CreateGameInput {
   name: string;
   mode: NewGameMode;
   /** `hook`: lo que el jugador cuenta de por qué viene; en un mundo generado entra en su situación inicial. */
-  character?: { name: string; race_id?: string; class_id?: string; hook?: string; /** Cómo se ve: alimenta su primer avatar (src/ai/avatar.ts). */ appearance?: string } | null;
+  character?: { name: string; race_id?: string; class_id?: string; hook?: string; /** Cómo se ve: alimenta su primer avatar (src/ai/avatar.ts). */ appearance?: string; /** Al morir (SPEC §4.7): casual por defecto. */ death_mode?: 'casual' | 'hardcore' } | null;
   dice_seed?: number | null;
   campaign_id?: Id;
   /** Mundo nuevo generado en vez de la semilla demo. */
@@ -137,6 +140,8 @@ export interface GameManagerOptions {
   illustrator?: Partial<IllustratorOptions>;
   /** Generador de mundos (por defecto src/worldgen); inyectable en tests. */
   worldgen?: (opts: GenerateOptions) => Promise<WorldSnapshot>;
+  /** Cupo diario del máster real por PJ (src/ai/budget.ts); por defecto, del entorno. null = sin límite. */
+  budget?: BudgetLimits | null;
 }
 
 export class GameError extends Error {
@@ -166,6 +171,8 @@ export class GameManager {
   private readonly engineOpts: Partial<EngineOptions>;
   private readonly illustratorOpts: Partial<IllustratorOptions>;
   private readonly worldgen: (opts: GenerateOptions) => Promise<WorldSnapshot>;
+  private readonly budget: BudgetLimits | null;
+  private readonly books = new WeakMap<Engine, BudgetBook>();
   private readonly now: () => Date;
   private readonly log: (msg: string) => void;
   private readonly engines = new Map<string, Promise<Engine>>();
@@ -178,6 +185,7 @@ export class GameManager {
     this.engineOpts = opts.engine ?? {};
     this.illustratorOpts = opts.illustrator ?? {};
     this.worldgen = opts.worldgen ?? generateSeed;
+    this.budget = opts.budget !== undefined ? opts.budget : budgetFromEnv(this.env);
     this.now = opts.now ?? (() => new Date());
     this.log = opts.log ?? ((m) => console.log(m));
   }
@@ -329,7 +337,7 @@ export class GameManager {
     });
     // El máster lleva su propia secuencia, derivada de la misma semilla.
     const master = this.masterFor(engine, m, p, m.dice_seed !== null ? seededRng((m.dice_seed ^ 0x9e3779b9) >>> 0) : undefined);
-    engine.attachMaster(master);
+    engine.attachMaster(master && this.budget && (m.mode === 'live' || m.mode === 'record') ? this.withBudget(engine, master, p) : master);
     if (imagesEnabled(this.env, m.mode)) {
       const ill = attachIllustrator(engine, new Illustrator({
         dir: join(p.dir, 'images'), worldSeed: m.dice_seed ?? m.campaign_id,
@@ -339,8 +347,63 @@ export class GameManager {
     }
     m.last_opened_at = this.now().toISOString();
     await this.writeManifest(m);
-    this.log(`[partidas] abierta «${m.slug}» (${m.mode}${master ? '' : ', sin máster: narración plana'}${imagesEnabled(this.env, m.mode) ? `, ilustraciones con ${cloudflareFromEnv(this.env) ? 'Cloudflare (reserva: Pollinations)' : 'Pollinations'}` : ''}) en ${p.data}`);
+    this.log(`[partidas] abierta «${m.slug}» (${m.mode}${master ? '' : ', sin máster: narración plana'}${master && this.budget && (m.mode === 'live' || m.mode === 'record') ? `, cupo ${this.budget.actions || '∞'} acciones${this.budget.tokens ? ` / ${this.budget.tokens} tokens` : ''} por PJ y día` : ''}${imagesEnabled(this.env, m.mode) ? `, ilustraciones con ${cloudflareFromEnv(this.env) ? 'Cloudflare (reserva: Pollinations)' : 'Pollinations'}` : ''}) en ${p.data}`);
     return engine;
+  }
+
+  /** El máster real con cupo diario por PJ; agotado, el offline (src/ai/budget.ts). */
+  private withBudget(engine: Engine, live: MasterLike, p: GamePaths): MasterLike {
+    const book = new BudgetBook(this.budget!, join(p.dir, 'budget.json'), () => this.now().getTime());
+    this.books.set(engine, book);
+    return new BudgetedMaster(engine, live, new Master(engine, { client: offlineClient() }), book);
+  }
+
+  /** Cupo del máster de la partida, si lo tiene (para la web). */
+  budgetOf(engine: Engine): BudgetBook | null { return this.books.get(engine) ?? null; }
+
+  /**
+   * Un PJ más en una partida ya creada (invitación con asiento libre): como el de
+   * la creación, con su situación inicial en campañas escritas y mundos generados.
+   * Con `near`, empieza en el punto de ese PJ (para jugar juntos desde el principio).
+   */
+  async addCharacter(slug: string, userId: Id, input: NonNullable<CreateGameInput['character']>, opts: { near?: Id | null } = {}): Promise<Id> {
+    const game = await this.require(slug);
+    const engine = await this.open(slug);
+    const id = await this.spawnCharacter(engine, game, userId, input, opts.near ?? null);
+    await engine.flush();
+    void avatarsOf(engine)?.ensure(id);
+    return id;
+  }
+
+  /**
+   * Crea el PJ y lo coloca antes de anunciar su llegada: primero su situación
+   * inicial (campañas escritas y mundos generados) y, con `nearId`, junto a ese PJ
+   * (para empezar juntos). El motor emite «llega a…» y la primera visita ya ahí.
+   */
+  private async spawnCharacter(engine: Engine, game: GameManifest, userId: Id, input: NonNullable<CreateGameInput['character']>, nearId: Id | null = null): Promise<Id> {
+    const situations = Boolean(game.world || isAuthoredCampaign(game.campaign_id));
+    const r = await engine.createCharacter(userId, input.name.trim(), {
+      ...(input.race_id ? { race_id: input.race_id } : {}),
+      ...(input.class_id ? { class_id: input.class_id } : {}),
+      ...(cleanLook(input.appearance ?? '') ? { appearance: cleanLook(input.appearance!) } : {}),
+      death_mode: input.death_mode === 'hardcore' ? 'hardcore' : 'casual',
+    }, {
+      place: (c) => {
+        const near = nearId ? engine.world.characters.get(nearId) : null;
+        const together = near && near.id !== c.id && near.status !== 'retired' && near.location.type === 'spot' ? near : null;
+        // Juntos: situación complementaria (llegasteis juntos, mismo lugar y reloj), no la misma repetida.
+        if (situations) claimSituation(engine.world, c.id, engine.gameNow(), input.hook, { companionOf: together?.id ?? null });
+        if (together) {
+          c.location = { type: 'spot', id: together.location.id };
+          // Llegaron juntos: se conocen por su nombre desde el principio.
+          if (!c.knows.includes(together.id)) c.knows.push(together.id);
+          if (!together.knows.includes(c.id)) { together.knows.push(c.id); engine.world.touch('characters', together.id); }
+          engine.world.touch('characters', c.id);
+        }
+      },
+    });
+    if (!r.ok) throw new GameError(r.reason);
+    return r.character.id;
   }
 
   /** Vuelca y suelta el motor; los oyentes de `onClose` cierran sus conexiones. */
@@ -350,6 +413,8 @@ export class GameManager {
     this.engines.delete(slug);
     const engine = await p.catch(() => null);
     if (!engine) return;
+    // Lo que aún corre en sus colas (una presentación, una llegada narrada) termina antes de soltar la partida.
+    await engine.settle();
     await engine.flush();
     for (const l of this.closeListeners) l(slug, engine);
   }
@@ -403,16 +468,7 @@ export class GameManager {
         await this.writeManifest(game);
       }
       const engine = await this.open(slug);
-      if (charName) {
-        const r = await engine.createCharacter(`web:${slug}`, charName, {
-          ...(input.character?.race_id ? { race_id: input.character.race_id } : {}),
-          ...(input.character?.class_id ? { class_id: input.character.class_id } : {}),
-          ...(cleanLook(input.character?.appearance ?? '') ? { appearance: cleanLook(input.character!.appearance!) } : {}),
-        });
-        if (!r.ok) throw new GameError(r.reason);
-        game.character_id = r.character.id;
-        if (game.world || isAuthoredCampaign(game.campaign_id)) claimSituation(engine.world, r.character.id, engine.gameNow(), input.character?.hook);
-      }
+      if (charName) game.character_id = await this.spawnCharacter(engine, game, `web:${slug}`, { ...input.character!, name: charName });
       await engine.flush();
       if (input.mode === 'record') {
         // Foto del arranque: la demo empezará desde aquí, con el mismo personaje.

@@ -1,0 +1,9 @@
+[Unit]
+Description=Tavernus: copia comprimida de las partidas
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/tavernus/backup-now.sh --quiet
+Nice=10
+IOSchedulingClass=idle
+SyslogIdentifier=tavernus-backup

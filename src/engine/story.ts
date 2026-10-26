@@ -64,7 +64,9 @@ export type StoryCondition =
   /** Lo decide el máster con advance_story; `how` le dice cuándo. */
   | { kind: 'narrative'; how: string }
   | { kind: 'any'; of: StoryCondition[] }
-  | { kind: 'all'; of: StoryCondition[] };
+  | { kind: 'all'; of: StoryCondition[] }
+  /** No se cumple (en la amenaza: nadie la cumple). */
+  | { kind: 'not'; of: StoryCondition };
 
 /** Lo que cambia al dar un paso, abrir o cumplir una misión, o al escalar la amenaza. */
 export type StoryEffect =
@@ -79,7 +81,12 @@ export type StoryEffect =
   | { kind: 'tell'; text: string }
   // Al mundo (una vez)
   | { kind: 'npc_move'; npc_id: Id; spot_id: Id }
-  | { kind: 'npc_status'; npc_id: Id; status: Npc['status'] }
+  /**
+   * `missing` con `hideout_spot_id`: se esconde allí sin morir. Sale de la
+   * percepción, del horario y de la agenda (todo eso mira `status === 'alive'`)
+   * y vuelve a estar a la vista cuando un PJ se planta en el escondite.
+   */
+  | { kind: 'npc_status'; npc_id: Id; status: Npc['status']; hideout_spot_id?: Id }
   | { kind: 'npc_attitude_all'; npc_id: Id; attitude: Attitude }
   | { kind: 'npc_routine'; npc_id: Id; routine: NpcRoutine | null }
   | { kind: 'spot_state'; spot_id: Id; patch: Record<string, unknown> }
@@ -151,6 +158,10 @@ export interface StoryState {
   applied: Id[];
   /** Escalones resueltos: `id` si pasó, `!id` si se evitó. */
   escalated: Id[];
+  /** Quién dio cada paso (`quest/paso`) y quién estaba con él (crédito compartido, docs/MULTIJUGADOR.md). */
+  credits?: Record<Id, { by: Id; with: Id[]; game_s: number }>;
+  /** Finales excluyentes cerrados: cuál, quién, con quién y cuándo (para el «Donde lo dejamos» de quien no estaba). */
+  finals?: { quest_id: Id; by: Id; with: Id[]; game_s: number }[];
 }
 
 export interface CharacterStory {
@@ -162,6 +173,14 @@ export interface CharacterStory {
 }
 
 type StoryCampaign = { story?: Story; story_state?: StoryState; hooks?: Hook[]; rumors?: Rumor[]; schedule?: ScheduledEvent[] };
+
+/** Finales excluyentes cerrados después de `sinceGameS` en los que `c` no estaba (para su «Donde lo dejamos»). */
+export function finalsMissedBy(world: World, c: Character, sinceGameS: number): { quest: StoryQuest; by: Id; with: Id[]; game_s: number }[] {
+  const st = (world.campaign as typeof world.campaign & StoryCampaign).story_state;
+  return (st?.finals ?? [])
+    .filter((f) => f.game_s >= sinceGameS && f.by !== c.id && !f.with.includes(c.id))
+    .map((f) => ({ ...f, quest: quest(world, f.quest_id)! })).filter((f) => f.quest);
+}
 
 export function storyOf(world: World): Story | null {
   return (world.campaign as typeof world.campaign & StoryCampaign).story ?? null;
@@ -214,11 +233,12 @@ export function holds(world: World, c: Character | null, cond: StoryCondition): 
     case 'narrative': return false;
     case 'any': return cond.of.some((x) => holds(world, c, x));
     case 'all': return cond.of.every((x) => holds(world, c, x));
+    case 'not': return !holds(world, c, cond.of);
   }
 }
 
 function isPersonal(cond: StoryCondition): boolean {
-  return !['npc_has', 'npc_status', 'npc_at', 'spot_state', 'any', 'all'].includes(cond.kind);
+  return !['npc_has', 'npc_status', 'npc_at', 'spot_state', 'any', 'all', 'not'].includes(cond.kind);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,8 +326,15 @@ function applyWorld(world: World, e: StoryEffect, nowS: number, o: StoryOutput):
       break;
     }
     case 'npc_status': {
-      const n = world.npcs.get(e.npc_id);
-      if (n) { n.status = e.status; world.touch('npcs', n.id); }
+      const n = world.npcs.get(e.npc_id) as HidingNpc | undefined;
+      if (!n) break;
+      n.status = e.status;
+      if (e.status === 'missing' && e.hideout_spot_id && world.spots.has(e.hideout_spot_id)) {
+        n.location = { type: 'spot', id: e.hideout_spot_id }; n.talking_to = null;
+        n.hideout_spot_id = e.hideout_spot_id;
+        delete n.routine;
+      } else delete n.hideout_spot_id;
+      world.touch('npcs', n.id);
       break;
     }
     case 'npc_attitude_all': {
@@ -441,13 +468,36 @@ function advanceCharacter(world: World, c: Character, nowS: number, o: StoryOutp
   if (changed) world.touch('characters', c.id);
 }
 
+/** Los que están con él cuando da un paso: PJ activos, presentes (no ausentes) y en su misma localización. */
+function companionsOf(world: World, c: Character): Character[] {
+  const loc = world.characterSpot(c)?.location_id;
+  return [...world.characters.values()].filter((o) => o.id !== c.id && o.status === 'active' && !o.away && !o.transit && world.characterSpot(o)?.location_id === loc);
+}
+
 function markStep(world: World, c: Character, q: StoryQuest, s: StoryStep, nowS: number, o: StoryOutput): void {
-  characterStory(c).steps.push(stepKey(q, s));
+  const key = stepKey(q, s);
+  characterStory(c).steps.push(key);
   if (q.steps.length > 1) tellTo(o, c, [{ kind: 'story', text: `✔ ${q.title}: ${s.text}` }]);
-  applyEffects(world, c, s.on_done, `${q.id}/${s.id}`, nowS, o);
+  // Crédito compartido: quien estaba presente y va por ese mismo paso de la misión, lo da también.
+  const st = stateOf(world);
+  const shared = companionsOf(world, c).filter((p) => characterStory(p).open.includes(q.id) && currentStep(p, q)?.id === s.id);
+  if (!st.credits?.[key]) { st.credits = { ...(st.credits ?? {}), [key]: { by: c.id, with: companionsOf(world, c).map((p) => p.id), game_s: nowS } }; world.touch('campaign', world.campaign.id); }
+  for (const p of shared) {
+    characterStory(p).steps.push(key);
+    world.touch('characters', p.id);
+    tellTo(o, p, [{ kind: 'story', text: `✔ ${q.title}: ${s.text} (con ${c.name})` }]);
+  }
+  applyEffects(world, c, s.on_done, key, nowS, o);
 }
 
 function complete(world: World, c: Character, q: StoryQuest, nowS: number, o: StoryOutput): void {
+  if (q.exclusive) {
+    const ss = stateOf(world);
+    if (!ss.finals?.some((f) => f.quest_id === q.id)) {
+      ss.finals = [...(ss.finals ?? []), { quest_id: q.id, by: c.id, with: companionsOf(world, c).map((p) => p.id), game_s: nowS }];
+      world.touch('campaign', world.campaign.id);
+    }
+  }
   const st = characterStory(c);
   st.open = st.open.filter((x) => x !== q.id);
   st.done.push(q.id);
@@ -478,10 +528,33 @@ function escalate(world: World, nowS: number, o: StoryOutput): void {
   }
 }
 
+type HidingNpc = Npc & { routine?: NpcRoutine; hideout_spot_id?: Id };
+
+/** Escondite de un NPC desaparecido (efecto npc_status con hideout_spot_id), o null. */
+export function hideoutOf(n: Npc): Id | null {
+  return n.status === 'missing' ? (n as HidingNpc).hideout_spot_id ?? null : null;
+}
+
+/** Un PJ parado en el escondite da con quien se esconde: vuelve a estar a la vista, allí mismo y sin horario. */
+function findHidden(world: World, o: StoryOutput): void {
+  for (const n of world.npcs.values()) {
+    const at = hideoutOf(n);
+    if (!at) continue;
+    const finder = world.charactersAt(at).find((c) => c.status === 'active' && !c.transit);
+    if (!finder) continue;
+    n.status = 'alive';
+    delete (n as HidingNpc).hideout_spot_id;
+    world.touch('npcs', n.id);
+    if (!finder.knows.includes(n.id)) { finder.knows.push(n.id); world.touch('characters', finder.id); }
+    tellTo(o, finder, [{ kind: 'story', text: `Das con ${n.name}, escondido en ${world.spot(at).name}.` }]);
+  }
+}
+
 /** En cada tick y tras cada acción: amenaza y misiones de todos los PJ. Sin historia, no hace nada. */
 export function tickStory(world: World, nowS: number): StoryOutput {
   const o = out();
   if (!storyOf(world)) return o;
+  findHidden(world, o);
   escalate(world, nowS, o);
   for (const c of world.characters.values()) {
     if (c.status === 'retired' || c.status === 'dead') continue;
@@ -539,6 +612,7 @@ export function describeCondition(world: World, cond: StoryCondition): string {
     case 'narrative': return `lo decides tú con advance_story: ${cond.how}`;
     case 'any': return cond.of.map((x) => describeCondition(world, x)).join(' O ');
     case 'all': return cond.of.map((x) => describeCondition(world, x)).join(' Y ');
+    case 'not': return `que no se cumpla: ${describeCondition(world, cond.of)}`;
   }
 }
 
@@ -626,6 +700,7 @@ export function validateStory(story: Story, has: { spot: (id: Id) => boolean; lo
       case 'quest': if (!qids.has(c.quest_id)) errs.push(`${where}: la misión ${c.quest_id} no existe.`); break;
       case 'narrative': if (!c.how.trim()) errs.push(`${where}: paso narrativo sin «how».`); break;
       case 'any': case 'all': if (!c.of.length) errs.push(`${where}: ${c.kind} vacío.`); c.of.forEach((x) => cond(where, x)); break;
+      case 'not': cond(where, c.of); break;
     }
   };
   const eff = (where: string, e: StoryEffect): void => {
@@ -642,6 +717,7 @@ export function validateStory(story: Story, has: { spot: (id: Id) => boolean; lo
       if (!has.location(e.event.location_id) || !has.spot(e.event.spot_id)) errs.push(`${where}: el evento ${e.event.id} apunta a un sitio que no existe.`);
       for (const id of e.event.npc_ids) if (!has.npc(id)) errs.push(`${where}: el evento ${e.event.id} trae a ${id}, que no existe.`);
     }
+    if (e.kind === 'npc_status' && e.hideout_spot_id && !has.spot(e.hideout_spot_id)) errs.push(`${where}: el escondite ${e.hideout_spot_id} no existe.`);
     if (e.kind === 'npc_routine' && e.routine) for (const id of Object.values(e.routine)) if (id && !has.spot(id)) errs.push(`${where}: horario con el punto ${id}, que no existe.`);
   };
   for (const q of story.quests) {

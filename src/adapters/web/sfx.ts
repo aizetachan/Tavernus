@@ -24,7 +24,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Engine } from '../../engine/engine.js';
 import { currentAmbience, SOUND_KEYS } from './soundmap.js';
@@ -327,16 +327,16 @@ const RECIPES_JS = String.raw`var SFX_RECIPES = (function () {
     events(o, sr, r, 0.25, function (t) { clink(o, sr, r, t, 0.12); if (r() < 0.5) clink(o, sr, r, t + 0.08, 0.08); });
     events(o, sr, r, 0.12, function (t) { creak(o, sr, r, t, 0.2, 55, 40, 0.06); });
   }), 0.5); } };
-  R['ambiente-herreria'] = { loop: true, gain: 0.5, render: function (sr) { var r = rng(109); return norm(loop(sr, 12, function (o) {
-    bed(o, sr, r, { brown: true, lp: 300, gain: 0.4, lfo: [[0.1, 0.4]] });
-    crackles(o, sr, r, 8, 0.3);
-    events(o, sr, r, 0.45, function (t) { for (var k = 0; k < 3; k++) { var f = 900 + r() * 300; modal(o, sr, t + k * 0.45, [f, f * 2.76, f * 5.4], [0.25, 0.12, 0.06], [0.3, 0.15, 0.07]); } });
-  }), 0.45); } };
   R['ambiente-interior'] = { loop: true, gain: 0.45, render: function (sr) { var r = rng(102); return norm(loop(sr, 12, function (o) {
     bed(o, sr, r, { brown: true, lp: 220, gain: 0.5, lfo: [[0.07, 0.3]] });
     events(o, sr, r, 0.15, function (t) { creak(o, sr, r, t, 0.25, 50, 38, 0.12); });
     crackles(o, sr, r, 1.5, 0.12);
   }), 0.4); } };
+  R['ambiente-herreria'] = { loop: true, gain: 0.5, render: function (sr) { var r = rng(109); return norm(loop(sr, 14, function (o) {
+    bed(o, sr, r, { brown: true, lp: 320, gain: 0.45, lfo: [[0.11, 0.5], [0.31, 0.25]] });
+    crackles(o, sr, r, 6, 0.2);
+    hammer(o, sr, r, 0.18, 0.3);
+  }), 0.5); } };
   R['ambiente-plaza'] = { loop: true, gain: 0.5, render: function (sr) { var r = rng(103); return norm(loop(sr, 14, function (o) {
     bed(o, sr, r, { brown: true, lp: 500, gain: 0.35, lfo: [[0.09, 0.6], [0.23, 0.3]] });
     murmur(o, sr, r, 3, 0.45, 900);
@@ -411,6 +411,7 @@ export const SFX_STYLE = String.raw`
   .sfx-pop label.row { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
   .sfx-pop input[type=range] { display: block; width: 100%; margin-top: 4px; }
   .sfx-pop .note { margin: 6px 0 0; color: var(--faint); font-size: 11.5px; line-height: 1.4; }
+  .sfx-pop .credits a { color: var(--muted); }
   @media (max-width: 820px) { .sfx > .sfx-toggle span { display: none; } .sfx > .sfx-toggle { padding: 0 6px 0 10px; } }
 `;
 
@@ -427,9 +428,9 @@ export const SFX_SCRIPT = String.raw`<script>
   function num(v, d) { var n = Number(v); return v === null || v === undefined || v === '' || !isFinite(n) ? d : Math.max(0, Math.min(1, n)); }
   function isAmb(k) { return /^ambiente-/.test(k); }
   var AC = window.AudioContext || window.webkitAudioContext;
-  var muted = store('tavernus.sfx.muted') === '1', vol = num(store('tavernus.sfx.volume'), 0.7), ambVol = num(store('tavernus.sfx.ambience'), 0.6);
+  var muted = store('tavernus.sfx.muted') === '1', vol = num(store('tavernus.sfx.volume'), 0.7), ambVol = num(store('tavernus.sfx.ambience'), 0.5);
   var ctx = null, master = null, ambBus = null, fxBus = null, unlocked = false, fresh = false, ducked = false, external = false;
-  var cache = {}, files = {}, ai = false, amb = null, wantAmb = null, seqEnd = 0, character = null;
+  var cache = {}, files = {}, credits = [], ai = false, amb = null, wantAmb = null, seqEnd = 0, character = null;
 
   // Interfaz: silencio y volúmenes en la cabecera del chat, delante del narrador.
   var head = document.querySelector('.chat-head'), box = document.createElement('div');
@@ -442,6 +443,7 @@ export const SFX_SCRIPT = String.raw`<script>
       '<label>Volumen<input type="range" min="0" max="1" step="0.05" data-k="volume"></label>' +
       '<label>Ambiente<input type="range" min="0" max="1" step="0.05" data-k="ambience"></label>' +
       '<p class="note"></p>' +
+      '<p class="note credits" hidden></p>' +
     '</div>';
   if (head) head.insertBefore(box, head.querySelector('.tts')); else return;
   if (!AC) { box.hidden = true; return; }
@@ -454,8 +456,18 @@ export const SFX_SCRIPT = String.raw`<script>
     pop.querySelector('[data-k=on]').checked = !muted;
     pop.querySelector('[data-k=volume]').value = String(vol);
     pop.querySelector('[data-k=ambience]').value = String(ambVol);
-    pop.querySelector('.note').textContent = (ai ? 'Efectos generados por IA y cacheados por partida; lo que falta se sintetiza aquí.' : 'Efectos y ambientes sintetizados en el navegador, sin coste.') +
+    pop.querySelector('.note').textContent = (ai ? 'Efectos generados por IA y cacheados por partida; lo que falta se sintetiza aquí.'
+      : credits.length ? 'Ambientes grabados con licencia libre; los efectos se sintetizan en el navegador.' : 'Efectos y ambientes sintetizados en el navegador, sin coste.') +
       (unlocked ? '' : ' Empieza a sonar al tocar la página.');
+    // Créditos de las pistas de ambiente (obligatorios en las CC BY; las CC0 se citan igual).
+    var cr = pop.querySelector('.credits');
+    cr.hidden = !credits.length;
+    cr.textContent = credits.length ? 'Créditos: ' : '';
+    credits.forEach(function (c, i) {
+      var a = document.createElement('a');
+      a.href = c.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = '«' + c.title + '», de ' + c.author;
+      cr.appendChild(a); cr.appendChild(document.createTextNode(' (' + c.license + ')' + (i < credits.length - 1 ? ' · ' : '. Freesound.org')));
+    });
   }
 
   function ensure() {
@@ -497,8 +509,20 @@ export const SFX_SCRIPT = String.raw`<script>
     return b;
   }
   function decode(ab) { return new Promise(function (ok, ko) { ctx.decodeAudioData(ab, ok, ko); }); }
+  // Vorbis donde se pueda (no deja hueco al repetir); si no, MP3.
+  var fmt = (function () { try { return new Audio().canPlayType('audio/ogg; codecs="vorbis"') ? 'ogg' : 'mp3'; } catch (e) { return 'mp3'; } })();
   function fetchFile(key) {
-    return fetch(api('/api/sfx?key=' + encodeURIComponent(key))).then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); }).then(decode);
+    return fetch(api('/api/sfx?key=' + encodeURIComponent(key) + '&fmt=' + fmt)).then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); }).then(decode).then(function (b) {
+      if (isAmb(key)) b.loopPoints = edges(b);
+      return b;
+    });
+  }
+  /** Bucle de una pista: sin el silencio que el MP3 mete al principio y al final (hasta 0,2 s). */
+  function edges(b) {
+    var d = b.getChannelData(0), max = Math.min(d.length >> 2, Math.round(b.sampleRate * 0.2)), i = 0, j = d.length - 1;
+    while (i < max && Math.abs(d[i]) < 1e-4) i++;
+    while (d.length - 1 - j < max && Math.abs(d[j]) < 1e-4) j--;
+    return [i / b.sampleRate, (j + 1) / b.sampleRate];
   }
   /** Búfer de una clave: el fichero si lo hay; si no, la receta. Con IA activa, lo que falta se pide en segundo plano para la próxima vez. */
   function buffer(key) {
@@ -509,7 +533,8 @@ export const SFX_SCRIPT = String.raw`<script>
     if (!files[key] && ai) fetchFile(key).then(function (b) { files[key] = true; cache[key] = Promise.resolve(b); }).catch(function () {});
     return p;
   }
-  function gainOf(key) { var i = SFX_RECIPES.info(key); return i ? i.gain : 0.6; }
+  // Las pistas de ambiente vienen igualadas a -24 dBFS RMS: de fondo, por debajo de la voz.
+  function gainOf(key, b) { if (b && b.loopPoints) return 0.7; var i = SFX_RECIPES.info(key); return i ? i.gain : 0.6; }
   function nextOf(key, b) { var i = SFX_RECIPES.info(key); return files[key] && b ? Math.min(b.duration, 1.2) : (i && i.next) || (b ? b.duration : 0.5); }
 
   /** Ambiente en bucle con fundido cruzado; la misma clave no se reinicia. */
@@ -523,9 +548,10 @@ export const SFX_SCRIPT = String.raw`<script>
       var t = Math.max(ctx.currentTime, when || 0);
       if (prev && prev.gain) { prev.gain.gain.setValueAtTime(prev.gain.gain.value, t); prev.gain.gain.linearRampToValueAtTime(0, t + fade); var old = prev.src; setTimeout(function () { try { old.stop(); } catch (e) {} }, (t - ctx.currentTime + fade) * 1000 + 200); }
       var g = ctx.createGain(), s = ctx.createBufferSource();
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gainOf(key), t + fade);
-      s.buffer = b; s.loop = true; s.connect(g); g.connect(ambBus);
-      s.start(t, Math.random() * b.duration);
+      var lp = b.loopPoints || [0, b.duration];
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gainOf(key, b), t + fade);
+      s.buffer = b; s.loop = true; s.loopStart = lp[0]; s.loopEnd = lp[1]; s.connect(g); g.connect(ambBus);
+      s.start(t, lp[0] + Math.random() * (lp[1] - lp[0]));
       mine.src = s; mine.gain = g;
     });
   }
@@ -541,7 +567,7 @@ export const SFX_SCRIPT = String.raw`<script>
         if (!b) return;
         if (isAmb(k)) { setAmbience(k, 2.5, t); return; }
         var g = ctx.createGain(), s = ctx.createBufferSource();
-        g.gain.value = gainOf(k); s.buffer = b; s.connect(g); g.connect(fxBus); s.start(t);
+        g.gain.value = gainOf(k, b); s.buffer = b; s.connect(g); g.connect(fxBus); s.start(t);
         t += nextOf(k, b) + 0.06;
       });
       seqEnd = t;
@@ -577,6 +603,7 @@ export const SFX_SCRIPT = String.raw`<script>
     fetch(api('/api/sfx?character=' + encodeURIComponent(id))).then(function (r) { return r.ok ? r.json() : null; }).then(function (s) {
       if (!s || character !== id) return;
       files = {}; (s.files || []).forEach(function (k) { files[k] = true; });
+      credits = Array.isArray(s.credits) ? s.credits : [];
       ai = !!s.ai;
       if (s.ambience) setAmbience(s.ambience, 2);
       ui();
@@ -599,7 +626,7 @@ export const SFX_SCRIPT = String.raw`<script>
     cue: cue,
     setAmbience: function (k) { setAmbience(k, 2.5); },
     /** Para pruebas y depuración. */
-    state: function () { return { unlocked: unlocked, muted: muted, volume: vol, ambienceVolume: ambVol, ambience: amb && amb.key, wanted: wantAmb, context: ctx && ctx.state, files: Object.keys(files), ai: ai }; },
+    state: function () { return { unlocked: unlocked, muted: muted, volume: vol, ambienceVolume: ambVol, ambience: amb && amb.key, wanted: wantAmb, context: ctx && ctx.state, files: Object.keys(files), ai: ai, format: fmt }; },
   };
 })();
 </script>`;
@@ -626,23 +653,46 @@ function current(): SoundProvider | null {
 /** Para tests: fija el proveedor (null = ninguno; undefined = el del entorno). */
 export function setSoundProviderForTests(p: SoundProvider | null | undefined): void { provider = p; generated = 0; inflight.clear(); }
 
-async function listKeys(dir: string): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+/** Ficheros de una carpeta por clave; una clave puede venir en varios formatos (ogg y mp3). */
+async function listKeys(dir: string): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
   try {
-    for (const f of await readdir(dir)) {
+    for (const f of (await readdir(dir)).sort()) {
       const m = /^([a-z0-9-]+)\.([a-z0-9]+)$/.exec(f);
-      if (m && EXTS[m[2]!] && !out.has(m[1]!)) out.set(m[1]!, join(dir, f));
+      if (m && EXTS[m[2]!]) out.set(m[1]!, [...(out.get(m[1]!) ?? []), join(dir, f)]);
     }
   } catch { /* sin carpeta */ }
   return out;
 }
 
-/** Ficheros por clave: primero los de la partida (IA), luego la biblioteca de public/sfx. */
-async function filesFor(gameDir: string): Promise<Map<string, string>> {
+/** Ficheros por clave: primero los de la partida, luego la biblioteca (public/sfx y sus pistas de ambiente). */
+async function filesFor(gameDir: string): Promise<Map<string, string[]>> {
   const own = await listKeys(join(gameDir, 'sfx'));
-  for (const [k, p] of await listKeys(librarySfx())) if (!own.has(k)) own.set(k, p);
+  // Lo de la raíz de public/sfx manda sobre las pistas grabadas de ambient/ (los ambientes elegidos por el equipo).
+  for (const dir of [librarySfx(), join(librarySfx(), 'ambient')]) {
+    for (const [k, p] of await listKeys(dir)) if (!own.has(k)) own.set(k, p);
+  }
   return own;
 }
+
+/** El formato que pide el navegador (?fmt=ogg|mp3) si está; si no, el primero que haya. */
+const pick = (paths: string[], fmt: string | null) => paths.find((p) => fmt && p.endsWith(`.${fmt}`)) ?? paths[0]!;
+
+/**
+ * Pistas grabadas de public/sfx/ambient (licencias completas en public/sfx/LICENSES).
+ * Viajan a la web para la línea de créditos del panel de sonido.
+ */
+export interface AmbientTrack { key: string; title: string; author: string; url: string; license: 'CC0 1.0' | 'CC BY 4.0' | 'CC BY 3.0' }
+export const AMBIENT_TRACKS: readonly AmbientTrack[] = [
+  { key: 'ambiente-taberna', title: 'Pirate Tavern', author: 'brunoboselli', url: 'https://freesound.org/people/brunoboselli/sounds/695295/', license: 'CC0 1.0' },
+  { key: 'ambiente-herreria', title: 'traditionnal blacksmith', author: 'bruno.auzet', url: 'https://freesound.org/people/bruno.auzet/sounds/640197/', license: 'CC0 1.0' },
+  { key: 'ambiente-interior', title: 'Fire crackling in fireplace', author: 'Davor', url: 'https://freesound.org/people/Davor/sounds/382616/', license: 'CC0 1.0' },
+  { key: 'ambiente-plaza', title: 'medieval_village_atmosphere.wav', author: 'ramonmineiro', url: 'https://freesound.org/people/ramonmineiro/sounds/578072/', license: 'CC0 1.0' },
+  { key: 'ambiente-plaza-noche', title: 'Ambience Countryside Nightfall.wav', author: 'Cristiano_Scherer', url: 'https://freesound.org/people/Cristiano_Scherer/sounds/478788/', license: 'CC0 1.0' },
+  { key: 'ambiente-bosque', title: 'sfx_amb_forest_spring_afternoon-01.wav', author: 'bajko', url: 'https://freesound.org/people/bajko/sounds/385280/', license: 'CC0 1.0' },
+  { key: 'ambiente-bosque-noche', title: 'AMBIENCE NIGHT FIELD CRICKET 01.wav', author: 'sengjinn', url: 'https://freesound.org/people/sengjinn/sounds/175020/', license: 'CC0 1.0' },
+  { key: 'ambiente-agua', title: 'small stream forest', author: 'Yuval', url: 'https://freesound.org/people/Yuval/sounds/197023/', license: 'CC0 1.0' },
+];
 
 /** Genera con el proveedor (una vez por clave) y lo deja en data/games/<slug>/sfx. */
 async function generate(gameDir: string, key: string, p: SoundProvider): Promise<string | null> {
@@ -671,12 +721,17 @@ export async function handleSfxRequest(engine: Engine, res: ServerResponse, url:
   const p = current();
   if (key === null) {
     const id = url.searchParams.get('character');
-    const files = [...(await filesFor(gameDir)).keys()].filter((k) => SOUND_KEYS.includes(k));
-    json(res, 200, { ambience: id ? currentAmbience(engine, id) : null, files, ai: p !== null, provider: p ? p.label : null });
+    const all = await filesFor(gameDir);
+    const files = [...all.keys()].filter((k) => SOUND_KEYS.includes(k));
+    // Créditos solo de las pistas grabadas que de verdad suenan (las de ambient/, si nada las tapa).
+    const recorded = join(librarySfx(), 'ambient');
+    const credits = AMBIENT_TRACKS.filter((t) => all.get(t.key)?.[0]?.startsWith(recorded + sep));
+    json(res, 200, { ambience: id ? currentAmbience(engine, id) : null, files, credits, ai: p !== null, provider: p ? p.label : null });
     return;
   }
   if (!/^[a-z0-9-]{1,40}$/.test(key) || !SOUND_KEYS.includes(key)) { json(res, 404, { ok: false, text: 'No existe ese sonido.' }); return; }
-  let file = (await filesFor(gameDir)).get(key) ?? null;
+  const found = (await filesFor(gameDir)).get(key);
+  let file = found ? pick(found, url.searchParams.get('fmt')) : null;
   if (!file && p) file = await generate(gameDir, key, p);
   if (!file) { json(res, 404, { ok: false, text: 'Sin fichero: se sintetiza en el navegador.' }); return; }
   const ext = file.slice(file.lastIndexOf('.') + 1);

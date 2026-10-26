@@ -42,6 +42,7 @@ export const PAGE = String.raw`<!doctype html>
   .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .ib { display: inline-grid; place-items: center; width: 32px; height: 32px; flex: none; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; text-decoration: none; }
   .ib:hover { background: var(--hover); color: var(--text); }
+  .ib[hidden] { display: none; }
   .ib svg.i { width: 16px; height: 16px; }
   .sec-t { display: flex; align-items: center; gap: 8px; padding: 14px 14px 6px 16px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
   .sec-t span { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
@@ -189,6 +190,21 @@ export const PAGE = String.raw`<!doctype html>
   #party button:first-child { margin-left: 0; }
   #party button:hover { color: var(--text); position: relative; z-index: 2; }
   #party button.on { color: var(--accent); background-color: #2a1d05; border-color: var(--accent); position: relative; z-index: 1; }
+  /* Presencia (docs/MULTIJUGADOR.md): los demás jugadores, con punto verde si están en línea; en la hoja, una línea cada uno. */
+  #presence { display: flex; align-items: center; flex: none; gap: 2px; }
+  #presence:empty { display: none; }
+  #presence span { position: relative; width: 30px; height: 30px; margin-left: -6px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--panel); background: #22262a; color: var(--muted); font-size: 11.5px; font-weight: 600; cursor: default; }
+  #presence span:first-child { margin-left: 0; }
+  #presence span.on { color: var(--text); }
+  #presence span.here { box-shadow: 0 0 0 1.5px rgba(230,183,90,.55); }
+  #presence span::after { content: ''; position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; background: #5b5f62; border: 2px solid var(--panel); }
+  #presence span.on::after { background: #4fbf7a; }
+  #group { margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid var(--sep); }
+  #group:empty { display: none; }
+  #group h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  #group div { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 2px 0; }
+  #group i { width: 8px; height: 8px; border-radius: 50%; background: #5b5f62; flex: none; }
+  #group i.on { background: #4fbf7a; }
   .chat-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   /* Fondo con motivos tenues, como el papel de WhatsApp. */
   .chat-body::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .08; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900' fill='none' stroke='%23e6b75a' stroke-width='1.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='translate(537 498) rotate(-31 12 12) scale(1.67)'%3E%3Ccircle cx='7.5' cy='12' r='4'/%3E%3Cpath d='M11.5 12H21M18 12v3M15 12v2'/%3E%3C/g%3E%3Cg transform='translate(61 201) rotate(4 12 12) scale(1.45)'%3E%3Cpath d='M6 5h11a2 2 0 0 1 2 2v12H8a2 2 0 0 1-2-2z'/%3E%3Cpath d='M6 5a2 2 0 0 0-2 2v2h2M10 10h6M10 13h6M10 16h4'/%3E%3C/g%3E%3Cg transform='translate(364 463) rotate(5 12 12) scale(1.18)'%3E%3Ccircle cx='12' cy='14' r='6'/%3E%3Cpath d='M9.5 5h5L12 8z'/%3E%3C/g%3E%3Cg transform='translate(579 105) rotate(5 12 12) scale(1.44)'%3E%3Cpath d='M10 3h4M10.5 3v5L6 16a4 4 0 0 0 3.5 5h5a4 4 0 0 0 3.5-5L13.5 8V3'/%3E%3Cpath d='M8 15h8'/%3E%3C/g%3E%3Cg transform='translate(100 604) rotate(5 12 12) scale(1.21)'%3E%3Cpath d='M6 21L18 6'/%3E%3Cpath d='M14 4c3-1 6 1 6 4-2 0-4 1-5 3l-3-3c1-2 2-3 2-4z'/%3E%3C/g%3E%3Cg transform='translate(402 777) rotate(-10 12 12) scale(1.57)'%3E%3Cpath d='M4 20h16'/%3E%3Cpath d='M6 20c1-6 3-11 7-16 1 4 3 7 5 9-2 1-3 3-3 7'/%3E%3Cpath d='M10 14l1 .5'/%3E%3C/g%3E%3Cg transform='translate(440 155) rotate(-11 12 12) scale(1.14)'%3E%3Cpath d='M6 16v-5a6 6 0 0 1 12 0v5h-2v3H8v-3z'/%3E%3Ccircle cx='9.5' cy='11.5' r='1.3'/%3E%3Ccircle cx='14.5' cy='11.5' r='1.3'/%3E%3C/g%3E%3Cg transform='translate(478 667) rotate(22 12 12) scale(1.15)'%3E%3Cpath d='M4 17h16l1-10-5 4-4-6-4 6-5-4z'/%3E%3Cpath d='M4 20h16'/%3E%3C/g%3E%3Cg transform='translate(256 625) rotate(-7 12 12) scale(1.23)'%3E%3Cpath d='M6 5h11a2 2 0 0 1 2 2v12H8a2 2 0 0 1-2-2z'/%3E%3Cpath d='M6 5a2 2 0 0 0-2 2v2h2M10 10h6M10 13h6M10 16h4'/%3E%3C/g%3E%3Cg transform='translate(248 132) rotate(-5 12 12) scale(1.34)'%3E%3Cpath d='M6 21L18 6'/%3E%3Cpath d='M14 4c3-1 6 1 6 4-2 0-4 1-5 3l-3-3c1-2 2-3 2-4z'/%3E%3C/g%3E%3Cg transform='translate(599 829) rotate(13 12 12) scale(1.43)'%3E%3Cpath d='M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z'/%3E%3Cpath d='M12 7v10M8 11h8'/%3E%3C/g%3E%3Cg transform='translate(123 725) rotate(32 12 12) scale(1.29)'%3E%3Cpath d='M12 2l9 5v10l-9 5-9-5V7z'/%3E%3Cpath d='M12 2v6M3 7l9 5 9-5M12 12v10M7.5 9.5l4.5 8 4.5-8z'/%3E%3C/g%3E%3Cg transform='translate(627 394) rotate(26 12 12) scale(1.49)'%3E%3Cpath d='M15 4a8 8 0 1 0 5 13A7 7 0 0 1 15 4z'/%3E%3C/g%3E%3Cg transform='translate(642 264) rotate(10 12 12) scale(1.65)'%3E%3Cpath d='M14.5 3.5L20 3l-.5 5.5L9 19l-4-4z'/%3E%3Cpath d='M5 15l-2 2 4 4 2-2M7.5 12.5l4 4'/%3E%3C/g%3E%3Cg transform='translate(666 642) rotate(-21 12 12) scale(1.47)'%3E%3Cpath d='M4 17h16l1-10-5 4-4-6-4 6-5-4z'/%3E%3Cpath d='M4 20h16'/%3E%3C/g%3E%3Cg transform='translate(516 302) rotate(22 12 12) scale(1.22)'%3E%3Cpath d='M6 16v-5a6 6 0 0 1 12 0v5h-2v3H8v-3z'/%3E%3Ccircle cx='9.5' cy='11.5' r='1.3'/%3E%3Ccircle cx='14.5' cy='11.5' r='1.3'/%3E%3C/g%3E%3Cg transform='translate(104 405) rotate(-11 12 12) scale(1.15)'%3E%3Cpath d='M10 3h4M10.5 3v5L6 16a4 4 0 0 0 3.5 5h5a4 4 0 0 0 3.5-5L13.5 8V3'/%3E%3Cpath d='M8 15h8'/%3E%3C/g%3E%3Cg transform='translate(828 520) rotate(-35 12 12) scale(1.39)'%3E%3Ccircle cx='7.5' cy='12' r='4'/%3E%3Cpath d='M11.5 12H21M18 12v3M15 12v2'/%3E%3C/g%3E%3Cg transform='translate(470 38) rotate(21 12 12) scale(1.19)'%3E%3Cpath d='M4 20h16'/%3E%3Cpath d='M6 20c1-6 3-11 7-16 1 4 3 7 5 9-2 1-3 3-3 7'/%3E%3Cpath d='M10 14l1 .5'/%3E%3C/g%3E%3Cg transform='translate(829 180) rotate(26 12 12) scale(1.18)'%3E%3Cpath d='M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z'/%3E%3Cpath d='M12 7v10M8 11h8'/%3E%3C/g%3E%3Cg transform='translate(657 519) rotate(19 12 12) scale(1.62)'%3E%3Cpath d='M15 4a8 8 0 1 0 5 13A7 7 0 0 1 15 4z'/%3E%3C/g%3E%3Cg transform='translate(753 72) rotate(-12 12 12) scale(1.12)'%3E%3Cpath d='M14.5 3.5L20 3l-.5 5.5L9 19l-4-4z'/%3E%3Cpath d='M5 15l-2 2 4 4 2-2M7.5 12.5l4 4'/%3E%3C/g%3E%3Cg transform='translate(223 449) rotate(26 12 12) scale(1.40)'%3E%3Cpath d='M12 2l9 5v10l-9 5-9-5V7z'/%3E%3Cpath d='M12 2v6M3 7l9 5 9-5M12 12v10M7.5 9.5l4.5 8 4.5-8z'/%3E%3C/g%3E%3Cg transform='translate(777 752) rotate(-21 12 12) scale(1.66)'%3E%3Ccircle cx='12' cy='14' r='6'/%3E%3Cpath d='M9.5 5h5L12 8z'/%3E%3C/g%3E%3C/svg%3E"); background-size: 900px 900px; }
@@ -295,6 +311,8 @@ export const PAGE = String.raw`<!doctype html>
   .tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 10px 4px; border-radius: 12px; background: var(--platter); border: 1px solid var(--sep); text-align: center; }
   .tile b { font-size: 17px; font-weight: 600; }
   .tile small { font-size: 11px; color: var(--muted); }
+  .tile.death { border-color: #6b3a36; background: rgba(120, 40, 36, 0.18); }
+  #card .respawn { margin-top: 8px; padding: 6px 10px; border-radius: 10px; font-size: 12px; color: #e8c9c4; background: rgba(120, 40, 36, 0.25); }
   .tile.wide { grid-column: 1 / -1; align-items: stretch; text-align: left; padding: 12px 14px; gap: 8px; }
   .tile.wide .l { display: flex; font-size: 13px; color: #b8b1a6; } .tile.wide .l b { margin-left: auto; font-size: 13px; color: var(--text); }
   .tile.wide .bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
@@ -358,6 +376,39 @@ export const PAGE = String.raw`<!doctype html>
   #journal .rumor b { color: var(--text); font-style: normal; font-weight: 600; }
   #journal .rumor small { display: block; margin-top: 3px; font-style: normal; color: var(--faint); }
   #journal .dates { margin-top: 6px; font-size: 11.5px; color: var(--faint); }
+  /* Misiones: icono por estado, seguir una, novedad, resumen y lo que te dijeron. */
+  .qi { position: relative; flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--control); color: var(--muted); }
+  .qi svg.i { width: 16px; height: 16px; }
+  .qi.active { background: var(--accent-tint); color: var(--accent); }
+  .qi.completed { background: rgba(79,191,122,.14); color: var(--ok); }
+  .qi.expired { color: var(--faint); opacity: .7; }
+  #journal .qdrop { margin-top: 8px; background: none; border: 1px solid var(--line); color: var(--faint); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  #journal .qdrop:hover { color: var(--text); }
+  .qi.main { background: var(--accent); color: var(--accent-ink); }
+  .qi .nw { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 2px var(--panel); }
+  .qi .nw svg.i { width: 9px; height: 9px; stroke-width: 2.4; }
+  #journal .q.isnew { box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
+  #journal summary .trk { flex: none; display: grid; place-items: center; width: 30px; height: 30px; margin: -4px -4px -4px 0; border: 0; border-radius: 50%; background: transparent; color: var(--faint); cursor: pointer; }
+  #journal summary .trk:hover { background: var(--hover); color: var(--text); }
+  #journal summary .trk.on { color: var(--accent); }
+  #journal summary .trk.on svg { fill: currentColor; }
+  #journal .qb .sum { margin: 0 0 8px; color: var(--text); }
+  #journal .qb .now { display: flex; gap: 6px; margin: 0 0 8px; color: var(--accent); font-weight: 600; }
+  #journal .qb .now::before { content: '→'; }
+  #journal .told { margin: 0 0 6px; padding: 7px 10px; border-left: 2px solid rgba(230,183,90,.45); border-radius: 0 10px 10px 0; background: rgba(255,255,255,.035); font-size: 12.5px; color: var(--muted); }
+  #journal .told b { color: var(--text); font-weight: 600; }
+  #journal .told small { display: block; margin-top: 2px; color: var(--faint); }
+  #journal .qb .rw { margin-top: 6px; font-size: 11.5px; color: var(--faint); }
+  #journal details.rumors summary b { font-size: 13px; }
+  .sec-row { display: flex; align-items: center; gap: 6px; padding-right: 10px; }
+  .sec-row .sec-t { flex: 1; min-width: 0; }
+  .qnew { display: inline-flex; align-items: center; gap: 4px; height: 22px; margin-left: 6px; padding: 0 8px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 600 11px/1 var(--sans); cursor: pointer; vertical-align: 1px; }
+  .qnew svg.i { width: 11px; height: 11px; stroke-width: 2.2; }
+  /* «Cerca de ti» solo en el tablero o el mapa ampliados, como columna junto al plano. */
+  body:not(.board-big):not(.map-big) #near { display: none; }
+  body.board-big #near, body.map-big #near { position: fixed; top: 40px; right: 40px; bottom: 40px; z-index: 22; width: 300px; overflow: auto; padding: 14px 10px; border-radius: 0 20px 20px 0; background: var(--panel); box-shadow: inset 1px 0 0 var(--sep); }
+  body.board-big #board, body.map-big #map { right: 340px; border-radius: 20px 0 0 20px; }
+  body.board-big #near .sec-b, body.map-big #near .sec-b { display: block !important; }
   #journal .pt { position: relative; flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; overflow: hidden; background: rgba(255,255,255,.06); color: var(--npc, #e6a587); box-shadow: inset 0 0 0 1.5px currentColor; font-size: 13px; font-weight: 600; }
   #journal .pt img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   #journal .ex { padding: 0 12px 10px; }
@@ -398,6 +449,7 @@ export const PAGE = String.raw`<!doctype html>
     .chat-head .dot { width: 38px; height: 38px; }
     #party button { width: 28px; height: 28px; }
     #log { padding: 12px 10px 8px; }
+    #thinking { padding: 0 12px; }
     .chips { padding: 8px 12px; }
     form { padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) 12px; }
     form input { border-radius: 21px; }
@@ -417,7 +469,8 @@ export const PAGE = String.raw`<!doctype html>
     #dr-title { display: none; }
     .dr-head { padding-left: 16px; }
     .dr-head .seg { margin-left: 0; }
-    body.map-big #map, body.board-big #board { inset: 12px; }
+    body.map-big #map, body.board-big #board { inset: 12px; bottom: 42vh; border-radius: 20px 20px 0 0; }
+    body.board-big #near, body.map-big #near { top: auto; left: 12px; right: 12px; bottom: 12px; width: auto; height: calc(42vh - 12px); border-radius: 0 0 20px 20px; box-shadow: inset 0 1px 0 var(--sep); }
   }
 ${VOICE_STYLE}
 ${TTS_STYLE}
@@ -459,6 +512,21 @@ ${PAINT_STYLE}
   .sfx.on { background: transparent; }
   .sfx.on > .sfx-toggle, .tts > button.on { background: var(--accent-tint); }
   .tts-pop, .sfx-pop { top: 44px; border-radius: 16px; background: var(--bubble); box-shadow: var(--window-shadow); }
+  /* Hacer / Decir: lo que escribes lo hace tu personaje (al narrador) o lo dice tal cual (a los demás, sin narrador). */
+  form button.mode { width: auto; min-width: 58px; white-space: nowrap; height: 32px; padding: 0 10px; border-radius: 16px; font: 600 12.5px/1 var(--sans); letter-spacing: 0; background: var(--control); color: #b8b1a6; }
+  form button.mode[hidden] { display: none; }
+  form button.mode.say { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
+  form button.mode .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
+  form.say input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
+  /* Otro jugador escribiendo y la ronda de una escena tensa: una línea encima del cuadro. */
+  /* «Esperando a <jugador>» cuando la acción va en cola (multijugador); el resto de la espera son los puntos del hilo. */
+  #thinking { position: relative; min-height: 0; padding: 0 max(24px, calc((100% - 980px) / 2)); color: var(--muted); font-size: 13px; }
+  #thinking:not(:empty) { padding-bottom: 8px; }
+  #typing { padding: 2px 18px 0; font-size: 12.5px; font-style: italic; color: var(--muted); min-height: 0; }
+  #presence span.away { opacity: .45; filter: grayscale(1); }
+  .round-banner { margin: 6px 16px 0; padding: 7px 12px; border-radius: 12px; font: 600 13px/1.3 var(--sans); background: rgba(214,96,74,.14); color: #f0b3a3; box-shadow: inset 0 0 0 1px rgba(214,96,74,.35); }
+  .round-banner.mine { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(230,183,90,.35); }
+  .actions.party button.accept { background: var(--accent); color: var(--accent-ink); }
   /* Micrófono y pincel dentro del cuadro de redacción, del mismo tamaño que el cubo. */
   form .mic, form .brush { width: 32px; height: 32px; margin: 0; }
   form .mic svg.i, form .brush svg.i { width: 18px; height: 18px; }
@@ -486,7 +554,7 @@ ${PAINT_STYLE}
   body.boot aside, body.boot .chat-head, body.boot form, body.boot #play, body.boot .compose,
   body.entered aside, body.entered .chat-head, body.entered form, body.entered #play, body.entered .compose { background-color: #000; box-shadow: none; }
   body.boot aside, body.boot .chat-head, body.boot form, body.boot #play, body.boot .compose { transition: none; }
-  body.boot #log, body.boot .chips { opacity: 0; }
+  body.boot #log, body.boot #thinking, body.boot .chips { opacity: 0; }
   body.boot .side-head, body.boot .side-scroll > *, body.boot .chat-head > * { opacity: 0; }
   /* Llegada desde el menú: la página aparece desde negro. */
   body::before { content: ''; position: fixed; inset: 0; z-index: 100; background: #000; pointer-events: none; animation: from-black .7s ease 1.2s both; }
@@ -638,6 +706,11 @@ ${PAINT_STYLE}
   <symbol id="i-max" viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></symbol>
+  <symbol id="i-q-available" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" stroke-dasharray="3 3"/><path d="M12 8.5v4M12 15.5v.01"/></symbol>
+  <symbol id="i-q-active" viewBox="0 0 24 24"><path d="M6 21V4M6 4h10l-2 4 2 4H6"/></symbol>
+  <symbol id="i-q-completed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9.5"/></symbol>
+  <symbol id="i-q-expired" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></symbol>
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></symbol>
   <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></symbol>
   <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4l-5 2v14l5-2 6 2 5-2V4l-5 2z"/><path d="M9 4v14M15 6v14"/></symbol>
@@ -649,6 +722,7 @@ ${PAINT_STYLE}
   <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.5 10h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3H15"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-invite" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
 </svg>
 <aside id="side" aria-label="La partida">
@@ -658,6 +732,7 @@ ${PAINT_STYLE}
       <span id="game-name">Tavernus</span>
       <div class="sub"><span id="game-mode" class="badge" hidden></span><span id="game-when"></span></div>
     </div>
+    <a class="ib" id="side-invites" href="#" hidden title="Invitaciones: enlaces para tus amigos" aria-label="Invitaciones"><svg class="i"><use href="#i-invite"/></svg></a>
     <span id="side-gear"></span>
     <button type="button" class="ib" id="side-close" title="Volver al chat" aria-label="Volver al chat"><svg class="i"><use href="#i-chat"/></svg></button>
   </div>
@@ -681,11 +756,13 @@ ${PAINT_STYLE}
     <button type="button" class="ib" id="to-side" title="La partida: ficha, tablero y mapa" aria-label="Abrir la partida: ficha, tablero y mapa"><svg class="i"><use href="#i-grid"/></svg></button>
     <span class="dot" id="scene-dot"><svg class="i"><use href="#i-pin"/></svg></span>
     <div class="t"><div id="place">Tavernus</div><div id="place-sub"></div></div>
+    <div id="presence" role="status" aria-label="Quién más juega"></div>
     <div id="party" role="group" aria-label="Personaje"></div>
     <select id="character" class="vh" aria-label="Personaje" tabindex="-1"></select>
   </div>
   <div class="chat-body">
     <div id="log" aria-live="polite"></div>
+    <div id="thinking" role="status"></div>
     <button type="button" id="drawer-scrim" hidden aria-label="Cerrar y volver a la conversación"></button>
     <section id="drawer" hidden aria-labelledby="dr-title">
       <span class="dr-grab" aria-hidden="true"></span>
@@ -698,19 +775,22 @@ ${PAINT_STYLE}
         </div>
       </div>
       <div class="dr-body">
-        <div class="dr-pane" data-drpane="sheet"><div id="sheet"></div><p class="none">Cargando la hoja…</p></div>
+        <div class="dr-pane" data-drpane="sheet"><div id="group" aria-live="polite"></div><div id="sheet"></div><p class="none">Cargando la hoja…</p></div>
         <div class="dr-pane" data-drpane="journal"><div id="journal"></div><p class="none">El diario está en blanco.</p></div>
         <div class="dr-pane" data-drpane="pack"><div id="pack"></div><p class="none">Cargando la mochila…</p></div>
       </div>
     </section>
   </div>
   <div class="compose">
+    <div id="round" class="round-banner" hidden role="status"></div>
+    <div id="typing" class="typing" hidden aria-live="polite"></div>
     <div class="chips">
       <button data-cmd="look">/look</button><button data-cmd="where">/where</button><button data-cmd="who">/who</button>
       <button data-cmd="inventory">/inventory</button><button data-cmd="recap">/recap</button><button data-cmd="time">/time</button>
       <button data-cmd="tablon">/tablon</button><button data-cmd="progress">/progress</button>
     </div>
     <form id="form" autocomplete="off">
+      <button type="button" id="saymode" class="mode" hidden aria-pressed="false" title="Hacer: el narrador cuenta lo que haces. Decir: tu personaje lo dice tal cual, al instante y sin narrador.">Hacer</button>
       <span class="inwrap"><input id="input" placeholder="¿Qué haces?" aria-label="Acción"></span>
       <button type="button" id="cube" aria-haspopup="menu" aria-expanded="false" aria-controls="cube-menu" title="Hoja, diario y mochila" aria-label="Menú de la partida: hoja, diario y mochila"><svg class="i ic-cube"><use href="#i-cube"/></svg><svg class="i ic-x"><use href="#i-x"/></svg></button>
       <button type="submit" aria-label="Enviar" title="Enviar"><svg class="i"><use href="#i-send"/></svg></button>
@@ -737,15 +817,23 @@ ${PAINT_STYLE}
   /** Todas las rutas /api/* llevan la partida activa. */
   function api(path) { return path + (path.indexOf('?') < 0 ? '?' : '&') + 'game=' + encodeURIComponent(game); }
   var MODE_LABEL = { live: 'Máster real', offline: 'Offline', record: 'Grabando', replay: 'Demo' };
-  fetch('/api/games').then(function (r) { return r.json(); }).then(function (d) {
-    var g = (d.games || []).filter(function (x) { return x.slug === game; })[0];
+  // Quién soy en esta partida: anfitrión (puede cambiar de PJ) o jugador ligado a su asiento (access.ts).
+  var session = fetch(api('/api/session')).then(function (r) { return r.json(); }).catch(function () { return { ok: false }; });
+  session.then(function (d) {
+    var g = d && d.game;
     if (!g) return;
     $('game-name').textContent = g.name;
     var badge = $('game-mode');
     badge.textContent = MODE_LABEL[g.mode] || g.mode; badge.className = 'badge ' + g.mode; badge.hidden = false;
     document.title = g.name + ' — Tavernus';
+    // El anfitrión reparte los enlaces de invitación desde la propia partida (page-access.ts).
+    if (d.role === 'admin') {
+      var inv = $('side-invites');
+      inv.href = '/invitaciones?game=' + encodeURIComponent(g.slug);
+      inv.hidden = false;
+    }
   }).catch(function () {});
-  var log = $('log'), input = $('input'), select = $('character');
+  var log = $('log'), input = $('input'), select = $('character'), thinking = $('thinking');
   /** Entrada en la partida: al llegar el historial (con un mínimo para que se vea la carga) se quita body.boot y
    *  se pone body.entered, que abre la ventana del chat, ensancha el cuadro y hace entrar el panel (ver CSS). */
   var bootStart = Date.now(), entered = false;
@@ -848,9 +936,35 @@ ${PAINT_JS}
     $('board').classList.toggle('busy', on);
     $('map').classList.toggle('busy', on);
     document.querySelectorAll('.chips button, form button').forEach(function (b) { b.disabled = on; });
+    // Mientras se espera: los puntos del narrador en el hilo (novel.ts) y, si la acción va en cola, a quién se espera.
     turnShown = false;
+    if (on) waitingFor = [];
     typing(on);
+    renderWaiting();
     if (!on) input.focus();
+  }
+  /** Mientras la acción espera en la cola del sitio detrás de la de otro jugador, se dice a quién (SSE «queue»). */
+  var waitingFor = [];
+  function renderWaiting() { thinking.textContent = busy && waitingFor.length ? 'Esperando a ' + waitingFor.join(' y ') + '…' : ''; }
+
+  /** Los demás jugadores: en la cabecera, sus iniciales con un punto (verde = en línea); en la hoja, una línea cada uno. */
+  function renderPresence(list) {
+    var box = $('presence'), group = $('group');
+    box.innerHTML = ''; group.innerHTML = '';
+    // Hacer / Decir solo tiene sentido con más jugadores en la partida; en solitario, todo va al narrador.
+    var alone = !list || !list.length;
+    $('saymode').hidden = alone;
+    if (alone && sayMode) setSayMode(false);
+    if (!list || !list.length) return;
+    list.forEach(function (p) {
+      var sp = document.createElement('span');
+      sp.textContent = initial(p.name);
+      sp.className = (p.online ? 'on' : '') + (p.where === 'here' ? ' here' : '') + (p.away ? ' away' : '');
+      sp.title = p.text;
+      sp.setAttribute('aria-label', p.text);
+      box.appendChild(sp);
+    });
+    group.innerHTML = '<h4>Tu grupo</h4>' + list.map(function (p) { return '<div><i class="' + (p.online ? 'on' : '') + '"></i>' + escapeHtml(p.text) + '</div>'; }).join('');
   }
 
   function post(path, body) {
@@ -870,7 +984,76 @@ ${PAINT_JS}
     // Sin burbuja de «prompt»: mientras piensa el narrador se ve atenuado; luego lo sustituye lo que el PJ dice o hace.
     pendingMine(text);
     setBusy(true);
-    post('/api/act', { text: text }).then(function (r) { afterChat(function () { handleReply(r); clearPending(); setBusy(false); loadSheet(); }); });
+    post('/api/act', { text: text }).then(function (r) {
+      // Después de lo que el turno haya traído por el stream (y de sus puntos).
+      afterChat(function () {
+        // «hablar con <otro jugador>» sin frase: el servidor no lo narra; abre el modo Decir hacia él.
+        if (r.ok && r.say_to) { setSayMode(true, r.say_to); add('system', r.text); } else handleReply(r);
+        clearPending(); setBusy(false); loadSheet();
+      });
+    });
+  }
+
+  // --- Entre jugadores: Hacer / Decir (party.ts) -----------------------------------
+  /** Decir: lo escrito es la frase literal del PJ; llega al instante a quien la oiga, sin narrador ni coste. */
+  var sayMode = false, sayTo = null;
+  function setSayMode(on, to) {
+    sayMode = on; sayTo = on ? (to || null) : null;
+    var b = $('saymode');
+    b.classList.toggle('say', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.innerHTML = on ? 'Decir' + (sayTo ? '<span class="to"></span>' : '') : 'Hacer';
+    if (sayTo) b.querySelector('.to').textContent = 'a ' + sayTo.name;
+    $('form').classList.toggle('say', on);
+    input.placeholder = on ? (sayTo ? '¿Qué le dices a ' + sayTo.name + '?' : '¿Qué dices?') : '¿Qué haces?';
+    input.setAttribute('aria-label', on ? 'Lo que dices' : 'Acción');
+    input.focus();
+  }
+  // «Aren está escribiendo…» (SSE «typing»; caduca sola) y aviso propio, como mucho cada 2,5 s.
+  var typers = {}, typingTimer = null, lastTyping = 0;
+  function showTyping(t) {
+    typers[t.id] = { name: t.name, until: Date.now() + (t.ms || 4000) };
+    renderTyping();
+  }
+  function renderTyping() {
+    clearTimeout(typingTimer);
+    var now = Date.now(), names = [];
+    Object.keys(typers).forEach(function (id) { if (typers[id].until > now) names.push(typers[id].name); else delete typers[id]; });
+    var el = $('typing');
+    el.hidden = !names.length;
+    el.textContent = names.length ? names.join(' y ') + (names.length > 1 ? ' están' : ' está') + ' escribiendo…' : '';
+    if (names.length) typingTimer = setTimeout(renderTyping, 1000);
+  }
+  input.addEventListener('input', function () {
+    var v = input.value.trim();
+    if (!v || v.charAt(0) === '/' || Date.now() - lastTyping < 2500) return;
+    lastTyping = Date.now();
+    post('/api/typing', {});
+  });
+  // Ronda en escena tensa: «Ronda 2 · faltan Aren y Lys · 0:42».
+  var roundTimer = null, roundData = null;
+  function showRound(r) {
+    roundData = r && r.open ? r : null;
+    clearInterval(roundTimer);
+    renderRound();
+    if (roundData) roundTimer = setInterval(renderRound, 1000);
+  }
+  function renderRound() {
+    var el = $('round');
+    if (!roundData) { el.hidden = true; return; }
+    var left = Math.max(0, Math.round((roundData.deadline_ms - Date.now()) / 1000));
+    var w = roundData.waiting || [];
+    var who = roundData.acted ? (w.length ? 'faltan ' + w.join(' y ') : 'resolviendo') : 'te toca' + (w.length ? ' (y a ' + w.join(' y ') + ')' : '');
+    el.hidden = false;
+    el.classList.toggle('mine', !roundData.acted);
+    el.textContent = 'Ronda ' + roundData.n + ' · ' + who + ' · ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+    if (!left) clearInterval(roundTimer);
+  }
+  function say(text) {
+    post('/api/say', { text: text, to: sayTo ? sayTo.id : null }).then(function (r) { if (!r.ok) handleReply(r); });
+  }
+  function answerOffer(id, accept) {
+    post('/api/offer', { offer: id, accept: accept }).then(function (r) { if (!r.ok) handleReply(r); loadSheet(); });
   }
   function roll() {
     if (busy) return;
@@ -898,6 +1081,26 @@ ${PAINT_JS}
   }
 
   function field(s, name) { return (s.fields.filter(function (f) { return f.name === name; })[0] || {}).value || ''; }
+  /** Caída y muerte (death.ts): salvaciones, estable o cuenta atrás hasta volver. */
+  var DEATH_MODE = { casual: 'Casual: si mueres, vuelves a las 2 h con lo tuyo esperándote.', hardcore: 'Hardcore: si mueres, vuelves a los 30 min, sin nada y con una característica rebajada.' };
+  function deathBlock(s) {
+    var d = s.death;
+    if (!d) return '';
+    if (d.state === 'dead') return '<div class="tile wide death"><span class="l">☠ Muerto · vuelves en ' + escapeHtml(d.respawn_place || '') + '<b data-respawn="' + Number(d.respawn_real_ms || 0) + '">—</b></span><small>' + escapeHtml(DEATH_MODE[d.mode] || '') + '</small></div>';
+    if (d.state === 'dying') return '<div class="tile wide death"><span class="l">A 0 PG, cayendo<b>' + d.success + ' ✔ · ' + d.fail + ' ✖</b></span><small>El servidor tira tus salvaciones contra muerte: tres éxitos te estabilizan, tres fallos te matan.</small></div>';
+    if (d.state === 'stable') return '<div class="tile wide death"><span class="l">Inconsciente, estable<b>' + escapeHtml(d.stable_until ? 'hacia las ' + d.stable_until : '') + '</b></span><small>Recobras el sentido con 1 PG; si alguien te cura, antes.</small></div>';
+    return '<p class="sh-foot" style="margin-top:8px">Modo de muerte · ' + escapeHtml(DEATH_MODE[d.mode] || d.mode) + '</p>';
+  }
+  function fmtLeft(ms) {
+    var s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+  }
+  setInterval(function () {
+    document.querySelectorAll('[data-respawn]').forEach(function (el) {
+      var at = Number(el.getAttribute('data-respawn'));
+      el.textContent = at ? (at > Date.now() ? fmtLeft(at - Date.now()) : 'volviendo…') : '—';
+    });
+  }, 1000);
   function combatOf(s) {
     var c = field(s, 'Combate'), m = function (re) { var x = c.match(re); return x ? x : null; };
     var hp = m(/PG (\d+)\/(\d+)/), ca = m(/CA (\d+)/), sp = m(/Velocidad (\d+) ft/), pp = m(/Percepción pasiva (\d+)/), cond = m(/Condiciones: (.+)/);
@@ -915,7 +1118,9 @@ ${PAINT_JS}
     $('card').innerHTML = '<div class="top"><span class="av">' + escapeHtml(initial(t[0] || '?')) + '</span><div class="who"><div class="name">' + escapeHtml(t[0] || '') + '</div>' +
       '<div class="sub">' + escapeHtml(t.slice(1).join(' · ')) + '</div></div>' +
       (c.hp ? '<div class="hpbox"><span>' + c.hp[1] + ' / ' + c.hp[2] + '</span><span class="bar"><i class="' + c.cls + '" style="width:' + c.pct + '%"></i></span></div>' : '') + '</div>' +
-      '<div class="stats">' + stat(c.ca, 'CA') + stat(c.speed, 'Vel.') + stat(c.pp, 'Perc.') + stat(lvl || '—', 'Nivel') + stat(loadShort(s), 'Carga') + '</div>';
+      '<div class="stats">' + stat(c.ca, 'CA') + stat(c.speed, 'Vel.') + stat(c.pp, 'Perc.') + stat(lvl || '—', 'Nivel') + stat(loadShort(s), 'Carga') + '</div>' +
+      (s.death && s.death.state === 'dead' ? '<div class="respawn">☠ Muerto · vuelves en <b data-respawn="' + Number(s.death.respawn_real_ms || 0) + '">—</b></div>'
+        : s.death && s.death.state === 'dying' ? '<div class="respawn">A 0 PG · salvaciones ' + s.death.success + ' ✔ · ' + s.death.fail + ' ✖</div>' : '');
     // «despierto · Taberna, La barra»: el lugar a la cabecera del chat; debajo, la hora, el rincón y el estado.
     var d = s.description.split('\n')[0], i = d.indexOf(' · ');
     var where = i >= 0 ? d.slice(i + 3) : d, state = i >= 0 ? d.slice(0, i) : '';
@@ -939,6 +1144,10 @@ ${PAINT_JS}
     h += '<div class="tiles">';
     if (c.hp) h += '<div class="tile wide"><span class="l">Puntos de golpe<b>' + c.hp[1] + ' / ' + c.hp[2] + '</b></span><span class="bar"><i class="' + c.cls + '" style="width:' + c.pct + '%"></i></span>' + (c.cond ? '<small>Condiciones: ' + escapeHtml(c.cond) + '</small>' : '') + '</div>';
     h += '<div class="tile"><b>' + escapeHtml(c.ca) + '</b><small>CA</small></div><div class="tile"><b>' + escapeHtml(c.speed) + '</b><small>Velocidad</small></div><div class="tile"><b>' + escapeHtml(c.pp) + '</b><small>Percepción pasiva</small></div></div>';
+    var dz = deathBlock(s);
+    if (dz) h += dz.indexOf('<div') === 0 ? '<div class="tiles">' + dz + '</div>' : dz;
+    var rest = field(s, 'Descanso');
+    if (rest) h += '<p class="sh-foot" style="margin-top:8px">' + escapeHtml(rest).replace(/\n/g, '<br>') + '</p>';
     var scores = {};
     ABILS.forEach(function (a) { var m = abl.match(new RegExp(a + ' (\\d+)')); if (m) scores[a] = m[1]; });
     var saves = (abl.split('\n')[1] || '').replace(/^Salvaciones:\s*/, '');
@@ -967,7 +1176,7 @@ ${PAINT_JS}
   var SLOT_ES = { back: 'a la espalda', body: 'puesto', armor: 'armadura', head: 'cabeza', belt: 'cinturón', waist: 'cintura', feet: 'pies', hands: 'manos', neck: 'cuello', ring: 'anillo', shield: 'escudo', cloak: 'capa', shoulder: 'al hombro' };
   /** Mochila: carga y monedas arriba; lo que tienes en las manos, equipado, en los bolsillos y en cada contenedor. */
   function renderPack(s) {
-    var known = { Combate: 1, 'Características': 1, Habilidades: 1 };
+    var known = { Combate: 1, 'Características': 1, Habilidades: 1, Descanso: 1, Muerte: 1 };
     var list = function (v) { return v && v !== '—' && v !== 'vacía' ? v.split(', ') : []; };
     var rows = function (items, eq) {
       if (!items.length) return '<div class="empty">Nada.</div>';
@@ -1224,9 +1433,9 @@ ${PAINT_JS}
         var label = '→ ' + e.to_location_name + ' · ' + fmtM(e.distance_m) + (e.blocked ? ' · bloqueada' : '');
         var start = Math.min(14, t / 3);
         var seg = 'x1="' + r1(px + ux * start) + '" y1="' + r1(py + uy * start) + '" x2="' + r1(ex) + '" y2="' + r1(ey) + '"';
-        o.push('<g class="exit' + (e.blocked ? ' blocked' : '') + '" data-exit="' + escapeHtml(e.id) + '" data-side="' + side + '">' +
-          '<line class="hit" ' + seg + '/><line class="path" marker-end="url(#' + (e.blocked ? 'arr-x' : 'arr') + ')" ' + seg + '/>' +
-          '<text x="' + r1(lx) + '" y="' + r1(ly) + '" text-anchor="' + anchor + '">' + escapeHtml(label) + '</text></g>');
+        // Sin rótulo: el tablero solo nombra personajes. El destino sale al pasar el ratón (title) y la flecha sigue siendo clicable.
+        o.push('<g class="exit' + (e.blocked ? ' blocked' : '') + '" data-exit="' + escapeHtml(e.id) + '" data-side="' + side + '"><title>' + escapeHtml(label) + '</title>' +
+          '<line class="hit" ' + seg + '/><line class="path" marker-end="url(#' + (e.blocked ? 'arr-x' : 'arr') + ')" ' + seg + '/></g>');
       });
     });
 
@@ -1258,13 +1467,12 @@ ${PAINT_JS}
       var spread = ts.length > 1 ? tokR * 1.15 : 0;
       var markR = Math.max(8, (ts.length ? tokR + spread : tokR * 0.6) + 2);
       o.push('<g class="spot' + (here ? ' here' : '') + '" data-spot="' + escapeHtml(sp.id) + '">');
-      o.push('<circle class="hit" cx="' + r1(px) + '" cy="' + r1(py) + '" r="' + r1(markR) + '"/>');
-      o.push('<text class="label" x="' + r1(px) + '" y="' + r1(py + markR + 8) + '">' + escapeHtml(sp.name) + '</text>');
-      var others = ts.filter(function (t) { return t.kind !== 'actor'; });
-      if (others.length) {
-        var who = others.map(function (t) { return t.label; }).join(', ');
-        if (who.length > 36) who = who.slice(0, 35) + '…';
-        o.push('<text class="who" x="' + r1(px) + '" y="' + r1(py + markR + 20) + '">' + escapeHtml(who) + '</text>');
+      // El tablero solo nombra personajes: el nombre del punto no se pinta (sale en el tooltip y en «Cerca de ti»).
+      o.push('<circle class="hit" cx="' + r1(px) + '" cy="' + r1(py) + '" r="' + r1(markR) + '"><title>' + escapeHtml(sp.name) + '</title></circle>');
+      if (ts.length) {
+        var who = ts.map(function (t) { return t.kind === 'actor' ? 'tú' : t.label + (t.away ? ' (ausente)' : '') + (t.talking_with ? (t.talking_with === 'tú' ? ' (contigo)' : ' (con ' + t.talking_with.replace(/^tú y /, 'contigo y ') + ')') : ''); }).join(', ');
+        if (who.length > 40) who = who.slice(0, 39) + '…';
+        o.push('<text class="who" x="' + r1(px) + '" y="' + r1(py + markR + 10) + '">' + escapeHtml(who) + '</text>');
       }
       o.push('</g>');
       ts.forEach(function (t, i) {
@@ -1300,6 +1508,7 @@ ${PAINT_JS}
     var hits = function (a) { return labels.some(function (l) { return a.x < l.x + l.width + 3 && l.x < a.x + a.width + 3 && a.y < l.y + l.height + 2 && l.y < a.y + a.height + 2; }); };
     board.querySelectorAll('svg .exit').forEach(function (g) {
       var t = g.querySelector('text');
+      if (!t) return; // las salidas ya no llevan rótulo (el tablero solo nombra personajes)
       clamp(t);
       if (!t.getBBox().width || !hits(t.getBBox())) return;
       var along = g.getAttribute('data-side') === 'top' || g.getAttribute('data-side') === 'bottom' ? 'x' : 'y';
@@ -1588,7 +1797,11 @@ ${PAINT_JS}
     var dot = document.querySelector('#cube-menu .dotnew');
     if (dot) dot.hidden = !on;
   }
-  function markJournalSeen() { if (!journalData) return; store(journalKey(), journalData.version); setJournalNew(false); }
+  function markJournalSeen() {
+    if (!journalData) return;
+    store(journalKey(), journalData.version); setJournalNew(false);
+    if (journalSection === 'quests') markQuestsSeen(journalData);
+  }
 
   function loadJournal() {
     if (!current) return;
@@ -1604,22 +1817,47 @@ ${PAINT_JS}
   }
 
   var CHEV = '<svg class="i chev"><use href="#i-chev"/></svg>';
-  function questHtml(q) {
-    var sub = [q.giver && q.kind !== 'debt' ? 'lo pide ' + q.giver : '', q.reward || '', q.kind === 'main' ? 'misión principal' : '', q.kind === 'achievement' ? 'logro' : '', q.kind === 'debt' ? 'deuda' : ''].filter(Boolean).join(' · ');
-    var h = '<details class="q ' + q.status + (q.kind === 'main' ? ' main' : '') + '"' + (q.pinned ? ' open' : '') + '><summary><span class="st">' + escapeHtml(JSTATUS[q.status] || q.status) + '</span>' +
-      '<span class="tt"><b>' + escapeHtml(q.title) + '</b>' + (sub ? '<small>' + escapeHtml(sub) + '</small>' : '') + '</span>' + CHEV + '</summary><div class="qb">';
-    if (q.text) h += '<p>' + escapeHtml(q.text) + '</p>';
-    if (q.clock) {
+
+  // Misión seguida (la del recuadro del panel) y misiones ya vistas, por partida y PJ (localStorage).
+  function trackKey() { return 'tavernus.track.' + game + '.' + current; }
+  function qseenKey() { return 'tavernus.qseen.' + game + '.' + current; }
+  function qseen() { try { return JSON.parse(store(qseenKey()) || 'null'); } catch (e) { return null; } }
+  /** Misiones que el PJ aún no ha mirado. La primera vez, todas las de ahora cuentan como vistas. */
+  function newQuests(j) {
+    var all = j.quests.active.concat(j.quests.completed), seen = qseen();
+    if (!seen) { store(qseenKey(), JSON.stringify(all.map(function (q) { return q.id + ':' + q.status; }))); return []; }
+    return all.filter(function (q) { return q.status !== 'expired' && seen.indexOf(q.id + ':' + q.status) < 0; });
+  }
+  function markQuestsSeen(j) { store(qseenKey(), JSON.stringify(j.quests.active.concat(j.quests.completed).map(function (q) { return q.id + ':' + q.status; }))); }
+  /** La seguida: la que eligió el jugador si sigue abierta; si no, la principal o la primera en curso. */
+  function trackedQuest(j) {
+    var qs = j.quests.active, id = store(trackKey());
+    var live = qs.filter(function (x) { return x.status === 'active'; });
+    return qs.filter(function (x) { return x.id === id && x.status !== 'expired'; })[0] || live.filter(function (x) { return x.kind === 'main'; })[0] || live[0] || qs.filter(function (x) { return x.status !== 'expired'; })[0] || null;
+  }
+  function questIcon(q, isNew) {
+    return '<span class="qi ' + q.status + (q.kind === 'main' && q.status === 'active' ? ' main' : '') + '" title="' + escapeHtml(JSTATUS[q.status] || q.status) + '"><svg class="i"><use href="#i-q-' + q.status + '"/></svg>' +
+      (isNew ? '<span class="nw"><svg class="i"><use href="#i-spark"/></svg></span>' : '') + '</span>';
+  }
+  function questHtml(q, ctx) {
+    var isNew = ctx && ctx.fresh.indexOf(q.id) >= 0, tracked = ctx && ctx.tracked === q.id;
+    var sub = [JSTATUS[q.status] || q.status, q.kind === 'main' ? 'misión principal' : q.kind === 'achievement' ? 'logro' : q.kind === 'debt' ? 'deuda' : q.giver ? 'lo pide ' + q.giver : ''].filter(Boolean).join(' · ');
+    var open = tracked || isNew;
+    var h = '<details class="q ' + q.status + (q.kind === 'main' ? ' main' : '') + (isNew ? ' isnew' : '') + '"' + (open ? ' open' : '') + '><summary>' + questIcon(q, isNew) +
+      '<span class="tt"><b>' + escapeHtml(q.title) + (isNew ? '<span class="pill-new">Nueva</span>' : '') + '</b><small>' + escapeHtml(sub) + '</small></span>' +
+      (q.status === 'completed' || q.status === 'expired' ? '' : '<button type="button" class="trk' + (tracked ? ' on' : '') + '" data-track="' + escapeHtml(q.id) + '" title="' + (tracked ? 'La sigues en el panel' : 'Seguir en el panel') + '" aria-pressed="' + tracked + '"><svg class="i"><use href="#i-star"/></svg></button>') +
+      CHEV + '</summary><div class="qb">';
+    var s = q.summary || { text: q.text, next: null, told: [] };
+    if (s.text) h += '<p class="sum">' + escapeHtml(s.text) + '</p>';
+    if (s.next) h += '<div class="now">' + escapeHtml(s.next) + '</div>';
+    if (q.clock && q.status !== 'completed') {
       var late = q.clock.days_left <= 0;
-      h += '<div class="clock' + (late ? ' late' : '') + '"><svg class="i" style="width:13px;height:13px"><use href="#i-clock"/></svg>' + (late ? 'Plazo vencido' : 'Quedan ' + q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) + ' · vence ' + escapeHtml(q.clock.deadline) + '</div>';
-      h += '<p class="muted">Si vence: ' + escapeHtml(q.clock.runs_out) + '</p>';
+      h += '<div class="clock' + (late ? ' late' : '') + '"><svg class="i" style="width:13px;height:13px"><use href="#i-clock"/></svg>' + (late ? 'Plazo vencido' : 'Quedan ' + q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) + '</div>';
     }
-    if (q.antagonist) h += '<p class="muted">Se te opone: <b>' + escapeHtml(q.antagonist.name) + '</b> (' + escapeHtml(q.antagonist.role) + ')</p>';
-    if (q.steps.length) h += '<ul class="steps">' + q.steps.map(function (s) { return '<li class="' + (s.done ? 'done' : '') + '">' + escapeHtml(s.text) + '</li>'; }).join('') + '</ul>';
-    if (q.paths.length) h += '<div class="paths"><b>Caminos</b><ol>' + q.paths.map(function (p) { return '<li>' + escapeHtml(p) + '</li>'; }).join('') + '</ol></div>';
-    q.rumors.forEach(function (r) { h += rumorHtml(r); });
-    var dates = [q.seen ? (q.kind === 'job' ? 'Visto en el tablón: ' : 'Desde: ') + q.seen : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean);
-    if (dates.length) h += '<div class="dates">' + escapeHtml(dates.join(' · ')) + '</div>';
+    (s.told || []).forEach(function (t) { h += '<div class="told"><b>' + escapeHtml(t.who) + ':</b> «' + escapeHtml(t.said) + '»<small>' + escapeHtml(t.when) + '</small></div>'; });
+    if (q.steps.length > 1) h += '<ul class="steps">' + q.steps.map(function (st) { return '<li class="' + (st.done ? 'done' : '') + '">' + escapeHtml(st.text) + '</li>'; }).join('') + '</ul>';
+    var foot = [q.reward ? 'Recompensa: ' + q.reward : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean).join(' · ');
+    if (foot) h += '<div class="rw">' + escapeHtml(foot) + '</div>';
     return h + '</div></details>';
   }
   function rumorHtml(r) {
@@ -1650,14 +1888,23 @@ ${PAINT_JS}
     return '<div class="pl ' + p.status + (p.here ? ' here' : '') + '"><i></i><span><b>' + escapeHtml(p.name) + '</b><small>' + escapeHtml(sub) + '</small></span></div>';
   }
 
+  /** «Dejar esta misión» al pie de las que se pueden dejar (encargos y misiones dadas en curso). */
+  function withDrop(html, q) {
+    if (!q.droppable) return html;
+    var btn = '<button type="button" class="qdrop" data-drop="' + escapeHtml(q.id) + '">Dejar esta misión</button>';
+    var end = html.lastIndexOf('</div></details>');
+    return end < 0 ? html : html.slice(0, end) + btn + html.slice(end);
+  }
   function renderJournal(j) {
     var h = '<div class="jnav">' + JSECTIONS.map(function (s) { return '<button type="button" data-jsec="' + s[0] + '"' + (s[0] === journalSection ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('') + '</div>';
     if (journalSection === 'quests') {
+      var tq = trackedQuest(j), ctx = { fresh: newQuests(j).map(function (q) { return q.id; }), tracked: tq ? tq.id : null };
+      var render = function (q) { return withDrop(questHtml(q, ctx), q); };
       h += '<h3>Activas <span>' + j.quests.active.length + '</span></h3>';
-      h += j.quests.active.length ? j.quests.active.map(questHtml).join('') : '<p class="empty">Nada entre manos. Mira el tablón o habla con la gente.</p>';
-      if (j.rumors.length) h += '<h3>Se dice</h3>' + j.rumors.map(rumorHtml).join('');
+      h += j.quests.active.length ? j.quests.active.map(render).join('') : '<p class="empty">Nada entre manos. Mira el tablón o habla con la gente.</p>';
       h += '<h3>Completadas <span>' + j.quests.completed.length + '</span></h3>';
-      h += j.quests.completed.length ? j.quests.completed.map(questHtml).join('') : '<p class="empty">Todavía ninguna.</p>';
+      h += j.quests.completed.length ? j.quests.completed.map(render).join('') : '<p class="empty">Todavía ninguna.</p>';
+      if (j.rumors.length) h += '<details class="rumors"><summary><span class="tt"><b>Se dice</b><small>' + j.rumors.length + (j.rumors.length === 1 ? ' rumor' : ' rumores') + '</small></span>' + CHEV + '</summary><div class="qb">' + j.rumors.map(rumorHtml).join('') + '</div></details>';
     } else if (journalSection === 'talks') {
       h += '<h3>Conversaciones <span>' + j.conversations.length + '</span></h3>';
       h += j.conversations.length ? j.conversations.map(talkHtml).join('') : '<p class="empty">Aún no has hablado con nadie.</p>';
@@ -1671,10 +1918,25 @@ ${PAINT_JS}
     journalEl.innerHTML = h;
   }
   journalEl.addEventListener('click', function (ev) {
+    var d = ev.target.closest('[data-drop]');
+    if (d) {
+      ev.preventDefault(); d.disabled = true;
+      post('/api/quest/drop', { quest: d.getAttribute('data-drop') }).then(function (r) { if (r && !r.ok) handleReply(r); loadJournal(); });
+      return;
+    }
+    // Estrella: seguir esta misión en el recuadro del panel.
+    var t = ev.target.closest('[data-track]');
+    if (t) {
+      ev.preventDefault(); ev.stopPropagation();
+      store(trackKey(), t.getAttribute('data-track'));
+      if (journalData) { renderJournal(journalData); renderQuest(journalData); }
+      return;
+    }
     var b = ev.target.closest('[data-jsec]');
     if (!b) return;
     journalSection = b.getAttribute('data-jsec'); store('tavernus.journal.section', journalSection);
     if (journalData) renderJournal(journalData);
+    if (journalData && journalSection === 'quests') { markQuestsSeen(journalData); renderQuest(journalData); }
   });
   /** Abre algo desde el hilo: Hoja, Diario o Mochila en la columna del chat; tablero o mapa en el panel. */
   function goTab(t) {
@@ -1697,11 +1959,14 @@ ${PAINT_JS}
     renderParty();
     if (window.TavernusSfx) TavernusSfx.character(id);
     stream = new EventSource(api('/api/stream?character=' + encodeURIComponent(id)));
+    // Personaje nuevo presentándose: su hilo empieza en el prólogo, que llega por el stream; no se pide /look.
+    var opening = false;
+    stream.addEventListener('opening', function () { opening = true; });
     stream.addEventListener('history', function (e) {
       log.innerHTML = '';
       var h = JSON.parse(e.data);
       h.forEach(function (m, i) { renderMessage(m, i === h.length - 1); });
-      if (!h.some(function (m) { return !m.scene; })) command('look');
+      if (!opening && !h.some(function (m) { return !m.scene; })) command('look');
       enterGame();
     });
     stream.addEventListener('cast', function (e) { setCast(JSON.parse(e.data)); });
@@ -1719,6 +1984,10 @@ ${PAINT_JS}
     stream.addEventListener('place', function (e) { var p = JSON.parse(e.data); inChat(function () { placeReady(p); }); });
     paintConnect(stream);
     stream.addEventListener('journal', loadJournal);
+    stream.addEventListener('presence', function (e) { renderPresence(JSON.parse(e.data)); });
+    stream.addEventListener('typing', function (e) { showTyping(JSON.parse(e.data)); });
+    stream.addEventListener('round', function (e) { showRound(JSON.parse(e.data)); });
+    stream.addEventListener('queue', function (e) { waitingFor = JSON.parse(e.data).waiting_for || []; renderWaiting(); });
     loadSheet();
     loadScene();
     loadJournal();
@@ -1731,10 +2000,14 @@ ${PAINT_JS}
     if (!text || busy) return;
     input.value = '';
     // Ni las consultas ni la tirada salen como mensaje del jugador: solo su respuesta.
-    if (text.charAt(0) === '/') command(text.split(/\s+/)[0]);
+    // Los de depuración en offline llevan argumento («/time +2h», «/daño 5»); los demás, solo el nombre.
+    if (text.charAt(0) === '/') command(/^\/(time|da[ñn]o)\s/i.test(text) ? text.trim() : text.split(/\s+/)[0]);
+    else if (sayMode || (!$('saymode').hidden && /^[—–«"“-]/.test(text))) say(text);
     else if (text === 'tirar' || text === 'roll') { spendButtons(); roll(); }
     else act(text);
   });
+  // Hacer ⇄ Decir; con destinatario, el primer toque lo quita y el segundo vuelve a Hacer.
+  $('saymode').addEventListener('click', function () { if (sayMode && sayTo) setSayMode(true, null); else setSayMode(!sayMode); });
   document.querySelectorAll('.chips button').forEach(function (b) {
     b.addEventListener('click', function () { command(b.dataset.cmd); });
   });
@@ -1780,20 +2053,31 @@ ${PAINT_JS}
   }
   $('near').addEventListener('click', function (ev) {
     var go = ev.target.closest('[data-go]'), talk = ev.target.closest('[data-talk]');
+    // «Cerca de ti» vive en el tablero o el mapa ampliados: al elegir algo, se cierra para ver el hilo.
+    if (go || talk) {
+      if (document.body.classList.contains('board-big')) toggleBig(false);
+      if (document.body.classList.contains('map-big')) toggleMapBig(false);
+    }
     if (go && !busy) { var sp = spotById(go.getAttribute('data-go')); if (sp && !isHere(sp)) { showSide(false); act('Ir a ' + sp.name); } }
     if (talk) { showSide(false); input.value = 'Hablo con ' + talk.getAttribute('data-talk') + ': '; input.focus(); }
   });
   /** La misión en curso (la fijada o la primera activa): título, plazo y pasos hechos; abre el Diario. */
+  /**
+   * Recuadro de misión del panel: la que el jugador sigue (estrella en el Diario) o, si no eligió, la principal.
+   * Con el estado como icono, lo que toca ahora y el plazo; si hay misiones nuevas, una pastilla para verlas.
+   */
   function renderQuest(j) {
-    var qs = j.quests.active, live = qs.filter(function (x) { return x.status === 'active'; }), q = qs.filter(function (x) { return x.pinned; })[0] || live.filter(function (x) { return x.kind === 'main'; })[0] || live[0] || qs.filter(function (x) { return x.status !== 'expired'; })[0];
-    var h = '<button type="button" class="sec-t" data-col="quest" aria-expanded="' + !document.body.classList.contains('col-quest') + '"><svg class="i chev"><use href="#i-chev"/></svg>Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</button><div class="sec-b">';
+    var live = j.quests.active.filter(function (x) { return x.status === 'active'; }), q = trackedQuest(j), fresh = newQuests(j);
+    var chip = fresh.length ? '<button type="button" class="qnew" data-qnew title="Ver qué hay de nuevo en el Diario"><svg class="i"><use href="#i-spark"/></svg>' + fresh.length + (fresh.length === 1 ? ' nueva' : ' nuevas') + '</button>' : '';
+    var h = '<div class="sec-row"><button type="button" class="sec-t" data-col="quest" aria-expanded="' + !document.body.classList.contains('col-quest') + '"><svg class="i chev"><use href="#i-chev"/></svg>Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</button>' + chip + '</div><div class="sec-b">';
     if (!q) { $('quest').innerHTML = h + '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button></div>'; return; }
     var done = q.steps.filter(function (s) { return s.done; }).length, total = q.steps.length;
-    var sub = [q.giver ? 'lo pide ' + q.giver : '', q.reward || ''].filter(Boolean).join(' · ');
-    var when = q.clock ? (q.clock.days_left <= 0 ? 'plazo vencido' : q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) : '';
-    h += '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>' + escapeHtml(q.title) + (store(journalKey()) !== j.version ? '<span class="pill-new">Novedad</span>' : '') + '</b>' +
-      (sub ? '<small>' + escapeHtml(sub) + '</small>' : '') +
-      (total ? '<span class="prog"><i><span style="width:' + Math.round(100 * done / total) + '%"></span></i><small>' + done + ' de ' + total + (when ? ' · ' + escapeHtml(when) : '') + '</small></span>' : (when ? '<small>' + escapeHtml(when) + '</small>' : '')) + '</span></button>';
+    var s = q.summary || { text: '', next: null };
+    var line = s.next || s.text || '';
+    var when = q.clock ? (q.clock.days_left <= 0 ? 'plazo vencido' : 'quedan ' + q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) : '';
+    h += '<button type="button" class="prow" data-quest title="Abrir en el Diario">' + questIcon(q, false) + '<span class="tt"><b>' + escapeHtml(q.title) + '</b>' +
+      (line ? '<small>' + escapeHtml(line) + '</small>' : '') +
+      (total > 1 ? '<span class="prog"><i><span style="width:' + Math.round(100 * done / total) + '%"></span></i><small>' + done + ' de ' + total + (when ? ' · ' + escapeHtml(when) : '') + '</small></span>' : (when ? '<small>' + escapeHtml(when) + '</small>' : '')) + '</span></button>';
     $('quest').innerHTML = h + '</div>';
   }
   /** Cabeceras plegables del panel (tablero, cerca, misión); se recuerda cuáles están cerradas. */
@@ -1808,7 +2092,14 @@ ${PAINT_JS}
     var b = ev.target.closest('[data-col]');
     if (b) { var k = b.getAttribute('data-col'); setCol(k, !document.body.classList.contains('col-' + k)); }
   });
-  $('quest').addEventListener('click', function (ev) { if (ev.target.closest('[data-quest]')) { showSide(false); openDrawer('journal'); } });
+  $('quest').addEventListener('click', function (ev) {
+    // La pastilla de novedades y el recuadro abren el Diario en Misiones (allí se ven marcadas las nuevas).
+    if (ev.target.closest('[data-qnew]') || ev.target.closest('[data-quest]')) {
+      ev.stopPropagation();
+      journalSection = 'quests'; store('tavernus.journal.section', journalSection);
+      showSide(false); openDrawer('journal');
+    }
+  });
 
   // --- El cubo: Hoja, Diario y Mochila en la misma columna del chat ---------------------
   var cube = $('cube'), cubeMenu = $('cube-menu'), drawer = $('drawer'), drawerKey = null;
@@ -1829,7 +2120,12 @@ ${PAINT_JS}
     cube.classList.add('on');
     cube.setAttribute('aria-label', 'Cerrar ' + DR_TITLE[k].toLowerCase()); cube.title = 'Cerrar';
     if (k === 'sheet' && sheetData) renderSheet(sheetData);
-    if (k === 'journal') { markJournalSeen(); if (journalData) renderQuest(journalData); }
+    if (k === 'journal') {
+      // Se pinta con las novedades marcadas y, ya vistas, dejan de contar en el recuadro del panel.
+      if (journalData) renderJournal(journalData);
+      markJournalSeen();
+      if (journalData) renderQuest(journalData);
+    }
   }
   function closeDrawer() {
     drawerKey = null;
@@ -1872,6 +2168,7 @@ ${PAINT_JS}
   function renderParty() {
     var party = $('party');
     party.innerHTML = '';
+    if (document.body.classList.contains('bound')) { $('game-when').textContent = ''; return; }
     [].forEach.call(select.options, function (o) {
       var b = document.createElement('button');
       b.type = 'button'; b.textContent = initial(o.textContent); b.title = o.textContent;
@@ -1884,7 +2181,13 @@ ${PAINT_JS}
     $('game-when').textContent = n > 1 ? '· ' + n + ' en el grupo' : '';
   }
 
-  fetch(api('/api/characters')).then(function (r) { return r.json(); }).then(function (list) {
+  Promise.all([session, fetch(api('/api/characters')).then(function (r) { return r.json(); })]).then(function (both) {
+    var me = both[0] || {}, list = both[1] || [];
+    // Invitado ligado a su asiento: sin selector; solo su PJ.
+    if (me.can_switch === false && me.character_id) {
+      list = list.filter(function (c) { return c.id === me.character_id; });
+      document.body.classList.add('bound');
+    }
     list.forEach(function (c) {
       var o = document.createElement('option');
       o.value = c.id; o.textContent = c.name;

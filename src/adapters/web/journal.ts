@@ -12,7 +12,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Engine } from '../../engine/engine.js';
-import { journalOf, type Journal, type JournalConversation } from '../../engine/journal.js';
+import { journalOf, type Journal, type JournalConversation, type JournalQuest } from '../../engine/journal.js';
 import type { GameEvent, Id } from '../../engine/model.js';
 import { illustratorOf } from '../../ai/illustrate.js';
 
@@ -26,8 +26,12 @@ export interface WebNotice { text: string; link: string; tab: 'journal' }
 export function journalView(engine: Engine, characterId: Id, slug: string): WebJournal {
   const j = journalOf(engine, characterId);
   const ill = illustratorOf(engine);
+  // Lo que el jugador no debe ver ni en el navegador: los caminos (son para el máster), quién se le opone,
+  // qué pasa si vence el plazo y los rumores sueltos de cada misión (lo relevante va en el resumen).
+  const open = (q: JournalQuest): JournalQuest => ({ ...q, paths: [], antagonist: null, rumors: [], clock: q.clock ? { ...q.clock, runs_out: '' } : null });
   return {
     ...j,
+    quests: { active: j.quests.active.map(open), completed: j.quests.completed.map(open) },
     conversations: j.conversations.map((c) => {
       const img = ill?.entityImage('portrait', c.npc_id) ?? null;
       return { ...c, portrait: img ? `/images/${img.file}?game=${encodeURIComponent(slug)}` : null };

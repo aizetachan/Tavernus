@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { actionContext } from '../src/ai/prompt.js';
 import { executeTool, type ToolContext } from '../src/ai/tools.js';
-import { DEAL_REJECTION, dealWithoutState, outcomeMismatch, rollCategory } from '../src/engine/closecheck.js';
+import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, outcomeMismatch, RACE_WORDS, recentDone, rollCategory, type DoneEvent } from '../src/engine/closecheck.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { seededRng } from '../src/engine/dice.js';
 import type { Engine } from '../src/engine/engine.js';
 import { normalizeSkill } from '../src/engine/rules.js';
@@ -127,5 +129,43 @@ describe('en el cierre del máster', () => {
   it('get_location con un ID de punto devuelve su localización', async () => {
     const { engine } = await bootEngine();
     expect(JSON.parse(executeTool(ctxFor(engine), 'get_location', { location_id: 'sp_tab_mesa' })).id).toBe('loc_taberna');
+  });
+});
+
+describe('el máster no actúa por otro jugador (la-noche-del-breazl)', () => {
+  type Ev = DoneEvent & { narration_private: string };
+  const log = JSON.parse(readFileSync(join(__dirname, 'fixtures', 'la-noche-del-breazl.events.json'), 'utf8')) as Ev[];
+  const PCS = {
+    ch_aren_mvnrie48: { id: 'ch_aren_mvnrie48', name: 'Aren', refs: ['Aren', 'un humano con pinta de guerrero', ...RACE_WORDS['human']!, 'guerrero'] },
+    ch_leodhin_mvnrrvnl: { id: 'ch_leodhin_mvnrrvnl', name: 'Leodhin', refs: ['Leodhin', 'un elfo con pinta de explorador', ...RACE_WORDS['elf']!, 'explorador'] },
+  } as const;
+  const check = (seq: number) => {
+    const i = log.findIndex((e) => e.seq === seq);
+    const e = log[i]!;
+    const before = log.slice(0, i);
+    const actor = PCS[e.actor_id as keyof typeof PCS];
+    const others = Object.values(PCS).filter((p) => p.id !== actor.id).map((p) => ({ id: p.id, label: p.name, refs: [...p.refs], ...recentDone(before, actor.id, p) }));
+    return actedForOthers({ texts: [e.narration_private, e.observable ?? ''], others, actorRefs: [actor.name], npcRefs: ['Hugo', 'herrero'] });
+  };
+  const master = log.filter((e) => e.action_type.startsWith('master'));
+
+  it('caza los turnos 23, 24, 25 y 26 y ninguno más', () => {
+    const caught = master.filter((e) => check(e.seq).length > 0).map((e) => e.seq);
+    expect(caught).toEqual([23, 24, 25, 26]);
+  });
+
+  it('dice qué y de quién', () => {
+    expect(check(23).map((h) => h.cls)).toContain('look'); // «Te devuelve la mirada»
+    expect(check(24).map((h) => h.phrase)).toContain('sin apartar la vista'); // «Aren aguarda junto al yunque, sin apartar la vista de la puerta»
+    expect(check(25).map((h) => h.cls)).toContain('look'); // «Él no dice nada todavía; espera, con la vista fija en ti»
+    expect(check(26).map((h) => h.cls)).toContain('look'); // «Aren aguarda, con la mirada fija en ti»
+    expect(actedForRejection(check(24))).toContain('Aren');
+  });
+
+  it('lo que consta en sus eventos sí se puede contar', () => {
+    const others = [{ id: 'b', label: 'Mira', refs: ['Mira'], done: new Set<'look'>(['look']), attentive: true }];
+    expect(actedForOthers({ texts: ['Mira te observa desde la barra.'], others })).toEqual([]);
+    expect(actedForOthers({ texts: ['Le das la daga a Mira. Asiente sin decir nada.'], others }).map((h) => h.cls)).toEqual(['gesture']);
+    expect(actedForOthers({ texts: ['Te acercas a Mira. Brenna asiente.'], others, npcRefs: ['Brenna'] })).toEqual([]);
   });
 });

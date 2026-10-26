@@ -1,0 +1,193 @@
+[
+ {
+  "seq": 15,
+  "actor_id": "ch_aren_mvnrie48",
+  "action_type": "prologue",
+  "input_text": null,
+  "narration_private": "Hace veinte años el fuego se llevó a los señores de Vharn, y desde entonces nadie se atreve a remover sus ruinas. Hace tres semanas la niebla bajó del monte y cerró el valle: quien entra no encuentra la salida por otro lado. En Brezal se tose ceniza, los lobos rondan los corrales y, de noche, hay luz en el granero quemado. Nada se regala aquí, y todo se cobra.\n\nEs lunes, 1 de Brotes, y la tarde se apaga sobre la herrería. El calor del horno aún te golpea la cara, y el olor a hierro se mete en la garganta. Sobre tu cabeza cuelgan herraduras y hojas a medio hacer, y la piedra ennegrecida de la fragua guarda el humo de años.\n\nTu padre fue el herrero de Vharn y murió en el incendio. Hugo, que fue su aprendiz, te mandó llamar: dice que tu padre dejó algo para ti y que «no fue el fuego lo que lo mató». Quieres saber cómo murió y quién tiene la culpa. Pero Osric Malvez, regidor y mayordomo de Vharn aquella noche, tiene a Hugo atado por una deuda y quiere que funda lo que guarda. Tienes tres días. Si vencen, Garrán cerrará la herrería, y la noche de la Brasa lo que dejó tu padre acabará en el crisol o bajo la ceniza.",
+  "observable": null,
+  "payload": {}
+ },
+ {
+  "seq": 16,
+  "actor_id": "ch_aren_mvnrie48",
+  "action_type": "master_intro",
+  "input_text": null,
+  "narration_private": "El calor del horno te muerde la cara mientras Hugo echa la tranca de la puerta. Fuera, las botas siguen plantadas en el barro, sin prisa y sin irse. Por la rendija se distingue una sombra con capa y una vara corta al cinto.",
+  "observable": null,
+  "payload": {}
+ },
+ {
+  "seq": 17,
+  "actor_id": "ch_leodhin_mvnrrvnl",
+  "action_type": "character_joined",
+  "input_text": null,
+  "narration_private": "",
+  "observable": "Leodhin llega a el banco de trabajo.",
+  "payload": {}
+ },
+ {
+  "seq": 18,
+  "actor_id": "ch_leodhin_mvnrrvnl",
+  "action_type": "prologue",
+  "input_text": null,
+  "narration_private": "Hace veinte años el fuego se tragó a los señores de Vharn, y desde entonces nadie se atreve a remover sus cenizas. Hace tres semanas, una niebla gris bajó del monte y cerró el valle: quien entra en ella sale por donde entró, y nadie ha vuelto a preguntar qué hay dentro. Aquí todo se paga, y los inviernos son largos.\n\nLa herrería huele a hierro caliente y a carbón viejo. El horno aún respira bajo la piedra ennegrecida, y de las vigas cuelgan herraduras y hojas a medio forjar que nadie terminó. Afuera ya cae la tarde del lunes primero de Brotes.\n\nTu padre fue el herrero de Vharn y murió en el incendio. Hugo, que fue su aprendiz, te mandó llamar: dice que él dejó algo para ti y que «no fue el fuego lo que lo mató». Llegaste con el último carro antes de que la niebla cerrara el camino. Quieres saber cómo murió tu padre y quién tiene la culpa. Pero Osric Malvez, el regidor que era mayordomo de Vharn aquella noche, tiene a Hugo atado por una deuda y quiere que le funda lo que guarda. Tienes tres días. Si vencen, Garrán cerrará la herrería, y la noche de la Brasa lo que dejó tu padre acabará en el crisol o bajo la ceniza.",
+  "observable": null,
+  "payload": {}
+ },
+ {
+  "seq": 19,
+  "actor_id": "ch_leodhin_mvnrrvnl",
+  "action_type": "master_intro",
+  "input_text": null,
+  "narration_private": "Te acercas a el yunque. El calor del horno te pega en la cara mientras Hugo cierra la puerta de la fragua y baja la voz: «Aquí no. El alguacil ha pasado dos veces hoy». Fuera, unas botas se detienen frente a la puerta y no se van.",
+  "observable": null,
+  "payload": {
+   "lines": [
+    {
+     "speaker": "npc",
+     "npc_id": "npc_hugo",
+     "text": "Aquí no. El alguacil ha pasado dos veces hoy."
+    }
+   ]
+  }
+ },
+ {
+  "seq": 20,
+  "actor_id": "ch_leodhin_mvnrrvnl",
+  "action_type": "master",
+  "input_text": "hablar con Aren",
+  "narration_private": "Miras hacia el hombre del banco de trabajo, que sigue apoyado en la mesa con la mano en la empuñadura y los ojos en la puerta de la fragua. Hugo no hace ademán de presentaros. Fuera, las botas no se mueven. Antes de acercarte, decide qué le vas a decir.",
+  "observable": "Leodhin mira fijamente al hombre del banco de trabajo, con gesto de quien se dispone a hablarle.",
+  "payload": {}
+ },
+ {
+  "seq": 22,
+  "actor_id": "ch_aren_mvnrie48",
+  "action_type": "arrived",
+  "input_text": null,
+  "narration_private": "Llegas al yunque. Un yunque viejo con una marca de Vharn medio borrada a martillazos.\nAquí ves a Hugo y a un elfo con pinta de explorador.",
+  "observable": "Aren llega al yunque.",
+  "payload": {}
+ },
+ {
+  "seq": 21,
+  "actor_id": "ch_aren_mvnrie48",
+  "action_type": "master",
+  "input_text": "hablkar con Leodhin",
+  "narration_private": "Cruzas la fragua hacia el yunque, donde el elfo te espera con la mirada fija. Hugo sigue ahí, con el martillo en la mano, sin apartar los ojos de los dos.",
+  "observable": "Aren se dirige hacia el yunque, donde el elfo aguarda junto a Hugo.",
+  "payload": {}
+ },
+ {
+  "seq": 23,
+  "actor_id": "ch_leodhin_mvnrrvnl",
+  "action_type": "master",
+  "input_text": "Preguntarle quién es y qué hace aquí",
+  "narration_private": "Te acercas al hombre de la espada y le preguntas en voz baja, sin apartar la vista de la puerta: «¿Quién eres y qué haces aquí?». Te devuelve la mirada un momento largo. Hugo deja de limpiarse las manos y se queda quieto junto al yunque. Fuera, las botas siguen frente a la puerta.",
+  "observable": "Leodhin se acerca al hombre del yunque y le habla en voz baja. Hugo se queda quieto.",
+  "payload": {
+   "lines": [
+    {
+     "speaker": "actor",
+     "text": "¿Quién eres y qué haces aquí?"
+    }
+   ]
+  }
+ },
+ {
+  "seq": 24,
+  "actor_id": "ch_leodhin_mvnrrvnl",
+  "action_type": "master",
+  "input_text": "hablar con Aren",
+  "narration_private": "«Hablar con Aren» Aren aguarda junto al yunque, sin apartar la vista de la puerta. Hugo se queda quieto. Las botas siguen fuera. Tienes su atención; falta saber qué le quieres decir.",
+  "observable": "Leodhin se acerca a Aren junto al yunque. Hugo, junto a ellos, deja de limpiarse las manos.",
+  "payload": {
+   "lines": [
+    {
+     "speaker": "actor",
+     "text": "Hablar con Aren"
+    }
+   ]
+  }
+ },
+ {
+  "seq": 25,
+  "actor_id": "ch_aren_mvnrie48",
+  "action_type": "master",
+  "input_text": "hablar con Leodhin",
+  "narration_private": "Te quedas frente al elfo junto al yunque. Él no dice nada todavía; espera, con la vista fija en ti y sin prisa. Hugo, a un paso, no aparta los ojos de los dos. Fuera, las botas siguen plantadas ante la puerta.",
+  "observable": "Aren se queda frente a un elfo con pinta de explorador junto al yunque. Hugo los mira sin soltar el martillo.",
+  "payload": {}
+ },
+ {
+  "seq": 26,
+  "actor_id": "ch_leodhin_mvnrrvnl",
+  "action_type": "master",
+  "input_text": "darle tusd botas a Aren",
+  "narration_private": "No llevas botas de repuesto en la mochila; sólo tienes lo que calzas. Aren aguarda, con la mirada fija en ti, a que aclares qué le quieres dar. Fuera, las botas no se mueven de la puerta.",
+  "observable": "Leodhin hace un gesto vago hacia Aren, sin llegar a entregarle nada. Aren no se mueve.",
+  "payload": {}
+ },
+ {
+  "seq": 27,
+  "actor_id": "ch_aren_mvnrie48",
+  "action_type": "master",
+  "input_text": "Preguntarle si viene de la niebla",
+  "narration_private": "Miras al elfo a los ojos y lo dices sin rodeos: «¿Vienes de la niebla?». Hugo, a tu lado, deja el martillo sobre el yunque sin hacer ruido. Fuera, las botas siguen plantadas ante la puerta.",
+  "observable": "Aren pregunta al elfo, sin rodeos, si viene de la niebla. Hugo deja el martillo sobre el yunque.",
+  "payload": {
+   "lines": [
+    {
+     "speaker": "actor",
+     "text": "¿Vienes de la niebla?"
+    }
+   ]
+  }
+ },
+ {
+  "seq": 28,
+  "actor_id": null,
+  "action_type": "scheduled_start",
+  "input_text": null,
+  "narration_private": "",
+  "observable": "Se llena el Jabalí: huele a guiso, se arrastran bancos y alguien pide la primera ronda a gritos.",
+  "payload": {}
+ },
+ {
+  "seq": 29,
+  "actor_id": null,
+  "action_type": "scheduled_echo",
+  "input_text": null,
+  "narration_private": "",
+  "observable": "Desde Taberna del Jabalí llega ruido de gente: la cena del Jabalí.",
+  "payload": {}
+ },
+ {
+  "seq": 30,
+  "actor_id": null,
+  "action_type": "scheduled_echo",
+  "input_text": null,
+  "narration_private": "",
+  "observable": "Desde Taberna del Jabalí llega ruido de gente: la cena del Jabalí.",
+  "payload": {}
+ },
+ {
+  "seq": 32,
+  "actor_id": null,
+  "action_type": "npc_move",
+  "input_text": null,
+  "narration_private": "",
+  "observable": "Hugo llega a la barra para la cena del Jabalí.",
+  "payload": {}
+ },
+ {
+  "seq": 31,
+  "actor_id": null,
+  "action_type": "npc_move",
+  "input_text": null,
+  "narration_private": "",
+  "observable": "Hugo se va del yunque, camino de la cena del Jabalí.",
+  "payload": {}
+ }
+]

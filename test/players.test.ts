@@ -22,8 +22,8 @@ describe('alta de personaje y presencia', () => {
     // El siguiente reparte: ahora las tres tienen uno; empate → el primero de la lista.
     const r2 = await engine.createCharacter('discord:789', 'Bruno');
     expect(r2.ok && r2.character.location.id).toBe('sp_tab_puerta');
-    // Kael no conoce a Bruno: lo ve por lo que es.
-    expect(texts).toContain('ch_kael: un humano con pinta de guerrero llega a la puerta.');
+    // Los PJ de la partida se conocen por su nombre desde que coinciden: Kael ya sabe quién es Bruno.
+    expect(texts).toContain('ch_kael: Bruno llega a la puerta.');
     expect(repo.writes.some((w) => w.collection === 'characters' && w.id === r.character.id)).toBe(true);
     // Validaciones.
     expect(await engine.createCharacter('discord:123', 'Otro')).toMatchObject({ ok: false, reason: 'Ya tienes un personaje.' });
