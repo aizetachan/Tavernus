@@ -56,7 +56,8 @@ export interface AttackOutcome {
   death_save_failures?: number;
 }
 
-export function resolveAttack(world: World, attackerId: Id, targetId: Id, advantage: Advantage = 'none', rng?: Rng, nowGameS?: number): AttackOutcome | { error: string } {
+/** `autoHit`: el objetivo no se defiende (un PJ que se deja, reactions.ts): impacta sin tirada de ataque; el daño se tira. */
+export function resolveAttack(world: World, attackerId: Id, targetId: Id, advantage: Advantage = 'none', rng?: Rng, nowGameS?: number, opts: { autoHit?: boolean } = {}): AttackOutcome | { error: string } {
   const a = combatant(world, attackerId);
   const t = combatant(world, targetId);
   if (!a || !t) return { error: 'atacante u objetivo desconocido' };
@@ -78,7 +79,9 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
     bonus = a.n.stats!.attack_bonus; dmgExpr = a.n.stats!.damage; dmgType = a.n.stats!.damage_type; weaponName = a.n.stats!.attack_name;
   }
   const ac = acOf(world, t);
-  const roll = rollD20(bonus, ac, advantage, rng);
+  const roll = opts.autoHit
+    ? { total: ac, success: true, natural: undefined, breakdown: `sin tirada: no se defiende (CA ${ac})` }
+    : rollD20(bonus, ac, advantage, rng);
   const hit = roll.success === true;
   let damage = 0; let dmgBreakdown = '—';
   if (hit) {

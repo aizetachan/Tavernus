@@ -383,6 +383,8 @@ export interface Character {
   debts?: Debt[];
   /** Entre jugadores (party.ts): ofertas que le han hecho y esperan su respuesta. */
   offers?: Offer[];
+  /** Entre jugadores (reactions.ts): lo que otro PJ intenta hacerle y espera que decida si se deja o se resiste. */
+  reactions?: Reaction[];
   /** A quién sigue en cada desplazamiento (party.ts); null o ausente, a nadie. */
   following?: Id | null;
   /**
@@ -453,6 +455,31 @@ export interface Offer {
   coins: number;
   /** Cómo se lee: «una daga», «20 monedas», «una daga y 20 monedas». */
   label: string;
+  created_real_ms: number;
+  expires_real_ms: number;
+  /** Evento que la anuncia (para que la web ponga los botones en su sitio). */
+  event_id?: Id;
+}
+
+/** Qué le hace un PJ a otro con las manos (reactions.ts). `other`: lo que el máster pide con request_reaction y no es nada de lo anterior. */
+export type ReactionKind = 'attack' | 'grapple' | 'shove' | 'other';
+
+/** Lo que un PJ intenta hacerle a otro y espera su decisión: dejarse (sin tirada) o resistirse (tirada enfrentada). */
+export interface Reaction {
+  id: Id;
+  from_id: Id;
+  to_id: Id;
+  kind: ReactionKind;
+  /** Qué intenta, en infinitivo y para el afectado: «agarrarte y llevarte a la taberna». */
+  attempt: string;
+  /** Lo que escribió quien actúa (o la acción que llevó al máster a pedirla). */
+  input: string | null;
+  /** Adónde se lo lleva si sale bien; null si no se mueve. */
+  dest_spot_id: Id | null;
+  /** Empujar para tirarle al suelo (queda derribado). */
+  prone?: boolean;
+  /** Skills de la tirada enfrentada (claves 5e): la de quien actúa y las que puede usar el afectado (la mejor). Sin ella, Atletismo contra Atletismo o Acrobacias. */
+  contest?: { actor: string; target: string[] };
   created_real_ms: number;
   expires_real_ms: number;
   /** Evento que la anuncia (para que la web ponga los botones en su sitio). */

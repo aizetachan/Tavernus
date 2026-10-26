@@ -7,7 +7,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { Engine } from '../engine/engine.js';
 import { rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
 import { inventoryDetailed, inventoryView, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
-import type { Character, Id, Npc, Placement } from '../engine/model.js';
+import type { Character, Id, Npc, Placement, ReactionKind } from '../engine/model.js';
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
 import { perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
@@ -164,6 +164,14 @@ export const MASTER_TOOLS: Tool[] = [
   tool('attack', 'Ataque de un NPC (o de un PJ fuera del flujo de tirada del jugador). El servidor tira contra la CA, calcula y aplica el daño. Para el ataque del propio jugador usa requires_roll con kind=attack y requires_roll_target.', {
     attacker_id: str('ID del que ataca (NPC o personaje)'), target_id: str('ID del objetivo'), advantage: enm(ADV, 'Ventaja o desventaja'),
   }),
+  tool('request_reaction', 'El actor hace algo con las manos a OTRO JUGADOR presente (agarrarlo, llevárselo a rastras, empujarlo, sujetarlo, quitarle algo, atacarlo). No lo resuelvas tú: el otro decide en su pantalla si se deja (sin tirada) o se resiste (tirada enfrentada que hace el servidor) y luego te toca narrar el desenlace. Narra SOLO el intento (alarga la mano, se lanza…), nunca cómo reacciona ni el resultado. Dar algo es transfer_item (oferta), no esto.', {
+    target_character_id: str('ID del otro PJ (ch_…)'),
+    kind: enm(['grapple', 'shove', 'attack', 'other'], 'grapple: agarrar, sujetar, llevárselo; shove: empujar, apartar, derribar; attack: golpear o herir (ataque contra su CA); other: otra cosa física (quitarle algo, taparle la boca…)'),
+    attempt: str('Qué intenta, en infinitivo y en segunda persona para el afectado, concreto: «agarrarte del brazo y llevarte a la taberna», «quitarte la daga del cinto»'),
+    destination_spot_id: nstr('Si se lo quiere llevar a otro sitio: ID del punto (sp_…); el servidor mueve a los dos si sale bien. null si no'),
+    actor_skill: nstr('Solo other: skill 5e de quien actúa (sleight_of_hand, athletics…); null = athletics'),
+    target_skills: nstr('Solo other: skills con las que se resiste el afectado, separadas por comas (la mejor de las suyas); null = athletics,acrobatics'),
+  }),
   tool('apply_damage', 'Quita puntos de golpe a un personaje o NPC por daño que no es un ataque (caída, fuego, trampa).', {
     target_id: str('ID del personaje o NPC'), amount: num('Daño'), damage_type: str('Tipo: slashing, fire, falling…'), source: str('Qué lo causa'),
   }),
@@ -267,7 +275,7 @@ export const MASTER_TOOLS: Tool[] = [
 export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
-  'stabilize', 'take_rest', 'spend_resource',
+  'stabilize', 'take_rest', 'spend_resource', 'request_reaction',
 ]);
 
 export const MEMORY_CAP_PER_CHARACTER = 8;
@@ -622,6 +630,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       let targetSpot = s('target_spot_id') === 'null' ? '' : s('target_spot_id');
       const locId = s('target_location_id') && s('target_location_id') !== 'null' ? s('target_location_id') : !world.spots.has(targetSpot) && world.locations.has(targetSpot) ? targetSpot : '';
       const mover = world.characters.get(s('character_id'));
+      // A otro jugador no se le mueve: llevárselo es request_reaction con destination_spot_id (él decide).
+      if (mover && mover.id !== actor.id && !sharedWith(engine, actor.id).includes(mover.id)) return { error: 'other_player', hint: `${pcName(world, actor.id, mover)} es otro jugador: no lo muevas tú. Si el actor se lo lleva, request_reaction con destination_spot_id.` };
       if (locId && mover && (!targetSpot || world.spots.get(targetSpot)?.location_id !== locId)) {
         if (!world.locations.has(locId)) return { error: 'unknown_location', hint: `${locId} no es una localización. ${hereList(ctx)}` };
         const entry = entrySpot(world, mover, locId, s('pace') as 'walk', nowGameS);
@@ -789,8 +799,32 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!r.ok) return { error: r.error };
       return { ok: true, paid: r.paid, remaining: r.remaining, settled: r.settled, returned: r.returned, kept_by_npc: r.kept, coins_left: actor.coins };
     }
+    case 'request_reaction': {
+      if (engine.inReactionOutcome(actor.id)) return { error: 'Esto ya es el desenlace de una reacción: narra lo que ha pasado; no pidas otra.' };
+      const to = world.characters.get(s('target_character_id'));
+      if (!to || to.id === actor.id) return { error: 'target_character_id no es otro jugador presente. A un NPC no se le pide reacción: resuélvelo tú.' };
+      const kind = ['grapple', 'shove', 'attack', 'other'].includes(s('kind')) ? s('kind') as ReactionKind : 'other';
+      const dest = s('destination_spot_id') && s('destination_spot_id') !== 'null' ? s('destination_spot_id') : null;
+      if (dest && !world.spots.has(dest)) return { error: 'unknown_spot', hint: `${dest} no es un punto. ${hereList(ctx)}` };
+      const skills = (v: string) => v && v !== 'null' ? v.split(/\s*,\s*/).map(normalizeSkill).filter((k) => SKILLS[k]) : [];
+      const contest = kind === 'other' && (skills(s('actor_skill')).length || skills(s('target_skills')).length)
+        ? { actor: skills(s('actor_skill'))[0] ?? 'athletics', target: skills(s('target_skills')).length ? skills(s('target_skills')) : ['athletics', 'acrobatics'] }
+        : undefined;
+      const attempt = s('attempt').trim() || 'ponerte las manos encima';
+      const r = engine.requestReaction(actor.id, to.id, { kind, attempt, input: ctx.action_text ?? null, dest_spot_id: dest, prone: kind === 'shove' && /suelo|derrib|tumb/i.test(attempt), ...(contest ? { contest } : {}) }, { announce: false });
+      if (!r.ok) return { error: 'reaction_failed', hint: r.error };
+      return { ok: true, pending_reaction: true, hint: `Queda PEDIDO, no hecho: ${pcName(world, actor.id, to)} es otro jugador y decide si se deja o se resiste. Narra solo el intento; no narres su reacción ni el resultado. Cierra con log_event sin requires_roll.` };
+    }
     case 'attack': {
       const atk = world.characters.get(s('attacker_id'));
+      // Un PJ que ataca a otro jugador fuera de una ronda: no se resuelve aquí, el otro decide (reactions.ts).
+      const victim = world.characters.get(s('target_id'));
+      if (atk && victim && victim.id !== atk.id && atk.id === actor.id && !sharedWith(engine, actor.id).includes(victim.id)) {
+        if (engine.inReactionOutcome(actor.id)) return { error: 'El ataque ya está resuelto por el servidor (lo tienes en el resultado): narra lo que ha pasado.' };
+        const r = engine.requestReaction(actor.id, victim.id, { kind: 'attack', attempt: 'atacarte', input: ctx.action_text ?? null }, { announce: false });
+        if (!r.ok) return { error: 'reaction_failed', hint: r.error };
+        return { ok: true, pending_reaction: true, hint: `Contra otro jugador no se ataca sin más: queda PEDIDO y ${pcName(world, actor.id, victim)} decide si se defiende. Narra solo el intento (se lanza, levanta el arma); no narres el golpe ni su reacción.` };
+      }
       // Un PJ ausente no ataca ni gasta recursos: solo se defiende.
       if (atk && atk.away) return { error: `${atk.name} está ausente: no ataca ni gasta recursos; si le atacan, se defiende solo` };
       if (atk) {
@@ -894,6 +928,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         ? { kind: String(kind) as CheckKind, key: String(kind) === 'skill' ? normalizeSkill(s('requires_roll_key')) : s('requires_roll_key'), dc: input['requires_roll_dc'] == null ? null : Number(input['requires_roll_dc']), advantage: (ADV.includes(s('requires_roll_advantage')) ? s('requires_roll_advantage') : 'none') as Advantage, ...(input['requires_roll_target'] ? { target: s('requires_roll_target') } : {}) }
         : null;
       if (req?.kind === 'attack' && !req.target) return { error: 'un ataque necesita requires_roll_target (ID del objetivo)' };
+      if (req?.kind === 'attack' && req.target !== actor.id && world.characters.has(req.target!) && !sharedWith(engine, actor.id).includes(req.target!)) return { error: 'Contra otro jugador no se pide tirada de ataque: usa request_reaction (kind attack) y él decide si se defiende; cierra sin requires_roll.' };
       if (req?.target && !world.npcs.has(req.target) && !world.characters.has(req.target)) return { error: `objetivo desconocido: ${req.target}` };
       if (req && req.kind === 'skill' && !SKILLS[req.key]) return { error: `skill desconocida: ${req.key}. Válidas: ${Object.keys(SKILLS).join(', ')}` };
       // Relleno en lugar de narración («placeholder», «x»): siempre se reescribe; si el máster no sale de ahí, el motor dice que reintente.

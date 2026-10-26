@@ -11,10 +11,11 @@ import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, transferItem, type InventoryView, type TransferError } from './inventory.js';
-import type { Character, GameEvent, Id, Npc, Offer, Pace, Placement, WorldSnapshot } from './model.js';
+import type { Character, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
 import { approachSpot, interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
 import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, parseGive, parseParty, parseSay, pcName, SAY_LOUDNESS, type SayMode } from './party.js';
 import { witnesses } from './perception.js';
+import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, readsAsAccept } from './reactions.js';
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { bounceOff, parseCrossing } from './barrier.js';
 import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, whereAmI, whoIsHere } from './narrate.js';
@@ -544,6 +545,7 @@ export class Engine {
       this.advanceStory(nowG);
       for (const id of this.presence.keys()) this.refreshConnection(id);
       this.expireOffers();
+      this.expireReactions();
       this.serveQueues();
       this.checkDecisiveWindows();
       this.fireTimeHooks(nowG);
@@ -631,11 +633,14 @@ export class Engine {
     // A 0 PG o muerto no se actúa: se le dice cómo está y qué le espera.
     if (c.status === 'unconscious' || c.status === 'dead') return { ok: false, text: this.downText(c) };
     const locId = positionOf(this.world, c, this.gameNow()).location_id;
+    // Quien espera a que otro jugador decida (reactions.ts) no hace otra cosa hasta saberlo (hablar, sí).
+    const waiting = this.reactionWait(c);
+    if (waiting) return { ok: false, text: waiting };
     // Varios a la vez (scene.ts): ronda, conversación de grupo o NPC ocupado. Lo de entre jugadores sigue sin máster.
     const t0 = text.trim();
     const give = parseGive(t0);
     const party = parseParty(t0);
-    const betweenPcs = (give && findPresentPc(this.world, c, give.to)) || (party && (party.kind === 'unfollow' || findPresentPc(this.world, c, party.who)));
+    const betweenPcs = (c.status === 'active' && parseReaction(this.world, c, t0)) || (give && findPresentPc(this.world, c, give.to)) || (party && (party.kind === 'unfollow' || findPresentPc(this.world, c, party.who)));
     const scene = betweenPcs || parseRest(t0) || this.isDeathAction(c, t0) ? null : this.sceneRoute(c, t0);
     if (scene) return scene;
     // Mientras espera turno en la cola del sitio, quien va delante lo ve en su contexto (no lo resuelve: va después).
@@ -657,7 +662,7 @@ export class Engine {
       }
       // Quien sigue a otro y se mueve por su cuenta deja de seguirle.
       if (c.following && (travel || this.isMove(c, clean))) { c.following = null; this.world.touch('characters', c.id); }
-      const fast = decisive ? null : this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryTrivial(c, clean);
+      const fast = decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryTrivial(c, clean);
       if (fast) {
         r = fast;
       } else if (this.master && c.status === 'active' && !Engine.MECHANICAL.test(clean)) {
@@ -1028,6 +1033,7 @@ export class Engine {
     if (out.ok) { this.masterOk.push({ ts: Date.now(), ms: Date.now() - t0 }); if (this.masterOk.length > 500) this.masterOk.shift(); }
     else { this.masterErr.push({ ts: Date.now(), reason: out.reason, message: out.message.slice(0, 200) }); if (this.masterErr.length > 100) this.masterErr.shift(); }
     if (!out.ok) {
+      this.announcePending(c.id);
       console.warn(`[master] ${out.reason}: ${out.message}`);
       if (out.reason === 'refusal') return { ok: false, text: 'El narrador prefiere no seguir por ahí. Prueba otra cosa.' };
       return { ok: false, text: '' };
@@ -1057,6 +1063,8 @@ export class Engine {
       narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags, ...(share ? ['shared'] : [])], payload,
       ...(share ? { also_to: share.ids.filter((id) => id !== c.id) } : {}),
     }, this.stampFor(c));
+    // Lo que el máster pidió a otro jugador (request_reaction): la petición sale después de su narración.
+    this.announcePending(c.id);
     if (k.requires_roll) this.pendingRolls.set(c.id, { text, roll: k.requires_roll, event_id: event.id });
     if (k.decisive && scene !== 'decisive_timeout' && c.status === 'active') this.openDecisive(c, k.decisive, event.id);
     for (const sr of out.shown_rolls ?? []) this.announceRoll(sr);
@@ -1602,6 +1610,277 @@ export class Engine {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Reacciones (reactions.ts, docs/MULTIJUGADOR.md): lo que un PJ le hace a otro lo decide el otro.
+  // -------------------------------------------------------------------------
+
+  /** Temporizadores de las peticiones (con reloj real); el tick las caduca también, por si se pierden. */
+  private reactionTimers = new Map<Id, NodeJS.Timeout>();
+  /** Peticiones que ya están en la cola para resolverse (no se encolan dos veces). */
+  private resolvingReactions = new Set<Id>();
+  /** Peticiones que pidió el máster en esta acción: se anuncian después de su narración. */
+  private unannounced = new Map<Id, Reaction[]>();
+  /** Actores cuya narración del máster es el desenlace de una reacción (no se pide otra encima). */
+  private reactionOutcome = new Set<Id>();
+
+  /** ¿Está el máster narrando el desenlace de una reacción de este actor? (tools.ts no deja pedir otra.) */
+  inReactionOutcome(characterId: Id): boolean { return this.reactionOutcome.has(characterId); }
+
+  /** Lo que el actor intenta sobre otro PJ (reactions.ts), reconocido por el motor; null si no es eso. */
+  private tryReaction(c: Character, text: string): ActionResult | null {
+    if (c.status !== 'active') return null;
+    const intent = parseReaction(this.world, c, text);
+    if (!intent) return null;
+    const r = this.requestReaction(c.id, intent.target.id, { kind: intent.kind, attempt: intent.attempt, input: text, dest_spot_id: intent.dest_spot_id, prone: intent.prone });
+    return r.ok ? r.result : { ok: false, text: r.error };
+  }
+
+  /** «Esperando a que Mira decida…» si el actor tiene una petición en el aire; null si no. */
+  private reactionWait(c: Character): string | null {
+    const p = pendingFrom(this.world, c.id);
+    if (!p) return null;
+    return `⏳ Esperando a que ${pcName(this.world, c.id, p.to)} decida (quedan ${fmtLeft(p.reaction.expires_real_ms - this.now())}). Mientras, puedes hablar con «Decir».`;
+  }
+
+  /**
+   * Petición de reacción: un PJ intenta algo sobre otro (agarrarlo, llevárselo,
+   * empujarlo, atacarlo). No resuelve nada: el otro ve quién, qué y los botones
+   * «Dejarse» y «Resistirse» (o responde con sus palabras); quien actúa espera.
+   * Si el otro no puede responder (ausente, dormido, caído), se resuelve en
+   * cuanto acabe la acción en curso. La usan el motor (tryReaction) y el máster
+   * (request_reaction, y attack contra un PJ); con `announce: false` el evento
+   * sale después de la narración del máster.
+   */
+  requestReaction(fromId: Id, toId: Id, spec: { kind: ReactionKind; attempt: string; input: string | null; dest_spot_id?: Id | null; prone?: boolean; contest?: { actor: string; target: string[] } }, opts: { announce?: boolean } = {}): { ok: true; reaction: Reaction; result: ActionResult } | { ok: false; error: string } {
+    const from = this.world.character(fromId);
+    const to = this.world.characters.get(toId);
+    if (!to || to.id === from.id) return { ok: false, error: 'No hay nadie así aquí.' };
+    const toName = pcName(this.world, from.id, to);
+    const here = this.world.characterSpot(from);
+    const there = this.world.characterSpot(to);
+    if (!here || !there || here.location_id !== there.location_id || to.transit) return { ok: false, error: `${toName} no está aquí.` };
+    if (to.status === 'dead' || to.status === 'retired') return { ok: false, error: `${toName} ya no está para eso.` };
+    if (to.veiled) return { ok: false, error: `${toName} está bajo el velo: su jugador no está y nadie puede tocarle.` };
+    const waiting = this.reactionWait(from);
+    if (waiting) return { ok: false, error: waiting };
+    if (here.id !== there.id) approachSpot(this.world, from, there.id);
+    const nowMs = this.now();
+    const reaction: Reaction = {
+      id: `rx_${nowMs.toString(36)}_${Math.floor(this.rng() * 1e6).toString(36)}`, from_id: from.id, to_id: to.id, kind: spec.kind,
+      attempt: spec.attempt.trim().replace(/[.]+$/, ''), input: spec.input, dest_spot_id: spec.dest_spot_id ?? null,
+      ...(spec.prone ? { prone: true } : {}), ...(spec.contest ? { contest: spec.contest } : {}),
+      created_real_ms: nowMs, expires_real_ms: nowMs + REACTION_TTL_MS,
+    };
+    to.reactions = [...(to.reactions ?? []), reaction];
+    this.world.touch('characters', to.id);
+    if (this.realClock) {
+      const t = setTimeout(() => this.reactionDue(reaction.id, 'timeout'), REACTION_TTL_MS);
+      t.unref?.();
+      this.reactionTimers.set(reaction.id, t);
+    }
+    let result: ActionResult;
+    if (opts.announce === false) {
+      this.unannounced.set(from.id, [...(this.unannounced.get(from.id) ?? []), reaction]);
+      result = { ok: true, text: `Esperando a que ${toName} decida.` };
+    } else result = this.announceReaction(reaction);
+    // Quien no puede responder no hace esperar a nadie: se resuelve en cuanto acabe lo que esté en curso.
+    const unable = this.reactionUnable(to);
+    if (unable) this.reactionDue(reaction.id, unable);
+    return { ok: true, reaction, result };
+  }
+
+  /** Por qué el afectado no puede decidir ahora (dormido, caído, ausente); null si puede. */
+  private reactionUnable(to: Character): 'away' | 'helpless' | null {
+    if (to.status === 'unconscious' || to.status === 'asleep') return 'helpless';
+    return to.away ? 'away' : null;
+  }
+
+  /** El evento de la petición: quien actúa espera; el afectado lee quién, qué y lo que escribió, y tiene los botones. */
+  private announceReaction(r: Reaction): ActionResult {
+    const from = this.world.character(r.from_id);
+    const to = this.world.character(r.to_id);
+    const toName = pcName(this.world, from.id, to);
+    const ToName = toName.charAt(0).toUpperCase() + toName.slice(1);
+    const verb = { attack: ['Te lanzas contra', 'se lanza contra'], grapple: ['Alargas las manos hacia', 'alarga las manos hacia'], shove: ['Cargas con el hombro contra', 'carga con el hombro contra'], other: ['Vas a por', 'va a por'] }[r.kind];
+    const said = r.input && !r.input.startsWith('(') ? ` Ha escrito: «${r.input.replace(/[«»]/g, '').trim()}».` : '';
+    const event = this.events.emit({
+      actor_id: from.id, action_type: 'reaction_request', input_text: r.input, also_to: [to.id],
+      narration_private: `${verb[0]} ${toName}. ${ToName} decide si se deja o se resiste.`,
+      observable: `${from.name} ${verb[1]} ${to.name}.`,
+      tags: ['deterministic', 'party', 'reaction', ...(r.kind === 'attack' ? ['combat'] : [])],
+      payload: {
+        master: null, reaction: { id: r.id, to: to.id, from: from.id, kind: r.kind, attempt: r.attempt, expires_real_ms: r.expires_real_ms },
+        target_character_id: to.id,
+        observable_target: `${from.name} intenta ${r.attempt}.${said} ¿Te dejas o te resistes? Si no decides a tiempo, te resistes por instinto.`,
+        observable_vague: 'Una figura va a por otra.',
+      },
+    }, this.stampFor(from));
+    r.event_id = event.id;
+    this.world.touch('characters', to.id);
+    return { ok: true, text: event.narration_private, event };
+  }
+
+  /** Las peticiones que pidió el máster en esta acción, tras su narración. */
+  private announcePending(actorId: Id): void {
+    const list = this.unannounced.get(actorId);
+    if (!list) return;
+    this.unannounced.delete(actorId);
+    for (const r of list) if (this.world.characters.get(r.to_id)?.reactions?.some((x) => x.id === r.id)) this.announceReaction(r);
+  }
+
+  /** Encola la resolución de una petición (caducada o sin nadie que decida). Una sola vez. */
+  private reactionDue(reactionId: Id, how: 'timeout' | 'away' | 'helpless'): void {
+    if (this.resolvingReactions.has(reactionId)) return;
+    const found = findReaction(this.world, reactionId);
+    if (!found) return;
+    this.resolvingReactions.add(reactionId);
+    const locId = this.world.characterSpot(found.to)?.location_id ?? positionOf(this.world, found.to, this.gameNow()).location_id;
+    this.background(this.runInLocation(locId, async () => {
+      try { await this.resolveReaction(reactionId, how, null); } finally { this.resolvingReactions.delete(reactionId); }
+    }));
+  }
+
+  /** Peticiones caducadas (desde el tick): el afectado se resiste por instinto. */
+  private expireReactions(): void {
+    const nowMs = this.now();
+    for (const c of this.world.characters.values()) {
+      for (const r of c.reactions ?? []) if (r.expires_real_ms <= nowMs) this.reactionDue(r.id, 'timeout');
+    }
+  }
+
+  /**
+   * El afectado decide: «Dejarse» (accept), «Resistirse» (resist) o sus
+   * palabras (`text`: si se leen como un sí, se deja; si no, se resiste y lo
+   * dicho acompaña). Entra en la cola del sitio: el desenlace puede llamar al máster.
+   */
+  async answerReaction(characterId: Id, reactionId: Id, answer: 'accept' | 'resist' | null, text: string | null = null): Promise<ActionResult> {
+    const c = this.world.character(characterId);
+    this.lastAction.set(c.id, this.now());
+    if (!c.connected) this.setConnected(c.id, true);
+    const r = c.reactions?.find((x) => x.id === reactionId);
+    if (!r || this.resolvingReactions.has(r.id)) return { ok: false, text: 'Eso ya se ha decidido.' };
+    const reply = text?.trim().slice(0, 300) || null;
+    const how = answer ?? (reply && readsAsAccept(reply) ? 'accept' : 'resist');
+    this.resolvingReactions.add(r.id);
+    const locId = this.world.characterSpot(c)?.location_id ?? positionOf(this.world, c, this.gameNow()).location_id;
+    try {
+      return await this.runInLocation(locId, () => this.resolveReaction(r.id, how, reply));
+    } finally { this.resolvingReactions.delete(r.id); }
+  }
+
+  /**
+   * Resuelve una petición: dejarse sale sin tirada; resistirse (o no responder
+   * a tiempo, o no estar), con la tirada enfrentada del SRD o el ataque contra
+   * la CA. Aplica lo que el motor sabe aplicar (daño, agarrado, derribado,
+   * llevárselo a otro sitio), lo cuenta a los dos y, con máster, le pide que
+   * narre el desenlace como tras una tirada (el afectado lo lee como testigo).
+   */
+  private async resolveReaction(reactionId: Id, how: 'accept' | 'resist' | 'timeout' | 'away' | 'helpless', reply: string | null): Promise<ActionResult> {
+    const found = findReaction(this.world, reactionId);
+    if (!found) return { ok: false, text: 'Eso ya se ha decidido.' };
+    const { reaction: r, to } = found;
+    dropReaction(this.world, to, r.id);
+    const timer = this.reactionTimers.get(r.id);
+    if (timer) { clearTimeout(timer); this.reactionTimers.delete(r.id); }
+    const from = this.world.characters.get(r.from_id);
+    const fromName = from ? pcName(this.world, to.id, from) : 'alguien';
+    const From = fromName.charAt(0).toUpperCase() + fromName.slice(1);
+    const emit = (type: string, priv: string, obs: string | null, forActor: string, extra: Record<string, unknown> = {}) => this.events.emit({
+      actor_id: to.id, action_type: type, input_text: reply, also_to: from ? [from.id] : [], narration_private: priv, observable: obs,
+      tags: ['deterministic', 'party', 'reaction', ...(r.kind === 'attack' ? ['combat'] : [])],
+      payload: { master: null, reaction: { id: r.id, to: to.id, from: r.from_id, kind: r.kind, answer: how, ...extra }, target_character_id: r.from_id, observable_target: forActor },
+    }, this.stampFor(to));
+    const done = async (res: ActionResult) => { this.settleAll(this.gameNow()); this.announceDeathStates(); await this.flush(); return res; };
+    // Ya no tiene sentido: quien actuaba no está o no puede, o ya no están en la misma sala.
+    const mine = this.world.characterSpot(to);
+    const theirs = from ? this.world.characterSpot(from) : undefined;
+    if (!from || from.status !== 'active' || !mine || !theirs || mine.location_id !== theirs.location_id || from.transit || to.transit || to.status === 'dead') {
+      const e = emit('reaction_cancelled', `${From} ya no está para ${r.attempt}: no pasa nada.`, null, `Ya no puedes: ${pcName(this.world, r.from_id, to)} y tú ya no estáis juntos.`);
+      return done({ ok: true, text: e.narration_private, event: e });
+    }
+    if (mine.id !== theirs.id) approachSpot(this.world, from, mine.id);
+    const toName = pcName(this.world, from.id, to);
+    const ToName = toName.charAt(0).toUpperCase() + toName.slice(1);
+    // Cómo decidió, para el afectado [0] y para quien actúa [1].
+    const said = reply ? ` «${reply.replace(/[«»]/g, '').replace(/[.]+$/, '')}».` : '';
+    const decided = {
+      accept: [`Te dejas.${said}`, `${ToName} se deja.${said}`],
+      resist: [`Te resistes.${said}`, `${ToName} se resiste.${said}`],
+      timeout: ['No respondes a tiempo: te resistes por instinto.', `${ToName} no responde a tiempo: se resiste por instinto.`],
+      away: ['No estás: te resistes por instinto.', `${ToName} no está (su jugador se ha ido): se resiste por instinto.`],
+      helpless: [`No puedes resistirte (${to.status === 'asleep' ? 'duermes' : 'estás inconsciente'}).`, `${ToName} no puede resistirse (${to.status === 'asleep' ? 'duerme' : 'está inconsciente'}).`],
+    }[how] as [string, string];
+    const unopposed = how === 'accept' || how === 'helpless';
+    let success: boolean;
+    let rollMine = '';
+    let rollTheirs = '';
+    let check: CheckResult & { label: string };
+    const effects: string[] = [];
+    if (r.kind === 'attack') {
+      const atk = resolveAttack(this.world, from.id, to.id, 'none', this.rng, this.nowFor(from), { autoHit: how === 'accept' });
+      if ('error' in atk) {
+        const e = emit('reaction_cancelled', `${From} no llega a atacarte: ${atk.error}.`, null, `No llegas a atacar: ${atk.error}.`);
+        return done({ ok: true, text: e.narration_private, event: e });
+      }
+      success = atk.hit;
+      const dmg = atk.hit ? `${atk.damage} de daño (${atk.damage_breakdown})${atk.target_dead ? '; cae muerto' : atk.target_down ? '; cae' : ''}` : '';
+      const roll = atk.attack_breakdown.replace(/ vs CD \d+$/, '');
+      rollTheirs = how === 'accept' ? `Te alcanza sin tirada: ${dmg}.` : `Su ataque con ${atk.weapon}: ${roll} contra tu CA ${atk.target_ac}: ${atk.hit ? `te alcanza, ${dmg}` : 'falla'}.`;
+      rollMine = how === 'accept' ? `Le alcanzas sin tirada: ${dmg}.` : `Tu ataque con ${atk.weapon}: ${roll} contra su CA ${atk.target_ac}: ${atk.hit ? `le alcanzas, ${dmg}` : 'fallas'}.`;
+      if (atk.hit) effects.push(`${to.name} recibe ${atk.damage} de daño (queda a ${atk.target_hp} PG${atk.target_dead ? ', muerto' : atk.target_down ? ', caído' : ''})`);
+      check = { label: `Reacción de ${to.name}: ataque con ${atk.weapon}`, expr: 'attack', total: atk.attack_total, rolls: [], d20s: [], modifier: 0, dc: unopposed ? null : atk.target_ac, advantage: 'none', success, breakdown: `${decided[1]} ${rollMine}`, ...(atk.natural ? { natural: atk.natural } : {}) };
+    } else if (unopposed) {
+      success = true;
+      check = { label: `Reacción de ${to.name}`, expr: '', total: 0, rolls: [], d20s: [], modifier: 0, dc: null, advantage: 'none', success: true, breakdown: `${decided[1]} Sin tirada.` };
+    } else {
+      const k = contest(from, to, r, this.rng, this.takeHelp(from) ? 'advantage' : 'none');
+      success = k.success;
+      const show = (x: typeof k.actor) => `${x.label} ${x.breakdown}`;
+      rollTheirs = `Tirada enfrentada: tu ${show(k.target)}, contra su ${show(k.actor)}: ${success ? `gana ${fromName}` : 'ganas tú'}.`;
+      rollMine = `Tirada enfrentada: tu ${show(k.actor)}, contra su ${show(k.target)}: ${success ? 'ganas tú' : `gana ${toName}`}.`;
+      check = { ...k.actor, label: `Reacción de ${to.name}: tu ${k.actor.label} enfrentado a su ${k.target.label}`, dc: k.target.total, success, breakdown: `${decided[1]} ${rollMine}` };
+    }
+    // Lo que el motor sabe aplicar: llevárselo, agarrado, derribado (el daño ya lo aplicó el ataque).
+    let dest: string | null = null;
+    if (success && r.kind !== 'attack') {
+      if (r.dest_spot_id && this.world.spots.has(r.dest_spot_id)) {
+        const spot = this.world.spot(r.dest_spot_id);
+        const a = moveTo(this.world, to.id, spot.id, 'walk', this.nowFor(to));
+        const b = a.ok ? moveTo(this.world, from.id, spot.id, 'walk', this.nowFor(from)) : a;
+        if (a.ok && b.ok) {
+          this.tripFrom.set(to.id, mine.location_id);
+          this.tripFrom.set(from.id, mine.location_id);
+          const loc = this.world.location(spot.location_id);
+          dest = spot.location_id !== mine.location_id || loc.default_spot_id === spot.id ? loc.name : spot.name;
+          effects.push(`los dos van juntos ${aEs(dest)} (ya en camino)`);
+        }
+      } else if (r.kind === 'grapple') {
+        to.conditions = [...to.conditions.filter((x) => x.name !== 'agarrado'), { name: 'agarrado', source: from.name, expires_game_s: this.nowFor(to) + GRAPPLE_S }];
+        effects.push(`${to.name} queda agarrado por ${from.name}`);
+      } else if (r.kind === 'shove' && r.prone) {
+        to.conditions = [...to.conditions.filter((x) => x.name !== 'derribado'), { name: 'derribado', source: from.name, expires_game_s: this.nowFor(to) + PRONE_S }];
+        effects.push(`${to.name} queda en el suelo (derribado)`);
+      }
+      this.world.touch('characters', to.id);
+    }
+    // El desenlace: para el afectado, para quien actúa y para los demás.
+    const outcome: [string, string, string] = r.kind === 'attack'
+      ? [success ? '' : `Esquivas el ataque de ${fromName}.`, success ? '' : `${ToName} esquiva tu ataque.`, success ? `${from.name} alcanza a ${to.name}.` : `${to.name} esquiva el ataque de ${from.name}.`]
+      : success
+        ? [`${From} consigue ${r.attempt}.`, dest ? `Os vais juntos ${aEs(dest)}.` : 'Lo consigues.', dest ? `${from.name} se lleva a ${to.name} ${aEs(dest)}.` : `${from.name} se sale con la suya con ${to.name}.`]
+        : [`${From} no consigue ${r.attempt}.`, 'No lo consigues.', `${to.name} se resiste a ${from.name} y se libra.`];
+    const join = (...xs: string[]) => xs.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    const e = emit(unopposed ? 'reaction_accepted' : 'reaction_resisted',
+      join(decided[0], rollTheirs, outcome[0]), outcome[2], join(decided[1], rollMine, outcome[1]), { success, ...(dest ? { dest } : {}) });
+    // Con máster: narra el desenlace para quien actuaba, como tras una tirada.
+    if (this.master) {
+      check.breakdown = `${check.breakdown}${effects.length ? ` Ya aplicado por el servidor (no lo repitas): ${effects.join('; ')}.` : ''} ${to.name} es otro jugador y ya ha decidido: narra el desenlace sin ponerle palabras, gestos ni intenciones que no estén aquí, y no pidas otra reacción para esto.`;
+      this.reactionOutcome.add(from.id);
+      try { await this.resolveWithMaster(from, r.input ?? `(intenta ${r.attempt})`, { original_text: r.input ?? r.attempt, result: check }); } finally { this.reactionOutcome.delete(from.id); }
+    }
+    return done({ ok: true, text: e.narration_private, event: e });
+  }
+
   /**
    * Seguir (party.ts): quien sigue a un líder que se ha puesto en camino sale
    * tras él hacia el mismo sitio, al mismo paso. Si no puede (salida cerrada para
@@ -1730,6 +2009,17 @@ export class Engine {
         }, this.now());
       }
     }
+    // Reacciones: la que él esperaba se retira; las que le piden a él, se resisten por instinto ya (no hace esperar a nadie).
+    const mine = pendingFrom(this.world, c.id);
+    if (mine) {
+      dropReaction(this.world, mine.to, mine.reaction.id);
+      this.events.emit({
+        actor_id: mine.to.id, action_type: 'reaction_cancelled', also_to: [c.id], tags: ['deterministic', 'party', 'reaction'], observable: null,
+        narration_private: `${pcName(this.world, mine.to.id, c).replace(/^./, (x) => x.toUpperCase())} se ha ido: ya no intenta ${mine.reaction.attempt}.`,
+        payload: { master: null, reaction: { id: mine.reaction.id, to: mine.to.id, from: c.id, kind: mine.reaction.kind, answer: 'cancelled' }, target_character_id: c.id, observable_target: 'Lo que intentabas con otro jugador se retira al irte.' },
+      }, this.now());
+    }
+    for (const r of [...(c.reactions ?? [])]) this.reactionDue(r.id, 'away');
     this.background(this.flush());
   }
 

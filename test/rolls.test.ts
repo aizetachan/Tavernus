@@ -102,16 +102,15 @@ describe('las tiradas del máster (turno compartido, ataques, Medicina)', () => 
     expect(ctx.shown_rolls).toHaveLength(1);
   });
 
-  it('el ataque de un PJ a otro lo ven los dos y el objetivo lo lee en segunda persona; el de un enemigo sigue oculto', async () => {
-    const { engine, kael, mira, to } = await apart();
+  it('el de un enemigo sigue oculto; el de un PJ a otro fuera de una ronda no se tira: pasa por la reacción (reactions.ts)', async () => {
+    const { engine, kael, mira } = await apart();
     mira.location = { type: 'spot', id: 'sp_tab_barra' };
     const ctx = ctxFor(engine, mira.id);
     executeTool(ctx, 'attack', { attacker_id: 'npc_brenna', target_id: kael.id, advantage: 'none' });
     expect(ctx.shown_rolls ?? []).toHaveLength(0);
     executeTool(ctx, 'attack', { attacker_id: mira.id, target_id: kael.id, advantage: 'none' });
-    for (const r of ctx.shown_rolls!) engine.announceRoll(r);
-    expect(rolls(to(mira.id)).at(-1)!.text).toMatch(/^🎲 Ataque con .+ a Kael: d20 \[\d+\]/);
-    expect(rolls(to(kael.id)).at(-1)!.text).toMatch(/^🎲 Mira · Ataque con .+ a ti: d20 \[\d+\]/);
+    expect(ctx.shown_rolls ?? []).toHaveLength(0);
+    expect(engine.world.character(kael.id).reactions ?? []).toHaveLength(1);
   });
 
   it('la Medicina de un PJ para estabilizar a otro se apunta, con el caído como objetivo', async () => {

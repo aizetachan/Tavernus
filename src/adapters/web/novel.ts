@@ -620,6 +620,9 @@ export const NOVEL_JS = String.raw`
       if (!live) jb.disabled = true;
     }
     if (m.reply_to || m.offer) { partyButtons(m, host, live); }
+    if (m.reaction) reactionButtons(m.reaction, host);
+    if (m.reaction_wait) reactionWait(m.reaction_wait, main);
+    if (m.reaction_done) closeReaction(m.reaction_done);
     if (!m.roll && !(m.suggested && m.suggested.length)) { scroll(); return; }
     if (live) spendButtons();
     var row = document.createElement('div');
@@ -666,6 +669,73 @@ export const NOVEL_JS = String.raw`
     }
     host.parentNode.insertBefore(row, host.nextSibling);
     if (!live || (m.offer && !m.offer.open)) row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+  }
+
+  /**
+   * Reacciones (reactions.ts): otro jugador intenta algo sobre ti. «Dejarse», «Resistirse» o tus palabras,
+   * con la cuenta atrás; al acabar el tiempo te resistes por instinto. Siguen activos tras recargar
+   * mientras la petición esté en pie.
+   */
+  var reactionTimers = {};
+  function countdown(id, el, until, fmt) {
+    var tick = function () {
+      var left = Math.max(0, Math.round((until - Date.now()) / 1000));
+      el.textContent = fmt(Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0'), left);
+      if (!left) { clearInterval(reactionTimers[id]); delete reactionTimers[id]; }
+    };
+    clearInterval(reactionTimers[id]);
+    tick();
+    reactionTimers[id] = setInterval(tick, 1000);
+  }
+  function reactionButtons(r, host) {
+    var box = document.createElement('div');
+    box.className = 'actions party reaction';
+    box.setAttribute('data-reaction', r.id);
+    var open = r.open && r.expires_ms > Date.now();
+    var send = function (answer, text) {
+      box.querySelectorAll('button, input').forEach(function (x) { x.disabled = true; });
+      answerReaction(r.id, answer, text);
+    };
+    var btn = function (label, answer, cls) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = label; if (cls) b.className = cls;
+      b.onclick = function () { b.classList.add('chosen'); send(answer, ''); };
+      box.appendChild(b);
+    };
+    btn('Dejarse', 'accept', 'accept');
+    btn('Resistirse', 'resist');
+    // Sin <form>: el cuadro de la página habilita y deshabilita todos los botones de formulario al esperar.
+    var f = document.createElement('div');
+    f.className = 'reply';
+    f.innerHTML = '<input type="text" maxlength="300" placeholder="O responde con tus palabras…" aria-label="Tu respuesta"><button type="button">Enviar</button>';
+    var submit = function () { var v = f.querySelector('input').value.trim(); if (v) send(null, v); };
+    f.querySelector('button').onclick = submit;
+    f.querySelector('input').onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); submit(); } };
+    box.appendChild(f);
+    var left = document.createElement('span');
+    left.className = 'left';
+    box.appendChild(left);
+    host.parentNode.insertBefore(box, host.nextSibling);
+    if (!open) { closeReaction(r.id); return; }
+    countdown(r.id, left, r.expires_ms, function (t, s) { return s ? 'Decide en ' + t + ' · si no, te resistes por instinto' : 'Se acabó el tiempo: te resistes por instinto'; });
+  }
+  function reactionWait(r, main) {
+    var d = document.createElement('div');
+    d.className = 'decisive waiting';
+    d.setAttribute('data-reaction', r.id);
+    (main && (main.querySelector('.col') || main) || log).appendChild(d);
+    if (!r.open || r.expires_ms <= Date.now()) { d.textContent = r.name + ' ya ha decidido.'; return; }
+    countdown(r.id, d, r.expires_ms, function (t, s) { return s ? '⏳ Esperando a que ' + r.name + ' decida… ' + t : '⏳ ' + r.name + ' no ha respondido: se resiste por instinto.'; });
+  }
+  /** Ya decidido: fuera la cuenta atrás y los botones de esa petición. */
+  function closeReaction(id) {
+    clearInterval(reactionTimers[id]); delete reactionTimers[id];
+    log.querySelectorAll('[data-reaction="' + id + '"]').forEach(function (el) {
+      el.classList.add('done');
+      el.querySelectorAll('button, input').forEach(function (x) { x.disabled = true; });
+      var left = el.classList.contains('waiting') ? el : el.querySelector('.left');
+      if (left) left.textContent = el.classList.contains('waiting') ? 'Ya ha decidido.' : 'Decidido.';
+    });
   }
 
   function setCast(c) {
