@@ -370,16 +370,89 @@ export function withoutDeathPhrases(text: string, hits: readonly DeathHit[]): st
 // Cierre de relleno y turno compartido sin respuesta para alguno
 // ---------------------------------------------------------------------------
 
-/** Texto de relleno que no es narración («placeholder», «x», «...»): el jugador se quedaría sin respuesta. */
-const PLACEHOLDER = /^(?:placeholder|x+|todo|tbd|n\/?a|lorem ipsum\b.*|texto|narracion|test|\.+|…|-+|_+|\?+)$/;
+/**
+ * Texto de relleno que no es narración («placeholder», «x», «...», una letra
+ * suelta, «[texto]»): el jugador se quedaría sin respuesta. «placeholder» y
+ * «lorem ipsum» no son castellano: cuentan aunque vayan dentro de una frase.
+ */
+const PLACEHOLDER = /^(?:x+|todo|tbd|n\/?a|none|null|undefined|vacio|sin narracion|texto|narracion|observable|test|\.+|…|-+|_+|\?+|\[[^\]]*\]|<[^>]*>|[a-z])$|placeholder|lorem ipsum/;
 
-/** Campos del cierre que son relleno (vacío no cuenta: en conversación vale la narración vacía con lines). */
+/** ¿Es relleno este texto? Vacío no cuenta (en conversación vale la narración vacía con lines). */
+export function isPlaceholder(text: string | null | undefined): boolean {
+  return text != null && text.trim() !== '' && PLACEHOLDER.test(norm(text.trim()));
+}
+
+/** Campos del cierre que son relleno. */
 export function placeholderFields(fields: Record<string, string | null>): string[] {
-  return Object.entries(fields).filter(([, v]) => v != null && v.trim() !== '' && PLACEHOLDER.test(norm(v.trim()))).map(([k]) => k);
+  return Object.entries(fields).filter(([, v]) => isPlaceholder(v)).map(([k]) => k);
 }
 
 export function placeholderRejection(fields: readonly string[]): string {
   return `${fields.join(', ')} es relleno («placeholder», «x»…), no narración: el jugador se quedaría sin respuesta. Reescribe log_event con la respuesta de verdad a su acción (si en conversación sobra la narración, déjala vacía y pon lo dicho en lines).`;
+}
+
+/** Cierre sin nada que leer: ni narración ni nada dicho en lines. */
+export function emptyClose(input: { narration: string; lines?: readonly DialogueLine[] }): boolean {
+  return input.narration.trim() === '' && !(input.lines ?? []).some((l) => l.text.trim() !== '');
+}
+
+export const EMPTY_REJECTION = 'narration_private está vacía y no hay nada en lines: el jugador se quedaría sin respuesta. Reescribe log_event con lo que pasa (o, en conversación, con lo dicho en lines).';
+
+// ---------------------------------------------------------------------------
+// Autocorrección del modelo dentro del texto
+// ---------------------------------------------------------------------------
+
+/**
+ * Arranque en falso que el modelo corrige sobre la marcha y deja escrito:
+ * «MIAU Lenzo... no. MIAU se queda junto a la barra». Puntos suspensivos, «no»
+ * y una frase que empieza de nuevo (mayúscula).
+ */
+const SELF_FIX = /(?:\.\.\.|…)\s*no\s*[.,;!]\s+(?=\p{Lu})/u;
+
+/**
+ * Quita del texto los arranques en falso: desde el principio de la frase hasta
+ * la corrección, y deja lo que viene después. Lo que va entre «» (lo que dice
+ * alguien, que sí puede titubear: «Yo... no. No puedo.») no se toca.
+ */
+export function withoutSelfCorrection(text: string): string {
+  return text.split(/(«[^»]*»)/).map((part) => (part.startsWith('«') ? part : fixFalseStarts(part))).join('').replace(/[ \t]{2,}/g, ' ').trim();
+}
+
+function fixFalseStarts(part: string): string {
+  let t = part;
+  for (let i = 0; i < 5; i++) {
+    const m = SELF_FIX.exec(t);
+    if (!m) break;
+    const before = t.slice(0, m.index);
+    let start = 0;
+    for (const b of before.matchAll(/[.!?](?=\s)/g)) start = b.index + 1;
+    t = `${t.slice(0, start)}${start ? ' ' : ''}${t.slice(m.index + m[0].length)}`;
+  }
+  return t;
+}
+
+// ---------------------------------------------------------------------------
+// Frases puestas en boca de un jugador
+// ---------------------------------------------------------------------------
+
+const STOP = new Set(['el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'de', 'del', 'al', 'que', 'en', 'con', 'por', 'para', 'se', 'le', 'les', 'lo', 'me', 'te', 'mi', 'tu', 'su', 'es', 'si', 'ya', 'mas', 'pero', 'muy', 'yo', 'ni']);
+const words = (s: string) => norm(s).replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter(Boolean);
+
+/**
+ * ¿Sale esta frase de lo que escribió el jugador? Vale si al menos la mitad de
+ * sus palabras con contenido están en su entrada (o empiezan igual: «estás» y
+ * «esta»). «yo tambien quiero» de «yo tambien quiero», sí; «¡Quieto!» de «le
+ * ataco con la espada», no. Sin entrada (dudó o no actuó), nada es suyo.
+ */
+export function saidByPlayer(line: string, input: string | null | undefined): boolean {
+  if (!input) return false;
+  const all = words(line);
+  const content = all.filter((w) => w.length > 1 && !STOP.has(w));
+  const check = content.length ? content : all;
+  if (!check.length) return false;
+  const typed = words(input);
+  const found = check.filter((w) => typed.some((u) => u === w || (w.length >= 4 && u.length >= 4 && u.slice(0, 4) === w.slice(0, 4))));
+  return found.length * 2 >= check.length;
 }
 
 /**
