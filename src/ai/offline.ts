@@ -24,6 +24,8 @@ interface ParsedContext {
   npcs: { id: string; name: string; fights: boolean }[];
   scene: 'intro' | 'arrival' | 'decisive_timeout' | 'roll' | 'action';
   roll: { label: string; outcome: string } | null;
+  /** Recado: el motor ya le ha traído (línea de llegada) y queda lo que venía a hacer. */
+  errand: { line: string; action: string } | null;
 }
 
 /** Extrae del contexto (prompt.ts) lo que necesita la narración. Tolerante: si algo falta, lista vacía. */
@@ -46,7 +48,9 @@ export function parseContext(context: string): ParsedContext {
     : /^## Resultado de la tirada/m.test(context) ? 'roll' : 'action';
   const rm = /^## Resultado de la tirada\n.*\n(.+?): .+? → (ÉXITO|FALLO|sin CD)/m.exec(context);
   const roll = rm ? { label: rm[1]!, outcome: rm[2]! } : null;
-  return { actor, action, spots, exits, npcs, scene, roll };
+  const em = /^## Viaje ya hecho\n.*?: «(.*)»\. No uses move_to[\s\S]*?^Lo que venía a hacer: «(.*?)»\. En UNA/m.exec(context);
+  const errand = em ? { line: em[1]!, action: em[2]! } : null;
+  return { actor, action, spots, exits, npcs, scene, roll, errand };
 }
 
 /** 2-3 acciones sacadas de lo que hay en el contexto: un NPC, un punto, una salida. */
@@ -86,12 +90,14 @@ export function offlineLogEvent(context: string): Record<string, unknown> {
     case 'roll':
       return { ...base, narration_private: p.roll ? `${p.roll.label}: ${p.roll.outcome === 'ÉXITO' ? 'lo consigues' : p.roll.outcome === 'FALLO' ? 'no lo consigues' : 'el dado habla'}. Nada más cambia.` : 'La tirada se resuelve. Nada más cambia.', suggested_actions: sug };
     case 'action': {
-      const action = p.action ?? 'algo';
+      // Recado: la llegada delante y, de seguido, lo que venía a hacer.
+      const action = p.errand?.action ?? p.action ?? 'algo';
+      const lead = p.errand ? `${p.errand.line} ` : '';
       if (ATTACK_RE.test(action)) {
         const target = p.npcs.find((n) => n.fights) ?? p.npcs[0];
         if (target) {
           return {
-            ...base, narration_private: `Te lanzas contra ${target.name}.`, observable: `${p.actor} se lanza contra ${target.name}.`, observable_vague: 'Una figura se abalanza sobre algo.',
+            ...base, narration_private: `${lead}Te lanzas contra ${target.name}.`, observable: `${p.actor} se lanza contra ${target.name}.`, observable_vague: 'Una figura se abalanza sobre algo.',
             tags: 'offline,combat', suggested_actions: '',
             requires_roll_kind: 'attack', requires_roll_key: 'melee', requires_roll_dc: null, requires_roll_advantage: 'none', requires_roll_target: target.id,
           };
@@ -107,13 +113,13 @@ export function offlineLogEvent(context: string): Record<string, unknown> {
         const reply = 'Bienvenido. Aquí no se pregunta de dónde viene nadie: se paga y se bebe. ¿Qué te pongo?';
         return {
           ...base, tags: 'offline,social', npc_id: talkTo.id,
-          narration_private: `${said ? `«${said}», dices. ` : ''}${talkTo.name} levanta la vista. «${reply}»`,
+          narration_private: `${lead}${said ? `«${said}», dices. ` : ''}${talkTo.name} levanta la vista. «${reply}»`,
           observable: `${p.actor} habla con ${talkTo.name}.`,
           lines: [...(said ? [{ speaker: 'actor', npc_id: null, text: said }] : []), { speaker: 'npc', npc_id: talkTo.id, text: reply }],
           suggested_actions: sug,
         };
       }
-      return { ...base, narration_private: `Haces ${lower(action)}. Nada cambia.`, suggested_actions: sug };
+      return { ...base, narration_private: `${lead}Haces ${lower(action)}. Nada cambia.`, suggested_actions: sug };
     }
   }
 }

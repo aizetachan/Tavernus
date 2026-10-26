@@ -5,6 +5,7 @@ import { MASTER_TOOLS } from '../src/ai/tools.js';
 import { systemPrompt } from '../src/ai/prompt.js';
 import { seededRng } from '../src/engine/dice.js';
 import type { Delivery } from '../src/engine/events.js';
+import { moveTo } from '../src/engine/movement.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
 type Params = Anthropic.Beta.MessageCreateParamsNonStreaming;
@@ -300,22 +301,46 @@ describe('llegada narrada', () => {
     const time = fakeTime();
     const { engine } = await bootEngine(time);
     const seen = collect(engine);
+    // Un paseo que se espera (el motor lo pone en camino): la llegada la narra el master en su escena.
+    const kael = engine.world.character('ch_kael');
     const { client, requests } = fakeClient([
-      msg([use('move_to', { character_id: 'ch_kael', target_spot_id: 'sp_tab_mesa', pace: 'walk' }), logEvent('Cruzas la sala.', 'Kael se dirige a la mesa del fondo.')]),
       msg([logEvent('La mesa del fondo: un cofre cerrado y una vela apagada.', null, { suggested_actions: 'Abrir el cofre | Encender la vela' })]),
     ]);
     engine.attachMaster(new Master(engine, { client }));
-    await engine.act('ch_kael', 'voy a la mesa del fondo');
+    moveTo(engine.world, kael.id, 'sp_tab_mesa', 'walk', engine.gameNow());
     time.advanceGame(30);
     await engine.tick();
     // La cola de la localización procesa la llegada; esperamos a que termine.
     await engine.act('ch_kael', 'inventario');
-    expect(requests).toHaveLength(2);
-    expect(requests[1]!.messages[0]!.content as string).toContain('## Llegada');
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.messages[0]!.content as string).toContain('## Llegada');
     expect(seen('ch_kael')).toContain('La mesa del fondo: un cofre cerrado y una vela apagada.');
     expect(seen('ch_kael')).not.toContain('Llegas a la mesa del fondo.');
     const ev = engine.events.all().find((e) => e.action_type === 'master_arrival');
     expect(ev?.payload['suggested_actions']).toEqual(['Abrir el cofre', 'Encender la vela']);
+  });
+
+  it('con move_to el actor llega en el acto: lo que pide allí sale en la misma acción, sin otra escena de llegada', async () => {
+    const time = fakeTime();
+    const { engine } = await bootEngine(time);
+    const seen = collect(engine);
+    const { client, requests } = fakeClient([
+      msg([use('move_to', { character_id: 'ch_kael', target_spot_id: 'sp_tab_mesa', pace: 'walk' })]),
+      msg([logEvent('Cruzas la sala hasta la mesa del fondo: un cofre cerrado y una vela apagada.', 'Kael se dirige a la mesa del fondo.')]),
+    ]);
+    engine.attachMaster(new Master(engine, { client }));
+    await engine.act('ch_kael', 'voy a la mesa del fondo a ver qué hay');
+    const kael = engine.world.character('ch_kael');
+    expect(kael.transit).toBeNull();
+    expect(kael.location.id).toBe('sp_tab_mesa');
+    // El resultado de move_to le dice al master que ya está allí y qué hay.
+    const second = requests[1]!.messages.at(-1)!.content as { type: string; content?: string }[];
+    const result = JSON.parse(second.find((b) => b.type === 'tool_result')!.content!) as Record<string, unknown>;
+    expect(result['arrived']).toBe(true);
+    await engine.act('ch_kael', 'inventario');
+    expect(requests).toHaveLength(2);
+    expect(engine.events.all().some((e) => e.action_type === 'master_arrival')).toBe(false);
+    expect(seen('ch_kael')).toContain('Cruzas la sala hasta la mesa del fondo: un cofre cerrado y una vela apagada.');
   });
 });
 

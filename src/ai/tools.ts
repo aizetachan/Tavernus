@@ -86,7 +86,7 @@ export const MASTER_TOOLS: Tool[] = [
     advantage: enm(ADV, 'Ventaja o desventaja'),
   }),
 
-  tool('move_to', 'Pone al personaje en camino hacia un punto o hacia una localización (entra hasta su punto de entrada, cruzando las que haga falta). El servidor calcula ruta y tiempo; nunca es instantáneo.', {
+  tool('move_to', 'Pone al personaje en camino hacia un punto o hacia una localización (entra hasta su punto de entrada, cruzando las que haga falta). El servidor calcula ruta y tiempo. El actor llega en el acto (viaje rápido): los tools que vengan después en esta acción ya actúan en el destino. Devuelve arrived:false si algo le para por el camino.', {
     character_id: str('ID del personaje'),
     target_spot_id: nstr('ID del punto de destino, o null si vas a una localización'),
     target_location_id: nstr('ID de la localización de destino (entra en ella), o null si das un punto'),
@@ -631,7 +631,24 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!r.ok && r.error.code === 'unknown_spot') return { error: 'unknown_spot', detail: r.error, hint: `${targetSpot} no es un punto que el actor conozca. ${hereList(ctx)} Narra que no hay nada así; no lo inventes.` };
       if (!r.ok && r.error.code === 'locked') return { error: 'locked', detail: r.error, hint: `${world.spot(r.error.spot_id).name} está cerrado con llave para el actor: hace falta ${r.error.key_item_id ? world.itemDefs.get(r.error.key_item_id)?.name ?? r.error.key_item_id : 'la llave'} (la da quien vende su servicio, con buy_item o pawn_item)` };
       if (!r.ok) return { error: r.error.code, detail: r.error };
-      return { ok: true, destination: world.spot(r.transit.destination_spot_id).name, game_time: fmtDuration(r.total_s), real_time: engine.fastTravel && r.transit.legs.some((l) => l.via_exit_id) ? 'ninguno: viaje rápido, llega al acabar esta acción (no le hagas esperar)' : fmtDuration(engine.clock.gameToReal(r.total_s)), legs: r.transit.legs.map((l) => world.spot(l.to_spot_id).name) };
+      // El actor llega ya (viaje rápido): lo que haga después en esta acción ocurre en el destino y lo narras tú, de un tirón.
+      const goal = world.spot(r.transit.destination_spot_id);
+      const arrival = mover?.id === actor.id ? engine.arriveNow(actor) : null;
+      if (arrival) {
+        ctx.nowGameS = engine.nowFor(actor);
+        const at = world.characterSpot(actor);
+        if (!arrival.arrived) return { ok: true, arrived: false, destination: goal.name, stopped_at: at?.name ?? null, hint: 'No ha llegado: algo le para por el camino y el servidor lo cuenta aparte. Narra solo que sale; lo que iba a hacer allí queda pendiente: no lo hagas ni lo narres hecho.' };
+        const loc = world.location(goal.location_id);
+        const npcs = world.spotsOf(loc.id).flatMap((sp) => world.npcsAt(sp.id).filter((n) => n.status === 'alive').map((n) => `${n.name} [${n.id}] en ${sp.name}`));
+        const items = at ? world.itemsIn({ type: 'spot', id: at.id }).map((i) => `${world.itemDef(i.item_id).name} [${i.id}]`) : [];
+        return {
+          ok: true, arrived: true, destination: goal.name, location: loc.name, game_time: fmtDuration(r.total_s),
+          ...(arrival.first_visit ? { first_visit: true, description: loc.description_base } : {}),
+          npcs_here: npcs, items_here: items,
+          hint: 'Ya está allí: lo que hagas después en esta acción (transfer_item, harvest, hablar con npc_id…) ocurre en el destino. Narra el camino, la llegada y lo que hace allí en una sola narración; no habrá otra escena de llegada ni le preguntes qué quiere hacer.',
+        };
+      }
+      return { ok: true, destination: goal.name, game_time: fmtDuration(r.total_s), real_time: engine.fastTravel && r.transit.legs.some((l) => l.via_exit_id) ? 'ninguno: viaje rápido, llega al acabar esta acción (no le hagas esperar)' : fmtDuration(engine.clock.gameToReal(r.total_s)), legs: r.transit.legs.map((l) => world.spot(l.to_spot_id).name) };
     }
     case 'transfer_item': {
       const toType = s('to_type');
