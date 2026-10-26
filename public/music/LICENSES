@@ -1,5 +1,7 @@
 Música de la interfaz
 
-menu-theme.mp3
-  «Tavernus intro theme», tema del menú principal. Pista propia del proyecto,
+menu-instrumental.mp3
+  «Tavernus OST (instrumental)», tema del menú principal. Pista propia del proyecto,
   aportada por su autor (no procede de bancos de sonido ni lleva licencia de terceros).
+  Sustituye a menu-theme.mp3; el nombre cambia para que los navegadores no sigan con la
+  pista anterior en caché (/music/ se sirve con max-age de una semana).

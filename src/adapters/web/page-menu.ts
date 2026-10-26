@@ -658,7 +658,7 @@ export const MENU = String.raw`<!doctype html>
       .catch(function () { $('new-error').textContent = 'No hay conexión con el servidor.'; done(); });
   });
 
-  // Música del menú (public/music/menu-theme.mp3): en bucle y baja. El navegador no deja sonar nada antes
+  // Música del menú (public/music/menu-instrumental.mp3): en bucle y baja. El navegador no deja sonar nada antes
   // de que la persona toque la página, así que, si no puede empezar sola, empieza al primer clic o tecla.
   // El botón la silencia y se recuerda en este navegador.
   (function () {
@@ -666,7 +666,7 @@ export const MENU = String.raw`<!doctype html>
     var btn = $('music');
     var on = true;
     try { on = localStorage.getItem(KEY) !== 'off'; } catch (e) {}
-    var audio = new Audio('/music/menu-theme.mp3');
+    var audio = new Audio('/music/menu-instrumental.mp3');
     audio.loop = true; audio.preload = 'auto'; audio.volume = 0;
     var fade = null;
     function ramp(to, ms, then) {

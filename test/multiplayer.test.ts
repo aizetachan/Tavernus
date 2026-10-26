@@ -149,12 +149,12 @@ describe('invitaciones por asiento', () => {
   it('la música del menú se sirve sin invitación, por rangos, y solo nombres planos', async () => {
     await start(ACCESS);
     const anyone = browser();
-    const full = await anyone.get('/music/menu-theme.mp3');
+    const full = await anyone.get('/music/menu-instrumental.mp3');
     expect(full.status).toBe(200);
     expect(full.headers.get('content-type')).toBe('audio/mpeg');
     const size = Number(full.headers.get('content-length'));
     expect(size).toBeGreaterThan(1000);
-    const part = await anyone.get('/music/menu-theme.mp3', { headers: { range: 'bytes=0-99' } });
+    const part = await anyone.get('/music/menu-instrumental.mp3', { headers: { range: 'bytes=0-99' } });
     expect(part.status).toBe(206);
     expect(part.headers.get('content-range')).toBe(`bytes 0-99/${size}`);
     expect((await part.arrayBuffer()).byteLength).toBe(100);
