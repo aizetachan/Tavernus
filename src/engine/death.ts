@@ -28,7 +28,7 @@
 import { GameClock, GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
 import { abilityModifier, rollDie, type Rng } from './dice.js';
 import { directlyCarried } from './inventory.js';
-import type { CarrySlot, Character, DeathRules, Id, ItemDef, ItemInstance } from './model.js';
+import type { CarrySlot, Character, DeathRules, Id, ItemDef, ItemInstance, Npc } from './model.js';
 import { ABILITY_ES, type Ability } from './rules.js';
 import type { World } from './world.js';
 
@@ -70,7 +70,7 @@ export function isStable(c: Character): boolean {
   return c.status === 'unconscious' && c.hp_current === 0 && (c.dying?.stable_until_game_s != null || c.conditions.some((x) => x.name === STABLE));
 }
 
-function worldNow(world: World): number {
+export function worldNow(world: World): number {
   return GameClock.fromCampaign(world.campaign).gameNow();
 }
 
@@ -399,4 +399,78 @@ export function lootBody(world: World, actor: Character, body: ItemInstance, put
 /** Cuerpos (o cosas dejadas) en un punto. */
 export function bodiesAt(world: World, spotId: Id): ItemInstance[] {
   return world.itemsIn({ type: 'spot', id: spotId }).filter((i) => bodyStateOf(i));
+}
+
+// ---------------------------------------------------------------------------
+// Muerte de un NPC
+// ---------------------------------------------------------------------------
+
+/**
+ * Un NPC muere (a 0 PG en combate o por daño): se queda donde cae, como cuerpo
+ * (sigue en su punto con `status: 'dead'`), lo que llevaba cae al suelo y deja
+ * de hablar con nadie. El motor lo anuncia una vez a quien esté y hace
+ * reaccionar al sitio (engine.announceDeathStates). Devuelve false si ya
+ * estaba muerto.
+ */
+export function killNpc(world: World, n: Npc, nowG: number, by: { id: Id; name: string } | null, cause: string): boolean {
+  if (n.status === 'dead') return false;
+  n.status = 'dead';
+  if (n.stats) n.stats.hp = 0;
+  n.talking_to = null;
+  n.death = { died_game_s: nowG, by_id: by?.id ?? null, by_name: by?.name ?? null, cause, told: false };
+  for (const i of world.itemsIn({ type: 'npc', id: n.id })) { i.location = { type: 'spot', id: n.location.id }; world.touch('item_instances', i.id); }
+  world.touch('npcs', n.id);
+  return true;
+}
+
+/** Lo que se cuenta de una muerte de NPC y quién la ha visto (engine.announceNpcDeath). */
+export interface NpcDeathReport {
+  /** Para todos los presentes: «la guardia» o su nombre lo pone cada lector (events.ts). */
+  observable: string;
+  /** Para quien lo mató, si es un PJ: en segunda persona. */
+  killer_text: string | null;
+  /** NPC presentes que lo han visto (ya recuerdan quién fue y le miran peor). */
+  witnesses: Id[];
+}
+
+/**
+ * La muerte de un NPC vista desde el sitio: el cuerpo queda en su punto, la
+ * gente de la agenda que hay allí se aparta y los NPC presentes recuerdan
+ * para siempre quién fue (memoria de importancia 3) y le miran peor (si eran
+ * neutrales o mejor, pasan a recelar). Sin IA: el máster lo lee después en el
+ * contexto.
+ */
+export function npcDeathReport(world: World, n: Npc, crowd: string | null, nowG: number): NpcDeathReport {
+  const d = n.death!;
+  const spot = world.spot(n.location.id);
+  const killer = d.by_id ? world.characters.get(d.by_id) ?? null : null;
+  const seen: Id[] = [];
+  for (const o of world.npcs.values()) {
+    if (o.id === n.id || o.id === d.by_id || o.status !== 'alive' || world.spot(o.location.id).location_id !== spot.location_id) continue;
+    seen.push(o.id);
+    if (!killer) continue;
+    o.memory.push({ character_id: killer.id, game_s: nowG, note: `Vio cómo ${killer.name} mataba a ${n.name} en ${spot.name}.`, importance: 3 });
+    const a = o.attitude.by_character[killer.id] ?? o.attitude.default;
+    if (a === 'neutral' || a === 'friendly' || a === 'allied') o.attitude.by_character[killer.id] = 'unfriendly';
+    world.touch('npcs', o.id);
+  }
+  const by = d.by_name ? ` por el golpe de ${d.by_name}` : '';
+  const around = crowd ? ` ${cap(crowd)} se apartan del cuerpo; alguien grita y otros salen a toda prisa.` : seen.length ? ' Quienes están cerca se quedan mirando el cuerpo, sin moverse.' : '';
+  return {
+    observable: `☠ ${n.name} cae al suelo y ya no se mueve: ha muerto${by}. El cuerpo queda en ${spot.name}.${around}`,
+    killer_text: killer ? `☠ ${n.name} cae al suelo y ya no se mueve: ha muerto por tu golpe. El cuerpo queda en ${spot.name}.${around}` : null,
+    witnesses: seen,
+  };
+}
+
+function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+/** NPC muertos cuyo cuerpo está en este punto. */
+export function deadNpcsAt(world: World, spotId: Id): Npc[] {
+  return [...world.npcs.values()].filter((n) => n.status === 'dead' && n.location.id === spotId);
+}
+
+/** «el cuerpo de Doro» (o de «la guardia», si el lector no sabe su nombre). */
+export function npcBodyName(label: string): string {
+  return `el cuerpo de ${label}`;
 }

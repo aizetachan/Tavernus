@@ -33,7 +33,8 @@ import { conversationBlock, conversationOf } from '../engine/conversation.js';
 import { offersOf, pcName } from '../engine/party.js';
 import { pendingFrom } from '../engine/reactions.js';
 import { RULES_CHEATSHEET } from './rules-cheatsheet.js';
-import { bodiesAt, bodyStateOf, isDying, isStable } from '../engine/death.js';
+import { bodiesAt, bodyStateOf, deadNpcsAt, isDying, isStable } from '../engine/death.js';
+import { recentNpcLines } from '../engine/closecheck.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { hhmm } from '../engine/schedule.js';
 
@@ -275,6 +276,12 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       const dead = owner.status === 'dead';
       present.push(`- ${world.itemDef(b.item_id).name} [${b.id}] en ${sp.name}: ${dead ? `${owner.name} está MUERTO (modo ${st.mode}); vuelve solo, por el servidor; no narres que se levanta ni que resucita.` : `lo que ${owner.name} dejó al morir (ya ha vuelto).`} ${st.mode === 'casual' ? `Solo ${owner.name} puede coger lo que hay dentro.` : 'Cualquiera puede saquearlo.'}`);
     }
+    // NPC muertos: el cuerpo sigue ahí hasta que alguien se lo lleve; los vivos lo ven y reaccionan.
+    for (const n of deadNpcsAt(world, sp.id)) {
+      const d = n.death;
+      const label = actor.knows.includes(n.id) ? n.name : descriptorOf(world, n.id);
+      present.push(`- El cuerpo de ${label} [${n.id}] en ${sp.name}: MUERTO${d ? ` desde las ${hhmm(d.died_game_s)}${d.by_name ? `, a manos de ${d.by_name}` : ''}` : ''}. No se levanta, no habla y no desaparece; quien esté y lo vea reacciona (miedo, rabia, avisar a alguien). Lo que llevaba está en el suelo.`);
+    }
   }
   for (const n of world.npcs.values()) {
     const ns = world.spot(n.location.id);
@@ -293,6 +300,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       `  Quiere: ${dot(n.motivation)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage}).` : ' No combate.'}`,
       n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${b.price}`).join(', ')}` : '',
       n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${b.price}`).join(', ')}` : '',
+      carriedBy(world, n.id),
+      saidBy(engine.events.recentInLocation(loc.id, 60), n.id),
       n.secret ? `  Solo tú sabes (NUNCA lo reveles ni lo insinúes por tu cuenta): ${dot(n.secret)} Sale solo a medias y si se lo gana: confianza en varias charlas, presión creíble o tirada social contra CD alta.` : '',
       `  Recuerda de ${actor.name}: ${mine.length ? mine.join(' · ') : 'nada, es la primera vez que hablan'}`,
       others.length ? `  Recuerda de otros: ${others.join(' · ')}` : '',
@@ -450,4 +459,16 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     ...(heard.length ? [`De otros sitios, que ${actor.name} ya conoce:`, ...heard.map((r) => `- ${describeRumor(r)} (en ${world.locations.get(r.location_id)?.name ?? r.location_id})`)] : []),
   ].join('\n'));
   return L.join('\n\n');
+}
+
+/** Lo que lleva encima un NPC (con IDs, para transfer_item): sin esto el máster lo inventa con spawn_item. */
+function carriedBy(world: Engine['world'], npcId: Id): string {
+  const items = world.itemsIn({ type: 'npc', id: npcId });
+  return items.length ? `  Lleva: ${items.map((i) => `${world.itemDef(i.item_id).name}${i.quantity > 1 ? ` ×${i.quantity}` : ''} [${i.id}]`).join(', ')}` : '';
+}
+
+/** Lo último que ha dicho un NPC aquí: para que no repita la misma frase (closecheck.ts lo rechaza). */
+function saidBy(events: readonly GameEvent[], npcId: Id): string {
+  const said = recentNpcLines(events, npcId).slice(-4);
+  return said.length ? `  Ya ha dicho hace poco (no lo repitas; si vuelve al tema, dilo de otra manera o con algo nuevo): ${said.map((t) => `«${t}»`).join(' · ')}` : '';
 }

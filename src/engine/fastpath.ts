@@ -213,17 +213,22 @@ export function encounterChance(world: World, loc: Location): number {
 // Acciones sugeridas desde el estado
 // ---------------------------------------------------------------------------
 
-/** 3-4 acciones con el mismo texto canónico que envía el tablero web. */
+/**
+ * 3-4 acciones con el mismo texto canónico que envía el tablero web. Si el PJ
+ * va de camino, desde su destino: lo que deja atrás ya no le sirve («Coger
+ * agua del pozo» al salir de la plaza).
+ */
 export function suggestActions(world: World, clock: GameClock, c: Character, nowGameS: number, max = 4): string[] {
-  const pos = positionOf(world, c, nowGameS);
+  const goal = c.transit ? world.spots.get(c.transit.destination_spot_id) : undefined;
+  const pos = goal ? { spot_id: goal.id, next_spot_id: null, progress: 0, x: goal.x, y: goal.y, location_id: goal.location_id } : positionOf(world, c, nowGameS);
   const out: string[] = [];
-  // Alguien con quien hablar, por cómo lo ve el PJ.
+  // Alguien con quien hablar, por cómo lo ve el PJ (de camino, quien hay en el sitio adonde va).
   for (const n of world.npcs.values()) {
     if (n.status !== 'alive') continue;
     const ns = world.spot(n.location.id);
     if (ns.location_id !== pos.location_id) continue;
     if (attitudeOf(n, c.id) === 'hostile') continue;
-    const p = perceive(world, clock, c, { spot_id: ns.id, next_spot_id: null, progress: 0, x: ns.x, y: ns.y, location_id: ns.location_id }, nowGameS);
+    const p = goal ? { sight: 'full' } : perceive(world, clock, c, { spot_id: ns.id, next_spot_id: null, progress: 0, x: ns.x, y: ns.y, location_id: ns.location_id }, nowGameS);
     if (p.sight !== 'full') continue;
     out.push(`Hablar con ${c.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)}`);
     break;

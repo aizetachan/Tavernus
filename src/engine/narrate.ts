@@ -51,6 +51,10 @@ export function describeSurroundings(world: World, clock: GameClock, c: Characte
     else if (p.sight === 'vague') people.push(`alguien ${where}`);
   }
   if (people.length) lines.push(`Ves: ${people.join('; ')}.`);
+  // Cuerpos de NPC muertos: siguen donde cayeron.
+  const bodies = [...world.npcs.values()].filter((n) => n.status === 'dead' && world.spots.get(n.location.id)?.location_id === loc.id)
+    .map((n) => `el cuerpo de ${c.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)}${n.location.id === pos.spot_id ? ' aquí mismo' : ` en ${world.spot(n.location.id).name}`}`);
+  if (bodies.length) lines.push(`En el suelo: ${bodies.join('; ')}.`);
   // Gente de la agenda (schedule.ts): el mercado, la misa… como presencia del lugar.
   const crowd = presenceLine(world, loc.id, nowGameS);
   if (crowd) lines.push(crowd);
@@ -199,7 +203,10 @@ export function maskUnknownNames(world: World, readerId: Id, text: string): stri
   // Los PJ de la partida se conocen siempre por su nombre: solo se enmascaran NPC.
   for (const n of world.npcs.values()) {
     if (reader.knows.includes(n.id)) continue;
-    out = out.replace(new RegExp(`\\b${escapeRe(n.name)}\\b`, 'g'), descriptorOf(world, n.id));
+    const desc = descriptorOf(world, n.id);
+    // «Ilse, la curandera» → «la curandera» (no «la curandera, la curandera»).
+    out = out.replace(new RegExp(`\\b${escapeRe(n.name)},\\s*${escapeRe(desc)}\\b`, 'g'), desc);
+    out = out.replace(new RegExp(`\\b${escapeRe(n.name)}\\b`, 'g'), desc);
   }
   return out;
 }

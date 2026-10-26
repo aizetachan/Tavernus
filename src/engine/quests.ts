@@ -170,7 +170,11 @@ export function readBoard(world: World, c: Character, nowS: number): Job[] {
   const seen = h.board_seen ??= {};
   const fresh = activeJobs(world).filter((j) => seen[j.id] === undefined && !c.completed_jobs.includes(j.id));
   if (!fresh.length) return [];
-  for (const j of fresh) seen[j.id] = nowS;
+  for (const j of fresh) {
+    seen[j.id] = nowS;
+    // El aviso lleva el nombre de quien lo pide («lo pide Mateo»): leído, se sabe.
+    if (world.npcs.has(j.giver_npc_id) && !c.knows.includes(j.giver_npc_id)) c.knows.push(j.giver_npc_id);
+  }
   world.touch('characters', c.id);
   return fresh;
 }

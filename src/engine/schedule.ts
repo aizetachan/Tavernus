@@ -419,6 +419,12 @@ export function activeIn(world: World, locationId: Id, nowS: number): { event: S
   return out;
 }
 
+/** La gente de la agenda que hay ahora en una localización («unos diez vecinos»), o null si no hay nadie. */
+export function crowdHere(world: World, locationId: Id, nowS: number): string | null {
+  const cs = activeIn(world, locationId, nowS).flatMap(({ event }) => event.crowd);
+  return cs.length ? crowdList(cs) : null;
+}
+
 /** Una frase para quien está allí (plantillas de llegada y /look). Null si no pasa nada. */
 export function presenceLine(world: World, locationId: Id, nowS: number): string | null {
   const now = activeIn(world, locationId, nowS);
@@ -519,6 +525,20 @@ function norm(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^(el|la|los|las)\s+/, '').trim();
 }
 
+/**
+ * El título se lee dentro de frases del motor: «Empieza la misa», «Hugo se va
+ * de la fragua, camino de la cena», «llega a la barra para la cena». Tiene que
+ * ser un nombre con artículo y no nombrar a quien acude («Tobías va al
+ * granero» daba «camino de Tobías va al granero»). Null si vale.
+ */
+export function scheduleTitleProblem(title: string, attendeeNames: readonly string[]): string | null {
+  const t = title.trim();
+  if (!/^(el|la|los|las|un|una|unos|unas)\s/i.test(t)) return `el título «${t}» va sin artículo: se lee dentro de frases («Empieza …», «va camino de …»); ponlo como «la misa», «el mercado»`;
+  const named = attendeeNames.find((n) => n && new RegExp(`(^|[^\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\p{L}]|$)`, 'iu').test(t));
+  if (named) return `el título «${t}» nombra a ${named}, que acude: se leería «${named} va camino de ${t}»; dale nombre de cosa («la escapada al granero»)`;
+  return null;
+}
+
 export function findScheduled(world: World, locationId: Id, title: string): ScheduledEvent | null {
   return events(world).find((e) => e.location_id === locationId && norm(e.title) === norm(title)) ?? null;
 }
@@ -559,6 +579,8 @@ export function addScheduledEvent(world: World, input: ScheduleInput, nowS: numb
   const npcIds = [...new Set(input.npc_ids ?? [])];
   const busy = [...new Set(input.busy_npc_ids ?? [])];
   for (const id of [...npcIds, ...busy]) if (!world.npcs.has(id)) return { ok: false, error: `no existe el NPC ${id}` };
+  const badTitle = scheduleTitleProblem(title, npcIds.map((id) => world.npc(id).name));
+  if (badTitle) return { ok: false, error: badTitle };
   if (events(world).length >= MAX_EVENTS) return { ok: false, error: 'la agenda está llena' };
   if (events(world).filter((e) => e.location_id === loc.id).length >= MAX_EVENTS_PER_LOCATION) return { ok: false, error: 'demasiados eventos en esta localización' };
 

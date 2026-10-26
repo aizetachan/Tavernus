@@ -5,7 +5,7 @@
  */
 
 import { GAME_DAY } from '../clock/clock.js';
-import { spawnItem, transferItem } from './inventory.js';
+import { consumeItem, spawnItem, transferItem } from './inventory.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
 import type { World } from './world.js';
 
@@ -184,6 +184,14 @@ export function deliverGoods(world: World, c: Character, npc: Npc, itemId: Id, q
   let placed = false;
   for (const t of targets) if (spawnItem(world, give.id, def.service ? 1 : q, t).ok) { placed = true; break; }
   if (!placed && !spawnItem(world, give.id, def.service ? 1 : q, { type: 'spot', id: npc.location.id }).ok) return { ok: false, reason: 'no hay dónde ponerlo' };
+  // Lo que vende y lleva encima (sus existencias, campaign data) sale de ahí: no se puede comprar y luego robarle el mismo frasco.
+  let owed = def.service ? 0 : q;
+  for (const i of world.itemsIn({ type: 'npc', id: npc.id }).filter((x) => x.item_id === itemId)) {
+    if (owed <= 0) break;
+    const take = Math.min(owed, i.quantity);
+    consumeItem(world, i.id, take);
+    owed -= take;
+  }
   const unlocked: string[] = [];
   if (def.service) {
     const locId = world.spot(npc.location.id).location_id;

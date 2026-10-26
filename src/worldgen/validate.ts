@@ -16,7 +16,7 @@ import { SRD_STAT_RANGES } from './skeleton.js';
 import type { Id, WorldSnapshot } from '../engine/model.js';
 import type { Hook } from '../engine/hooks.js';
 import { RUMOR_KINDS, type Rumor } from '../engine/rumors.js';
-import { RECURRENCES, type NpcRoutine, type ScheduledEvent } from '../engine/schedule.js';
+import { RECURRENCES, scheduleTitleProblem, type NpcRoutine, type ScheduledEvent } from '../engine/schedule.js';
 import { validateStory, type Story } from '../engine/story.js';
 import type { EncounterTable } from '../engine/travel.js';
 
@@ -188,6 +188,7 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
     if (s.debt && (!npcs.has(s.debt.npc_id) || !(s.debt.amount > 0) || blank(s.debt.reason))) errs.push(`situación de ${who}: deuda mal formada.`);
     for (const it of s.items ?? []) if (!defs.has(it.item_id)) errs.push(`situación de ${who}: el objeto ${it.item_id} no existe.`);
     for (const id of s.knows ?? []) if (!npcs.has(id)) errs.push(`situación de ${who}: conoce a ${id}, que no existe.`);
+    for (const id of s.with_npc_ids ?? []) if (!isPerson(id)) errs.push(`situación de ${who}: la apertura pone con el PJ a ${id}, que no existe o no es una persona.`);
   }
 
   // Agenda, ganchos, rumores, encuentros
@@ -197,6 +198,8 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
     if (!RECURRENCES.includes(e.recurrence)) errs.push(`evento ${e.id}: recurrencia no válida.`);
     if (!(e.start_h >= 0 && e.start_h < 24) || !(e.duration_min > 0)) errs.push(`evento ${e.id}: hora o duración no válidas.`);
     for (const id of [...e.npc_ids, ...(e.effects.busy_npc_ids ?? [])]) if (!npcs.has(id)) errs.push(`evento ${e.id}: el NPC ${id} no existe.`);
+    const badTitle = scheduleTitleProblem(e.title, e.npc_ids.map((id) => npcs.get(id)?.name ?? ''));
+    if (badTitle) errs.push(`evento ${e.id}: ${badTitle}.`);
   }
   for (const h of c.hooks ?? []) {
     if (!locs.has(h.location_id)) errs.push(`gancho ${h.id}: la localización ${h.location_id} no existe.`);

@@ -177,6 +177,35 @@ export function findOffer(world: World, offerId: Id): { offer: Offer; to: Charac
   return null;
 }
 
+/**
+ * Respuesta escrita a una oferta: «acepto», «acepto la cerveza», «la cojo»,
+ * «no la quiero». `what` es lo que nombra (para elegir entre varias ofertas).
+ * Solo la frase entera; con más cosas va por su camino.
+ */
+export function parseOfferAnswer(text: string): { accept: boolean; what: string | null } | null {
+  const t = text.trim().replace(/[.!]+$/, '').trim();
+  let m = /^(?:acepto|aceptar|aceptarla|aceptarlo|la acepto|lo acepto|las acepto|los acepto|la cojo|lo cojo|cojo|coger|cogerla|cogerlo|la tomo|lo tomo|tomo|recibo)(?:\s+(.+))?$/i.exec(t);
+  if (m) return { accept: true, what: m[1]?.trim() || null };
+  m = /^(?:rechazo|rechazar|no acepto|no la quiero|no lo quiero|no, gracias|no gracias)(?:\s+(.+))?$/i.exec(t);
+  if (m) return { accept: false, what: m[1]?.trim() || null };
+  return null;
+}
+
+/** La oferta viva a la que contesta: la única si no nombra nada; si nombra, la que lo lleva en su etiqueta o viene de ese PJ. */
+export function offerAnswered(world: World, c: Character, what: string | null, nowMs: number): Offer | null {
+  const live = offersOf(c, nowMs);
+  if (!live.length) return null;
+  if (!what) return live.length === 1 ? live[0]! : null;
+  const plain = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const words = plain(what).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 4 && !/^(esta|este|esto|esa|ese|eso|aquella|aquel|tuya|tuyo)$/.test(w));
+  const hits = live.filter((o) => {
+    const from = world.characters.get(o.from_id)?.name ?? '';
+    const label = plain(`${o.label} ${from}`);
+    return words.some((w) => label.includes(w) || label.includes(w.replace(/s$/, '')));
+  });
+  return hits.length === 1 ? hits[0]! : !words.length && live.length === 1 ? live[0]! : null;
+}
+
 export function dropOffer(world: World, to: Character, offerId: Id): void {
   to.offers = (to.offers ?? []).filter((o) => o.id !== offerId);
   if (!to.offers.length) delete to.offers;

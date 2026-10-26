@@ -43,6 +43,9 @@ export const ITEMS: AuthoredInstance[] = [
   { id: 'ii_bolsa_ceniza', item_id: 'it_bolsa_ceniza', quantity: 1, at: { spot: 'sp_mo_desvan' } },
   { id: 'ii_copa_vharn', item_id: 'it_copa_vharn', quantity: 1, at: { spot: 'sp_ca_arcon' } },
   { id: 'ii_llave_arcon', item_id: 'it_llave_arcon', quantity: 1, at: { npc: 'npc_garran' } },
+  // Lo que Ilse vende lo tiene a mano, en su mesa de hierbas: se compra o se roba de aquí.
+  { id: 'ii_ilse_tonico', item_id: 'it_tonico', quantity: 3, at: { npc: 'npc_ilse' } },
+  { id: 'ii_ilse_pocion', item_id: 'it_pocion', quantity: 1, at: { npc: 'npc_ilse' } },
   // El agua del pozo, a mano para quien quiera llevársela
   { id: 'ii_agua_pozo', item_id: 'it_agua_pozo', quantity: 3, at: { spot: 'sp_pl_pozo' } },
   // Herramientas sueltas
