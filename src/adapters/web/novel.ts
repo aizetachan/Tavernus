@@ -468,7 +468,7 @@ export const NOVEL_JS = String.raw`
    * Aviso de sistema (notice.ts), como «Fulano ha salido del grupo» en WhatsApp: una línea centrada sin burbuja.
    * Si lleva enlace, abre su pestaña (el Diario); si es una tirada, el dado del botón cae en lo que ha salido.
    */
-  function addNotice(n) {
+  function addNotice(n, other) {
     var div = document.createElement('div');
     div.className = 'msg notice' + (n.tone ? ' tone-' + n.tone : '');
     div.setAttribute('role', 'status');
@@ -482,7 +482,7 @@ export const NOVEL_JS = String.raw`
       div.appendChild(b);
     }
     log.appendChild(div);
-    diceShown(n.text);
+    if (!other) diceShown(n.text);
     scroll();
     return div;
   }
@@ -546,13 +546,13 @@ export const NOVEL_JS = String.raw`
     };
     var narrate = function (text) {
       if (m.narrator || m.kind === 'master') return chatRow('master', cast.master, format(text));
-      return add('system', text);
+      return add('system', text, m.dice === 'other' ? { other: true } : undefined);
     };
     // Si el jugador no habla en este turno, su mensaje es lo que ha hecho (en cursiva).
     if (m.input && !lines.some(function (l) { return l.speaker === 'actor'; })) chatRow('mine', meWho(), format(m.input), { act: true });
     if (m.notice) {
       // Un aviso no es narración: su línea y, debajo, lo que traiga (momentos, opciones, oferta).
-      main = addNotice(m.notice);
+      main = addNotice(m.notice, m.dice === 'other');
     } else if (m.blocks && m.blocks.length) {
       // El turno en su orden real: narrador, personaje, narrador… cada trozo en su burbuja.
       // La frase que presenta a quien habla (lead) va dentro de la burbuja de ese personaje.

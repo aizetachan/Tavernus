@@ -911,7 +911,8 @@ ${PAINT_STYLE}
     div.className = 'msg ' + kind + (extra && extra.error ? ' error' : '') + (kind === 'system' ? ' tone-' + toneOf(text, extra) : '');
     div.innerHTML = (kind === 'master' ? '<div class="who">' + SPARK + 'Máster</div>' : '') + '<div class="body">' + format(text) + '</div>';
     log.appendChild(div);
-    if (kind === 'system') diceShown(text);
+    // La tirada propia marca su botón y para el dado; la de otro jugador es solo el aviso.
+    if (kind === 'system' && !(extra && extra.other)) diceShown(text);
     scroll();
     return div;
   }

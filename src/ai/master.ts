@@ -13,6 +13,7 @@ import { executeTool, MASTER_TOOLS, WRITE_TOOLS, type LogEventInput, type ToolCo
 import type { Approach } from '../engine/movement.js';
 import { rollCategory } from '../engine/closecheck.js';
 import type { ProgressEvent } from '../engine/progress.js';
+import type { ShownRoll } from '../engine/rolls.js';
 
 export interface MasterClient {
   create(params: Anthropic.Beta.MessageCreateParamsNonStreaming): Promise<Anthropic.Beta.BetaMessage>;
@@ -39,7 +40,7 @@ export function failureNotice(f: { name: string; error: string }): string {
 }
 
 export type MasterOutcome =
-  | { ok: true; closed: LogEventInput; usage: MasterUsage; calls: ToolCallRecord[]; rolls: RollResult[]; context: string; model: string; progress: ProgressEvent[]; tool_errors?: ToolFailure[]; approach?: Approach }
+  | { ok: true; closed: LogEventInput; usage: MasterUsage; calls: ToolCallRecord[]; rolls: RollResult[]; context: string; model: string; progress: ProgressEvent[]; shown_rolls: ShownRoll[]; tool_errors?: ToolFailure[]; approach?: Approach }
   | { ok: false; reason: 'refusal' | 'no_log_event' | 'api_error' | 'max_iterations' | 'not_configured'; message: string; usage?: MasterUsage; calls?: ToolCallRecord[] };
 
 export interface MasterOptions {
@@ -126,7 +127,7 @@ export class Master {
     const failures: ToolFailure[] = [];
     /** Cierre aceptado: con tool_failed y los errores si algo de escritura falló por el camino. */
     const done = (closed: LogEventInput, m: string): MasterOutcome => ({
-      ok: true, closed: failures.length ? { ...closed, tags: [...closed.tags, 'tool_failed'] } : closed, usage, calls, rolls: ctx.rolls, context, model: m, progress: ctx.progress,
+      ok: true, closed: failures.length ? { ...closed, tags: [...closed.tags, 'tool_failed'] } : closed, usage, calls, rolls: ctx.rolls, context, model: m, progress: ctx.progress, shown_rolls: ctx.shown_rolls ?? [],
       ...(failures.length ? { tool_errors: failures } : {}), ...(ctx.approach ? { approach: ctx.approach } : {}),
     });
     const usage: MasterUsage = { input: 0, output: 0, cache_read: 0, cache_write: 0, iterations: 0, ms: 0 };

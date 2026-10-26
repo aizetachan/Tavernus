@@ -33,6 +33,7 @@ import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, de
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
+import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
 type Tool = Anthropic.Beta.BetaTool;
@@ -78,12 +79,13 @@ export const MASTER_TOOLS: Tool[] = [
     reason: str('Para qué es la tirada'),
     dc: nnum('CD a superar, o null'),
   }),
-  tool('roll_check', 'Tirada oculta de un personaje (percepción pasiva, sigilo que no se anuncia, NPC contra PJ). No la uses para la acción principal del jugador: eso va con requires_roll en log_event.', {
+  tool('roll_check', 'Prueba de un personaje que tira el servidor: la que hace a sabiendas (en un turno compartido, la de cada PJ) o una oculta (percepción pasiva, sigilo que no se anuncia, NPC contra PJ). No la uses para la acción principal del jugador en su turno: eso va con requires_roll en log_event.', {
     character_id: str('ID del personaje que tira'),
     kind: enm(ROLL_KINDS, 'Tipo de prueba'),
     key: str('Skill 5e en inglés (athletics, stealth, perception…), característica (str/dex/…) o "melee"/"ranged" para ataque'),
     dc: nnum('CD, o null si es enfrentada'),
     advantage: enm(ADV, 'Ventaja o desventaja'),
+    hidden: bool('true si el PJ no debe saber que se tira (percepción pasiva, sigilo que no se anuncia); false si la hace a sabiendas: la ven él y los presentes'),
   }),
 
   tool('move_to', 'Pone al personaje en camino hacia un punto o hacia una localización (entra hasta su punto de entrada, cruzando las que haga falta). El servidor calcula ruta y tiempo; nunca es instantáneo.', {
@@ -278,6 +280,8 @@ export interface ToolContext {
   /** Rellenado por log_event. */
   closed: LogEventInput | null;
   rolls: RollResult[];
+  /** Tiradas a la vista (rolls.ts): el motor las emite tras el cierre, para quien tira y quien está con él. */
+  shown_rolls?: ShownRoll[];
   /** Avisos de progreso (pista, encargo, práctica, logro) para emitir como sistema tras la acción. */
   progress: ProgressEvent[];
   /** Texto de la acción del jugador, como procedencia de lo que se siembre (rumores). */
@@ -605,6 +609,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const c = world.character(s('character_id'));
       const r: CheckResult & { label: string } = characterCheck(c, s('kind') as CheckKind, s('kind') === 'skill' ? normalizeSkill(s('key')) : s('key'), input['dc'] == null ? null : Number(input['dc']), (s('advantage') || 'none') as Advantage, ctx.rng);
       ctx.rolls.push(r);
+      if (input['hidden'] !== true) (ctx.shown_rolls ??= []).push(checkRoll(c.id, r));
       return { character: c.name, check: r.label, breakdown: r.breakdown, total: r.total, success: r.success, natural: r.natural ?? null };
     }
     case 'move_to': {
@@ -702,6 +707,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const node = world.resourceNode(s('node_id'));
       const check = characterCheck(c, 'skill', node.skill, node.dc, 'none', ctx.rng);
       ctx.rolls.push(check);
+      (ctx.shown_rolls ??= []).push(checkRoll(c.id, check));
       const r = harvest(world, c, node.id, check.success === true, nowGameS);
       if (node.dc >= world.campaign.progression.practice_min_dc) { const pe = addPractice(world, c, node.skill); if (pe) ctx.progress.push(pe); }
       if (!r.ok) return { error: r.code, check: check.breakdown, regen: r.regen };
@@ -796,6 +802,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const r = resolveAttack(world, s('attacker_id'), s('target_id'), (ADV.includes(s('advantage')) ? s('advantage') : 'none') as Advantage, ctx.rng, nowGameS);
       if ('error' in r) return { error: r.error };
       ctx.rolls.push({ expr: 'attack', total: r.attack_total, breakdown: r.attack_breakdown, rolls: [] });
+      // Las tiradas de los enemigos son ocultas (SPEC §9.3); la del PJ que ataca, a la vista.
+      if (world.characters.has(s('attacker_id'))) (ctx.shown_rolls ??= []).push(attackRoll(s('attacker_id'), s('target_id'), r));
       return r;
     }
     case 'apply_damage': {
@@ -843,6 +851,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (pc.status !== 'active') return { error: `${pc.name} no puede atenderle (${pc.status})` };
         const roll = characterCheck(pc, 'skill', 'medicine', medicineDc(), 'none', ctx.rng);
         ctx.rolls.push({ expr: 'medicine', total: roll.total, breakdown: roll.breakdown, rolls: [] });
+        (ctx.shown_rolls ??= []).push({ ...checkRoll(pc.id, roll), target_id: c.id, label: `${roll.label} para estabilizar a ${c.name}` });
         if (!roll.success) return { ok: true, stabilized: false, roll: roll.breakdown, note: 'falla la Medicina: sigue cayendo (puede volver a intentarlo)' };
         stabilize(world, c, nowGameS, pc.name, `estabilizado por ${pc.name}`, ctx.rng);
         return { ok: true, stabilized: true, roll: roll.breakdown };
