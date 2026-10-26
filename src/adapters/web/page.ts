@@ -553,6 +553,15 @@ ${FIGHT_STYLE}
   form button.mode.say { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
   form button.mode .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
   form.say input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
+  /* «Responder» a un mensaje: su frase citada encima del cuadro, como en WhatsApp; la ✕ deja de responder. */
+  .quote { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px max(24px, calc((100% - 980px) / 2)) 0; background: var(--panel); border-top: 1px solid var(--sep); }
+  .quote[hidden] { display: none; }
+  .quote + form { border-top: 0; }
+  .quote > div { flex: 1; min-width: 0; padding: 6px 10px; border-left: 3px solid var(--accent); border-radius: 8px; background: var(--control); }
+  .quote b { display: block; font-size: 12.5px; color: var(--accent); }
+  .quote span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
+  .quote button { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; }
+  .quote button:hover { background: var(--hover); color: var(--text); }
   /* Otro jugador escribiendo y la ronda de una escena tensa: una línea encima del cuadro. */
   /* «Esperando a <jugador>» cuando la acción va en cola (multijugador); el resto de la espera son los puntos del hilo. */
   #thinking { position: relative; min-height: 0; padding: 0 max(24px, calc((100% - 980px) / 2)); color: var(--muted); font-size: 13px; }
@@ -847,6 +856,7 @@ ${FIGHT_STYLE}
       <button data-cmd="inventory">/inventory</button><button data-cmd="recap">/recap</button><button data-cmd="time">/time</button>
       <button data-cmd="tablon">/tablon</button><button data-cmd="progress">/progress</button>
     </div>
+    <div id="quote" class="quote" hidden><div><b></b><span></span></div><button type="button" aria-label="No responder" title="No responder"><svg class="i"><use href="#i-x"/></svg></button></div>
     <form id="form" autocomplete="off">
       <button type="button" id="saymode" class="mode" hidden aria-pressed="false" title="Hacer: el narrador cuenta lo que haces. Decir: tu personaje lo dice tal cual, al instante y sin narrador.">Hacer</button>
       <span class="inwrap"><input id="input" placeholder="¿Qué haces?" aria-label="Acción"></span>
@@ -1083,6 +1093,8 @@ ${FIGHT_SCRIPT}
   /** Decir: lo escrito es la frase literal del PJ; llega al instante a quien la oiga, sin narrador ni coste. */
   var sayMode = false, sayTo = null;
   function setSayMode(on, to) {
+    // La cita solo sigue mientras se responde a esa misma persona.
+    if (!on || !to || !sayTo || to.id !== sayTo.id) setQuote(null);
     sayMode = on; sayTo = on ? (to || null) : null;
     var b = $('saymode');
     b.classList.toggle('say', on);
@@ -1094,6 +1106,20 @@ ${FIGHT_SCRIPT}
     input.setAttribute('aria-label', on ? 'Lo que dices' : 'Acción');
     input.focus();
   }
+  /** «Responder» del menú de un mensaje (novel.ts): Decir hacia quien habló, con su frase citada encima del cuadro. */
+  function replyTo(to, text) {
+    setSayMode(true, to);
+    setQuote({ name: to.name, text: text });
+  }
+  function setQuote(q) {
+    var box = $('quote');
+    box.hidden = !q;
+    if (!q) return;
+    box.querySelector('b').textContent = q.name;
+    box.querySelector('span').textContent = q.text;
+  }
+  // La ✕ de la cita deja de responder: vuelve a Hacer.
+  $('quote').querySelector('button').addEventListener('click', function () { setSayMode(false); });
   // «Aren está escribiendo…» (SSE «typing»; caduca sola) y aviso propio, como mucho cada 2,5 s.
   var typers = {}, typingTimer = null, lastTyping = 0;
   function showTyping(t) {
@@ -1136,6 +1162,7 @@ ${FIGHT_SCRIPT}
     if (!left) clearInterval(roundTimer);
   }
   function say(text) {
+    setQuote(null);
     post('/api/say', { text: text, to: sayTo ? sayTo.id : null }).then(function (r) { if (!r.ok) handleReply(r); });
   }
   function answerReaction(id, answer, text) {
