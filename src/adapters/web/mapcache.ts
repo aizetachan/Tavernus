@@ -139,7 +139,8 @@ export class MapCache {
 
   private build(locationId: Id): CachedMap {
     // Plano escrito por el equipo (datos LocationMap del manifiesto de la campaña): manda sobre el generado.
-    const written = writtenMap(assetsFor(this.engine.world.campaign.id), locationId);
+    const campaign = this.engine.world.campaign.id;
+    const written = writtenMap(assetsFor(campaign), campaign, locationId);
     if (written) return { map: structuredClone(written) };
     const input = mapInputOf(this.engine.world, locationId);
     for (const dep of [...input.spots.map((s) => s.id), ...(input.exits ?? []).flatMap((e) => [e.id, e.to_location_id])]) {

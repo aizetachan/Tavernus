@@ -48,7 +48,8 @@ export const MENU = String.raw`<!doctype html>
   /* Lista de partidas. */
   aside { flex: 0 0 400px; display: flex; flex-direction: column; min-width: 0; background: var(--panel); border-right: 1px solid var(--sep); }
   .head { display: flex; align-items: center; gap: 12px; padding: 16px 12px 10px 16px; }
-  .mark { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 9px; background: var(--accent-tint); color: var(--accent); font: 800 18px/1 var(--display); }
+  .mark { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 9px; background: var(--accent-tint); color: var(--accent); font: 800 18px/1 var(--display); overflow: hidden; }
+  .mark img { display: block; width: 100%; height: 100%; object-fit: cover; }
   h1 { margin: 0; flex: 1; font: 800 20px/1.2 var(--display); letter-spacing: -.02em; }
   #status { display: flex; align-items: center; gap: 6px; padding: 0 16px 10px; font-size: 12.5px; color: var(--muted); }
   #status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
@@ -224,7 +225,7 @@ export const MENU = String.raw`<!doctype html>
 </svg>
 <aside>
   <div class="head">
-    <span class="mark" aria-hidden="true">T</span>
+    <span class="mark" aria-hidden="true"><img src="/assets/icono.jpg" alt=""></span>
     <h1>Tavernus</h1>
     <button id="open-new" class="btn primary sm" type="button"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button>
   </div>

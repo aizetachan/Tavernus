@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { assetsFor, forgetManifests, loadManifests, writtenImage, writtenMap, type AssetManifest } from '../src/ai/assets.js';
+import { assetsFor, forgetManifests, loadManifests, writtenImage, writtenMap, writtenMapBackground, type AssetManifest } from '../src/ai/assets.js';
 import { attachIllustrator, Illustrator, PollinationsQueue, sceneOf, sceneSeed } from '../src/ai/illustrate.js';
 import { mapCacheOf } from '../src/adapters/web/mapcache.js';
 import { rect, type LocationMap } from '../src/data/seed/maps.js';
@@ -64,8 +64,8 @@ describe('activos escritos', () => {
     expect(writtenImage(m, 'scene', ['loc_taberna'])).toBeNull(); // se sale de la carpeta
     expect(writtenImage(m, 'portrait', ['npc_doro'])).toBeNull(); // PNG: hoy no se sirve
     expect(writtenImage(m, 'portrait', ['ch_kael', 'pc:human-fighter'])?.id).toBe('pc:human-fighter');
-    expect(writtenMap(m, 'loc_taberna')).toEqual(PLANO);
-    expect(writtenMap(m, 'loc_plaza')).toBeNull();
+    expect(writtenMap(m, 'demo', 'loc_taberna')).toEqual(PLANO);
+    expect(writtenMap(m, 'demo', 'loc_plaza')).toBeNull();
     expect(loadManifests(join(root, 'no-hay'))).toEqual([]);
   });
 
@@ -118,5 +118,23 @@ describe('activos escritos', () => {
     expect(cache.generatedCount).toBe(0);
     expect(cache.get('loc_plaza').map).not.toEqual(PLANO);
     expect(cache.generatedCount).toBe(1);
+  });
+
+  it('plan_campaigns: los planos y sus fondos solo valen para esas campañas; el fondo, solo con plano escrito', async () => {
+    const brezal = join(root, 'campaigns', 'brezal');
+    await mkdir(join(brezal, 'plano'), { recursive: true });
+    await writeFile(join(brezal, 'plano', 'loc_taberna.jpg'), HAND);
+    await writeFile(join(brezal, 'plano', 'loc_plaza.jpg'), HAND);
+    await writeFile(join(brezal, 'manifest.json'), JSON.stringify({
+      campaigns: ['brezal', 'demo'], plan_campaigns: ['brezal'],
+      maps: { loc_taberna: PLANO }, map_backgrounds: { loc_taberna: 'plano/loc_taberna.jpg', loc_plaza: 'plano/loc_plaza.jpg' },
+    }));
+    forgetManifests();
+    const m = assetsFor('demo', join(root, 'campaigns'));
+    expect(writtenMap(m, 'brezal', 'loc_taberna')).toEqual(PLANO);
+    expect(writtenMap(m, 'demo', 'loc_taberna')).toBeNull();
+    expect(writtenMapBackground(m, 'brezal', 'loc_taberna')).toBe(join(brezal, 'plano', 'loc_taberna.jpg'));
+    expect(writtenMapBackground(m, 'demo', 'loc_taberna')).toBeNull();
+    expect(writtenMapBackground(m, 'brezal', 'loc_plaza')).toBeNull(); // sin plano escrito, el fondo no encajaría
   });
 });

@@ -16,6 +16,7 @@
  *   GET  /api/sheet?character=ID    hoja viva
  *   GET  /api/journal?character=ID  diario: misiones, conversaciones, crónica y lugares (journal.ts)
  *   GET  /api/board?character=ID    tablero
+ *   GET  /api/board/background?character=ID  fondo pintado del plano donde está el PJ (JPEG)
  *   GET  /api/map?character=ID      mapa de zona y región
  *   GET  /api/scene?character=ID    ilustración de la localización actual (IMAGES=on), o null
  *   GET  /images/<fichero>          ilustraciones descargadas de la partida (data/games/<slug>/images)
@@ -42,7 +43,7 @@ import { Master } from '../../ai/master.js';
 import { sheetView } from '../sheet-view.js';
 import { PAGE } from './page.js';
 import { MENU } from './page-menu.js';
-import { handleBoardRequest } from './board.js';
+import { handleBoardBackgroundRequest, handleBoardRequest } from './board.js';
 import { handleMapRequest } from './regionmap.js';
 import { handleTtsRequest } from './tts.js';
 import { handleSfxRequest } from './sfx.js';
@@ -80,8 +81,13 @@ interface WebMessage {
   /** Lo que lee el narrador de voz: los bloques tal como se pintan. */
   speech?: string;
   moments?: WebMoment[];
-  /** Ilustración de la localización: un mensaje más del hilo, en el sitio donde se mostró. */
+  /** Ilustración de la localización como mensaje suelto (historial en memoria de antes de «place»; ya no se crea). */
   scene?: { location_id: Id; name: string; src: string };
+  /**
+   * Llegada a otro sitio: la burbuja del narrador que lo cuenta lleva la ilustración del lugar. Sale de los eventos,
+   * así que sobrevive a un reinicio; `src` cuando la imagen ya existe (si no, llega luego por el evento «place»).
+   */
+  place?: { location_id: Id; name?: string; src?: string };
   /** Lo que hizo o dijo el propio jugador (su mensaje a la derecha del hilo), si este evento lo responde. */
   input?: string;
   /** Lo cuenta el narrador (burbuja suya); si no, es un aviso del sistema (tirada, progreso, tablón). */
@@ -99,8 +105,6 @@ interface Runtime {
   engine: Engine;
   streams: Map<Id, Set<ServerResponse>>;
   history: Map<Id, WebMessage[]>;
-  /** Pone en el hilo del PJ la escena de donde está, si aún no la tiene ahí. */
-  offerScene: (characterId: Id) => void;
   dispose: () => void;
 }
 
@@ -136,9 +140,21 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
     for (const c of engine.world.characters.values()) engine.setPresence(c.id, true);
     const streams = new Map<Id, Set<ServerResponse>>();
     const history = new Map<Id, WebMessage[]>();
+    // Al pasar a otro sitio, la primera burbuja del narrador allí lleva la ilustración del lugar (place). Lo decide el
+    // orden de los eventos del PJ, igual al reconstruir el historial que en vivo.
+    const lastLoc = new Map<Id, Id>();
+    const pendingPlace = new Map<Id, Id>();
+    const placed = (d: Delivery, m: WebMessage): WebMessage => {
+      const e = d.event, c = d.character_id;
+      if (e.actor_id !== c || !e.location_id) return m;
+      if (lastLoc.get(c) !== e.location_id) { lastLoc.set(c, e.location_id); pendingPlace.set(c, e.location_id); }
+      const loc = pendingPlace.get(c);
+      if (loc && loc === e.location_id && m.narrator && m.text && !m.notice && !m.chapter) { m.place = { location_id: loc }; pendingPlace.delete(c); }
+      return m;
+    };
     // Al abrir la partida, el hilo de cada PJ se reconstruye del log de eventos: un reinicio no borra lo jugado.
     for (const c of engine.world.characters.values()) {
-      const past = engine.events.forCharacter(c.id, null).slice(-HISTORY).map((d) => toMessage(d, engine));
+      const past = engine.events.forCharacter(c.id, null).slice(-HISTORY).map((d) => placed(d, toMessage(d, engine)));
       if (past.length) history.set(c.id, past);
     }
     const send = (characterId: Id, type: string, data: unknown) => {
@@ -151,18 +167,6 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
       history.set(characterId, h);
       send(characterId, 'message', withImages(m, illustratorOf(engine), slug));
     };
-    // La escena del sitio es un mensaje más del hilo: entra al llegar (o cuando acaba de pintarse) y se queda ahí.
-    const sceneShown = new Map<Id, Id>();
-    const offerScene = (characterId: Id, image?: SceneImage) => {
-      const c = engine.world.characters.get(characterId);
-      const loc = c ? engine.world.characterSpot(c)?.location_id : undefined;
-      if (!loc || sceneShown.get(characterId) === loc) return;
-      const img = image ?? illustratorOf(engine)?.imageFor(loc) ?? null;
-      if (!img || img.location_id !== loc) return;
-      sceneShown.set(characterId, loc);
-      const last = history.get(characterId)?.at(-1);
-      record(characterId, { seq: last?.seq ?? 0, kind: 'system', text: '', scene: sceneView(img, slug) });
-    };
     // El diario cambia con lo que el PJ vive: se avisa (agrupado) y la página lo vuelve a pedir.
     const journalTimers = new Map<Id, NodeJS.Timeout>();
     const notifyJournal = (characterId: Id) => {
@@ -170,11 +174,11 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
       journalTimers.set(characterId, setTimeout(() => { journalTimers.delete(characterId); send(characterId, 'journal', {}); }, 300));
     };
     const offDelivery = engine.onDelivery((d: Delivery) => {
-      record(d.character_id, toMessage(d, engine));
-      offerScene(d.character_id);
+      record(d.character_id, placed(d, toMessage(d, engine)));
       if (touchesJournal(d.event)) notifyJournal(d.character_id);
     });
-    const offScene = illustratorOf(engine)?.onIllustrated((r) => offerScene(r.character_id, r.image)) ?? (() => {});
+    // La vista de un sitio, recién pintada: entra en las burbujas de llegada a ese sitio que aún no la tienen.
+    const offScene = illustratorOf(engine)?.onIllustrated((r) => { for (const id of streams.keys()) send(id, 'place', sceneView(r.image, slug)); }) ?? (() => {});
     // Retrato u objeto listo: aparece junto a su evento en el hilo del PJ; los retratos, en cada parlamento.
     const offEntity = illustratorOf(engine)?.onEntity((r) => {
       const src = imageSrc(r.image, slug);
@@ -194,7 +198,7 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
       sheetTimer = setTimeout(() => { sheetTimer = null; for (const id of streams.keys()) send(id, 'sheet', {}); }, 300);
     });
     return {
-      engine, streams, history, offerScene,
+      engine, streams, history,
       dispose() {
         offDelivery(); offChange(); offScene(); offEntity();
         if (sheetTimer) clearTimeout(sheetTimer);
@@ -247,7 +251,6 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
       await engine.welcomeBack(id).catch((e) => console.error('[web] recap:', e));
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
       const ill = illustratorOf(engine);
-      rt.offerScene(id);
       // En una sola escritura: quién habla y el historial llegan juntos.
       res.write(`event: cast\ndata: ${JSON.stringify(castOf(engine, id, ill, slug))}\n\n`
         + `event: history\ndata: ${JSON.stringify((rt.history.get(id) ?? []).map((m) => withImages(m, ill, slug)))}\n\n`);
@@ -259,6 +262,7 @@ export function createWebServer(games: GameManager, opts: { tickMs?: number } = 
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/board') { handleBoardRequest(engine, req, res, url); return; }
+    if (req.method === 'GET' && url.pathname === '/api/board/background') { await handleBoardBackgroundRequest(engine, res, url); return; }
     if (req.method === 'GET' && url.pathname === '/api/journal') { handleJournalRequest(engine, req, res, url, slug); return; }
     if (url.pathname === '/api/avatar') { await handleAvatarRequest(engine, req, res, url, slug); return; }
     if (url.pathname === '/api/illustrate') { await handlePaintRequest(engine, req, res, url, slug, rt.streams); return; }
@@ -487,8 +491,9 @@ function castOf(engine: Engine, characterId: Id, ill: Illustrator | null, slug: 
 
 /** El mensaje con lo que ya esté ilustrado: retratos de quien habla y las imágenes de sus momentos. */
 function withImages(m: WebMessage, ill: Illustrator | null, slug: string): WebMessage {
-  if (!ill || (!m.lines && !m.moments)) return m;
+  if (!ill || (!m.lines && !m.moments && !m.place)) return m;
   const out: WebMessage = { ...m };
+  if (m.place) { const img = ill.imageFor(m.place.location_id); if (img) out.place = { ...sceneView(img, slug) }; }
   if (m.lines) out.lines = m.lines.map((l) => { const img = ill.entityImage('portrait', l.id); return img ? { ...l, avatar: imageSrc(img, slug) } : l; });
   if (m.moments) {
     out.moments = m.moments.map((x) => {

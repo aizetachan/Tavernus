@@ -56,6 +56,7 @@ export const SOUND_PROMPTS: Record<string, SoundPrompt> = {
   'descubrir': fx('Subtle discovery chime, two soft bell notes, fantasy game, short', 1.2),
   'campana': fx('Single distant village church bell strike with long decay, medieval', 3),
   'ambiente-taberna': amb('Medieval tavern ambience, low crowd murmur and indistinct chatter, crackling fireplace, occasional mugs clinking, no music, seamless loop'),
+  'ambiente-herreria': amb('Medieval blacksmith forge interior, roaring coal fire and bellows, hammer striking an anvil in slow rhythm, hot metal hissing in water, no music, seamless loop'),
   'ambiente-interior': amb('Quiet old wooden house interior room tone, occasional floorboard creak, faint fire crackle, no music, seamless loop'),
   'ambiente-plaza': amb('Medieval village square during the day, light wind, distant people talking, birds, a far blacksmith hammer, no music, seamless loop'),
   'ambiente-plaza-noche': amb('Medieval village square at night, soft wind, a few crickets, very quiet, no music, seamless loop'),

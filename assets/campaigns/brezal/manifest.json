@@ -1,10 +1,6 @@
 {
-  "campaigns": ["brezal", "demo"],
-  "scene": {
-    "loc_taberna": "vista/loc_taberna.jpg",
-    "loc_plaza": "vista/loc_plaza.jpg",
-    "loc_claro": "vista/loc_claro.jpg"
-  },
+  "campaigns": ["brezal","demo"],
+  "scene": {"loc_taberna":"vista/loc_taberna.jpg","loc_plaza":"vista/loc_plaza.jpg","loc_claro":"vista/loc_claro.jpg"},
   "portrait": {
     "npc_brenna": "retrato/npc_brenna.jpg",
     "npc_doro": "retrato/npc_doro.jpg",
@@ -20,11 +16,7 @@
     "pc:tiefling": "retrato/pc-tiefling.jpg",
     "pc:dragonborn": "retrato/pc-dragonborn.jpg"
   },
-  "item": {
-    "it_cofre": "objeto/it_cofre.jpg",
-    "it_hacha": "objeto/it_hacha.jpg",
-    "it_llave_vharn": "objeto/it_llave_vharn.jpg"
-  },
+  "item": {"it_cofre":"objeto/it_cofre.jpg","it_hacha":"objeto/it_hacha.jpg","it_llave_vharn":"objeto/it_llave_vharn.jpg"},
   "discovery": {
     "clue_hacha": "descubrimiento/clue_hacha.jpg",
     "clue_pozo": "descubrimiento/clue_pozo.jpg",
@@ -33,14 +25,989 @@
     "clue_trampilla": "descubrimiento/clue_trampilla.jpg",
     "sp_tab_trampilla": "descubrimiento/clue_trampilla.jpg"
   },
-  "combat": {
-    "npc_lobo": "combate/npc_lobo.jpg"
-  },
+  "combat": {"npc_lobo":"combate/npc_lobo.jpg"},
   "region_map": "mapa/region.jpg",
+  "plan_campaigns": ["brezal"],
   "map_backgrounds": {
     "loc_taberna": "plano/loc_taberna.jpg",
+    "loc_sotano": "plano/loc_sotano.jpg",
     "loc_plaza": "plano/loc_plaza.jpg",
-    "loc_claro": "plano/loc_claro.jpg"
+    "loc_herreria": "plano/loc_herreria.jpg",
+    "loc_casona": "plano/loc_casona.jpg",
+    "loc_curandera": "plano/loc_curandera.jpg",
+    "loc_molino": "plano/loc_molino.jpg",
+    "loc_claro": "plano/loc_claro.jpg",
+    "loc_cuesta": "plano/loc_cuesta.jpg",
+    "loc_ruinas": "plano/loc_ruinas.jpg",
+    "loc_cripta": "plano/loc_cripta.jpg",
+    "loc_way_ex_plaza_molino": "plano/loc_way_ex_plaza_molino.jpg",
+    "loc_way_ex_plaza_claro": "plano/loc_way_ex_plaza_claro.jpg",
+    "loc_way_ex_molino_claro": "plano/loc_way_ex_molino_claro.jpg",
+    "loc_way_ex_claro_cuesta": "plano/loc_way_ex_claro_cuesta.jpg",
+    "loc_way_ex_cuesta_ruinas": "plano/loc_way_ex_cuesta_ruinas.jpg"
   },
-  "maps": {}
+  "maps": {
+    "loc_taberna": {
+      "cell_m": 1.5,
+      "bounds": {"x":-4.2,"y":-4.2,"w":18.15,"h":20.4},
+      "background": "void",
+      "areas": [{"ground":"stone","polygon":[[-3,-3],[12.75,-3],[12.75,15],[-3,15]]}],
+      "walls": [{"points":[[-3,-3],[12.75,-3],[12.75,15],[-3,15],[-3,-3]]}],
+      "doors": [{"from":[-0.74,-3],"to":[0.92,-3]},{"from":[12.75,7.31],"to":[12.75,8.51],"requires_spot":"sp_tab_trampilla"}],
+      "props": [
+        {"kind":"rug","x":9.15,"y":10.79,"w":2.76,"h":1.32},
+        {"kind":"counter","x":5.74,"y":0.15,"w":3.62,"h":0.6,"spot_id":"sp_tab_barra","label":"la barra"},
+        {
+          "kind": "fireplace",
+          "x": 0.48,
+          "y": 6.6,
+          "w": 1.82,
+          "h": 0.8,
+          "spot_id": "sp_tab_chimenea",
+          "label": "la chimenea",
+          "lit": true
+        },
+        {"kind":"bed","x":3.5,"y":13.1,"w":1,"h":1.9,"spot_id":"sp_tab_habitacion","label":"la habitación de arriba"},
+        {"kind":"stairs","x":1.9,"y":12,"w":1.4,"h":3,"spot_id":"sp_tab_habitacion","label":"la habitación de arriba"},
+        {"kind":"rug","x":8.7,"y":5.1,"w":2.6,"h":1.8,"spot_id":"sp_tab_mesa","label":"la mesa del fondo"},
+        {"kind":"table","x":10.96,"y":6.62,"w":0.9,"h":1.57,"spot_id":"sp_tab_mesa","label":"la mesa del fondo"},
+        {"kind":"chair","x":11.16,"y":8.24,"w":0.5,"h":0.45,"spot_id":"sp_tab_mesa"},
+        {"kind":"chair","x":11.16,"y":6.12,"w":0.5,"h":0.45,"spot_id":"sp_tab_mesa"},
+        {
+          "kind": "trapdoor",
+          "x": 9.5,
+          "y": 7.5,
+          "w": 1,
+          "h": 1,
+          "spot_id": "sp_tab_trampilla",
+          "requires_spot": "sp_tab_trampilla",
+          "label": "la trampilla"
+        },
+        {"kind":"crate","x":3.97,"y":-0.38,"w":0.84,"h":0.84},
+        {"kind":"round_table","x":-0.5,"y":11.37,"r":0.6},
+        {"kind":"stool","x":0.34,"y":10.94,"r":0.25},
+        {"kind":"stool","x":-1.35,"y":11.81,"r":0.25},
+        {"kind":"table","x":7.26,"y":11.56,"w":0.94,"h":1.79},
+        {"kind":"chair","x":6.76,"y":12.21,"w":0.45,"h":0.5},
+        {"kind":"chair","x":8.24,"y":12.21,"w":0.45,"h":0.5},
+        {"kind":"round_table","x":10.61,"y":2.57,"r":0.72},
+        {"kind":"stool","x":10.14,"y":1.61,"r":0.25},
+        {"kind":"stool","x":11.07,"y":3.54,"r":0.25},
+        {"kind":"round_table","x":11.41,"y":11.62,"r":0.73},
+        {"kind":"stool","x":11.82,"y":12.62,"r":0.25},
+        {"kind":"stool","x":11.01,"y":10.62,"r":0.25},
+        {"kind":"table","x":-1.58,"y":2.96,"w":0.92,"h":1.2},
+        {"kind":"chair","x":-2.08,"y":3.01,"w":0.45,"h":0.5},
+        {"kind":"chair","x":-0.61,"y":3.01,"w":0.45,"h":0.5},
+        {"kind":"chair","x":-2.08,"y":3.61,"w":0.45,"h":0.5},
+        {"kind":"chair","x":-0.61,"y":3.61,"w":0.45,"h":0.5},
+        {"kind":"round_table","x":7.36,"y":-0.73,"r":0.57},
+        {"kind":"stool","x":6.55,"y":-0.28,"r":0.25},
+        {"kind":"stool","x":8.17,"y":-1.18,"r":0.25},
+        {"kind":"barrel","x":12.38,"y":1.77,"r":0.37},
+        {"kind":"barrel","x":-0.94,"y":7.66,"r":0.35},
+        {"kind":"barrel","x":6.59,"y":14.67,"r":0.34},
+        {"kind":"barrel","x":7.31,"y":14.67,"r":0.34},
+        {"kind":"barrel","x":-2.68,"y":1.59,"r":0.31},
+        {"kind":"barrel","x":-2.68,"y":2.27,"r":0.31},
+        {"kind":"round_table","x":4.23,"y":-1.78,"r":0.61},
+        {"kind":"stool","x":3.37,"y":-1.37,"r":0.25},
+        {"kind":"stool","x":5.09,"y":-2.19,"r":0.25},
+        {"kind":"shelf","x":-3,"y":4.75,"w":0.43,"h":2.64},
+        {"kind":"table","x":-2.82,"y":8.05,"w":1.29,"h":0.8},
+        {"kind":"chair","x":-2.74,"y":8.9,"w":0.5,"h":0.45},
+        {"kind":"chair","x":-2.74,"y":7.55,"w":0.5,"h":0.45},
+        {"kind":"chair","x":-2.1,"y":8.9,"w":0.5,"h":0.45},
+        {"kind":"chair","x":-2.1,"y":7.55,"w":0.5,"h":0.45},
+        {"kind":"barrel","x":12.01,"y":14.62,"r":0.38},
+        {"kind":"barrel","x":-2.67,"y":9.89,"r":0.32},
+        {"kind":"barrel","x":-2.67,"y":10.59,"r":0.32},
+        {"kind":"table","x":-2.65,"y":13.28,"w":1.37,"h":0.91},
+        {"kind":"chair","x":-2.56,"y":14.23,"w":0.5,"h":0.45},
+        {"kind":"chair","x":-2.56,"y":12.78,"w":0.5,"h":0.45},
+        {"kind":"chair","x":-1.87,"y":14.23,"w":0.5,"h":0.45},
+        {"kind":"chair","x":-1.87,"y":12.78,"w":0.5,"h":0.45}
+      ]
+    },
+    "loc_sotano": {
+      "cell_m": 1.5,
+      "bounds": {"x":-4.95,"y":-4.2,"w":14.4,"h":15.15},
+      "background": "void",
+      "areas": [
+        {"ground":"stone","polygon":[[-3.75,-3],[8.25,-3],[8.25,9.75],[-3.75,9.75]]},
+        {
+          "ground": "water",
+          "polygon": [[0.18,4.44],[-0.26,4.42],[-0.39,3.97],[-0.16,3.61],[0.22,3.55],[0.62,3.6],[0.8,4.02],[0.66,4.49]]
+        },
+        {
+          "ground": "water",
+          "polygon": [
+            [0.13,-1.12],
+            [-0.32,-0.87],
+            [-0.83,-0.46],
+            [-1.17,-1.01],
+            [-1.31,-1.49],
+            [-1.27,-2.09],
+            [-0.68,-2.31],
+            [-0.24,-1.97],
+            [0.27,-1.69]
+          ]
+        },
+        {
+          "ground": "water",
+          "polygon": [[7.41,8.49],[7.36,8.26],[7.53,8.06],[7.78,8.13],[7.98,8.28],[7.92,8.53],[7.75,8.67],[7.54,8.64]]
+        },
+        {
+          "ground": "water",
+          "polygon": [[-1.26,0.07],[-1.58,0.32],[-1.92,0.22],[-2.17,-0.04],[-2.1,-0.46],[-1.67,-0.63],[-1.37,-0.32]]
+        }
+      ],
+      "walls": [
+        {"points":[[-3.75,-3],[8.25,-3],[8.25,9.75],[-3.75,9.75],[-3.75,-3]]},
+        {"points":[[8.25,1.5],[7.01,1.5]]},
+        {"points":[[-2.25,9.75],[-2.25,7.8]]},
+        {"points":[[8.25,-1.5],[5.74,-1.5]]}
+      ],
+      "doors": [{"from":[-0.64,-3],"to":[0.77,-3]}],
+      "props": [
+        {"kind":"barrel","x":-0.42,"y":7.04,"r":0.35,"spot_id":"sp_so_barriles","label":"los barriles"},
+        {"kind":"barrel","x":0.34,"y":7.04,"r":0.35,"spot_id":"sp_so_barriles","label":"los barriles"},
+        {"kind":"crate","x":4.49,"y":3.49,"w":0.9,"h":0.9,"spot_id":"sp_so_cajas","label":"las cajas con el sello"},
+        {"kind":"stairs","x":0.7,"y":-3,"w":1.4,"h":3,"spot_id":"sp_so_escalera","label":"la escalera"},
+        {
+          "kind": "barrel",
+          "x": 2.66,
+          "y": 9.04,
+          "r": 0.35,
+          "spot_id": "sp_so_hueco",
+          "requires_spot": "sp_so_hueco",
+          "label": "el hueco tras el barril"
+        },
+        {
+          "kind": "barrel",
+          "x": 3.42,
+          "y": 9.04,
+          "r": 0.35,
+          "spot_id": "sp_so_hueco",
+          "requires_spot": "sp_so_hueco",
+          "label": "el hueco tras el barril"
+        },
+        {
+          "kind": "chest",
+          "x": 1.5,
+          "y": 9.2,
+          "w": 1,
+          "h": 0.55,
+          "spot_id": "sp_so_hueco",
+          "requires_spot": "sp_so_hueco",
+          "label": "el hueco tras el barril"
+        },
+        {"kind":"rock","x":4.53,"y":6.13,"r":0.51},
+        {"kind":"rock","x":4.42,"y":0.08,"r":0.85},
+        {"kind":"rock","x":2.01,"y":8.49,"r":0.42},
+        {"kind":"rock","x":6.93,"y":2.86,"r":0.77},
+        {"kind":"crate","x":-2.11,"y":-1.73,"w":0.75,"h":0.75},
+        {"kind":"crate","x":-1.32,"y":-1.68,"w":0.63,"h":0.63},
+        {"kind":"rock","x":-1.36,"y":1.51,"r":0.68},
+        {"kind":"rock","x":3.62,"y":8.96,"r":0.64},
+        {"kind":"rock","x":5.73,"y":7.85,"r":0.58}
+      ]
+    },
+    "loc_plaza": {
+      "cell_m": 1.5,
+      "bounds": {"x":-16.65,"y":-13.53,"w":64.8,"h":46.46},
+      "background": "dirt",
+      "areas": [
+        {
+          "ground": "cobble",
+          "polygon": [
+            [39.64,11.56],
+            [33.35,24.47],
+            [21.94,30.57],
+            [9.49,28.02],
+            [-4.33,26.64],
+            [-11.74,9.56],
+            [-0.45,-4.63],
+            [9.6,-12.6],
+            [21.45,-8.48],
+            [34.96,-5.42]
+          ]
+        },
+        {
+          "ground": "grass",
+          "polygon": [
+            [-0.96,25.43],
+            [-1.08,26.35],
+            [-1.85,26.71],
+            [-2.5,26.51],
+            [-2.89,26.05],
+            [-2.92,25.41],
+            [-2.4,24.99],
+            [-1.71,24.98]
+          ]
+        },
+        {
+          "ground": "water",
+          "polygon": [
+            [-7.74,7.95],
+            [-7.45,7.56],
+            [-6.98,7.62],
+            [-6.5,7.73],
+            [-6.51,8.23],
+            [-6.71,8.57],
+            [-7.02,8.84],
+            [-7.53,8.87],
+            [-7.84,8.44]
+          ]
+        },
+        {
+          "ground": "water",
+          "polygon": [
+            [24.39,14.32],
+            [24.75,14.49],
+            [24.84,14.92],
+            [24.55,15.26],
+            [24.15,15.29],
+            [23.73,15.22],
+            [23.74,14.79],
+            [23.67,14.38],
+            [24.03,14.13]
+          ]
+        },
+        {"ground":"dirt","path":[[-2.1,13.1],[-6,14],[-15.74,14]],"width":1.81},
+        {"ground":"dirt","path":[[32.04,6.58],[36,6],[47.26,6]],"width":1.78}
+      ],
+      "walls": [{"points":[[22.44,21],[37.13,21]]}],
+      "doors": [
+        {"from":[36.9,5.3],"to":[36.9,6.7]},
+        {"from":[5.3,22.9],"to":[6.7,22.9]},
+        {"from":[23.3,-4.9],"to":[24.7,-4.9]},
+        {"from":[28.76,21],"to":[31.24,21]},
+        {"from":[-0.7,-0.9],"to":[0.7,-0.9]}
+      ],
+      "props": [
+        {"kind":"building","x":36.9,"y":3.37,"w":5.09,"h":5.69,"spot_id":"sp_pl_camino_molino","label":"El molino"},
+        {"kind":"building","x":4.03,"y":22.9,"w":6.28,"h":5.29,"spot_id":"sp_pl_casona","label":"La casona"},
+        {"kind":"building","x":22.09,"y":-10.5,"w":6.66,"h":5.6,"spot_id":"sp_pl_herreria","label":"La herrería"},
+        {"kind":"building","x":-2.36,"y":-5.08,"w":8.87,"h":4.18,"spot_id":"sp_pl_taberna","label":"Taberna del Jabalí"},
+        {"kind":"well","x":15,"y":11.55,"r":0.85,"spot_id":"sp_pl_pozo","label":"el pozo"},
+        {"kind":"notice","x":19.2,"y":4.7,"w":1.6,"h":0.35,"spot_id":"sp_pl_tablon","label":"el tablón"},
+        {"kind":"building","x":-8.89,"y":28.15,"w":4.12,"h":3.84},
+        {"kind":"building","x":-2.91,"y":27.83,"w":5.7,"h":5.1},
+        {"kind":"building","x":10.96,"y":27.96,"w":4.96,"h":3.32},
+        {"kind":"building","x":18.07,"y":27.97,"w":5.11,"h":3.06},
+        {"kind":"building","x":30.62,"y":28.2,"w":8.24,"h":3.18},
+        {"kind":"building","x":41.25,"y":-7.83,"w":3.06,"h":7.97},
+        {"kind":"building","x":41.59,"y":10,"w":5.24,"h":8.84},
+        {"kind":"building","x":41.53,"y":20.36,"w":3.58,"h":6.29},
+        {"kind":"building","x":-8.97,"y":-12.34,"w":5.54,"h":3.5},
+        {"kind":"building","x":-2.05,"y":-13.4,"w":5.18,"h":4.84},
+        {"kind":"building","x":5.42,"y":-13.53,"w":9,"h":5.04},
+        {"kind":"building","x":30.17,"y":-12.7,"w":5.69,"h":3.89},
+        {"kind":"building","x":36.73,"y":-12.3,"w":4.52,"h":3.82},
+        {"kind":"building","x":-13.54,"y":-7.8,"w":3.67,"h":5.18},
+        {"kind":"building","x":-14.39,"y":0.04,"w":4.28,"h":7.11},
+        {"kind":"building","x":-15.21,"y":15.91,"w":5.32,"h":5.46},
+        {"kind":"building","x":-13.79,"y":22.79,"w":3.86,"h":4.86},
+        {"kind":"crate","x":33.88,"y":14.79,"w":0.83,"h":0.83},
+        {"kind":"bush","x":22.83,"y":26.56,"r":0.71},
+        {"kind":"barrel","x":35.34,"y":14.63,"r":0.36},
+        {"kind":"barrel","x":36.11,"y":14.63,"r":0.36},
+        {"kind":"barrel","x":35.73,"y":15.27,"r":0.36},
+        {"kind":"crate","x":-2.96,"y":22,"w":0.91,"h":0.91},
+        {"kind":"barrel","x":17.03,"y":-1.72,"r":0.35},
+        {"kind":"barrel","x":0.33,"y":26.7,"r":0.38},
+        {"kind":"barrel","x":1.13,"y":26.7,"r":0.38},
+        {"kind":"crate","x":23.52,"y":21.37,"w":0.8,"h":0.8},
+        {"kind":"barrel","x":34.75,"y":-4.85,"r":0.31},
+        {"kind":"bush","x":36.74,"y":11.62,"r":0.72},
+        {"kind":"barrel","x":36.44,"y":2.62,"r":0.36},
+        {"kind":"barrel","x":37.22,"y":2.62,"r":0.36},
+        {"kind":"tree","x":29.69,"y":-2.31,"r":1.17},
+        {"kind":"bush","x":17.82,"y":24.47,"r":0.55},
+        {"kind":"tree","x":15.22,"y":-6.92,"r":1.24},
+        {"kind":"crate","x":10.97,"y":25.36,"w":0.9,"h":0.9},
+        {"kind":"crate","x":11.92,"y":25.4,"w":0.76,"h":0.76},
+        {"kind":"bush","x":0.84,"y":25.01,"r":0.71},
+        {"kind":"crate","x":31.52,"y":-6.11,"w":0.72,"h":0.72},
+        {"kind":"barrel","x":-1.36,"y":26.03,"r":0.36},
+        {"kind":"barrel","x":-0.58,"y":26.03,"r":0.36},
+        {"kind":"barrel","x":-0.97,"y":26.67,"r":0.36},
+        {"kind":"crate","x":18.72,"y":10.02,"w":0.95,"h":0.95},
+        {"kind":"crate","x":19.72,"y":9.9,"w":0.81,"h":0.81},
+        {"kind":"barrel","x":19.52,"y":-7.68,"r":0.39},
+        {"kind":"barrel","x":20.34,"y":-7.68,"r":0.39},
+        {"kind":"barrel","x":19.93,"y":-7.01,"r":0.39},
+        {"kind":"bush","x":22.86,"y":23.02,"r":0.58}
+      ]
+    },
+    "loc_herreria": {
+      "cell_m": 1.5,
+      "bounds": {"x":-4.2,"y":-3.45,"w":15.15,"h":15.9},
+      "background": "void",
+      "areas": [{"ground":"stone","polygon":[[-3,-2.25],[9.75,-2.25],[9.75,11.25],[-3,11.25]]}],
+      "walls": [{"points":[[-3,-2.25],[9.75,-2.25],[9.75,11.25],[-3,11.25],[-3,-2.25]]},{"points":[[-3,10.5],[0.05,10.5]]}],
+      "doors": [{"from":[-0.39,-2.25],"to":[1.11,-2.25]}],
+      "props": [
+        {"kind":"table","x":1.27,"y":8.62,"w":0.9,"h":1.33,"spot_id":"sp_he_banco","label":"el banco de trabajo"},
+        {"kind":"chair","x":1.47,"y":10,"w":0.5,"h":0.45,"spot_id":"sp_he_banco"},
+        {"kind":"chair","x":1.47,"y":8.12,"w":0.5,"h":0.45,"spot_id":"sp_he_banco"},
+        {"kind":"fireplace","x":5.18,"y":2.39,"w":2.05,"h":0.8,"spot_id":"sp_he_fragua","label":"la fragua","lit":true},
+        {
+          "kind": "trapdoor",
+          "x": 8.5,
+          "y": 8.5,
+          "w": 1,
+          "h": 1,
+          "spot_id": "sp_he_losa",
+          "requires_spot": "sp_he_losa",
+          "label": "la losa suelta"
+        },
+        {"kind":"rock","x":7,"y":7.78,"r":1.08,"spot_id":"sp_he_yunque","label":"el yunque"},
+        {"kind":"crate","x":6.23,"y":0.66,"w":0.78,"h":0.78},
+        {"kind":"crate","x":7.06,"y":0.69,"w":0.66,"h":0.66},
+        {"kind":"crate","x":0.65,"y":5.99,"w":0.98,"h":0.98},
+        {"kind":"table","x":-2.01,"y":3.99,"w":1.59,"h":0.8},
+        {"kind":"chair","x":-1.86,"y":4.84,"w":0.5,"h":0.45},
+        {"kind":"chair","x":-1.86,"y":3.49,"w":0.5,"h":0.45},
+        {"kind":"chair","x":-1.07,"y":4.84,"w":0.5,"h":0.45},
+        {"kind":"chair","x":-1.07,"y":3.49,"w":0.5,"h":0.45},
+        {"kind":"shelf","x":-3,"y":0.95,"w":0.37,"h":1.86},
+        {"kind":"barrel","x":6.98,"y":9.82,"r":0.34},
+        {"kind":"shelf","x":9.36,"y":4.51,"w":0.39,"h":2.09},
+        {"kind":"table","x":-1.13,"y":8.51,"w":0.84,"h":1.69},
+        {"kind":"chair","x":-1.63,"y":9.11,"w":0.45,"h":0.5},
+        {"kind":"chair","x":-0.24,"y":9.11,"w":0.45,"h":0.5},
+        {"kind":"crate","x":2.68,"y":3.73,"w":0.74,"h":0.74},
+        {"kind":"shelf","x":9.36,"y":0.76,"w":0.39,"h":2.29},
+        {"kind":"shelf","x":-3,"y":4.64,"w":0.4,"h":2.79},
+        {"kind":"crate","x":2.85,"y":0.64,"w":0.75,"h":0.75},
+        {"kind":"crate","x":3.65,"y":0.66,"w":0.64,"h":0.64},
+        {"kind":"barrel","x":3.11,"y":-1.89,"r":0.36},
+        {"kind":"shelf","x":1.76,"y":10.84,"w":1.89,"h":0.41},
+        {"kind":"shelf","x":-2.15,"y":10.81,"w":2.48,"h":0.44}
+      ]
+    },
+    "loc_casona": {
+      "cell_m": 1.5,
+      "bounds": {"x":-4.2,"y":-3.45,"w":17.4,"h":18.9},
+      "background": "void",
+      "areas": [{"ground":"stone","polygon":[[-3,-2.25],[12,-2.25],[12,14.25],[2.25,14.25],[2.25,9],[-3,9]]}],
+      "walls": [{"points":[[-3,-2.25],[12,-2.25],[12,14.25],[2.25,14.25],[2.25,9],[-3,9],[-3,-2.25]]}],
+      "doors": [{"from":[-0.52,-2.25],"to":[0.97,-2.25]}],
+      "props": [
+        {"kind":"bed","x":2.25,"y":10.5,"w":1.9,"h":1,"spot_id":"sp_ca_alcoba","label":"la alcoba de arriba"},
+        {"kind":"stairs","x":2.25,"y":11.7,"w":3,"h":1.4,"spot_id":"sp_ca_alcoba","label":"la alcoba de arriba"},
+        {"kind":"chest","x":11.45,"y":7.5,"w":0.55,"h":1,"spot_id":"sp_ca_arcon","label":"el arcón de los registros"},
+        {"kind":"stool","x":1.26,"y":4.74,"r":0.25,"spot_id":"sp_ca_banco","label":"el banco de espera"},
+        {"kind":"table","x":7.92,"y":2.87,"w":0.9,"h":1.51,"spot_id":"sp_ca_despacho","label":"la mesa del despacho"},
+        {"kind":"chair","x":8.12,"y":4.43,"w":0.5,"h":0.45,"spot_id":"sp_ca_despacho"},
+        {"kind":"chair","x":8.12,"y":2.37,"w":0.5,"h":0.45,"spot_id":"sp_ca_despacho"},
+        {"kind":"barrel","x":9.68,"y":12.7,"r":0.31},
+        {"kind":"barrel","x":10.36,"y":12.7,"r":0.31},
+        {"kind":"barrel","x":10.03,"y":13.25,"r":0.31},
+        {"kind":"barrel","x":8.28,"y":-1.9,"r":0.35},
+        {"kind":"barrel","x":9.03,"y":-1.9,"r":0.35},
+        {"kind":"crate","x":9.36,"y":3.47,"w":0.79,"h":0.79},
+        {"kind":"crate","x":-2.37,"y":2.48,"w":0.72,"h":0.72},
+        {"kind":"chest","x":11.49,"y":11.81,"w":0.51,"h":1},
+        {"kind":"barrel","x":3.5,"y":1.17,"r":0.35},
+        {"kind":"table","x":7.25,"y":-0.69,"w":1.34,"h":0.83},
+        {"kind":"chair","x":7.33,"y":0.19,"w":0.5,"h":0.45},
+        {"kind":"chair","x":7.33,"y":-1.19,"w":0.5,"h":0.45},
+        {"kind":"chair","x":8.01,"y":0.19,"w":0.5,"h":0.45},
+        {"kind":"chair","x":8.01,"y":-1.19,"w":0.5,"h":0.45},
+        {"kind":"crate","x":4.14,"y":0.24,"w":0.99,"h":0.99},
+        {"kind":"chest","x":11.49,"y":-1.65,"w":0.51,"h":1.06},
+        {"kind":"shelf","x":3.84,"y":13.88,"w":1.78,"h":0.37}
+      ]
+    },
+    "loc_curandera": {
+      "cell_m": 1.5,
+      "bounds": {"x":-4.2,"y":-4.2,"w":15.9,"h":15.15},
+      "background": "void",
+      "areas": [{"ground":"wood","polygon":[[-3,-3],[10.5,-3],[10.5,9.75],[1.5,9.75],[1.5,4.5],[-3,4.5]]}],
+      "walls": [{"points":[[-3,-3],[10.5,-3],[10.5,9.75],[1.5,9.75],[1.5,4.5],[-3,4.5],[-3,-3]]}],
+      "doors": [{"from":[-0.2,-3],"to":[0.8,-3]}],
+      "props": [
+        {
+          "kind": "fireplace",
+          "x": 5.17,
+          "y": 0.38,
+          "w": 2.11,
+          "h": 0.8,
+          "spot_id": "sp_cu_caldero",
+          "label": "el caldero",
+          "lit": true
+        },
+        {"kind":"bed","x":6.5,"y":7.85,"w":1,"h":1.9,"spot_id":"sp_cu_camastro","label":"el camastro"},
+        {"kind":"shelf","x":1.5,"y":4.6,"w":0.35,"h":2.52,"spot_id":"sp_cu_hierbas","label":"las hierbas colgadas"},
+        {"kind":"table","x":2.36,"y":-1.75,"w":1.41,"h":0.81},
+        {"kind":"chair","x":2.82,"y":-0.88,"w":0.5,"h":0.45},
+        {"kind":"chair","x":2.82,"y":-2.25,"w":0.5,"h":0.45},
+        {"kind":"chest","x":-1.26,"y":3.95,"w":1.09,"h":0.55},
+        {"kind":"crate","x":7.39,"y":-1.98,"w":0.95,"h":0.95},
+        {"kind":"crate","x":8.39,"y":-1.97,"w":0.81,"h":0.81},
+        {"kind":"bed","x":-3,"y":0.08,"w":1.9,"h":1},
+        {"kind":"bed","x":-2.66,"y":2.6,"w":1,"h":1.9},
+        {"kind":"shelf","x":10.14,"y":0.44,"w":0.36,"h":1.78},
+        {"kind":"shelf","x":10.13,"y":-2.23,"w":0.37,"h":2.04}
+      ]
+    },
+    "loc_molino": {
+      "cell_m": 1.5,
+      "bounds": {"x":-3.45,"y":-3.45,"w":17.4,"h":15.9},
+      "background": "void",
+      "areas": [
+        {"ground":"stone","polygon":[[-2.25,-2.25],[12.75,-2.25],[12.75,8.25],[8.25,8.25],[8.25,11.25],[-2.25,11.25]]},
+        {
+          "ground": "stone",
+          "polygon": [[8.25,8.25],[10.5,8.25],[10.5,11.25],[5.25,11.25],[8.25,11.25]],
+          "requires_spot": "sp_mo_desvan"
+        }
+      ],
+      "walls": [
+        {"points":[[-2.25,-2.25],[12.75,-2.25],[12.75,8.25],[8.25,8.25],[8.25,11.25],[-2.25,11.25],[-2.25,-2.25]]},
+        {
+          "points": [[8.25,8.25],[10.5,8.25],[10.5,11.25],[5.25,11.25],[8.25,11.25],[8.25,8.25]],
+          "requires_spot": "sp_mo_desvan"
+        }
+      ],
+      "doors": [
+        {"from":[8.5,8.25],"to":[9.5,8.25],"requires_spot":"sp_mo_desvan"},
+        {"from":[-0.87,-2.25],"to":[0.58,-2.25]},
+        {"from":[12.75,1.43],"to":[12.75,2.94]}
+      ],
+      "props": [
+        {
+          "kind": "stairs",
+          "x": 8.25,
+          "y": 9.7,
+          "w": 3,
+          "h": 1.4,
+          "spot_id": "sp_mo_desvan",
+          "requires_spot": "sp_mo_desvan",
+          "label": "el desván"
+        },
+        {"kind":"rock","x":6,"y":2.4,"r":0.9,"spot_id":"sp_mo_muelas","label":"las muelas"},
+        {"kind":"crate","x":1.61,"y":8.49,"w":0.9,"h":0.9,"spot_id":"sp_mo_sacos","label":"los sacos de harina"},
+        {"kind":"table","x":5.78,"y":8.81,"w":0.97,"h":1.57},
+        {"kind":"chair","x":5.28,"y":8.96,"w":0.45,"h":0.5},
+        {"kind":"chair","x":6.8,"y":8.96,"w":0.45,"h":0.5},
+        {"kind":"chair","x":5.28,"y":9.74,"w":0.45,"h":0.5},
+        {"kind":"chair","x":6.8,"y":9.74,"w":0.45,"h":0.5},
+        {"kind":"barrel","x":7,"y":0.34,"r":0.36},
+        {"kind":"barrel","x":7.76,"y":0.34,"r":0.36},
+        {"kind":"chest","x":7.06,"y":10.72,"w":0.95,"h":0.53},
+        {"kind":"table","x":9.92,"y":4.22,"w":0.93,"h":1.59},
+        {"kind":"chair","x":9.42,"y":4.76,"w":0.45,"h":0.5},
+        {"kind":"chair","x":10.9,"y":4.76,"w":0.45,"h":0.5},
+        {"kind":"crate","x":-1.31,"y":2.48,"w":0.92,"h":0.92},
+        {"kind":"barrel","x":-1.86,"y":7.13,"r":0.39},
+        {"kind":"barrel","x":-1.86,"y":7.96,"r":0.39}
+      ]
+    },
+    "loc_claro": {
+      "cell_m": 1.5,
+      "bounds": {"x":-12.4,"y":-10.770000000000001,"w":74.165,"h":57.160000000000004},
+      "background": "grass",
+      "areas": [
+        {
+          "ground": "dirt",
+          "polygon": [
+            [-4.63,16.23],
+            [-4.69,14.94],
+            [-3.93,13.97],
+            [-2.81,13.79],
+            [-1.76,14.15],
+            [-1.37,15.18],
+            [-1.25,16.44],
+            [-2.48,16.75],
+            [-3.63,17.04]
+          ]
+        },
+        {
+          "ground": "water",
+          "path": [
+            [42.52,-7.75],
+            [43.02,-2.6],
+            [41.97,2.55],
+            [42.82,7.7],
+            [42.1,12.85],
+            [42.79,18],
+            [42.62,23.15],
+            [42.58,28.3],
+            [42.77,33.45],
+            [42.96,38.6],
+            [42.52,43.75]
+          ],
+          "width": 4
+        },
+        {"ground":"dirt","path":[[46.46,28.14],[50,30],[60.76,30]],"width":2.01},
+        {"ground":"dirt","path":[[3.32,2.22],[0,0],[0,-9.75]],"width":2.04},
+        {"ground":"dirt","path":[[40,5],[40,-9.97]],"width":1.6}
+      ],
+      "walls": [],
+      "doors": [],
+      "props": [
+        {"kind":"building","x":27.72,"y":35.9,"w":6.18,"h":4.31,"spot_id":"sp_cl_choza","label":"la choza de pieles"},
+        {"kind":"rock","x":10.39,"y":21.61,"r":1.12,"spot_id":"sp_cl_piedra","label":"la piedra grande"},
+        {"kind":"bush","x":12,"y":21.41,"r":0.71,"spot_id":"sp_cl_piedra","label":"la piedra grande"},
+        {"kind":"tree","x":21.88,"y":18.12,"r":2.63,"spot_id":"sp_cl_roble","label":"el roble viejo"},
+        {"kind":"tree","x":56.19,"y":35.64,"r":1.51},
+        {"kind":"tree","x":-9.89,"y":22.02,"r":1.52},
+        {"kind":"tree","x":-7.91,"y":3.58,"r":1.11},
+        {"kind":"tree","x":-1.82,"y":34.28,"r":1.25},
+        {"kind":"tree","x":58.23,"y":5.86,"r":1.35},
+        {"kind":"tree","x":-4.05,"y":20.14,"r":1.48},
+        {"kind":"tree","x":23.3,"y":41.75,"r":1.7},
+        {"kind":"tree","x":13.47,"y":41.27,"r":1.89},
+        {"kind":"tree","x":47.32,"y":-2.23,"r":1.8},
+        {"kind":"tree","x":-4.69,"y":43.22,"r":1.5},
+        {"kind":"tree","x":-5.47,"y":2.77,"r":1.36},
+        {"kind":"tree","x":-8.39,"y":-8.37,"r":1.16},
+        {"kind":"tree","x":-0.91,"y":41.98,"r":1.97},
+        {"kind":"tree","x":38.61,"y":42.07,"r":1.42},
+        {"kind":"tree","x":49.3,"y":-5.95,"r":1.81},
+        {"kind":"tree","x":-7.8,"y":-0.67,"r":1.64},
+        {"kind":"tree","x":50.16,"y":38.4,"r":1.57},
+        {"kind":"tree","x":55.99,"y":25.02,"r":1.78},
+        {"kind":"tree","x":-7.91,"y":16.83,"r":1.18},
+        {"kind":"tree","x":-1.2,"y":25.9,"r":1.83},
+        {"kind":"tree","x":28.15,"y":-7.01,"r":1.79},
+        {"kind":"tree","x":-9.2,"y":14.68,"r":1.91},
+        {"kind":"tree","x":58.2,"y":-4.92,"r":1.75},
+        {"kind":"tree","x":-4.19,"y":27.89,"r":1.23},
+        {"kind":"tree","x":54.23,"y":43.3,"r":1.68},
+        {"kind":"tree","x":-1.99,"y":37.8,"r":1.37},
+        {"kind":"tree","x":38.82,"y":39.58,"r":1.34},
+        {"kind":"tree","x":47.23,"y":1.45,"r":1.77},
+        {"kind":"tree","x":18.84,"y":43.76,"r":1.35},
+        {"kind":"tree","x":-5.75,"y":37.49,"r":1.45},
+        {"kind":"tree","x":10.2,"y":38.56,"r":1.6},
+        {"kind":"tree","x":-3.46,"y":-3.56,"r":1.94},
+        {"kind":"tree","x":56.28,"y":-8.36,"r":1.89},
+        {"kind":"tree","x":-7.91,"y":36.52,"r":1.17},
+        {"kind":"tree","x":-5.9,"y":40.31,"r":1.5},
+        {"kind":"tree","x":10.79,"y":35.69,"r":1.58},
+        {"kind":"tree","x":30.52,"y":43.19,"r":1.28},
+        {"kind":"tree","x":-3.65,"y":-7.51,"r":1.43},
+        {"kind":"tree","x":25.39,"y":43.65,"r":1.82},
+        {"kind":"tree","x":-10.25,"y":25.16,"r":1.82},
+        {"kind":"tree","x":-7.83,"y":26.61,"r":1.46},
+        {"kind":"tree","x":51.75,"y":0.27,"r":1.44},
+        {"kind":"tree","x":47.34,"y":39.04,"r":2},
+        {"kind":"tree","x":-8.35,"y":-3.74,"r":1.33},
+        {"kind":"tree","x":-10.41,"y":18.16,"r":1.71},
+        {"kind":"tree","x":-10.15,"y":6.78,"r":1.49},
+        {"kind":"tree","x":5.25,"y":32.98,"r":1.61},
+        {"kind":"tree","x":53.34,"y":5.74,"r":1.31},
+        {"kind":"tree","x":49.9,"y":43.66,"r":1.97},
+        {"kind":"tree","x":-8.2,"y":32,"r":1.56},
+        {"kind":"tree","x":-10.56,"y":38.42,"r":1.84},
+        {"kind":"tree","x":2.19,"y":36.79,"r":1.37},
+        {"kind":"tree","x":54.69,"y":1.83,"r":1.42},
+        {"kind":"tree","x":47.07,"y":42.5,"r":1.24},
+        {"kind":"tree","x":33.64,"y":-4.95,"r":1.63},
+        {"kind":"tree","x":-4.73,"y":22.4,"r":1.13},
+        {"kind":"tree","x":2.36,"y":41.31,"r":1.93},
+        {"kind":"tree","x":-5.71,"y":17.51,"r":1.38},
+        {"kind":"tree","x":35.79,"y":44.15,"r":1.1},
+        {"kind":"tree","x":-0.38,"y":39.44,"r":1.24},
+        {"kind":"tree","x":33.58,"y":44.57,"r":1.56},
+        {"kind":"tree","x":52.51,"y":40.6,"r":1.72},
+        {"kind":"tree","x":20.08,"y":39.86,"r":1.49},
+        {"kind":"tree","x":56.76,"y":20.74,"r":1.12},
+        {"kind":"tree","x":9.79,"y":41.41,"r":1.37},
+        {"kind":"tree","x":53.3,"y":-5.06,"r":1.89},
+        {"kind":"tree","x":-5.9,"y":-5.52,"r":1.48},
+        {"kind":"tree","x":36.94,"y":-4.02,"r":1.37},
+        {"kind":"tree","x":58.32,"y":0.48,"r":1.6},
+        {"kind":"tree","x":-4.88,"y":30.52,"r":1.63},
+        {"kind":"tree","x":56.99,"y":38.62,"r":1.38},
+        {"kind":"tree","x":51,"y":34.53,"r":1.48},
+        {"kind":"tree","x":-8.38,"y":41.09,"r":1.51},
+        {"kind":"tree","x":58,"y":23.02,"r":1.45},
+        {"kind":"tree","x":-4.59,"y":34.23,"r":1.8},
+        {"kind":"tree","x":-8.98,"y":29.62,"r":1.44},
+        {"kind":"tree","x":9.26,"y":44.6,"r":1.31},
+        {"kind":"tree","x":-10.36,"y":1,"r":1.13},
+        {"kind":"tree","x":13.42,"y":44.15,"r":1.13},
+        {"kind":"tree","x":56.54,"y":18.13,"r":1.24},
+        {"kind":"tree","x":58.35,"y":12.29,"r":1.48},
+        {"kind":"tree","x":-9.71,"y":11.34,"r":1.55},
+        {"kind":"tree","x":49.41,"y":0.19,"r":1.35},
+        {"kind":"tree","x":28.28,"y":44.65,"r":1.74},
+        {"kind":"tree","x":8.85,"y":33.66,"r":1.82},
+        {"kind":"tree","x":11.57,"y":24.39,"r":1.35},
+        {"kind":"rock","x":9.44,"y":28.68,"r":0.79},
+        {"kind":"rock","x":15.21,"y":34.9,"r":0.93},
+        {"kind":"bush","x":19.58,"y":38.02,"r":0.67},
+        {"kind":"rock","x":15.74,"y":27.22,"r":1.1},
+        {"kind":"rock","x":18.15,"y":31.97,"r":0.73},
+        {"kind":"rock","x":16.24,"y":12.35,"r":0.89},
+        {"kind":"rock","x":25.58,"y":10.9,"r":0.67},
+        {"kind":"bush","x":35.18,"y":15.28,"r":0.55},
+        {"kind":"tree","x":48.67,"y":4.33,"r":1.38},
+        {"kind":"bush","x":33.22,"y":1.99,"r":0.67},
+        {"kind":"tree","x":36.07,"y":-0.61,"r":1.23},
+        {"kind":"rock","x":16.28,"y":6.87,"r":0.68},
+        {"kind":"bush","x":49.08,"y":9.17,"r":0.72},
+        {"kind":"bush","x":37.17,"y":35.79,"r":0.5},
+        {"kind":"tree","x":25.08,"y":7.16,"r":1.11},
+        {"kind":"tree","x":51.49,"y":8.97,"r":1.31},
+        {"kind":"tree","x":49.87,"y":15.77,"r":1.58},
+        {"kind":"rock","x":6.81,"y":-0.7,"r":0.93},
+        {"kind":"rock","x":0.04,"y":24.41,"r":1.11},
+        {"kind":"bush","x":36.59,"y":37.23,"r":0.53},
+        {"kind":"tree","x":6.55,"y":28.8,"r":1.61},
+        {"kind":"bush","x":21.48,"y":5.37,"r":0.6}
+      ]
+    },
+    "loc_cuesta": {
+      "cell_m": 1.5,
+      "bounds": {"x":-11.56,"y":-5.25,"w":56.57,"h":96.3},
+      "background": "grass",
+      "areas": [
+        {
+          "ground": "dirt",
+          "polygon": [[40.56,43.81],[39.45,43.18],[39.08,42.02],[39.77,41.13],[40.74,40.49],[41.71,41.16],[42.13,42.19],[42,43.62]]
+        },
+        {"ground":"dirt","path":[[38.31,76.37],[40,80],[40,90]],"width":2.1},
+        {"ground":"dirt","path":[[1.89,3.53],[0,0],[-10.49,0]],"width":2.13}
+      ],
+      "walls": [],
+      "doors": [],
+      "props": [
+        {"kind":"rock","x":10.5,"y":46.5,"r":1.01,"spot_id":"sp_cs_cueva","label":"la lobera"},
+        {"kind":"rock","x":36.63,"y":48.37,"r":1.14,"spot_id":"sp_cs_mirador","label":"el mirador"},
+        {"kind":"rock","x":21.5,"y":23.5,"r":1.01,"spot_id":"sp_cs_mojon","label":"el mojón quemado"},
+        {"kind":"rock","x":14.58,"y":32.81,"r":0.74},
+        {"kind":"rock","x":6.8,"y":44.53,"r":0.76},
+        {"kind":"tree","x":3.49,"y":34.24,"r":1.2},
+        {"kind":"bush","x":9.22,"y":67.87,"r":0.59},
+        {"kind":"tree","x":22.3,"y":53.34,"r":1.42},
+        {"kind":"bush","x":31.12,"y":22.92,"r":0.74},
+        {"kind":"rock","x":21.97,"y":75.18,"r":0.76},
+        {"kind":"bush","x":6.36,"y":34.81,"r":0.79},
+        {"kind":"tree","x":23.11,"y":69.18,"r":1.28},
+        {"kind":"rock","x":32.91,"y":42.34,"r":0.86},
+        {"kind":"bush","x":9.42,"y":69.76,"r":0.52},
+        {"kind":"bush","x":33.89,"y":31.76,"r":0.59},
+        {"kind":"bush","x":6.57,"y":54.8,"r":0.68},
+        {"kind":"bush","x":43.05,"y":64.53,"r":0.59},
+        {"kind":"bush","x":43.91,"y":52.64,"r":0.52},
+        {"kind":"rock","x":35.71,"y":62.35,"r":0.71},
+        {"kind":"bush","x":23.24,"y":17.68,"r":0.7},
+        {"kind":"tree","x":4.91,"y":57.33,"r":1.66},
+        {"kind":"bush","x":25.15,"y":22.11,"r":0.68},
+        {"kind":"bush","x":-1.61,"y":19.69,"r":0.75},
+        {"kind":"bush","x":-1.64,"y":5.22,"r":0.73},
+        {"kind":"bush","x":20.17,"y":8.26,"r":0.53},
+        {"kind":"rock","x":25.53,"y":82.44,"r":0.66},
+        {"kind":"rock","x":4.21,"y":31.23,"r":0.72},
+        {"kind":"bush","x":22.2,"y":-0.98,"r":0.57}
+      ]
+    },
+    "loc_ruinas": {
+      "cell_m": 1.5,
+      "bounds": {"x":-3.75,"y":-4.5,"w":37.83,"h":39},
+      "background": "grass",
+      "areas": [
+        {
+          "ground": "dirt",
+          "polygon": [[12.6,-1.49],[12.87,-0.77],[12.61,-0.08],[11.95,0.2],[11.03,0.25],[10.51,-0.65],[11.08,-1.46],[11.84,-1.87]]
+        }
+      ],
+      "walls": [{"points":[[12.69,31],[27.87,31]]},{"points":[[-1,-4.3],[-1,5.3]]}],
+      "doors": [{"from":[18.6,31],"to":[21.4,31]},{"from":[-1,-1.44],"to":[-1,1.44]}],
+      "props": [
+        {
+          "kind": "building",
+          "x": 4.97,
+          "y": 26.9,
+          "w": 6.38,
+          "h": 4.34,
+          "spot_id": "sp_ru_capilla",
+          "label": "la capilla de los señores"
+        },
+        {"kind":"building","x":28.9,"y":0.03,"w":5.18,"h":8.6,"spot_id":"sp_ru_torre","label":"la torre hundida"},
+        {"kind":"stairs","x":17.71,"y":30.09,"w":1.4,"h":3,"spot_id":"sp_ru_cripta","label":"la puerta de la cripta"},
+        {"kind":"rock","x":0.18,"y":13.27,"r":0.64},
+        {"kind":"tree","x":9.41,"y":-2.22,"r":1.29},
+        {"kind":"rock","x":25.56,"y":21.35,"r":0.9},
+        {"kind":"bush","x":23.2,"y":25.22,"r":0.5},
+        {"kind":"rock","x":20.37,"y":-0.32,"r":0.98},
+        {"kind":"tree","x":28.03,"y":16.46,"r":1.17},
+        {"kind":"tree","x":-0.27,"y":10.82,"r":1.58},
+        {"kind":"tree","x":4.46,"y":25.34,"r":1.29},
+        {"kind":"rock","x":16.9,"y":8.34,"r":1.16},
+        {"kind":"bush","x":-1.89,"y":16.17,"r":0.75},
+        {"kind":"rock","x":12.73,"y":4.69,"r":1.16},
+        {"kind":"bush","x":7.87,"y":15.54,"r":0.73},
+        {"kind":"bush","x":32.59,"y":11.05,"r":0.62},
+        {"kind":"rock","x":2.52,"y":22.62,"r":1.17},
+        {"kind":"rock","x":1.42,"y":19.35,"r":0.97},
+        {"kind":"bush","x":8.04,"y":-0.11,"r":0.65},
+        {"kind":"rock","x":22.37,"y":28.77,"r":0.91}
+      ]
+    },
+    "loc_cripta": {
+      "cell_m": 1.5,
+      "bounds": {"x":-5.7,"y":-3.45,"w":20.4,"h":20.4},
+      "background": "void",
+      "areas": [
+        {"ground":"stone","polygon":[[-4.5,-2.25],[13.5,-2.25],[13.5,15.75],[-4.5,15.75]]},
+        {
+          "ground": "water",
+          "polygon": [[-3.2,-0.76],[-3.24,-1.34],[-2.7,-1.48],[-2.25,-1.37],[-2.11,-0.92],[-2.29,-0.45],[-2.79,-0.5]]
+        }
+      ],
+      "walls": [
+        {"points":[[-4.5,-2.25],[13.5,-2.25],[13.5,15.75],[-4.5,15.75],[-4.5,-2.25]]},
+        {"points":[[13.5,1.5],[10.11,1.5]]},
+        {"points":[[4.5,-2.25],[4.5,-0.98]]},
+        {"points":[[-4.5,8.25],[-3.26,8.25]]}
+      ],
+      "doors": [{"from":[-1.01,-2.25],"to":[0.61,-2.25]}],
+      "props": [
+        {"kind":"table","x":2.15,"y":12.62,"w":0.9,"h":1.56,"spot_id":"sp_cr_altar","label":"el altar de los Vharn"},
+        {"kind":"chair","x":2.35,"y":14.23,"w":0.5,"h":0.45,"spot_id":"sp_cr_altar"},
+        {"kind":"chair","x":2.35,"y":12.12,"w":0.5,"h":0.45,"spot_id":"sp_cr_altar"},
+        {"kind":"fireplace","x":12.7,"y":9.21,"w":0.8,"h":1.57,"spot_id":"sp_cr_brasa","label":"la Brasa","lit":true},
+        {"kind":"rock","x":11.61,"y":11.61,"r":1.12,"spot_id":"sp_cr_brasa","label":"la Brasa"},
+        {"kind":"rock","x":7.39,"y":4.61,"r":0.9,"spot_id":"sp_cr_cadenas","label":"las cadenas rotas"},
+        {"kind":"stairs","x":0.7,"y":-2.25,"w":1.4,"h":3,"spot_id":"sp_cr_escalera","label":"la escalera"},
+        {"kind":"rock","x":12.24,"y":-0.91,"r":0.7},
+        {"kind":"rock","x":11.51,"y":9.43,"r":0.57},
+        {"kind":"rock","x":6.27,"y":2.79,"r":0.5},
+        {"kind":"rock","x":11.21,"y":4.76,"r":0.53},
+        {"kind":"crate","x":-3.34,"y":0.57,"w":0.94,"h":0.94},
+        {"kind":"chest","x":12.92,"y":5.4,"w":0.58,"h":1.07},
+        {"kind":"rock","x":-1.29,"y":6.37,"r":0.78},
+        {"kind":"rock","x":-0.79,"y":11.94,"r":0.5},
+        {"kind":"crate","x":8.48,"y":-0.2,"w":0.82,"h":0.82},
+        {"kind":"rock","x":6.07,"y":0.03,"r":0.83},
+        {"kind":"rock","x":-0.95,"y":3.63,"r":0.88}
+      ]
+    },
+    "loc_way_ex_plaza_molino": {
+      "cell_m": 1.5,
+      "bounds": {"x":-6.87,"y":-11.6,"w":12.870000000000001,"h":24.625},
+      "background": "grass",
+      "areas": [
+        {
+          "ground": "dirt",
+          "polygon": [
+            [4.97,0.1],
+            [3.7,3.05],
+            [1.87,6.41],
+            [-1.85,5.78],
+            [-4.73,4.78],
+            [-6.87,2.64],
+            [-6.53,-1.69],
+            [-4.47,-3.75],
+            [-2.22,-6.41],
+            [0.94,-6.68],
+            [3.25,-4.47],
+            [5.73,-2.5]
+          ]
+        },
+        {
+          "ground": "grass",
+          "polygon": [[-6.05,-3.62],[-5.04,-4.76],[-3.24,-5.24],[-2.25,-3.54],[-3.17,-2.13],[-4.43,-1.35],[-5.99,-1.96]]
+        },
+        {
+          "ground": "water",
+          "polygon": [
+            [1.32,-4.07],
+            [1.87,-3.89],
+            [1.86,-3.33],
+            [1.95,-2.82],
+            [1.45,-2.7],
+            [1,-2.59],
+            [0.6,-2.91],
+            [0.66,-3.4],
+            [0.79,-3.92]
+          ]
+        },
+        {
+          "ground": "water",
+          "polygon": [[-0.34,-2.12],[0.28,-2.12],[0.59,-1.49],[0.25,-0.84],[-0.48,-0.71],[-1.02,-1.22],[-0.9,-1.91]]
+        },
+        {"ground":"dirt","path":[[0,0],[0,12.01]],"width":2.03}
+      ],
+      "walls": [],
+      "doors": [],
+      "props": [
+        {"kind":"building","x":2.4,"y":6.53,"w":3.6,"h":4.33},
+        {"kind":"building","x":-5.44,"y":-11.33,"w":4.39,"h":4.01},
+        {"kind":"building","x":-0.37,"y":-11.6,"w":6.37,"h":4.49},
+        {"kind":"bush","x":0.9,"y":-6.05,"r":0.65},
+        {"kind":"bush","x":-1.23,"y":-3.01,"r":0.63},
+        {"kind":"barrel","x":-2.59,"y":-1.21,"r":0.36}
+      ]
+    },
+    "loc_way_ex_plaza_claro": {
+      "cell_m": 1.5,
+      "bounds": {"x":-12.96,"y":-13.07,"w":25.94,"h":26.700000000000003},
+      "background": "grass",
+      "areas": [
+        {
+          "ground": "dirt",
+          "polygon": [[3.03,1.82],[1.5,1.19],[1.92,-0.45],[3.23,-1.15],[4.62,-1.15],[5.91,-0.15],[5.59,1.51],[4.25,2.23]]
+        },
+        {"ground":"dirt","path":[[0,0],[0,-12]],"width":2.14}
+      ],
+      "walls": [],
+      "doors": [],
+      "props": [
+        {"kind":"tree","x":9.82,"y":10.26,"r":1.57},
+        {"kind":"tree","x":-4.8,"y":-8.78,"r":1.21},
+        {"kind":"tree","x":10.33,"y":-5.97,"r":1.36},
+        {"kind":"tree","x":8.92,"y":-2.01,"r":1.92},
+        {"kind":"tree","x":-7.9,"y":-6.23,"r":1.55},
+        {"kind":"tree","x":9.2,"y":2.93,"r":1.91},
+        {"kind":"tree","x":-7.61,"y":9.01,"r":1.25},
+        {"kind":"tree","x":-8.12,"y":-1.03,"r":1.19},
+        {"kind":"tree","x":-9.8,"y":5.17,"r":1.62},
+        {"kind":"tree","x":4.28,"y":-8.18,"r":1.65},
+        {"kind":"tree","x":10.82,"y":7.49,"r":1.49},
+        {"kind":"tree","x":3.88,"y":10.69,"r":1.29},
+        {"kind":"tree","x":2.82,"y":7.92,"r":1.52},
+        {"kind":"tree","x":-0.63,"y":8.45,"r":1.22},
+        {"kind":"tree","x":-4.65,"y":11.03,"r":1.28},
+        {"kind":"tree","x":-10.59,"y":12.04,"r":1.55},
+        {"kind":"tree","x":-11.21,"y":2.33,"r":1.75},
+        {"kind":"tree","x":7.23,"y":9.8,"r":1.3},
+        {"kind":"tree","x":11.86,"y":5.42,"r":1.12},
+        {"kind":"tree","x":-4.34,"y":7.03,"r":1.85},
+        {"kind":"tree","x":-10.96,"y":-3.61,"r":1.46},
+        {"kind":"tree","x":-0.24,"y":11.89,"r":1.74},
+        {"kind":"tree","x":-6.7,"y":-4.17,"r":1.33},
+        {"kind":"tree","x":-8.22,"y":0.95,"r":1.17},
+        {"kind":"tree","x":11.29,"y":-9.36,"r":1.64},
+        {"kind":"tree","x":-10.6,"y":-8.5,"r":1.95},
+        {"kind":"bush","x":-1.73,"y":1.84,"r":0.67}
+      ]
+    },
+    "loc_way_ex_molino_claro": {
+      "cell_m": 1.5,
+      "bounds": {"x":-12.100000000000001,"y":-12.97,"w":23.11,"h":25.26},
+      "background": "grass",
+      "areas": [
+        {
+          "ground": "dirt",
+          "polygon": [
+            [-0.92,0.5],
+            [-0.22,1.17],
+            [0.5,1.79],
+            [0.09,2.65],
+            [-0.5,3.36],
+            [-1.52,3.42],
+            [-1.96,2.55],
+            [-2.44,1.7],
+            [-1.83,0.9]
+          ]
+        },
+        {
+          "ground": "dirt",
+          "polygon": [[3.01,-2.22],[1.45,-1.59],[0.27,-2.79],[0.54,-4.21],[1.4,-5.55],[2.86,-4.87],[3.94,-3.63]]
+        },
+        {
+          "ground": "dirt",
+          "polygon": [[-3.87,1.48],[-3.42,2.28],[-3.84,3.1],[-4.74,3.5],[-5.43,2.79],[-5.29,1.96],[-4.73,1.41]]
+        },
+        {
+          "ground": "water",
+          "polygon": [[3.03,-5.59],[3.3,-6.09],[3.84,-6.14],[4.19,-5.81],[4.34,-5.25],[3.82,-4.99],[3.28,-5.08]]
+        },
+        {"ground":"dirt","path":[[0,0],[0,11.25]],"width":2.08}
+      ],
+      "walls": [],
+      "doors": [],
+      "props": [
+        {"kind":"tree","x":9.18,"y":2.36,"r":1.83},
+        {"kind":"tree","x":7.35,"y":8.93,"r":1.48},
+        {"kind":"tree","x":-2.69,"y":-10.18,"r":1.43},
+        {"kind":"tree","x":-10.64,"y":5.25,"r":1.46},
+        {"kind":"tree","x":-7.35,"y":3.89,"r":1.98},
+        {"kind":"tree","x":-10.08,"y":-2.19,"r":1.5},
+        {"kind":"tree","x":-7.87,"y":-10.51,"r":1.86},
+        {"kind":"tree","x":6.49,"y":-1.07,"r":1.56},
+        {"kind":"tree","x":8.16,"y":-11.73,"r":1.24},
+        {"kind":"tree","x":7.35,"y":-8.34,"r":1.7},
+        {"kind":"tree","x":4.52,"y":-7.65,"r":1.19},
+        {"kind":"tree","x":-7.77,"y":-3.49,"r":1.74},
+        {"kind":"tree","x":-0.09,"y":-10.06,"r":1.8},
+        {"kind":"tree","x":-5.74,"y":-8.9,"r":1.47},
+        {"kind":"tree","x":8.42,"y":-4.89,"r":1.37},
+        {"kind":"tree","x":6.12,"y":3.04,"r":1.28},
+        {"kind":"tree","x":-10.61,"y":-9.6,"r":1.19},
+        {"kind":"tree","x":-3.52,"y":7.35,"r":1.54},
+        {"kind":"tree","x":2.8,"y":-10.93,"r":1.56},
+        {"kind":"bush","x":-2.19,"y":-0.9,"r":0.72}
+      ]
+    },
+    "loc_way_ex_claro_cuesta": {
+      "cell_m": 1.5,
+      "bounds": {"x":-6,"y":-12.98,"w":12,"h":19.74},
+      "background": "dirt",
+      "areas": [
+        {
+          "ground": "dirt",
+          "polygon": [[3.65,2.8],[3.31,3.97],[2.54,4.87],[1.42,4.59],[0.49,4.1],[0.5,3.06],[0.51,1.81],[1.74,1.39],[2.93,1.78]]
+        },
+        {
+          "ground": "dirt",
+          "polygon": [
+            [-5.38,4.32],
+            [-4.77,3.41],
+            [-3.8,3.93],
+            [-2.93,4.41],
+            [-3.13,5.38],
+            [-3.33,6.47],
+            [-4.44,6.37],
+            [-5.28,6.01],
+            [-5.57,5.17]
+          ]
+        },
+        {
+          "ground": "dirt",
+          "polygon": [[5.36,-0.67],[5.5,1.29],[4.85,2.72],[3.43,3.12],[1.9,2.85],[0.97,1.33],[1.87,-0.21],[3.4,-0.49]]
+        },
+        {
+          "ground": "water",
+          "polygon": [[2.64,-1.24],[2.11,-1.41],[1.63,-1.86],[1.99,-2.46],[2.59,-2.51],[3.09,-2.21],[3.27,-1.54]]
+        },
+        {"ground":"dirt","path":[[0,0],[0,-11.99]],"width":1.97}
+      ],
+      "walls": [],
+      "doors": [],
+      "props": [{"kind":"bush","x":-3.26,"y":-4.34,"r":0.65}]
+    },
+    "loc_way_ex_cuesta_ruinas": {
+      "cell_m": 1.5,
+      "bounds": {"x":-6,"y":-12.86,"w":12.75,"h":18.87},
+      "background": "grass",
+      "areas": [
+        {
+          "ground": "dirt",
+          "polygon": [[5.01,2.75],[4.16,4.18],[2.56,4],[1.51,3.33],[0.17,2.32],[1.05,0.91],[2.25,0.19],[3.81,-0.09],[4.67,1.25]]
+        },
+        {
+          "ground": "dirt",
+          "polygon": [[4.26,-1.19],[5.49,0.19],[5.34,2.05],[3.66,2.51],[1.84,2.44],[0.96,0.5],[2.65,-0.59]]
+        },
+        {
+          "ground": "water",
+          "polygon": [[-2.63,4.12],[-2.48,3.96],[-2.19,3.9],[-2.14,4.19],[-2.15,4.47],[-2.43,4.5],[-2.71,4.4]]
+        },
+        {"ground":"dirt","path":[[0,0],[0,-11.99]],"width":1.73}
+      ],
+      "walls": [],
+      "doors": [],
+      "props": [{"kind":"rock","x":-3.21,"y":-5.25,"r":0.68}]
+    }
+  }
 }

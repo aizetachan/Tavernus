@@ -78,9 +78,9 @@ describe('proveedor de IA (apagado por defecto)', () => {
     expect(body['duration_seconds']).toBe(22);
   });
 
-  it('coste por mundo (26 claves, una vez): céntimos con ElevenLabs, unos 2 $ con Stable Audio', () => {
+  it('coste por mundo (27 claves, una vez): céntimos con ElevenLabs, unos 2 $ con Stable Audio', () => {
     expect(worldCostUSD('elevenlabs')).toBeLessThan(0.5);
-    expect(worldCostUSD('stability')).toBeCloseTo(26 * 0.08, 5);
+    expect(worldCostUSD('stability')).toBeCloseTo(27 * 0.08, 5);
   });
 
   it('/api/sfx: estado sin IA y 404 para lo que se sintetiza; con proveedor, genera una vez y cachea', async () => {
@@ -91,13 +91,16 @@ describe('proveedor de IA (apagado por defecto)', () => {
       const res = { writeHead(s: number, h: Record<string, string>) { r.status = s; r.headers = h; return res; }, end(b?: string | Buffer) { r.body = Buffer.from(b ?? ''); } };
       return { r, res: res as never };
     };
+    // Biblioteca vacía: así hay claves que se sintetizan (la del repositorio ya tiene fichero para todas).
+    const lib = await mkdtemp(join(tmpdir(), 'tavernus-sfxlib-'));
+    process.env['SFX_LIBRARY_DIR'] = lib;
     try {
       setSoundProviderForTests(null);
       let o = out();
       await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&character=ch_kael'), dir);
       expect(JSON.parse(o.r.body.toString())).toMatchObject({ ambience: 'ambiente-taberna', ai: false });
       o = out();
-      await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=puerta-abrir'), dir);
+      await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=ambiente-lluvia'), dir);
       expect(o.r.status).toBe(404);
       o = out();
       await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=..%2F..%2Fsecreto'), dir);
@@ -108,16 +111,18 @@ describe('proveedor de IA (apagado por defecto)', () => {
       setSoundProviderForTests(fake);
       for (let i = 0; i < 2; i++) {
         o = out();
-        await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=puerta-abrir'), dir);
+        await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=ambiente-lluvia'), dir);
         expect(o.r.status).toBe(200);
         expect(o.r.headers['content-type']).toBe('audio/mpeg');
       }
       expect(calls).toBe(1);
-      expect((await readFile(join(dir, 'sfx', 'puerta-abrir.mp3'))).toString()).toBe('ID3fake');
+      expect((await readFile(join(dir, 'sfx', 'ambiente-lluvia.mp3'))).toString()).toBe('ID3fake');
       o = out();
       await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&character=ch_kael'), dir);
-      expect(JSON.parse(o.r.body.toString())).toMatchObject({ ai: true, files: ['puerta-abrir'] });
+      expect(JSON.parse(o.r.body.toString())).toMatchObject({ ai: true, files: ['ambiente-lluvia'] });
     } finally {
+      delete process.env['SFX_LIBRARY_DIR'];
+      await rm(lib, { recursive: true, force: true });
       await rm(dir, { recursive: true, force: true });
     }
   });

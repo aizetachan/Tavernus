@@ -150,7 +150,7 @@ const PACE_FACTOR: Record<Pace, number> = { stealth: 0.4, walk: 1, run: 1.2 };
 /** Distancia de referencia: a 500 m la base cuenta entera; el factor se topa en ×2. */
 const REF_DISTANCE_M = 500;
 /** Por debajo de esto (entre localizaciones) no hay encuentro: una puerta, un portal. */
-const MIN_DISTANCE_M = 100;
+export const MIN_DISTANCE_M = 100;
 const MAX_CHANCE = 0.75;
 
 function zoneKindOf(world: World, loc: Location): string {

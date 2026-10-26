@@ -11,7 +11,7 @@ Al salir de la taberna se oyen pasos sobre madera, una puerta que se abre y se c
 | **Efectos puntuales** | pasos (madera, piedra, tierra, hierba, agua), puerta (abrir y cerrar), moneda, coger y soltar, dado, espada (golpe y fallo), daño, curar, hacha, descubrir, campana | De 0,5 a 3 s. Se disparan desde eventos del motor y se tocan en secuencia. |
 | **Ambientes en bucle** | taberna, interior tranquilo, plaza (de día y de noche), bosque (de día y de noche), agua, lluvia | De 10 a 30 s y sin costura. Uno por localización, con fundido al cambiar. Bajan cuando habla el narrador. |
 
-El catálogo es **genérico**: las claves dependen del tipo de suelo y del arquetipo de lugar, no del mundo. Con unos 26 sonidos (18 efectos y 8 ambientes) se cubre cualquier mundo generado. Generar sonidos por mundo solo tiene sentido si se quiere un sabor propio, por ejemplo la taberna de un puerto pirata frente a un refugio de montaña.
+El catálogo es **genérico**: las claves dependen del tipo de suelo y del arquetipo de lugar, no del mundo. Con unos 27 sonidos (18 efectos y 9 ambientes) se cubre cualquier mundo generado. Generar sonidos por mundo solo tiene sentido si se quiere un sabor propio, por ejemplo la taberna de un puerto pirata frente a un refugio de montaña.
 
 ## Opciones comparadas
 
@@ -51,7 +51,7 @@ Ruido filtrado, senos con barrido, resonancias amortiguadas y trenes de impulsos
 | Escalón | Qué | Coste por mundo (unos 20 efectos y 6 ambientes, generados una vez) |
 |---|---|---|
 | **Gratis (hecho)** | Recetas procedurales para todo el catálogo. Los más débiles (taberna, pájaros, lluvia) se sustituyen por CC0 de Kenney o Freesound dejando el fichero en `public/sfx/<clave>.ogg` y anotándolo en `public/sfx/LICENSES` | **0 $** |
-| **Barato** | ElevenLabs Sound Effects por API, con las descripciones de `SOUND_PROMPTS` (o con el tono del mundo añadido), los ambientes con `loop: true` y caché por partida | 20 × ~1,5 s + 6 × 22 s ≈ 162 s → **≈ 0,32 $**. Con tres tomas para elegir, **≈ 1 $**. Los 26 sonidos del catálogo actual: ≈ 0,40 $ |
+| **Barato** | ElevenLabs Sound Effects por API, con las descripciones de `SOUND_PROMPTS` (o con el tono del mundo añadido), los ambientes con `loop: true` y caché por partida | 20 × ~1,5 s + 6 × 22 s ≈ 162 s → **≈ 0,32 $**. Con tres tomas para elegir, **≈ 1 $**. Los 27 sonidos del catálogo actual: ≈ 0,40 $ |
 | **Premium** | ElevenLabs para el foley más Stable Audio 2.5 para ambientes de 60 a 90 s (menos repetición), con tomas extra y escucha humana antes de fijarlas | 26 × 0,08 $ ≈ **2,1 $** en Stable Audio. Con tres tomas y foley de ElevenLabs, **≈ 5–7 $** |
 
 Todos los costes son **por mundo, generados una vez**, y nunca por acción. Después, cada partida reproduce lo cacheado sin coste. Si el catálogo genérico basta, el coste se paga una sola vez para todos los mundos.
@@ -71,7 +71,7 @@ Todos los costes son **por mundo, generados una vez**, y nunca por acción. Desp
 | `look`, `say`, `shout`, `whisper`, `wait`, `sleep`, `passed`… | nada |
 
 - **Suelo:** si el punto tiene la etiqueta `water`, agua. Si no, manda `location.state.floor` cuando existe. Si tampoco, se mira la descripción: «losas» o «cripta» dan piedra en interior, «empedrada» piedra fuera y «prado» hierba. Por defecto, interior es madera, poblado es piedra y campo es tierra.
-- **Ambiente:** un interior animado (`noise ≥ 0,25` o «taberna/posada») es taberna, y si no, interior. Fuera, según la zona `town` o el nombre, plaza o bosque, en versión de noche según `lightAt`. Un río o arroyo en el nombre da agua. La lluvia sale de `location.state.weather` (el motor todavía no tiene clima; queda preparado).
+- **Ambiente:** una herrería, fragua o forja es herrería. Si no, un interior animado (`noise ≥ 0,25` o «taberna/posada») es taberna, y si no, interior. Fuera, según la zona `town` o el nombre, plaza o bosque, en versión de noche según `lightAt`. Un río o arroyo en el nombre da agua. La lluvia sale de `location.state.weather` (el motor todavía no tiene clima; queda preparado).
 - **Puerta:** hay puerta si se pasa de interior a exterior (o al revés), o si el punto tiene la etiqueta `door`, `gate` o `trapdoor`, o se llama puerta, portón o trampilla.
 - **Servidor** (`server.ts`): cada mensaje del actor lleva `sfx: string[]`.
 

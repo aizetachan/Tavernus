@@ -220,6 +220,15 @@ export const NOVEL_STYLE = String.raw`
   /* La frase del narrador que presenta a quien habla, dentro de su misma burbuja. */
   .msg.row .lead { margin: 0 0 3px; font-style: italic; color: var(--muted); }
   .msg.row.pending { opacity: .55; }
+  /* «Escribiendo…»: la burbuja del máster con tres puntos mientras se espera la respuesta, como en los chats. */
+  .msg.held { display: none !important; }
+  .msg.row.typing .who { display: none; }
+  .msg.row.typing .body { display: flex; align-items: center; gap: 5px; height: 34px; padding: 0 14px; }
+  .msg.row.typing .body i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: nv-typing 1s ease-in-out infinite; }
+  .msg.row.typing .body i:nth-child(2) { animation-delay: .15s; }
+  .msg.row.typing .body i:nth-child(3) { animation-delay: .3s; }
+  @keyframes nv-typing { 0%, 60%, 100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
+  @media (prefers-reduced-motion: reduce) { .msg.row.typing .body i { animation: none; opacity: .7; } }
   .msg.row .who { display: flex; align-items: center; gap: 6px; margin: 0 0 2px; font-size: 12.5px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--accent); }
   .msg.row.npc .who { color: var(--npc, #e6a587); }
   .msg.row.cont .who .nm { display: none; }
@@ -240,6 +249,13 @@ export const NOVEL_STYLE = String.raw`
   /* Imágenes del narrador (escena, retrato, objeto…): bajo su avatar, como una foto en el chat. */
   .msg.scene, .msg.moment { margin: 4px 0 0 42px; animation: nv-in .5s ease-out; }
   .msg.scene { width: min(560px, calc(100% - 42px)); }
+  /* La vista del sitio dentro de la burbuja del narrador que cuenta la llegada, como una foto en un mensaje. */
+  /* Con foto: el mismo margen arriba que a los lados (4 px) y un clic en la foto la amplía. */
+  .msg.row.has-place .body { width: min(520px, 100%); padding-top: 4px; }
+  .place-shot { position: relative; display: block; width: calc(100% + 16px); margin: 0 -8px 8px; padding: 0; border: 0; border-radius: 14px; overflow: hidden;
+    aspect-ratio: 16 / 9; background: var(--platter); cursor: zoom-in; }
+  .place-shot img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
+  .place-shot.ready img { opacity: 1; }
   @keyframes nv-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   .moment .shot { position: relative; display: block; width: 220px; aspect-ratio: 4 / 5; padding: 0; border: 0; border-radius: 18px; overflow: hidden; background: var(--platter); cursor: zoom-in; box-shadow: var(--control-shadow); }
   .moment.item .shot { width: 200px; aspect-ratio: 1; }
@@ -340,6 +356,109 @@ export const NOVEL_JS = String.raw`
   /** Lo que escribe el jugador, mientras el narrador piensa: se sustituye por lo que su PJ dice o hace. */
   function pendingMine(text) { chatRow('mine', meWho(), format(text), { act: true, pending: true }); scroll(); }
   function clearPending() { log.querySelectorAll('.msg.row.pending').forEach(function (d) { d.remove(); }); }
+  /**
+   * «Escribiendo…»: antes de cada burbuja que no es del jugador (narrador o personaje) se ven sus tres puntos, con
+   * su avatar, como en los chats. La primera respuesta del turno, al menos TYPING_MS (dos vueltas de la animación),
+   * contando los puntos del narrador que ya se veían mientras se esperaba; las siguientes, entre 1,5 y 2 s según lo
+   * largas que sean. Los mensajes del stream y el fin de la espera pasan por la misma cola, en orden (inChat, afterChat).
+   */
+  var TYPING_MS = 2000, typingSince = 0, chatQueue = Promise.resolve(), turnShown = false;
+  /** Los puntos del narrador al final del hilo (on) o fuera (off): mientras se espera la respuesta. */
+  function typing(on) {
+    log.querySelectorAll('.msg.row.typing').forEach(function (d) { d.remove(); });
+    typingSince = on ? Date.now() : 0;
+    if (!on) return;
+    var row = chatRow('master', cast.master, '<i></i><i></i><i></i>');
+    typingRow(row, cast.master && cast.master.name || 'El narrador');
+    scroll();
+  }
+  function typingRow(row, name) {
+    row.classList.add('typing');
+    row.setAttribute('role', 'status');
+    row.setAttribute('aria-label', name + ' está escribiendo');
+  }
+  /** Los puntos de quien habla en esa burbuja: la misma fila, con su avatar, y los puntos en vez del texto. */
+  function typingLike(row) {
+    var t = row.cloneNode(true);
+    t.classList.remove('held');
+    t.removeAttribute('data-seq');
+    var col = t.querySelector('.col');
+    if (col) col.innerHTML = '<div class="body"><i></i><i></i><i></i></div>';
+    var nm = row.querySelector('.who .nm');
+    typingRow(t, nm ? nm.textContent : 'Alguien');
+    log.appendChild(t);
+    scroll();
+    return t;
+  }
+  function typingMs(row) {
+    var n = ((row.querySelector('.body') || row).textContent || '').length;
+    return Math.max(1500, Math.min(2000, 1200 + n * 4));
+  }
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, Math.max(0, ms)); }); }
+  /**
+   * Enseña lo nuevo del turno (lo que no estaba en «old») poco a poco: lo del jugador y lo que no es una burbuja,
+   * enseguida; cada burbuja de otro, tras sus puntos. La voz empieza con la primera burbuja.
+   */
+  function revealTurn(old) {
+    var els = [].filter.call(log.children, function (e) { return !old.has(e) && !e.classList.contains('typing'); });
+    els.forEach(function (x) { x.classList.add('held'); });
+    var first = true;
+    return els.reduce(function (p, x) {
+      return p.then(function () {
+        if (!x.classList.contains('row') || x.classList.contains('mine')) { x.classList.remove('held'); scroll(); return; }
+        var dots = log.querySelector('.msg.row.typing'), ms;
+        if (first && dots && typingSince && x.classList.contains('master')) ms = TYPING_MS - (Date.now() - typingSince);
+        else { if (dots) dots.remove(); typingLike(x); ms = first && typingSince ? TYPING_MS - (Date.now() - typingSince) : typingMs(x); ms = Math.max(ms, 1500); }
+        return wait(ms).then(function () {
+          log.querySelectorAll('.msg.row.typing').forEach(function (d) { d.remove(); });
+          x.classList.remove('held');
+          scroll();
+          if (first) { first = false; if (window.TavernusTTS) TavernusTTS.fresh(); }
+        });
+      });
+    }, Promise.resolve());
+  }
+  /** Hace fn en su turno de la cola (fn puede devolver una promesa: la cola la espera). */
+  function inChat(fn) { queueChat(fn, function () { return false; }); }
+  /**
+   * Fin de la espera: en su turno de la cola, sin más espera si ya salió algo del turno; si no (la respuesta llegó
+   * y el stream no trajo nada), también espera a que los puntos cumplan su tiempo.
+   */
+  function afterChat(fn) { queueChat(fn, function () { return !turnShown; }); }
+  function queueChat(fn, mustWait) {
+    chatQueue = chatQueue.then(function () {
+      return wait(mustWait() && typingSince ? typingSince + TYPING_MS - Date.now() : 0);
+    }).then(fn).catch(function (e) { console.error(e); });
+  }
+
+  /** La burbuja que cuenta la llegada a un sitio: queda marcada con él y lleva su vista si ya existe. */
+  function placeIn(row, p) {
+    row.setAttribute('data-place', p.location_id);
+    if (p.src) placeShot(row, p);
+  }
+  /** La vista recién pintada entra en las burbujas de llegada a ese sitio que aún no la tienen. */
+  function placeReady(p) {
+    if (!p || !p.src) return;
+    log.querySelectorAll('.msg.row[data-place]').forEach(function (row) { if (row.getAttribute('data-place') === p.location_id) placeShot(row, p); });
+  }
+  function placeShot(row, p) {
+    var body = row.querySelector('.body');
+    if (!body || body.querySelector('.place-shot')) return;
+    row.classList.add('has-place');
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'place-shot'; b.title = 'Ver en grande';
+    b.innerHTML = '<img alt="">';
+    var img = b.querySelector('img');
+    img.alt = 'Ilustración: ' + (p.name || '');
+    var atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+    img.addEventListener('load', function () { b.classList.add('ready'); if (atEnd) scroll(); sceneDot(); });
+    // Si no carga, se quita la foto y queda la burbuja como estaba.
+    img.addEventListener('error', function () { b.remove(); row.classList.remove('has-place'); });
+    b.addEventListener('click', function () { openLightbox({ src: p.src, name: p.name || '' }); });
+    img.src = p.src;
+    // Arriba del todo: la foto, con el mismo margen por arriba que por los lados; debajo, el nombre y el texto.
+    body.insertBefore(b, body.firstChild);
+  }
 
   /** Aviso de una línea (tablón, progreso): sin burbuja; un enlace lleva a la pestaña que toca (el Diario). */
   function addNotice(n) {
@@ -379,7 +498,29 @@ export const NOVEL_JS = String.raw`
     row.querySelectorAll('button').forEach(function (b) { if (b.textContent.trim().toLowerCase() === t) b.classList.add('chosen'); });
   }
 
-  function chatMessage(m, live) {
+  /** Un mensaje del stream. Con «animate» (lo que llega en vivo), sus burbujas salen tras sus puntos: devuelve cuándo acaba. */
+  function chatMessage(m, live, animate) {
+    if (busy) turnShown = true;
+    var since = typingSince;
+    typing(false);
+    // Lo que ya había (el mensaje pendiente del jugador se quita al pintar el turno: no vale como marca).
+    var old = new Set(log.children);
+    try { chatTurn(m, live); } catch (e) { console.error(e); }
+    var shown;
+    if (animate) {
+      // Los puntos del narrador que ya se veían siguen (y cuentan) hasta la primera burbuja.
+      if (since) { typing(true); typingSince = since; }
+      shown = revealTurn(old);
+    } else shown = Promise.resolve();
+    return shown.then(function () {
+      // Si el turno sigue (otra respuesta en camino), los puntos vuelven al rato: sin parpadeo cuando era la última.
+      // La siguiente respuesta cuenta su espera desde ahora.
+      if (!busy) return;
+      typingSince = Date.now();
+      setTimeout(function () { if (busy && !log.querySelector('.msg.row.typing')) { var t = typingSince; typing(true); typingSince = t; } }, 600);
+    });
+  }
+  function chatTurn(m, live) {
     if (m.notice) { addNotice(m.notice); return; }
     if (m.scene) { showScene(m.scene); return; }
     if (m.chapter) { addChapter(m); return; }
@@ -421,6 +562,7 @@ export const NOVEL_JS = String.raw`
     // Sin narración (todo era diálogo): el turno cuelga de su última burbuja.
     if (!main) main = last;
     if (!last || !main) return;
+    if (m.place && main.classList.contains('row')) placeIn(main, m.place);
     last.setAttribute('data-seq', String(m.seq));
     // La voz lee la narración y los parlamentos del turno desde la burbuja del narrador.
     var div = main.classList.contains('master') ? main : last;

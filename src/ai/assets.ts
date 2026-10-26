@@ -48,9 +48,15 @@ export interface AssetManifest {
   combat?: Record<Id, string>;
   /** Mapa de región (imagen); la web aún no lo pinta. */
   region_map?: string;
+  /**
+   * Campañas cuyos puntos encajan con `maps` y `map_backgrounds` (si falta, todas las de `campaigns`). Hace falta
+   * cuando la carpeta sirve a dos campañas con los mismos ids de localización y puntos distintos, como la demo y
+   * Brezal escrito: las imágenes valen para las dos, los planos solo para una.
+   */
+  plan_campaigns?: Id[];
   /** Planos a mano por localización, como datos. */
   maps?: Record<Id, LocationMap>;
-  /** Fondo opcional de cada plano (imagen); el tablero aún no lo pinta. */
+  /** Fondo pintado de cada plano (imagen): cubre justo los `bounds` del plano escrito de esa localización. */
   map_backgrounds?: Record<Id, string>;
 }
 
@@ -120,9 +126,14 @@ export function writtenImage(m: AssetManifest | null, kind: AssetKind | (string 
   return null;
 }
 
-/** Plano escrito de la localización; null si se genera. */
-export function writtenMap(m: AssetManifest | null, locationId: Id): LocationMap | null {
-  return m?.maps?.[locationId] ?? null;
+/** ¿Los planos del manifiesto valen para esta campaña? */
+function plansFor(m: AssetManifest, campaignId: Id): boolean {
+  return (m.plan_campaigns ?? m.campaigns).includes(campaignId);
+}
+
+/** Plano escrito de la localización para esa campaña; null si se genera. */
+export function writtenMap(m: AssetManifest | null, campaignId: Id, locationId: Id): LocationMap | null {
+  return m && plansFor(m, campaignId) ? m.maps?.[locationId] ?? null : null;
 }
 
 /** Imagen del mapa de región, si la hay. */
@@ -130,7 +141,7 @@ export function writtenRegionMap(m: AssetManifest | null): string | null {
   return m ? fileOf(m, m.region_map) : null;
 }
 
-/** Fondo del plano de la localización, si lo hay. */
-export function writtenMapBackground(m: AssetManifest | null, locationId: Id): string | null {
-  return m ? fileOf(m, m.map_backgrounds?.[locationId]) : null;
+/** Fondo del plano de la localización para esa campaña, si lo hay y la localización tiene plano escrito. */
+export function writtenMapBackground(m: AssetManifest | null, campaignId: Id, locationId: Id): string | null {
+  return m && writtenMap(m, campaignId, locationId) ? fileOf(m, m.map_backgrounds?.[locationId]) : null;
 }

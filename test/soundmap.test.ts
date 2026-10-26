@@ -3,6 +3,8 @@ import { cuesFor, floorOf, ambienceOf, isDoor, placeOf, soundCuesOf, currentAmbi
 import { RECIPE_KEYS } from '../src/adapters/web/sfx.js';
 import { bootEngine, freshWorld } from './helpers.js';
 import type { Delivery } from '../src/engine/events.js';
+import { authoredSeed } from '../src/data/campaigns/index.js';
+import { World } from '../src/engine/world.js';
 
 const taberna: Place = { location_id: 'loc_taberna', indoor: true, floor: 'madera', ambience: 'taberna' };
 const plaza: Place = { location_id: 'loc_plaza', indoor: false, floor: 'piedra', ambience: 'plaza' };
@@ -122,5 +124,15 @@ describe('con el motor', () => {
     expect(currentAmbience(engine, 'ch_kael')).toBe('ambiente-taberna');
     expect(currentAmbience(engine, 'ch_mira')).toBe('ambiente-plaza');
     expect(currentAmbience(engine, 'nadie')).toBeNull();
+  });
+
+  it('Brezal: cada sitio con fichero de ambiente suena con el suyo; la herrería, con el de herrería', () => {
+    const { clock, t0 } = freshWorld();
+    const world = new World(authoredSeed('brezal'));
+    const amb = (id: string) => ambienceOf(world, { clock }, world.location(id), t0);
+    expect(amb('loc_taberna')).toBe('taberna');
+    expect(amb('loc_herreria')).toBe('herreria');
+    expect(['plaza', 'plaza-noche']).toContain(amb('loc_plaza'));
+    expect(['bosque', 'bosque-noche']).toContain(amb('loc_claro'));
   });
 });

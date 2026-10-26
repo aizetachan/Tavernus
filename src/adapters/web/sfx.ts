@@ -327,6 +327,11 @@ const RECIPES_JS = String.raw`var SFX_RECIPES = (function () {
     events(o, sr, r, 0.25, function (t) { clink(o, sr, r, t, 0.12); if (r() < 0.5) clink(o, sr, r, t + 0.08, 0.08); });
     events(o, sr, r, 0.12, function (t) { creak(o, sr, r, t, 0.2, 55, 40, 0.06); });
   }), 0.5); } };
+  R['ambiente-herreria'] = { loop: true, gain: 0.5, render: function (sr) { var r = rng(109); return norm(loop(sr, 12, function (o) {
+    bed(o, sr, r, { brown: true, lp: 300, gain: 0.4, lfo: [[0.1, 0.4]] });
+    crackles(o, sr, r, 8, 0.3);
+    events(o, sr, r, 0.45, function (t) { for (var k = 0; k < 3; k++) { var f = 900 + r() * 300; modal(o, sr, t + k * 0.45, [f, f * 2.76, f * 5.4], [0.25, 0.12, 0.06], [0.3, 0.15, 0.07]); } });
+  }), 0.45); } };
   R['ambiente-interior'] = { loop: true, gain: 0.45, render: function (sr) { var r = rng(102); return norm(loop(sr, 12, function (o) {
     bed(o, sr, r, { brown: true, lp: 220, gain: 0.5, lfo: [[0.07, 0.3]] });
     events(o, sr, r, 0.15, function (t) { creak(o, sr, r, t, 0.25, 50, 38, 0.12); });
@@ -604,7 +609,8 @@ export const SFX_SCRIPT = String.raw`<script>
 // ---------------------------------------------------------------------------
 
 const EXTS: Record<string, string> = { mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', webm: 'audio/webm' };
-const PUBLIC_SFX = fileURLToPath(new URL('../../../public/sfx/', import.meta.url));
+/** Biblioteca fija (public/sfx); SFX_LIBRARY_DIR la cambia (tests). */
+const librarySfx = () => process.env['SFX_LIBRARY_DIR'] || fileURLToPath(new URL('../../../public/sfx/', import.meta.url));
 
 let provider: SoundProvider | null | undefined;
 let generated = 0;
@@ -634,7 +640,7 @@ async function listKeys(dir: string): Promise<Map<string, string>> {
 /** Ficheros por clave: primero los de la partida (IA), luego la biblioteca de public/sfx. */
 async function filesFor(gameDir: string): Promise<Map<string, string>> {
   const own = await listKeys(join(gameDir, 'sfx'));
-  for (const [k, p] of await listKeys(PUBLIC_SFX)) if (!own.has(k)) own.set(k, p);
+  for (const [k, p] of await listKeys(librarySfx())) if (!own.has(k)) own.set(k, p);
   return own;
 }
 
