@@ -404,6 +404,22 @@ export interface Character {
   death?: DeathState | null;
   /** Hardcore: puntos perdidos por característica al volver de la muerte (se recuperan al subir de nivel). */
   ability_penalties?: Partial<Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>>;
+  /** Conjuros (levels.ts). Ausente: la clase no lanza o el PJ es de antes y `migrate` se los da. */
+  spells?: CharacterSpells;
+  /** Elecciones de clase hechas (levels.ts): clave de la elección → lo elegido (estilo, pericia, mejora de característica). */
+  picks?: Record<string, string[]>;
+}
+
+/**
+ * Conjuros de un PJ (ids de src/data/srd/spells.ts). `known`: los que aprende
+ * una clase de conjuros conocidos o, para el mago, los de su libro. `prepared`:
+ * los que tiene listos hoy una clase que prepara (mago, clérigo, druida,
+ * paladín). Los de dominio o juramento no se apuntan: van siempre preparados.
+ */
+export interface CharacterSpells {
+  cantrips: Id[];
+  known: Id[];
+  prepared: Id[];
 }
 
 export interface RestState {

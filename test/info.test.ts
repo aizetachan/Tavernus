@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { initClass } from '../src/engine/levels.js';
 import type { MasterLike } from '../src/engine/engine.js';
 import { parseInfo, RULE_TERMS } from '../src/engine/fastpath.js';
 import { bootEngine } from './helpers.js';
@@ -145,10 +146,14 @@ describe('el sistema contesta sin narrador', () => {
     const { engine } = await bootEngine(undefined, { deterministic: true });
     engine.attachMaster(forbidden);
     const c = engine.world.character('ch_mira');
-    c.class_id = 'wizard'; c.class_name = 'maga';
+    c.class_id = 'wizard'; c.class_name = 'maga'; delete c.picks;
+    initClass(c);
     const r = await engine.act('ch_mira', '¿qué hechizos tengo?');
     expect(r.info?.lines).toContain('Espacios de conjuro de nivel 1: 2 de 2 (vuelven con un descanso largo).');
-    expect(r.info?.lines).toContain('Lanzas con Inteligencia: CD de salvación 11, ataque de conjuro 1d20 + 3.');
+    expect(r.info?.lines).toContain('Lanzas con Inteligencia: CD de salvación 11, ataque de conjuro 1d20 + 3 · preparados 2 de 2.');
+    expect(r.info?.lines).toContain('**Trucos:** Descarga de fuego, Mano de mago, Luz.');
+    expect(r.info?.lines).toContain('**Nivel 1:** Proyectil mágico, Escudo.');
+    expect(r.info?.lines.some((l) => l.startsWith('En tu libro (6): Proyectil mágico, Escudo, Dormir, Armadura de mago, Manos ardientes, Detectar magia.') && l.includes('como ritual: Detectar magia'))).toBe(true);
   });
 
   it('«¿qué tiro para esto?» explica la tirada pendiente y no la gasta', async () => {

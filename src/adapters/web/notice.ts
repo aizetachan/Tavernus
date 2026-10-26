@@ -17,8 +17,9 @@ export type NoticeTab = 'journal' | 'sheet' | 'bag';
 /**
  * Aviso de una línea: `link` + `tab`, un enlace a esa pestaña; `tone` tiñe el texto (una tirada que sale bien o mal).
  * Los de misiones (`quest`) se pintan más visibles: qué ha pasado (alta, paso, cierre) y, debajo, por qué.
+ * La subida de nivel (`level`), igual de visible, con lo que gana debajo, una línea por apartado.
  */
-export interface WebNotice { text: string; link?: string; tab?: NoticeTab; tone?: 'good' | 'bad'; quest?: { id: Id; event: QuestChange['event']; why: string } }
+export interface WebNotice { text: string; link?: string; tab?: NoticeTab; tone?: 'good' | 'bad'; quest?: { id: Id; event: QuestChange['event']; why: string }; level?: { level: number; gains: string[] } }
 
 const QUEST_HEAD: Record<QuestChange['event'], string> = {
   open: 'Nueva misión', available: 'Encargo en el Diario', step: 'Paso cumplido', done: 'Misión cumplida', failed: 'Misión fallida', expired: 'Misión cerrada', dropped: 'Misión dejada',
@@ -53,7 +54,13 @@ export function noticeOf(e: NoticeEvent, readerId: Id | null = e.actor_id ?? nul
     return { text: `${QUEST_HEAD[q.event]} · ${what}`, link: 'ver en el Diario', tab: 'journal', quest: { id: q.id, event: q.event, why: q.why.charAt(0).toUpperCase() + q.why.slice(1) } };
   }
   const isActor = readerId !== null && readerId === e.actor_id;
+  // Subida de nivel (levels.ts): quien sube ve lo que gana y va a su Hoja; los demás, una línea.
+  const up = e.payload?.['level_up'] as { level: number; head: string; gains: string[] } | undefined;
+  if (e.action_type === 'progress_level' && up) {
+    return isActor ? { text: `⬆ ${up.head}`, link: 'ver en la Hoja', tab: 'sheet', level: { level: up.level, gains: up.gains } } : webNotice(e.observable ?? up.head);
+  }
   const shown = text ?? ((isActor ? e.narration_private : e.observable) || e.narration_private || e.observable || '');
+  if (e.action_type === 'progress_level') return webNotice(shown, { link: 'ver en la Hoja', tab: 'sheet' });
   if (/^progress_/.test(e.action_type)) {
     const flat = shown.replace(/\s+/g, ' ').trim();
     const first = /^(.+?[.!?])(\s|$)/.exec(flat)?.[1] ?? flat;

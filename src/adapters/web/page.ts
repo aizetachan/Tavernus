@@ -334,6 +334,48 @@ export const PAGE = String.raw`<!doctype html>
   .lines .v { margin-left: auto; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 30px; padding: 0 8px; border-radius: 8px; background: var(--accent-tint); color: #e6c98a; font-weight: 600; }
   .lines .v.plain { background: rgba(255,255,255,.06); color: #d9d3c8; font-weight: 500; font-size: 13px; }
   .sh-foot { margin-top: 16px; font-size: 12px; color: var(--faint); }
+  /* Hoja · clase y nivel (levels.ts): rasgos con sus usos, elecciones y conjuros con lo que hace cada uno. */
+  .tile.wide .bar i.xp { background: var(--accent); }
+  .pips { display: inline-flex; gap: 3px; vertical-align: middle; }
+  .pips i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--accent); }
+  .pips i.on { background: var(--accent); }
+  .feat, .choice { padding: 10px 12px; margin-bottom: 6px; border-radius: 12px; background: var(--platter); border: 1px solid var(--sep); }
+  .feat .fh, .choice .fh { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .feat .fh .uses { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #e6c98a; }
+  .feat p, .choice p { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+  .feat p small { color: var(--faint); font-size: 12px; }
+  .choice.pending { border-color: rgba(230,183,90,.55); background: #1f1b12; }
+  .choice.pending .fh b::before { content: '✦ '; color: var(--accent); }
+  .choice .fh button, .sp-edit button, .ed-btns button { margin-left: auto; height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--control); color: var(--text); font-family: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; }
+  .choice.pending .fh button, .ed-btns button.save { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  .choice .opts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .choice .opts button { margin: 0; height: auto; min-height: 30px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--control); color: var(--text); font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; text-align: left; }
+  .choice .opts button.on { border-color: var(--accent); background: var(--accent-tint); color: #f1d9a4; }
+  .choice .opts button small { display: block; color: var(--muted); font-size: 11.5px; font-weight: 400; }
+  .ed-btns { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  .ed-btns .err { color: var(--error); }
+  .ed-btns button:first-of-type { margin-left: auto; }
+  .ed-btns button + button { margin-left: 0; }
+  .slots { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 10px 2px 2px; font-size: 13px; color: #b8b1a6; }
+  .slots > div { display: inline-flex; align-items: center; gap: 8px; }
+  .sg { margin-top: 10px; }
+  .sg .sgh { margin: 0 2px 4px; font-size: 12px; font-weight: 600; color: var(--accent); }
+  details.spell { border-bottom: 1px solid rgba(255,255,255,.05); }
+  details.spell summary { display: flex; align-items: baseline; gap: 8px; min-height: 40px; padding: 10px 4px 6px; list-style: none; cursor: pointer; font-size: 14.5px; }
+  details.spell summary::-webkit-details-marker { display: none; }
+  details.spell summary::after { content: '›'; margin-left: 4px; color: var(--faint); transition: transform .15s; }
+  details.spell[open] summary::after { transform: rotate(90deg); }
+  details.spell .meta { margin-left: auto; font-size: 12px; color: var(--faint); white-space: nowrap; }
+  details.spell .tagx { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--accent-tint); color: #e6c98a; }
+  details.spell p { margin: 0 4px 8px; font-size: 13px; line-height: 1.45; color: var(--muted); }
+  details.spell p.tags { font-size: 11.5px; color: var(--faint); }
+  .sp-edit { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .sp-edit button { margin-left: 0; }
+  .speditor { margin-top: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(230,183,90,.45); background: #1f1b12; }
+  .speditor h4 { margin: 0 0 6px; font-size: 13.5px; }
+  .speditor label { display: flex; gap: 10px; align-items: flex-start; padding: 7px 2px; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 13.5px; cursor: pointer; }
+  .speditor label input { margin-top: 3px; accent-color: var(--accent); }
+  .speditor label small { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; }
 
   /* Mochila. */
   .items > div { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid rgba(255,255,255,.05); }
@@ -477,6 +519,10 @@ export const PAGE = String.raw`<!doctype html>
   .msg.notice.q-failed > span:first-child::before, .msg.notice.q-expired > span:first-child::before, .msg.notice.q-dropped > span:first-child::before { content: '✕ '; color: var(--faint); }
   .msg.notice.q-failed, .msg.notice.q-expired, .msg.notice.q-dropped { border-color: var(--sep); background: #161a1b; }
   .msg.notice .why { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
+  .msg.notice.q-level { max-width: min(94%, 560px); padding: 9px 16px 10px; border-color: rgba(230,183,90,.7); background: linear-gradient(180deg, #2a2210, #1f1b12); box-shadow: 0 0 18px rgba(230,183,90,.12); }
+  .msg.notice.q-level > span:first-child { font: 700 14.5px/1.3 var(--display); color: #f1d9a4; }
+  .msg.notice.q-level > span:first-child::before { content: ''; }
+  .msg.notice.q-level .why { margin-top: 3px; color: #c9c0b0; }
 
   /* Móvil: el chat a pantalla completa; el panel, una vista aparte; Hoja, Diario y Mochila suben desde abajo. */
   @media (max-width: 820px) {
@@ -1299,15 +1345,148 @@ ${FIGHT_SCRIPT}
       var m = x.match(/^(.*)\s([+−-]\d+)$/);
       return '<div>' + escapeHtml(m ? m[1] : x) + (m ? '<span class="v">' + escapeHtml(m[2]) + '</span>' : '') + '</div>';
     }).join('') + '</div>' : '<p class="sh-foot">Sin habilidades con competencia.</p>';
+    h += renderClass(s['class']);
     h += '<p class="sh-foot">' + escapeHtml(s.footer) + '</p>';
     $('sheet').innerHTML = h;
   }
+
+  /*
+   * Clase y nivel en la Hoja (levels.ts, sheet-view.ts): PX hasta el siguiente nivel, lo que queda por elegir,
+   * rasgos con sus usos, elecciones hechas y conjuros (con lo que hace cada uno). Elegir y cambiar va a /api/choice;
+   * lo que se está eligiendo vive en classEdit para sobrevivir a los refrescos de la hoja.
+   */
+  var classEdit = null;
+  var REST_ES = { short: 'corto', long: 'largo' };
+  function pips(left, max) {
+    if (max > 8) return '';
+    var o = '';
+    for (var i = 0; i < max; i++) o += '<i class="' + (i < left ? 'on' : '') + '"></i>';
+    return '<span class="pips">' + o + '</span>';
+  }
+  function spellRow(sp) {
+    return '<details class="spell"><summary><span>' + escapeHtml(sp.name) + '</span>' + (sp.always ? '<span class="tagx">siempre</span>' : '') +
+      '<span class="meta">' + escapeHtml(sp.time + ' · ' + sp.range) + '</span></summary><p>' + escapeHtml(sp.text) + '</p><p class="tags">' + escapeHtml(sp.tags.join(' · ')) + '</p></details>';
+  }
+  function optName(ch, id) { var o = ch.options.filter(function (x) { return x.id === id; })[0]; return o ? o.name : id; }
+  function editFoot(n, count, exact, err) {
+    return '<div class="ed-btns"><span>' + n + ' de ' + count + (exact ? '' : ' como mucho') + '</span>' + (err ? '<span class="err">' + escapeHtml(err) + '</span>' : '') +
+      '<button type="button" data-ccancel>Cancelar</button><button type="button" class="save" data-csave>Guardar</button></div>';
+  }
+  function choiceBox(ch) {
+    var editing = classEdit && classEdit.kind === 'choice' && classEdit.key === ch.key;
+    var h = '<div class="choice' + (ch.pending ? ' pending' : '') + '"><div class="fh"><b>' + escapeHtml(ch.name) + '</b>' + (ch.pending ? '<small>nivel ' + ch.level + '</small>' : '') +
+      (editing ? '' : ch.pending ? '<button type="button" data-cedit="' + escapeHtml(ch.key) + '">Elegir</button>' : ch.final ? '' : '<button type="button" data-cedit="' + escapeHtml(ch.key) + '">Cambiar</button>') + '</div>';
+    if (!editing) {
+      if (ch.pending) return h + '<p>' + escapeHtml(ch.text) + '</p></div>';
+      if (ch.kind === 'asi') {
+        var add = {}; ch.picked.forEach(function (a) { add[a] = (add[a] || 0) + 1; });
+        return h + '<p>' + escapeHtml(Object.keys(add).map(function (a) { return optName(ch, a) + ' +' + add[a]; }).join(', ')) + '</p></div>';
+      }
+      return h + '<p>' + ch.picked.map(function (id) {
+        var o = ch.options.filter(function (x) { return x.id === id; })[0];
+        return '<b>' + escapeHtml(o ? o.name : id) + '</b>' + (o && o.text ? ': ' + escapeHtml(o.text) : '');
+      }).join('<br>') + '</p></div>';
+    }
+    var picks = classEdit.picks;
+    h += '<p>' + escapeHtml(ch.text) + (ch.kind === 'asi' ? ' Toca dos veces la misma para +2.' : '') + '</p><div class="opts">';
+    h += ch.options.map(function (o) {
+      var n = picks.filter(function (x) { return x === o.id; }).length;
+      var label = ch.kind === 'asi' ? o.name + ' ' + o.text + (n ? ' → ' + (Number(o.text) + n) : '') : o.name;
+      return '<button type="button" class="' + (n ? 'on' : '') + '" data-cpick="' + escapeHtml(o.id) + '">' + escapeHtml(label) + (ch.kind === 'option' && o.text ? '<small>' + escapeHtml(o.text) + '</small>' : '') + '</button>';
+    }).join('');
+    return h + '</div>' + editFoot(picks.length, ch.count, true, classEdit.error) + '</div>';
+  }
+  function spellEditor(e) {
+    var picks = classEdit.picks;
+    return '<div class="speditor"><h4>' + escapeHtml(e.title) + '</h4>' + e.options.map(function (sp) {
+      return '<label><input type="checkbox" data-spick="' + escapeHtml(sp.id) + '"' + (picks.indexOf(sp.id) >= 0 ? ' checked' : '') + '><span><b>' + escapeHtml(sp.name) + '</b> <small>' +
+        escapeHtml(sp.tags.join(' · ') + ' · ' + sp.time + ' · ' + sp.range) + '</small><small>' + escapeHtml(sp.text) + '</small></span></label>';
+    }).join('') + editFoot(picks.length, e.count, e.exact, classEdit.error) + '</div>';
+  }
+  function renderClass(k) {
+    if (!k) return '';
+    var h = '<div class="kv-t">Nivel y experiencia</div>';
+    var pct = k.next_xp ? Math.max(0, Math.min(100, Math.round(100 * (k.xp - k.level_xp) / (k.next_xp - k.level_xp)))) : 100;
+    h += '<div class="tiles"><div class="tile wide"><span class="l">Nivel ' + k.level + ' · competencia +' + k.proficiency + '<b>' + k.xp + (k.next_xp ? ' / ' + k.next_xp : '') + ' PX</b></span>' +
+      '<span class="bar"><i class="xp" style="width:' + pct + '%"></i></span><small>' + (k.next_xp ? 'Te faltan ' + (k.next_xp - k.xp) + ' PX para el nivel ' + (k.level + 1) + '. Se ganan venciendo enemigos y cumpliendo misiones; al llegar subes solo y un aviso te dice qué ganas.' : 'Nivel máximo.') + '</small></div></div>';
+    var pend = k.choices.filter(function (c) { return c.pending; });
+    if (pend.length) h += '<div class="kv-t">Por elegir</div>' + pend.map(choiceBox).join('');
+    h += '<div class="kv-t">Rasgos de clase</div>' + (k.features.length ? k.features.map(function (f) {
+      return '<div class="feat"><div class="fh"><b>' + escapeHtml(f.name) + '</b>' + (f.uses ? '<span class="uses">' + pips(f.uses.left, f.uses.max) + f.uses.left + ' de ' + f.uses.max + '</span>' : '') + '</div>' +
+        '<p>' + escapeHtml(f.text) + (f.uses ? ' <small>Vuelve con un descanso ' + REST_ES[f.uses.recharge] + '.</small>' : '') + '</p></div>';
+    }).join('') : '<p class="sh-foot">Ninguno.</p>');
+    var made = k.choices.filter(function (c) { return !c.pending; });
+    if (made.length) h += '<div class="kv-t">Elecciones</div>' + made.map(choiceBox).join('');
+    var sp = k.spells;
+    if (sp) {
+      var ABL = { str: 'FUE', dex: 'DES', con: 'CON', int: 'INT', wis: 'SAB', cha: 'CAR' };
+      h += '<div class="kv-t">Conjuros</div><div class="tiles"><div class="tile"><b>' + sp.save_dc + '</b><small>CD de salvación</small></div><div class="tile"><b>+' + sp.attack + '</b><small>Ataque de conjuro</small></div><div class="tile"><b>' + ABL[sp.ability] + '</b><small>Lanzas con</small></div></div>';
+      if (sp.slots.length) {
+        h += '<div class="slots">' + sp.slots.map(function (x) { return '<div><span>' + escapeHtml(x.label) + '</span>' + pips(x.left, x.max) + '<small>' + x.left + ' de ' + x.max + '</small></div>'; }).join('') + '</div>';
+        h += '<p class="sh-foot" style="margin-top:4px">Cada conjuro de nivel gasta un espacio de su nivel o más; los trucos, nada. Vuelven con un descanso ' + REST_ES[sp.slots[0].recharge] + '.</p>';
+      }
+      h += sp.groups.map(function (g) { return '<div class="sg"><div class="sgh">' + escapeHtml(g.label) + '</div>' + g.spells.map(spellRow).join('') + '</div>'; }).join('');
+      if (sp.book.length) h += '<div class="sg"><div class="sgh">Tu libro (' + sp.book.length + ')</div>' + sp.book.map(spellRow).join('') + '<p class="sh-foot" style="margin-top:6px">Preparas cada día unos cuantos de tu libro; los que son ritual los lanzas también sin prepararlos, tardando 10 minutos más.</p></div>';
+      h += '<p class="sh-foot" style="margin-top:8px">Para lanzar uno, dilo al actuar: «lanzo ' + escapeHtml((sp.groups[sp.groups.length - 1].spells[0] || { name: 'un conjuro' }).name) + ' a…».</p>';
+      h += '<div class="sp-edit">' + sp.edits.map(function (e) { return '<button type="button" data-sedit="' + e.key + '">' + (e.key === 'prepared' ? 'Preparar conjuros' : e.key === 'cantrips' ? 'Cambiar trucos' : e.key === 'known' && sp.mode === 'book' ? 'Libro de conjuros' : 'Cambiar conocidos') + '</button>'; }).join('') + '</div>';
+      var ed = classEdit && classEdit.kind === 'spells' ? sp.edits.filter(function (e) { return e.key === classEdit.key; })[0] : null;
+      if (ed) h += spellEditor(ed);
+    } else if (k.spells_from) h += '<div class="kv-t">Conjuros</div><p class="sh-foot" style="margin-top:0">Empiezas a lanzar conjuros a nivel ' + k.spells_from + '.</p>';
+    return h;
+  }
+  function classItem(key, kind) {
+    var k = sheetData && sheetData['class'];
+    if (!k) return null;
+    if (kind === 'choice') return k.choices.filter(function (c) { return c.key === key; })[0] || null;
+    return k.spells ? k.spells.edits.filter(function (e) { return e.key === key; })[0] || null : null;
+  }
+  $('sheet').addEventListener('click', function (ev) {
+    var t = ev.target.closest('[data-cedit],[data-sedit],[data-cpick],[data-ccancel],[data-csave]');
+    if (!t) return;
+    if (t.hasAttribute('data-cedit')) {
+      var ch = classItem(t.getAttribute('data-cedit'), 'choice');
+      classEdit = { kind: 'choice', key: ch.key, picks: ch.final ? [] : ch.picked.slice(), max: ch.count, asi: ch.kind === 'asi' };
+    } else if (t.hasAttribute('data-sedit')) {
+      var e = classItem(t.getAttribute('data-sedit'), 'spells');
+      classEdit = classEdit && classEdit.kind === 'spells' && classEdit.key === e.key ? null : { kind: 'spells', key: e.key, picks: e.selected.slice() };
+    } else if (t.hasAttribute('data-cpick') && classEdit) {
+      var id = t.getAttribute('data-cpick'), i = classEdit.picks.indexOf(id);
+      if (classEdit.asi) { if (classEdit.picks.length >= classEdit.max) classEdit.picks = []; classEdit.picks.push(id); }
+      else if (i >= 0) classEdit.picks.splice(i, 1);
+      else if (classEdit.picks.length < classEdit.max) classEdit.picks.push(id);
+      else if (classEdit.max === 1) classEdit.picks = [id];
+    } else if (t.hasAttribute('data-ccancel')) classEdit = null;
+    else if (t.hasAttribute('data-csave') && classEdit) {
+      var sent = classEdit;
+      post('/api/choice', { key: sent.key, picks: sent.picks }).then(function (r) {
+        if (classEdit !== sent) return;
+        if (!r.ok) { sent.error = r.text; renderSheet(sheetData); return; }
+        classEdit = null;
+        // La mejora de característica ya llega como aviso del motor.
+        if (sent.key.indexOf('asi_') !== 0) add('system', r.text);
+        loadSheet();
+      });
+      return;
+    }
+    if (classEdit) classEdit.error = '';
+    renderSheet(sheetData);
+  });
+  $('sheet').addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (!t.hasAttribute || !t.hasAttribute('data-spick') || !classEdit) return;
+    var id = t.getAttribute('data-spick'), i = classEdit.picks.indexOf(id);
+    if (t.checked && i < 0) classEdit.picks.push(id);
+    if (!t.checked && i >= 0) classEdit.picks.splice(i, 1);
+    classEdit.error = '';
+    var foot = t.closest('.speditor').querySelector('.ed-btns span');
+    if (foot) foot.textContent = foot.textContent.replace(/^\d+/, String(classEdit.picks.length));
+  });
 
   var PACK_FIELDS = { Manos: 1, Bolsillos: 1, Equipado: 1, Monedas: 1, Carga: 1 };
   var SLOT_ES = { back: 'a la espalda', body: 'puesto', armor: 'armadura', head: 'cabeza', belt: 'cinturón', waist: 'cintura', feet: 'pies', hands: 'manos', neck: 'cuello', ring: 'anillo', shield: 'escudo', cloak: 'capa', shoulder: 'al hombro' };
   /** Mochila: carga y monedas arriba; lo que tienes en las manos, equipado, en los bolsillos y en cada contenedor. */
   function renderPack(s) {
-    var known = { Combate: 1, 'Características': 1, Habilidades: 1, Descanso: 1, Muerte: 1 };
+    var known = { Combate: 1, 'Características': 1, Habilidades: 1, Descanso: 1, Muerte: 1, Nivel: 1, Rasgos: 1, Conjuros: 1 };
     var list = function (v) { return v && v !== '—' && v !== 'vacía' ? v.split(', ') : []; };
     var rows = function (items, eq) {
       if (!items.length) return '<div class="empty">Nada.</div>';

@@ -7,6 +7,7 @@ import { abilityModifier, proficiencyBonus, rollD20, rollExpr, type Advantage, t
 import type { Character, Id, Npc } from './model.js';
 import { damageCharacter, killNpc, worldNow } from './death.js';
 import { armorClass } from './rules.js';
+import { rangedStyleBonus } from './levels.js';
 import type { World } from './world.js';
 
 export type Combatant = { kind: 'character'; c: Character } | { kind: 'npc'; n: Npc };
@@ -74,7 +75,7 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
     const w = weaponOf(world, a.c);
     const str = abilityModifier(a.c.abilities.str), dex = abilityModifier(a.c.abilities.dex);
     const mod = w.ranged ? dex : w.finesse ? Math.max(str, dex) : str;
-    bonus = mod + proficiencyBonus(a.c.level); dmgExpr = w.damage; dmgType = w.damage_type; weaponName = w.name; dmgMod = mod;
+    bonus = mod + proficiencyBonus(a.c.level) + (w.ranged ? rangedStyleBonus(a.c) : 0); dmgExpr = w.damage; dmgType = w.damage_type; weaponName = w.name; dmgMod = mod;
   } else {
     bonus = a.n.stats!.attack_bonus; dmgExpr = a.n.stats!.damage; dmgType = a.n.stats!.damage_type; weaponName = a.n.stats!.attack_name;
   }

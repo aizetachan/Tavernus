@@ -39,6 +39,8 @@ import { resolveAttack } from './combat.js';
 import { attackRoll, checkRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
 import { abilityModifier } from './dice.js';
 import { passivePerception, type Ability } from './rules.js';
+import { casterOf, initClass, levelUp, levelUpText, makeChoice, setSpells } from './levels.js';
+import { spellById } from '../data/srd/spells.js';
 import { ABILITIES, backgroundById, classById, raceById, STANDARD_ARRAY } from '../data/srd/index.js';
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
@@ -1305,6 +1307,25 @@ export class Engine {
     return { ok: true, text: `Has dejado la misión «${r.title}».` };
   }
 
+  /**
+   * Elección desde la Hoja (levels.ts): conjuros (`cantrips`, `known`,
+   * `prepared`) o una elección de clase (estilo, pericia, mejora de
+   * característica…). Sin máster. La mejora, que es definitiva, deja aviso.
+   */
+  async choose(characterId: Id, key: string, picks: string[]): Promise<{ ok: boolean; text: string }> {
+    const c = this.world.character(characterId);
+    const spells = key === 'cantrips' || key === 'known' || key === 'prepared';
+    const r: { ok: true; text?: string } | { ok: false; error: string } = spells ? setSpells(c, key, picks) : makeChoice(c, key, picks);
+    if (!r.ok) return { ok: false, text: r.error };
+    c.passive_perception = passivePerception(c);
+    this.world.touch('characters', c.id);
+    const label = key === 'cantrips' ? 'Trucos' : key === 'prepared' ? 'Preparados' : casterOf(c)?.mode === 'book' ? 'Tu libro' : 'Conocidos';
+    const text = r.text ?? `${label}: ${(spells ? c.spells![key as 'cantrips' | 'known' | 'prepared'] : []).map((id) => spellById(id)?.name ?? id).join(', ')}.`;
+    if (key.startsWith('asi_')) this.emitProgress(c, [{ kind: 'level', text }]);
+    await this.flush();
+    return { ok: true, text };
+  }
+
   /** Comandos de sistema (SPEC §2.4). Sin LLM, sin cola. */
   async command(characterId: Id, name: string): Promise<string> {
     // Depuración, solo en offline: «/time +2h» adelanta el reloj de juego (y lo guarda en la campaña).
@@ -1385,7 +1406,7 @@ export class Engine {
 
     const race = raceById(spec?.race_id ?? 'human');
     const klass = classById(spec?.class_id ?? 'fighter');
-    const bg = backgroundById(spec?.background_id ?? 'soldier');
+    const bg = backgroundById(spec?.background_id ?? klass?.background ?? 'soldier');
     if (!race || !klass || !bg) return { ok: false, reason: 'Raza, clase o trasfondo no válidos.' };
 
     // Características: array estándar asignado (validado) o el recomendado de la clase.
@@ -1396,7 +1417,7 @@ export class Engine {
 
     // Skills: trasfondo + raza fijas; clase elige N de su lista sin repetir.
     const fixed = [...new Set([...bg.skills, ...race.skills])];
-    const choices = spec?.skills ?? klass.skill_choices.from.filter((k) => !fixed.includes(k)).slice(0, klass.skill_choices.count);
+    const choices = spec?.skills ?? [...new Set([...klass.skill_choices.prefer, ...klass.skill_choices.from])].filter((k) => klass.skill_choices.from.includes(k) && !fixed.includes(k)).slice(0, klass.skill_choices.count);
     if (choices.length !== klass.skill_choices.count) return { ok: false, reason: `Elige ${klass.skill_choices.count} habilidades de clase.` };
     for (const k of choices) {
       if (!klass.skill_choices.from.includes(k)) return { ok: false, reason: `${k} no es una habilidad de ${klass.name}.` };
@@ -1421,6 +1442,8 @@ export class Engine {
       abilities, passive_perception: 10, darkvision: race.darkvision, condition_speed_factor: 1,
       coins: 1500, last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
     };
+    // Lo de su clase (levels.ts): conjuros, pericia, estilo… con sus valores por defecto.
+    initClass(c);
     c.passive_perception = passivePerception(c);
     this.world.characters.set(c.id, c);
     this.world.touch('characters', c.id);
@@ -2752,11 +2775,32 @@ export class Engine {
   }
 
   /**
+   * Quien ha cruzado un umbral de PX sube de nivel (levels.ts): el PJ lee un
+   * aviso con lo que gana y lo que le queda por elegir; quien está con él, una
+   * línea. Lo llama `announceDeathStates`, que corre tras cada acción, tick y
+   * ronda: los PX los dan el combate y la historia, que no emiten.
+   */
+  private announceLevelUps(): void {
+    for (const c of this.world.characters.values()) {
+      const r = levelUp(c);
+      if (!r) continue;
+      c.passive_perception = passivePerception(c);
+      this.world.touch('characters', c.id);
+      const t = levelUpText(c, r);
+      this.events.emit({
+        actor_id: c.id, action_type: 'progress_level', narration_private: `${t.head}. ${t.gains.join('. ')}.`, observable: `${c.name} sube a nivel ${r.to}.`,
+        tags: ['progress', 'level'], payload: { master: null, level_up: { level: r.to, head: t.head, gains: t.gains } },
+      }, this.stampFor(c));
+    }
+  }
+
+  /**
    * Cuenta lo que ha cambiado: caídas, estables, quien vuelve en sí y muertes.
    * Lo llaman la acción, el tick y las rondas: el estado lo cambian también
    * los tools del máster y el combate, que no emiten.
    */
   private announceDeathStates(): void {
+    this.announceLevelUps();
     for (const n of this.world.npcs.values()) if (n.status === 'dead' && n.death && !n.death.told) this.announceNpcDeath(n);
     for (const c of this.world.characters.values()) {
       if (c.status === 'dead' && c.death && !c.death.told) { this.announceDeath(c); continue; }
@@ -3092,6 +3136,12 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     c.race_id ??= 'human'; c.class_id ??= 'fighter'; c.background_id ??= 'soldier'; c.hit_die ??= 10; c.death_mode ??= 'casual';
     if (c.decisive === undefined) changed = true;
     c.decisive ??= null; c.xp ??= 0;
+    // Clase completa (levels.ts): los PJ de antes no tenían conjuros ni elecciones; la subida de nivel la avisa el motor.
+    if (initClass(c)) {
+      changed = true;
+      // La pericia por defecto (pícaro) puede caer en Percepción.
+      if (c.proficiencies.expert.includes('perception')) c.passive_perception = passivePerception(c);
+    }
   }
   for (const n of snapshot.npcs as (Npc & { memory?: unknown })[]) {
     if (n.memory === undefined) changed = true;

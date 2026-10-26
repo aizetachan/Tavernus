@@ -10,7 +10,7 @@ import type { Character, Id, Job, Npc, Placement } from './model.js';
 import type { World } from './world.js';
 
 export interface ProgressEvent {
-  kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story' | 'quest';
+  kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story' | 'quest' | 'level';
   text: string;
   public?: string;
   /** Si toca una misión: cuál, qué le ha pasado y por qué (el aviso del chat y el Diario lo enseñan). */
