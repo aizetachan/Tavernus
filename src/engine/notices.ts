@@ -26,7 +26,7 @@ const NOTICE_TYPES: Record<string, NoticeScope> = {
   // Tablón, logros y progreso.
   board: 'all', announcement: 'all',
   // Gente que va y viene.
-  character_joined: 'all', move: 'all', passed: 'all', arrived: 'all', stop: 'all', rebound: 'all', npc_move: 'all',
+  character_joined: 'all', move: 'all', passed: 'all', arrived: 'all', stop: 'all', rebound: 'all', npc_move: 'all', npc_order_end: 'all',
   away: 'all', back: 'all', party_notice: 'all',
   // La llegada que narra el máster: escena para quien llega; para los demás, «Fulano entra en la taberna».
   master_arrival: 'others', master_intro: 'others',

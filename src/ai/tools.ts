@@ -25,6 +25,7 @@ import { aEs, descriptorOf, fmtDuration } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
 import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
 import { addScheduledEvent, listSchedule, RECURRENCES } from '../engine/schedule.js';
+import { NPC_TASK_KINDS, orderLine, orderOf, promisedMove, promisedMoveRejection, setNpcOrder, type NpcTaskKind } from '../engine/npcorders.js';
 import { characterFacts, recordFact } from '../engine/facts.js';
 import type { DialogueLine } from '../engine/moments.js';
 import { fmtCoins, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
@@ -236,6 +237,20 @@ export const MASTER_TOOLS: Tool[] = [
     location_id: nstr('"here", un ID de localización o null para toda la agenda'),
   }),
 
+  tool('set_npc_order', 'Lo que un NPC decide hacer fuera de la charla, y el servidor cumple: follow = acompaña a un personaje (va con él de punto en punto y de sitio en sitio hasta que acabe la orden); go = se va él a un punto o a una localización (o a donde está el objetivo de su encargo) y se queda allí un rato; stop = deja de acompañar o de lo que hacía y vuelve a lo suyo. Llámalo en el mismo turno en que el NPC acepta o decide («te sigo», «ve delante», «voy ahora»): sin esto se queda donde está. Con un encargo (curar, atender, dar algo), lo hace él al llegar donde está su objetivo. Mientras tanto su horario espera. No narres que llega: lo cuenta el servidor.', {
+    npc_id: str('ID del NPC'),
+    order: enm(['follow', 'go', 'stop'], 'follow (acompaña), go (va él), stop (se acaba)'),
+    character_id: nstr('follow: a quién acompaña; null = el actor'),
+    target_spot_id: nstr('go: punto de destino; null si das localización o va a donde está el objetivo'),
+    target_location_id: nstr('go: localización de destino (va a su punto principal); null si no'),
+    task_kind: enm(['none', ...NPC_TASK_KINDS], 'Encargo al llegar: none (ninguno), act (algo que solo se cuenta), heal (curar PG), stabilize (atender a un PJ caído), give (darle a un PJ un objeto que lleva el NPC)'),
+    task_text: nstr('Lo que hace al llegar, en tercera persona y sin su nombre: «se arrodilla junto a Mira y le venda la herida»; null si none'),
+    task_target_id: nstr('Sobre quién lo hace (PJ o NPC); obligatorio con follow y con heal, stabilize y give'),
+    task_amount: nnum('heal: PG que cura; null = un cuarto de sus PG máximos'),
+    task_item_id: nstr('give: ID del ejemplar que entrega; null si no'),
+    minutes: nnum('follow: cuánto acompaña como mucho (null = 4 h); go: cuánto se queda allí (null = 1 h)'),
+  }),
+
   tool('log_event', 'CIERRE OBLIGATORIO de cada acción. Registra lo ocurrido y lo entrega a cada personaje según lo que percibe. Tras llamarlo, termina.', {
     narration_private: str('Lo que ve el actor. Segunda persona. Breve.'),
     observable: nstr('Lo que ve un testigo cercano con detalle completo, en tercera persona con el nombre del actor. null si no hay nada observable.'),
@@ -275,7 +290,7 @@ export const MASTER_TOOLS: Tool[] = [
 export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
-  'stabilize', 'take_rest', 'spend_resource', 'request_reaction',
+  'stabilize', 'take_rest', 'spend_resource', 'request_reaction', 'set_npc_order',
 ]);
 
 export const MEMORY_CAP_PER_CHARACTER = 8;
@@ -316,6 +331,8 @@ export interface ToolContext {
   death_rejections?: number;
   /** Cierres rechazados por dejar sin respuesta a alguno de un turno compartido (closecheck.ts; uno como mucho). */
   shared_rejections?: number;
+  /** Cierres rechazados porque un NPC dice que va y no tiene orden (npcorders.ts; uno como mucho). */
+  order_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -513,6 +530,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         remembers_about_actor: n.memory.filter((m) => m.character_id === actor.id).map((m) => `[${engine.clock.format(m.game_s)}] ${m.note}`),
         remembers_about_others: n.memory.filter((m) => m.character_id !== actor.id && m.importance >= 2).slice(-5).map((m) => `[${engine.clock.format(m.game_s)}] ${world.characters.get(m.character_id)?.name ?? '?'}: ${m.note}`),
         talking_to: n.talking_to ? (world.characters.get(n.talking_to.character_id)?.name ?? null) : null,
+        order: orderLine(world, n, nowGameS),
       };
     }
     case 'get_item': {
@@ -602,6 +620,27 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       }, nowGameS);
       if (!r.ok) return { error: r.error };
       return { ok: true, event_id: r.event.id, existing: r.existing, schedule: listSchedule(world, nowGameS, r.event.location_id).find((x) => x['id'] === r.event.id) };
+    }
+    case 'set_npc_order': {
+      const opt = (k: string) => (input[k] == null || input[k] === '' || input[k] === 'null' ? null : String(input[k]));
+      const npc = world.npcs.get(s('npc_id'));
+      if (!npc) return { error: `no existe el NPC ${s('npc_id')}` };
+      const order = s('order') as 'follow' | 'go' | 'stop';
+      if (!['follow', 'go', 'stop'].includes(order)) return { error: 'order debe ser follow | go | stop' };
+      const kind = opt('task_kind');
+      const task = kind && kind !== 'none' ? { kind: kind as NpcTaskKind, text: opt('task_text') ?? '', target_id: opt('task_target_id'), amount: input['task_amount'] == null ? null : Number(input['task_amount']), item_instance_id: opt('task_item_id') } : null;
+      if (task?.kind === 'give' && task.item_instance_id) {
+        const inst = world.itemInstances.get(task.item_instance_id);
+        if (!inst || inst.location.type !== 'npc' || inst.location.id !== npc.id) return { error: `${npc.name} no lleva ${task.item_instance_id}: solo da lo que tiene (compra o crea antes el objeto)` };
+      }
+      const locId = opt('target_location_id');
+      const spotId = opt('target_spot_id') ?? (locId ? world.locations.get(locId)?.default_spot_id ?? locId : null);
+      const r = setNpcOrder(world, { npc_id: npc.id, order, character_id: opt('character_id') ?? actor.id, spot_id: spotId, task, minutes: input['minutes'] == null ? null : Number(input['minutes']) }, nowGameS);
+      if (!r.ok) return { error: r.error };
+      const hint = order === 'follow' ? `Ya va con ${world.character(opt('character_id') ?? actor.id).name}: cuando se mueva, el servidor la lleva con él y lo cuenta${task ? '; el encargo lo hace al llegar donde está su objetivo' : ''}. Narra que acepta; no narres que llega.`
+        : order === 'go' ? 'El servidor la lleva al acabar esta acción y lo cuenta a quien la vea irse y llegar. Narra que se pone en marcha; no narres que llega.'
+        : 'Se queda un poco donde está y luego vuelve a lo suyo.';
+      return { ok: true, npc: npc.name, order: orderLine(world, npc, nowGameS) ?? 'sin orden', hint };
     }
     case 'get_schedule': {
       const loc = input['location_id'] == null || input['location_id'] === '' ? null : s('location_id') === 'here' ? here() : s('location_id');
@@ -1000,6 +1039,17 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           ctx.conversation_rejections = (ctx.conversation_rejections ?? 0) + 1;
           const npc = world.npcs.get(conv.npc_id);
           return { error: conversationRejection(p, !npc ? 'ese personaje' : actor.knows.includes(npc.id) ? npc.name : descriptorOf(world, npc.id)) };
+        }
+      }
+      // Un NPC que dice que va con el actor (o a algún sitio) sin set_npc_order se queda donde está: se reescribe una vez.
+      if ((ctx.order_rejections ?? 0) < 1) {
+        const lines = parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id));
+        const npcId = lines.find((l) => l.speaker === 'npc' && l.npc_id)?.npc_id ?? (input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null);
+        const npc = npcId ? world.npcs.get(npcId) : undefined;
+        const phrase = npc ? promisedMove({ npcLines: lines.filter((l) => l.speaker === 'npc').map((l) => l.text), narration: s('narration_private'), hasOrder: orderOf(npc) !== null && orderOf(npc)!.kind !== 'stay', ordered: (ctx.ok_tools ?? []).includes('set_npc_order') }) : null;
+        if (npc && phrase) {
+          ctx.order_rejections = (ctx.order_rejections ?? 0) + 1;
+          return { error: promisedMoveRejection(actor.knows.includes(npc.id) ? npc.name : descriptorOf(world, npc.id), phrase) };
         }
       }
       if (input['npc_id']) {
