@@ -22,6 +22,7 @@ import { GAME_DAY, GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
 import type { EmitInput } from './events.js';
 import type { Id, LightLevel, Location, Npc, Spot } from './model.js';
 import type { Position } from './movement.js';
+import { orderOf } from './npcorders.js';
 import type { World } from './world.js';
 
 export type Recurrence = 'daily' | 'weekly' | 'once';
@@ -282,7 +283,8 @@ export function tickSchedule(world: World, nowS: number, emit: ScheduleEmit): vo
   const attending = new Set(active.flatMap((r) => Object.keys(r.home)));
   const slot = slotAt(world, nowS);
   for (const n of world.npcs.values()) {
-    if (n.status !== 'alive' || attending.has(n.id) || n.talking_to) continue;
+    // Con orden (sigue a alguien, ha ido a algo: npcorders.ts) el horario espera.
+    if (n.status !== 'alive' || attending.has(n.id) || n.talking_to || orderOf(n)) continue;
     const want = routineSpot(n, slot);
     if (want && want !== n.location.id && world.spots.has(want)) moveNpc(world, n, want, nowS, emit, null, false);
   }
@@ -342,7 +344,7 @@ function endRun(world: World, e: ScheduledEvent, run: ActiveRun, nowS: number, e
   const slot = slotAt(world, nowS);
   for (const [npcId, home] of Object.entries(run.home)) {
     const n = world.npcs.get(npcId);
-    if (!n || n.status !== 'alive') continue;
+    if (!n || n.status !== 'alive' || orderOf(n)) continue;
     const back = routineSpot(n, slot) ?? home;
     if (world.spots.has(back) && back !== n.location.id) moveNpc(world, n, back, at, emit, null, late);
   }
@@ -352,7 +354,7 @@ function bringAttendees(world: World, e: ScheduledEvent, run: ActiveRun, nowS: n
   for (const id of e.npc_ids) {
     if (id in run.home) continue;
     const n = world.npcs.get(id);
-    if (!n || n.status !== 'alive' || n.talking_to) continue;
+    if (!n || n.status !== 'alive' || n.talking_to || orderOf(n)) continue;
     run.home[id] = n.location.id;
     world.touch('campaign', world.campaign.id);
     if (n.location.id !== e.spot_id) moveNpc(world, n, e.spot_id, Math.max(run.start_s, Math.min(nowS, run.end_s)), emit, e, quiet);

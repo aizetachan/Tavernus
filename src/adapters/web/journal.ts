@@ -21,7 +21,8 @@ export interface WebJournal extends Journal {
 }
 
 /** Aviso discreto en el hilo en lugar de una burbuja; `tab` es la pestaña a la que lleva. */
-export interface WebNotice { text: string; link: string; tab: 'journal' }
+/** Sin enlace, solo la línea (un NPC que llega o se va). */
+export interface WebNotice { text: string; link?: string; tab?: 'journal' }
 
 export function journalView(engine: Engine, characterId: Id, slug: string): WebJournal {
   const j = journalOf(engine, characterId);

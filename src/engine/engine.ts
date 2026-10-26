@@ -23,6 +23,7 @@ import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type 
 import { dropQuest } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { tickSchedule } from './schedule.js';
+import { tickOrders } from './npcorders.js';
 import { tickStory, type StoryOutput } from './story.js';
 import { aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
 import { seededRng, type Rng } from './dice.js';
@@ -420,6 +421,8 @@ export class Engine {
         if (plan?.kind === 'master') this.narrateArrival(c, travel ? { hooks: [], encounter: null, ...plan.hints, travel } : plan.hints);
       }
     }
+    // Órdenes de NPC (npcorders.ts): quien acompaña a un PJ llega con él (antes de que el máster narre la llegada), quien va a un sitio llega, y los encargos.
+    tickOrders(this.world, nowGameS, (i, s, after) => { this.events.emit(i, Math.max(this.clock.realAt(s), after ? this.lastStamp(after) : 0)); }, (c) => nowFor(c, nowGameS), this.rng);
   }
 
   /**

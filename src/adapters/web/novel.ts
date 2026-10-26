@@ -464,17 +464,19 @@ export const NOVEL_JS = String.raw`
     body.insertBefore(b, body.firstChild);
   }
 
-  /** Aviso de una línea (tablón, progreso): sin burbuja; un enlace lleva a la pestaña que toca (el Diario). */
+  /** Aviso de una línea (tablón, progreso, un NPC que llega o se va): sin burbuja; si trae enlace, lleva a la pestaña que toca (el Diario). */
   function addNotice(n) {
     var div = document.createElement('div');
     div.className = 'msg notice';
     var s = document.createElement('span');
     s.textContent = n.text;
     div.appendChild(s);
-    var b = document.createElement('button');
-    b.type = 'button'; b.className = 'link'; b.textContent = n.link;
-    b.addEventListener('click', function () { goTab(n.tab || 'journal'); });
-    div.appendChild(b);
+    if (n.link) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'link'; b.textContent = n.link;
+      b.addEventListener('click', function () { goTab(n.tab || 'journal'); });
+      div.appendChild(b);
+    }
     log.appendChild(div);
     scroll();
     return div;

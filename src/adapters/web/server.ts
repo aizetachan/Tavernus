@@ -79,6 +79,7 @@ import type { SceneNotice } from '../../engine/engine.js';
 const MASTER_TYPES = new Set(['master', 'master_roll_outcome', 'master_intro', 'master_arrival', 'prologue', 'recap']);
 const HISTORY = 200;
 /** Avisos fuera de la ficción: tiradas, progreso, anuncios, tablón. Lo demás lo cuenta el narrador. */
+const NPC_MOVES = /^(npc_move|npc_order_end)$/;
 const SYSTEM_TYPES = /^(roll|progress_|announcement|board|admin_|decisive_expired|budget)/;
 /** Tras cerrar la última pestaña, el aviso «ha salido» espera esto (una recarga no cuenta como salir). */
 const LEAVE_NOTICE_MS = 20_000;
@@ -893,6 +894,8 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   // Tablón y progreso: fuera del hilo; queda un aviso de una línea que lleva al Diario (también en el historial restaurado).
   const notice = noticeOf(e);
   if (notice) { m.text = ''; m.notice = notice; return m; }
+  // Un NPC llega, se va o deja de acompañar (agenda, órdenes: npcorders.ts): aviso de una línea con lo que percibe cada uno.
+  if (NPC_MOVES.test(e.action_type) && d.text) { m.text = ''; m.notice = { text: d.text.replace(/[.\s]+$/, '') }; return m; }
   if (!SYSTEM_TYPES.test(e.action_type)) m.narrator = true;
   // Turno compartido (grupo o ronda): cada participante lo ve como suyo, con su propia acción y la de los demás.
   const group = Array.isArray(e.payload['group']) && (e.payload['group'] as Id[]).includes(d.character_id);
