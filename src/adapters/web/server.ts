@@ -65,7 +65,8 @@ import { soundCuesOf } from './soundmap.js';
 import { illustratorOf, MASTER_PORTRAIT_ID, masterPortraitOf, portraitOf, sceneOf, type EntityInput, type Illustrator, type SceneImage } from '../../ai/illustrate.js';
 import { type DialogueLine, type Moment } from '../../engine/moments.js';
 import { blocksSpeech, novelBlocks, type NovelBlock } from './novel.js';
-import { handleJournalRequest, noticeOf, touchesJournal, type WebNotice } from './journal.js';
+import { handleJournalRequest, touchesJournal } from './journal.js';
+import { noticeOf, webNotice, type WebNotice } from './notice.js';
 import { handlePaintRequest } from './paint.js';
 import { handleAvatarRequest } from './avatar.js';
 import { journeyOf } from '../../engine/travel.js';
@@ -129,7 +130,7 @@ export interface WebMessage {
   narrator?: boolean;
   /** Sonido (solo para el actor): claves en orden, de soundmap.ts. */
   sfx?: string[];
-  /** Aviso de una línea en lugar de burbuja (tablón, progreso): lleva al Diario. */
+  /** Aviso de sistema en lugar de burbuja (notice.ts): quién entra o sale, movimientos, objetos, tiradas, progreso. */
   notice?: WebNotice;
   /** Prólogo o «Donde lo dejamos» (docs/PROLOGO.md): página de libro con su título, sin avatar. */
   chapter?: { kind: 'prologue' | 'recap'; title: string };
@@ -320,11 +321,11 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
      * ya se lo cuenta el motor en la ficción («se ha ido; su personaje se queda…», engine.setAway).
      */
     const announce = (id: Id, online: boolean, inFiction = !online) => {
-      const text = online ? `🟢 ${nameOf(id)} ha entrado en la partida.` : `⚪ ${nameOf(id)} ha salido de la partida.`;
+      const notice = webNotice(online ? `${nameOf(id)} ha entrado en la partida` : `${nameOf(id)} ha salido de la partida`);
       const where = locOf(id);
       for (const other of streams.keys()) {
         if (other === id || !tabs.get(other) || (inFiction && where && locOf(other) === where)) continue;
-        record(other, { seq: history.get(other)?.at(-1)?.seq ?? 0, kind: 'system', text, presence: { id, online } });
+        record(other, { seq: history.get(other)?.at(-1)?.seq ?? 0, kind: 'system', text: '', notice, presence: { id, online } });
       }
       sendPresence();
     };
@@ -890,10 +891,11 @@ function reply(r: ActionResult): { ok: boolean; text: string | null; say_to?: { 
 export function toMessage(d: Delivery, engine: Engine): WebMessage {
   const e: GameEvent = d.event;
   const m: WebMessage = { seq: e.seq, kind: MASTER_TYPES.has(e.action_type) ? 'master' : 'system', text: d.text };
-  // Tablón y progreso: fuera del hilo; queda un aviso de una línea que lleva al Diario (también en el historial restaurado).
-  const notice = noticeOf(e);
-  if (notice) { m.text = ''; m.notice = notice; return m; }
-  if (!SYSTEM_TYPES.test(e.action_type)) m.narrator = true;
+  // Lo informativo no es narración (notice.ts): sale como aviso de sistema de una línea, también en el historial
+  // restaurado. El tablón y el progreso llevan al Diario. Sigue con sus botones, momentos y sonido.
+  const notice = noticeOf(e, d.character_id, d.text);
+  if (notice) { m.kind = 'system'; m.text = ''; m.notice = notice; }
+  else if (!SYSTEM_TYPES.test(e.action_type)) m.narrator = true;
   // Turno compartido (grupo o ronda): cada participante lo ve como suyo, con su propia acción y la de los demás.
   const group = Array.isArray(e.payload['group']) && (e.payload['group'] as Id[]).includes(d.character_id);
   if (e.actor_id !== d.character_id && !group) return witnessMessage(m, d, engine);
@@ -925,7 +927,7 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   if (e.input_text && e.action_type !== 'master_roll_outcome' && !e.input_text.startsWith('(')) m.input = e.input_text;
   const sfx = soundCuesOf(engine, e);
   if (sfx.length) m.sfx = sfx;
-  const novel = novelOf(e, engine, d.character_id, d.text);
+  const novel = notice ? null : novelOf(e, engine, d.character_id, d.text);
   if (novel) { m.prose = novel.prose; m.lines = novel.lines; m.blocks = novel.blocks; m.speech = novel.speech; }
   const moments = (Array.isArray(e.payload['moments']) ? e.payload['moments'] as Moment[] : [])
     .filter((x) => x.kind !== 'scene' && x.character_id === d.character_id)
@@ -961,13 +963,13 @@ function witnessMessage(m: WebMessage, d: Delivery, engine: Engine): WebMessage 
   if (!actor) return m;
   const reader = d.character_id;
   const shown = pcLabel(w, reader, actor);
-  // Lo que hace otro mientras habla (le hacen esperar, espera su turno): aviso de una línea, sin burbuja del narrador.
-  if (e.payload['notice_for_others'] === true) { m.kind = 'system'; delete m.narrator; return m; }
   const offer = e.payload['offer'] as { id: Id; to: Id; label: string; answer?: string } | undefined;
   if (e.action_type === 'offer' && offer?.to === reader) {
     const open = (w.characters.get(reader)?.offers ?? []).some((o) => o.id === offer.id && o.expires_real_ms > Date.now());
     m.offer = { id: offer.id, label: offer.label, open };
   }
+  // Un aviso (llega, se va, coge algo, espera su turno…) no lleva parlamentos ni «Responder a…».
+  if (m.notice) return m;
   const say = e.payload['say'] as { to: Id | null } | undefined;
   const delivered = e.delivered_to.find((x) => x.character_id === reader);
   const heardWell = SAY_TYPES.has(e.action_type) ? d.level === 'full' : delivered?.sound === 'full';

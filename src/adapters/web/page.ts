@@ -432,11 +432,15 @@ export const PAGE = String.raw`<!doctype html>
   #journal .pl.visited i { border-color: var(--ok); } #journal .pl.heard_of i { border-style: dashed; }
   #journal .pl.here i { border-color: var(--accent); box-shadow: 0 0 8px var(--glow); }
   #journal .pl b { display: block; font-size: 13.5px; font-weight: 600; } #journal .pl small { color: var(--muted); font-size: 12px; }
-  /* Aviso de una línea en el hilo (tablón, progreso): nada de burbuja, solo un enlace al Diario. */
-  .msg.notice { align-self: center; display: flex; flex-wrap: wrap; justify-content: center; gap: 0 6px; margin: 6px 0 0; padding: 5px 12px; border-radius: 8px; background: #161a1b; border: 1px solid var(--sep); box-shadow: 0 1px 1px rgba(0,0,0,.4); font-size: 12.5px; font-weight: 500; color: #b8b1a6; text-align: center; }
-  .msg.notice .link { border: 0; padding: 0; background: none; color: var(--accent); font-size: 12.5px; font-weight: 500; }
-  .msg.notice .link::before { content: '· '; color: var(--faint); }
-  .msg.notice .link:hover { text-decoration: underline; }
+  /* Aviso de sistema (notice.ts), como «Fulano ha salido del grupo» en WhatsApp: centrado, pequeño, oscuro y
+     semitransparente, para que no compita con la narración. Puede llevar un enlace (al Diario) al final. */
+  .msg.notice { align-self: center; max-width: min(86%, 520px); margin: 4px 0 2px; padding: 3px 10px 4px; border-radius: 7px; background: rgba(6,8,8,.62); box-shadow: 0 1px 0 rgba(0,0,0,.3); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); color: rgba(198,191,180,.66); font-size: 11.5px; font-weight: 500; line-height: 1.45; letter-spacing: .01em; text-align: center; }
+  .msg.notice + .msg.notice { margin-top: 0; }
+  .msg.notice .link { display: inline; height: auto; margin: 0 0 0 .35em; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--accent); opacity: .8; font: inherit; cursor: pointer; }
+  .msg.notice .link::before { content: '· '; color: rgba(198,191,180,.4); }
+  .msg.notice .link:hover { opacity: 1; text-decoration: underline; }
+  .msg.notice.tone-good { color: rgba(140,205,165,.75); }
+  .msg.notice.tone-bad { color: rgba(240,150,140,.78); }
 
   /* Móvil: el chat a pantalla completa; el panel, una vista aparte; Hoja, Diario y Mochila suben desde abajo. */
   @media (max-width: 820px) {
@@ -481,7 +485,6 @@ ${PAINT_STYLE}
   /* B5 sobre los módulos (novel, tts, sfx, voz, pincel, avatar): mismas piezas, otra piel. */
   .msg.row { gap: 8px; margin-top: 8px; max-width: min(760px, 100%); }
   .msg.scene, .moment.combat, .moment.discovery, .moment.manual { width: min(640px, calc(100% - 42px)); }
-  .msg.system { max-width: min(720px, 100%); }
   .msg.row .body { padding: 8px 12px 7px; border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
   .msg.row:not(.cont):not(.mine) .body { border-top-left-radius: 4px; }
   .msg.row.mine:not(.cont) .body { border-top-right-radius: 4px; }
@@ -492,8 +495,6 @@ ${PAINT_STYLE}
   .nv-av { width: 34px; height: 34px; box-shadow: 0 1px 2px rgba(0,0,0,.5), inset 0 0 0 1.5px currentColor; }
   .msg.row.master .nv-av { background: #22262a; }
   .msg.row.mine .nv-av { background: #2a1d05; }
-  .msg.system { margin: 8px 0 2px; }
-  .msg.system .body { background: #161a1b; border: 1px solid var(--sep); color: #b8b1a6; box-shadow: 0 1px 1px rgba(0,0,0,.4); border-radius: 8px; }
   .moment .shot, .scene .shot { border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
   .msg.chapter { border-radius: 12px; background: var(--bubble); box-shadow: 0 1px 1px rgba(0,0,0,.45), inset 0 0 0 1px rgba(230,183,90,.18); }
   .msg.chapter h2 { font: 800 22px/1.25 var(--display); letter-spacing: -.02em; }
@@ -616,12 +617,12 @@ ${PAINT_STYLE}
     body::before { animation-duration: .01s; }
     body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chips, body.entered .chips button, body.entered form > button, body.entered #card .stats > div, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
   }
-  /* Avisos del sistema (tiradas, consultas): una pastilla centrada de color muy suave; verde si sale bien, azul si
-     es neutro y rojo si sale mal. */
-  .msg.system { margin: 8px 0 2px; }
-  .msg.system .body { display: inline-block; padding: 5px 14px; border-radius: 999px; font-size: 13px; line-height: 1.45; box-shadow: none; background: rgba(99,170,255,.09); border: 1px solid rgba(99,170,255,.22); color: #b4d3f7; }
-  .msg.system.tone-good .body { background: rgba(79,191,122,.10); border-color: rgba(79,191,122,.26); color: #a6dfbb; }
-  .msg.system.tone-bad .body, .msg.system.error .body { background: rgba(255,107,94,.10); border-color: rgba(255,107,94,.26); color: #ffb0a8; }
+  /* Respuestas del sistema (consultas, errores, notas del pincel): la misma piel que los avisos, un punto más
+     legible porque las ha pedido el jugador; rojo si algo falla. */
+  .msg.system { align-self: center; max-width: min(86%, 560px); margin: 4px 0 2px; text-align: center; }
+  .msg.system .body { display: inline-block; padding: 4px 11px 5px; border: 0; border-radius: 7px; background: rgba(6,8,8,.62); box-shadow: 0 1px 0 rgba(0,0,0,.3); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); color: rgba(206,199,188,.8); font-size: 12px; line-height: 1.45; }
+  .msg.system.tone-good .body { color: rgba(140,205,165,.85); }
+  .msg.system.tone-bad .body, .msg.system.error .body { color: rgba(250,155,145,.9); }
   /* Tirar: un botón redondo solo con el icono del d20, que se balancea de vez en cuando para invitar a pulsarlo. */
   .actions button.roll { width: 40px; height: 40px; padding: 0; justify-content: center; border-radius: 50%; }
   .actions button.roll svg.d20 { width: 24px; height: 24px; stroke-width: 1.6; }
@@ -689,6 +690,8 @@ ${PAINT_STYLE}
   .chat-head .sfx, .chat-head .sfx.on { height: 32px; background: transparent; border-radius: 12px; }
   #party { order: 2; margin-right: 6px; }
   @media (max-width: 820px) {
+    /* Avisos: algo más anchos en el móvil, para que quepan en una o dos líneas. */
+    .msg.notice, .msg.system { max-width: 92%; }
     .sfx > .sfx-toggle, .tts > .tts-auto { width: 32px; }
     .nv-av { width: 28px; height: 28px; }
     .msg.scene, .msg.moment, #log > .actions { margin-left: 36px; }
@@ -908,13 +911,16 @@ ${PAINT_STYLE}
     div.className = 'msg ' + kind + (extra && extra.error ? ' error' : '') + (kind === 'system' ? ' tone-' + toneOf(text, extra) : '');
     div.innerHTML = (kind === 'master' ? '<div class="who">' + SPARK + 'Máster</div>' : '') + '<div class="body">' + format(text) + '</div>';
     log.appendChild(div);
-    if (kind === 'system' && /🎲/.test(text)) {
-      var rb = log.querySelectorAll('.actions button.roll'); if (rb.length) rb[rb.length - 1].classList.add('chosen');
-      var rolled = String(text).match(/d20\s*\[(\d+)/);
-      if (rolled) landRoll(Number(rolled[1])); else stopRoll();
-    }
+    if (kind === 'system') diceShown(text);
     scroll();
     return div;
+  }
+  /** Un aviso con el resultado de una tirada: el botón del dado queda marcado y cae en lo que ha salido. */
+  function diceShown(text) {
+    if (!/🎲/.test(text)) return;
+    var rb = log.querySelectorAll('.actions button.roll'); if (rb.length) rb[rb.length - 1].classList.add('chosen');
+    var rolled = String(text).match(/d20\s*\[(\d+)/);
+    if (rolled) landRoll(Number(rolled[1])); else stopRoll();
   }
 ${NOVEL_JS}
 ${PAINT_JS}

@@ -464,18 +464,25 @@ export const NOVEL_JS = String.raw`
     body.insertBefore(b, body.firstChild);
   }
 
-  /** Aviso de una línea (tablón, progreso): sin burbuja; un enlace lleva a la pestaña que toca (el Diario). */
+  /**
+   * Aviso de sistema (notice.ts), como «Fulano ha salido del grupo» en WhatsApp: una línea centrada sin burbuja.
+   * Si lleva enlace, abre su pestaña (el Diario); si es una tirada, el dado del botón cae en lo que ha salido.
+   */
   function addNotice(n) {
     var div = document.createElement('div');
-    div.className = 'msg notice';
+    div.className = 'msg notice' + (n.tone ? ' tone-' + n.tone : '');
+    div.setAttribute('role', 'status');
     var s = document.createElement('span');
     s.textContent = n.text;
     div.appendChild(s);
-    var b = document.createElement('button');
-    b.type = 'button'; b.className = 'link'; b.textContent = n.link;
-    b.addEventListener('click', function () { goTab(n.tab || 'journal'); });
-    div.appendChild(b);
+    if (n.link) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'link'; b.textContent = n.link;
+      b.addEventListener('click', function () { goTab(n.tab || 'journal'); });
+      div.appendChild(b);
+    }
     log.appendChild(div);
+    diceShown(n.text);
     scroll();
     return div;
   }
@@ -525,7 +532,6 @@ export const NOVEL_JS = String.raw`
     });
   }
   function chatTurn(m, live) {
-    if (m.notice) { addNotice(m.notice); return; }
     if (m.scene) { showScene(m.scene); return; }
     if (m.chapter) { addChapter(m); return; }
     if (m.input) { clearPending(); markChosen(m.input); }
@@ -544,7 +550,10 @@ export const NOVEL_JS = String.raw`
     };
     // Si el jugador no habla en este turno, su mensaje es lo que ha hecho (en cursiva).
     if (m.input && !lines.some(function (l) { return l.speaker === 'actor'; })) chatRow('mine', meWho(), format(m.input), { act: true });
-    if (m.blocks && m.blocks.length) {
+    if (m.notice) {
+      // Un aviso no es narración: su línea y, debajo, lo que traiga (momentos, opciones, oferta).
+      main = addNotice(m.notice);
+    } else if (m.blocks && m.blocks.length) {
       // El turno en su orden real: narrador, personaje, narrador… cada trozo en su burbuja.
       // La frase que presenta a quien habla (lead) va dentro de la burbuja de ese personaje.
       var lead = null;
@@ -572,7 +581,7 @@ export const NOVEL_JS = String.raw`
     last.setAttribute('data-seq', String(m.seq));
     // La voz lee la narración y los parlamentos del turno desde la burbuja del narrador.
     var div = main.classList.contains('master') ? main : last;
-    if (window.TavernusTTS) {
+    if (window.TavernusTTS && !m.notice) {
       TavernusTTS.attach(div, m);
       // Cualquier avatar de este turno (narrador o personajes) lo lee.
       var rows = [], e = before ? before.nextElementSibling : log.firstElementChild;

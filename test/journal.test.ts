@@ -269,8 +269,9 @@ describe('diario: web', () => {
     expect(noticeOf({ action_type: 'progress_job', narration_private: 'Encargo completado: Leña para la posada. +900 monedas. Reputación en Brezal: 1.', observable: null }))
       .toEqual({ text: 'Encargo completado: Leña para la posada', link: 'ver en el Diario', tab: 'journal' });
     expect(noticeOf({ action_type: 'master', narration_private: 'Brenna te mira.', observable: null })).toBeNull();
-    expect(noticeOf({ action_type: 'roll', narration_private: '🎲 Persuasión…', observable: null })).toBeNull();
-    expect(noticeOf({ action_type: 'announcement', narration_private: '', observable: 'Kael ha mirado la ceniza.' })).toBeNull();
+    // Tiradas y anuncios también son aviso (notice.ts), pero sin enlace: no llevan al Diario.
+    expect(noticeOf({ action_type: 'roll', narration_private: '🎲 Persuasión…', observable: null })).toEqual({ text: '🎲 Persuasión…' });
+    expect(noticeOf({ action_type: 'announcement', narration_private: '', observable: 'Kael ha mirado la ceniza.' })).toEqual({ text: 'Kael ha mirado la ceniza' });
   });
 
   it('avisa por el stream con lo que el diario recoge, no con lo trivial', () => {

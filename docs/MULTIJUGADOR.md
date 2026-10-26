@@ -71,7 +71,8 @@ La página pide `/api/session` (rol, PJ ligado, `can_switch`). Si el jugador est
 - SSE `presence`: los demás PJ vistos desde el tuyo, con nombre, en línea o no, y dónde: `here` si está en tu localización, `travel` si está de viaje o con un viaje a medias, `away` si no. No dice en qué sitio está el otro: eso lo tiene que descubrir el juego.
 - **Cabecera**: las iniciales de los demás, con punto verde si están en línea y aro dorado si están contigo; al pasar el ratón, «Kael está aquí», «Mira está en camino (sin conexión)».
 - **Hoja**: bloque «Tu grupo» con una línea por jugador.
-- **Hilo**: «🟢 Kael ha entrado en la partida» y «⚪ Kael ha salido de la partida» en el hilo de quien esté en línea. La salida espera 20 s, así que recargar no cuenta.
+- **Hilo**: «Kael ha entrado en la partida» y «Kael ha salido de la partida», como aviso de sistema, en el hilo de quien esté en línea. La salida espera 20 s, así que recargar no cuenta.
+- **Avisos de sistema** (estilo WhatsApp, «Fulano ha salido del grupo»): lo informativo (entradas, salidas, movimientos, objetos, tiradas, progreso, el paso del tiempo) sale como una línea centrada y apagada, no como narración; para emitir uno, `payload: { notice: 'all' | 'others' }` en el evento del motor (`src/engine/notices.ts`, que también trae la tabla por `action_type`) o `notice: webNotice(texto)` en un mensaje del servidor (`src/adapters/web/notice.ts`).
 - **Motor**: `setPresence(true)` al abrir y `false` a los 30 min sin pestañas. A partir de ahí manda §9.1: dormido, con velo y sin contar para esperas ni ganchos. Al volver, se despierta solo.
 
 ### (d) Bloqueo de doble acción y «esperando a…»
