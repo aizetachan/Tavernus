@@ -22,6 +22,7 @@ import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration,
 import { encounterChance, parseInfo, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
 import { answerInfo, infoText, type InfoAnswer } from './info.js';
 import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type RouteCut } from './goto.js';
+import { parseErrand, pendingLine, trivialAction, type Errand } from './errand.js';
 import { atBoard, dropQuest, readBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { tickSchedule } from './schedule.js';
@@ -102,7 +103,16 @@ export interface SceneHints {
   round?: { n: number; members: { id: Id; name: string; text: string }[]; hesitant: { id: Id; name: string }[] };
   /** Descanso interrumpido (rest.ts): qué le despierta. */
   rest?: { kind: RestKind; what: string; teaser: string };
+  /** Recado (errand.ts): el motor ya le ha traído hasta aquí y queda lo que venía a hacer. */
+  errand?: { line: string; action: string; first_visit: boolean };
 }
+
+/** Llegada que cuenta la propia acción que la provocó (un recado o un move_to del máster): sin escena aparte. */
+interface QuietArrival {
+  spot_id: Id;
+  arrived?: { landing_spot_id: Id | null; exit_id?: Id; crossed: boolean; first_visit: boolean; note: string; hooks: Hook[] };
+}
+type Arrival = NonNullable<QuietArrival['arrived']>;
 
 /** Banner de ronda para la web: quién ha actuado, a quién se espera y hasta cuándo. */
 export interface SceneNotice { kind: 'round'; location_id: Id; n: number; acted: Id[]; waiting: Id[]; deadline_ms: number; open: boolean }
@@ -167,6 +177,9 @@ export class Engine {
   private hints = new Map<Id, SceneHints>();
   /** Localización desde la que salió cada viaje iniciado por el motor (para saber si la llegada cruza a otra). */
   private tripFrom = new Map<Id, Id>();
+  /** Llegadas que narra la acción en curso (recado, move_to del máster) y ganchos del destino que saltan después. */
+  private quiet = new Map<Id, QuietArrival>();
+  private lateHooks = new Map<Id, Hook[]>();
   private firstVisitListeners: FirstVisitListener[] = [];
   private momentListeners: MomentListener[] = [];
   /** Claves de momentos ya dados (moments.ts): se recuperan de los eventos pasados al arrancar. */
@@ -400,6 +413,25 @@ export class Engine {
         if (firstVisit) { loc.discovery[c.id] = 'visited'; this.world.touch('locations', loc.id); }
         if (last && encounter) { this.tripFrom.delete(c.id); this.stopOnTheRoad(c, encounter, departed, pace, behind ? c.following ?? null : null); continue; }
         if (last && !isWaypoint(spot)) setJourney(c, null);
+        const q = last ? this.quiet.get(c.id) : undefined;
+        if (q && q.spot_id === spot.id) {
+          // La llegada la cuenta la acción que la ha provocado: al actor no le sale nada aparte; a los demás, que llega.
+          const crossed = (this.tripFrom.get(c.id) ?? startLoc) !== spot.location_id;
+          this.tripFrom.delete(c.id);
+          const via = r.reached.filter((x) => x.via_exit_id).at(-1);
+          q.arrived = {
+            landing_spot_id: via?.spot_id ?? null, ...(via?.via_exit_id ? { exit_id: via.via_exit_id } : {}), crossed, first_visit: firstVisit,
+            note: crossed ? travelNote(this.clock, departed, reached.at_game_s) : '',
+            hooks: [...matchHooks(this.world, { kind: 'spot', spot_id: spot.id, character_id: c.id }), ...(crossed ? matchHooks(this.world, { kind: 'location', location_id: loc.id, character_id: c.id }) : [])],
+          };
+          this.events.emit({
+            actor_id: c.id, at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
+            action_type: 'arrived', narration_private: '', observable: `${c.name} llega ${aEs(spot.name)}.`, tags: ['movement'],
+            payload: { observable_vague: `Una figura llega ${aEs(spot.name)}.` },
+          }, Math.max(this.clock.realAt(reached.at_game_s), this.lastStamp(c)));
+          if (firstVisit && !isWaypoint(spot)) this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: reached.at_game_s });
+          continue;
+        }
         // Con master, la llegada al destino la narra él (escena de llegada) salvo que sea trivial: entonces, plantilla.
         // El aviso plano queda para los tramos intermedios y para quien no está mirando.
         const live = last && this.master !== null && c.status === 'active' && c.connected;
@@ -675,7 +707,7 @@ export class Engine {
       }
       // Quien sigue a otro y se mueve por su cuenta deja de seguirle.
       if (c.following && (travel || this.isMove(c, clean))) { c.following = null; this.world.touch('characters', c.id); }
-      const fast = decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryTrivial(c, clean);
+      const fast = decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryTrivial(c, clean);
       if (fast) {
         r = fast;
       } else if (this.master && c.status === 'active' && !Engine.MECHANICAL.test(clean)) {
@@ -687,6 +719,9 @@ export class Engine {
       } else {
         r = this.resolveAction(c, clean);
       }
+      // Un gancho del sitio al que le llevó el máster con move_to: salta ahora, tras su narración.
+      const late = this.lateHooks.get(c.id);
+      if (late) { this.lateHooks.delete(c.id); this.narrateArrival(c, { hooks: late, encounter: null }); }
       this.settleAll(this.gameNow()); // viaje rápido: si la acción (o un tool del master) lo puso en camino, llega ya
       this.advanceStory(this.gameNow());
       this.announceDeathStates();
@@ -714,15 +749,17 @@ export class Engine {
     return `⏳ Has llegado antes que el resto: para ti son las ${hhmm(mine)} y aquí aún son las ${hhmm(theirs)}. Podrás actuar en ${fmtDuration(this.clock.gameToReal(mine - g))} reales (marcharte, ya).`;
   }
 
-  /** ¿Es moverse (a otro punto o a otra localización)? */
+  /** ¿Es moverse (a otro punto o a otra localización), sola o con algo que hacer allí? */
   private isMove(c: Character, text: string): boolean {
-    return parseTrivial(this.world, c, text)?.kind === 'move';
+    return parseTrivial(this.world, c, text)?.kind === 'move' || parseErrand(this.world, c, text, this.nowFor(c)) !== null;
   }
 
   /** ¿Es salir hacia otra localización? Eso lo puede hacer aunque vaya por delante del reloj. */
   private isLeaving(c: Character, text: string): boolean {
     const intent = parseTrivial(this.world, c, text);
-    return intent?.kind === 'move' && intent.exit;
+    if (intent?.kind === 'move' && intent.exit) return true;
+    const e = parseErrand(this.world, c, text, this.nowFor(c));
+    return e !== null && e.dest.location_id !== this.world.characterSpot(c)?.location_id;
   }
 
   /**
@@ -804,8 +841,129 @@ export class Engine {
     return this.execTrivial(c, text, intent);
   }
 
-  /** Ejecuta con las mismas funciones que usan los tools y narra con plantilla. null si el motor la rechaza (al master). */
-  private execTrivial(c: Character, input: string, intent: TrivialIntent): ActionResult | null {
+  /**
+   * Ir y hacer en una frase (errand.ts): «voy a la plaza a por agua». El motor
+   * hace el viaje y la acción se resuelve allí en el mismo turno, en una sola
+   * respuesta. Se para antes solo si algo lo impide (un paso cerrado, un
+   * gancho o un evento de paso, un encuentro en el camino, una escena tensa
+   * allí, quien buscaba no está): lo dice y la acción queda pendiente. null si
+   * no es un recado o si aquí la escena está tensa (al master, con la frase entera).
+   */
+  private async tryErrand(c: Character, text: string): Promise<ActionResult | null> {
+    if (!this.deterministic || c.status !== 'active') return null;
+    const nowG = this.nowFor(c);
+    const e = parseErrand(this.world, c, text, nowG);
+    if (!e || e.pace === 'stealth') return null; // el sigilo es una prueba: al master
+    const here = this.world.spot(positionOf(this.world, c, nowG).spot_id);
+    const goal = this.world.spot(e.dest.spot_id);
+    const leaving = goal.location_id !== here.location_id;
+    if (this.master && tension(this.world, c, [here.location_id], this.recentTags([here.location_id]), { leaving })) return null;
+    if (!leaving) return approachSpot(this.world, c, goal.id) ? this.errandAction(c, text, e, null) : null;
+
+    let cut: RouteCut | null = null;
+    let res = moveTo(this.world, c.id, goal.id, e.pace, nowG);
+    if (!res.ok && res.error.code === 'no_route') cut = blockedOnRoute(this.world, c, goal.id, e.pace, nowG);
+    else if (res.ok) cut = interruptionOnRoute(this.world, c, res.transit.legs);
+    if (cut) {
+      res = moveTo(this.world, c.id, cut.spot_id, e.pace, nowG);
+      if (res.ok && cut.kind === 'event' && cut.run_key) notePassedRun(c, cut.run_key);
+    }
+    if (!res.ok) return null;
+    this.tripFrom.set(c.id, here.location_id);
+    const dest = this.world.location(goal.location_id);
+    const pending = pendingLine(e.action);
+    // Se queda antes: el viaje sigue su curso (llega al corte al final de la acción) y lo de allí queda pendiente.
+    if (cut) return this.emitPending(c, text, e, `Te pones en camino hacia ${dest.name}. ${cut.text} ${pending}`, `${c.name} se marcha hacia ${dest.name}.`, 'Una figura se marcha.');
+    // Con la escena tensa allí, la llegada la narra el master como siempre y la acción espera.
+    const tense = this.master !== null && tension(this.world, c, [dest.id], this.recentTags([dest.id])) !== null;
+    if (!tense) this.quiet.set(c.id, { spot_id: goal.id });
+    this.settleAll(this.gameNow());
+    const arrived = this.quiet.get(c.id)?.arrived ?? null;
+    this.quiet.delete(c.id);
+    // Un encuentro en el camino ya lo ha contado el viaje (travel.ts); aquí, solo que la acción espera.
+    if (c.transit || this.world.characterSpot(c)?.id !== goal.id || tense || !arrived) return this.emitPending(c, text, e, pending, null, null);
+    const wait = this.aheadWait(c);
+    if (wait) return this.emitPending(c, text, e, `${this.errandLine(c, arrived)} ${wait} ${pending}`, null, null);
+    return this.errandAction(c, text, e, arrived);
+  }
+
+  /** Lo que hace al llegar: con plantilla si es trivial y el sitio no es nuevo; si no, el master con el viaje ya hecho. */
+  private async errandAction(c: Character, text: string, e: Errand, a: Arrival | null): Promise<ActionResult> {
+    const line = this.errandLine(c, a);
+    const spot = this.world.characterSpot(c)!;
+    if (e.absent_npc_id) {
+      const n = this.world.npc(e.absent_npc_id);
+      const who = c.knows.includes(n.id) ? n.name : descriptorOf(this.world, n.id);
+      return this.emitPending(c, text, e, `${line} ${who.charAt(0).toUpperCase()}${who.slice(1)} no está aquí. ${pendingLine(e.action)}`, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`);
+    }
+    const hooks = [...(a?.hooks ?? [])];
+    const intent = parseTrivial(this.world, c, trivialAction(e.action), this.nowFor(c));
+    if (intent && intent.kind !== 'move' && !a?.first_visit) {
+      if (intent.kind === 'take') hooks.push(...matchHooks(this.world, { kind: 'item', item_id: this.world.itemInstance(intent.instance_id).item_id, location_id: spot.location_id, character_id: c.id }));
+      const r = hooks.length && this.master ? null : this.execTrivial(c, text, intent, line);
+      if (r) return r;
+    }
+    if (!this.master) {
+      this.emitTrivial(c, text, 'move', 'movement', line, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`, spot.name);
+      const r = this.resolveAction(c, e.action);
+      return { ...r, text: `${line}\n${r.text}` };
+    }
+    const r = await this.resolveWithHints(c, text, { hooks, encounter: null, errand: { line, action: e.action, first_visit: a?.first_visit ?? false } });
+    if (r.ok || r.text !== '') return r;
+    return this.emitPending(c, text, e, `${line} El narrador no responde ahora mismo. ${pendingLine(e.action)}`, null, null);
+  }
+
+  /** «Cruzas la puerta baja y entras en Casa de las hierbas. Te acercas al caldero.» */
+  private errandLine(c: Character, a: Arrival | null): string {
+    const spot = this.world.characterSpot(c)!;
+    const parts: string[] = [];
+    if (a?.note) parts.push(a.note);
+    if (a?.crossed) parts.push(crossingLine(this.world, a.exit_id, a.landing_spot_id ?? spot.id) || `Llegas a ${this.world.location(spot.location_id).name}.`);
+    if (!a?.crossed || (a.landing_spot_id && a.landing_spot_id !== spot.id)) parts.push(`Te acercas ${aEs(spot.name)}.`);
+    return parts.join(' ');
+  }
+
+  /** El recado se queda a medias: lo dice, y la frase entera queda como primera acción sugerida para retomarlo. */
+  private emitPending(c: Character, input: string, e: Errand, priv: string, obs: string | null, vague: string | null): ActionResult {
+    const suggested = [input, ...suggestActions(this.world, this.clock, c, this.gameNow())].slice(0, 4);
+    const event = this.events.emit({
+      actor_id: c.id, action_type: 'move', input_text: input, narration_private: priv, observable: obs, tags: ['deterministic', 'movement', 'pending'],
+      payload: { master: null, suggested_actions: suggested, pending_action: e.action, ...(vague ? { observable_vague: vague } : {}) },
+    }, this.stampFor(c));
+    return { ok: true, text: priv, event, suggested_actions: suggested };
+  }
+
+  /**
+   * Viaje rápido dentro de una acción del máster (tools.ts, move_to): el actor
+   * llega ya, para que lo que haga después en esa misma acción (coger, hablar)
+   * ocurra en el destino. La llegada la narra esa acción, sin escena aparte;
+   * un gancho del destino salta después. Dentro de la localización, como un
+   * acercamiento. Sin viaje rápido no cambia nada: llega a su tiempo.
+   */
+  arriveNow(c: Character): { arrived: boolean; first_visit: boolean } {
+    if (!c.transit || !this.fastTravel) return { arrived: !c.transit, first_visit: false };
+    const dest = c.transit.destination_spot_id;
+    if (!crossesLocations(c.transit)) {
+      settleTransit(this.world, c, c.transit.arrives_game_s);
+      this.world.touch('characters', c.id);
+      return { arrived: !c.transit && this.world.characterSpot(c)?.id === dest, first_visit: false };
+    }
+    const from = this.world.characterSpot(c)?.location_id;
+    if (from && !this.tripFrom.has(c.id)) this.tripFrom.set(c.id, from);
+    this.quiet.set(c.id, { spot_id: dest });
+    this.settleAll(this.gameNow());
+    const a = this.quiet.get(c.id)?.arrived;
+    this.quiet.delete(c.id);
+    if (a?.hooks.length) this.lateHooks.set(c.id, a.hooks);
+    return { arrived: Boolean(a), first_visit: a?.first_visit ?? false };
+  }
+
+  /**
+   * Ejecuta con las mismas funciones que usan los tools y narra con plantilla. null si el motor la rechaza (al master).
+   * `lead`: la llegada de un recado, delante de lo que hace allí (coger, dejar, esperar).
+   */
+  private execTrivial(c: Character, input: string, intent: TrivialIntent, lead = ''): ActionResult | null {
+    const led = (t: string) => (lead ? `${lead} ${t}` : t);
     const nowG = this.nowFor(c);
     const here = this.world.spot(positionOf(this.world, c, nowG).spot_id);
     switch (intent.kind) {
@@ -842,18 +1000,18 @@ export class Engine {
         const def = this.world.itemDef(inst.item_id);
         const where = this.takeToHands(c, inst.id);
         if (!where) return null;
-        return this.emitTrivial(c, input, 'take', 'inventory', `Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.`,
+        return this.emitTrivial(c, input, 'take', 'inventory', led(`Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.`),
           `${c.name} coge ${def.name}.`, 'Una figura coge algo.', undefined, { item_id: def.id });
       }
       case 'drop': {
         const def = this.world.itemDef(this.world.itemInstance(intent.instance_id).item_id);
         const res = transferItem(this.world, intent.instance_id, { type: 'spot', id: here.id });
         if (!res.ok) return null;
-        return this.emitTrivial(c, input, 'drop', 'inventory', `Dejas ${def.name} en ${here.name}.`,
+        return this.emitTrivial(c, input, 'drop', 'inventory', led(`Dejas ${def.name} en ${here.name}.`),
           `${c.name} deja ${def.name} en ${here.name}.`, 'Una figura deja algo.');
       }
       case 'wait':
-        return this.emitTrivial(c, input, 'wait', 'wait', `Esperas un rato en ${here.name}. No ocurre nada.`, null, null);
+        return this.emitTrivial(c, input, 'wait', 'wait', led(`Esperas un rato en ${here.name}. No ocurre nada.`), null, null);
     }
   }
 

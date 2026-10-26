@@ -67,7 +67,7 @@ export function systemPrompt(c: Campaign): string {
     '3. Intención antes de efecto: si la acción es ambigua o le falta objetivo, no ejecutes nada; pregunta en la narración y ofrece opciones en suggested_actions.',
     '4. Si la acción tiene riesgo o resultado incierto, NO la resuelvas: cierra con log_event indicando requires_roll (tipo, skill, CD oculta). La narración de ese cierre describe el momento previo ("te agachas ante la cerradura…"). El servidor tirará y te llamará de nuevo con el resultado para que narres la consecuencia. Lo trivial (andar, hablar, mirar, coger algo del suelo) no requiere tirada.',
     '5. Percepción: el contexto te dice a qué nivel percibe el actor a cada presente (full/vague/hint). En vague no nombres a la persona; en hint solo hay movimiento. Los testigos recibirán tu texto "observable" solo si perciben la acción.',
-    '6. Moverse cuesta tiempo. Para ir a otro sitio, move_to con target_location_id (entra hasta dentro, aunque haya que cruzar otros sitios); con target_spot_id, a un punto concreto. Tras move_to, narra que se pone en camino con el tiempo que devuelve el tool; la llegada la narrará el servidor. Para hablar con alguien o darle algo hay que estar en su punto: acércate antes de interactuar (move_to), o deja que el motor lo haga, que acerca solo al actor a quien no es hostil y está en la misma sala.',
+    '6. Moverse cuesta tiempo. Para ir a otro sitio, move_to con target_location_id (entra hasta dentro, aunque haya que cruzar otros sitios); con target_spot_id, a un punto concreto. Con viaje rápido move_to le deja ya en el destino (arrived:true): si la frase trae algo que hacer allí («voy al pozo a por agua», «voy a la curandera a preguntarle…»), en esta MISMA acción encadena move_to y lo que hace allí (transfer_item, harvest, hablar con el npc_id que te devuelve) y narra camino, llegada y acción en una sola narración, sin preguntarle qué quiere hacer al llegar. Si devuelve arrived:false, no ha llegado: narra el corte y deja la acción pendiente. Para hablar con alguien o darle algo hay que estar en su punto: acércate antes de interactuar (move_to), o deja que el motor lo haga, que acerca solo al actor a quien no es hostil y está en la misma sala.',
     '7. No rompas la cuarta pared. No hables de tools, IDs, reglas ni de ti mismo como IA. Si el jugador escribe algo fuera de la ficción, responde brevemente en ficción o redirige.',
     '8. Cierra SIEMPRE con log_event, una sola vez, y no escribas texto fuera de él. Sin log_event la acción no existe.',
     '',
@@ -408,6 +408,13 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   if (hints?.hooks.length) L.push(`## Gancho que salta ahora\n${hints.hooks.map((h) => `- ${h.what}`).join('\n')}\nHazlo ocurrir ahora, encajado con lo que hace el actor (puedes interrumpir su movimiento o dejar la acción a medias). Ya está consumido: no lo repitas.`);
   if (hints?.encounter) L.push('## Imprevisto\nHa salido la tirada de imprevisto del servidor: mientras el actor hace esto pasa algo que no buscaba (alguien llega o se va, un ruido, un animal, un cambio de luz o de tiempo), acorde al lugar y la hora. Pequeño y concreto; combate solo si encaja. Resuelve también la acción.');
   if (hints?.travel) L.push(travelBlock(world, engine.clock, hints.travel));
+  if (hints?.errand) {
+    L.push([
+      '## Viaje ya hecho',
+      `El servidor ya ha traído a ${actor.name} hasta ${spot.name} (${loc.name}): «${hints.errand.line}». No uses move_to para venir.${hints.errand.first_visit ? ' Es la primera vez que pisa este sitio: dibújalo en una o dos frases.' : ''}`,
+      `Lo que venía a hacer: «${hints.errand.action}». En UNA sola narración: la llegada en una frase y, sin cortar, esa acción resuelta aquí con los tools que haga falta. No le preguntes qué quiere hacer.`,
+    ].join('\n'));
+  }
   if (hints?.rest) L.push(`## Descanso interrumpido\nEl actor ${hints.rest.kind === 'long' ? 'dormía' : 'descansaba'} y algo le despierta (ya se le ha dicho: «${hints.rest.teaser}»). Lo que pasa, para ti: ${hints.rest.what}. Narra lo que encuentra al despertar; el descanso ya está cortado y el tiempo ya ha pasado.`);
   if (hints?.group) {
     const n = world.npcs.get(hints.group.npc_id);

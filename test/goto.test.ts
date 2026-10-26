@@ -143,7 +143,10 @@ describe('ir a un sitio es llegar y entrar', () => {
     const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] };
     const out = JSON.parse(executeTool(ctx, 'move_to', { character_id: c.id, target_spot_id: null, target_location_id: 'loc_taberna', pace: 'walk' })) as Record<string, unknown>;
     expect(out['ok']).toBe(true);
-    expect(c.transit?.destination_spot_id).toBe('sp_tab_puerta');
+    // Viaje rápido: llega en el acto, para que lo que haga después en la misma acción ocurra dentro.
+    expect(out['arrived']).toBe(true);
+    expect(c.transit).toBeNull();
+    expect(c.location.id).toBe('sp_tab_puerta');
   });
 });
 

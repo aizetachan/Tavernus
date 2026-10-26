@@ -305,6 +305,14 @@ generateSeed: esqueleto + relleno ── buildSnapshot ─────┘ (el mi
 
 El atajo sin IA (`fastpath.ts`) manda al máster cualquier destino que nombre a una persona, por su nombre o su oficio («voy a casa de Ilse» es «trato con Ilse»). Por eso los lugares no llevan nombre ni oficio de NPC: *La herrería*, *Casa de las hierbas*, *La casona*, *El molino*, *Los Corrales*, *El Soto*, *El Lindero* (el perro se llama Ceniza), *la choza de pieles*, *la casa de la granja*; Ysolde figura solo por su nombre y su papel es «mujer del ascua». Así «salgo hacia Casa de las hierbas» se resuelve sin gastar tokens.
 
+### Ir y hacer en una frase
+
+«Voy a la plaza a por agua» o «voy a la curandera a preguntarle si me puede seguir» traen dos partes. `src/engine/errand.ts` las separa. El destino se resuelve como en `goto.ts`, y también vale el oficio de un NPC sin fijarse en el género («al curandero»). Si la acción nombra algo o a alguien de esa localización, el destino se afina hasta ese punto: el agua está en el pozo. El motor hace el viaje y la acción sale allí en la misma respuesta. Coger, dejar o esperar se resuelven con plantilla. Lo demás va al máster con el bloque «Viaje ya hecho», que le dice que no vuelva a usar `move_to`.
+
+Solo se para antes si algo lo impide: un paso cerrado, un gancho o un evento de paso, un encuentro en el camino, una escena tensa en el destino o que no esté quien se buscaba. En ese caso lo dice, la acción queda pendiente y la frase entera es la primera sugerencia para retomarla.
+
+El máster IA también encadena: con viaje rápido, `move_to` deja al actor ya en el destino (`arrived: true`), y lo que haga después en esa misma acción ocurre allí. En la partida del 2026-10-26, «Ir al pozo y sacar agua» fallaba porque el agua seguía «a 21 m».
+
 ## 6. Arte: qué deja de aplicar y qué hace falta **[nuevo]**
 
 Para rehacer el registro de arte y el manifiesto (`assets/campaigns/brezal/manifest.json`; issue #55). El manifiesto busca por id.
