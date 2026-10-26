@@ -24,6 +24,7 @@
  *   POST /api/act      {character, text}
  *   POST /api/say      {character, text, to?, mode?}   decir sin máster: la frase literal del PJ (party.ts)
  *   POST /api/offer    {character, offer, accept}      aceptar o rechazar lo que otro PJ le ofrece
+ *   POST /api/reaction {character, reaction, answer, text}  dejarse o resistirse a lo que otro PJ intenta hacerle (answer: accept, resist o null con text)
  *   POST /api/typing   {character}                     «está escribiendo…» a los demás PJ del sitio (SSE «typing»)
  * SSE «round»: ronda abierta en escena tensa (scene.ts): número, quién falta y cuándo vence.
  *   POST /api/roll     {character}
@@ -137,6 +138,12 @@ export interface WebMessage {
   reply_to?: { id: Id; name: string };
   /** Oferta de otro jugador a este: «Aceptar» y «Rechazar» mientras siga en pie. */
   offer?: { id: Id; label: string; open: boolean };
+  /** Otro jugador intenta algo sobre este (reactions.ts): «Dejarse», «Resistirse» o sus palabras, hasta `expires_ms`. */
+  reaction?: { id: Id; from: string; attempt: string; expires_ms: number; open: boolean };
+  /** Este jugador espera a que otro decida: «Esperando a que Mira decida…» con la cuenta atrás. */
+  reaction_wait?: { id: Id; name: string; expires_ms: number; open: boolean };
+  /** Esa petición ya se ha decidido: la web cierra sus botones y su espera. */
+  reaction_done?: Id;
   /** Conversación ajena que este PJ oye (bien o a trozos): se marca «Escuchas» y se ofrece unirse. */
   overheard?: { npc: string; join: string; well: boolean };
 }
@@ -640,6 +647,15 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           json(res, 200, reply(await engine.answerOffer(id, offer, body['accept'] === true)));
           return;
         }
+        case '/api/reaction': {
+          const reaction = typeof body['reaction'] === 'string' ? body['reaction'] : '';
+          const answer = body['answer'] === 'accept' || body['answer'] === 'resist' ? body['answer'] : null;
+          const text = typeof body['text'] === 'string' ? body['text'].trim() : '';
+          if (!answer && !text) { json(res, 400, { ok: false, text: '¿Te dejas o te resistes?' }); return; }
+          if (!rt.begin(id)) { json(res, 409, { ok: false, text: 'Ya tienes una acción en curso: espera a que el narrador responda.' }); return; }
+          try { json(res, 200, reply(await engine.answerReaction(id, reaction, answer, text || null))); } finally { rt.end(id); }
+          return;
+        }
         case '/api/roll': {
           if (!rt.begin(id)) { json(res, 409, { ok: false, text: 'Ya tienes una acción en curso: espera a que el narrador responda.' }); return; }
           try { json(res, 200, reply(await engine.rollPending(id))); } finally { rt.end(id); }
@@ -936,7 +952,25 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   else if (Array.isArray(e.payload['suggested_actions'])) m.suggested = (e.payload['suggested_actions'] as string[]).slice(0, 4);
   const decisive = e.payload['decisive'] as { window_s: number } | undefined;
   if (decisive) m.decisive_s = decisive.window_s;
+  reactionView(m, e, engine.world, d.character_id);
   return m;
+}
+
+/**
+ * Reacciones (reactions.ts): al afectado, los botones de la petición mientras siga en pie; a quien actúa,
+ * su espera con la cuenta atrás; a los dos, la marca de que ya se decidió (cierra lo anterior en vivo).
+ */
+function reactionView(m: WebMessage, e: GameEvent, w: Engine['world'], reader: Id): void {
+  const r = e.payload['reaction'] as { id: Id; to: Id; from: Id; attempt?: string; expires_real_ms?: number } | undefined;
+  if (!r) return;
+  if (e.action_type !== 'reaction_request') { m.reaction_done = r.id; return; }
+  const to = w.characters.get(r.to);
+  const from = w.characters.get(r.from);
+  if (!to || !from) return;
+  const open = (to.reactions ?? []).some((x) => x.id === r.id);
+  const expires = r.expires_real_ms ?? 0;
+  if (reader === r.to) m.reaction = { id: r.id, from: pcName(w, reader, from), attempt: r.attempt ?? '', expires_ms: expires, open };
+  else if (reader === r.from) m.reaction_wait = { id: r.id, name: pcName(w, reader, to), expires_ms: expires, open };
 }
 
 const SAY_TYPES = new Set(['say', 'shout', 'whisper']);
@@ -968,6 +1002,7 @@ function witnessMessage(m: WebMessage, d: Delivery, engine: Engine): WebMessage 
     const open = (w.characters.get(reader)?.offers ?? []).some((o) => o.id === offer.id && o.expires_real_ms > Date.now());
     m.offer = { id: offer.id, label: offer.label, open };
   }
+  reactionView(m, e, w, reader);
   const say = e.payload['say'] as { to: Id | null } | undefined;
   const delivered = e.delivered_to.find((x) => x.character_id === reader);
   const heardWell = SAY_TYPES.has(e.action_type) ? d.level === 'full' : delivered?.sound === 'full';

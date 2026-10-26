@@ -28,6 +28,7 @@ import { reboundOf } from '../engine/barrier.js';
 import { ROLL_CATEGORY, rollCategory } from '../engine/closecheck.js';
 import { conversationBlock, conversationOf } from '../engine/conversation.js';
 import { offersOf, pcName } from '../engine/party.js';
+import { pendingFrom } from '../engine/reactions.js';
 import { RULES_CHEATSHEET } from './rules-cheatsheet.js';
 import { bodiesAt, bodyStateOf, isDying, isStable } from '../engine/death.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
@@ -57,7 +58,7 @@ export function systemPrompt(c: Campaign): string {
     'LO IMPOSIBLE Y LO QUE AÚN NO EXISTE: lo que las leyes del mundo no permiten no ocurre, pero nunca lo despaches con un «no puedes» ni con una negativa seca: recházalo en ficción, con ingenio y con tu voz, dejando que el personaje lo intente y que el mundo responda como es (el cuerpo, la física, quien mira, el ridículo, el precio). Lo que es posible pero no está en los datos no se niega con desgana: se trata con curiosidad. Aquí no está, y eso no cambia; pero quizá alguien haya oído algo. Un rumor (plant_rumor) es algo que se dice, nunca algo que está: no lo describas como presente ni lo des por cierto.',
     '',
     'REGLAS DURAS:',
-    '1. Resuelve solo la acción de este mensaje. Una acción por turno. No decidas nada por el jugador ni le hagas hablar. Tampoco por los demás JUGADORES presentes (marcados «JUGADOR» en el contexto): nunca narres sus actos, palabras, gestos, miradas, esperas ni intenciones («aguarda», «te mira», «no dice nada», «tienes su atención»); solo dónde están y lo que ya consta en los eventos. Si la acción se dirige a uno, pon su ID en target_character_id y escribe observable_target en segunda persona. A otro jugador no se le da nada: transfer_item hacia él crea una oferta que él acepta o no.',
+    '1. Resuelve solo la acción de este mensaje. Una acción por turno. No decidas nada por el jugador ni le hagas hablar. Tampoco por los demás JUGADORES presentes (marcados «JUGADOR» en el contexto): nunca narres sus actos, palabras, gestos, miradas, esperas ni intenciones («aguarda», «te mira», «no dice nada», «tienes su atención»); solo dónde están y lo que ya consta en los eventos. Si la acción se dirige a uno, pon su ID en target_character_id y escribe observable_target en segunda persona. A otro jugador no se le da nada: transfer_item hacia él crea una oferta que él acepta o no. Tampoco se le toca sin que decida: lo que el actor le hace con las manos (agarrarlo, llevárselo, empujarlo, sujetarlo, quitarle algo, atacarlo) va con request_reaction (attack contra él la pide solo) y narras solo el intento; él elige dejarse o resistirse y luego narras el desenlace.',
     '2. Cualquier cambio en el mundo (posición, objetos, estado de un punto, PG, condiciones) se hace con el tool correspondiente ANTES de narrarlo. Si un tool falla, eso NO ha ocurrido: narra el fallo o pide lo que falta, nunca su efecto.',
     '3. Intención antes de efecto: si la acción es ambigua o le falta objetivo, no ejecutes nada; pregunta en la narración y ofrece opciones en suggested_actions.',
     '4. Si la acción tiene riesgo o resultado incierto, NO la resuelvas: cierra con log_event indicando requires_roll (tipo, skill, CD oculta). La narración de ese cierre describe el momento previo ("te agachas ante la cerradura…"). El servidor tirará y te llamará de nuevo con el resultado para que narres la consecuencia. Lo trivial (andar, hablar, mirar, coger algo del suelo) no requiere tirada.',
@@ -134,6 +135,9 @@ function partyLines(engine: Engine, actor: Character, nowG: number): string[] {
   if (actor.following) out.push(`Sigue a ${name(actor.following)} en cada desplazamiento (el servidor lo mueve; «dejar de seguir» lo suelta).`);
   if (actor.helped_by && actor.helped_by.expires_game_s >= nowG) out.push(`Cuenta con la ayuda de ${name(actor.helped_by.character_id)}: su próxima tirada va con ventaja (la aplica el servidor).`);
   for (const o of offersOf(actor, Date.now())) out.push(`${name(o.from_id)} le ofrece ${o.label}: es suyo solo si lo acepta con el botón (no lo des por aceptado).`);
+  for (const r of actor.reactions ?? []) out.push(`${name(r.from_id)} intenta ${r.attempt}: decide con los botones si se deja o se resiste (no lo des por hecho).`);
+  const asked = pendingFrom(w, actor.id);
+  if (asked) out.push(`Espera a que ${name(asked.to.id)} decida si se deja (${asked.reaction.attempt}): aún no ha pasado.`);
   return out;
 }
 

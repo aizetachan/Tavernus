@@ -527,6 +527,14 @@ ${PAINT_STYLE}
   .round-banner { margin: 6px 16px 0; padding: 7px 12px; border-radius: 12px; font: 600 13px/1.3 var(--sans); background: rgba(214,96,74,.14); color: #f0b3a3; box-shadow: inset 0 0 0 1px rgba(214,96,74,.35); }
   .round-banner.mine { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(230,183,90,.35); }
   .actions.party button.accept { background: var(--accent); color: var(--accent-ink); }
+  /* Reacción: «Dejarse», «Resistirse», tus palabras y la cuenta atrás; la espera de quien actúa, en ámbar. */
+  .actions.reaction { align-items: center; }
+  .actions.reaction .reply { display: flex; gap: 6px; flex: 1 1 260px; min-width: 0; margin: 0; padding: 0; background: none; border: 0; box-shadow: none; }
+  .actions.reaction .reply input { flex: 1; min-width: 0; height: 32px; padding: 0 12px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px; background: rgba(20,22,23,.9); color: var(--text); font-size: 13px; }
+  .actions.reaction .left { flex-basis: 100%; font-size: 12.5px; color: #ff9d94; }
+  .actions.reaction.done .left { color: var(--muted); }
+  .decisive.waiting { background: var(--accent-tint); color: var(--accent); }
+  .decisive.waiting.done { background: none; color: var(--muted); padding-left: 0; }
   /* Micrófono y pincel dentro del cuadro de redacción, del mismo tamaño que el cubo. */
   form .mic, form .brush { width: 32px; height: 32px; margin: 0; }
   form .mic svg.i, form .brush svg.i { width: 18px; height: 18px; }
@@ -860,7 +868,8 @@ ${PAINT_STYLE}
   }
 
   function scroll() { log.scrollTop = log.scrollHeight; }
-  function spendButtons() { log.querySelectorAll('.actions button').forEach(function (b) { b.disabled = true; }); }
+  // Las de una reacción pendiente no: siguen en pie hasta que se decide o se acaba el tiempo.
+  function spendButtons() { log.querySelectorAll('.actions:not(.reaction) button').forEach(function (b) { b.disabled = true; }); }
 
   var SPARK = '<svg class="i" style="width:12px;height:12px"><use href="#i-spark"/></svg>';
   /** Tono de un aviso del sistema: bueno (verde), normal (azul) o malo (rojo), por el resultado que anuncia. */
@@ -1051,6 +1060,9 @@ ${PAINT_JS}
   }
   function say(text) {
     post('/api/say', { text: text, to: sayTo ? sayTo.id : null }).then(function (r) { if (!r.ok) handleReply(r); });
+  }
+  function answerReaction(id, answer, text) {
+    post('/api/reaction', { reaction: id, answer: answer, text: text || '' }).then(function (r) { if (!r.ok) handleReply(r); loadSheet(); });
   }
   function answerOffer(id, accept) {
     post('/api/offer', { offer: id, accept: accept }).then(function (r) { if (!r.ok) handleReply(r); loadSheet(); });

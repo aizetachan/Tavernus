@@ -38,7 +38,7 @@ Estados: **funciona**, **a medias** (funciona con matices), **fallaba** (corregi
 | **Avisos de lo que pasa mientras no estás** (#19) | Hay `/recap` (lo percibido desde que te fuiste) y «Donde lo dejamos» tras 72 h, pero nada avisa fuera de la web: ni correo, ni push, ni marca de no leídos. | **Deseable**. Con dos amigos se avisan por su chat. |
 | **Velo al desconectar** (§9.1) | El motor ya lo tenía (`setConnected`: dormido y con velo; `combat.ts` impide el daño bajo el velo). Faltaba que la web dijera quién se desconecta: ahora lo dice, a los 30 min. No están las protecciones físicas (candados, llaves escondidas, guardias) ni el robo a un durmiente con tirada de Sigilo. | Velo: **hecho**. Robo al durmiente y protecciones: **después**. |
 | **Conectado pero dormido** (§9.1): notificación y ventana decisiva si te atacan dormido | No existe. | **Después**. |
-| **PvP, crimen y ley** (§9.4) | El ataque entre PJ existe por el máster (`resolveAttack` acepta personajes). No hay `crimes`, ni `wanted`, ni guardias que detengan, ni recompensas, ni multas. | **Después**. Entre amigos que juegan juntos, no hace falta. |
+| **PvP, crimen y ley** (§9.4) | El ataque entre PJ es una reacción: el atacado decide si se defiende (ver «Reacciones»). No hay `crimes`, ni `wanted`, ni guardias que detengan, ni recompensas, ni multas. | **Después**. Entre amigos que juegan juntos, no hace falta. |
 | **Compañías** (§9.5) | No existe nada. | **Después**. |
 | **Cola de conversación con NPC** (§9.6) | A medias: `talking_to` más una instrucción al máster, sin cola real ni «te toca». | **Deseable**. |
 | **Ventana decisiva con varios jugadores** (§9.3): el orden de llegada decide | Las ventanas son por PJ (`openDecisive`). El orden lo da la cola, pero no hay recurso disputado explícito. | **Deseable**. |
@@ -139,6 +139,20 @@ Que dos jugadores actuando a la vez en el mismo sitio no sea lioso. Código en `
 Lo que no entra en todo esto: **Decir** (sigue siendo inmediato, también en plena ronda), dar, seguir y ayudar a otro PJ (deterministas), y los comandos (`/look`…). Fuera de las escenas tensas, cada uno a su ritmo como antes.
 
 **Concurrencia.** Los lotes y las rondas viven antes de la cola por localización: las acciones que se juntan esperan en memoria hasta que se cierra el lote o la ronda, y entonces la llamada al máster entra en la cola como una acción más (así un lote no bloquea al resto del sitio mientras espera). La cola de turnos, los lotes y las rondas viven en memoria: un reinicio del servidor los vacía (las acciones en vuelo devuelven error y se reintentan). `talking_to` sí se guarda. El detector de «el máster actúa por otro jugador» no cuenta a los que participan en el turno compartido (han dicho qué hacen); sigue valiendo para los demás.
+
+## Reacciones (26-10-2026)
+
+Lo que un jugador le hace a otro con las manos (agarrarlo y llevárselo a la taberna, empujarlo, atacarlo) lo resolvía el máster sin preguntar al afectado. Ahora es una reacción: el afectado decide. Código en `src/engine/reactions.ts` (detección, tirada enfrentada) y en el motor (`requestReaction`, `answerReaction`, `resolveReaction`); herramienta del máster `request_reaction` (`tools.ts`); web en `server.ts` (`POST /api/reaction`, `reactionView`) y `novel.ts`. Tests en `test/reactions.test.ts`.
+
+| Qué | Cómo |
+|---|---|
+| **Detectar** | El motor reconoce, sin máster, el verbo sobre otro PJ presente con su nombre tras «a» en la misma frase: agarrar, coger, sujetar, arrastrar, llevar (con destino: «… a la taberna»), empujar, apartar, derribar, atacar, golpear, pegar, «un puñetazo/una patada a…». «cojo la jarra y se la doy a Mira» o «ataco al lobo con Mira» no cuentan. Lo demás lo detecta el máster: `request_reaction` (tipo, qué intenta en segunda persona, destino y, si es otra cosa, las skills enfrentadas); su `attack` contra un PJ fuera de una ronda pide la reacción él solo, y `requires_roll` de ataque contra un PJ o `move_to` de otro PJ se rechazan con la pista. El prompt lo dice en la regla 1. |
+| **Petición** | Evento `reaction_request`. El afectado lee «Kael intenta agarrarte y llevarte a Taberna del Jabalí. Ha escrito: «…». ¿Te dejas o te resistes?», con «Dejarse», «Resistirse», un cuadro «O responde con tus palabras…» y la cuenta atrás. Se guarda en `Character.reactions` del afectado (sobrevive a un reinicio). Si la pidió el máster, sale después de su narración. |
+| **Quien actúa** | Ve «⏳ Esperando a que Mira decida… 1:14». Mientras, otra acción se le rechaza con ese aviso; hablar con Decir, sí. Una petición a la vez. |
+| **Resolver** | Dejarse: sin tirada (un ataque impacta sin tirada de ataque; el daño se tira). Resistirse: tirada enfrentada del SRD, Atletismo de quien actúa contra el mejor de Atletismo o Acrobacias del otro (el empate lo pierde quien actúa); el ataque, tirada contra la CA. Palabras: un «vale», «sí», «venga», «me dejo» es dejarse; lo demás, resistirse, y lo dicho acompaña. El motor aplica lo que sabe: llevárselo (los dos van al destino), agarrado (10 min de juego), derribado (1 min), el daño. Evento `reaction_accepted` o `reaction_resisted` a los dos, cada uno en su persona. Con máster, además narra el desenlace como tras una tirada (`master_roll_outcome`), con lo decidido y lo ya aplicado; el afectado lo lee como testigo. |
+| **Tiempo límite** | 90 s reales (`REACTION_TTL_MS`). Si no responde, se resiste por instinto: tirada enfrentada, ni pasa gratis ni le protege nada (como el ausente que se defiende). Ausente: igual, en el acto. Dormido o inconsciente: no puede resistirse, sale sin tirada. Bajo el velo: no se le puede tocar. Si quien actúa se va de la partida, se retira; si ya no están en la misma sala al decidir, se cancela sin efecto. |
+
+Dar algo sigue siendo una oferta (Aceptar o Rechazar), no una reacción. En una ronda de escena tensa, lo que va contra otro PJ también sale de la ronda y pasa por la reacción.
 
 ## Desconexiones (25-10-2026)
 
