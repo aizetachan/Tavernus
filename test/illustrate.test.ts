@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  CLOUDFLARE_MODEL, Limiter, MIN_INTERVAL_MS, Illustrator, PollinationsQueue, cloudflareFromEnv, POLLINATIONS_BASE, STYLE, illustratorOf, imagesEnabled, pollinationsUrl, retryAfterMs,
+  CLOUDFLARE_MODEL, CloudflareQuota, Limiter, MIN_INTERVAL_MS, Illustrator, PollinationsQueue, cloudflareFromEnv, POLLINATIONS_BASE, STYLE, illustratorOf, imagesEnabled, pollinationsUrl, retryAfterMs,
   sceneKey, sceneOf, scenePrompt, sceneSeed, type SceneInput,
 } from '../src/ai/illustrate.js';
 import { avatarsOf } from '../src/ai/avatar.js';
@@ -301,9 +301,9 @@ describe('Cloudflare Workers AI', () => {
     return { fetch: fn, cf, polli };
   }
 
-  const make = (f: ReturnType<typeof routedFetch>, cloudflare: typeof CF | null = CF) => new Illustrator({
-    queue: new PollinationsQueue(), cloudflareLimit: new Limiter(2), dir, worldSeed: 'demo', fetch: f.fetch,
-    minIntervalMs: 0, cloudflare, log: () => {},
+  const make = (f: ReturnType<typeof routedFetch>, cloudflare: typeof CF | null = CF, more: { quota?: CloudflareQuota; log?: (m: string) => void; now?: () => number; dir?: string; limit?: Limiter } = {}) => new Illustrator({
+    queue: new PollinationsQueue(), cloudflareLimit: more.limit ?? new Limiter(2), cloudflareQuota: more.quota ?? new CloudflareQuota(), dir: more.dir ?? dir, worldSeed: 'demo', fetch: f.fetch,
+    minIntervalMs: 0, cloudflare, log: more.log ?? (() => {}), ...(more.now ? { now: more.now } : {}),
   });
 
   it('las credenciales salen del entorno solo si están las dos', () => {
@@ -344,6 +344,49 @@ describe('Cloudflare Workers AI', () => {
     expect(f.polli).toHaveLength(2);
   });
 
+  it('tras un 429 ninguna partida del proceso vuelve a llamar a Cloudflare y el registro lo dice una vez', async () => {
+    const quota = new CloudflareQuota();
+    const limit = new Limiter(2);
+    const logs: string[] = [];
+    const f = routedFetch(Array.from({ length: 10 }, () => () => new Response('{}', { status: 429 })));
+    const now = Date.UTC(2026, 9, 26, 18, 30);
+    const a = make(f, CF, { quota, limit, log: (m) => logs.push(m), now: () => now, dir: join(dir, 'a') });
+    const b = make(f, CF, { quota, limit, log: (m) => logs.push(m), now: () => now, dir: join(dir, 'b') });
+    const scenes = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ ...PLAZA, location_id: `loc_${id}` }));
+    const imgs = await Promise.all([...scenes.map((s) => a.illustrate(s)), ...scenes.map((s) => b.illustrate(s))]);
+    expect(imgs.every((i) => i?.provider === 'pollinations')).toBe(true);
+    // Como mucho las que ya estaban en marcha (2 a la vez) llegan a Cloudflare; las otras 8 ni lo intentan.
+    expect(f.cf.length).toBeGreaterThanOrEqual(1);
+    expect(f.cf.length).toBeLessThanOrEqual(2);
+    const cfLogs = logs.filter((m) => m.includes('Cloudflare'));
+    expect(cfLogs).toEqual(['[imágenes] Cloudflare: HTTP 429. No se le pide nada hasta 2026-10-27T00:00:00.000Z; mientras, Pollinations']);
+    expect(a.cloudflareExhausted && b.cloudflareExhausted).toBe(true);
+  });
+
+  it('pasada la medianoche UTC vuelve a probar Cloudflare', async () => {
+    let now = Date.UTC(2026, 9, 26, 23, 50);
+    const f = routedFetch([() => new Response('{}', { status: 429 })]);
+    const ill = make(f, CF, { now: () => now });
+    expect((await ill.illustrate(TABERNA))?.provider).toBe('pollinations');
+    expect((await ill.illustrate(PLAZA))?.provider).toBe('pollinations');
+    expect(f.cf).toHaveLength(1);
+    now = Date.UTC(2026, 9, 27, 0, 0, 1);
+    expect(ill.cloudflareExhausted).toBe(false);
+    expect((await ill.illustrate(CLARO))?.provider).toBe('cloudflare');
+    expect(f.cf).toHaveLength(2);
+  });
+
+  it('un 429 de ritmo con Retry-After pausa solo ese tiempo', async () => {
+    let now = Date.UTC(2026, 9, 26, 12, 0);
+    const f = routedFetch([() => new Response('{}', { status: 429, headers: { 'retry-after': '60' } })]);
+    const logs: string[] = [];
+    const ill = make(f, CF, { now: () => now, log: (m) => logs.push(m) });
+    expect((await ill.illustrate(TABERNA))?.provider).toBe('pollinations');
+    expect(logs[0]).toContain('hasta 2026-10-26T12:01:00.000Z');
+    now += 61_000;
+    expect((await ill.illustrate(PLAZA))?.provider).toBe('cloudflare');
+  });
+
   it('success:false: cae a Pollinations y la siguiente escena vuelve a probar Cloudflare', async () => {
     const f = routedFetch([() => Response.json({ success: false, errors: [{ code: 5006, message: 'Internal error' }], result: null }, { status: 500 })]);
     const ill = make(f);
@@ -378,7 +421,7 @@ describe('Cloudflare Workers AI', () => {
       active--;
       return cfOk();
     }) as unknown as typeof fetch;
-    const ill = new Illustrator({ queue: new PollinationsQueue(), cloudflareLimit: new Limiter(2), dir, worldSeed: 'demo', fetch: slow, cloudflare: CF, log: () => {} });
+    const ill = new Illustrator({ queue: new PollinationsQueue(), cloudflareLimit: new Limiter(2), cloudflareQuota: new CloudflareQuota(), dir, worldSeed: 'demo', fetch: slow, cloudflare: CF, log: () => {} });
     const scenes = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ ...PLAZA, location_id: `loc_${id}` }));
     const imgs = await Promise.all(scenes.map((s) => ill.illustrate(s)));
     expect(imgs.every((i) => i?.provider === 'cloudflare')).toBe(true);
@@ -391,7 +434,7 @@ describe('Cloudflare Workers AI', () => {
     const games = new GameManager({
       root: join(dir, 'games'), env: { DATA_DIR: join(dir, 'local'), IMAGES: 'on', CLOUDFLARE_API_TOKEN: 'tok_test', CLOUDFLARE_ACCOUNT_ID: 'acc123' },
       masterFor: noApi, engine: { deterministic: false }, log: () => {},
-      illustrator: { fetch: f.fetch, minIntervalMs: 0, queue: new PollinationsQueue(), cloudflareLimit: new Limiter(2) },
+      illustrator: { fetch: f.fetch, minIntervalMs: 0, queue: new PollinationsQueue(), cloudflareLimit: new Limiter(2), cloudflareQuota: new CloudflareQuota() },
     });
     try {
       const live = await games.create({ name: 'Con Cloudflare', mode: 'live', campaign_id: 'demo', character: { name: 'Ana' } });

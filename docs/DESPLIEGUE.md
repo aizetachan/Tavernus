@@ -173,12 +173,40 @@ Con B3 y B4, ufw solo necesita SSH abierto. Puedes cerrar 80 y 443 con `sudo ufw
 | Qué | Cómo |
 |---|---|
 | Subir una versión nueva | `deploy/push.sh` (con `--test` pasa antes los tests) |
-| Ver qué hace la web | `sudo journalctl -u tavernus-web -f` |
+| Ver qué hace la web | `sudo journalctl -u tavernus-web -f` (qué sale, en «Qué apunta el registro») |
 | Estado del servicio y los temporizadores | `systemctl status tavernus-web` · `systemctl list-timers 'tavernus*'` |
 | Cambiar una variable | `sudo nano /etc/tavernus/env` y `sudo systemctl restart tavernus-web` |
 | ¿Responde? | `sudo tavernus-health --probe` |
 | Volver a una versión anterior a mano | `ls /opt/tavernus/releases`, luego `sudo ln -sfn /opt/tavernus/releases/<fecha> /opt/tavernus/current && sudo systemctl restart tavernus-web` |
 | Caddy | `sudo journalctl -u caddy -f` · `/etc/caddy/Caddyfile` (lo actualiza `push.sh` desde `deploy/Caddyfile`) |
+
+### Qué apunta el registro
+
+La web escribe en journald una línea por cosa, en `clave=valor`, para poder filtrar con `grep`.
+Nunca apunta lo que escribe el jugador, la narración ni tokens de acceso.
+
+- **`[acción]`**: cada acción de un jugador (`tipo=act`, `say`, `roll`, `reaction`, `offer`,
+  `command`, `quest_drop`). Lleva la partida, el PJ (`pj` y `nombre`), lo que tardó (`ms`), el
+  `modelo` del máster y lo que tardó él (`máster_ms`), las vueltas (`iter`), los tokens
+  (`tokens_in`, `tokens_out`, `caché_lee`, `caché_escribe`) y `resultado=ok`, `rechazada` (el
+  motor dijo que no) o `error`, con el `error` al lado.
+- **`[máster]`**: una llamada al máster que no viene de una acción (presentación de un PJ,
+  llegada, escena decisiva que vence). Los mismos campos.
+- **`[presencia]`**: `conecta` y `desconecta` (el stream de una pestaña, con `pestaña` y cuántos
+  `streams` quedan), `cierra_pestaña` (la página avisó al cerrarse), y `en_línea` y
+  `fuera_de_línea` (cuando la web da al jugador por llegado o por ido, pasada la gracia).
+- **`[imágenes]`**: cada imagen y los fallos. Si Cloudflare responde 429 o agota la cuota
+  diaria, lo dice **una sola vez** («No se le pide nada hasta …») y deja de llamarle en todas las
+  partidas hasta el reinicio de la cuota (medianoche UTC, o lo que diga `Retry-After` si el 429
+  es de ritmo). Mientras, las imágenes salen de Pollinations.
+
+Ejemplos:
+
+```bash
+sudo journalctl -u tavernus-web --since today | grep 'resultado=error'
+sudo journalctl -u tavernus-web --since '1 hour ago' | grep '\[presencia\] partida=brezal'
+sudo journalctl -u tavernus-web --since today | grep -o 'máster_ms=[0-9]*' | sort -t= -k2 -n | tail
+```
 
 ## 5. Datos y copias (#21)
 
@@ -271,9 +299,30 @@ y `bsd-mailx` con una cuenta SMTP (por ejemplo, una contraseña de aplicación d
   servicio. No está ni estará en el repo: `.env` está en `.gitignore`, `push.sh` no lo sube
   (empaqueta una lista explícita de carpetas) y `deploy/local.env` también se ignora. No copies tu
   `.env` local al servidor: pasa a mano solo las claves que hagan falta.
-- **ADMIN_TOKEN:** quien lo tenga es anfitrión. La web imprime el enlace de admin en el registro al
-  arrancar (`journalctl` lo pueden leer root y el grupo `adm`). Si se filtra, cámbialo en
-  `/etc/tavernus/env` y reinicia. `IMAGES`, `MASTER_MODEL` y el resto también van por entorno.
+- **ADMIN_TOKEN:** quien lo tenga es anfitrión. Al arrancar, la web dice que hay enlace de
+  administración y dónde está el token, pero no lo escribe. Se ve con
+  `sudo grep ^ADMIN_TOKEN /etc/tavernus/env`. Las versiones anteriores al 2026-10-27 sí lo
+  escribían, así que si el servidor corrió alguna, el token está en journald: rótalo (abajo).
+  `IMAGES`, `MASTER_MODEL` y el resto también van por entorno.
+- **Rotar el ADMIN_TOKEN** (si se filtró o estuvo en el registro):
+  1. Genera uno nuevo y ponlo en el fichero de entorno:
+     ```bash
+     NEW=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+     sudo sed -i "s/^ADMIN_TOKEN=.*/ADMIN_TOKEN=$NEW/" /etc/tavernus/env
+     unset NEW
+     ```
+  2. Reinicia: `sudo systemctl restart tavernus-web`.
+  3. Comprueba que el registro ya no lo escribe:
+     `sudo journalctl -u tavernus-web -n 20 -o cat | grep admin`. Debe salir
+     `admin?token=<token>`, sin el valor.
+  4. Entra con el enlace nuevo, `https://<dominio>/admin?token=<nuevo>`. El viejo da 403, y la
+     cookie de anfitrión de cada navegador deja de valer (sale del token), así que hay que
+     volver a entrar con el enlace. A los jugadores no les afecta: sus enlaces de invitación y
+     sus cookies no dependen de este token.
+  5. Opcional: el token viejo sigue en el journal hasta que se rote, pero ya no sirve. Si quieres
+     quitarlo, `sudo journalctl --rotate && sudo journalctl --vacuum-time=1s` borra **todo** el
+     registro del sistema, no solo el de Tavernus. Si guardaste copias locales del registro
+     (como la de la revisión de partidas), bórralas o tapa el token.
 - **Red:** la web escucha solo en 127.0.0.1:3000. Desde fuera solo se llega por Caddy (80/443),
   y ufw solo abre SSH, 80 y 443. Caddy añade cabeceras básicas: HSTS, `nosniff`, `X-Frame-Options:
   DENY`, `Referrer-Policy` y `Permissions-Policy` con el micrófono solo para la propia página.

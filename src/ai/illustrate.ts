@@ -7,7 +7,9 @@
  *     Sale 1024x1024 (el modelo no admite tamaño ni seed: la API rechaza la petición con
  *     HTTP 400 si se envía; la escena solo es reproducible por la caché). Cuota gratuita de 10.000 neuronas al
  *     día, unas 170 imágenes a 4 pasos; agotada, responde 429 o un error en `errors` y
- *     no se vuelve a probar hasta la medianoche UTC. Hasta 2 peticiones a la vez.
+ *     no se vuelve a probar hasta la medianoche UTC (o lo que diga Retry-After, si el 429 es
+ *     de ritmo y no de cuota). La pausa es del proceso (`SHARED_CLOUDFLARE_QUOTA`): ninguna
+ *     partida le pide nada mientras dura y el registro lo dice una sola vez. Hasta 2 peticiones a la vez.
  *   - Pollinations (reserva, o principal sin Cloudflare):
  *       GET https://image.pollinations.ai/prompt/{prompt}?width=768&height=512&seed=N
  *
@@ -289,10 +291,33 @@ export class Limiter {
 
 export const SHARED_CLOUDFLARE_LIMIT = new Limiter(2);
 
-/** Error de Cloudflare; `quota` = cuota diaria agotada. */
-class CloudflareError extends Error {
-  constructor(message: string, readonly quota: boolean) { super(message); }
+/**
+ * Pausa de Cloudflare tras un 429 o la cuota agotada. La cuota es de la cuenta, no de la partida:
+ * todas las del proceso comparten la misma (`SHARED_CLOUDFLARE_QUOTA`) salvo que se pase otra (tests).
+ */
+export class CloudflareQuota {
+  /** Hasta cuándo no se le pide nada (ms); 0, sin pausa. */
+  downUntil = 0;
+
+  down(nowMs: number): boolean { return nowMs < this.downUntil; }
+
+  /** Pausa hasta `untilMs`. true si no lo estaba ya: quien la abre la avisa en el registro, los demás callan. */
+  pause(nowMs: number, untilMs: number): boolean {
+    const fresh = !this.down(nowMs);
+    this.downUntil = Math.max(this.downUntil, untilMs);
+    return fresh;
+  }
 }
+
+export const SHARED_CLOUDFLARE_QUOTA = new CloudflareQuota();
+
+/** Error de Cloudflare; `quota` = cuota diaria agotada o 429; `until`, hasta cuándo no volver a pedir (si no, medianoche UTC). */
+class CloudflareError extends Error {
+  constructor(message: string, readonly quota: boolean, readonly until: number | null = null) { super(message); }
+}
+
+/** Ya en pausa al llegar el turno: no se pide nada ni se avisa otra vez. */
+class CloudflarePaused extends Error {}
 
 export interface IllustratorOptions {
   /** Directorio de imágenes (data/games/<slug>/images). */
@@ -320,12 +345,12 @@ export interface IllustratorOptions {
   cloudflare?: CloudflareCreds | null;
   /** Por defecto, el del proceso. */
   cloudflareLimit?: Limiter;
+  /** Por defecto, la del proceso. */
+  cloudflareQuota?: CloudflareQuota;
 }
 
 export class Illustrator {
   private readonly opts: Required<Omit<IllustratorOptions, 'apiKey' | 'cloudflare'>> & { apiKey: string | null; cloudflare: CloudflareCreds | null };
-  /** Cuota de Cloudflare agotada: no se le pide nada hasta entonces. */
-  private cloudflareDownUntil = 0;
   /** Escenas por clave: una sola petición por escena aunque lleguen varios PJs a la vez. */
   private readonly memory = new Map<string, Promise<SceneImage | null>>();
   /** Escenas que fallaron: no se reintentan hasta ese instante. */
@@ -350,7 +375,7 @@ export class Illustrator {
       fetch: (...a) => fetch(...a), now: () => Date.now(),
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       log: (m) => console.log(m),
-      queue: SHARED_QUEUE, cloudflareLimit: SHARED_CLOUDFLARE_LIMIT,
+      queue: SHARED_QUEUE, cloudflareLimit: SHARED_CLOUDFLARE_LIMIT, cloudflareQuota: SHARED_CLOUDFLARE_QUOTA,
       ...opts,
       apiKey: opts.apiKey?.trim() || null,
       cloudflare: opts.cloudflare ?? null,
@@ -364,7 +389,7 @@ export class Illustrator {
   get provider(): ImageProvider { return this.opts.cloudflare ? 'cloudflare' : 'pollinations'; }
 
   /** Cuota diaria de Cloudflare agotada (hasta la medianoche UTC); siempre false sin Cloudflare. */
-  get cloudflareExhausted(): boolean { return this.opts.cloudflare !== null && this.opts.now() < this.cloudflareDownUntil; }
+  get cloudflareExhausted(): boolean { return this.opts.cloudflare !== null && this.opts.cloudflareQuota.down(this.opts.now()); }
 
   onIllustrated(l: IllustratedListener): () => void {
     this.listeners.push(l);
@@ -470,14 +495,20 @@ export class Illustrator {
     const file = `${key}.jpg`;
     let image: SceneImage | null = null;
     const cf = this.opts.cloudflare;
-    if (cf && this.opts.now() >= this.cloudflareDownUntil) {
+    if (cf && !this.opts.cloudflareQuota.down(this.opts.now())) {
       try {
         await this.generateCloudflare(cf, prompt, file, priority);
         image = { key, ...meta, seed, prompt, provider: 'cloudflare', url: `cloudflare:${CLOUDFLARE_MODEL}`, file };
       } catch (e) {
-        const quota = e instanceof CloudflareError && e.quota;
-        if (quota) this.cloudflareDownUntil = nextUtcMidnight(this.opts.now());
-        this.opts.log(`[imágenes] Cloudflare falló (${(e as Error).message})${quota ? ', cuota agotada hasta medianoche UTC' : ''}: uso Pollinations`);
+        if (e instanceof CloudflareError && e.quota) {
+          const now = this.opts.now();
+          const until = e.until ?? nextUtcMidnight(now);
+          if (this.opts.cloudflareQuota.pause(now, until)) {
+            this.opts.log(`[imágenes] Cloudflare: ${e.message}. No se le pide nada hasta ${new Date(until).toISOString()}; mientras, Pollinations`);
+          }
+        } else if (!(e instanceof CloudflarePaused)) {
+          this.opts.log(`[imágenes] Cloudflare falló (${(e as Error).message}): uso Pollinations`);
+        }
       }
     }
     if (!image) {
@@ -493,6 +524,8 @@ export class Illustrator {
   /** Cloudflare Workers AI: JSON con el JPEG en base64. Sin espaciado; como mucho 2 a la vez. */
   private generateCloudflare(cf: CloudflareCreds, prompt: string, file: string, priority = 0): Promise<void> {
     return this.opts.cloudflareLimit.run(async () => {
+      // Mientras esperaba hueco, otra petición (de esta u otra partida) pudo dar con la cuota agotada.
+      if (this.opts.cloudflareQuota.down(this.opts.now())) throw new CloudflarePaused('cuota en pausa');
       this.requests++;
       let res: Response;
       try {
@@ -505,13 +538,17 @@ export class Illustrator {
       } catch (e) {
         throw new CloudflareError((e as Error).name === 'TimeoutError' ? 'sin respuesta' : (e as Error).message, false);
       }
-      if (res.status === 429) throw new CloudflareError('HTTP 429', true);
       const body = await res.json().catch(() => null) as { success?: boolean; result?: { image?: unknown }; errors?: { code?: number; message?: string }[] } | null;
       const errors = body?.errors ?? [];
-      const detail = errors.map((x) => `${x.code ?? ''} ${x.message ?? ''}`.trim()).join('; ');
+      const detail = errors.map((x) => `${x.code ?? ''} ${x.message ?? ''}`.slice(0, 200).trim()).join('; ');
+      const daily = errors.some((x) => x.code === 4006 || /quota|allocation|neuron/i.test(x.message ?? ''));
+      if (res.status === 429) {
+        // Cuota diaria: hasta medianoche UTC. Un 429 de ritmo con Retry-After: lo que diga.
+        const after = daily ? null : retryAfterMs(res.headers.get('retry-after'), this.opts.now());
+        throw new CloudflareError(`HTTP 429${detail ? ` (${detail})` : ''}`, true, after === null ? null : this.opts.now() + Math.max(after, 1000));
+      }
       if (!res.ok || !body?.success || typeof body.result?.image !== 'string') {
-        const quota = errors.some((x) => x.code === 4006 || /quota|allocation|neuron/i.test(x.message ?? ''));
-        throw new CloudflareError(`HTTP ${res.status}${body?.success === false ? ', success:false' : ''}${detail ? `: ${detail}` : ''}`, quota);
+        throw new CloudflareError(`HTTP ${res.status}${body?.success === false ? ', success:false' : ''}${detail ? `: ${detail}` : ''}`, daily);
       }
       const bytes = Buffer.from(body.result.image, 'base64');
       if (bytes.length === 0) throw new CloudflareError('imagen vacía', false);
