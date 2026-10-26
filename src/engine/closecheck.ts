@@ -365,3 +365,38 @@ export function withoutDeathPhrases(text: string, hits: readonly DeathHit[]): st
   const bad = hits.map((h) => h.phrase);
   return text.split(/(?<=[.!?…])\s+/).filter((s) => !bad.some((b) => norm(s).includes(b))).join(' ').trim();
 }
+
+// ---------------------------------------------------------------------------
+// Cierre de relleno y turno compartido sin respuesta para alguno
+// ---------------------------------------------------------------------------
+
+/** Texto de relleno que no es narración («placeholder», «x», «...»): el jugador se quedaría sin respuesta. */
+const PLACEHOLDER = /^(?:placeholder|x+|todo|tbd|n\/?a|lorem ipsum\b.*|texto|narracion|test|\.+|…|-+|_+|\?+)$/;
+
+/** Campos del cierre que son relleno (vacío no cuenta: en conversación vale la narración vacía con lines). */
+export function placeholderFields(fields: Record<string, string | null>): string[] {
+  return Object.entries(fields).filter(([, v]) => v != null && v.trim() !== '' && PLACEHOLDER.test(norm(v.trim()))).map(([k]) => k);
+}
+
+export function placeholderRejection(fields: readonly string[]): string {
+  return `${fields.join(', ')} es relleno («placeholder», «x»…), no narración: el jugador se quedaría sin respuesta. Reescribe log_event con la respuesta de verdad a su acción (si en conversación sobra la narración, déjala vacía y pon lo dicho en lines).`;
+}
+
+/**
+ * Turno compartido (ronda o conversación de grupo, scene.ts): la narración la
+ * leen todos los que actuaron, así que cada uno tiene que salir en ella por su
+ * nombre o con una línea del NPC dirigida a él (`to`). Devuelve los que faltan.
+ */
+export function unansweredInShared(input: { narration: string; lines?: readonly DialogueLine[]; acted: readonly { id: string; name: string }[] }): { id: string; name: string }[] {
+  if (input.acted.length < 2) return [];
+  const text = ` ${norm(input.narration).replace(/[^\p{L}\p{N}]+/gu, ' ')} `;
+  return input.acted.filter((m) => {
+    const n = norm(m.name).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    if (n && text.includes(` ${n} `)) return false;
+    return !(input.lines ?? []).some((l) => l.speaker === 'npc' && l.to === m.id);
+  });
+}
+
+export function unansweredRejection(missing: readonly { name: string; text: string }[]): string {
+  return `Turno compartido: narration_private la leen todos y no responde a ${missing.map((m) => `${m.name} («${m.text}»)`).join(' ni a ')}. Resuelve lo de CADA uno nombrándolo («${missing[0]!.name}, …») o en plural; nunca «tú» a secas, que cada jugador lo leería como suyo. Si preguntó algo, contéstale a él.`;
+}

@@ -143,6 +143,18 @@ Lo que no entra en todo esto: **Decir** (sigue siendo inmediato, también en ple
 
 **Concurrencia.** Los lotes y las rondas viven antes de la cola por localización: las acciones que se juntan esperan en memoria hasta que se cierra el lote o la ronda, y entonces la llamada al máster entra en la cola como una acción más (así un lote no bloquea al resto del sitio mientras espera). La cola de turnos, los lotes y las rondas viven en memoria: un reinicio del servidor los vacía (las acciones en vuelo devuelven error y se reintentan). `talking_to` sí se guarda. El detector de «el máster actúa por otro jugador» no cuenta a los que participan en el turno compartido (han dicho qué hacen); sigue valiendo para los demás.
 
+## Sincronía del máster con varios jugadores (26-10-2026)
+
+Lo que salió en la partida online del 26-10 (Leodhin y Miau, Brezal): respuestas a uno escritas en «tú» que leía el otro, frases de un jugador al otro contestadas por la tabernera, un cierre «placeholder» como respuesta y dos jugadores atacando a la vez sin que el máster de uno supiera lo del otro. Código en `scene.ts` (`namedPc`), `engine.ts` (`waitingIn`), `prompt.ts` (`othersBlock`, turno compartido) y `closecheck.ts`; tests en `test/sync.test.ts`.
+
+| Qué | Cómo |
+|---|---|
+| **El máster ve lo que acaban de hacer los demás** | Bloque «Los otros jugadores aquí, desde la última acción del actor»: lo que mandó cada otro PJ de la localización y lo que el actor percibió de ello, íntegro (hasta 6), y lo que han mandado y espera en la cola detrás («acaba de mandar, a la vez: … se resuelve justo después: no la narres ni la des por hecha»). |
+| **A la vez, fuera de rondas** | Siguen en orden (cola FIFO por localización); cada acción tiene su respuesta y la segunda se escribe sabiendo la primera. |
+| **Lo que va a otro jugador no va al NPC** | Si el texto nombra a otro PJ presente y a ningún NPC («oye Leodhin…», «pedir a MIAU que…»), no entra en la conversación (ni en el lote de grupo) con el NPC con quien se hablaba: va al máster aparte y el contexto dice «Va dirigida a X, otro JUGADOR presente: el NPC no contesta por él». |
+| **Turno compartido para todos** | En rondas y conversaciones de grupo el contexto ya no presenta la acción como del «actor» (que es solo el primero que actuó): «Turno compartido» y, en la ronda, «nombra a cada uno («Kael, tu…»; «Mira, tu…») o usa el plural; nunca «tú» a secas». El cierre que no nombra a alguno de los que actuaron (ni le dirige una línea con `to`) se rechaza una vez. |
+| **Nada de relleno** | Un cierre con «placeholder», «x», «…» en la narración o en lo observable se rechaza siempre; si el máster no sale de ahí, la acción cae al parser plano o al «el narrador no responde ahora mismo», nunca a un «placeholder» en el hilo. |
+
 ## Desconexiones (25-10-2026)
 
 El mundo es abierto: el reloj sigue y cada uno entra cuando quiere. Estas reglas dicen qué pasa cuando un jugador se va en mitad de algo compartido. Código: `Engine.setAway` (motor), `stabilizeIfAway` (`combat.ts`), `roundMembers` (rondas), `markStep` y `complete` (`story.ts`: créditos y finales), `relevantWhileAway` y `absence` (`prologue.ts`). Tests: `test/away.test.ts`, una prueba por regla, con relojes simulados y dos PJ.

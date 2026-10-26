@@ -5,7 +5,9 @@
 
 import type { Engine } from '../engine/engine.js';
 import type { CheckResult } from '../engine/dice.js';
-import type { Campaign, Character, Clue, Id } from '../engine/model.js';
+import type { Campaign, Character, Clue, GameEvent, Id } from '../engine/model.js';
+import { readerText } from '../engine/events.js';
+import { namedNpc, namedPc } from '../engine/scene.js';
 import { positionOf } from '../engine/movement.js';
 import { lightAt, perceive, witnesses } from '../engine/perception.js';
 import { regenState } from '../engine/resources.js';
@@ -136,6 +138,46 @@ function partyLines(engine: Engine, actor: Character, nowG: number): string[] {
   if (actor.helped_by && actor.helped_by.expires_game_s >= nowG) out.push(`Cuenta con la ayuda de ${name(actor.helped_by.character_id)}: su próxima tirada va con ventaja (la aplica el servidor).`);
   for (const o of offersOf(actor, Date.now())) out.push(`${name(o.from_id)} le ofrece ${o.label}: es suyo solo si lo acepta con el botón (no lo des por aceptado).`);
   return out;
+}
+
+/** Cuántas cosas de los otros jugadores entran en su bloque (las últimas). */
+export const OTHERS_RECENT = 6;
+const OTHERS_CHARS = 400;
+
+/**
+ * Lo que han hecho los demás jugadores de la localización desde la última
+ * acción del actor (íntegro, sin el ruido de «Últimos eventos») y lo que han
+ * mandado y espera en la cola detrás de él. Con dos jugadores en la misma
+ * escena, el máster responde sabiendo lo que el otro acaba de hacer y no
+ * contesta fuera de contexto. null si no hay nada.
+ */
+export function othersBlock(engine: Engine, actor: Character, locationId: Id): string | null {
+  const w = engine.world;
+  const isOther = (id: Id | null) => id !== null && id !== actor.id && w.characters.has(id);
+  const name = (id: Id) => pcName(w, actor.id, w.character(id));
+  const events = engine.events.recentInLocation(locationId, 60);
+  // Desde la última acción del actor (suya o un turno compartido en el que estaba).
+  const inputs = (e: GameEvent) => e.payload['group_inputs'] as Record<Id, string> | undefined;
+  const lastOwn = [...events].reverse().find((e) => (e.actor_id === actor.id && e.input_text) || inputs(e)?.[actor.id]);
+  const done: string[] = [];
+  for (const e of events) {
+    if (lastOwn && e.seq <= lastOwn.seq) continue;
+    if (!isOther(e.actor_id) || inputs(e)?.[actor.id]) continue;
+    const d = e.delivered_to.find((x) => x.character_id === actor.id);
+    const seen = d ? readerText(w, e, actor.id, d.level) : null;
+    if (!seen && !e.input_text) continue;
+    const said = e.input_text && !e.input_text.startsWith('(') ? `«${clip(e.input_text, 160)}»` : '';
+    done.push(`- ${name(e.actor_id!)}${said ? ` mandó ${said}` : ''}${seen ? ` → lo que percibió el actor: ${clip(seen, OTHERS_CHARS)}` : ' (el actor no lo percibió)'}`);
+  }
+  const queued = engine.waitingIn(locationId).filter((q) => isOther(q.character_id))
+    .map((q) => `- ${name(q.character_id)} acaba de mandar, a la vez: «${clip(q.text, 160)}». Se resuelve justo después de esta acción: no la narres ni la des por hecha, pero tenla en cuenta (si va con lo del actor, no le pidas que aclare lo que el otro ya ha dicho).`);
+  if (!done.length && !queued.length) return null;
+  return [
+    '## Los otros jugadores aquí, desde la última acción del actor',
+    ...done.slice(-OTHERS_RECENT),
+    ...queued,
+    'Responde a la acción del actor sabiendo esto: es la misma escena y lo leen los presentes. No vuelvas a narrar lo que ya se resolvió para ellos.',
+  ].join('\n');
 }
 
 /** Una pista sin anclas va siempre; con anclas, solo en su localización o con uno de sus NPCs delante. */
@@ -296,6 +338,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const when = Math.floor(ts / 86400) === today ? engine.clock.format(ts).slice(-5) : engine.clock.format(ts);
     return `- [${when}] ${i < recent.length - RECENT_FULL ? clip(d.text, OLD_EVENT_CHARS) : d.text}`;
   }).join('\n') : 'Ninguno.'));
+  const others = intro ? null : othersBlock(engine, actor, loc.id);
+  if (others) L.push(others);
 
   // Conversación en curso (conversation.ts): el narrador solo entra cuando aporta.
   const conv = intro || scene ? null : conversationOf(engine.events.all(), actor.id, pos);
@@ -341,8 +385,15 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     ].join('\n'));
   } else if (roll) {
     L.push(`## Resultado de la tirada\nAcción original: «${roll.original_text}»\n${roll.result.label}: ${roll.result.breakdown} → ${roll.result.success === null ? 'sin CD' : roll.result.success ? 'ÉXITO' : 'FALLO'}${roll.result.natural ? ` (${roll.result.natural} natural)` : ''}.${rollLine(roll.result)}\nNarra la consecuencia y aplica los cambios con tools. No pidas otra tirada para esta misma acción.`);
+  } else if (engine.sceneHints(actor.id)?.round || engine.sceneHints(actor.id)?.group) {
+    // Turno compartido: lo de cada uno va en su bloque (Ronda o Conversación de grupo), no como acción del actor.
+    L.push(`## Turno compartido\nLo ha mandado más de un jugador a la vez (abajo, cada uno con lo suyo). El bloque «Actor» es solo el primero que actuó: no le hables a él como si fuera el único; las fichas de los demás, con get_character.`);
   } else {
-    L.push(`## Acción del jugador\n«${text}»${decisive ? `\nRespondió a la ventana decisiva («${decisive.threat}») en ${decisive.seconds} s: ${decisive.speed === 'fast' ? 'RÁPIDA → actúa antes de que la amenaza se resuelva; si pides tirada, el servidor le dará ventaja' : 'normal → su acción y la amenaza se resuelven a la vez; decide el dado'}.` : ''}`);
+    const toPc = namedPc(world, actor, text);
+    const toOther = toPc && !namedNpc(world, actor, text)
+      ? `\nVa dirigida a ${pcName(world, actor.id, toPc)} [${toPc.id}], otro JUGADOR presente, no a ningún NPC: el NPC con quien hablaba no contesta por él ni se da por aludido; lo que responda ${pcName(world, actor.id, toPc)} lo escribe su jugador. Narra solo lo que hace o dice el actor y, si toca, cómo reacciona la sala.`
+      : '';
+    L.push(`## Acción del jugador\n«${text}»${toOther}${decisive ? `\nRespondió a la ventana decisiva («${decisive.threat}») en ${decisive.seconds} s: ${decisive.speed === 'fast' ? 'RÁPIDA → actúa antes de que la amenaza se resuelva; si pides tirada, el servidor le dará ventaja' : 'normal → su acción y la amenaza se resuelven a la vez; decide el dado'}.` : ''}`);
   }
 
   // Ganchos e imprevisto que el motor pone delante en esta llamada (hooks.ts, fastpath.ts).
@@ -355,14 +406,14 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const n = world.npcs.get(hints.group.npc_id);
     L.push([`## Conversación de grupo con ${n?.name ?? hints.group.npc_id}: responde UNA vez a todos`,
       ...hints.group.members.map((m) => `- ${m.name} [${m.id}]: ${m.text}`),
-      'Un solo cierre para todos. narration_private la leen todos los que hablan: en segunda persona del plural («os mira»). En lines, lo que dice cada uno: speaker "pc" con su character_id (sus palabras, en primera persona; no añadas nada que no hayan dicho) y la respuesta del NPC con to = ID del PJ al que contesta cada frase. No narres de los PJ más de lo que han dicho o hecho aquí.'].join('\n'));
+      'Un solo cierre para todos. narration_private la leen todos los que hablan: en segunda persona del plural («os mira») o nombrando a cada uno; nunca «tú» a secas. En lines, lo que dice cada uno: speaker "pc" con su character_id (sus palabras, en primera persona; no añadas nada que no hayan dicho) y la respuesta del NPC con to = ID del PJ al que contesta cada frase. Cada uno recibe respuesta a lo suyo. Lo que un jugador le dice a otro jugador (no al NPC) no lo contesta el NPC. No narres de los PJ más de lo que han dicho o hecho aquí.'].join('\n'));
   }
   if (hints?.round) {
     const r = hints.round;
     L.push([`## Ronda ${r.n} (escena tensa): resuélvela entera, a la vez`,
       ...r.members.map((m) => `- ${m.name} [${m.id}]: ${m.text}`),
-      r.hesitant.length ? `Dudan y pierden la ronda: ${r.hesitant.map((h) => `${h.name} [${h.id}]`).join(', ')}. No les inventes acciones: dudan.` : '',
-      'Un solo cierre: narration_private para todos, en segunda persona del plural, con lo que hace cada uno por su nombre y lo que hace el mundo en respuesta. No pidas requires_roll: las pruebas de cada PJ con roll_check (hidden=false: la ven todos) y los ataques de los PJ con attack (attacker_id = ese PJ). Lo que diga cada uno, en lines como speaker "pc" con su character_id.'].filter(Boolean).join('\n'));
+      r.hesitant.length ? `Dudan y pierden la ronda: ${r.hesitant.map((h) => `${h.name} [${h.id}]`).join(', ')} (solo ellos; los de arriba sí han actuado). No les inventes acciones: dudan.` : '',
+      `Un solo cierre: narration_private la leen TODOS los de la ronda, no solo el actor. Resuelve la acción de CADA uno y nómbralo al hacerlo (${r.members.map((m) => `«${m.name}, tu…»`).join('; ')}) o usa el plural; nunca «tú» a secas, que cada jugador lo leería como suyo. Si alguno pregunta algo (qué conjuros tiene, qué ve), contéstale a él por su nombre. Después, lo que hace el mundo en respuesta. No pidas requires_roll: las pruebas de cada PJ con roll_check (hidden=false: la ven todos) y los ataques de los PJ con attack (attacker_id = ese PJ). Lo que diga cada uno, en lines como speaker "pc" con su character_id.`].filter(Boolean).join('\n'));
   }
   const firing = new Set(hints?.hooks.map((h) => h.id) ?? []);
   const planted = engine.hooksIn(loc.id).filter((h) => !firing.has(h.id));

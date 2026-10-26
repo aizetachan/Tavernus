@@ -29,7 +29,7 @@ import { characterFacts, recordFact } from '../engine/facts.js';
 import type { DialogueLine } from '../engine/moments.js';
 import { fmtCoins, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
 import { inventedPlaces } from '../engine/places.js';
-import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, outcomeMismatch, outcomeRejection, withoutDeathPhrases, type DeathHit, type RollCategory } from '../engine/closecheck.js';
+import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, unansweredInShared, unansweredRejection, withoutDeathPhrases, type DeathHit, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
@@ -306,6 +306,8 @@ export interface ToolContext {
   others_rejections?: number;
   /** Cierres rechazados por narrar una muerte o una vuelta sin estado (closecheck.ts; dos, luego se quitan esas frases). */
   death_rejections?: number;
+  /** Cierres rechazados por dejar sin respuesta a alguno de un turno compartido (closecheck.ts; uno como mucho). */
+  shared_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -894,6 +896,20 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (req?.kind === 'attack' && !req.target) return { error: 'un ataque necesita requires_roll_target (ID del objetivo)' };
       if (req?.target && !world.npcs.has(req.target) && !world.characters.has(req.target)) return { error: `objetivo desconocido: ${req.target}` };
       if (req && req.kind === 'skill' && !SKILLS[req.key]) return { error: `skill desconocida: ${req.key}. Válidas: ${Object.keys(SKILLS).join(', ')}` };
+      // Relleno en lugar de narración («placeholder», «x»): siempre se reescribe; si el máster no sale de ahí, el motor dice que reintente.
+      const junk = placeholderFields({ narration_private: s('narration_private'), observable: input['observable'] == null ? null : s('observable') });
+      if (junk.length) return { error: placeholderRejection(junk) };
+      // Turno compartido: cada uno de los que actuaron recibe su respuesta, por su nombre. Se reescribe una vez.
+      if ((ctx.shared_rejections ?? 0) < 1) {
+        const h = engine.sceneHints(actor.id);
+        const acted = [...(h?.round?.members ?? []), ...(h?.group?.members ?? [])];
+        const lines = parseLines(input['lines'], null, (id) => world.npcs.has(id), (id) => acted.some((m) => m.id === id));
+        const missing = unansweredInShared({ narration: s('narration_private'), lines, acted });
+        if (missing.length) {
+          ctx.shared_rejections = (ctx.shared_rejections ?? 0) + 1;
+          return { error: unansweredRejection(missing.map((m) => ({ name: m.name, text: acted.find((a) => a.id === m.id)!.text }))) };
+        }
+      }
       // Trato cerrado en la narración sin tool que lo registre, y desenlace que no respeta la tirada: se reescribe una vez cada uno.
       if ((ctx.deal_rejections ?? 0) < 1) {
         const deal = dealWithoutState({ narration: s('narration_private'), lines: parseLines(input['lines'], null, (id) => world.npcs.has(id)), okTools: ctx.ok_tools ?? [], pendingRoll: req !== null, hasOpenDebt: openDebts(actor).length > 0 });
