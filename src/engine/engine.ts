@@ -869,11 +869,11 @@ export class Engine {
       if (helper) pending.roll = { ...pending.roll, advantage: pending.roll.advantage === 'disadvantage' ? 'none' : 'advantage' };
       let result: CheckResult & { label: string };
       let shown: string;
-      let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean } | undefined;
+      let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean; damage: number } | undefined;
       if (pending.roll.kind === 'attack' && pending.roll.target) {
         const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c));
         if ('error' in atk) return { ok: false, text: atk.error };
-        attack = { target_id: pending.roll.target, hit: atk.hit, down: Boolean(atk.target_down), dead: Boolean(atk.target_dead) };
+        attack = { target_id: pending.roll.target, hit: atk.hit, down: Boolean(atk.target_down), dead: Boolean(atk.target_dead), damage: atk.damage };
         result = {
           label: `ataque con ${atk.weapon} a ${atk.target}`, expr: 'attack', total: atk.attack_total, rolls: [], d20s: [], modifier: 0, dc: atk.target_ac, advantage: pending.roll.advantage,
           success: atk.hit, ...(atk.natural ? { natural: atk.natural } : {}),

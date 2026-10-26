@@ -6,6 +6,7 @@ import { TTS_SCRIPT, TTS_STYLE } from './tts.js';
 import { SFX_SCRIPT, SFX_STYLE } from './sfx.js';
 import { PAINT_JS, PAINT_STYLE } from './paint.js';
 import { AVATAR_SCRIPT, AVATAR_STYLE } from './avatar.js';
+import { FIGHT_SCRIPT, FIGHT_STYLE } from './fight.js';
 
 export const PAGE = String.raw`<!doctype html>
 <html lang="es">
@@ -478,6 +479,7 @@ ${SFX_STYLE}
 ${AVATAR_STYLE}
 ${NOVEL_STYLE}
 ${PAINT_STYLE}
+${FIGHT_STYLE}
   /* B5 sobre los módulos (novel, tts, sfx, voz, pincel, avatar): mismas piezas, otra piel. */
   .msg.row { gap: 8px; margin-top: 8px; max-width: min(760px, 100%); }
   .msg.scene, .moment.combat, .moment.discovery, .moment.manual { width: min(640px, calc(100% - 42px)); }
@@ -760,6 +762,7 @@ ${PAINT_STYLE}
     <div id="party" role="group" aria-label="Personaje"></div>
     <select id="character" class="vh" aria-label="Personaje" tabindex="-1"></select>
   </div>
+  <section id="fight" hidden aria-label="Combate"></section>
   <div class="chat-body">
     <div id="log" aria-live="polite"></div>
     <div id="thinking" role="status"></div>
@@ -918,6 +921,7 @@ ${PAINT_STYLE}
   }
 ${NOVEL_JS}
 ${PAINT_JS}
+${FIGHT_SCRIPT}
   /** Cada mensaje del stream entra en el hilo tipo chat (novel.ts): avatar, burbuja, botones e imágenes. */
   function renderMessage(m, live, animate) { var shown = chatMessage(m, live, animate); sceneDot(); return shown; }
   /** La última ilustración del sitio hace de foto del «chat» en la cabecera, como en WhatsApp. */
@@ -1040,7 +1044,8 @@ ${PAINT_JS}
   }
   function renderRound() {
     var el = $('round');
-    if (!roundData) { el.hidden = true; return; }
+    // En combate, la ronda y su tiempo van en la cabecera del combate (fight.ts).
+    if (!roundData || fight) { el.hidden = true; return; }
     var left = Math.max(0, Math.round((roundData.deadline_ms - Date.now()) / 1000));
     var w = roundData.waiting || [];
     var who = roundData.acted ? (w.length ? 'faltan ' + w.join(' y ') : 'resolviendo') : 'te toca' + (w.length ? ' (y a ' + w.join(' y ') + ')' : '');
@@ -1949,6 +1954,7 @@ ${PAINT_JS}
     store('tavernus.character.' + game, id);
     if (stream) stream.close();
     log.innerHTML = '';
+    fight = null; fightTurnKey = null; document.body.classList.remove('in-combat'); renderFight();
     board.innerHTML = ''; boardData = null; clearTimeout(boardTimer); document.body.classList.remove('board-big');
     mapEl.innerHTML = ''; mapData = null; document.body.classList.remove('map-big');
     journalEl.innerHTML = ''; journalData = null; setJournalNew(false);
@@ -1987,6 +1993,7 @@ ${PAINT_JS}
     stream.addEventListener('presence', function (e) { renderPresence(JSON.parse(e.data)); });
     stream.addEventListener('typing', function (e) { showTyping(JSON.parse(e.data)); });
     stream.addEventListener('round', function (e) { showRound(JSON.parse(e.data)); });
+    stream.addEventListener('combat', function (e) { showFight(JSON.parse(e.data)); });
     stream.addEventListener('queue', function (e) { waitingFor = JSON.parse(e.data).waiting_for || []; renderWaiting(); });
     loadSheet();
     loadScene();

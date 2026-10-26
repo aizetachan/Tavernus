@@ -526,6 +526,7 @@ export const NOVEL_JS = String.raw`
   }
   function chatTurn(m, live) {
     if (m.notice) { addNotice(m.notice); return; }
+    if (m.combat) { fightMark(m.combat); return; }
     if (m.scene) { showScene(m.scene); return; }
     if (m.chapter) { addChapter(m); return; }
     if (m.input) { clearPending(); markChosen(m.input); }
