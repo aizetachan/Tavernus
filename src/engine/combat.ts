@@ -26,7 +26,7 @@ function acOf(world: World, x: Combatant): number {
 }
 
 /** Arma en la mano principal (o secundaria) del PJ; sin arma, puñetazo. */
-function weaponOf(world: World, c: Character): { name: string; damage: string; damage_type: string; finesse: boolean; ranged: boolean } {
+export function weaponOf(world: World, c: Character): { name: string; damage: string; damage_type: string; finesse: boolean; ranged: boolean } {
   for (const which of ['main', 'both', 'off'] as const) {
     for (const i of world.itemsIn({ type: 'character', id: c.id, slot: { kind: 'hand', which } })) {
       const d = world.itemDef(i.item_id);

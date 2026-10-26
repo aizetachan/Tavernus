@@ -18,7 +18,8 @@ import { witnesses } from './perception.js';
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { bounceOff, parseCrossing } from './barrier.js';
 import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, whereAmI, whoIsHere } from './narrate.js';
-import { encounterChance, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
+import { encounterChance, parseInfo, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
+import { answerInfo, infoText, type InfoAnswer } from './info.js';
 import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type RouteCut } from './goto.js';
 import { dropQuest } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
@@ -52,6 +53,8 @@ export interface ActionResult {
   requires_roll?: RequiresRoll;
   /** «hablar con <PJ>» sin frase: la web abre el modo Decir hacia ese PJ (party.ts). */
   say_to?: { id: Id; name: string };
+  /** Pregunta sobre el juego contestada por el sistema (info.ts): la web la pinta como ficha. */
+  info?: InfoAnswer;
 }
 
 export interface RequiresRoll { kind: CheckKind; key: string; dc: number | null; advantage: Advantage; target?: Id }
@@ -619,6 +622,13 @@ export class Engine {
     const c = this.world.character(characterId);
     this.lastAction.set(c.id, this.now());
     if (!c.connected) this.setConnected(c.id, true);
+    // Pregunta sobre el juego («¿qué hechizos tengo?»): contesta el sistema ya, sin cola ni máster, y no gasta la tirada pendiente ni el turno de la ronda.
+    const ask = this.deterministic ? parseInfo(text) : null;
+    // Dormido o en el suelo no ve a nadie: eso, al camino de siempre; su hoja sí la consulta.
+    if (ask && (c.status === 'active' || (ask.topic !== 'people' && ask.topic !== 'where'))) {
+      const info = answerInfo(this, c, ask);
+      return { ok: true, text: infoText(info), info };
+    }
     // A 0 PG o muerto no se actúa: se le dice cómo está y qué le espera.
     if (c.status === 'unconscious' || c.status === 'dead') return { ok: false, text: this.downText(c) };
     const locId = positionOf(this.world, c, this.gameNow()).location_id;
