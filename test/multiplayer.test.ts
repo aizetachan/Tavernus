@@ -24,9 +24,9 @@ let games: GameManager;
 let web: WebServer;
 let base: string;
 
-async function start(access?: AccessOptions, extra: { masterFor?: MasterFactory; leaveNoticeMs?: number } = {}) {
+async function start(access?: AccessOptions, extra: { masterFor?: MasterFactory; leaveNoticeMs?: number; staleMs?: number; hiddenMs?: number } = {}) {
   games = new GameManager({ root: join(dir, 'games'), env: { DATA_DIR: join(dir, 'local') }, masterFor: extra.masterFor ?? ((e) => new Master(e, { client: offlineClient() })), engine: { deterministic: false }, log: () => {}, budget: null });
-  web = createWebServer(games, { tickMs: 3_600_000, ...(access ? { access } : {}), ...(extra.leaveNoticeMs !== undefined ? { leaveNoticeMs: extra.leaveNoticeMs } : {}) });
+  web = createWebServer(games, { tickMs: 3_600_000, ...(access ? { access } : {}), ...(extra.leaveNoticeMs !== undefined ? { leaveNoticeMs: extra.leaveNoticeMs } : {}), ...(extra.staleMs !== undefined ? { staleMs: extra.staleMs } : {}), ...(extra.hiddenMs !== undefined ? { hiddenMs: extra.hiddenMs } : {}) });
   await new Promise<void>((resolve) => web.server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${(web.server.address() as AddressInfo).port}`;
 }
@@ -226,9 +226,42 @@ describe('presencia y cola en la web', () => {
     ctrl.abort();
     // Están en el mismo sitio: el aviso es de la ficción, y su PJ se queda (docs/MULTIJUGADOR.md, «Desconexiones»).
     const leftText = await readSse(miraStream, (t) => t.includes('se ha ido'));
-    expect(leftText).toMatch(/Tor se ha ido; su personaje se queda en [^.]+\./);
+    expect(leftText).toMatch(/"kind":"system","text":"","notice":\{"text":"Tor se ha ido; su personaje se queda en [^"]+"\}.*"presence":\{"id":"[^"]+","online":false\}/);
     expect(leftText).toContain('Tor está aquí (ausente)');
     await miraStream.body!.cancel();
+  });
+
+  it('sin cerrar el stream (colgado tras un proxy u oculta), los demás leen que se ha marchado sin que nadie actúe', async () => {
+    await start(undefined, { leaveNoticeMs: 40, staleMs: 150, hiddenMs: 150 });
+    const { game, character_id: lia } = await games.create({ name: 'Latido', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
+    const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
+    // En otro sitio: el aviso es de la web («se ha marchado», «ha vuelto»), no del motor.
+    (await games.open(game.slug)).world.character(tor).location = { type: 'spot', id: 'sp_tab_barra' };
+    const g = `?game=${game.slug}`;
+    const beat = (character: string, tab: string, state: string) => fetch(`${base}/api/presence${g}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ character, tab, state }) });
+
+    const liaStream = await fetch(`${base}/api/stream${g}&character=${lia}&tab=lia`);
+    await readSse(liaStream, (t) => t.includes('event: presence'));
+    const liaAlive = setInterval(() => void beat(lia, 'lia', 'visible'), 40);
+    try {
+      const torStream = await fetch(`${base}/api/stream${g}&character=${tor}&tab=tor`);
+      expect(await readSse(liaStream, (t) => t.includes('ha entrado'))).toContain('Tor ha entrado en la partida');
+      // Tor no late: su stream sigue abierto, pero a los 150 ms más la gracia se le da por ido.
+      const t0 = Date.now();
+      const gone = await readSse(liaStream, (t) => t.includes('se ha marchado'));
+      expect(Date.now() - t0).toBeGreaterThan(100);
+      expect(gone).toContain('Tor se ha marchado');
+      expect(gone).toMatch(/"kind":"system","text":"","notice":\{"text":"Tor se ha marchado"\},"presence":\{"id":"[^"]+","online":false\}/);
+      expect(gone).toContain('"name":"Tor","online":false');
+      // Vuelve a latir (el portátil despierta): ha vuelto, sin abrir otro stream.
+      await beat(tor, 'tor', 'visible');
+      expect(await readSse(liaStream, (t) => t.includes('ha vuelto'))).toContain('Tor ha vuelto');
+      // Oculta: cuenta un rato y luego se va igual.
+      await beat(tor, 'tor', 'hidden');
+      expect(await readSse(liaStream, (t) => t.includes('se ha marchado'))).toContain('Tor se ha marchado');
+      await torStream.body!.cancel();
+    } finally { clearInterval(liaAlive); }
+    await liaStream.body!.cancel();
   });
 
   it('dos acciones a la vez en el mismo sitio: en orden, la segunda «esperando a» la primera; doble acción del mismo PJ, 409', async () => {

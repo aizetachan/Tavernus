@@ -6,6 +6,7 @@ import { TTS_SCRIPT, TTS_STYLE } from './tts.js';
 import { SFX_SCRIPT, SFX_STYLE } from './sfx.js';
 import { PAINT_JS, PAINT_STYLE } from './paint.js';
 import { AVATAR_SCRIPT, AVATAR_STYLE } from './avatar.js';
+import { HEARTBEAT_MS } from './presence.js';
 
 export const PAGE = String.raw`<!doctype html>
 <html lang="es">
@@ -193,11 +194,13 @@ export const PAGE = String.raw`<!doctype html>
   /* Presencia (docs/MULTIJUGADOR.md): los demás jugadores, con punto verde si están en línea; en la hoja, una línea cada uno. */
   #presence { display: flex; align-items: center; flex: none; gap: 2px; }
   #presence:empty { display: none; }
-  #presence span { position: relative; width: 30px; height: 30px; margin-left: -6px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--panel); background: #22262a; color: var(--muted); font-size: 11.5px; font-weight: 600; cursor: default; }
+  #presence span { position: relative; width: 32px; height: 32px; margin-left: -6px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--panel); background: #22262a; color: var(--muted); font-size: 11.5px; font-weight: 600; cursor: default; }
+  #presence span img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+  #presence span:not(.on) img { filter: grayscale(.7) brightness(.75); }
   #presence span:first-child { margin-left: 0; }
   #presence span.on { color: var(--text); }
   #presence span.here { box-shadow: 0 0 0 1.5px rgba(230,183,90,.55); }
-  #presence span::after { content: ''; position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; background: #5b5f62; border: 2px solid var(--panel); }
+  #presence span::after { content: ''; position: absolute; z-index: 1; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%; background: #5b5f62; border: 2px solid var(--panel); }
   #presence span.on::after { background: #4fbf7a; }
   #group { margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid var(--sep); }
   #group:empty { display: none; }
@@ -524,7 +527,7 @@ ${PAINT_STYLE}
   #thinking { position: relative; min-height: 0; padding: 0 max(24px, calc((100% - 980px) / 2)); color: var(--muted); font-size: 13px; }
   #thinking:not(:empty) { padding-bottom: 8px; }
   #typing { padding: 2px 18px 0; font-size: 12.5px; font-style: italic; color: var(--muted); min-height: 0; }
-  #presence span.away { opacity: .45; filter: grayscale(1); }
+  #presence span.away { opacity: .75; }
   .round-banner { margin: 6px 16px 0; padding: 7px 12px; border-radius: 12px; font: 600 13px/1.3 var(--sans); background: rgba(214,96,74,.14); color: #f0b3a3; box-shadow: inset 0 0 0 1px rgba(214,96,74,.35); }
   .round-banner.mine { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(230,183,90,.35); }
   .actions.party button.accept { background: var(--accent); color: var(--accent-ink); }
@@ -689,6 +692,8 @@ ${PAINT_STYLE}
   .chat-head .sfx > .sfx-more { width: 26px; padding: 0; border-radius: 0 12px 12px 0; border-left: 1px solid rgba(230,183,90,.18); }
   .chat-head .sfx, .chat-head .sfx.on { height: 32px; background: transparent; border-radius: 12px; }
   #party { order: 2; margin-right: 6px; }
+  /* Los demás jugadores, arriba a la derecha (como en WhatsApp). */
+  #presence { order: 5; margin-left: 4px; }
   @media (max-width: 820px) {
     /* Avisos: algo más anchos en el móvil, para que quepan en una o dos líneas. */
     .msg.notice, .msg.system { max-width: 92%; }
@@ -926,7 +931,11 @@ ${PAINT_STYLE}
 ${NOVEL_JS}
 ${PAINT_JS}
   /** Cada mensaje del stream entra en el hilo tipo chat (novel.ts): avatar, burbuja, botones e imágenes. */
-  function renderMessage(m, live, animate) { var shown = chatMessage(m, live, animate); sceneDot(); return shown; }
+  function renderMessage(m, live, animate) {
+    // Irse o volver: aviso de sistema, sin puntos del narrador ni turno (el propio no tiene texto).
+    if (m.presence) { if (m.text) add('system', m.text); return Promise.resolve(); }
+    var shown = chatMessage(m, live, animate); sceneDot(); return shown;
+  }
   /** La última ilustración del sitio hace de foto del «chat» en la cabecera, como en WhatsApp. */
   function sceneDot() {
     var imgs = log.querySelectorAll('.msg.scene img, .place-shot img'), last = imgs[imgs.length - 1], dot = $('scene-dot');
@@ -954,8 +963,10 @@ ${PAINT_JS}
   var waitingFor = [];
   function renderWaiting() { thinking.textContent = busy && waitingFor.length ? 'Esperando a ' + waitingFor.join(' y ') + '…' : ''; }
 
-  /** Los demás jugadores: en la cabecera, sus iniciales con un punto (verde = en línea); en la hoja, una línea cada uno. */
+  /** Los demás jugadores: en la cabecera, su avatar (o inicial) con un punto (verde = en línea); en la hoja, una línea cada uno. */
+  var presenceList = [];
   function renderPresence(list) {
+    presenceList = list || [];
     var box = $('presence'), group = $('group');
     box.innerHTML = ''; group.innerHTML = '';
     // Hacer / Decir solo tiene sentido con más jugadores en la partida; en solitario, todo va al narrador.
@@ -966,6 +977,8 @@ ${PAINT_JS}
     list.forEach(function (p) {
       var sp = document.createElement('span');
       sp.textContent = initial(p.name);
+      var src = p.avatar || portraits[p.id];
+      if (src) { var img = document.createElement('img'); img.alt = ''; img.src = src; img.addEventListener('error', function () { img.remove(); }); sp.appendChild(img); }
       sp.className = (p.online ? 'on' : '') + (p.where === 'here' ? ' here' : '') + (p.away ? ' away' : '');
       sp.title = p.text;
       sp.setAttribute('aria-label', p.text);
@@ -1965,7 +1978,7 @@ ${PAINT_JS}
     var dot = $('scene-dot'); dot.removeAttribute('data-src'); dot.innerHTML = '<svg class="i"><use href="#i-pin"/></svg>';
     renderParty();
     if (window.TavernusSfx) TavernusSfx.character(id);
-    stream = new EventSource(api('/api/stream?character=' + encodeURIComponent(id)));
+    stream = new EventSource(api('/api/stream?character=' + encodeURIComponent(id) + '&tab=' + TAB));
     // Personaje nuevo presentándose: su hilo empieza en el prólogo, que llega por el stream; no se pide /look.
     var opening = false;
     stream.addEventListener('opening', function () { opening = true; });
@@ -1979,6 +1992,7 @@ ${PAINT_JS}
     stream.addEventListener('cast', function (e) { setCast(JSON.parse(e.data)); });
     stream.addEventListener('message', function (e) {
       var m = JSON.parse(e.data);
+      if (m.presence) { inChat(function () { return renderMessage(m); }); return; }
       inChat(function () {
         if (window.TavernusSfx) TavernusSfx.cue(m.sfx);
         loadBoard(); loadScene();
@@ -1987,7 +2001,11 @@ ${PAINT_JS}
     });
     stream.addEventListener('sheet', loadSheet);
     stream.addEventListener('moment', function (e) { var x = JSON.parse(e.data); showMoment(x, x.seq); });
-    stream.addEventListener('portrait', function (e) { setPortrait(JSON.parse(e.data)); });
+    stream.addEventListener('portrait', function (e) {
+      var p = JSON.parse(e.data);
+      setPortrait(p);
+      if (presenceList.some(function (x) { return x.id === p.id; })) renderPresence(presenceList);
+    });
     stream.addEventListener('place', function (e) { var p = JSON.parse(e.data); inChat(function () { placeReady(p); }); });
     paintConnect(stream);
     stream.addEventListener('journal', loadJournal);
@@ -1995,11 +2013,28 @@ ${PAINT_JS}
     stream.addEventListener('typing', function (e) { showTyping(JSON.parse(e.data)); });
     stream.addEventListener('round', function (e) { showRound(JSON.parse(e.data)); });
     stream.addEventListener('queue', function (e) { waitingFor = JSON.parse(e.data).waiting_for || []; renderWaiting(); });
+    // Al abrir (y al reconectar) el stream, la pestaña dice si se ve o está oculta.
+    stream.addEventListener('open', function () { beat(); });
     loadSheet();
     loadScene();
     loadJournal();
     input.focus();
   }
+
+  // Presencia (presence.ts): cada pestaña tiene su id; late mientras se ve, avisa al ocultarse y al cerrarse.
+  // Así el servidor sabe que se ha ido aunque el stream siga abierto tras un proxy o en el móvil.
+  var TAB = Math.random().toString(36).slice(2, 12);
+  function beat(state) {
+    if (!current) return;
+    var body = JSON.stringify({ character: current, tab: TAB, state: state || (document.hidden ? 'hidden' : 'visible') });
+    if (state === 'gone' && navigator.sendBeacon) { navigator.sendBeacon(api('/api/presence'), new Blob([body], { type: 'application/json' })); return; }
+    fetch(api('/api/presence'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: body, keepalive: true }).catch(function () {});
+  }
+  setInterval(function () { if (!document.hidden) beat(); }, ${HEARTBEAT_MS});
+  document.addEventListener('visibilitychange', function () { beat(); });
+  window.addEventListener('pagehide', function () { beat('gone'); });
+  // Vuelve de la caché del navegador (atrás/adelante): si el stream se cerró, se reabre.
+  window.addEventListener('pageshow', function (e) { if (!e.persisted || !current) return; if (stream && stream.readyState === 2) connect(current); else beat(); });
 
   $('form').addEventListener('submit', function (e) {
     e.preventDefault();
