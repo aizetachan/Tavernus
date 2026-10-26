@@ -52,6 +52,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Engine, ActionResult } from '../../engine/engine.js';
+import type { InfoAnswer } from '../../engine/info.js';
 import type { GameEvent, Id } from '../../engine/model.js';
 import type { Delivery } from '../../engine/events.js';
 import { GameError, GameManager, NEW_GAME_MODES, type NewGameMode, type WorldInput } from '../../games/manager.js';
@@ -1008,9 +1009,9 @@ function characterOr404(engine: Engine, id: string | null, res: ServerResponse):
 }
 
 /** Con evento, la narración ya llegó por el stream; sin él (consultas, errores) va en la respuesta. */
-function reply(r: ActionResult): { ok: boolean; text: string | null; say_to?: { id: Id; name: string } } {
+function reply(r: ActionResult): { ok: boolean; text: string | null; say_to?: { id: Id; name: string }; info?: InfoAnswer } {
   if (!r.ok) return { ok: false, text: r.text };
-  return { ok: true, text: r.event ? null : r.text, ...(r.say_to ? { say_to: r.say_to } : {}) };
+  return { ok: true, text: r.event ? null : r.text, ...(r.say_to ? { say_to: r.say_to } : {}), ...(r.info ? { info: r.info } : {}) };
 }
 
 export function toMessage(d: Delivery, engine: Engine): WebMessage {

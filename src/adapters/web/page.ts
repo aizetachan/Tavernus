@@ -665,6 +665,16 @@ ${FIGHT_STYLE}
   .msg.system .body { display: inline-block; padding: 4px 11px 5px; border: 0; border-radius: 7px; background: rgba(6,8,8,.62); box-shadow: 0 1px 0 rgba(0,0,0,.3); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); color: rgba(206,199,188,.8); font-size: 12px; line-height: 1.45; }
   .msg.system.tone-good .body { color: rgba(140,205,165,.85); }
   .msg.system.tone-bad .body, .msg.system.error .body { color: rgba(250,155,145,.9); }
+  /* Respuesta del sistema a una pregunta sobre el juego (info.ts): ni burbuja del narrador ni pastilla de aviso, sino
+     una ficha de consulta, a la izquierda, con el icono de la hoja, su título y una línea por dato. */
+  .msg.info { align-self: flex-start; margin: 6px 0 4px 44px; max-width: min(460px, calc(100% - 44px)); }
+  .msg.info .body { padding: 9px 13px 10px; border-radius: 10px; background: var(--platter); border: 1px dashed rgba(230,183,90,.38); font-size: 13.5px; line-height: 1.5; color: var(--text); }
+  .msg.info .hd { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+  .msg.info .hd svg { width: 14px; height: 14px; }
+  .msg.info .hd small { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--faint); }
+  .msg.info .ln + .ln { margin-top: 3px; }
+  .msg.info .ln strong { color: var(--text); font-weight: 600; }
+  @media (max-width: 640px) { .msg.info { margin-left: 0; max-width: 100%; } }
   /* Tirar: un botón redondo solo con el icono del d20, que se balancea de vez en cuando para invitar a pulsarlo. */
   .actions button.roll { width: 40px; height: 40px; padding: 0; justify-content: center; border-radius: 50%; }
   .actions button.roll svg.d20 { width: 24px; height: 24px; stroke-width: 1.6; }
@@ -1041,6 +1051,17 @@ ${FIGHT_SCRIPT}
     else if (r.text) add('system', r.text);
   }
 
+  /** Pregunta sobre el juego (info.ts): queda la pregunta en el hilo y, debajo, la ficha con la respuesta del sistema. */
+  function infoReply(question, info) {
+    chatRow('mine', meWho(), format(question));
+    var div = document.createElement('div');
+    div.className = 'msg info';
+    var lines = info.lines.map(function (l) { return '<div class="ln">' + escapeHtml(l).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</div>'; }).join('');
+    div.innerHTML = '<div class="body"><div class="hd"><svg class="i"><use href="#i-sheet"/></svg>' + escapeHtml(info.title) + '<small>sistema</small></div>' + lines + '</div>';
+    log.appendChild(div);
+    scroll();
+  }
+
   function act(text) {
     if (busy) return;
     // Sin burbuja de «prompt»: mientras piensa el narrador se ve atenuado; luego lo sustituye lo que el PJ dice o hace.
@@ -1050,7 +1071,9 @@ ${FIGHT_SCRIPT}
       // Después de lo que el turno haya traído por el stream (y de sus puntos).
       afterChat(function () {
         // «hablar con <otro jugador>» sin frase: el servidor no lo narra; abre el modo Decir hacia él.
-        if (r.ok && r.say_to) { setSayMode(true, r.say_to); add('system', r.text); } else handleReply(r);
+        if (r.ok && r.say_to) { setSayMode(true, r.say_to); add('system', r.text); }
+        else if (r.ok && r.info) { clearPending(); infoReply(text, r.info); }
+        else handleReply(r);
         clearPending(); setBusy(false); loadSheet();
       });
     });

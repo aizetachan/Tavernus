@@ -17,7 +17,9 @@ import { enterDestination, exitDestination, nameScore, npcDestination, resolveDe
 import { positionOf } from './movement.js';
 import { aEs, descriptorOf } from './narrate.js';
 import { perceive } from './perception.js';
+import { ABILITY_ES, SKILLS, type Ability, type CheckKind } from './rules.js';
 import type { World } from './world.js';
+import { RULES_CHEATSHEET } from '../ai/rules-cheatsheet.js';
 
 export type TrivialIntent =
   | { kind: 'move'; spot_id: Id; pace: Pace; exit: boolean }
@@ -246,4 +248,215 @@ export function suggestActions(world: World, clock: GameClock, c: Character, now
   for (const s of near.slice(0, room)) out.push(`Ir ${aEs(s.name)}`);
   if (exits.length && out.length < max) out.push(`Salir hacia ${exits[0]}`);
   return out.slice(0, max);
+}
+
+// ---------------------------------------------------------------------------
+// Preguntas sobre el juego: las contesta el sistema (info.ts), no el narrador
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo que el jugador pregunta de su hoja, de quién tiene al lado o de una
+ * tirada: «¿cuánta destreza tengo?», «¿qué hechizos tengo?», «¿cuántos dados
+ * tiro para esto?». Lo que pregunta del mundo o de otros («¿qué sabe Ilse del
+ * pozo?», «¿tienes cerveza?») sigue al narrador; en la duda, también.
+ */
+export type InfoIntent =
+  | { topic: InfoTopic }
+  | { topic: 'ability'; ability: Ability }
+  | { topic: 'skill'; skill: string }
+  /** `check` null: la tirada pendiente («¿qué tiro para esto?»). */
+  | { topic: 'roll'; check: { kind: CheckKind; key: string } | null }
+  | { topic: 'rule'; term: string };
+
+export type InfoTopic = 'abilities' | 'skills' | 'spells' | 'inventory' | 'coins' | 'hp' | 'armor' | 'level' | 'quests' | 'people' | 'where';
+
+/**
+ * Temas y las palabras que los nombran (sin tildes). `words`: dentro de una
+ * pregunta; `bare`: también solas («mis hechizos»); `weak`: solo cuentan si
+ * no sale otro tema («¿cuánto oro llevo?» es oro, no inventario).
+ */
+export const INFO_TOPICS: { topic: InfoTopic; words: string[]; bare: string[]; weak?: string[] }[] = [
+  { topic: 'spells', words: ['hechizo', 'hechizos', 'conjuro', 'conjuros', 'magia', 'magias', 'trucos', 'espacios de conjuro', 'espacios', 'slots', 'spells'], bare: ['hechizos', 'conjuros', 'espacios de conjuro', 'spells'] },
+  { topic: 'coins', words: ['oro', 'monedas', 'moneda', 'dinero', 'pasta', 'plata', 'cobre', 'blanca'], bare: ['oro', 'monedas', 'dinero'] },
+  { topic: 'hp', words: ['vida', 'pv', 'pg', 'puntos de vida', 'puntos de golpe', 'salud', 'hp', 'herido', 'herida', 'dados de golpe'], bare: ['vida', 'pv', 'pg', 'puntos de vida', 'puntos de golpe', 'salud', 'hp'], weak: ['como estoy'] },
+  { topic: 'armor', words: ['ca', 'clase de armadura', 'defensa'], bare: ['ca', 'clase de armadura'] },
+  { topic: 'level', words: ['nivel', 'experiencia', 'px', 'xp'], bare: ['nivel', 'experiencia', 'px', 'xp'] },
+  { topic: 'quests', words: ['mision', 'misiones', 'encargo', 'encargos', 'tarea', 'tareas', 'objetivo', 'objetivos', 'trabajos', 'quests'], bare: ['mision', 'misiones', 'encargos', 'tareas', 'objetivos', 'quests'] },
+  { topic: 'abilities', words: ['atributos', 'caracteristicas', 'estadisticas', 'stats', 'hoja', 'ficha'], bare: ['atributos', 'caracteristicas', 'estadisticas', 'stats', 'hoja', 'ficha', 'hoja de personaje'] },
+  { topic: 'skills', words: ['habilidades', 'competencias', 'pericias'], bare: ['habilidades', 'competencias', 'pericias'] },
+  { topic: 'inventory', words: ['inventario', 'mochila', 'equipo', 'equipaje', 'pertenencias', 'bolsillos', 'zurron', 'alforjas'], bare: ['mochila', 'equipo', 'equipaje', 'pertenencias', 'bolsillos'], weak: ['llevo', 'encima', 'cosas', 'objetos', 'conmigo', 'manos', 'llevo puesto'] },
+];
+
+/** Las órdenes de una palabra de siempre (inventario, quién, dónde) siguen su camino (resolveAction). */
+const LEGACY = /^(inventario|inventory|quien|who|donde|where)$/;
+/** Muletillas al principio: «oye», «a ver», «dime»… */
+const FILLER = /^(?:(?:oye|a ver|vale|pues|y|entonces|bueno|venga|ok|eh|perdona|una pregunta|pregunta|master|narrador|sistema|dime|dime una cosa|recuerdame|ensename|muestrame|consultar|ver|mirar|abrir)\s+)+/;
+/** Segunda o tercera persona, o el grupo: pregunta a otro o por otro. Al narrador. */
+const NOT_INFO = /\b(tienes|tiene|teneis|tienen|tenga|tengas|llevas|lleva|llevan|sabes|sabe|saben|puedes|puede|pueden|vendes|vende|venden|cuesta|cuestan|valen|dame|danos|dadme|deme|das|cobras|cobra|quieres|quiere|le|les|tu|tus|su|sus|usted|tenemos|llevamos|nos)\b/;
+const ASK = /^(?:que|cuanto|cuanta|cuantos|cuantas|cual|cuales|como)\b/;
+const SELF = /\b(tengo|llevo|me queda|me quedan|cargo|conozco|mi|mis|estoy|puedo lanzar|se lanzar)\b/;
+const SELF_START = /^(?:tengo|llevo|me queda|me quedan|conozco|estoy)\b/;
+const PEOPLE = /^(?:cuanta gente|cuantas personas|cuantos|cuantas|quien|quienes|hay alguien|hay gente|hay mas gente|con quien)(?: (?:hay|esta|estan|somos|estoy|se ve|veo))?(?: (?:aqui|a mi lado|conmigo|cerca|alrededor|a mi alrededor|por aqui|en la sala|aqui dentro|junto a mi|cerca de mi|ahora))+$/;
+const WHERE = /^donde (?:estoy|me encuentro|ando)(?: ahora)?$/;
+/** «¿Cuántos dados tiro para esto?», «¿qué sumo a sigilo?», «¿qué bonificador tengo en destreza?». */
+const ROLL = /^(?:cuantos dados|que dados?|con que dados?|que tirada|que bonificador|que modificador|que bono|cuanto|que)\s+(tiro|tengo que tirar|me toca tirar|hay que tirar|lanzo|sumo|me sumo|hago|tengo|uso|es)(?:\s+(?:para|en|a|al|de|con)\s+(.+))?$/;
+const DICE_LEAD = /^(?:cuantos dados|que dados?|con que dados?|que tirada|que bonificador|que modificador|que bono)\b/;
+const TIRAR = /^(?:tiro|tengo que tirar|me toca tirar|hay que tirar|sumo|me sumo)$/;
+const PENDING = /^(?:esto|eso|esta|esa|ella|la tirada|esta tirada|esa tirada|lo que me pide|lo que me pides|lo que me piden)$/;
+const ATTACK = /^(?:atacar|ataque|ataco|atacarle|golpear|golpe|pegar|pegarle|pego|acertar|dar un golpe|un ataque)\b/;
+const SAVE = /^(?:salvacion|tirada salvacion|salvarme|salvar)\s+(.+)$/;
+const RULE = /^(?:que (?:es|significa|hace|pasa si estoy|pasa cuando estoy|es estar|significa estar|implica)|como funciona)\s+(?:el |la |los |las |un |una |estar )?(.+)$/;
+
+const plainInfo = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+/** Minúsculas, sin tildes ni signos, sin cifras coladas en una palabra («q1ue») y con «q»/«k» como «que». */
+function cleanInfo(text: string): string {
+  return plainInfo(text)
+    .replace(/([a-zñ])\d+(?=[a-zñ])/g, '$1')
+    .replace(/[^a-z0-9ñ\s]/g, ' ')
+    .replace(/\b[qk]\b/g, 'que')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** ¿Aparece la frase entera (por palabras) en el texto? */
+function hasPhrase(t: string, phrase: string): boolean {
+  return ` ${t} `.includes(` ${phrase} `);
+}
+
+/** Características y habilidades por su nombre en castellano (rules.ts) o por la clave inglesa. */
+function abilityNamed(t: string): Ability | null {
+  for (const [k, es] of Object.entries(ABILITY_ES) as [Ability, string][]) if (t === plainInfo(es)) return k;
+  return null;
+}
+function skillNamed(t: string): string | null {
+  for (const [k, v] of Object.entries(SKILLS)) if (t === plainInfo(v.es) || t === k.replace(/_/g, ' ')) return k;
+  return null;
+}
+/** Característica o habilidad nombrada dentro del texto (una sola; con dos, null). */
+function statIn(t: string): { ability: Ability } | { skill: string } | null {
+  const hits: ({ ability: Ability } | { skill: string })[] = [];
+  for (const [k, es] of Object.entries(ABILITY_ES) as [Ability, string][]) if (hasPhrase(t, plainInfo(es))) hits.push({ ability: k });
+  for (const [k, v] of Object.entries(SKILLS)) if (hasPhrase(t, plainInfo(v.es))) hits.push({ skill: k });
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+/** Tirada nombrada: habilidad, característica, salvación o ataque. 'pending': «esto». null: no se sabe cuál (al narrador). */
+function checkNamed(raw: string | undefined): { kind: CheckKind; key: string } | 'pending' | null {
+  const t = (raw ?? '').replace(/^(?:el|la|los|las|un|una|mi|mis)\s+/, '').replace(/^(?:prueba|tirada|chequeo|check)\s+(?:de\s+)?/, '').trim();
+  if (!t || PENDING.test(t)) return 'pending';
+  if (ATTACK.test(t)) return { kind: 'attack', key: 'weapon' };
+  const save = t.match(SAVE);
+  if (save) {
+    const a = abilityNamed(save[1]!.replace(/^(?:de|contra)\s+/, ''));
+    return a ? { kind: 'save', key: a } : null;
+  }
+  const skill = skillNamed(t);
+  if (skill) return { kind: 'skill', key: skill };
+  const ability = abilityNamed(t);
+  return ability ? { kind: 'ability', key: ability } : null;
+}
+
+/**
+ * Términos de reglas que el sistema sabe explicar: las condiciones y los
+ * apartados («Ventaja:», «Descanso corto (1 h):») de la chuleta SRD, cada uno
+ * con su texto. Sale de la chuleta: si crece, crece esto.
+ */
+export const RULE_TERMS: ReadonlyMap<string, string> = (() => {
+  const out = new Map<string, string>();
+  for (const line of RULES_CHEATSHEET.split('\n')) {
+    const cond = line.match(/^\s{2}([^:]+):\s*(.+)$/);
+    if (cond) {
+      for (const name of cond[1]!.replace(/\([^)]*\)/g, '').split('/')) out.set(plainInfo(name.trim()), `${cond[1]!.trim()}: ${cond[2]!.trim()}`);
+      continue;
+    }
+    const body = line.replace(/^-\s*/, '');
+    const heads = [...body.matchAll(/(?:^|[.;]\s+)([A-ZÁÉÍÓÚ][a-záéíóúñ]+(?: [a-záéíóúñ]+){0,2})(?: \([^)]*\))?:/g)];
+    heads.forEach((h, i) => {
+      const from = h.index! + h[0].indexOf(h[1]!);
+      const to = i + 1 < heads.length ? heads[i + 1]!.index! + 1 : body.length;
+      const term = plainInfo(h[1]!);
+      const seg = body.slice(from, to).trim();
+      // Un encabezado sin nada detrás («Condiciones (…):») no explica nada.
+      if (term.length >= 5 && !out.has(term) && !/:$/.test(seg)) out.set(term, seg);
+    });
+  }
+  return out;
+})();
+
+function ruleNamed(raw: string): string | null {
+  const t = raw.trim();
+  for (const form of [t, t.replace(/s$/, ''), t.replace(/a$/, 'o'), t.replace(/as$/, 'o'), t.replace(/os$/, 'o')]) if (RULE_TERMS.has(form)) return form;
+  return null;
+}
+
+/** Temas que nombra el texto: los fuertes y, aparte, los flojos. */
+function topicsIn(t: string): { strong: InfoTopic[]; weak: InfoTopic[] } {
+  const strong: InfoTopic[] = [];
+  const weak: InfoTopic[] = [];
+  for (const def of INFO_TOPICS) {
+    if (def.words.some((w) => hasPhrase(t, w))) strong.push(def.topic);
+    else if (def.weak?.some((w) => hasPhrase(t, w))) weak.push(def.topic);
+  }
+  return { strong, weak };
+}
+
+/**
+ * ¿Es una pregunta sobre el juego que el sistema sabe contestar? Solo texto:
+ * no mira el mundo. Pide que sea del propio PJ («tengo», «mis», «me quedan»)
+ * y que nombre un único tema; si no, null y va al narrador.
+ */
+export function parseInfo(text: string): InfoIntent | null {
+  const raw = text.trim();
+  let t = cleanInfo(raw);
+  if (!t || LEGACY.test(t)) return null;
+  t = t.replace(FILLER, '').trim();
+  if (!t || t.split(' ').length > 10) return null;
+
+  if (WHERE.test(t)) return { topic: 'where' };
+  if (PEOPLE.test(t)) return { topic: 'people' };
+
+  const rule = t.match(RULE);
+  if (rule) {
+    const term = ruleNamed(rule[1]!);
+    return term ? { topic: 'rule', term } : null;
+  }
+  if (NOT_INFO.test(t)) return null;
+
+  const roll = t.match(ROLL);
+  // «¿Qué hago?», «¿qué lanzo?», «¿qué es?» no son tiradas: el verbo de tirar o el dado tienen que estar.
+  if (roll && (DICE_LEAD.test(t) || TIRAR.test(roll[1]!) || roll[1] === 'tengo')) {
+    const check = checkNamed(roll[2]);
+    // «¿Qué tengo en sigilo?»: el valor, no la tirada.
+    if (check && check !== 'pending' && roll[1] === 'tengo') {
+      if (check.kind === 'skill') return { topic: 'skill', skill: check.key };
+      if (check.kind === 'ability') return { topic: 'ability', ability: check.key as Ability };
+    }
+    if (check === 'pending' && roll[1] !== 'tengo') return { topic: 'roll', check: null };
+    if (check && check !== 'pending') return { topic: 'roll', check };
+    // «¿Qué tiro para abrir la puerta?»: no se sabe qué tirada es. «¿Qué tengo en la mochila?» sigue abajo.
+    if (roll[1] !== 'tengo') return null;
+  }
+
+  // Sola: «mis hechizos», «mochila», «mi destreza».
+  const mine = /^mis? /.test(t);
+  const bare = t.replace(/^(?:mis?|el|la|los|las|lista de|la lista de|mi lista de)\s+/, '');
+  for (const def of INFO_TOPICS) if (def.bare.includes(bare)) return { topic: def.topic };
+  if (mine) {
+    const a = abilityNamed(bare);
+    if (a) return { topic: 'ability', ability: a };
+    const s = skillNamed(bare);
+    if (s) return { topic: 'skill', skill: s };
+  }
+
+  // Pregunta del propio PJ: «¿qué hechizos tengo?», «¿cuánta destreza tengo?», «¿me quedan monedas?».
+  const asks = ASK.test(t) || (SELF_START.test(t) && /\?/.test(raw));
+  if (!asks || !SELF.test(t)) return null;
+  const stat = statIn(t);
+  const { strong, weak } = topicsIn(t);
+  if (stat && strong.length === 0) return 'ability' in stat ? { topic: 'ability', ability: stat.ability } : { topic: 'skill', skill: stat.skill };
+  if (stat) return null;
+  if (strong.length === 1) return { topic: strong[0]! };
+  if (strong.length === 0 && weak.length === 1) return { topic: weak[0]! };
+  return null;
 }
