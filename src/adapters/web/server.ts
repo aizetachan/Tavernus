@@ -78,6 +78,8 @@ import { pcLabel, pcName } from '../../engine/party.js';
 import { talkingWith } from '../../engine/scene.js';
 import { descriptorOf } from '../../engine/narrate.js';
 import type { SceneNotice } from '../../engine/engine.js';
+import { encounterAt, type Encounter } from '../../engine/encounter.js';
+import { combatView, type CombatEnd, type CombatView, type TurnContext } from './fight.js';
 
 const MASTER_TYPES = new Set(['master', 'master_roll_outcome', 'master_intro', 'master_arrival', 'prologue', 'recap']);
 const HISTORY = 200;
@@ -142,6 +144,8 @@ export interface WebMessage {
   offer?: { id: Id; label: string; open: boolean };
   /** Conversación ajena que este PJ oye (bien o a trozos): se marca «Escuchas» y se ofrece unirse. */
   overheard?: { npc: string; join: string; well: boolean };
+  /** Aviso de combate en el hilo (fight.ts): empieza, o se acaba (o el PJ sale de él). */
+  combat?: { phase: 'start' | 'end'; text: string };
 }
 
 /** Lo que la web cuelga de cada motor abierto: conexiones SSE e historial en memoria. */
@@ -165,6 +169,8 @@ interface Runtime {
   typing: (characterId: Id) => void;
   /** Ronda abierta donde está ese PJ, para pintar el banner al conectar. */
   roundFor: (characterId: Id) => unknown;
+  /** Combate en el que está ese PJ, visto por él (fight.ts), para pintarlo al conectar. */
+  combatFor: (characterId: Id) => CombatView | null;
   /** Acción en curso por PJ: false si ya tenía una (bloqueo de doble acción). */
   begin: (characterId: Id) => boolean;
   end: (characterId: Id) => void;
@@ -273,6 +279,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       // Lo de antes del prólogo de un PJ que se presenta no se enseña: tampoco se lleva la vista del sitio.
       record(d.character_id, opening.has(d.character_id) && m.chapter?.kind !== 'prologue' ? m : placed(d, m));
       if (touchesJournal(d.event)) notifyJournal(d.character_id);
+      scheduleFights();
     });
     // La vista de un sitio, recién pintada: entra en las burbujas de llegada a ese sitio que aún no la tienen.
     const offScene = illustratorOf(engine)?.onIllustrated((r) => { for (const id of streams.keys()) send(id, 'place', sceneView(r.image, slug)); }) ?? (() => {});
@@ -289,6 +296,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     const offChange = engine.world.onChange((ch) => {
       // Rumores (campaña) y memoria de los NPC: el diario también los recoge.
       if (ch.collection === 'campaign' || ch.collection === 'npcs') for (const id of streams.keys()) notifyJournal(id);
+      if (ch.collection === 'characters' || ch.collection === 'npcs') scheduleFights();
       if (ch.collection !== 'characters' && ch.collection !== 'item_instances') return;
       if (ch.collection === 'characters') notifyJournal(ch.id);
       if (sheetTimer) return;
@@ -376,12 +384,15 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const loc = locOf(id);
       inflight.set(id, { loc, since: ++order });
       sendQueue(loc);
+      scheduleFights();
       return true;
     };
     const end = (id: Id) => {
       const a = inflight.get(id);
       inflight.delete(id);
       if (a) { send(id, 'queue', { waiting_for: [] }); sendQueue(a.loc); }
+      for (const [loc, ids] of resolvingRound) { ids.delete(id); if (!ids.size) resolvingRound.delete(loc); }
+      scheduleFights();
     };
     // «está escribiendo…»: a los demás PJ de la misma localización; caduca solo en la página.
     const typing = (id: Id) => {
@@ -400,7 +411,67 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     };
     const offRound = engine.onScene((n) => {
       for (const id of streams.keys()) if (locOf(id) === n.location_id) send(id, 'round', roundFor(id, n));
+      // Ronda cerrada: el máster la narra hasta que acaban las acciones de los que actuaron.
+      if (!n.open && n.acted.length) resolvingRound.set(n.location_id, new Set(n.acted));
+      scheduleFights();
     });
+    // Combate (fight.ts): sale del log y del mundo (encounter.ts); a cada PJ implicado, su vista cuando cambia,
+    // con aviso de inicio y de fin en su hilo. Se recalcula con cada entrega, cambio, ronda o acción en vuelo.
+    const resolvingRound = new Map<Id, Set<Id>>();
+    /** Combate en el que está cada PJ (ya avisado) y lo último que se le mandó. */
+    const fightIn = new Map<Id, string>();
+    const fightSent = new Map<Id, string>();
+    const avatarOf = (id: Id): string | null => { const img = illustratorOf(engine)?.entityImage('portrait', id); return img ? imageSrc(img, slug) : null; };
+    const encounterIn = (loc: Id): Encounter | null => encounterAt(engine.world, engine.events.recentInLocation(loc, 400), loc, engine.gameNow(), Boolean(engine.roundIn(loc)));
+    const turnCtx = (loc: Id): TurnContext => ({
+      round: engine.roundIn(loc),
+      busy: [...inflight].filter(([, a]) => a.loc === loc).sort((x, y) => x[1].since - y[1].since).map(([id]) => id),
+      resolving: [...(resolvingRound.get(loc) ?? [])],
+      avatar: avatarOf,
+    });
+    const combatFor = (id: Id): CombatView | null => {
+      const loc = locOf(id);
+      const enc = loc ? encounterIn(loc) : null;
+      return enc && loc ? combatView(engine.world, enc, id, turnCtx(loc)) : null;
+    };
+    const lastSeq = (id: Id) => history.get(id)?.at(-1)?.seq ?? 0;
+    const syncFights = () => {
+      const encs = new Map<Id, Encounter | null>();
+      const enc = (loc: Id) => { if (!encs.has(loc)) encs.set(loc, encounterIn(loc)); return encs.get(loc) ?? null; };
+      for (const c of engine.world.characters.values()) {
+        if (c.status === 'retired' || opening.has(c.id)) continue;
+        const loc = locOf(c.id);
+        const e = loc ? enc(loc) : null;
+        const view = e && loc ? combatView(engine.world, e, c.id, turnCtx(loc)) : null;
+        const was = fightIn.get(c.id);
+        let data: CombatView | CombatEnd | { active: false } = view ?? { active: false };
+        if (view && was !== view.key) {
+          fightIn.set(c.id, view.key);
+          const fresh = e && engine.gameNow() - e.started_game_s < 120;
+          const text = fresh ? `⚔ Empieza el combate en ${view.place}` : `⚔ Hay un combate en curso en ${view.place}`;
+          record(c.id, { seq: lastSeq(c.id), kind: 'system', text, combat: { phase: 'start', text } });
+        } else if (!view && was) {
+          fightIn.delete(c.id);
+          const wloc = was.slice(0, was.lastIndexOf(':'));
+          const still = enc(wloc);
+          const left = Boolean(still && `${still.location_id}:${still.started_seq}` === was);
+          const text = left ? 'Sales del combate.' : 'Fin del combate.';
+          record(c.id, { seq: lastSeq(c.id), kind: 'system', text, combat: { phase: 'end', text } });
+          data = { active: false, key: was, why: left ? 'left' : 'ended' };
+        }
+        const json = JSON.stringify(data);
+        if (fightSent.get(c.id) === json || (!view && !was && !fightSent.has(c.id))) continue;
+        fightSent.set(c.id, json);
+        send(c.id, 'combat', data);
+      }
+    };
+    let fightTimer: NodeJS.Timeout | null = null;
+    const scheduleFights = () => {
+      if (fightTimer) return;
+      fightTimer = setTimeout(() => { fightTimer = null; try { syncFights(); } catch (e) { console.error('[web] combate:', e); } }, 150);
+    };
+    // El combate también se acaba solo, al pasar el tiempo sin golpes.
+    const fightClock = setInterval(scheduleFights, 5_000);
     const introduce = (characterId: Id) => {
       opening.add(characterId);
       history.delete(characterId);
@@ -414,11 +485,14 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       left: (id, tab) => presence.close(id, tab),
       beat: (id, tab, state) => { if (state === 'gone') presence.gone(id, tab); else presence.beat(id, tab, state === 'visible'); },
       roundFor: (id: Id) => { const loc = locOf(id); const r = loc ? engine.roundIn(loc) : null; return r ? roundFor(id, r) : null; },
+      combatFor,
       isOpening: (id) => opening.has(id),
       online: (id) => presence.online(id),
       dispose() {
         offDelivery(); offChange(); offScene(); offEntity(); offRound();
         presence.dispose();
+        clearInterval(fightClock);
+        if (fightTimer) clearTimeout(fightTimer);
         for (const t of offlineTimers.values()) clearTimeout(t);
         if (sheetTimer) clearTimeout(sheetTimer);
         for (const t of journalTimers.values()) clearTimeout(t);
@@ -590,6 +664,8 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       res.write(`event: presence\ndata: ${JSON.stringify(rt.presenceFor(id))}\n\n`);
       const round = rt.roundFor(id);
       if (round) res.write(`event: round\ndata: ${JSON.stringify(round)}\n\n`);
+      const fight = rt.combatFor(id);
+      if (fight) res.write(`event: combat\ndata: ${JSON.stringify(fight)}\n\n`);
       if (seat) void seats.update(games.paths(manifest).dir, (list) => { const s = list.find((x) => x.id === seat.id); if (s) s.last_seen_at = new Date().toISOString(); });
       const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
       // «close» de la respuesta: salta al caerse la conexión (tras un proxy, a más tardar al escribir el ping).
