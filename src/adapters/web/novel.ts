@@ -540,7 +540,7 @@ export const NOVEL_JS = String.raw`
     };
     var narrate = function (text) {
       if (m.narrator || m.kind === 'master') return chatRow('master', cast.master, format(text));
-      return add('system', text);
+      return add('system', text, m.dice === 'other' ? { other: true } : undefined);
     };
     // Si el jugador no habla en este turno, su mensaje es lo que ha hecho (en cursiva).
     if (m.input && !lines.some(function (l) { return l.speaker === 'actor'; })) chatRow('mine', meWho(), format(m.input), { act: true });

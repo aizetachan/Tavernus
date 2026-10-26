@@ -908,7 +908,8 @@ ${PAINT_STYLE}
     div.className = 'msg ' + kind + (extra && extra.error ? ' error' : '') + (kind === 'system' ? ' tone-' + toneOf(text, extra) : '');
     div.innerHTML = (kind === 'master' ? '<div class="who">' + SPARK + 'Máster</div>' : '') + '<div class="body">' + format(text) + '</div>';
     log.appendChild(div);
-    if (kind === 'system' && /🎲/.test(text)) {
+    // La tirada propia marca su botón y para el dado; la de otro jugador es solo el aviso.
+    if (kind === 'system' && /🎲/.test(text) && !(extra && extra.other)) {
       var rb = log.querySelectorAll('.actions button.roll'); if (rb.length) rb[rb.length - 1].classList.add('chosen');
       var rolled = String(text).match(/d20\s*\[(\d+)/);
       if (rolled) landRoll(Number(rolled[1])); else stopRoll();

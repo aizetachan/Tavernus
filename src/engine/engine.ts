@@ -32,6 +32,7 @@ import { classifyMoments, seenFromEvents, type DialogueLine, type Moment } from 
 import { characterCheck, type CheckKind } from './rules.js';
 import { activeJobs, addPractice, rotateBoard, type ProgressEvent } from './progress.js';
 import { resolveAttack } from './combat.js';
+import { attackRoll, checkRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
 import { abilityModifier } from './dice.js';
 import { passivePerception, type Ability } from './rules.js';
 import { ABILITIES, backgroundById, classById, raceById, STANDARD_ARRAY } from '../data/srd/index.js';
@@ -105,7 +106,7 @@ interface Batch { items: { id: Id; text: string }[]; members: Id[]; done: Promis
 interface Round { n: number; items: Map<Id, string>; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; deadline_ms: number; timer: NodeJS.Timeout }
 
 export type MasterResolution =
-  | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number } }
+  | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number } }
   | { ok: false; reason: string; message: string; usage?: unknown; calls?: unknown };
 
 /** Un PJ pisa una localización por primera vez (para ilustrarla, src/ai/illustrate.ts). */
@@ -868,7 +869,7 @@ export class Engine {
       const helper = this.takeHelp(c);
       if (helper) pending.roll = { ...pending.roll, advantage: pending.roll.advantage === 'disadvantage' ? 'none' : 'advantage' };
       let result: CheckResult & { label: string };
-      let shown: string;
+      let roll: ShownRoll;
       let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean } | undefined;
       if (pending.roll.kind === 'attack' && pending.roll.target) {
         const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c));
@@ -879,16 +880,14 @@ export class Engine {
           success: atk.hit, ...(atk.natural ? { natural: atk.natural } : {}),
           breakdown: `${atk.attack_breakdown}${atk.hit ? `. Daño: ${atk.damage_breakdown} (${atk.damage_type}). ${atk.target} queda a ${atk.target_hp} PG${atk.target_dead ? ', MUERTO' : atk.target_down ? ', CAE' : ''}. El daño ya está aplicado: no lo apliques otra vez.` : '. Falla.'}`,
         };
-        shown = `🎲 Ataque con ${atk.weapon}: ${atk.attack_breakdown.replace(/ vs CD \d+$/, '')} → ${atk.hit ? `impacta${atk.natural === 20 ? ' (crítico)' : ''}: ${atk.damage} de daño` : 'falla'}`;
+        roll = attackRoll(c.id, pending.roll.target, atk);
       } else {
         result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage);
-        shown = `🎲 ${result.label}: ${result.breakdown.replace(/ vs CD \d+$/, '')} → ${result.success === null ? '—' : result.success ? 'éxito' : 'fallo'}${result.natural ? ` (${result.natural} natural)` : ''}`;
+        roll = checkRoll(c.id, result);
       }
-      if (helper) shown += ` · con la ayuda de ${pcName(this.world, c.id, helper)}`;
-      this.events.emit({
-        actor_id: c.id, action_type: 'roll', input_text: null, narration_private: shown, observable: null,
-        tags: ['roll'], payload: { roll: { ...result, dc: undefined }, ...(attack ? { attack } : {}) },
-      }, this.stampFor(c));
+      if (helper) roll.note = `con la ayuda de ${pcName(this.world, c.id, helper)}`;
+      const shown = rollTextForRoller(roll);
+      this.announceRoll(roll, { roll: { ...result, dc: undefined }, ...(attack ? { attack } : {}) });
       if (pending.roll.kind === 'skill' && (pending.roll.dc ?? 0) >= this.world.campaign.progression.practice_min_dc) {
         const pe = addPractice(this.world, c, pending.roll.key);
         if (pe) this.emitProgress(c, [pe]);
@@ -901,6 +900,22 @@ export class Engine {
       await this.flush();
       return r;
     });
+  }
+
+  /**
+   * Una tirada a la vista (rolls.ts): la ve quien tira, los PJ del mismo lugar,
+   * el objetivo y quien comparte el turno o la ronda. Aviso de sistema, sin
+   * narrador ni coste. Las tiradas ocultas no pasan por aquí.
+   */
+  announceRoll(r: ShownRoll, payload: Record<string, unknown> = {}, action_type = 'roll', tags: string[] = ['roll']): GameEvent | null {
+    const pc = this.world.characters.get(r.roller_id);
+    const spot = pc ? this.world.characterSpot(pc) : null;
+    if (!pc || !spot) return null;
+    const group = [...this.sharing.values()].filter((s) => s.ids.includes(pc.id) || (r.target_id && s.ids.includes(r.target_id))).flatMap((s) => s.ids);
+    return this.events.emit({
+      actor_id: pc.id, action_type, input_text: null, narration_private: rollTextForRoller(r), observable: rollTextForOthers(this.world, r),
+      visibility: 'private', also_to: rollAudience(this.world, spot.location_id, pc.id, group, r.target_id), tags, payload: { master: null, shown_roll: r, ...payload },
+    }, this.stampFor(pc));
   }
 
   private openDecisive(c: Character, d: { threat: string; npc_id: string | null }, eventId: Id): void {
@@ -1018,6 +1033,7 @@ export class Engine {
     }, this.stampFor(c));
     if (k.requires_roll) this.pendingRolls.set(c.id, { text, roll: k.requires_roll, event_id: event.id });
     if (k.decisive && scene !== 'decisive_timeout' && c.status === 'active') this.openDecisive(c, k.decisive, event.id);
+    for (const sr of out.shown_rolls ?? []) this.announceRoll(sr);
     if (out.progress?.length) this.emitProgress(c, out.progress);
     const r: ActionResult = { ok: true, text: k.narration_private, event, suggested_actions: k.suggested_actions };
     if (k.requires_roll) r.requires_roll = k.requires_roll;
@@ -2141,16 +2157,16 @@ export class Engine {
     this.announceDeathStates();
   }
 
-  /** Una salvación contra muerte, tirada por el servidor y contada solo al caído. */
+  /** Una salvación contra muerte, tirada por el servidor: la ve el caído y quien está con él. */
   private deathSave(c: Character, atGameS: number): DeathSave | null {
     const r = rollDeathSave(this.world, c, atGameS, this.rng);
     if (!r) return null;
     if (c.dying) c.dying.next_game_s = Math.max(c.dying.next_game_s, atGameS + SAVE_EVERY_THREAT_S);
-    const what = r.outcome === 'revive' ? '20 natural' :`${r.natural}${r.natural === 1 ? ' (1 natural: dos fallos)' : ''} → ${r.outcome === 'success' ? 'éxito' : 'fallo'}`;
-    this.events.emit({
-      actor_id: c.id, action_type: 'death_save', narration_private: `🎲 Salvación contra muerte: ${what}.${r.outcome === 'revive' || r.died ? '' : ` Éxitos ${r.success}/3 · fallos ${r.fail}/3.`}`,
-      observable: null, tags: ['roll', 'death'], payload: { master: null, death_save: r },
-    }, this.stampFor(c));
+    this.announceRoll({
+      roller_id: c.id, label: 'Salvación contra muerte', dice: `d20 [${r.natural}]`, total: r.natural,
+      outcome: r.outcome === 'revive' ? '20 natural: vuelve en sí' : r.natural === 1 ? 'fallo (1 natural: dos fallos)' : r.outcome === 'success' ? 'éxito' : 'fallo',
+      ...(r.outcome === 'revive' || r.died ? {} : { note: `éxitos ${r.success}/3 · fallos ${r.fail}/3` }),
+    }, { death_save: r }, 'death_save', ['roll', 'death']);
     return r;
   }
 

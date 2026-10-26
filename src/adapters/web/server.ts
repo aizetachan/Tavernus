@@ -79,7 +79,7 @@ import type { SceneNotice } from '../../engine/engine.js';
 const MASTER_TYPES = new Set(['master', 'master_roll_outcome', 'master_intro', 'master_arrival', 'prologue', 'recap']);
 const HISTORY = 200;
 /** Avisos fuera de la ficción: tiradas, progreso, anuncios, tablón. Lo demás lo cuenta el narrador. */
-const SYSTEM_TYPES = /^(roll|progress_|announcement|board|admin_|decisive_expired|budget)/;
+const SYSTEM_TYPES = /^(roll|death_save|progress_|announcement|board|admin_|decisive_expired|budget)/;
 /** Tras cerrar la última pestaña, el aviso «ha salido» espera esto (una recarga no cuenta como salir). */
 const LEAVE_NOTICE_MS = 20_000;
 /** Y la presencia del motor (SPEC §9.1: dormir con velo) cae a los 30 min, como su gracia por acción. */
@@ -104,6 +104,8 @@ export interface WebMessage {
   text: string;
   /** Botones: solo para el actor del evento. */
   roll?: { kind: string; key: string; dc: number | null };
+  /** Tirada a la vista (rolls.ts): la propia (anima el dado del botón) o la de otro (solo el aviso). */
+  dice?: 'mine' | 'other';
   suggested?: string[];
   decisive_s?: number;
   /** Modo novela (solo para el actor): la narración sin los parlamentos y, aparte, cada parlamento. */
@@ -894,6 +896,13 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   const notice = noticeOf(e);
   if (notice) { m.text = ''; m.notice = notice; return m; }
   if (!SYSTEM_TYPES.test(e.action_type)) m.narrator = true;
+  // Tirada a la vista: un aviso de sistema para quien tira y para quien está con él, sin narrador.
+  if (e.payload['shown_roll']) {
+    m.dice = e.actor_id === d.character_id ? 'mine' : 'other';
+    const sfx = m.dice === 'mine' ? soundCuesOf(engine, e) : [];
+    if (sfx.length) m.sfx = sfx;
+    return m;
+  }
   // Turno compartido (grupo o ronda): cada participante lo ve como suyo, con su propia acción y la de los demás.
   const group = Array.isArray(e.payload['group']) && (e.payload['group'] as Id[]).includes(d.character_id);
   if (e.actor_id !== d.character_id && !group) return witnessMessage(m, d, engine);
