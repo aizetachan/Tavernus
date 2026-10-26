@@ -87,7 +87,7 @@ if [ "$fails" -ge 2 ] && [ $(((fails - 2) % 10)) = 0 ]; then
   state=$(systemctl is-active "$SERVICE" 2>/dev/null)
   systemctl reset-failed "$SERVICE" 2>/dev/null
   systemctl restart "$SERVICE"
-  # Sin tokens: el journal lleva el enlace de admin y el aviso sale a Telegram/Discord.
+  # Sin tokens: el journal de versiones antiguas llevaba el enlace de admin y el aviso sale a Telegram/Discord.
   last=$(journalctl -u "$SERVICE" -n 8 --no-pager -o cat 2>/dev/null | tail -n 8 | cut -c1-200     | sed -E 's/(token=)[A-Za-z0-9_-]+/…/g; s#(/i/[a-z0-9-]+/)[A-Za-z0-9_-]+#…#g')
   if [ "$fails" = 2 ] || [ $(((fails - 2) % 60)) = 0 ]; then
     alert "la web no responde desde hace $fails min ($PROBE_DETAIL; servicio: $state). Reiniciada. Últimas líneas:

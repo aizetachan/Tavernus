@@ -212,7 +212,7 @@ Código: `src/engine/death.ts` (caer, salvaciones, muerte, cuerpo, vuelta), `src
 
 ## Cómo jugar con un amigo (resumen; detalle en el README)
 
-1. En el servidor: `ADMIN_TOKEN=<algo largo>` y, detrás de HTTPS, `PUBLIC_URL=https://tu-dominio`. Arranca con `npm run web` (o el servicio); el log imprime el enlace de administración.
+1. En el servidor: `ADMIN_TOKEN=<algo largo>` y, detrás de HTTPS, `PUBLIC_URL=https://tu-dominio`. Arranca con `npm run web` (o el servicio); el log dice dónde leer el token de administración, sin escribirlo.
 2. Abre `https://tu-dominio/admin?token=…`, crea la partida con tu personaje y «Plazas para amigos: 1».
 3. En «⚙ → Invitaciones», copia el enlace del asiento libre y pásaselo a tu amigo. Guarda también el tuyo, para entrar desde otro dispositivo.
 4. Tu amigo abre el enlace, crea su personaje («Empezar junto a…» marcado) y ya estáis en el mismo sitio.

@@ -46,6 +46,7 @@
  *   POST /api/seat/claim?game=SLUG  asiento libre: crea el PJ del invitado
  * Presencia: SSE «presence» con quién está en línea y dónde respecto a ti; avisos en el hilo al entrar y salir.
  * Una acción a la vez por PJ (409 si ya tiene una en curso) y SSE «queue» si espera a otro PJ del mismo sitio.
+ * Registro (servicelog.ts): una línea por acción con su máster, otra por llamada suelta al máster y la presencia.
  */
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -82,6 +83,7 @@ import { descriptorOf } from '../../engine/narrate.js';
 import type { SceneNotice } from '../../engine/engine.js';
 import { encounterAt, type Encounter } from '../../engine/encounter.js';
 import { combatView, type CombatEnd, type CombatView, type TurnContext } from './fight.js';
+import { ActionLog, presenceLine } from './servicelog.js';
 
 const MASTER_TYPES = new Set(['master', 'master_roll_outcome', 'master_intro', 'master_arrival', 'prologue', 'recap']);
 const HISTORY = 200;
@@ -182,6 +184,8 @@ interface Runtime {
   /** Acción en curso por PJ: false si ya tenía una (bloqueo de doble acción). */
   begin: (characterId: Id) => boolean;
   end: (characterId: Id) => void;
+  /** Registro de acciones de esta partida (servicelog.ts). */
+  actions: ActionLog;
   dispose: () => void;
 }
 
@@ -207,6 +211,8 @@ export interface WebServerOptions {
   staleMs?: number;
   hiddenMs?: number;
   engineOfflineMs?: number;
+  /** Registro del servicio (servicelog.ts); por defecto, la salida estándar (journald en el VPS). */
+  log?: (line: string) => void;
 }
 
 export function createWebServer(games: GameManager, opts: WebServerOptions = {}): WebServer {
@@ -216,6 +222,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
   const claiming = new Set<string>();
   const timing: PresenceTiming = { graceMs: opts.leaveNoticeMs ?? PRESENCE_TIMING.graceMs, staleMs: opts.staleMs ?? PRESENCE_TIMING.staleMs, hiddenMs: opts.hiddenMs ?? PRESENCE_TIMING.hiddenMs };
   const engineOfflineMs = opts.engineOfflineMs ?? ENGINE_OFFLINE_MS;
+  const log = opts.log ?? ((line: string) => console.log(line));
 
   const timer = setInterval(() => {
     void games.openEngines().then((list) => { for (const [, e] of list) void e.tick(); });
@@ -319,8 +326,18 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       if (sheetTimer) return;
       sheetTimer = setTimeout(() => { sheetTimer = null; for (const id of streams.keys()) { send(id, 'sheet', {}); send(id, 'presence', presenceFor(id)); } }, 300);
     });
+    // Registro: cada llamada al máster va a la acción en curso de su PJ o sale sola (servicelog.ts).
+    const charName = (id: Id) => engine.world.characters.get(id)?.name ?? null;
+    const actions = new ActionLog(slug, charName, log);
+    const offMaster = engine.onMaster((c) => actions.master(c));
     // Presencia: pestañas que cuentan por PJ (presence.ts). La web avisa al entrar y al irse; el motor (§9.1) duerme y vela al ausente.
-    const presence = new PresenceTracker(timing, (id, online) => { if (online) cameOnline(id); else wentOffline(id); });
+    const presence = new PresenceTracker(timing, (id, online) => {
+      log(presenceLine(slug, id, charName(id), online ? 'en_línea' : 'fuera_de_línea'));
+      if (online) cameOnline(id); else wentOffline(id);
+    });
+    const tabsOpen = new Map<Id, number>();
+    const tabLog = (id: Id, event: 'conecta' | 'desconecta' | 'cierra_pestaña', tab: string, extra: Record<string, string | number> = {}) =>
+      log(presenceLine(slug, id, charName(id), event, { pestaña: tab.slice(0, 8), ...extra }));
     /** Quien ya estuvo en línea desde que se abrió la partida: al volver, «ha vuelto» en vez de «ha entrado». */
     const seen = new Set<Id>();
     const offlineTimers = new Map<Id, NodeJS.Timeout>();
@@ -372,7 +389,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const wasVeiled = Boolean(c && c.veiled && c.status === 'asleep');
       engine.setPresence(id, true);
       // Se durmió al irse (velo): al volver se despierta solo.
-      if (wasVeiled) void engine.act(id, 'despierto').catch((e) => console.error('[web] despertar:', e));
+      if (wasVeiled) void engine.act(id, 'despierto').catch((e) => console.error(`[web] despertar partida=${slug} pj=${id}:`, e));
       // Vuelve: deja de estar ausente (los presentes leen «ha vuelto» del motor; el resto, el aviso de la web).
       const wasAway = Boolean(engine.world.characters.get(id)?.away);
       engine.setAway(id, false);
@@ -499,20 +516,31 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       history.delete(characterId);
       held.delete(characterId);
       void engine.introduce(characterId)
-        .catch((e) => console.error('[web] intro:', e))
+        .catch((e) => console.error(`[web] intro partida=${slug} pj=${characterId}:`, e))
         .finally(() => { opening.delete(characterId); releaseHeld(characterId); });
     };
     return {
-      engine, streams, history, introduce, presenceFor, begin, end, typing,
-      joined: (id, tab, beats) => presence.open(id, tab, beats),
-      left: (id, tab) => presence.close(id, tab),
-      beat: (id, tab, state) => { if (state === 'gone') presence.gone(id, tab); else presence.beat(id, tab, state === 'visible'); },
+      engine, streams, history, introduce, presenceFor, begin, end, typing, actions,
+      joined: (id, tab, beats) => {
+        tabsOpen.set(id, (tabsOpen.get(id) ?? 0) + 1);
+        tabLog(id, 'conecta', tab, { streams: tabsOpen.get(id)!, ...(beats ? {} : { latido: 'no' }) });
+        presence.open(id, tab, beats);
+      },
+      left: (id, tab) => {
+        const n = Math.max(0, (tabsOpen.get(id) ?? 1) - 1);
+        if (n) tabsOpen.set(id, n); else tabsOpen.delete(id);
+        tabLog(id, 'desconecta', tab, { streams: n });
+        presence.close(id, tab);
+      },
+      beat: (id, tab, state) => {
+        if (state === 'gone') { tabLog(id, 'cierra_pestaña', tab); presence.gone(id, tab); } else presence.beat(id, tab, state === 'visible');
+      },
       roundFor: (id: Id) => { const loc = locOf(id); const r = loc ? engine.roundIn(loc) : null; return r ? roundFor(id, r) : null; },
       combatFor,
       isOpening: (id) => opening.has(id),
       online: (id) => presence.online(id),
       dispose() {
-        offDelivery(); offChange(); offScene(); offEntity(); offRound();
+        offDelivery(); offChange(); offScene(); offEntity(); offRound(); offMaster();
         presence.dispose();
         clearInterval(fightClock);
         if (fightTimer) clearTimeout(fightTimer);
@@ -666,7 +694,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const id = characterOr404(engine, characterParam, res);
       if (!id) return;
       // Vuelve tras días sin jugar: «Donde lo dejamos» entra en el historial antes de mandarlo.
-      await engine.welcomeBack(id).catch((e) => console.error('[web] recap:', e));
+      await engine.welcomeBack(id).catch((e) => console.error(`[web] recap partida=${slug} pj=${id}:`, e));
       // no-transform y x-accel-buffering: que ningún proxy (túnel de Cloudflare, nginx) comprima ni retenga el stream; el relleno inicial fuerza el primer envío.
       res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
       res.write(':' + ' '.repeat(2048) + '\n\n');
@@ -729,7 +757,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           const text = typeof body['text'] === 'string' ? body['text'].trim() : '';
           if (!text) { json(res, 400, { ok: false, text: 'Acción vacía.' }); return; }
           if (!rt.begin(id)) { json(res, 409, { ok: false, text: 'Ya tienes una acción en curso: espera a que el narrador responda.' }); return; }
-          try { json(res, 200, reply(await engine.act(id, text))); } finally { rt.end(id); }
+          try { json(res, 200, reply(await rt.actions.track(id, 'act', () => engine.act(id, text), refused))); } finally { rt.end(id); }
           return;
         }
         case '/api/say': {
@@ -740,7 +768,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           if (sayLooksLikeAction(text)) { json(res, 200, { ok: true, text: null, as_action: true }); return; }
           const to = typeof body['to'] === 'string' && body['to'] ? body['to'] : null;
           const mode = body['mode'] === 'shout' || body['mode'] === 'whisper' ? body['mode'] : undefined;
-          json(res, 200, reply(await engine.say(id, text, { to, ...(mode ? { mode } : {}) })));
+          json(res, 200, reply(await rt.actions.track(id, 'say', () => engine.say(id, text, { to, ...(mode ? { mode } : {}) }), refused)));
           return;
         }
         case '/api/presence': {
@@ -757,7 +785,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         }
         case '/api/offer': {
           const offer = typeof body['offer'] === 'string' ? body['offer'] : '';
-          json(res, 200, reply(await engine.answerOffer(id, offer, body['accept'] === true)));
+          json(res, 200, reply(await rt.actions.track(id, 'offer', () => engine.answerOffer(id, offer, body['accept'] === true), refused)));
           return;
         }
         case '/api/reaction': {
@@ -766,22 +794,22 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           const text = typeof body['text'] === 'string' ? body['text'].trim() : '';
           if (!answer && !text) { json(res, 400, { ok: false, text: '¿Te dejas o te resistes?' }); return; }
           if (!rt.begin(id)) { json(res, 409, { ok: false, text: 'Ya tienes una acción en curso: espera a que el narrador responda.' }); return; }
-          try { json(res, 200, reply(await engine.answerReaction(id, reaction, answer, text || null))); } finally { rt.end(id); }
+          try { json(res, 200, reply(await rt.actions.track(id, 'reaction', () => engine.answerReaction(id, reaction, answer, text || null), refused))); } finally { rt.end(id); }
           return;
         }
         case '/api/roll': {
           if (!rt.begin(id)) { json(res, 409, { ok: false, text: 'Ya tienes una acción en curso: espera a que el narrador responda.' }); return; }
-          try { json(res, 200, reply(await engine.rollPending(id))); } finally { rt.end(id); }
+          try { json(res, 200, reply(await rt.actions.track(id, 'roll', () => engine.rollPending(id), refused))); } finally { rt.end(id); }
           return;
         }
         case '/api/quest/drop': {
           const quest = typeof body['quest'] === 'string' ? body['quest'] : '';
-          json(res, 200, await engine.dropQuest(id, quest));
+          json(res, 200, await rt.actions.track(id, 'quest_drop', () => engine.dropQuest(id, quest), refused));
           return;
         }
         case '/api/command': {
           const name = typeof body['name'] === 'string' ? body['name'] : '';
-          json(res, 200, { ok: true, text: await engine.command(id, name) });
+          json(res, 200, { ok: true, text: await rt.actions.track(id, 'command', () => engine.command(id, name)) });
           return;
         }
       }
@@ -980,6 +1008,26 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
 }
 
 /**
+ * Lo que la web dice al arrancar sobre el acceso. Nunca el token de administración: el registro acaba en
+ * journald (y en las alertas); se dice dónde leerlo, y quien entra al servidor lo consulta allí.
+ */
+export function accessBanner(access: AccessOptions, base: string, env: NodeJS.ProcessEnv, root: string): string[] {
+  const out = [`[web] abre ${base}`];
+  if (access.mode === 'open') {
+    out.push('[web] acceso abierto: cualquiera que llegue a esta URL juega con cualquier personaje (WEB_ACCESS=invite o ADMIN_TOKEN para invitaciones)');
+    return out;
+  }
+  out.push(access.mode === 'public'
+    ? '[web] acceso público: cada navegador crea y ve sus partidas; los enlaces de invitación unen a otras.'
+    : '[web] acceso por invitación.');
+  const where = env['ADMIN_TOKEN']?.trim()
+    ? 'la variable ADMIN_TOKEN (en el VPS: sudo grep ^ADMIN_TOKEN /etc/tavernus/env)'
+    : `el fichero ${join(root, '.admin-token')}`;
+  out.push(`[web] administración: ${base}/admin?token=<token>. El token está en ${where}; no lo compartas.`);
+  return out;
+}
+
+/**
  * Arranca la web. WEB_HOST (127.0.0.1) dice dónde escucha; detrás de un proxy con HTTPS basta el de por
  * defecto. El acceso sale de WEB_ACCESS / ADMIN_TOKEN (access.ts); PUBLIC_URL solo sirve para imprimir enlaces.
  */
@@ -989,14 +1037,7 @@ export async function startWeb(games: GameManager, port: number, env: NodeJS.Pro
   const web = createWebServer(games, { access });
   await new Promise<void>((resolve) => web.server.listen(port, host, resolve));
   const base = (env['PUBLIC_URL']?.trim() || `http://localhost:${port}`).replace(/\/+$/, '');
-  console.log(`[web] abre ${base}`);
-  if (access.mode === 'public') {
-    console.log(`[web] acceso público: cada navegador crea y ve sus partidas; los enlaces de invitación unen a otras. Administración (no la compartas): ${base}/admin?token=${access.adminToken}`);
-  } else if (access.mode === 'invite') {
-    console.log(`[web] acceso por invitación. Enlace de administración (no lo compartas): ${base}/admin?token=${access.adminToken}`);
-  } else {
-    console.log('[web] acceso abierto: cualquiera que llegue a esta URL juega con cualquier personaje (WEB_ACCESS=invite o ADMIN_TOKEN para invitaciones)');
-  }
+  for (const line of accessBanner(access, base, env, games.root)) console.log(line);
   await new Promise<void>((resolve) => {
     const stop = () => { void web.stop().then(resolve); };
     process.once('SIGINT', stop);
@@ -1011,6 +1052,9 @@ function characterOr404(engine: Engine, id: string | null, res: ServerResponse):
 }
 
 /** Con evento, la narración ya llegó por el stream; sin él (consultas, errores) va en la respuesta. */
+/** El motor dijo que no (para el registro: resultado=rechazada). */
+const refused = (r: { ok: boolean }) => !r.ok;
+
 function reply(r: ActionResult): { ok: boolean; text: string | null; say_to?: { id: Id; name: string }; info?: InfoAnswer } {
   if (!r.ok) return { ok: false, text: r.text };
   return { ok: true, text: r.event ? null : r.text, ...(r.say_to ? { say_to: r.say_to } : {}), ...(r.info ? { info: r.info } : {}) };

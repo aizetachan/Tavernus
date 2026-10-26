@@ -125,6 +125,22 @@ export type MasterResolution =
   | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number } }
   | { ok: false; reason: string; message: string; usage?: unknown; calls?: unknown };
 
+/**
+ * Una llamada al máster, para el registro del servicio: quién, de qué tipo, modelo, cuánto tardó, tokens y error.
+ * Sin el texto del jugador ni la narración.
+ */
+export interface MasterCall {
+  character_id: Id;
+  /** Tipo del evento que cierra (master, master_intro, master_arrival…). */
+  action_type: string;
+  ok: boolean;
+  model: string | null;
+  ms: number;
+  usage: { input: number; output: number; cache_read: number; cache_write: number; iterations: number } | null;
+  error?: { reason: string; message: string };
+}
+export type MasterCallListener = (c: MasterCall) => void;
+
 /** Un PJ pisa una localización por primera vez (para ilustrarla, src/ai/illustrate.ts). */
 export interface FirstVisit { character_id: Id; location_id: Id; game_s: number }
 export type FirstVisitListener = (v: FirstVisit) => void;
@@ -189,6 +205,13 @@ export class Engine {
   private static readonly MECHANICAL = /^(inventario|inventory|qui[eé]n|who|d[oó]nde|where|dormir|duermo|me duermo|descansar|descanso|sleep|despierto|despertar|me despierto|wake|parar|me paro|me detengo|stop)\b/i;
 
   attachMaster(m: MasterLike | null): void { this.master = m; }
+
+  private masterListeners: MasterCallListener[] = [];
+  /** Cada llamada al máster (la web la apunta en el registro con la partida). */
+  onMaster(l: MasterCallListener): () => void {
+    this.masterListeners.push(l);
+    return () => { this.masterListeners = this.masterListeners.filter((x) => x !== l); };
+  }
 
   /** Salud del proceso para /estado (tiempo real, no de juego). */
   readonly startedMs = Date.now();
@@ -1205,12 +1228,24 @@ export class Engine {
 
   private async resolveWithMaster(c: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string; prologue?: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<ActionResult> {
     const t0 = Date.now();
-    const out = await this.master!.resolve(c, text, roll, intro, scene, decisive);
+    const actionType = intro ? 'master_intro' : scene === 'arrival' ? 'master_arrival' : scene === 'hook' ? 'master_hook' : roll ? 'master_roll_outcome' : 'master';
+    let out: MasterResolution;
+    try {
+      out = await this.master!.resolve(c, text, roll, intro, scene, decisive);
+    } catch (e) {
+      this.reportMaster({ character_id: c.id, action_type: actionType, ok: false, model: null, ms: Date.now() - t0, usage: null, error: { reason: 'exception', message: (e as Error).message } });
+      throw e;
+    }
     if (out.ok) { this.masterOk.push({ ts: Date.now(), ms: Date.now() - t0 }); if (this.masterOk.length > 500) this.masterOk.shift(); }
     else { this.masterErr.push({ ts: Date.now(), reason: out.reason, message: out.message.slice(0, 200) }); if (this.masterErr.length > 100) this.masterErr.shift(); }
+    this.reportMaster({
+      character_id: c.id, action_type: actionType, ok: out.ok, model: out.ok ? out.model : null, ms: Date.now() - t0, usage: usageOf(out.usage),
+      ...(out.ok ? {} : { error: { reason: out.reason, message: out.message } }),
+    });
     if (!out.ok) {
       this.announcePending(c.id);
-      console.warn(`[master] ${out.reason}: ${out.message}`);
+      // Sin oyentes (REPL, Discord), el aviso de siempre; la web lo apunta con la partida y el PJ.
+      if (!this.masterListeners.length) console.warn(`[master] ${out.reason}: ${out.message}`);
       if (out.reason === 'refusal') return { ok: false, text: 'El narrador prefiere no seguir por ahí. Prueba otra cosa.' };
       return { ok: false, text: '' };
     }
@@ -1235,7 +1270,7 @@ export class Engine {
     const share = this.sharing.get(c.id);
     if (share) { payload['group'] = share.ids; payload['group_inputs'] = share.inputs; }
     const event = this.events.emit({
-      actor_id: c.id, action_type: intro ? 'master_intro' : scene === 'arrival' ? 'master_arrival' : scene === 'hook' ? 'master_hook' : roll ? 'master_roll_outcome' : 'master', input_text: intro || scene ? null : share ? share.inputs[c.id] ?? text : text,
+      actor_id: c.id, action_type: actionType, input_text: intro || scene ? null : share ? share.inputs[c.id] ?? text : text,
       narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags, ...(share ? ['shared'] : [])], payload,
       ...(share ? { also_to: share.ids.filter((id) => id !== c.id) } : {}),
     }, this.stampFor(c));
@@ -1248,6 +1283,12 @@ export class Engine {
     const r: ActionResult = { ok: true, text: k.narration_private, event, suggested_actions: k.suggested_actions };
     if (k.requires_roll) r.requires_roll = k.requires_roll;
     return r;
+  }
+
+  private reportMaster(call: MasterCall): void {
+    for (const l of this.masterListeners) {
+      try { l(call); } catch (e) { console.error('[master] registro:', e); }
+    }
   }
 
   /** «Dejar esta misión» desde el Diario (quests.ts): sin máster; un aviso de una línea en el hilo. */
@@ -3110,3 +3151,11 @@ export function transferErrorText(e: TransferError): string {
 }
 
 export { spotOfPlacement };
+
+/** Tokens del máster (MasterUsage de src/ai/master.ts; el contrato lo deja en unknown). */
+function usageOf(u: unknown): MasterCall['usage'] {
+  if (!u || typeof u !== 'object') return null;
+  const o = u as Record<string, unknown>;
+  const n = (k: string) => (typeof o[k] === 'number' ? o[k] as number : 0);
+  return { input: n('input'), output: n('output'), cache_read: n('cache_read'), cache_write: n('cache_write'), iterations: n('iterations') };
+}
