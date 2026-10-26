@@ -11,7 +11,11 @@ import type { World } from '../src/engine/world.js';
 import type { Engine } from '../src/engine/engine.js';
 import { moveTo, positionOf } from '../src/engine/movement.js';
 import { perceive } from '../src/engine/perception.js';
-import { bootEngine } from './helpers.js';
+import { bootEngine, freshWorld } from './helpers.js';
+import { authoredSeed } from '../src/data/campaigns/index.js';
+import { World as WorldClass } from '../src/engine/world.js';
+import { ensureWaypoint } from '../src/engine/travel.js';
+import { ambienceOf } from '../src/adapters/web/soundmap.js';
 
 /** El PJ ya ha pasado por todos los puntos: el revelado (reveal.ts) deja ver todos los muebles. */
 function knowAll(engine: Engine, characterId: string): void {
@@ -771,5 +775,23 @@ describe('tipos de lugar', () => {
     const exteriors = ['Plaza Mayor', 'Calle del Horno', 'Claro de las Hayas', 'Muelle Viejo', 'Las Afueras'].map((n) => JSON.stringify(generateMap(base(n, false))));
     expect(new Set(interiors).size).toBe(interiors.length);
     expect(new Set(exteriors).size).toBe(exteriors.length);
+  });
+});
+
+describe('tramos de camino', () => {
+  it('un tramo se plantea y suena por su zona, no por su nombre («Camino entre Plaza…» no es una plaza)', () => {
+    const world = new WorldClass(authoredSeed('brezal'));
+    const spot = ensureWaypoint(world, 'ex_plaza_claro');
+    const loc = world.location(spot.location_id);
+    expect(loc.name).toBe('Camino entre Plaza del Pozo y El Soto');
+    // Dentro de la aldea: una calle, no la plaza; y nada de arboleda por el «Soto» del nombre.
+    expect(placeTypeOf(mapInputOf(world, loc.id))).toBe('street');
+    const { clock, t0 } = freshWorld();
+    expect(['plaza', 'plaza-noche']).toContain(ambienceOf(world, { clock }, loc, t0));
+    // En una zona de bosque, el mismo tramo sería un sendero sin edificios.
+    world.zones.set(loc.zone_id, { ...world.zones.get(loc.zone_id)!, name: 'Bosque de Fresnos', kind: 'forest' });
+    const input = mapInputOf(world, loc.id);
+    expect(placeTypeOf(input)).toBe('forest');
+    expect(generateMap(input).props.some((p) => p.kind === 'building')).toBe(false);
   });
 });

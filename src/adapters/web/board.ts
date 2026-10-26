@@ -6,6 +6,7 @@
  * semilla de la campaña) y se recorta aquí a lo que ve el PJ.
  *
  *   GET /api/board?character=ID[&mapseed=N]
+ *   GET /api/board/background?character=ID   fondo pintado del plano donde está el PJ (JPEG), si lo hay
  *
  * `mapseed` (depuración): genera el plano con esa semilla, sin caché ni tocar
  * la campaña. Vale también en la URL de la página (`/play?game=…&mapseed=7`):
@@ -15,6 +16,7 @@
  *   if (req.method === 'GET' && url.pathname === '/api/board') { handleBoardRequest(engine, req, res, url); return; }
  */
 
+import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Engine } from '../../engine/engine.js';
 import type { Id, LightLevel, Location, PerceptionLevel, Spot } from '../../engine/model.js';
@@ -34,6 +36,7 @@ function talkingLabel(engine: Engine, readerId: Id, npcId: Id): { talking_with?:
   return { talking_with: ids.map((id) => (id === readerId ? 'tú' : pcName(w, readerId, w.character(id)))).join(' y ') };
 }
 import type { LocationMap, MapPoint } from '../../data/seed/maps.js';
+import { assetsFor, writtenMapBackground } from '../../ai/assets.js';
 import { mapCacheOf } from './mapcache.js';
 import { generateMap, mapExtent, mapInputOf } from './mapgen.js';
 import { revealMap, revealTrackerOf } from './reveal.js';
@@ -82,6 +85,11 @@ export interface BoardState {
   location: { id: Id; name: string; description: string; light: LightLevel; indoor: boolean };
   /** Plano: suelo, paredes, puertas y muebles; sin lo que dependa de puntos que el PJ no ve ni los muebles de puntos con los que aún no ha interactuado (reveal.ts). */
   map: LocationMap;
+  /**
+   * Fondo pintado del plano (docs/ARTE.md), o null. Cubre `bounds`, los del plano escrito, que ya incluyen lo
+   * oculto: así no se mueve al descubrir algo. Lleva el suelo, las paredes y los muebles; lo oculto no (`secret`).
+   */
+  background: { src: string; bounds: LocationMap['bounds'] } | null;
   spots: BoardSpot[];
   exits: BoardExit[];
   actor: {
@@ -191,11 +199,13 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
   const destLoc = c.transit ? world.spots.get(c.transit.destination_spot_id)?.location_id : undefined;
   if (destLoc && destLoc !== loc.id && !neighbors.includes(destLoc)) neighbors.push(destLoc);
   cache.preloadFor(c.id);
+  const painted = opts.mapSeed === undefined && writtenMapBackground(assetsFor(world.campaign.id), world.campaign.id, loc.id);
 
   return {
     location: { id: loc.id, name: loc.name, description: loc.description_base, light: lightAt(engine.clock, loc, nowG), indoor: loc.indoor },
     // Primero lo que ve (puntos ocultos), luego lo que ya conoce (muebles de los puntos donde ha estado o hecho algo).
     map: revealMap(clipMap(base, visible), visible, revealTrackerOf(engine).seenBy(c.id), pos.spot_id),
+    background: painted ? { src: `/api/board/background?character=${encodeURIComponent(c.id)}&loc=${encodeURIComponent(loc.id)}`, bounds: base.bounds } : null,
     spots,
     exits,
     actor: { id: c.id, name: c.name, spot_id: pos.spot_id, x: pos.x, y: pos.y, transit },
@@ -214,14 +224,16 @@ export function mapFor(loc: Location, visibleSpots: Spot[], seed = 0): LocationM
 
 /**
  * Recorta el plano a lo que ve el PJ: quita lo que pide un punto que no ve.
- * Los límites del plano ya no cuentan lo oculto; crecen con lo que se
- * descubre, y siempre caben todos los puntos visibles.
+ * Lo que pedía un punto que ya ve queda marcado `secret` (el fondo pintado no
+ * lo lleva y la página lo dibuja encima). Los límites del plano ya no cuentan
+ * lo oculto; crecen con lo que se descubre, y siempre caben todos los puntos
+ * visibles.
  */
 export function clipMap(base: LocationMap, visibleSpots: Spot[]): LocationMap {
   const ids = new Set(visibleSpots.map((s) => s.id));
   const ok = (r: { requires_spot?: Id }) => !r.requires_spot || ids.has(r.requires_spot);
   const strip = <T extends { requires_spot?: Id }>(xs: T[]): T[] =>
-    xs.filter(ok).map((x) => { const { requires_spot: _r, ...rest } = x; return rest as T; });
+    xs.filter(ok).map((x) => { const { requires_spot: r, ...rest } = x; return (r ? { ...rest, secret: true } : rest) as T; });
   const out: LocationMap = { ...base, areas: strip(base.areas), walls: strip(base.walls), doors: strip(base.doors), props: strip(base.props) };
   out.bounds = grow(base.bounds, mapExtent(out));
   out.bounds = grow(out.bounds, visibleSpots.flatMap((s): MapPoint[] => [[s.x - SPOT_PAD, s.y - SPOT_PAD], [s.x + SPOT_PAD, s.y + SPOT_PAD]]));
@@ -254,6 +266,24 @@ export function handleBoardRequest(engine: Engine, req: IncomingMessage, res: Se
   }
   res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(boardState(engine, id, { mapSeed: mapSeedParam(url, req) })));
+}
+
+/** Fondo pintado del plano donde está el PJ; 404 si no hay. `loc` solo sirve para que la caché cambie al cambiar de sitio. */
+export async function handleBoardBackgroundRequest(engine: Engine, res: ServerResponse, url: URL): Promise<void> {
+  const id = url.searchParams.get('character');
+  const world = engine.world;
+  const c = id ? world.characters.get(id) : undefined;
+  const loc = c ? positionOf(world, c, engine.gameNow()).location_id : null;
+  const file = loc ? writtenMapBackground(assetsFor(world.campaign.id), world.campaign.id, loc) : null;
+  let bytes: Buffer | null = null;
+  if (file) { try { bytes = await readFile(file); } catch { /* sin fichero */ } }
+  if (!bytes) {
+    res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ ok: false, text: 'Sin fondo.' }));
+    return;
+  }
+  res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=3600' });
+  res.end(bytes);
 }
 
 /** `mapseed` de la consulta o, si no, de la página que pide el tablero (Referer). */

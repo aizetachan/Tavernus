@@ -50,7 +50,8 @@ export const PAGE = String.raw`<!doctype html>
   /* Panel de la partida. */
   aside { flex: 0 0 380px; display: flex; flex-direction: column; min-width: 0; background: var(--panel); border-right: 1px solid var(--sep); }
   .side-head { display: flex; align-items: center; gap: 10px; padding: 14px 8px 10px 16px; flex: none; }
-  .side-head .mark { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 9px; background: var(--accent-tint); color: var(--accent); font: 800 18px/1 var(--display); text-decoration: none; }
+  .side-head .mark { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 9px; background: var(--accent-tint); color: var(--accent); font: 800 18px/1 var(--display); text-decoration: none; overflow: hidden; }
+  .side-head .mark img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .side-head .t { min-width: 0; flex: 1; }
   #game-name { display: block; font: 700 18px/1.2 var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .side-head .sub { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; }
@@ -240,15 +241,14 @@ export const PAGE = String.raw`<!doctype html>
   #lightbox .cap { display: flex; gap: 12px; align-items: baseline; font-size: 12px; font-weight: 500; color: var(--muted); }
   #lightbox .cap b { font-size: 15px; font-weight: 600; color: var(--text); }
   #lightbox .close { position: absolute; top: 28px; right: 28px; display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; color: var(--text); }
-  #thinking { position: relative; min-height: 0; padding: 0 max(24px, calc((100% - 980px) / 2)); color: var(--muted); font-size: 13px; }
-  #thinking:not(:empty) { padding-bottom: 8px; }
 
   /* Redacción: atajos, cuadro de texto, micrófono y pincel, el cubo y Enviar. */
   .compose { position: relative; z-index: 3; flex: none; background: var(--chat); }
   .chips { display: flex; gap: 8px; padding: 8px max(16px, calc((100% - 980px) / 2)) 10px; overflow-x: auto; scrollbar-width: none; }
   .chips button { border-color: rgba(255,255,255,.1); color: #b8b1a6; font-family: var(--mono); font-size: 12px; letter-spacing: 0; }
   body.drawer-open .chips { display: none; }
-  form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 16px; background: var(--panel); border-top: 1px solid var(--sep); }
+  /* Al ancho del hilo (#log): el campo y sus botones no ocupan toda la pantalla. */
+  form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px max(24px, calc((100% - 980px) / 2)); background: var(--panel); border-top: 1px solid var(--sep); }
   form input { flex: 1; min-width: 0; height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--control); outline: none; font-size: 15px; }
   form input::placeholder { color: var(--faint); }
   form input:focus { box-shadow: 0 0 0 1.5px rgba(230,183,90,.55); }
@@ -519,7 +519,10 @@ ${PAINT_STYLE}
   form button.mode .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
   form.say input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
   /* Otro jugador escribiendo y la ronda de una escena tensa: una línea encima del cuadro. */
-  .typing { padding: 2px 18px 0; font-size: 12.5px; font-style: italic; color: var(--muted); min-height: 0; }
+  /* «Esperando a <jugador>» cuando la acción va en cola (multijugador); el resto de la espera son los puntos del hilo. */
+  #thinking { position: relative; min-height: 0; padding: 0 max(24px, calc((100% - 980px) / 2)); color: var(--muted); font-size: 13px; }
+  #thinking:not(:empty) { padding-bottom: 8px; }
+  #typing { padding: 2px 18px 0; font-size: 12.5px; font-style: italic; color: var(--muted); min-height: 0; }
   #presence span.away { opacity: .45; filter: grayscale(1); }
   .round-banner { margin: 6px 16px 0; padding: 7px 12px; border-radius: 12px; font: 600 13px/1.3 var(--sans); background: rgba(214,96,74,.14); color: #f0b3a3; box-shadow: inset 0 0 0 1px rgba(214,96,74,.35); }
   .round-banner.mine { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(230,183,90,.35); }
@@ -724,7 +727,7 @@ ${PAINT_STYLE}
 </svg>
 <aside id="side" aria-label="La partida">
   <div class="side-head">
-    <a class="mark" href="/" title="Volver al menú de partidas" aria-label="Tavernus: volver al menú de partidas">T</a>
+    <a class="mark" href="/" title="Volver al menú de partidas" aria-label="Tavernus: volver al menú de partidas"><img src="/assets/icono.jpg" alt=""></a>
     <div class="t">
       <span id="game-name">Tavernus</span>
       <div class="sub"><span id="game-mode" class="badge" hidden></span><span id="game-when"></span></div>
@@ -759,7 +762,7 @@ ${PAINT_STYLE}
   </div>
   <div class="chat-body">
     <div id="log" aria-live="polite"></div>
-    <div id="thinking"></div>
+    <div id="thinking" role="status"></div>
     <button type="button" id="drawer-scrim" hidden aria-label="Cerrar y volver a la conversación"></button>
     <section id="drawer" hidden aria-labelledby="dr-title">
       <span class="dr-grab" aria-hidden="true"></span>
@@ -845,7 +848,7 @@ ${PAINT_STYLE}
     }, Math.max(0, 2200 - (Date.now() - bootStart)));
   }
   setTimeout(enterGame, 6000);
-  var current = null, stream = null, busy = false, dots = null;
+  var current = null, stream = null, busy = false;
 
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
 
@@ -916,10 +919,10 @@ ${PAINT_STYLE}
 ${NOVEL_JS}
 ${PAINT_JS}
   /** Cada mensaje del stream entra en el hilo tipo chat (novel.ts): avatar, burbuja, botones e imágenes. */
-  function renderMessage(m, live) { chatMessage(m, live); sceneDot(); }
+  function renderMessage(m, live, animate) { var shown = chatMessage(m, live, animate); sceneDot(); return shown; }
   /** La última ilustración del sitio hace de foto del «chat» en la cabecera, como en WhatsApp. */
   function sceneDot() {
-    var imgs = log.querySelectorAll('.msg.scene img'), last = imgs[imgs.length - 1], dot = $('scene-dot');
+    var imgs = log.querySelectorAll('.msg.scene img, .place-shot img'), last = imgs[imgs.length - 1], dot = $('scene-dot');
     var src = last && last.getAttribute('src');
     if (!src || dot.getAttribute('data-src') === src) return;
     dot.setAttribute('data-src', src);
@@ -933,16 +936,16 @@ ${PAINT_JS}
     $('board').classList.toggle('busy', on);
     $('map').classList.toggle('busy', on);
     document.querySelectorAll('.chips button, form button').forEach(function (b) { b.disabled = on; });
-    clearInterval(dots);
-    if (!on) { thinking.textContent = ''; input.focus(); return; }
-    var n = 0;
-    waitingFor = [];
-    thinking.textContent = thinkingText();
-    dots = setInterval(function () { n = (n + 1) % 4; thinking.textContent = thinkingText() + '.'.repeat(n); }, 400);
+    // Mientras se espera: los puntos del narrador en el hilo (novel.ts) y, si la acción va en cola, a quién se espera.
+    turnShown = false;
+    if (on) waitingFor = [];
+    typing(on);
+    renderWaiting();
+    if (!on) input.focus();
   }
   /** Mientras la acción espera en la cola del sitio detrás de la de otro jugador, se dice a quién (SSE «queue»). */
   var waitingFor = [];
-  function thinkingText() { return waitingFor.length ? 'Esperando a ' + waitingFor.join(' y ') : 'El narrador está pensando'; }
+  function renderWaiting() { thinking.textContent = busy && waitingFor.length ? 'Esperando a ' + waitingFor.join(' y ') + '…' : ''; }
 
   /** Los demás jugadores: en la cabecera, sus iniciales con un punto (verde = en línea); en la hoja, una línea cada uno. */
   function renderPresence(list) {
@@ -982,10 +985,13 @@ ${PAINT_JS}
     pendingMine(text);
     setBusy(true);
     post('/api/act', { text: text }).then(function (r) {
-      // «hablar con <otro jugador>» sin frase: el servidor no lo narra; abre el modo Decir hacia él.
-      if (r.ok && r.say_to) { setSayMode(true, r.say_to); add('system', r.text); return; }
-      handleReply(r);
-    }).finally(function () { clearPending(); setBusy(false); loadSheet(); });
+      // Después de lo que el turno haya traído por el stream (y de sus puntos).
+      afterChat(function () {
+        // «hablar con <otro jugador>» sin frase: el servidor no lo narra; abre el modo Decir hacia él.
+        if (r.ok && r.say_to) { setSayMode(true, r.say_to); add('system', r.text); } else handleReply(r);
+        clearPending(); setBusy(false); loadSheet();
+      });
+    });
   }
 
   // --- Entre jugadores: Hacer / Decir (party.ts) -----------------------------------
@@ -1054,7 +1060,7 @@ ${PAINT_JS}
     setBusy(true);
     var rbs = log.querySelectorAll('.actions button.roll');
     startRoll(rollBtn || rbs[rbs.length - 1]); rollBtn = null;
-    post('/api/roll', {}).then(function (r) { if (!r.ok) stopRoll(); handleReply(r); }).finally(function () { setBusy(false); loadSheet(); });
+    post('/api/roll', {}).then(function (r) { afterChat(function () { if (!r.ok) stopRoll(); handleReply(r); setBusy(false); loadSheet(); }); });
   }
   function command(name) {
     if (busy) return;
@@ -1361,8 +1367,14 @@ ${PAINT_JS}
     o.push(patterns(k));
     o.push('<rect width="' + SW + '" height="' + H + '" fill="url(#g-' + m.background + ')"/>');
 
+    // Fondo pintado (plano escrito): lleva suelos, paredes y muebles. Encima solo va lo que estaba oculto (secret);
+    // los muebles pintados siguen ahí, invisibles, para pasar el ratón y clicar.
+    var bg = b.background, painted = function (x) { return bg && !x.secret; };
+    if (bg) o.push('<image href="' + escapeHtml(api(bg.src)) + '" x="' + r1(X(bg.bounds.x)) + '" y="' + r1(Y(bg.bounds.y + bg.bounds.h)) + '" width="' + r1(bg.bounds.w * k) + '" height="' + r1(bg.bounds.h * k) + '" preserveAspectRatio="none"/>');
+
     // Suelos.
     m.areas.forEach(function (a) {
+      if (painted(a)) return;
       if (a.polygon) o.push('<path d="' + poly(a.polygon, X, Y) + ' Z" fill="url(#g-' + a.ground + ')"/>');
       else if (a.path) o.push('<path d="' + poly(a.path, X, Y) + '" fill="none" stroke="url(#g-' + a.ground + ')" stroke-width="' + r1((a.width || 1.5) * k) + '" stroke-linecap="round" stroke-linejoin="round"/>');
     });
@@ -1377,17 +1389,18 @@ ${PAINT_JS}
     var seen = {};
     b.spots.forEach(function (s) { seen[s.id] = true; });
     var drawProp = function (p, i) {
-      if (p.kind === 'text') { o.push(propSvg(p, X, Y, k)); return; }
+      if (p.kind === 'text') { if (!painted(p)) o.push(propSvg(p, X, Y, k)); return; }
       var link = p.spot_id && seen[p.spot_id] ? ' data-spot="' + escapeHtml(p.spot_id) + '"' : '';
-      o.push('<g class="prop" data-prop="' + i + '"' + link + '>' + propSvg(p, X, Y, k) + '</g>');
+      o.push('<g class="prop" data-prop="' + i + '"' + link + (painted(p) ? ' opacity="0"' : '') + '>' + propSvg(p, X, Y, k) + '</g>');
     };
     m.props.forEach(function (p, i) { if (p.kind === 'building') drawProp(p, i); });
     m.props.forEach(function (p, i) { if (p.kind !== 'building') drawProp(p, i); });
 
     // Paredes y puertas.
     var ww = r1(Math.max(4, 0.32 * k));
-    m.walls.forEach(function (w) { o.push('<path d="' + poly(w.points, X, Y) + '" fill="none" stroke="#0e0a07" stroke-width="' + ww + '" stroke-linecap="square" stroke-linejoin="miter"/>'); });
+    m.walls.forEach(function (w) { if (painted(w)) return; o.push('<path d="' + poly(w.points, X, Y) + '" fill="none" stroke="#0e0a07" stroke-width="' + ww + '" stroke-linecap="square" stroke-linejoin="miter"/>'); });
     m.doors.forEach(function (d) {
+      if (painted(d)) return;
       o.push('<path d="' + poly([d.from, d.to], X, Y) + '" stroke="#0e0a07" stroke-width="' + r1(ww * 0.9) + '"/>');
       o.push('<path d="' + poly([d.from, d.to], X, Y) + '" stroke="#a07a4a" stroke-width="' + r1(ww * 0.5) + '"/>');
     });
@@ -1957,16 +1970,24 @@ ${PAINT_JS}
       enterGame();
     });
     stream.addEventListener('cast', function (e) { setCast(JSON.parse(e.data)); });
-    stream.addEventListener('message', function (e) { var m = JSON.parse(e.data); renderMessage(m, true); if (window.TavernusTTS) TavernusTTS.fresh(); if (window.TavernusSfx) TavernusSfx.cue(m.sfx); loadBoard(); loadScene(); });
+    stream.addEventListener('message', function (e) {
+      var m = JSON.parse(e.data);
+      inChat(function () {
+        if (window.TavernusSfx) TavernusSfx.cue(m.sfx);
+        loadBoard(); loadScene();
+        return renderMessage(m, true, true);
+      });
+    });
     stream.addEventListener('sheet', loadSheet);
     stream.addEventListener('moment', function (e) { var x = JSON.parse(e.data); showMoment(x, x.seq); });
     stream.addEventListener('portrait', function (e) { setPortrait(JSON.parse(e.data)); });
+    stream.addEventListener('place', function (e) { var p = JSON.parse(e.data); inChat(function () { placeReady(p); }); });
     paintConnect(stream);
     stream.addEventListener('journal', loadJournal);
     stream.addEventListener('presence', function (e) { renderPresence(JSON.parse(e.data)); });
     stream.addEventListener('typing', function (e) { showTyping(JSON.parse(e.data)); });
     stream.addEventListener('round', function (e) { showRound(JSON.parse(e.data)); });
-    stream.addEventListener('queue', function (e) { waitingFor = JSON.parse(e.data).waiting_for || []; if (busy) thinking.textContent = thinkingText(); });
+    stream.addEventListener('queue', function (e) { waitingFor = JSON.parse(e.data).waiting_for || []; renderWaiting(); });
     loadSheet();
     loadScene();
     loadJournal();

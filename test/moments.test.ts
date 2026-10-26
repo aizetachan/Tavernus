@@ -271,7 +271,7 @@ describe('hilo de la web', () => {
     return events;
   }
 
-  it('la escena es un mensaje del historial en su sitio; lo del jugador va como su acción, sin repetirse', async () => {
+  it('la vista del sitio va en la burbuja de llegada, también tras reiniciar; lo del jugador va como su acción, sin repetirse', async () => {
     const { GameManager } = await import('../src/games/manager.js');
     const { createWebServer } = await import('../src/adapters/web/server.js');
     const f = vi.fn(async () => new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), { status: 200, headers: { 'content-type': 'image/jpeg' } })) as unknown as typeof fetch;
@@ -302,13 +302,20 @@ describe('hilo de la web', () => {
     const cast = first.find((x) => x.type === 'cast')!.data as { master: { id: string; name: string }; me: { id: string; name: string } };
     expect(cast.master).toMatchObject({ id: 'master', name: 'El Narrador' });
     expect(cast.me).toMatchObject({ id: character_id, name: 'Ana' });
-    const history = first.find((x) => x.type === 'history')!.data as { seq: number; scene?: { src: string }; input?: string; narrator?: boolean }[];
-    const scenes = history.filter((m) => m.scene);
-    expect(scenes).toHaveLength(1);
+    const history = first.find((x) => x.type === 'history')!.data as { seq: number; place?: { location_id: string; src?: string }; scene?: unknown; input?: string; narrator?: boolean }[];
+    // Una sola llegada (la de empezar) y lleva la vista; no hay mensajes de escena sueltos.
+    const places = history.filter((m) => m.place);
+    expect(places).toHaveLength(1);
+    expect(places[0]!.place!.src).toMatch(/^\/images\/.+\.jpg\?game=/);
+    expect(history.some((m) => m.scene)).toBe(false);
     expect(history.find((m) => m.input === 'Espero un rato')).toMatchObject({ narrator: true });
-    // Al volver a entrar la escena sigue en el mismo sitio del historial, sin añadirse otra al final.
+    // Al volver a entrar, igual.
     const again = (await open()).find((x) => x.type === 'history')!.data as typeof history;
-    expect(again.map((m) => (m.scene ? 'escena' : m.seq))).toEqual(history.map((m) => (m.scene ? 'escena' : m.seq)));
+    expect(again).toEqual(history);
+    // Tras reiniciar el servidor (el historial sale del log de eventos), la vista sigue en su burbuja.
+    await games.closeAll();
+    const reopened = await open();
+    expect((reopened.find((x) => x.type === 'history')!.data as typeof history).filter((m) => m.place)).toEqual(places);
     await games.closeAll();
   });
 });

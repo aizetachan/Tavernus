@@ -24,7 +24,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Engine } from '../../engine/engine.js';
 import { currentAmbience, SOUND_KEYS } from './soundmap.js';
@@ -636,7 +636,8 @@ export const SFX_SCRIPT = String.raw`<script>
 // ---------------------------------------------------------------------------
 
 const EXTS: Record<string, string> = { mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', webm: 'audio/webm' };
-const PUBLIC_SFX = fileURLToPath(new URL('../../../public/sfx/', import.meta.url));
+/** Biblioteca fija (public/sfx); SFX_LIBRARY_DIR la cambia (tests). */
+const librarySfx = () => process.env['SFX_LIBRARY_DIR'] || fileURLToPath(new URL('../../../public/sfx/', import.meta.url));
 
 let provider: SoundProvider | null | undefined;
 let generated = 0;
@@ -667,7 +668,8 @@ async function listKeys(dir: string): Promise<Map<string, string[]>> {
 /** Ficheros por clave: primero los de la partida, luego la biblioteca (public/sfx y sus pistas de ambiente). */
 async function filesFor(gameDir: string): Promise<Map<string, string[]>> {
   const own = await listKeys(join(gameDir, 'sfx'));
-  for (const dir of [PUBLIC_SFX, join(PUBLIC_SFX, 'ambient')]) {
+  // Lo de la raíz de public/sfx manda sobre las pistas grabadas de ambient/ (los ambientes elegidos por el equipo).
+  for (const dir of [librarySfx(), join(librarySfx(), 'ambient')]) {
     for (const [k, p] of await listKeys(dir)) if (!own.has(k)) own.set(k, p);
   }
   return own;
@@ -719,8 +721,11 @@ export async function handleSfxRequest(engine: Engine, res: ServerResponse, url:
   const p = current();
   if (key === null) {
     const id = url.searchParams.get('character');
-    const files = [...(await filesFor(gameDir)).keys()].filter((k) => SOUND_KEYS.includes(k));
-    const credits = AMBIENT_TRACKS.filter((t) => files.includes(t.key));
+    const all = await filesFor(gameDir);
+    const files = [...all.keys()].filter((k) => SOUND_KEYS.includes(k));
+    // Créditos solo de las pistas grabadas que de verdad suenan (las de ambient/, si nada las tapa).
+    const recorded = join(librarySfx(), 'ambient');
+    const credits = AMBIENT_TRACKS.filter((t) => all.get(t.key)?.[0]?.startsWith(recorded + sep));
     json(res, 200, { ambience: id ? currentAmbience(engine, id) : null, files, credits, ai: p !== null, provider: p ? p.label : null });
     return;
   }

@@ -59,7 +59,8 @@ sobre un fondo casi negro, con un único acento ámbar.
 
 - **Prohibido:** texto, letras, firmas o marcas de agua dentro de la imagen (el pie lo pone la web); marcos;
   anacronismos (lámparas eléctricas, cristal moderno); estilo anime o caricatura; arte generado por IA,
-  aunque sea retocado.
+  aunque sea retocado. **Excepción:** los fondos de plano, que se generan a partir de la referencia exacta del plano
+  (ver «Fondos pintados»).
 - **Coherencia:** la misma aldea en todas las vistas (madera negra, piedra gris, tejados de pizarra, nada de
   teja roja), el mismo fresno y roble en el bosque, y la montaña de Vharn siempre al norte cuando se vea.
 
@@ -75,7 +76,7 @@ Discord lo muestra sin conversiones; WebP queda para cuando el servidor lo admit
 | Objeto | 512 × 512 | 120 KB | El objeto solo, sostenido en una mano o sobre madera, centrado y ocupando ~70 %, fondo oscuro. |
 | Descubrimiento (pista) | 1024 × 576 | 350 KB | El detalle que se descubre, de cerca, con la luz sobre el hallazgo. |
 | Mapa de región | 2048 × 1536 (4:3) | 1,5 MB | Vista cenital o de cartógrafo, norte arriba, con la montaña de Vharn al norte. Rótulos a mano permitidos solo aquí. |
-| Fondo de plano (opcional) | 40 px por metro de `bounds`, máx. 2048 px de lado | 800 KB | Cenital, ortogonal, sin perspectiva; el suelo y lo fijo, no los muebles (esos los dibuja el tablero). |
+| Fondo de plano (opcional) | 40 px por metro de `bounds`, máx. 2048 px de lado (la medida exacta la da `scripts/plans.ts reference`) | 800 KB | Cenital, ortogonal, sin perspectiva. Suelo, paredes y muebles en el mismo sitio que en el plano escrito; lo oculto no. |
 
 ## Planos: datos, no dibujos
 
@@ -113,8 +114,48 @@ plano escrito, el tablero usa ese; si no, lo genera `src/adapters/web/mapgen.ts`
 En una partida ya empezada la imagen generada antes sigue en caché hasta que se vuelva a pedir; para verla al
 momento, borra `data/games/<partida>/images/`. Los planos escritos se usan en cuanto se reinicia el servidor.
 
-Lo que aún no hace la web (issues aparte): pintar el mapa de región (`region_map`) en la vista de región y el
-fondo de los planos (`map_backgrounds`) bajo el tablero. El motor ya los expone (`src/ai/assets.ts`).
+Lo que aún no hace la web (issue aparte): pintar el mapa de región (`region_map`) en la vista de región.
+
+## Fondos pintados
+
+Un plano escrito puede llevar debajo una imagen realista (`map_backgrounds`), hecha a partir del propio plano para
+que cada mueble, puerta y pared caiga justo en su punto y la cuadrícula encaje.
+
+Estado en Brezal sellada (26 de octubre de 2026): 19 planos congelados (12 lugares, contando el Camino de Valcruz, que
+está sellado tras el Cerco, y 7 tramos de camino). Tienen fondo pintado la taberna, el sótano, la herrería, la casa de
+las hierbas y el tramo plaza–molino. El resto perdió el fondo al cambiar sus puntos con Brezal sellada, o es nuevo:
+plaza, casona, molino, El Soto, el Granero Quemado, Los Corrales, El Lindero y los tramos plaza–Soto, molino–Soto,
+plaza–Corrales, plaza–Lindero, Corrales–Soto y Soto–Granero. Hasta que se pinten, el tablero dibuja su plano como
+antes.
+
+Los tramos de camino (`loc_way_<salida>`, src/engine/travel.ts) los crea el motor cuando un encuentro corta un viaje,
+a mitad de una salida de al menos 100 m entre dos localizaciones (no bloqueada). Son siempre los mismos y salen siempre
+iguales, así que `scripts/plans.ts` los crea igual que el motor y los congela y pinta con los demás.
+
+Si cambian los datos de la campaña: `node --import tsx scripts/plans.ts freeze brezal --sync` deja igual lo que no ha
+cambiado (con su fondo), vuelve a congelar lo cambiado y le quita el fondo, que ya no encajaría, y quita lo que ya no
+existe. Después, `reference` y repintar lo que no tenga fondo.
+
+1. **Congelar los planos:** `node --import tsx scripts/plans.ts freeze <campaña>` copia al manifiesto (`maps`) el
+   plano que hoy genera `mapgen.ts`. Sus `bounds` ya incluyen lo oculto y todos los puntos: el tablero no crece al
+   descubrir algo y el fondo no se mueve. Si la carpeta sirve a otra campaña con los mismos ids y otros puntos (la
+   demo), `plan_campaigns` dice a cuál valen los planos y los fondos.
+2. **Sacar las referencias:** `node --import tsx scripts/plans.ts reference <campaña>` deja en
+   `plano/referencia/` dos PNG por localización, a la medida exacta del fondo: `<loc>.png` (suelo liso, paredes,
+   puertas y muebles; sin cuadrícula, fichas ni lo oculto) y `<loc>-guia.png` (lo mismo con cada punto y su
+   nombre; lo oculto, en rojo).
+3. **Generar:** en Magnific, Nano Banana 2.1 con ancho y alto exactos de la referencia, la referencia como imagen
+   y `public/taberna.jpg` como estilo. El texto pide vista cenital ortogonal, cada elemento en la misma posición,
+   tamaño y forma, materiales del sitio, la paleta oscura con acento ámbar, y nada de texto, cuadrícula ni personas.
+4. **Comprobar:** superponer `<loc>-guia.png` al 45 % sobre la imagen. Si algo de un punto se ha movido (la fragua,
+   el hogar), se repite esa localización.
+5. **Guardar:** JPEG en `plano/<loc>.jpg` (bajar la calidad hasta quedar por debajo de 800 KB) y la línea en
+   `map_backgrounds`.
+
+En el tablero el fondo va bajo la cuadrícula y las fichas. Los suelos, paredes y muebles dibujados dejan de verse,
+pero los muebles siguen ahí, invisibles, para pasar el ratón y clicar. Lo oculto (la trampilla, el desván) no
+está pintado: se dibuja encima cuando el PJ lo descubre. El fondo lleva todos los muebles desde el principio,
+también los de puntos que el PJ aún no ha visitado.
 
 ## Inventario
 

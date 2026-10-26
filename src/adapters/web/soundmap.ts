@@ -139,9 +139,13 @@ export function ambienceOf(world: World, engine: Pick<Engine, 'clock'>, loc: Loc
     return lively ? 'taberna' : 'interior';
   }
   const night = ['night_moon', 'night_dark'].includes(lightAt(engine.clock, loc, nowGameS));
-  if (has(/\b(rio|arroyo|orilla|lago|cascada|river)\b/, loc.name, loc.id.replace(/_/g, ' '))) return 'agua';
+  // Un tramo de camino (travel.ts) se llama «Camino entre <A> y <B>»: suena como su zona, no como A o B.
+  const own = loc.state['waypoint'] ? [] : [loc.name, loc.id.replace(/_/g, ' ')];
+  if (has(/\b(rio|arroyo|orilla|lago|cascada|river)\b/, ...own)) return 'agua';
+  // Una arboleda suena a bosque aunque esté dentro del pueblo (El Soto de Brezal).
+  if (has(/\b(bosque|soto|arboleda|claro|fresneda|forest|woods|grove)\b/, ...own)) return night ? 'bosque-noche' : 'bosque';
   const zone = world.zones.get(loc.zone_id);
-  const town = zone?.kind === 'town' || has(/\b(plaza|calle|mercado|aldea|pueblo|square|gate|porton|puerto)\b/, loc.name, loc.id.replace(/_/g, ' '));
+  const town = zone?.kind === 'town' || has(/\b(plaza|calle|mercado|aldea|pueblo|square|gate|porton|puerto)\b/, ...own);
   return town ? (night ? 'plaza-noche' : 'plaza') : (night ? 'bosque-noche' : 'bosque');
 }
 

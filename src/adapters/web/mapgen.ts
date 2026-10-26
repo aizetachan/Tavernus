@@ -65,7 +65,10 @@ export function mapInputOf(world: World, locationId: Id, seed: number = mapSeedO
   // Etiquetas y tipo de plantilla de la localización si el mundo los tiene (los del generador de mundos).
   const extra = loc as unknown as { tags?: unknown; kind?: unknown };
   const tags = [...(Array.isArray(extra.tags) ? extra.tags.map(String) : []), ...(typeof extra.kind === 'string' ? [extra.kind] : [])];
-  return { location: { ...loc, tags }, zone: world.zones.get(loc.zone_id) ?? null, spots, exits, seed };
+  // Un tramo de camino (travel.ts) se llama «Camino entre <A> y <B>»: sus nombres («Plaza…») no dicen cómo es él.
+  // Se plantea como camino de su zona (la más agreste de las dos).
+  const name = loc.state['waypoint'] ? 'camino' : loc.name;
+  return { location: { ...loc, name, tags }, zone: world.zones.get(loc.zone_id) ?? null, spots, exits, seed };
 }
 
 type Feature = PropKind | 'water' | 'pond' | 'dirt' | 'gate';

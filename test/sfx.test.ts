@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RECIPE_KEYS, renderRecipe, recipeInfo, SFX_SCRIPT, SFX_STYLE, handleSfxRequest, setSoundProviderForTests, AMBIENT_TRACKS } from '../src/adapters/web/sfx.js';
@@ -119,15 +119,21 @@ describe('proveedor de IA (desactivado, para más adelante)', () => {
       const res = { writeHead(s: number, h: Record<string, string>) { r.status = s; r.headers = h; return res; }, end(b?: string | Buffer) { r.body = Buffer.from(b ?? ''); } };
       return { r, res: res as never };
     };
+    // Biblioteca de prueba: dos pistas grabadas en ambient/ (ogg y mp3) y, en la raíz, un fichero del equipo que tapa una.
+    const lib = await mkdtemp(join(tmpdir(), 'tavernus-sfxlib-'));
+    await mkdir(join(lib, 'ambient'), { recursive: true });
+    for (const k of ['ambiente-taberna', 'ambiente-plaza']) for (const ext of ['ogg', 'mp3']) await writeFile(join(lib, 'ambient', `${k}.${ext}`), 'x');
+    await writeFile(join(lib, 'ambiente-plaza.mp3'), 'ID3equipo');
+    process.env['SFX_LIBRARY_DIR'] = lib;
     try {
       setSoundProviderForTests(null);
       let o = out();
       await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&character=ch_kael'), dir);
       const state = JSON.parse(o.r.body.toString());
       expect(state).toMatchObject({ ambience: 'ambiente-taberna', ai: false });
-      // Las pistas de ambiente de public/sfx/ambient, con sus créditos.
-      for (const t of AMBIENT_TRACKS) expect(state.files, t.key).toContain(t.key);
-      expect(state.credits.map((c: { key: string }) => c.key)).toEqual(AMBIENT_TRACKS.map((t) => t.key));
+      expect(state.files).toEqual(expect.arrayContaining(['ambiente-taberna', 'ambiente-plaza']));
+      // Créditos solo de lo grabado que suena: la plaza la tapa el fichero de la raíz.
+      expect(state.credits.map((c: { key: string }) => c.key)).toEqual(['ambiente-taberna']);
       for (const [fmt, type] of [['ogg', 'audio/ogg'], ['mp3', 'audio/mpeg']] as const) {
         o = out();
         await handleSfxRequest(engine, o.res, new URL(`http://x/api/sfx?game=g&key=ambiente-taberna&fmt=${fmt}`), dir);
@@ -135,7 +141,10 @@ describe('proveedor de IA (desactivado, para más adelante)', () => {
         expect(o.r.headers['content-type']).toBe(type);
       }
       o = out();
-      await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=puerta-abrir'), dir);
+      await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=ambiente-plaza&fmt=ogg'), dir);
+      expect(o.r.body.toString()).toBe('ID3equipo');
+      o = out();
+      await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=ambiente-lluvia'), dir);
       expect(o.r.status).toBe(404);
       o = out();
       await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=..%2F..%2Fsecreto'), dir);
@@ -146,18 +155,20 @@ describe('proveedor de IA (desactivado, para más adelante)', () => {
       setSoundProviderForTests(fake);
       for (let i = 0; i < 2; i++) {
         o = out();
-        await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=puerta-abrir'), dir);
+        await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&key=ambiente-lluvia'), dir);
         expect(o.r.status).toBe(200);
         expect(o.r.headers['content-type']).toBe('audio/mpeg');
       }
       expect(calls).toBe(1);
-      expect((await readFile(join(dir, 'sfx', 'puerta-abrir.mp3'))).toString()).toBe('ID3fake');
+      expect((await readFile(join(dir, 'sfx', 'ambiente-lluvia.mp3'))).toString()).toBe('ID3fake');
       o = out();
       await handleSfxRequest(engine, o.res, new URL('http://x/api/sfx?game=g&character=ch_kael'), dir);
       const after = JSON.parse(o.r.body.toString());
       expect(after.ai).toBe(true);
-      expect(after.files).toContain('puerta-abrir');
+      expect(after.files[0]).toBe('ambiente-lluvia');
     } finally {
+      delete process.env['SFX_LIBRARY_DIR'];
+      await rm(lib, { recursive: true, force: true });
       await rm(dir, { recursive: true, force: true });
     }
   });

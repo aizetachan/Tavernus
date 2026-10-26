@@ -1,11 +1,14 @@
 Sonidos de public/sfx — licencias y atribución
 ==============================================
 
-Estado actual (2026-10-25): los ambientes en bucle son grabaciones de terceros
-con licencia libre, en public/sfx/ambient (abajo, una entrada por pista). Los
-efectos puntuales (pasos, puertas, monedas…) y el ambiente de lluvia se
-sintetizan en el navegador con las recetas de src/adapters/web/sfx.ts, código
-propio del proyecto, sin nada que atribuir.
+Estado actual (2026-10-26): todo el catálogo tiene fichero en la raíz de
+public/sfx (lista en «Ficheros», al final): los 18 efectos y 9 ambientes. Los
+ambientes de la raíz mandan sobre las grabaciones de public/sfx/ambient
+(Freesound, abajo), que se quedan en el repositorio sin usarse mientras haya
+fichero en la raíz; el panel «Sonido» solo cita las que de verdad suenan.
+
+Grabaciones de public/sfx/ambient
+---------------------------------
 
 Todas las pistas actuales son CC0 1.0 (dominio público): no exigen atribución,
 pero se citan igual aquí y en los créditos del panel «Sonido» de la web.
@@ -87,13 +90,14 @@ ambient/ambiente-agua.ogg · ambient/ambiente-agua.mp3
 Cómo añadir un sonido de biblioteca
 -----------------------------------
 1. Nombre del fichero = clave del catálogo + extensión: puerta-abrir.ogg,
-   ambiente-taberna.mp3 (mp3, ogg, wav o webm). Los ambientes van en
-   public/sfx/ambient, mejor en ogg y mp3 a la vez (el navegador pide el que
-   sabe tocar). Las claves válidas están en SOUND_KEYS
+   ambiente-taberna.mp3 (mp3, ogg, wav o webm). Los ambientes grabados de
+   terceros van en public/sfx/ambient, mejor en ogg y mp3 a la vez (el
+   navegador pide el que sabe tocar); un fichero con la misma clave en la raíz
+   manda sobre ellos. Las claves válidas están en SOUND_KEYS
    (src/adapters/web/soundmap.ts). Un fichero sustituye a la receta; si falla
    al cargar, se vuelve a la receta.
 2. Solo CC0 o CC-BY (nunca CC-BY-NC ni Sampling+ si el juego puede ser comercial),
-   y nada generado por IA. Fuentes recomendadas en docs/SONIDO.md (Kenney,
+   o generado por el equipo con un proveedor cuyas condiciones lo permitan. Fuentes recomendadas en docs/SONIDO.md (Kenney,
    Freesound filtrado por licencia, OpenGameArt filtrado por CC0).
 3. Añade aquí una entrada por fichero, aunque sea CC0, y en AMBIENT_TRACKS
    (src/adapters/web/sfx.ts) si es un ambiente: de ahí salen los créditos de
@@ -106,6 +110,42 @@ Cómo añadir un sonido de biblioteca
      Licencia: CC0 1.0 | CC BY 4.0 (<URL de la licencia>)
      Cambios:  <recortado, normalizado, convertido a ogg, bucle…>
 
-Los sonidos generados por IA no van aquí (y hoy esa generación está
-desactivada): se guardarían por partida en data/games/<slug>/sfx, fuera del
-repositorio, con las condiciones del proveedor.
+Los sonidos que la IA generaría durante una partida no van aquí (hoy esa
+generación está desactivada): se guardarían en data/games/<slug>/sfx, fuera
+del repositorio. Los que el equipo genera una vez para dejarlos fijos (con
+scripts/sfx-generate.ts) sí van aquí, y se apuntan abajo: el equipo decidió
+el 2026-10-26 usar los suyos y los de ElevenLabs en lugar de las grabaciones.
+
+Ficheros
+--------
+
+ambiente-taberna.mp3, ambiente-herreria.mp3, ambiente-plaza.mp3, ambiente-bosque.mp3
+  Título:   tavern, herreria, plaza, bosque
+  Autor:    equipo de Tavernus (los aportó Santy el 2026-10-26)
+  Origen:   POR CONFIRMAR: de dónde salen y con qué licencia
+  Licencia: POR CONFIRMAR
+  Cambios:  bucle sin costura (fundido de 2 s del final sobre el principio,
+            quedan 23-28 s), volumen igualado a -28 LUFS con pico máximo
+            de -3 dBTP (loudnorm a dos pasadas), MP3 VBR q2 a 48 kHz.
+
+pasos-madera, pasos-piedra, pasos-tierra, pasos-hierba, pasos-agua, puerta-abrir,
+puerta-cerrar, moneda, objeto-coger, objeto-soltar, dado, espada-golpe,
+espada-fallo, dano, curar, hacha, descubrir, campana (.mp3)
+  Título:   el nombre de la clave
+  Autor:    generados con ElevenLabs Sound Effects (eleven_text_to_sound_v2)
+            el 2026-10-26, con la cuenta del proyecto y las descripciones de
+            SOUND_PROMPTS (src/ai/sound.ts)
+  Origen:   scripts/sfx-generate.ts
+  Licencia: condiciones de ElevenLabs para lo generado con su API (uso
+            comercial en planes de pago; ver docs/SONIDO.md)
+  Cambios:  sin silencio al principio, pico a -3 dBFS, fundido final de 30 ms
+            (scripts/sfx-generate.ts --tidy).
+
+ambiente-plaza-noche, ambiente-bosque-noche, ambiente-interior, ambiente-agua,
+ambiente-lluvia (.mp3)
+  Título:   el nombre de la clave
+  Autor:    generados con ElevenLabs Sound Effects (eleven_text_to_sound_v2, en
+            bucle) el 2026-10-26, con las descripciones de SOUND_PROMPTS
+  Origen:   scripts/sfx-generate.ts --ambientes
+  Licencia: condiciones de ElevenLabs para lo generado con su API
+  Cambios:  volumen a -28 LUFS (loudnorm lineal), sin tocar el bucle.

@@ -59,7 +59,7 @@ Ruido filtrado, senos con barrido, resonancias amortiguadas y trenes de impulsos
 | Escalón | Qué | Coste por mundo (unos 20 efectos y 6 ambientes, generados una vez) |
 |---|---|---|
 | **Gratis (hecho)** | Recetas procedurales para todo el catálogo. Los más débiles (taberna, pájaros, lluvia) se sustituyen por CC0 de Kenney o Freesound dejando el fichero en `public/sfx/<clave>.ogg` y anotándolo en `public/sfx/LICENSES` | **0 $** |
-| **Barato** | ElevenLabs Sound Effects por API, con las descripciones de `SOUND_PROMPTS` (o con el tono del mundo añadido), los ambientes con `loop: true` y caché por partida | 20 × ~1,5 s + 6 × 22 s ≈ 162 s → **≈ 0,32 $**. Con tres tomas para elegir, **≈ 1 $**. Los 26 sonidos del catálogo actual: ≈ 0,40 $ |
+| **Barato** | ElevenLabs Sound Effects por API, con las descripciones de `SOUND_PROMPTS` (o con el tono del mundo añadido), los ambientes con `loop: true` y caché por partida | 20 × ~1,5 s + 6 × 22 s ≈ 162 s → **≈ 0,32 $**. Con tres tomas para elegir, **≈ 1 $**. Los 27 sonidos del catálogo actual: ≈ 0,40 $ |
 | **Premium** | ElevenLabs para el foley más Stable Audio 2.5 para ambientes de 60 a 90 s (menos repetición), con tomas extra y escucha humana antes de fijarlas | 26 × 0,08 $ ≈ **2,1 $** en Stable Audio. Con tres tomas y foley de ElevenLabs, **≈ 5–7 $** |
 
 Todos los costes son **por mundo, generados una vez**, y nunca por acción. Después, cada partida reproduce lo cacheado sin coste. Si el catálogo genérico basta, el coste se paga una sola vez para todos los mundos.
@@ -79,7 +79,7 @@ Todos los costes son **por mundo, generados una vez**, y nunca por acción. Desp
 | `look`, `say`, `shout`, `whisper`, `wait`, `sleep`, `passed`… | nada |
 
 - **Suelo:** si el punto tiene la etiqueta `water`, agua. Si no, manda `location.state.floor` cuando existe. Si tampoco, se mira la descripción: «losas» o «cripta» dan piedra en interior, «empedrada» piedra fuera y «prado» hierba. Por defecto, interior es madera, poblado es piedra y campo es tierra.
-- **Ambiente:** un interior animado (`noise ≥ 0,25` o «taberna/posada») es taberna, y si no, interior. Fuera, según la zona `town` o el nombre, plaza o bosque, en versión de noche según `lightAt`. Un río o arroyo en el nombre da agua. La lluvia sale de `location.state.weather` (el motor todavía no tiene clima; queda preparado).
+- **Ambiente:** una herrería, fragua o forja es herrería. Si no, un interior animado (`noise ≥ 0,25` o «taberna/posada») es taberna, y si no, interior. Fuera, según la zona `town` o el nombre, plaza o bosque, en versión de noche según `lightAt`. Un río o arroyo en el nombre da agua. La lluvia sale de `location.state.weather` (el motor todavía no tiene clima; queda preparado).
 - **Puerta:** hay puerta si se pasa de interior a exterior (o al revés), o si el punto tiene la etiqueta `door`, `gate` o `trapdoor`, o se llama puerta, portón o trampilla.
 - **Servidor** (`server.ts`): cada mensaje del actor lleva `sfx: string[]`.
 
