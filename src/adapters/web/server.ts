@@ -24,6 +24,7 @@
  *   POST /api/act      {character, text}
  *   POST /api/say      {character, text, to?, mode?}   decir sin máster: la frase literal del PJ (party.ts)
  *   POST /api/offer    {character, offer, accept}      aceptar o rechazar lo que otro PJ le ofrece
+ *   POST /api/presence {character, tab, state}         latido de la pestaña: visible | hidden | gone (presence.ts)
  *   POST /api/typing   {character}                     «está escribiendo…» a los demás PJ del sitio (SSE «typing»)
  * SSE «round»: ronda abierta en escena tensa (scene.ts): número, quién falta y cuándo vence.
  *   POST /api/roll     {character}
@@ -71,6 +72,7 @@ import { handleAvatarRequest } from './avatar.js';
 import { journeyOf } from '../../engine/travel.js';
 import { accessFromEnv, checkSeatCookie, cookies, isAdmin, isHostSeat, adminTokenMatches, newSeat, randomToken, SeatStore, seatCookieName, seatCookieValue, seatIdOf, setAdminCookie, setCookie, type AccessOptions, type Seat } from './access.js';
 import { invitePage, joinPage, seatsPage } from './page-access.js';
+import { PRESENCE_TIMING, PresenceTracker, type PresenceTiming } from './presence.js';
 import { pcLabel, pcName } from '../../engine/party.js';
 import { talkingWith } from '../../engine/scene.js';
 import { descriptorOf } from '../../engine/narrate.js';
@@ -80,8 +82,6 @@ const MASTER_TYPES = new Set(['master', 'master_roll_outcome', 'master_intro', '
 const HISTORY = 200;
 /** Avisos fuera de la ficción: tiradas, progreso, anuncios, tablón. Lo demás lo cuenta el narrador. */
 const SYSTEM_TYPES = /^(roll|progress_|announcement|board|admin_|decisive_expired|budget)/;
-/** Tras cerrar la última pestaña, el aviso «ha salido» espera esto (una recarga no cuenta como salir). */
-const LEAVE_NOTICE_MS = 20_000;
 /** Y la presencia del motor (SPEC §9.1: dormir con velo) cae a los 30 min, como su gracia por acción. */
 const ENGINE_OFFLINE_MS = 30 * 60 * 1000;
 /** Plazas libres que se crean con una partida nueva si no se dice otra cosa. */
@@ -150,9 +150,11 @@ interface Runtime {
   introduce: (characterId: Id) => void;
   /** ¿Se está presentando ese PJ (aún sin prólogo en su hilo)? */
   isOpening: (characterId: Id) => boolean;
-  /** Una pestaña más (o menos) mirando a ese PJ: presencia en la web y en el motor. */
-  joined: (characterId: Id) => void;
-  left: (characterId: Id) => void;
+  /** Se abre (o cierra) el stream de una pestaña de ese PJ: presencia en la web y en el motor (presence.ts). */
+  joined: (characterId: Id, tab: string, beats: boolean) => void;
+  left: (characterId: Id, tab: string) => void;
+  /** Latido de una pestaña: visible, oculta o cerrándose. */
+  beat: (characterId: Id, tab: string, state: 'visible' | 'hidden' | 'gone') => void;
   online: (characterId: Id) => boolean;
   /** Los demás PJ vistos desde este. */
   presenceFor: (viewerId: Id) => PresenceEntry[];
@@ -167,7 +169,11 @@ interface Runtime {
 }
 
 /** Otro PJ de la partida visto desde el tuyo: si su jugador está en línea, si está contigo y con qué NPC habla. */
-export interface PresenceEntry { id: Id; name: string; online: boolean; where: 'here' | 'travel' | 'away'; text: string; talking_with?: string; /** Su jugador se ha ido: el PJ se queda, ausente. */ away?: boolean }
+export interface PresenceEntry {
+  id: Id; name: string; online: boolean; where: 'here' | 'travel' | 'away'; text: string; talking_with?: string;
+  /** Su jugador se ha ido: el PJ se queda, ausente. */ away?: boolean;
+  /** Su retrato, si ya está hecho (avatar en la cabecera). */ avatar?: string;
+}
 
 export interface WebServer {
   server: Server;
@@ -179,8 +185,10 @@ export interface WebServerOptions {
   tickMs?: number;
   /** Acceso por invitación (access.ts); por defecto abierto, como en local. */
   access?: AccessOptions;
-  /** Esperas de presencia (tests): aviso de salida y caída de la presencia del motor. */
+  /** Esperas de presencia (tests): gracia del aviso de salida, latido y pestaña oculta (presence.ts); caída de la presencia del motor. */
   leaveNoticeMs?: number;
+  staleMs?: number;
+  hiddenMs?: number;
   engineOfflineMs?: number;
 }
 
@@ -189,7 +197,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
   const access: AccessOptions = opts.access ?? { mode: 'open', adminToken: null, secret: randomToken(32) };
   const seats = new SeatStore();
   const claiming = new Set<string>();
-  const leaveNoticeMs = opts.leaveNoticeMs ?? LEAVE_NOTICE_MS;
+  const timing: PresenceTiming = { graceMs: opts.leaveNoticeMs ?? PRESENCE_TIMING.graceMs, staleMs: opts.staleMs ?? PRESENCE_TIMING.staleMs, hiddenMs: opts.hiddenMs ?? PRESENCE_TIMING.hiddenMs };
   const engineOfflineMs = opts.engineOfflineMs ?? ENGINE_OFFLINE_MS;
 
   const timer = setInterval(() => {
@@ -283,14 +291,14 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       if (sheetTimer) return;
       sheetTimer = setTimeout(() => { sheetTimer = null; for (const id of streams.keys()) { send(id, 'sheet', {}); send(id, 'presence', presenceFor(id)); } }, 300);
     });
-    // Presencia: pestañas abiertas por PJ. La web avisa al entrar y salir; el motor (§9.1) duerme y vela al ausente.
-    const tabs = new Map<Id, number>();
-    const shownOnline = new Set<Id>();
-    const leaveTimers = new Map<Id, NodeJS.Timeout>();
+    // Presencia: pestañas que cuentan por PJ (presence.ts). La web avisa al entrar y al irse; el motor (§9.1) duerme y vela al ausente.
+    const presence = new PresenceTracker(timing, (id, online) => { if (online) cameOnline(id); else wentOffline(id); });
+    /** Quien ya estuvo en línea desde que se abrió la partida: al volver, «ha vuelto» en vez de «ha entrado». */
+    const seen = new Set<Id>();
     const offlineTimers = new Map<Id, NodeJS.Timeout>();
     const scheduleOffline = (id: Id) => {
       clearTimeout(offlineTimers.get(id));
-      offlineTimers.set(id, setTimeout(() => { offlineTimers.delete(id); if (!tabs.get(id)) engine.setPresence(id, false); }, engineOfflineMs));
+      offlineTimers.set(id, setTimeout(() => { offlineTimers.delete(id); if (!presence.online(id)) engine.setPresence(id, false); }, engineOfflineMs));
     };
     // Quien no vuelve tras abrir la partida también acaba dormido; un reinicio no duerme a nadie en el acto.
     for (const c of engine.world.characters.values()) if (c.status !== 'retired' && c.status !== 'dead') scheduleOffline(c.id);
@@ -302,7 +310,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const out: PresenceEntry[] = [];
       for (const c of w.characters.values()) {
         if (c.id === viewerId || c.status === 'retired') continue;
-        const online = shownOnline.has(c.id);
+        const online = presence.online(c.id);
         const loc = w.characterSpot(c)?.location_id;
         const where: PresenceEntry['where'] = c.transit || journeyOf(c) ? 'travel' : loc && loc === myLoc && !me?.transit ? 'here' : 'away';
         // Con quién habla (solo si está contigo y lo ves): «Aren está aquí, hablando con Hugo».
@@ -310,51 +318,43 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         const talk = npc && me ? (me.knows.includes(npc.id) ? npc.name : descriptorOf(w, npc.id)) : undefined;
         const state = c.veiled ? ' (ausente, bajo el velo)' : c.away ? ' (ausente)' : online ? '' : ' (sin conexión)';
         const text = `${c.name} ${where === 'here' ? 'está aquí' : where === 'travel' ? 'está en camino' : 'está en otro lugar'}${talk ? `, hablando con ${talk}` : ''}${state}`;
-        out.push({ id: c.id, name: c.name, online, where, text, ...(talk ? { talking_with: talk } : {}), ...(c.away ? { away: true } : {}) });
+        const portrait = illustratorOf(engine)?.entityImage('portrait', c.id);
+        out.push({ id: c.id, name: c.name, online, where, text, ...(talk ? { talking_with: talk } : {}), ...(c.away ? { away: true } : {}), ...(portrait ? { avatar: imageSrc(portrait, slug) } : {}) });
       }
       return out.sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
     };
     const sendPresence = () => { for (const id of streams.keys()) send(id, 'presence', presenceFor(id)); };
     /**
-     * «Mira ha entrado» en el hilo de los demás que están en línea. A los que están en su mismo sitio
-     * ya se lo cuenta el motor en la ficción («se ha ido; su personaje se queda…», engine.setAway).
+     * «Mira se ha marchado» / «Mira ha vuelto» en el hilo de los demás que están en línea, sin pasar por el
+     * narrador. A los que están en su mismo sitio ya se lo cuenta el motor («se ha ido; su personaje se queda…»,
+     * engine.setAway), también como aviso de sistema.
      */
     const announce = (id: Id, online: boolean, inFiction = !online) => {
-      const text = online ? `🟢 ${nameOf(id)} ha entrado en la partida.` : `⚪ ${nameOf(id)} ha salido de la partida.`;
+      const text = online ? `🟢 ${nameOf(id)} ${seen.has(id) ? 'ha vuelto' : 'ha entrado en la partida'}.` : `⚪ ${nameOf(id)} se ha marchado.`;
       const where = locOf(id);
       for (const other of streams.keys()) {
-        if (other === id || !tabs.get(other) || (inFiction && where && locOf(other) === where)) continue;
+        if (other === id || !presence.online(other) || (inFiction && where && locOf(other) === where)) continue;
         record(other, { seq: history.get(other)?.at(-1)?.seq ?? 0, kind: 'system', text, presence: { id, online } });
       }
       sendPresence();
     };
-    const joined = (id: Id) => {
-      const n = (tabs.get(id) ?? 0) + 1;
-      tabs.set(id, n);
-      clearTimeout(leaveTimers.get(id)); leaveTimers.delete(id);
+    const cameOnline = (id: Id) => {
       clearTimeout(offlineTimers.get(id)); offlineTimers.delete(id);
-      if (n > 1) return;
       const c = engine.world.characters.get(id);
       const wasVeiled = Boolean(c && c.veiled && c.status === 'asleep');
       engine.setPresence(id, true);
       // Se durmió al irse (velo): al volver se despierta solo.
       if (wasVeiled) void engine.act(id, 'despierto').catch((e) => console.error('[web] despertar:', e));
-      // Vuelve: deja de estar ausente (los presentes leen «ha vuelto» en la ficción; el resto, el aviso de siempre).
+      // Vuelve: deja de estar ausente (los presentes leen «ha vuelto» del motor; el resto, el aviso de la web).
       const wasAway = Boolean(engine.world.characters.get(id)?.away);
       engine.setAway(id, false);
-      if (!shownOnline.has(id)) { shownOnline.add(id); announce(id, true, wasAway); } else sendPresence();
+      announce(id, true, wasAway);
+      seen.add(id);
     };
-    const left = (id: Id) => {
-      const n = Math.max(0, (tabs.get(id) ?? 0) - 1);
-      tabs.set(id, n);
-      if (n > 0) return;
-      leaveTimers.set(id, setTimeout(() => {
-        leaveTimers.delete(id);
-        if (tabs.get(id)) return;
-        // Pasado el margen sin pestañas, su PJ se queda ausente donde estaba (docs/MULTIJUGADOR.md, «Desconexiones»).
-        engine.setAway(id, true);
-        if (shownOnline.delete(id)) announce(id, false);
-      }, leaveNoticeMs));
+    // Pasada la gracia sin pestañas que cuenten, su PJ se queda ausente donde estaba (docs/MULTIJUGADOR.md, «Desconexiones»).
+    const wentOffline = (id: Id) => {
+      engine.setAway(id, true);
+      announce(id, false);
       scheduleOffline(id);
     };
     // Una acción a la vez por PJ; si otro PJ del mismo sitio va delante en la cola del motor, «esperando a…».
@@ -406,13 +406,17 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         .finally(() => { opening.delete(characterId); });
     };
     return {
-      engine, streams, history, introduce, joined, left, presenceFor, begin, end, typing,
+      engine, streams, history, introduce, presenceFor, begin, end, typing,
+      joined: (id, tab, beats) => presence.open(id, tab, beats),
+      left: (id, tab) => presence.close(id, tab),
+      beat: (id, tab, state) => { if (state === 'gone') presence.gone(id, tab); else presence.beat(id, tab, state === 'visible'); },
       roundFor: (id: Id) => { const loc = locOf(id); const r = loc ? engine.roundIn(loc) : null; return r ? roundFor(id, r) : null; },
       isOpening: (id) => opening.has(id),
-      online: (id) => shownOnline.has(id),
+      online: (id) => presence.online(id),
       dispose() {
         offDelivery(); offChange(); offScene(); offEntity(); offRound();
-        for (const t of [...leaveTimers.values(), ...offlineTimers.values()]) clearTimeout(t);
+        presence.dispose();
+        for (const t of offlineTimers.values()) clearTimeout(t);
         if (sheetTimer) clearTimeout(sheetTimer);
         for (const t of journalTimers.values()) clearTimeout(t);
         for (const set of streams.values()) for (const res of set) res.end();
@@ -575,13 +579,18 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const set = rt.streams.get(id) ?? new Set();
       set.add(res);
       rt.streams.set(id, set);
-      rt.joined(id);
+      // Cada pestaña trae su id: EventSource reconecta con la misma URL, así que un corte corto no la cuenta como nueva.
+      // Sin id es una página de antes del latido: cuenta mientras su stream siga abierto.
+      const sent = (url.searchParams.get('tab') ?? '').slice(0, 64);
+      const tab = sent || randomToken(8);
+      rt.joined(id, tab, Boolean(sent));
       res.write(`event: presence\ndata: ${JSON.stringify(rt.presenceFor(id))}\n\n`);
       const round = rt.roundFor(id);
       if (round) res.write(`event: round\ndata: ${JSON.stringify(round)}\n\n`);
       if (seat) void seats.update(games.paths(manifest).dir, (list) => { const s = list.find((x) => x.id === seat.id); if (s) s.last_seen_at = new Date().toISOString(); });
       const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
-      req.on('close', () => { clearInterval(ping); set.delete(res); rt.left(id); });
+      // «close» de la respuesta: salta al caerse la conexión (tras un proxy, a más tardar al escribir el ping).
+      res.on('close', () => { clearInterval(ping); set.delete(res); rt.left(id, tab); });
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/board') { handleBoardRequest(engine, req, res, url); return; }
@@ -628,6 +637,13 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           const to = typeof body['to'] === 'string' && body['to'] ? body['to'] : null;
           const mode = body['mode'] === 'shout' || body['mode'] === 'whisper' ? body['mode'] : undefined;
           json(res, 200, reply(await engine.say(id, text, { to, ...(mode ? { mode } : {}) })));
+          return;
+        }
+        case '/api/presence': {
+          const tab = typeof body['tab'] === 'string' ? body['tab'].slice(0, 64) : '';
+          const state = body['state'] === 'hidden' || body['state'] === 'gone' ? body['state'] : 'visible';
+          if (tab) rt.beat(id, tab, state);
+          json(res, 200, { ok: true });
           return;
         }
         case '/api/typing': {
@@ -893,6 +909,8 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   // Tablón y progreso: fuera del hilo; queda un aviso de una línea que lleva al Diario (también en el historial restaurado).
   const notice = noticeOf(e);
   if (notice) { m.text = ''; m.notice = notice; return m; }
+  // Se va o vuelve otro jugador (engine.setAway): aviso de sistema, no burbuja del narrador.
+  if ((e.action_type === 'away' || e.action_type === 'back') && e.actor_id) { m.presence = { id: e.actor_id, online: e.action_type === 'back' }; return m; }
   if (!SYSTEM_TYPES.test(e.action_type)) m.narrator = true;
   // Turno compartido (grupo o ronda): cada participante lo ve como suyo, con su propia acción y la de los demás.
   const group = Array.isArray(e.payload['group']) && (e.payload['group'] as Id[]).includes(d.character_id);

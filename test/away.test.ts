@@ -108,6 +108,34 @@ describe('3. rondas', () => {
     expect(calls.at(-1)!.text).toBe('apagar el fuego');
   });
 
+  it('al ausente no se le espera: la ronda se cierra en cuanto actúan los demás, sin temporizador', async () => {
+    const { engine, kael, mira } = await bar({ roundMs: 5000 });
+    const calls = fakeMaster(engine);
+    engine.world.location('loc_taberna').state['tense'] = true;
+    engine.setAway(mira.id, true);
+    const t0 = Date.now();
+    await engine.act(kael.id, 'vigilar la puerta');
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(calls.map((c) => c.text)).toEqual(['(ronda 1) Kael: vigilar la puerta / dudan: Mira']);
+    expect(engine.roundIn('loc_taberna')).toBeNull();
+  });
+
+  it('si se va a mitad de ronda y solo faltaba él, la ronda se cierra ya; el banner deja de esperarle', async () => {
+    const { engine, kael, mira } = await bar({ roundMs: 5000 });
+    const calls = fakeMaster(engine);
+    const banners: string[][] = [];
+    engine.onScene((n) => { if (n.open) banners.push(n.waiting); });
+    engine.world.location('loc_taberna').state['tense'] = true;
+    const t0 = Date.now();
+    const acted = engine.act(kael.id, 'vigilar la puerta');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(banners.at(-1)).toEqual([mira.id]);
+    engine.setAway(mira.id, true);
+    await acted;
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(calls.map((c) => c.text)).toEqual(['(ronda 1) Kael: vigilar la puerta / dudan: Mira']);
+  });
+
   it('8. con la pestaña abierta pero sin actuar, manda el temporizador y nunca sale de la ronda', async () => {
     const { engine, kael } = await bar({ roundMs: 60 });
     const calls = fakeMaster(engine);

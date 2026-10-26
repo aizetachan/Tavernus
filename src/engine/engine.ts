@@ -1659,6 +1659,12 @@ export class Engine {
     }
     // Conversación de grupo y colas: fuera; el NPC sigue con los que quedan.
     this.leaveTalk(c, false);
+    // Ronda abierta en su sitio: si solo faltaba él, se cierra ya (no se espera al temporizador).
+    const round = spot ? this.rounds.get(spot.location_id) : undefined;
+    if (spot && round) {
+      if (round.items.size && this.roundComplete(spot.location_id, round)) void this.flushRound(spot.location_id);
+      else this.notifyScene(this.roundNotice(spot.location_id, round, true));
+    }
     // Seguir: quien le seguía deja de hacerlo, con aviso; él se queda donde está.
     if (c.following) { c.following = null; this.world.touch('characters', c.id); }
     for (const f of this.world.characters.values()) {
@@ -1719,7 +1725,7 @@ export class Engine {
 
   private roundNotice(locationId: Id, r: Round, open: boolean): SceneNotice {
     const present = this.roundMembers(locationId);
-    return { kind: 'round', location_id: locationId, n: r.n, acted: [...r.items.keys()], waiting: present.filter((p) => !r.items.has(p.id)).map((p) => p.id), deadline_ms: r.deadline_ms, open };
+    return { kind: 'round', location_id: locationId, n: r.n, acted: [...r.items.keys()], waiting: present.filter((p) => !p.away && !r.items.has(p.id)).map((p) => p.id), deadline_ms: r.deadline_ms, open };
   }
 
   private notifyScene(n: SceneNotice): void { for (const l of this.sceneListeners) l(n); }
@@ -1908,8 +1914,13 @@ export class Engine {
     r.items.set(c.id, text);
     this.notifyScene(this.roundNotice(locId, r, true));
     this.awayHesitations.delete(c.id);
-    if (this.roundMembers(locId).every((p) => r!.items.has(p.id))) void this.flushRound(locId);
+    if (this.roundComplete(locId, r)) void this.flushRound(locId);
     return r.done;
+  }
+
+  /** ¿Han actuado todos los que se esperan? Al ausente no se le espera: duda al cerrarse la ronda. */
+  private roundComplete(locId: Id, r: Round): boolean {
+    return this.roundMembers(locId).every((p) => p.away || r.items.has(p.id));
   }
 
   private async flushRound(locId: Id): Promise<void> {
