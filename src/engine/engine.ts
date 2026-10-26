@@ -104,7 +104,8 @@ export interface SceneHints {
   /** Descanso interrumpido (rest.ts): qué le despierta. */
   rest?: { kind: RestKind; what: string; teaser: string };
   /** Recado (errand.ts): el motor ya le ha traído hasta aquí y queda lo que venía a hacer. */
-  errand?: { line: string; action: string; first_visit: boolean };
+  /** `obstacle`: lo que puede impedírselo allí (escena tensa, quien buscaba no está); decide y lo cuenta el master. */
+  errand?: { line: string; action: string; first_visit: boolean; obstacle?: string };
 }
 
 /** Llegada que cuenta la propia acción que la provocó (un recado o un move_to del máster): sin escena aparte. */
@@ -874,31 +875,35 @@ export class Engine {
     const pending = pendingLine(e.action);
     // Se queda antes: el viaje sigue su curso (llega al corte al final de la acción) y lo de allí queda pendiente.
     if (cut) return this.emitPending(c, text, e, `Te pones en camino hacia ${dest.name}. ${cut.text} ${pending}`, `${c.name} se marcha hacia ${dest.name}.`, 'Una figura se marcha.');
-    // Con la escena tensa allí, la llegada la narra el master como siempre y la acción espera.
-    const tense = this.master !== null && tension(this.world, c, [dest.id], this.recentTags([dest.id])) !== null;
-    if (!tense) this.quiet.set(c.id, { spot_id: goal.id });
+    // Con la escena tensa allí (alguien hostil, combate o peligro reciente; quien solo recela no cuenta), viaje y
+    // acción siguen siendo un turno: el master narra la llegada y decide si se lo impide; si es así, lo cuenta en
+    // ficción con el motivo, no la deja pendiente sin más.
+    const tense = this.master !== null ? tension(this.world, c, [dest.id], this.recentTags([dest.id]), { leaving: true }) : null;
+    this.quiet.set(c.id, { spot_id: goal.id });
     this.settleAll(this.gameNow());
     const arrived = this.quiet.get(c.id)?.arrived ?? null;
     this.quiet.delete(c.id);
     // Un encuentro en el camino ya lo ha contado el viaje (travel.ts); aquí, solo que la acción espera.
-    if (c.transit || this.world.characterSpot(c)?.id !== goal.id || tense || !arrived) return this.emitPending(c, text, e, pending, null, null);
+    if (c.transit || this.world.characterSpot(c)?.id !== goal.id || !arrived) return this.emitPending(c, text, e, pending, null, null);
     const wait = this.aheadWait(c);
     if (wait) return this.emitPending(c, text, e, `${this.errandLine(c, arrived)} ${wait} ${pending}`, null, null);
-    return this.errandAction(c, text, e, arrived);
+    return this.errandAction(c, text, e, arrived, tense ? `la escena allí está tensa (${tense})` : null);
   }
 
   /** Lo que hace al llegar: con plantilla si es trivial y el sitio no es nuevo; si no, el master con el viaje ya hecho. */
-  private async errandAction(c: Character, text: string, e: Errand, a: Arrival | null): Promise<ActionResult> {
+  private async errandAction(c: Character, text: string, e: Errand, a: Arrival | null, obstacle: string | null = null): Promise<ActionResult> {
     const line = this.errandLine(c, a);
     const spot = this.world.characterSpot(c)!;
     if (e.absent_npc_id) {
       const n = this.world.npc(e.absent_npc_id);
       const who = c.knows.includes(n.id) ? n.name : descriptorOf(this.world, n.id);
-      return this.emitPending(c, text, e, `${line} ${who.charAt(0).toUpperCase()}${who.slice(1)} no está aquí. ${pendingLine(e.action)}`, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`);
+      // Con master, que lo cuente él («llegas a la casa de las hierbas, pero Ilse no está…»); sin él, la plantilla.
+      if (!this.master) return this.emitPending(c, text, e, `${line} ${who.charAt(0).toUpperCase()}${who.slice(1)} no está aquí. ${pendingLine(e.action)}`, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`);
+      obstacle = `${who} no está aquí ahora`;
     }
     const hooks = [...(a?.hooks ?? [])];
     const intent = parseTrivial(this.world, c, trivialAction(e.action), this.nowFor(c));
-    if (intent && intent.kind !== 'move' && !a?.first_visit) {
+    if (intent && intent.kind !== 'move' && !a?.first_visit && !obstacle) {
       if (intent.kind === 'take') hooks.push(...matchHooks(this.world, { kind: 'item', item_id: this.world.itemInstance(intent.instance_id).item_id, location_id: spot.location_id, character_id: c.id }));
       const r = hooks.length && this.master ? null : this.execTrivial(c, text, intent, line);
       if (r) return r;
@@ -908,7 +913,7 @@ export class Engine {
       const r = this.resolveAction(c, e.action);
       return { ...r, text: `${line}\n${r.text}` };
     }
-    const r = await this.resolveWithHints(c, text, { hooks, encounter: null, errand: { line, action: e.action, first_visit: a?.first_visit ?? false } });
+    const r = await this.resolveWithHints(c, text, { hooks, encounter: null, errand: { line, action: e.action, first_visit: a?.first_visit ?? false, ...(obstacle ? { obstacle } : {}) } });
     if (r.ok || r.text !== '') return r;
     return this.emitPending(c, text, e, `${line} El narrador no responde ahora mismo. ${pendingLine(e.action)}`, null, null);
   }

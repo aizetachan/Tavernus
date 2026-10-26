@@ -413,7 +413,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       '## Viaje ya hecho',
       `El servidor ya ha traído a ${actor.name} hasta ${spot.name} (${loc.name}): «${hints.errand.line}». No uses move_to para venir.${hints.errand.first_visit ? ' Es la primera vez que pisa este sitio: dibújalo en una o dos frases.' : ''}`,
       `Lo que venía a hacer: «${hints.errand.action}». En UNA sola narración: la llegada en una frase y, sin cortar, esa acción resuelta aquí con los tools que haga falta. No le preguntes qué quiere hacer.`,
-    ].join('\n'));
+      hints.errand.obstacle ? `Puede que no lo consiga: ${hints.errand.obstacle}. Decide tú si se lo impide. Si no, hazla sin más. Si sí, cuéntalo en la narración, en ficción y con el motivo concreto («No llegas a sacar el agua: …»), y no la des por hecha.` : '',
+    ].filter(Boolean).join('\n'));
   }
   if (hints?.rest) L.push(`## Descanso interrumpido\nEl actor ${hints.rest.kind === 'long' ? 'dormía' : 'descansaba'} y algo le despierta (ya se le ha dicho: «${hints.rest.teaser}»). Lo que pasa, para ti: ${hints.rest.what}. Narra lo que encuentra al despertar; el descanso ya está cortado y el tiempo ya ha pasado.`);
   if (hints?.group) {

@@ -126,7 +126,39 @@ describe('ir y hacer en una frase', () => {
     expect(r.text).toContain('queda pendiente');
   });
 
-  it('quien buscaba no está: llega, lo dice y la acción queda pendiente', async () => {
+  it('con la escena tensa allí, viaje y acción siguen en un turno: el máster decide y, si se lo impide, lo cuenta', async () => {
+    const { engine, c, requests } = await brezal();
+    // Garrán, hostil con Lia, junto al pozo.
+    const garran = engine.world.npc('npc_garran') as { routine?: unknown; location: { type: 'spot'; id: string } };
+    garran.routine = undefined;
+    garran.location = { type: 'spot', id: 'sp_pl_pozo' };
+    engine.world.npc('npc_garran').attitude.by_character[c.id] = 'hostile';
+    const from = lastSeq(engine);
+    const r = await engine.act(c.id, 'voy a la plaza a por agua');
+    expect(r.ok).toBe(true);
+    expect(c.location.id).toBe('sp_pl_pozo');
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toContain('## Viaje ya hecho');
+    expect(requests[0]).toContain('Lo que venía a hacer: «a por agua»');
+    expect(requests[0]).toMatch(/Puede que no lo consiga: la escena allí está tensa \(Garrán hostile\)\. Decide tú/);
+    // Ni escena de llegada aparte ni «queda pendiente».
+    expect(engine.events.all().some((e) => e.seq > from && e.action_type === 'master_arrival')).toBe(false);
+    expect(said(engine, c, from).some((e) => e.tags.includes('pending'))).toBe(false);
+  });
+
+  it('quien solo recela allí no frena el recado: coge el agua sin IA', async () => {
+    const { engine, c, requests } = await brezal();
+    const garran = engine.world.npc('npc_garran') as { routine?: unknown; location: { type: 'spot'; id: string } };
+    garran.routine = undefined;
+    garran.location = { type: 'spot', id: 'sp_pl_pozo' };
+    engine.world.npc('npc_garran').attitude.by_character[c.id] = 'unfriendly';
+    await engine.act(c.id, 'voy a la plaza a por agua');
+    expect(c.location.id).toBe('sp_pl_pozo');
+    expect(holds(engine, c, 'it_agua_pozo')).toBe(true);
+    expect(requests).toHaveLength(0);
+  });
+
+  it('quien buscaba no está: llega y el narrador dice que no está, sin dar la acción por hecha', async () => {
     const { engine, c, requests } = await brezal();
     c.knows.push('npc_hugo');
     // Hugo se ha ido a la taberna y su rutina no le devuelve a la fragua.
@@ -135,9 +167,10 @@ describe('ir y hacer en una frase', () => {
     hugo.location = { type: 'spot', id: 'sp_tab_barra' };
     const r = await engine.act(c.id, 'voy a la herrería a hablar con Hugo');
     expect(engine.world.location(engine.world.spot(c.location.id).location_id).id).toBe('loc_herreria');
-    expect(r.text).toContain('Hugo no está aquí.');
-    expect(r.text).toContain('queda pendiente');
-    expect(requests).toHaveLength(0);
+    // Lo cuenta el narrador, en ficción y con el motivo; el máster lo sabe por el contexto.
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toContain('Puede que no lo consiga: Hugo no está aquí ahora.');
+    expect(r.text).toContain('Hugo no está aquí ahora: lo de «hablar con Hugo» tendrá que esperar.');
   });
 });
 

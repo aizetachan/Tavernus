@@ -29,7 +29,7 @@ interface ParsedContext {
   scene: 'intro' | 'arrival' | 'decisive_timeout' | 'roll' | 'action';
   roll: { label: string; outcome: string } | null;
   /** Recado: el motor ya le ha traído (línea de llegada) y queda lo que venía a hacer. */
-  errand: { line: string; action: string } | null;
+  errand: { line: string; action: string; obstacle?: string } | null;
 }
 
 /** Extrae del contexto (prompt.ts) lo que necesita la narración. Tolerante: si algo falta, lista vacía. */
@@ -54,7 +54,8 @@ export function parseContext(context: string): ParsedContext {
   const rm = /^## Resultado de la tirada\n.*\n(.+?): .+? → (ÉXITO|FALLO|sin CD)/m.exec(context);
   const roll = rm ? { label: rm[1]!, outcome: rm[2]! } : null;
   const em = /^## Viaje ya hecho\n.*?: «(.*)»\. No uses move_to[\s\S]*?^Lo que venía a hacer: «(.*?)»\. En UNA/m.exec(context);
-  const errand = em ? { line: em[1]!, action: em[2]! } : null;
+  const om = /^Puede que no lo consiga: (.+?)\. Decide tú/m.exec(context);
+  const errand = em ? { line: em[1]!, action: em[2]!, ...(om ? { obstacle: om[1]! } : {}) } : null;
   return { actor, actor_id, action, spots, exits, npcs, scene, roll, errand };
 }
 
@@ -98,6 +99,11 @@ export function offlineLogEvent(context: string): Record<string, unknown> {
       // Recado: la llegada delante y, de seguido, lo que venía a hacer.
       const action = p.errand?.action ?? p.action ?? 'algo';
       const lead = p.errand ? `${p.errand.line} ` : '';
+      // Sin criterio para juzgar una escena tensa, solo frena lo concreto (quien buscaba no está), contado en ficción.
+      if (p.errand?.obstacle && !/escena allí está tensa/.test(p.errand.obstacle)) {
+        const why = p.errand.obstacle.charAt(0).toUpperCase() + p.errand.obstacle.slice(1);
+        return { ...base, narration_private: `${lead}${why}: lo de «${action}» tendrá que esperar.`, suggested_actions: sug };
+      }
       if (ATTACK_RE.test(action)) {
         const target = p.npcs.find((n) => n.fights) ?? p.npcs[0];
         if (target) {
