@@ -2545,6 +2545,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   }
   // Partidas de antes de la muerte y la reaparición: el punto de vuelta de la campaña escrita.
   if (seed?.campaign.death_rules && !camp2.death_rules) { camp2.death_rules = structuredClone(seed.campaign.death_rules); changed = true; }
+  // Partidas de antes de las costumbres de la campaña escrita.
+  if (seed?.campaign.customs && !camp2.customs) { camp2.customs = [...seed.campaign.customs]; changed = true; }
   // Mundos generados antes de los cuartos de alquiler: la habitación deja de ser el premio oculto.
   if (migrateRentableRooms(snapshot)) changed = true;
   return changed;

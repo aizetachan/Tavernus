@@ -174,6 +174,7 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
   // Biblia, leyes y situaciones (mismas reglas que fill.ts)
   if (c.bible && (c.bible.length < 5 || c.bible.length > 10 || c.bible.some(blank))) errs.push(`La Biblia debe tener entre 5 y 10 verdades (tiene ${c.bible.length}).`);
   if (c.laws && (c.laws.length < 3 || c.laws.length > 8 || c.laws.some(blank))) errs.push(`Las leyes del mundo deben ser entre 3 y 8 (hay ${c.laws.length}).`);
+  if (c.customs && (c.customs.length > 20 || c.customs.some(blank))) errs.push(`Las costumbres deben ser como mucho 20 y sin entradas vacías (hay ${c.customs.length}).`);
   for (const e of c.situations ?? []) {
     const s = e.situation;
     const who = e.for_name || (e.for_classes?.length ? e.for_classes.join('/') : 'reserva');

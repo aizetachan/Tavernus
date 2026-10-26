@@ -74,6 +74,8 @@ export interface Campaign {
   // Mundo generado (src/worldgen). Todo opcional: la semilla demo no lo trae.
   /** Biblia: verdades ocultas del mundo que explican pistas y secretos. Consulta; no va al system prompt. */
   bible?: string[];
+  /** Costumbres del lugar (lo que la gente hace y dice sin explicarlo), una entrada cada una. Van al system prompt como detalle de fondo. */
+  customs?: string[];
   /** Leyes del mundo, una frase cada una (las lee src/engine/laws.ts). */
   laws?: string[];
   /** Procedencia: cómo y con qué se generó este mundo. */

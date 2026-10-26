@@ -9,7 +9,7 @@ import { ITEM_DEFS, ITEMS, RESOURCES } from './items.js';
 import { ENCOUNTERS, HOOKS, RUMORS, SCHEDULE } from './life.js';
 import { EXITS, LOCATIONS, REGIONS, ZONES } from './map.js';
 import { NPCS } from './people.js';
-import { ACHIEVEMENT, BIBLE, CLUES, FACTIONS, JOBS, LAWS, PREMISE, SITUATIONS, STARTING_POINTS, WELCOME } from './plot.js';
+import { ACHIEVEMENT, BIBLE, CLUES, CUSTOMS, FACTIONS, JOBS, LAWS, PREMISE, SITUATIONS, STARTING_POINTS, WELCOME } from './plot.js';
 import { STORY } from './story.js';
 
 export const BREZAL: AuthoredCampaign = {
@@ -46,6 +46,7 @@ export const BREZAL: AuthoredCampaign = {
     achievement: ACHIEVEMENT,
     progression: { practice_thresholds: [10, 30, 60], practice_min_dc: 10 },
     bible: BIBLE,
+    customs: CUSTOMS,
     laws: LAWS,
     situations: SITUATIONS,
     // Quien muere vuelve en el camastro de Ilse (SPEC §4.7): ella le encontró.

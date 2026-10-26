@@ -186,6 +186,15 @@ describe('leyes del mundo y prompt', () => {
     expect(systemPrompt(camp)).toContain('LEYES DEL MUNDO: Aquí todo el mundo vuela los martes.');
   });
 
+  it('las costumbres de la campaña van al prompt solo si las trae', async () => {
+    const { engine } = await bootEngine();
+    const camp = engine.world.campaign;
+    expect(systemPrompt(camp)).not.toContain('COSTUMBRES DEL LUGAR');
+    camp.customs = ['Al cruzarse se saluda «¿Prendes?» y se responde «Aún».'];
+    expect(systemPrompt(camp)).toContain('COSTUMBRES DEL LUGAR (detalle de fondo');
+    expect(systemPrompt(camp)).toContain('«¿Prendes?»');
+  });
+
   it('el prompt trae el tono ante lo imposible y los tres casos fuera de los datos, sin perder el principio rector', async () => {
     const { engine } = await bootEngine();
     const sp = systemPrompt(engine.world.campaign);

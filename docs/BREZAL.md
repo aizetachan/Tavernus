@@ -83,7 +83,7 @@ La demo de `src/data/seed/demo.ts` era un mundo de pruebas con alma de aventura:
 
 ### 1.4 Por qué no basta con escribir texto
 
-La regla del proyecto es que la historia **se revela por tools**: nada existe porque el máster lo diga. Por eso la campaña escrita no es un guion que se le pase al máster, sino datos: cada paso de una misión tiene una condición que el motor comprueba solo (una pista concedida, un punto pisado, un objeto en el bolsillo o entregado, un NPC caído, el estado de un punto), y las consecuencias (un NPC que se va o se esconde, un rumor, un gancho, un evento en la agenda) las aplica el motor. Solo los pasos que son pura ficción («convencer a Brenna») los marca el máster con `advance_story`, y aun así el motor comprueba que sea el paso en curso. La niebla tampoco la narra el máster a su gusto: la resuelve el motor (§2.12).
+La regla del proyecto es que la historia **se revela por tools**: nada existe porque el máster lo diga. Por eso la campaña escrita no es un guion que se le pase al máster, sino datos: cada paso de una misión tiene una condición que el motor comprueba solo (una pista concedida, un punto pisado, un objeto en el bolsillo o entregado, un NPC caído, el estado de un punto), y las consecuencias (un NPC que se va o se esconde, un rumor, un gancho, un evento en la agenda) las aplica el motor. Solo los pasos que son pura ficción («convencer a Brenna») los marca el máster con `advance_story`, y aun así el motor comprueba que sea el paso en curso. La niebla tampoco la narra el máster a su gusto: la resuelve el motor (§2.13).
 
 ---
 
@@ -96,7 +96,7 @@ La regla del proyecto es que la historia **se revela por tools**: nada existe po
 ### 2.2 Biblia (lo que es verdad aunque nadie lo diga)
 
 1. Los señores de Vharn ataban en la cripta de su granero, bajo la capilla, un fuego antiguo, **la Brasa**, con cadenas de hierro frío; mientras dormía atada, el valle era fértil y el manantial bajaba frío. **[cambia]**
-2. **El incendio no fue un accidente**: Osric Malvez, entonces mayordomo, robó la plata del sello y prendió el granero para taparlo. El fuego llegó a la cripta, rompió las cadenas, la derrumbó y mató a los señores, al herrero de Vharn y al hermano de Brenna.
+2. **El incendio no fue un accidente**: Osric Malvez, entonces mayordomo, robó la plata del sello y prendió el granero para taparlo, la noche en que el valle prestaba la lumbre. El fuego llegó a la cripta, rompió las cadenas, la derrumbó y mató a los señores, al herrero de Vharn y al hermano de Brenna. **El herrero vio a Osric con la plata, y Garrán, entonces su mozo, le atrancó la puerta de la fragua.** **[nuevo]**
 3. **Brenna** vio a Osric con la antorcha y sacó del fuego a la niña de los señores, Ysolde. Osric le dio la taberna a cambio de callar; ella guarda en el sótano el **libro de cuentas** que apunta la plata entregada a «O. Malvez».
 4. **Ysolde Vharn** ha vuelto: se esconde en el pajar del Granero Quemado con **un ascua de la Brasa en el guante**. Recuerda a una mujer con antorcha llevándosela y **cree que Brenna prendió el fuego**. Si el valle no confiesa, soltará el ascua en la plaza la noche de la Brasa. **[cambia]**
 5. **La Brasa grande sigue enterrada** bajo el granero, fuera de alcance, y respira: calienta el manantial que alimenta el pozo. Además **Tobías** echa cada noche al pozo ceniza de las grietas del altar por encargo de Ysolde: de ahí la tos gris. **[cambia]**
@@ -166,7 +166,7 @@ Bloques SRD de los arquetipos del generador (`ARCHETYPES`, mismos rangos que val
 
 Al otro lado de la niebla está el **Camino de Valcruz** (`loc_valcruz`, zona «Más allá del Cerco»): un lugar sellado que solo existe para que el Cerco sea una salida con destino. Nadie llega en la demo; el tablero y el mapa de zona lo enseñan como vecino bloqueado. La expansión lo abrirá con un `exit_state` que borre `blocked_by`.
 
-Salidas: taberna-plaza (3 m), trampilla-sótano (3 m), plaza-herrería, plaza-casona, plaza-curandera (25 m), plaza-molino (150 m), plaza-corrales (180 m), portón-Soto (250 m), portón-Lindero (450 m), molino-Soto por el arroyo (220 m), corrales-Soto (200 m), Soto-granero (180 m) y **el Cerco**: borde de la niebla → camino de Valcruz, `blocked_by: 'El Cerco de Ceniza'` con `rebound` (§2.12).
+Salidas: taberna-plaza (3 m), trampilla-sótano (3 m), plaza-herrería, plaza-casona, plaza-curandera (25 m), plaza-molino (150 m), plaza-corrales (180 m), portón-Soto (250 m), portón-Lindero (450 m), molino-Soto por el arroyo (220 m), corrales-Soto (200 m), Soto-granero (180 m) y **el Cerco**: borde de la niebla → camino de Valcruz, `blocked_by: 'El Cerco de Ceniza'` con `rebound` (§2.13).
 
 ### 2.7 Pistas (11)
 
@@ -251,7 +251,15 @@ Tres días desde las 18:00 del día 1 (72 h de juego, 24 h reales al ritmo 3×).
 - **Encuentros de camino** (solo aldea): un vecino con tos, la ronda de Garrán, ceniza que cae y la niebla devuelve, un lobo entre las cercas, un buhonero atrapado, huellas de Tobías y de lobo. **[cambia]**
 - **Tablón**: leña y bayas para Brenna, la ronda de Doro al Soto, carbón para Hugo, truchas, la toma del arroyo para Mateo, **huevos para la cena** (Brenna) y **la cerca del redil** (Úrsula) **[nuevo]**.
 
-### 2.12 Las dos piezas de motor de la versión sellada **[nuevo]**
+### 2.12 Trasfondo y costumbres **[nuevo]**
+
+Cada vecino y cada lugar tienen ahora un pasado: de dónde viene, qué le hirió, qué gesto lo delata, con quién lo ata. Lo que se ve va en la descripción del NPC o del punto; lo que no se dice, en su secreto. El pueblo tiene además costumbres propias (`CUSTOMS` en `plot.ts`, campo `campaign.customs`), que van en el system prompt cacheado como detalle de fondo: el consejo de los cinco oficios, la noche de prestar la lumbre, «al pozo no se miente: se calla», el fiador del forastero, los mechones en el dintel, «duerme, viejo», los refranes. Nada de eso cambia la trama ni abre pistas nuevas.
+
+Decisiones que tocan la historia de fondo: Garrán atrancó la fragua de Vharn (ver Biblia 2); la noche de la Brasa cae en el aniversario del incendio; Hal es hijo del perrero de Vharn; el marido de Úrsula murió esa noche velando el fuego; Ilse guarda el cuenco del ascua de cuna de Ysolde y sospecha que vive; las palabras del rito están escondidas en la rima de corro, la canción de amasar y una nana, e Ysolde las sabe sin saberlo. El hijo del maestro de Hugo no tiene culpa de nada: puede ser el personaje del jugador. La propuesta completa, con las fuentes de inspiración, está en las notas del proyecto («Trasfondo de Brezal»).
+
+Las partidas guardadas reciben las costumbres al cargar (`migrate`); las descripciones y los secretos nuevos solo llegan a las partidas nuevas.
+
+### 2.13 Las dos piezas de motor de la versión sellada **[nuevo]**
 
 **Chocar con la niebla** (`src/engine/barrier.ts`). Una salida con `state.blocked_by` es una pared para las rutas (movement.ts, fastpath.ts). Si además lleva `state.rebound` (`hours`, `text`, `observable`, `aliases`), quien intenta cruzarla se mete en ella y sale por donde entró: queda en el punto de su lado, con el reloj adelantado `hours` (como tras un viaje rápido) y la narración de la plantilla, sin IA. Se intenta de dos maneras:
 - con texto del jugador, que el motor intercepta antes del máster: «cruzo / atravieso / me meto en la niebla», «salgo hacia el camino de Valcruz», «salgo del valle». «Voy a la niebla» o «voy al borde de la niebla» es acercarse a un punto del Lindero, no cruzar;

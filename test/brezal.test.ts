@@ -119,6 +119,9 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(c.bible!.some((b) => b.includes('Guarda de Vharn') && b.includes('tres semanas'))).toBe(true);
     expect(c.bible!.some((b) => b.includes('tres anclajes') && b.includes('minas de plata'))).toBe(true);
     expect(c.laws!.length).toBeGreaterThanOrEqual(3);
+    // Costumbres del pueblo (docs/BREZAL.md): van al system prompt.
+    expect(c.customs!.some((x) => x.includes('duerme, viejo'))).toBe(true);
+    expect(c.customs!.some((x) => x.includes('prestar la lumbre'))).toBe(true);
     expect(c.situations).toHaveLength(5);
     expect(c.situations!.map((s) => s.situation.clock_days)).toEqual([3, 3, 3, 3, 3]);
     expect(c.schedule.length).toBeGreaterThanOrEqual(5);

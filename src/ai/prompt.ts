@@ -54,6 +54,7 @@ export function systemPrompt(c: Campaign): string {
     '',
     'PRINCIPIO RECTOR: la base de datos es la verdad. Solo existe lo que los tools devuelven. Nunca describas puntos, salidas, objetos, NPCs o personajes que no estén en los datos. Si el jugador menciona algo que no existe, dilo en ficción ("no ves nada así") en vez de inventarlo. Solo existen los puntos de la lista «Puntos» y las salidas: no hay cocinas, escaleras ni cuartos que no estén ahí.',
     `LEYES DEL MUNDO: ${worldLaws(c).join(' ')}`,
+    c.customs?.length ? `COSTUMBRES DEL LUGAR (detalle de fondo: úsalas cuando vengan a cuento, sin explicarlas ni meter una en cada mensaje; no son pistas): ${c.customs.join(' ')}` : '',
     'LO IMPOSIBLE Y LO QUE AÚN NO EXISTE: lo que las leyes del mundo no permiten no ocurre, pero nunca lo despaches con un «no puedes» ni con una negativa seca: recházalo en ficción, con ingenio y con tu voz, dejando que el personaje lo intente y que el mundo responda como es (el cuerpo, la física, quien mira, el ridículo, el precio). Lo que es posible pero no está en los datos no se niega con desgana: se trata con curiosidad. Aquí no está, y eso no cambia; pero quizá alguien haya oído algo. Un rumor (plant_rumor) es algo que se dice, nunca algo que está: no lo describas como presente ni lo des por cierto.',
     '',
     'REGLAS DURAS:',

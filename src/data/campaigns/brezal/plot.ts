@@ -19,7 +19,7 @@ export const WELCOME = [
 /** Verdades ocultas del mundo: explican pistas y secretos. Consulta del máster, nunca se cuentan tal cual. */
 export const BIBLE: string[] = [
   'Los señores de Vharn ataban en la cripta de su granero, bajo la capilla, un fuego antiguo, la Brasa, con cadenas de hierro frío; mientras dormía atada, el valle era fértil y el agua del manantial bajaba fría.',
-  'El incendio de hace veinte años no fue un accidente: Osric Malvez, entonces mayordomo de Vharn, robó la plata del sello y prendió el granero para taparlo. El fuego llegó a la cripta, rompió las cadenas, la derrumbó y mató a los señores y a medio servicio, entre ellos al herrero de Vharn y al hermano de Brenna.',
+  'El incendio de hace veinte años no fue un accidente: Osric Malvez, entonces mayordomo de Vharn, robó la plata del sello y prendió el granero para taparlo, la noche en que el valle prestaba la lumbre. El fuego llegó a la cripta, rompió las cadenas, la derrumbó y mató a los señores y a medio servicio, entre ellos al hermano de Brenna y al herrero de Vharn, que vio a Osric con la plata: Garrán, entonces su mozo, le atrancó la puerta de la fragua.',
   'Brenna, que servía en las cocinas, vio a Osric con la antorcha y sacó del fuego a la niña de los señores, Ysolde. Osric le dio la Taberna del Jabalí a cambio de callar; ella guarda en el sótano el libro de cuentas de Vharn, que apunta la plata entregada a «O. Malvez» aquella noche.',
   'Ysolde Vharn ha vuelto: se esconde en el pajar del Granero Quemado con una ascua de la Brasa en el guante. Recuerda a una mujer con una antorcha llevándosela y cree que Brenna prendió el fuego. Quiere que el valle confiese y, si no, soltar el ascua en la plaza la noche de la Brasa.',
   'La Brasa grande sigue enterrada bajo el granero, fuera de alcance, y respira: calienta el manantial que alimenta el pozo y la caza huye. Además, Tobías, el hijo del molinero, echa cada noche al pozo ceniza de las grietas del altar por encargo de Ysolde: de ahí la tos gris.',
@@ -28,6 +28,24 @@ export const BIBLE: string[] = [
   'La Guarda tiene tres anclajes con el sello de Vharn: el del valle (el mojón del Lindero, ligado al pozo y al ascua), el del bosque (la Lobera, al otro lado de la niebla) y el de las minas de plata. Esta historia solo puede templar el primero; los otros dos esperan fuera.',
   'Osric sabe que alguien vive en el granero. Manda a deudores a «apagar las luces» por cuenta suya a través de Garrán, y ha ordenado a Hugo fundir los eslabones. Guarda en su arcón una copa de plata con el sello que no se atrevió a fundir, y en la casona una bodega tapiada por si algún día tiene que esconderse: del valle ya no puede huir nadie.',
   'La loba de ceniza bajó de la montaña cuando empezó a arder por dentro y la niebla la encerró en el Soto, en una madriguera al pie del roble; no ataca a quien lleva encima ceniza del granero. Tiene acorralado a Ceniza, el perro de Brenna.',
+];
+
+/** Costumbres de Brezal: lo que la gente hace y dice sin explicarlo. Detalle de fondo para el máster, no pistas. */
+export const CUSTOMS: string[] = [
+  'Antes el valle se gobernaba con el señor de Vharn y cinco oficios: la llama (la sacerdotisa, hoy Ilse), el pan (el molino), el hierro (la herrería), la tierra (los Corrales) y la mesa (la cocina de Vharn, donde servía Brenna). Osric disolvió ese consejo al comprar el cargo.',
+  'Antes del incendio, una noche al año cada hogar subía un ascua al fuego común del granero de Vharn y volvía a por ella al alba: prestar la lumbre («fuego prestado, deuda de un año»). El incendio fue esa noche; desde entonces es la noche muda y no se celebra.',
+  'Junto al pozo no se miente, pero se puede callar: por eso allí se habla poco. Un papel solo vale si se lee en voz alta junto al pozo, ante testigos.',
+  'En la misa del pozo, Ilse dice cada noche el nombre de uno de los muertos de Vharn con su oficio y una manía, y todos responden «aguarda». Al nombre de Pol, el hijo de Úrsula, se hace silencio: no es del fuego.',
+  'El forastero necesita un fiador, que pone la mano abierta sobre su jarra ante dos testigos. Lo primero que se le pregunta es «¿a quién has dejado atrás?», y hasta que contesta nadie le cuenta nada. En el Jabalí su primer plato se paga con una noticia.',
+  'Cuando alguien se va, se ata un mechón suyo con hilo rojo al clavo del dintel. Cuando alguien muere, se dice qué le gustaba comer, su jarra del Jabalí se cuelga boca abajo y cada vecino lleva un tizón a su casa para encenderle el fuego.',
+  'Es de mala educación tener las manos quietas: las confidencias se cuentan pelando, hilando o trenzando cuerda, sin mirarse a los ojos.',
+  'En la mesa del Jabalí, mientras el caldo humea no se cuentan muertos.',
+  'Al cruzarse al anochecer se saluda «¿Prendes?» y se responde «Aún». Quien no contesta «aún» ha perdido a alguien.',
+  'Los mayores cuentan su edad en años «de antes» y «de después» del fuego. En la casona llaman al incendio «el accidente de Vharn»; en el pueblo, «la Noche del Granero».',
+  'Cada noche, en cada casa, se entierra el rescoldo bajo ceniza diciendo «duerme, viejo», y nadie sabe por qué. Bajo el dintel de cada puerta hubo una marca que casi todos han encalado. Los niños cantan una rima de corro que nadie entiende, y las mujeres otra para amasar.',
+  'Osric no dice «diezmo» sino «ofrenda de vecindad»; en su boca «apagar las luces» es quemar, «dar aire» es echar de casa y «cerrar la cuenta» es matar. El pueblo los traduce todos.',
+  'La ceniza vale: se hace lejía, abono y jabón, se curten pieles y se cura el queso. El brezo da escobas, techos, colchones y cerveza. Se come pan negro con costra de ceniza, gachas de centeno ahumado y queso curado en ceniza.',
+  'Refranes: «Cada casa guarda algo que no sabe tirar». «Lo que tapas con ceniza sigue vivo». «No hay mañana en la fragua». «Lo que te sacan del fuego es de quien te sacó». «Si Garrán busca un lobo, lo encuentra».',
 ];
 
 export const LAWS: string[] = [
