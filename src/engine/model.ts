@@ -153,6 +153,8 @@ export interface InitialSituation {
   debt?: { npc_id: Id; amount: number; reason: string };
   items?: { item_id: Id; quantity: number }[];
   knows?: Id[];
+  /** NPC que la apertura pone junto al PJ: el alta los lleva a su punto de inicio y los retiene un rato (npcorders.ts). */
+  with_npc_ids?: Id[];
 }
 
 export interface Faction { id: Id; name: string; description: string }
@@ -531,6 +533,17 @@ export interface Npc {
   stats: NpcStats | null;
   /** Actitud por PJ; `default` para quien no conoce. */
   attitude: { default: Attitude; by_character: Record<Id, Attitude> };
+  /** Cómo murió (death.ts, killNpc): su cuerpo sigue en su punto y el motor lo anuncia una vez (`told`). */
+  death?: NpcDeath;
+}
+
+export interface NpcDeath {
+  died_game_s: number;
+  /** Quién lo mató (PJ o NPC), si alguien. */
+  by_id: Id | null;
+  by_name: string | null;
+  cause: string;
+  told?: boolean;
 }
 
 export type Attitude = 'hostile' | 'unfriendly' | 'neutral' | 'friendly' | 'allied';
@@ -591,6 +604,8 @@ export interface ItemDef {
    * vendedor cerrados con esa llave (`spot.state.key_item_id`).
    */
   service?: { gives_item_id: Id };
+  /** Consumible que cura (poción): dados de PG que devuelve al gastarlo («2d4+2»). */
+  heals?: string;
   origin: 'srd' | 'custom';
 }
 

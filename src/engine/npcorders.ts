@@ -177,6 +177,23 @@ export function setNpcOrder(world: World, input: OrderInput, nowS: number): Orde
   return { ok: true, order: orderOf(n), npc: n };
 }
 
+/** Lo que dura la escena de apertura con quien la protagoniza antes de que vuelva a su horario. */
+export const OPENING_HOLD_MIN = 30;
+
+/**
+ * Lleva a un NPC a un punto y lo retiene allí un rato (orden `go`, luego
+ * `stay`): la apertura de una situación (claimSituation) cuenta que está con
+ * el PJ, así que tiene que estar, aunque su horario diga otra cosa. Lo mueve
+ * `tickOrders` al asentar, antes de que el máster narre la apertura, con su
+ * `npc_move` para quien lo vea irse o llegar.
+ */
+export function holdNpcAt(world: World, n: Npc, spotId: Id, nowS: number, minutes = OPENING_HOLD_MIN): boolean {
+  if (n.status !== 'alive' || !world.spots.has(spotId)) return false;
+  n.talking_to = null;
+  setOrder(world, n, { kind: 'go', spot_id: spotId, since_game_s: nowS, until_game_s: nowS + minutes * GAME_MINUTE, task: null });
+  return true;
+}
+
 function spotOf(world: World, id: Id): Spot | null {
   const c = world.characters.get(id);
   if (c) return world.characterSpot(c);

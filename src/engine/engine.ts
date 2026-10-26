@@ -13,7 +13,7 @@ import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, transferItem, type InventoryView, type TransferError } from './inventory.js';
 import type { Character, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
 import { approachSpot, interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
-import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, parseGive, parseParty, parseSay, pcName, SAY_LOUDNESS, type SayMode } from './party.js';
+import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswered, parseGive, parseOfferAnswer, parseParty, parseSay, pcName, SAY_LOUDNESS, type SayMode } from './party.js';
 import { witnesses } from './perception.js';
 import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, readsAsAccept } from './reactions.js';
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
@@ -25,7 +25,7 @@ import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type 
 import { parseErrand, pendingLine, trivialAction, type Errand } from './errand.js';
 import { atBoard, dropQuest, readBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
-import { tickSchedule } from './schedule.js';
+import { crowdHere, tickSchedule } from './schedule.js';
 import { tickOrders } from './npcorders.js';
 import { tickStory, type StoryOutput } from './story.js';
 import { aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
@@ -42,7 +42,7 @@ import { passivePerception, type Ability } from './rules.js';
 import { ABILITIES, backgroundById, classById, raceById, STANDARD_ARRAY } from '../data/srd/index.js';
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
-import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, type DeathSave } from './death.js';
+import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, type DeathSave } from './death.js';
 import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
@@ -681,6 +681,10 @@ export class Engine {
     // Quien espera a que otro jugador decida (reactions.ts) no hace otra cosa hasta saberlo (hablar, sí).
     const waiting = this.reactionWait(c);
     if (waiting) return { ok: false, text: waiting };
+    // «Acepto la cerveza» con una oferta de otro jugador en pie: lo resuelve el motor, como el botón (sin máster que lo dé por hecho).
+    const answer = parseOfferAnswer(text);
+    const answered = answer ? offerAnswered(this.world, c, answer.what, this.now()) : null;
+    if (answer && answered) return this.answerOffer(c.id, answered.id, answer.accept);
     // Varios a la vez (scene.ts): ronda, conversación de grupo o NPC ocupado. Lo de entre jugadores sigue sin máster.
     const t0 = text.trim();
     const give = parseGive(t0);
@@ -1065,7 +1069,7 @@ export class Engine {
         result = {
           label: `ataque con ${atk.weapon} a ${atk.target}`, expr: 'attack', total: atk.attack_total, rolls: [], d20s: [], modifier: 0, dc: atk.target_ac, advantage: pending.roll.advantage,
           success: atk.hit, ...(atk.natural ? { natural: atk.natural } : {}),
-          breakdown: `${atk.attack_breakdown}${atk.hit ? `. Daño: ${atk.damage_breakdown} (${atk.damage_type}). ${atk.target} queda a ${atk.target_hp} PG${atk.target_dead ? ', MUERTO' : atk.target_down ? ', CAE' : ''}. El daño ya está aplicado: no lo apliques otra vez.` : '. Falla.'}`,
+          breakdown: `${atk.attack_breakdown}${atk.hit ? `. Daño: ${atk.damage_breakdown} (${atk.damage_type}). ${atk.target} queda a ${atk.target_hp} PG${atk.target_dead ? `, MUERTO${this.world.npcs.has(pending.roll.target!) ? ': su cuerpo se queda donde cae (el servidor lo anuncia); narra el golpe y cómo reaccionan los presentes' : ''}` : atk.target_down ? ', CAE' : ''}. El daño ya está aplicado: no lo apliques otra vez.` : '. Falla.'}`,
         };
         roll = attackRoll(c.id, pending.roll.target, atk);
       } else {
@@ -2707,6 +2711,7 @@ export class Engine {
    * los tools del máster y el combate, que no emiten.
    */
   private announceDeathStates(): void {
+    for (const n of this.world.npcs.values()) if (n.status === 'dead' && n.death && !n.death.told) this.announceNpcDeath(n);
     for (const c of this.world.characters.values()) {
       if (c.status === 'dead' && c.death && !c.death.told) { this.announceDeath(c); continue; }
       const d = c.dying;
@@ -2741,6 +2746,31 @@ export class Engine {
         }, this.stampFor(c));
       }
     }
+  }
+
+  /**
+   * Muerte de un NPC (death.ts, killNpc): lo ve quien esté, el cuerpo se queda
+   * en su punto y el sitio reacciona. Lo emite el motor, no el máster: sale
+   * aunque la narración no lo cuente.
+   */
+  private announceNpcDeath(n: Npc): void {
+    const d = n.death!;
+    d.told = true;
+    this.world.touch('npcs', n.id);
+    const spot = this.world.spot(n.location.id);
+    const nowG = this.gameNow();
+    const r = npcDeathReport(this.world, n, crowdHere(this.world, spot.location_id, nowG), nowG);
+    const killer = d.by_id && this.world.characters.has(d.by_id) ? d.by_id : null;
+    this.events.emit({
+      actor_id: null, at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
+      action_type: 'npc_death', narration_private: '', observable: r.observable, loudness: 3, tags: ['death', 'npc', 'combat', 'deterministic'],
+      ...(killer ? { also_to: [killer] } : {}),
+      payload: {
+        master: null, npc_id: n.id, observable_vague: 'Alguien cae al suelo y no vuelve a levantarse.',
+        death: { cause: d.cause, by_id: d.by_id, spot_id: spot.id, witnesses: r.witnesses },
+        ...(killer && r.killer_text ? { target_character_id: killer, observable_target: r.killer_text } : {}),
+      },
+    }, this.now());
   }
 
   private announceDeath(c: Character): void {

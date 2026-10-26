@@ -61,7 +61,7 @@ const QUESTS: StoryQuest[] = [
   {
     id: 'q_noche', act: 1, title: 'Lo que vio Doro', giver_npc_id: 'npc_doro',
     text: 'Doro, el guardia del portón, se pone nervioso cuando alguien mira hacia el granero viejo. Algo ha visto.',
-    notes: 'Doro confiesa las luces del Granero Quemado y la figura de la senda (pista clue_doro) si se le trata bien. La figura es Tobías: cada noche, a las 23:00, cruza el arroyo del Soto hacia el granero (evento «Tobías va al granero»). Si el PJ espera allí a esa hora, lo ve con su hatillo. Que lo siga o lo pare es cosa suya.',
+    notes: 'Doro confiesa las luces del Granero Quemado y la figura de la senda (pista clue_doro) si se le trata bien. La figura es Tobías: cada noche, a las 23:00, cruza el arroyo del Soto hacia el granero (evento «la escapada al granero»). Si el PJ espera allí a esa hora, lo ve con su hatillo. Que lo siga o lo pare es cosa suya.',
     opens_when: { kind: 'any', of: [{ kind: 'knows', npc_id: 'npc_doro' }, { kind: 'visit', spot_id: 'sp_pl_porton' }, { kind: 'clue', clue_id: 'clue_doro' }] },
     heard: 'Lo notas tú mismo: el guardia del portón no le quita ojo al granero viejo',
     steps: [

@@ -23,11 +23,19 @@ async function brezal(opts: { deterministic?: boolean; client?: MasterClient } =
   claimSituation(engine.world, r.character.id, engine.gameNow());
   const c = r.character;
   c.location = { type: 'spot', id: 'sp_cu_puerta' };
+  // La apertura de la carta lleva a Ilse al pozo un rato (with_npc_ids); aquí la queremos en su casa.
+  releaseOpening(engine, 'npc_ilse', 'sp_cu_hierbas');
   for (const l of ['loc_plaza', 'loc_curandera', 'loc_taberna', 'loc_herreria']) engine.world.location(l).discovery[c.id] = 'visited';
   const requests: string[] = [];
   const base = opts.client ?? offlineClient();
   engine.attachMaster(new Master(engine, { client: { create: (p) => { requests.push(p.messages[0]!.content as string); return base.create(p); } } }));
   return { engine, c, requests, time };
+}
+
+function releaseOpening(engine: Engine, npcId: string, spotId: string): void {
+  const n = engine.world.npc(npcId) as ReturnType<Engine['world']['npc']> & { order?: unknown };
+  n.location = { type: 'spot', id: spotId };
+  delete n.order;
 }
 
 const lastSeq = (engine: Engine) => engine.events.all().at(-1)?.seq ?? 0;

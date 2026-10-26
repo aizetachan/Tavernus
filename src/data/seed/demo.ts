@@ -227,7 +227,7 @@ const SEED: WorldSnapshot = {
     { id: 'it_hacha', name: 'hacha de leñador', aliases: ['hacha', 'axe'], type: 'tool', size: 'medium', weight_lb: 4, value: 500, unique: false, weapon: { damage: '1d6', damage_type: 'slashing' }, origin: 'srd' },
     { id: 'it_madera', name: 'leña', aliases: ['madera', 'tronco', 'wood', 'leños'], type: 'misc', size: 'medium', weight_lb: 5, value: 5, unique: false, origin: 'custom' },
     { id: 'it_bayas', name: 'bayas', aliases: ['baya', 'berries', 'frutos'], type: 'consumable', size: 'tiny', weight_lb: 0.1, value: 2, unique: false, origin: 'custom' },
-    { id: 'it_pocion', name: 'poción de curación', aliases: ['poción', 'pocion', 'potion'], type: 'consumable', size: 'small', weight_lb: 0.5, value: 2500, unique: false, origin: 'srd' },
+    { id: 'it_pocion', name: 'poción de curación', aliases: ['poción', 'pocion', 'potion'], type: 'consumable', size: 'small', weight_lb: 0.5, value: 2500, unique: false, heals: '2d4+2', origin: 'srd' },
     { id: 'it_cofre', name: 'cofre de la posada', aliases: ['cofre', 'arcón', 'chest'], type: 'container', size: 'bulky', weight_lb: 60, value: 0, unique: false, container: { slots: 30, max_weight_lb: 200, max_size: 'large', fixed: true }, origin: 'custom' },
     { id: 'it_barril', name: 'barril', aliases: ['barrel', 'tonel'], type: 'misc', size: 'bulky', weight_lb: 40, value: 50, unique: false, origin: 'custom' },
     { id: 'it_pescado', name: 'trucha', aliases: ['pescado', 'pez', 'truchas', 'fish'], type: 'consumable', size: 'small', weight_lb: 1, value: 25, unique: false, origin: 'custom' },

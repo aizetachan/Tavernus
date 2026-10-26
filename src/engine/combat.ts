@@ -5,7 +5,7 @@
 
 import { abilityModifier, proficiencyBonus, rollD20, rollExpr, type Advantage, type Rng } from './dice.js';
 import type { Character, Id, Npc } from './model.js';
-import { damageCharacter } from './death.js';
+import { damageCharacter, killNpc, worldNow } from './death.js';
 import { armorClass } from './rules.js';
 import type { World } from './world.js';
 
@@ -106,9 +106,9 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
     if (hit) {
       s.hp = Math.max(0, s.hp - damage);
       if (s.hp === 0) {
-        n.status = 'dead'; dead = true; down = true; xp = s.xp;
-        // Lo que llevaba cae al suelo.
-        for (const i of world.itemsIn({ type: 'npc', id: n.id })) { i.location = { type: 'spot', id: n.location.id }; world.touch('item_instances', i.id); }
+        // Muere: su cuerpo se queda y el motor lo anuncia (death.ts).
+        killNpc(world, n, nowGameS ?? worldNow(world), { id: a.kind === 'character' ? a.c.id : a.n.id, name: nameOfCombatant(a) }, `${nameOfCombatant(a)} (${weaponName})`);
+        dead = true; down = true; xp = s.xp;
         if (a.kind === 'character') { a.c.xp += xp; world.touch('characters', a.c.id); }
       }
       world.touch('npcs', n.id);

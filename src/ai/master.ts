@@ -122,7 +122,7 @@ export class Master {
       ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }
       : {};
     const context = actionContext(engine, actor, text, roll, intro, scene, decisive);
-    const ctx: ToolContext = { engine, actor, nowGameS: engine.nowFor(actor), rng: this.rng, closed: null, rolls: [], progress: [], action_text: roll?.original_text ?? (intro || scene ? null : text), roll_category: roll && !/^ataque/i.test(roll.result.label) ? rollCategory(roll.result) : null };
+    const ctx: ToolContext = { engine, actor, nowGameS: engine.nowFor(actor), rng: this.rng, closed: null, rolls: [], progress: [], action_text: roll?.original_text ?? (intro || scene ? null : text), roll_category: roll && !/^ataque/i.test(roll.result.label) ? rollCategory(roll.result) : null, ...(intro ? { intro: true } : {}) };
     const calls: ToolCallRecord[] = [];
     const failures: ToolFailure[] = [];
     /** Cierre aceptado: con tool_failed y los errores si algo de escritura falló por el camino. */

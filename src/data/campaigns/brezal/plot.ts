@@ -110,6 +110,7 @@ export const ACHIEVEMENT: Achievement = {
  * Tres situaciones iniciales y dos de compañero. Todas empiezan a las 18:00 del primer día, con la misa del pozo a
  * dos horas, y vencen la noche de la Brasa. En multijugador no se repiten si hay otra libre; quien entra con
  * «Empezar junto a…» recibe la de compañero de la del otro (`companion_of`, con `{companion}` = su nombre).
+ * Quien sale en la apertura existe y está allí: `with_npc_ids` lo pone junto al PJ al empezar.
  */
 export const SITUATIONS: NonNullable<Campaign['situations']> = [
   {
@@ -122,13 +123,14 @@ export const SITUATIONS: NonNullable<Campaign['situations']> = [
       clock_days: 3, clock_runs_out: 'Llega la noche de la Brasa: el ascua se suelta en la plaza y lo que ardió hace veinte años vuelve a arder, esta vez con el valle cerrado.',
       antagonist_npc_id: 'npc_osric', start_spot_id: 'sp_pl_pozo', start_hour: 18,
       paths: [
-        'Buscar a Ilse, la curandera: es la única que aún reza por los de Vharn.',
+        'Contarle a Ilse lo de la carta y seguirla a la Casa de las hierbas: es la única que aún reza por los de Vharn.',
         'Enseñar la carta en la taberna y mirar quién se pone pálido.',
         'Ir al Lindero y mirar la niebla de cerca.',
       ],
-      opening: 'Llevas tres semanas callando la carta. Esta noche, junto al pozo, una vieja que prepara velas para la misa ve asomar el lacre, se le cae una vela al agua y te agarra la muñeca con una fuerza que no parece suya: «¿Quién te ha mandado eso?».',
+      opening: 'Llevas tres semanas callando la carta. Esta noche, junto al pozo, Ilse, la curandera, que ha venido temprano a poner las velas de la misa, ve asomar el lacre; se le cae una vela al agua y te agarra la muñeca con una fuerza que no parece suya: «¿Quién te ha mandado eso?».',
       items: [{ item_id: 'it_carta_sello', quantity: 1 }],
       knows: ['npc_ilse'],
+      with_npc_ids: ['npc_ilse'],
     },
   },
   {
@@ -147,6 +149,7 @@ export const SITUATIONS: NonNullable<Campaign['situations']> = [
       ],
       opening: 'Hugo cierra la puerta de la fragua a tu espalda y baja la voz: «Aquí no. El alguacil ha pasado dos veces hoy». Fuera, unas botas se paran delante de la puerta y no se van.',
       knows: ['npc_hugo', 'npc_garran'],
+      with_npc_ids: ['npc_hugo'],
     },
   },
   {
@@ -166,6 +169,7 @@ export const SITUATIONS: NonNullable<Campaign['situations']> = [
       opening: 'Garrán deja caer en tu mesa una tablilla con tu nombre y una cifra, 300, y se sienta enfrente a esperar. «Tres días», dice, y te bebe la cerveza. «Y no pienses en la niebla: los deudores no pueden huir. Mejor».',
       debt: { npc_id: 'npc_garran', amount: 300, reason: 'la cama, la comida y la curandera del Jabalí; la deuda la compró el regidor' },
       knows: ['npc_brenna', 'npc_garran'],
+      with_npc_ids: ['npc_garran'],
     },
   },
   {
@@ -184,6 +188,7 @@ export const SITUATIONS: NonNullable<Campaign['situations']> = [
       ],
       opening: 'Hugo os mete a los dos en la herrería y echa la tranca. A ti apenas te mira: «Tú, a la puerta». Fuera, unas botas se paran delante y no se van.',
       knows: ['npc_hugo'],
+      with_npc_ids: ['npc_hugo'],
     },
   },
   {
@@ -196,12 +201,13 @@ export const SITUATIONS: NonNullable<Campaign['situations']> = [
       clock_days: 3, clock_runs_out: 'Llega la noche de la Brasa: el ascua se suelta en la plaza y lo que ardió hace veinte años vuelve a arder, esta vez con el valle cerrado.',
       antagonist_npc_id: 'npc_osric', start_spot_id: 'sp_pl_pozo', start_hour: 18,
       paths: [
-        'Cubrir a {companion} mientras habla con la vieja de las velas.',
+        'Cubrir a {companion} mientras habla con Ilse, la curandera.',
         'Ir a la taberna y escuchar qué se dice de la carta y de Vharn.',
         'Ir al Lindero y mirar la niebla de cerca.',
       ],
-      opening: 'Estás a un paso de {companion} junto al pozo cuando una vieja que prepara velas para la misa ve asomar el lacre de la carta, se le cae una vela al agua y agarra a {companion} de la muñeca: «¿Quién te ha mandado eso?». Después te mira a ti, de arriba abajo.',
+      opening: 'Estás a un paso de {companion} junto al pozo cuando Ilse, la curandera, que ha venido temprano a poner las velas de la misa, ve asomar el lacre de la carta; se le cae una vela al agua y agarra a {companion} de la muñeca: «¿Quién te ha mandado eso?». Después te mira a ti, de arriba abajo.',
       knows: ['npc_ilse'],
+      with_npc_ids: ['npc_ilse'],
     },
   },
 ];

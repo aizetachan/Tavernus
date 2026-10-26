@@ -39,7 +39,8 @@ export const BREZAL: AuthoredCampaign = {
     language: 'es',
     house_rules: '',
     welcome: WELCOME,
-    master: structuredClone(DEFAULT_MASTER),
+    // Campaña escrita como datos: el máster no crea objetos (spawn_item pide improvisación 3); lo que hay está en items.ts.
+    master: { ...structuredClone(DEFAULT_MASTER), improvisation: 1 },
     factions: FACTIONS,
     clues: CLUES,
     jobs: JOBS,

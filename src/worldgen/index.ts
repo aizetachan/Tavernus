@@ -19,6 +19,7 @@ import { CATALOG, DEFAULT_WORLDGEN_MODEL, FillError, fillWorld, GENRE_DEFAULT, l
 import { validateSnapshot } from './validate.js';
 import { setDebt } from '../engine/debts.js';
 import { spawnItem } from '../engine/inventory.js';
+import { holdNpcAt } from '../engine/npcorders.js';
 
 export { buildSkeleton, TONES, type Skeleton, type Tone } from './skeleton.js';
 export { FillError, offlineFill, validateFill, type FillClient, type PcBrief, type WorldFill } from './fill.js';
@@ -259,6 +260,8 @@ export function claimSituation(world: World, characterId: Id, nowGameS: number, 
   c.situation = situation;
   if (world.spots.has(situation.start_spot_id)) c.location = { type: 'spot', id: situation.start_spot_id };
   for (const id of [situation.antagonist_npc_id, ...(situation.knows ?? [])]) if (world.npcs.has(id) && !c.knows.includes(id)) c.knows.push(id);
+  // Quien protagoniza la apertura está donde empieza el PJ (si no, el máster narra a alguien que no está, o lleva al PJ hacia él).
+  for (const id of situation.with_npc_ids ?? []) { const n = world.npcs.get(id); if (n) holdNpcAt(world, n, c.location.id, nowGameS); }
   c.backstory = [hook?.trim(), situationText(world, situation)].filter(Boolean).join('\n');
   world.touch('characters', c.id);
   // Campañas escritas: lo que debe (vence con el plazo) y lo que trae encima.

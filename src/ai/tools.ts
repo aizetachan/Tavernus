@@ -6,7 +6,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Engine } from '../engine/engine.js';
 import { rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
-import { inventoryDetailed, inventoryView, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
+import { consumeItem, inventoryDetailed, inventoryView, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
 import type { Character, Id, Npc, Placement, ReactionKind } from '../engine/model.js';
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
 import { perceive, witnesses } from '../engine/perception.js';
@@ -18,10 +18,10 @@ import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
 import { finishQuest, giveQuest } from '../engine/quests.js';
 import { attitudeOf, resolveAttack } from '../engine/combat.js';
-import { bodyHolding, canLoot, damageCharacter, healCharacter, isDying, medicineDc, stabilize } from '../engine/death.js';
+import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, isDying, killNpc, medicineDc, stabilize } from '../engine/death.js';
 import { spendResource } from '../engine/rest.js';
 import { characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
-import { aEs, descriptorOf, fmtDuration } from '../engine/narrate.js';
+import { aEs, descriptorOf, fmtDuration, maskUnknownNames } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
 import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
 import { addScheduledEvent, listSchedule, RECURRENCES } from '../engine/schedule.js';
@@ -30,7 +30,7 @@ import { characterFacts, recordFact } from '../engine/facts.js';
 import type { DialogueLine } from '../engine/moments.js';
 import { fmtCoins, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
 import { inventedPlaces } from '../engine/places.js';
-import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, unansweredInShared, unansweredRejection, withoutDeathPhrases, type DeathHit, type RollCategory } from '../engine/closecheck.js';
+import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, unansweredInShared, unansweredRejection, withoutDeathPhrases, type DeathHit, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
@@ -147,7 +147,7 @@ export const MASTER_TOOLS: Tool[] = [
   tool('sell_item', 'Vende un objeto a un NPC que lo compre, al precio de su lista. Cobra en el acto.', {
     character_id: str('ID del personaje'), npc_id: str('ID del NPC'), instance_id: str('ID del ejemplar'), quantity: nnum('Cantidad, o null para todo'),
   }),
-  tool('buy_item', 'Compra a un NPC algo de su lista de venta. Descuenta monedas y lo pone en manos/bolsillo (o en el suelo si no cabe).', {
+  tool('buy_item', 'Compra a un NPC algo de su lista de venta. Descuenta monedas y lo pone en manos/bolsillo (o en el suelo si no cabe). Si es para varios («una para cada uno», «danos dos»), quantity es una por persona; lo comprado queda en manos del actor y para que otro jugador lo tenga se lo ofrece (transfer_item).', {
     character_id: str('ID del personaje'), npc_id: str('ID del NPC'), item_id: str('ID del catálogo'), quantity: num('Cantidad'),
   }),
   tool('set_debt', 'Anota lo que el actor debe a un NPC (una cuenta, un préstamo, un precio fiado) o corrige la deuda abierta con él. Lo que se debe es estado del mundo, no solo narración: sin esto no se puede pagar ni reclamar.', {
@@ -176,7 +176,13 @@ export const MASTER_TOOLS: Tool[] = [
   tool('apply_damage', 'Quita puntos de golpe a un personaje o NPC por daño que no es un ataque (caída, fuego, trampa).', {
     target_id: str('ID del personaje o NPC'), amount: num('Daño'), damage_type: str('Tipo: slashing, fire, falling…'), source: str('Qué lo causa'),
   }),
-  tool('heal', 'Devuelve puntos de golpe a un personaje o NPC. A un PJ a 0 PG le despierta (cualquier curación).', { target_id: str('ID del personaje o NPC'), amount: num('PG curados'), healer_id: nstr('Quién cura (ID de PJ o NPC); null = el actor') }),
+  tool('heal', 'Devuelve puntos de golpe a un personaje o NPC. A un PJ a 0 PG le despierta (cualquier curación). Si cura un objeto (poción, venda), pásalo en item_instance_id: el servidor lo gasta y tira sus dados.', {
+    target_id: str('ID del personaje o NPC'), amount: num('PG curados (con un objeto que tiene dados de curación, los tira el servidor y esto se ignora)'), healer_id: nstr('Quién cura (ID de PJ o NPC); null = el actor'),
+    item_instance_id: nstr('El ejemplar que se gasta al curar (poción, tónico, venda…), o null si es magia o cuidados'),
+  }),
+  tool('use_item', 'Alguien gasta un objeto consumible que lleva encima o tiene delante (bebe la cerveza, se come la ración, quema la antorcha hasta el final): el servidor lo quita. Para curar con una poción usa heal con item_instance_id.', {
+    instance_id: str('ID del ejemplar'), quantity: nnum('Unidades que se gastan; null = 1'),
+  }),
   tool('stabilize', 'Atender a un PJ que está a 0 PG cayendo (salvaciones contra muerte). Si lo atiende un PJ, el servidor tira su Medicina CD 10; un NPC lo logra. Estable: deja de tirar y recupera 1 PG en 1d4 h.', {
     target_id: str('ID del PJ caído'), healer_id: str('Quién le atiende: el actor u otro PJ presente, o un NPC'),
   }),
@@ -288,7 +294,7 @@ export const MASTER_TOOLS: Tool[] = [
 
 /** Tools que cambian el mundo: si fallan, eso no ha ocurrido y no se puede narrar (master.ts). */
 export const WRITE_TOOLS = new Set([
-  'move_to', 'transfer_item', 'spawn_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story',
+  'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
   'stabilize', 'take_rest', 'spend_resource', 'request_reaction', 'set_npc_order',
 ]);
@@ -333,6 +339,14 @@ export interface ToolContext {
   shared_rejections?: number;
   /** Cierres rechazados porque un NPC dice que va y no tiene orden (npcorders.ts; uno como mucho). */
   order_rejections?: number;
+  /** Curaciones rechazadas por no gastar el objeto que nombra la acción (una como mucho). */
+  heal_item_rejections?: number;
+  /** Cierres rechazados porque un NPC repite lo que ya ha dicho (closecheck.ts; uno como mucho). */
+  repeat_rejections?: number;
+  /** Cierres rechazados por narrar que el actor recibe algo de otro jugador sin oferta (closecheck.ts; uno como mucho). */
+  receive_rejections?: number;
+  /** Es la escena de apertura: el actor no se acerca a quien habla (la apertura ya le pone con él). */
+  intro?: boolean;
 }
 
 export interface LogEventInput {
@@ -473,6 +487,46 @@ function reachNpc(ctx: ToolContext, npc: Npc): Record<string, unknown> | null {
   };
 }
 
+/** ¿Puede alguno de `holders` usar este ejemplar? Lo lleva encima o está en su mismo punto (en el suelo o en un contenedor de allí). */
+function usableBy(ctx: ToolContext, instanceId: Id, holders: Id[]): boolean {
+  const w = ctx.engine.world;
+  const inst = w.itemInstances.get(instanceId);
+  if (!inst) return false;
+  for (const id of holders) {
+    if (w.characters.has(id) && w.itemsCarriedBy(id).some((i) => i.id === inst.id)) return true;
+    if (inst.location.type === 'npc' && inst.location.id === id) return true;
+  }
+  if (inst.location.type === 'character' || inst.location.type === 'npc') return false;
+  const here = w.characterSpot(ctx.actor)?.id;
+  return Boolean(here) && w.spotOfItem(inst)?.id === here;
+}
+
+/** Un consumible que llevan `holders` y que la acción del jugador nombra («le hago tragar la poción»). */
+function namedConsumable(ctx: ToolContext, holders: Id[]): { id: Id; item_id: Id } | null {
+  const text = norm(ctx.action_text ?? '');
+  if (!text) return null;
+  const w = ctx.engine.world;
+  for (const id of holders) {
+    if (!w.characters.has(id)) continue;
+    for (const i of w.itemsCarriedBy(id)) {
+      const d = w.itemDef(i.item_id);
+      if (d.type !== 'consumable' && !d.heals) continue;
+      const words = [d.name, ...d.aliases].map(norm).filter((a) => a.length >= 4);
+      if (words.some((a) => ` ${text} `.includes(` ${a} `))) return { id: i.id, item_id: i.item_id };
+    }
+  }
+  return null;
+}
+
+function capFirst(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+/** Minúsculas, sin tildes ni signos: para buscar palabras. */
+function norm(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9ñ ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const NPC_DEATH_NOTE = 'ha muerto: su cuerpo se queda donde ha caído y el servidor lo anuncia a quien esté; narra el golpe y la reacción de los presentes, no que se levante ni que desaparezca';
+
 /**
  * Saquear (death.ts): el cuerpo de quien murió en casual solo lo toca su dueño;
  * a un PJ vivo caído no se le quita nada sin su consentimiento (que te lo dé).
@@ -531,6 +585,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         remembers_about_others: n.memory.filter((m) => m.character_id !== actor.id && m.importance >= 2).slice(-5).map((m) => `[${engine.clock.format(m.game_s)}] ${world.characters.get(m.character_id)?.name ?? '?'}: ${m.note}`),
         talking_to: n.talking_to ? (world.characters.get(n.talking_to.character_id)?.name ?? null) : null,
         order: orderLine(world, n, nowGameS),
+        carries: world.itemsIn({ type: 'npc', id: n.id }).map((i) => `${world.itemDef(i.item_id).name} ×${i.quantity} [${i.id}]`),
+        ...(n.death ? { death: { at: engine.clock.format(n.death.died_game_s), by: n.death.by_name, cause: n.death.cause } } : {}),
       };
     }
     case 'get_item': {
@@ -555,6 +611,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         const p = perceive(world, engine.clock, actor, { spot_id: ns.id, next_spot_id: null, progress: 0, x: ns.x, y: ns.y, location_id: ns.location_id }, nowGameS);
         if (p.level === 'none') continue;
         out.push({ id: n.id, name: p.sight === 'full' ? n.name : '(figura)', role: n.role, level: p.level, spot_id: ns.id, distance_m: Math.round(p.distance_m ?? 0) });
+      }
+      // Los muertos siguen ahí: su cuerpo no desaparece de la escena.
+      for (const sp of world.spotsOf(pos.location_id)) {
+        for (const n of deadNpcsAt(world, sp.id)) out.push({ id: n.id, name: `cuerpo de ${n.name}`, role: n.role, status: 'dead', spot_id: sp.id, note: 'muerto: no se levanta ni se va' });
       }
       return out;
     }
@@ -750,7 +810,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity };
     }
     case 'spawn_item': {
-      if (world.campaign.master.improvisation < 3) return { error: 'improvisation_too_low' };
+      if (world.campaign.master.improvisation < 3) return { error: 'improvisation_too_low', hint: 'En esta campaña no se crean objetos: lo que hay está en el mundo (en el suelo, en un contenedor o lo lleva alguien: «Lleva» de cada NPC, get_npc, get_inventory). Usa transfer_item con ese ejemplar o narra que no lo hay.' };
       const r = spawnItem(world, s('item_id'), Math.max(1, Number(input['quantity']) || 1), { type: 'spot', id: s('spot_id') });
       if (!r.ok) return { error: r.error.code, detail: r.error };
       return { ok: true, instance_id: r.moved.id, item: world.itemDef(r.moved.item_id).name };
@@ -901,16 +961,17 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       ctx.rolls.push({ expr: 'attack', total: r.attack_total, breakdown: r.attack_breakdown, rolls: [] });
       // Las tiradas de los enemigos son ocultas (SPEC §9.3); la del PJ que ataca, a la vista.
       if (world.characters.has(s('attacker_id'))) (ctx.shown_rolls ??= []).push(attackRoll(s('attacker_id'), s('target_id'), r));
-      return r;
+      return r.target_dead && world.npcs.has(s('target_id')) ? { ...r, note: NPC_DEATH_NOTE } : r;
     }
     case 'apply_damage': {
       const npcT = world.npcs.get(s('target_id'));
       if (npcT) {
         if (!npcT.stats) return { error: 'ese NPC no tiene puntos de golpe' };
+        if (npcT.status === 'dead') return { error: `${npcT.name} ya está muerto` };
         npcT.stats.hp = Math.max(0, npcT.stats.hp - Math.max(0, Math.floor(Number(input['amount']) || 0)));
-        if (npcT.stats.hp === 0) { npcT.status = 'dead'; for (const i of world.itemsIn({ type: 'npc', id: npcT.id })) { i.location = { type: 'spot', id: npcT.location.id }; world.touch('item_instances', i.id); } }
+        const killed = npcT.stats.hp === 0 && killNpc(world, npcT, nowGameS, null, s('source') || s('damage_type') || 'daño');
         world.touch('npcs', npcT.id);
-        return { ok: true, hp: `${npcT.stats.hp}/${npcT.stats.hp_max}`, status: npcT.status };
+        return { ok: true, hp: `${npcT.stats.hp}/${npcT.stats.hp_max}`, status: npcT.status, ...(killed ? { died: true, note: NPC_DEATH_NOTE } : {}) };
       }
       const c = world.character(s('target_id'));
       if (c.veiled) return { error: `${c.name} está bajo el velo: no puede recibir daño` };
@@ -925,18 +986,48 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     }
     case 'heal': {
       const npcH = world.npcs.get(s('target_id'));
-      if (npcH) {
-        if (!npcH.stats) return { error: 'ese NPC no tiene puntos de golpe' };
-        npcH.stats.hp = Math.min(npcH.stats.hp_max, npcH.stats.hp + Math.max(0, Math.floor(Number(input['amount']) || 0)));
-        world.touch('npcs', npcH.id);
-        return { ok: true, hp: `${npcH.stats.hp}/${npcH.stats.hp_max}` };
-      }
-      const c = world.character(s('target_id'));
-      if (c.status === 'dead') return { error: `${c.name} está muerto: ninguna curación le devuelve; vuelve solo, por el servidor, cuando acabe su espera` };
+      const c = npcH ? null : world.character(s('target_id'));
+      if (npcH && !npcH.stats) return { error: 'ese NPC no tiene puntos de golpe' };
+      if (npcH && npcH.status === 'dead') return { error: `${npcH.name} está muerto: ninguna curación le devuelve` };
+      if (c && c.status === 'dead') return { error: `${c.name} está muerto: ninguna curación le devuelve; vuelve solo, por el servidor, cuando acabe su espera` };
       const healerId = input['healer_id'] ? s('healer_id') : actor.id;
+      // Con qué cura: el objeto se gasta (una poción no sana dos veces) y, si tiene dados, los tira el servidor.
+      let amount = Math.max(0, Math.floor(Number(input['amount']) || 0));
+      let used: string | null = null;
+      const itemId = input['item_instance_id'] && s('item_instance_id') !== 'null' ? s('item_instance_id') : null;
+      if (itemId) {
+        const inst = world.itemInstances.get(itemId);
+        if (!inst || !usableBy(ctx, inst.id, [healerId, s('target_id')])) return { error: 'not_reachable', hint: `${itemId} no lo lleva ${world.characters.get(healerId)?.name ?? 'quien cura'} ni está a su alcance: no puede curar con eso.` };
+        const def = world.itemDef(inst.item_id);
+        if (def.heals) { const roll = rollExpr(def.heals, ctx.rng); ctx.rolls.push(roll); amount = roll.total; }
+        consumeItem(world, inst.id);
+        used = def.name;
+      } else if ((ctx.heal_item_rejections ?? 0) < 1) {
+        const named = namedConsumable(ctx, [healerId, s('target_id')]);
+        if (named) {
+          ctx.heal_item_rejections = (ctx.heal_item_rejections ?? 0) + 1;
+          return { error: `La acción cura con ${world.itemDef(named.item_id).name} [${named.id}]: pásalo en item_instance_id para que se gaste. Si no lo usa, vuelve a llamar a heal igual.` };
+        }
+      }
+      if (npcH) {
+        npcH.stats!.hp = Math.min(npcH.stats!.hp_max, npcH.stats!.hp + amount);
+        world.touch('npcs', npcH.id);
+        return { ok: true, healed: amount, hp: `${npcH.stats!.hp}/${npcH.stats!.hp_max}`, ...(used ? { used } : {}) };
+      }
       const healer = world.characters.get(healerId)?.name ?? world.npcs.get(healerId)?.name ?? actor.name;
-      const r = healCharacter(world, c, Number(input['amount']) || 0, healer);
-      return { ok: true, hp: `${c.hp_current}/${c.hp_max}`, status: c.status, ...(r.revived ? { revived: true } : {}) };
+      const r = healCharacter(world, c!, amount, healer);
+      return { ok: true, healed: amount, hp: `${c!.hp_current}/${c!.hp_max}`, status: c!.status, ...(used ? { used } : {}), ...(r.revived ? { revived: true } : {}) };
+    }
+    case 'use_item': {
+      const inst = world.itemInstances.get(s('instance_id'));
+      if (!inst || !usableBy(ctx, inst.id, [actor.id])) return { error: 'not_reachable', hint: `${s('instance_id')} no lo lleva el actor ni está a su alcance.` };
+      const def = world.itemDef(inst.item_id);
+      if (def.type !== 'consumable' && !def.light_source) return { error: 'not_consumable', hint: `${def.name} no se gasta al usarlo: no lo quites.` };
+      const guard = lootGuard(ctx, inst.id);
+      if (guard) return guard;
+      const r = consumeItem(world, inst.id, input['quantity'] == null ? 1 : Number(input['quantity']));
+      if (!r.ok) return { error: r.error };
+      return { ok: true, used: def.name, left: r.left, ...(def.heals ? { hint: 'Esto cura: si se lo ha bebido para curarse, era heal con item_instance_id.' } : {}) };
     }
     case 'stabilize': {
       const c = world.character(s('target_id'));
@@ -1058,6 +1149,25 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: conversationRejection(p, !npc ? 'ese personaje' : actor.knows.includes(npc.id) ? npc.name : descriptorOf(world, npc.id)) };
         }
       }
+      // Un NPC que repite lo que acaba de decir («Treinta la jarra» por sexta vez): se reescribe una vez.
+      if ((ctx.repeat_rejections ?? 0) < 1) {
+        const recent = engine.events.recentInLocation(here(), 60);
+        const lines = parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id));
+        const rep = repeatedLines({ lines, said: (id) => recentNpcLines(recent, id) });
+        if (rep.length) {
+          ctx.repeat_rejections = (ctx.repeat_rejections ?? 0) + 1;
+          return { error: repeatedRejection(rep.map((r) => ({ who: actor.knows.includes(r.npc_id) ? world.npc(r.npc_id).name : descriptorOf(world, r.npc_id), text: r.text }))) };
+        }
+      }
+      // Recibir algo de otro jugador sin que haya cambiado de manos («aceptas la jarra que te tiende…»): se reescribe una vez.
+      if ((ctx.receive_rejections ?? 0) < 1) {
+        const givers = [...world.characters.values()].filter((o) => o.id !== actor.id).map((o) => o.name);
+        const got = receivedWithoutOffer({ texts: [s('narration_private'), input['observable'] == null ? '' : s('observable')], givers, okTools: ctx.ok_tools ?? [] });
+        if (got.length) {
+          ctx.receive_rejections = (ctx.receive_rejections ?? 0) + 1;
+          return { error: receivedRejection(got) };
+        }
+      }
       // Un NPC que dice que va con el actor (o a algún sitio) sin set_npc_order se queda donde está: se reescribe una vez.
       if ((ctx.order_rejections ?? 0) < 1) {
         const lines = parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id));
@@ -1072,7 +1182,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (input['npc_id']) {
         const npc = world.npcs.get(s('npc_id'));
         // Habla con alguien de la sala que está a unos metros: el motor lo acerca antes (si no es hostil).
-        if (npc && npc.status === 'alive' && world.spot(npc.location.id).location_id === here()) reachNpc(ctx, npc);
+        if (npc && npc.status === 'alive' && world.spot(npc.location.id).location_id === here() && !ctx.intro) reachNpc(ctx, npc);
         if (npc) {
           // Conversación de grupo (scene.ts): quien habla pasa a llevarla y los demás siguen unidos.
           const prev = npc.talking_to;
@@ -1132,7 +1242,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         loudness: Number(input['loudness']) || 1,
         tags: s('tags').split(',').map((t) => t.trim()).filter(Boolean),
         // Esperar o unirse a un NPC ocupado con otro jugador lo ofrecen los botones del motor (scene.ts), no el máster.
-        suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter(Boolean).filter((t) => !(busyHere(engine, actor, nowGameS) && /^(esperar|aguardar|unirme|unirse|sumarme)\b/i.test(t))).slice(0, 4),
+        suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter(Boolean).filter((t) => !(busyHere(engine, actor, nowGameS) && /^(esperar|aguardar|unirme|unirse|sumarme)\b/i.test(t))).slice(0, 4)
+          // Un nombre que el actor no sabe no se le escapa en los botones: «Preguntar a la tabernera», no «a Brenna».
+          .map((t) => capFirst(maskUnknownNames(world, actor.id, t))),
         requires_roll: req,
         decisive: input['decisive_threat'] ? { threat: cleanText(s('decisive_threat')), npc_id: input['decisive_npc_id'] ? s('decisive_npc_id') : null } : null,
         npc_id: closingNpc,

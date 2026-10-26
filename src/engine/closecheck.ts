@@ -17,6 +17,7 @@
  */
 
 import type { DialogueLine } from './moments.js';
+import type { GameEvent } from './model.js';
 
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -399,4 +400,81 @@ export function unansweredInShared(input: { narration: string; lines?: readonly 
 
 export function unansweredRejection(missing: readonly { name: string; text: string }[]): string {
   return `Turno compartido: narration_private la leen todos y no responde a ${missing.map((m) => `${m.name} («${m.text}»)`).join(' ni a ')}. Resuelve lo de CADA uno nombrándolo («${missing[0]!.name}, …») o en plural; nunca «tú» a secas, que cada jugador lo leería como suyo. Si preguntó algo, contéstale a él.`;
+}
+
+// ---------------------------------------------------------------------------
+// NPC que se repite
+// ---------------------------------------------------------------------------
+
+/** Lo que ha dicho un NPC en estos eventos (sus líneas en `lines`), en orden. */
+export function recentNpcLines(events: readonly GameEvent[], npcId: string): string[] {
+  const out: string[] = [];
+  for (const e of events) {
+    const ls = e.payload['lines'];
+    if (!Array.isArray(ls)) continue;
+    for (const l of ls as DialogueLine[]) if (l.speaker === 'npc' && l.npc_id === npcId && typeof l.text === 'string' && l.text.trim()) out.push(l.text.trim());
+  }
+  return out;
+}
+
+const wordsOf = (s: string) => norm(s).replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean);
+
+/** Igual o casi igual: las mismas palabras, o con 4 o más casi todas (80 %). */
+function sameSaying(a: string[], b: string[]): boolean {
+  if (a.join(' ') === b.join(' ')) return true;
+  if (a.length < 4 || b.length < 4) return false;
+  const A = new Set(a); const B = new Set(b);
+  const common = [...A].filter((w) => B.has(w)).length;
+  return common / new Set([...A, ...B]).size >= 0.8;
+}
+
+/**
+ * Frases de un NPC en este cierre que ya dijo hace poco, igual o casi: Brenna
+ * con «Treinta la jarra» seis veces, o la misma advertencia dos turnos
+ * seguidos. Frase a frase; las de menos de tres palabras («Sí.», «Treinta.»)
+ * no cuentan.
+ */
+export function repeatedLines(input: { lines: readonly DialogueLine[]; said: (npcId: string) => readonly string[] }): { npc_id: string; text: string }[] {
+  const out: { npc_id: string; text: string }[] = [];
+  for (const l of input.lines) {
+    if (l.speaker !== 'npc' || !l.npc_id) continue;
+    const before = input.said(l.npc_id).flatMap((t) => t.split(/[.!?¿¡…]+/)).map(wordsOf).filter((w) => w.length >= 3);
+    for (const sentence of l.text.split(/[.!?¿¡…]+/)) {
+      const w = wordsOf(sentence);
+      if (w.length < 3 || !before.some((b) => sameSaying(w, b))) continue;
+      out.push({ npc_id: l.npc_id, text: sentence.trim() });
+      break;
+    }
+  }
+  return out;
+}
+
+export function repeatedRejection(hits: readonly { who: string; text: string }[]): string {
+  return `${hits.map((h) => `${h.who} ya ha dicho «${h.text}» hace nada`).join('; ')}: la gente no repite la misma frase. Si vuelve sobre eso, que lo diga de otra manera, con algo nuevo (un detalle, una pregunta, un gesto) o que calle; reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Recibir algo de otro jugador sin oferta
+// ---------------------------------------------------------------------------
+
+const TAKES = '(?:aceptas|acepta|coges|coge|tomas|toma|recibes|recibe|agarras|agarra)';
+const GIVES = '(?:que te|que le|que se la|que se lo)\\s+(?:tiende|tendia|ofrece|ofrecia|da|daba|pasa|pasaba|alarga|acerca)';
+
+/**
+ * La narración da por hecho que el actor recibe algo de otro jugador («aceptas
+ * la jarra que te tiende Leodhin») sin que haya pasado nada: entre jugadores
+ * las cosas cambian de mano con la oferta del que da y el «acepto» del que
+ * recibe (party.ts), y eso lo hace el motor. Devuelve los nombres citados.
+ */
+export function receivedWithoutOffer(input: { texts: readonly string[]; givers: readonly string[]; okTools: readonly string[] }): string[] {
+  if (input.okTools.includes('transfer_item')) return [];
+  const text = input.texts.map(norm).join(' . ');
+  return input.givers.filter((name) => {
+    const n = norm(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${TAKES}\\b[^.;:]{0,60}\\b(?:${GIVES}|de manos de)\\s+${n}\\b`).test(text);
+  });
+}
+
+export function receivedRejection(names: readonly string[]): string {
+  return `La narración dice que el actor recibe algo de ${names.join(' y ')}, y en este turno no ha cambiado nada de manos: entre jugadores, solo pasa cuando el otro lo ofrece y este lo acepta (lo hace el servidor). Reescribe log_event sin darlo por recibido: como mucho, alarga la mano o se lo pide.`;
 }

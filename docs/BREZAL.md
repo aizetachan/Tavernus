@@ -61,7 +61,7 @@ La demo de `src/data/seed/demo.ts` era un mundo de pruebas con alma de aventura:
 | Leyes del mundo (3-8) | no (las SRD por defecto) | 7 leyes propias (nueva: nadie cruza el Cerco) **[cambia]** |
 | Situación inicial por PJ con reloj y antagonista | no: un origen genérico | 3 situaciones por clase, las tres a 3 días, con antagonista, deuda u objeto **[cambia]** |
 | Horarios de NPC | 2 | los 11 vecinos **[cambia]** |
-| Eventos programados | 2 | 6 (mercado, diezmo, cena, misa, Tobías va al granero, alguien prueba la niebla) **[cambia]** |
+| Eventos programados | 2 | 6 (mercado, diezmo, cena, misa, la escapada al granero de Tobías, la prueba de la niebla) **[cambia]** |
 | Deudas | no | la situación del deudor empieza con 300 monedas que debe a Garrán |
 | Rumores iniciales | no | 15 **[cambia]** |
 | Cuarto alquilable | no (la habitación era el premio oculto) | sí: visible, cerrado, Brenna vende la noche |
@@ -72,7 +72,7 @@ La demo de `src/data/seed/demo.ts` era un mundo de pruebas con alma de aventura:
 
 ### 1.3 Qué hace que una historia escrita enganche
 
-1. **Un problema personal desde el primer segundo.** No «llegas a una aldea»: Garrán te pone delante una tablilla con tu deuda, una vieja te agarra la muñeca al ver tu carta, el herrero cierra la puerta a tu espalda. La situación inicial es lo primero que pasa.
+1. **Un problema personal desde el primer segundo.** No «llegas a una aldea»: Garrán te pone delante una tablilla con tu deuda, Ilse, la curandera, te agarra la muñeca al ver tu carta, el herrero cierra la puerta a tu espalda. La situación inicial es lo primero que pasa.
 2. **Un reloj visible.** Las tres situaciones vencen a los tres días, la noche de la Brasa, y la amenaza tiene fechas: la tos gris de madrugada, los lobos en los Corrales al día siguiente, la herrería clavada al tercero. El Diario muestra el reloj; el máster sabe cuánto falta.
 3. **NPC que quieren algo de ti.** Brenna quiere su perro, Ilse una muestra del agua, Mateo que alguien hable con su hijo, Úrsula que le arreglen el redil, Garrán su dinero, Osric que vayas a «apagar las luces», Ysolde un culpable. Cada uno es una puerta.
 4. **Progreso en bucles cortos.** Cada misión del acto I se cierra en una o dos horas de juego, con recompensa y una consecuencia a la vista. El tablón y la granja dan bucles aún más cortos (leña, bayas, truchas, huevos) para respirar.
@@ -232,7 +232,7 @@ Tres días desde las 18:00 del día 1 (72 h de juego, 24 h reales al ritmo 3×).
 
 ### 2.11 Vida del pueblo
 
-- **Agenda diaria**: mercado (9-13, plaza, Mateo y **Úrsula**; los buhoneros que la niebla dejó dentro), cobro del diezmo (13-14, Garrán y Doro), cena del Jabalí (19-21, Hugo y diez vecinos), misa del pozo (20-21, Ilse y Brenna), **alguien prueba la niebla** (22-23, barricada del Lindero: un vecino entra atado a una cuerda y sale por donde entró) **[nuevo]**, Tobías va al granero (23-24, arroyo del Soto).
+- **Agenda diaria**: mercado (9-13, plaza, Mateo y **Úrsula**; los buhoneros que la niebla dejó dentro), cobro del diezmo (13-14, Garrán y Doro), cena del Jabalí (19-21, Hugo y diez vecinos), misa del pozo (20-21, Ilse y Brenna), **la prueba de la niebla** (22-23, barricada del Lindero: un vecino entra atado a una cuerda y sale por donde entró) **[nuevo]**, la escapada al granero de Tobías (23-24, arroyo del Soto).
 - **Rumores que ya corren**: las luces del granero (taberna), la tos gris y el diezmo de la ceniza (plaza), el perro de Brenna (taberna), la plata de los señores (Soto), la rueda que se para (molino) y **lo que dice cada vecino del Cerco** **[nuevo]**:
 
   | Quién | Dónde corre | Qué dice | ¿Verdad? |

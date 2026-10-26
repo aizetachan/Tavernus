@@ -215,6 +215,9 @@ describe('la curandera de la partida del 26 (Brezal, máster offline)', () => {
     claimSituation(engine.world, r.character.id, engine.gameNow());
     const leo = r.character;
     const ilse = engine.world.npc('npc_ilse');
+    // La apertura de la carta la lleva al pozo un rato (with_npc_ids); aquí empieza en su casa, como en la partida.
+    ilse.location = { type: 'spot', id: 'sp_cu_hierbas' };
+    delete (ilse as typeof ilse & { order?: unknown }).order;
     leo.location = { type: 'spot', id: ilse.location.id };
     leo.knows.push(ilse.id);
     const home = ilse.location.id;

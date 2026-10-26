@@ -34,6 +34,7 @@ import { characterFacts } from './facts.js';
 import { debtLine, fmtCoins } from './debts.js';
 import type { Character, GameEvent, Id, Npc } from './model.js';
 import type { DialogueLine } from './moments.js';
+import { maskUnknownNames } from './narrate.js';
 import { activeJobs } from './progress.js';
 import { rumorsHeardBy, rumorsIn, type Rumor } from './rumors.js';
 import { characterStory, questsOf } from './story.js';
@@ -199,8 +200,18 @@ function firstSentence(s: string): string {
   return (m ? m[1]! : t).slice(0, 160);
 }
 
-/** Nombre con que el PJ conoce a un NPC: el suyo si lo sabe, su oficio si no. */
+/**
+ * Nombre con que el PJ conoce a un NPC, para ir dentro de una frase: el suyo
+ * si lo sabe y, si no, su oficio con artículo («te lo pide la tabernera», no
+ * «Tabernera»). Suelto, como etiqueta, va con `cap`.
+ */
 export function npcLabel(c: Character, npc: Npc): string {
+  if (c.knows.includes(npc.id)) return npc.name;
+  return /^(el|la|los|las) /i.test(npc.role) ? npc.role : /a$/.test(npc.role) ? `la ${npc.role}` : `el ${npc.role}`;
+}
+
+/** Etiqueta suelta (lista de conversaciones, «lo pide»): el nombre o el oficio con mayúscula, sin artículo. */
+export function npcTag(c: Character, npc: Npc): string {
   return c.knows.includes(npc.id) ? npc.name : cap(npc.role);
 }
 
@@ -221,6 +232,8 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   const hhmm = (s: number) => { const d = clock.dateTime(s); return `${String(d.hour).padStart(2, '0')}:${String(d.minute).padStart(2, '0')}`; };
 
   const all = engine.events.all();
+  /** Un texto escrito para cualquiera, con los nombres que este PJ no sabe cambiados por cómo los ve (y la mayúscula de cada frase). */
+  const masked = (t: string) => maskUnknownNames(w, c.id, t).replace(/(^|[.!?…]\s+)(\p{Ll})/gu, (_m, a: string, b: string) => a + b.toUpperCase());
   /** Lo que el PJ percibió o hizo, en orden. */
   const mine = all.filter((e) => e.actor_id === c.id || e.delivered_to.some((d) => d.character_id === c.id));
   const born = mine[0]?.timestamp_game_s ?? nowS;
@@ -312,9 +325,9 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     if (completed !== null) history.push({ key: `${j.id}:completed`, ...at(completed), kind: 'completed', text: 'Encargo cumplido', why: `se lo ${j.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${who}` });
     else if (status === 'expired') history.push({ key: `${j.id}:expired`, ...at(Math.max(seen ?? born, engaged ?? born)), kind: 'expired', text: 'Ya no está en el tablón', why: 'el tablón cambió' });
     quests.push({
-      id: j.id, kind: 'job', title: j.title, text: j.text, status, droppable: status === 'active',
+      id: j.id, kind: 'job', title: j.title, text: masked(j.text), status, droppable: status === 'active',
       origin: fromBoard ? { kind: 'board', text: 'Aviso del tablón', where: null } : { kind: 'giver', text: `Te lo pide ${who}`, where: null }, history,
-      giver: giver ? npcLabel(c, giver) : null, giver_npc_id: giver?.id ?? null,
+      giver: giver ? npcTag(c, giver) : null, giver_npc_id: giver?.id ?? null,
       reward: `${j.reward_coins} monedas${j.reward_reputation ? ` · +${j.reward_reputation} de reputación` : ''}`,
       seen_game_s: seen, seen: seen === null ? null : fmt(seen),
       completed_game_s: completed, completed: completed === null ? null : fmt(completed),
@@ -405,13 +418,13 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     if (left !== null) gHistory.push({ key: `${g.id}:dropped:${left}`, ...at(left), kind: 'dropped', text: 'La dejas', why: 'desde el Diario' });
     if (closed !== null) gHistory.push({ key: `${g.id}:${g.status}`, ...at(closed), kind: g.status === 'completed' ? 'completed' : 'failed', text: g.status === 'completed' ? 'Misión cumplida' : 'Misión fallida', why: g.closed_why ?? null });
     quests.push({
-      id: g.id, kind: 'given', title: g.title, text: g.text, status, droppable: status === 'active',
+      id: g.id, kind: 'given', title: g.title, text: masked(g.text), status, droppable: status === 'active',
       origin: g.heard ? { kind: 'heard', text: g.origin_text, where: locName(g.location_id) } : giver ? { kind: 'giver', text: g.origin_text ?? `Te lo pide ${npcLabel(c, giver)}`, where: locName(g.location_id) } : null,
       history: gHistory,
-      giver: giver && !g.heard ? npcLabel(c, giver) : null, giver_npc_id: giver?.id ?? null, reward: g.reward,
+      giver: giver && !g.heard ? npcTag(c, giver) : null, giver_npc_id: giver?.id ?? null, reward: g.reward,
       seen_game_s: g.given_game_s, seen: fmt(g.given_game_s), completed_game_s: closed, completed: closed === null ? null : fmt(closed),
       updated_game_s: g.updated_game_s, updated: fmt(g.updated_game_s),
-      steps: [{ text: g.objective ?? `Cumplirlo y decírselo a ${giver ? npcLabel(c, giver) : 'quien lo pide'}`, done: g.status === 'completed' }],
+      steps: [{ text: g.objective ? masked(g.objective) : `Cumplirlo y decírselo a ${giver ? npcLabel(c, giver) : 'quien lo pide'}`, done: g.status === 'completed' }],
       clock: null, antagonist: null, paths: [], rumors: questRumors([g.title, g.text]), pinned: false, summary: EMPTY_SUMMARY(),
     });
   }
@@ -435,19 +448,19 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     const history: JournalChange[] = log.map((x) => ({
       key: `${q.id}:${x.kind}:${x.step_id ?? ''}:${x.game_s}`, ...at(x.game_s),
       kind: x.kind === 'open' ? 'added' : x.kind === 'done' ? 'completed' : x.kind,
-      text: x.kind === 'open' ? 'Nueva misión' : x.kind === 'done' ? 'Misión cumplida' : x.kind === 'expired' ? 'Se cierra' : `✔ ${q.steps.find((st) => st.id === x.step_id)?.text ?? x.step_id ?? ''}`,
+      text: x.kind === 'open' ? 'Nueva misión' : x.kind === 'done' ? 'Misión cumplida' : x.kind === 'expired' ? 'Se cierra' : `✔ ${masked(q.steps.find((st) => st.id === x.step_id)?.text ?? x.step_id ?? '')}`,
       why: x.why || null,
     }));
     if (!log.length) history.push({ key: `${q.id}:added`, ...at(seen), kind: 'added', text: 'Nueva misión', why: null });
     quests.push({
-      id: q.id, kind: 'story', title: `${['', 'I', 'II', 'III'][q.act]} · ${q.title}`, text: q.text, status: v.status,
+      id: q.id, kind: 'story', title: `${['', 'I', 'II', 'III'][q.act]} · ${q.title}`, text: masked(q.text), status: v.status,
       // De oídas: nadie se la ha pedido aún; no se pone «lo pide X».
-      giver: giver && o?.kind !== 'heard' ? npcLabel(c, giver) : null, giver_npc_id: giver?.id ?? null,
-      origin: o ? { kind: o.kind, text: o.text, where: locName(o.location_id) } : giver ? { kind: 'giver', text: `Te lo pide ${npcLabel(c, giver)}`, where: null } : null, history,
+      giver: giver && o?.kind !== 'heard' ? npcTag(c, giver) : null, giver_npc_id: giver?.id ?? null,
+      origin: o ? { kind: o.kind, text: masked(o.text), where: locName(o.location_id) } : giver ? { kind: 'giver', text: `Te lo pide ${npcLabel(c, giver)}`, where: null } : null, history,
       reward: [r.coins ? `${r.coins} monedas` : '', r.reputation ? `+${r.reputation} de reputación` : '', r.xp ? `${r.xp} PX` : ''].filter(Boolean).join(' · ') || null,
       seen_game_s: seen, seen: fmt(seen), completed_game_s: completed, completed: completed === null ? null : fmt(completed),
       updated_game_s: updated, updated: fmt(updated),
-      steps: v.steps.map((s) => ({ text: s.step.text, done: s.done })),
+      steps: v.steps.map((s) => ({ text: masked(s.step.text), done: s.done })),
       clock: null, antagonist: null, paths: [], rumors: questRumors([q.title, q.text]), pinned: false, summary: EMPTY_SUMMARY(),
     });
   }
@@ -473,7 +486,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
       if (!replied.length) continue;
       let conv = convs.get(id);
       if (!conv) {
-        conv = { npc_id: id, name: npcLabel(c, npc), role: npc.role, known: c.knows.includes(id), exchanges: [], memory: [], last_game_s: 0 };
+        conv = { npc_id: id, name: npcTag(c, npc), role: npc.role, known: c.knows.includes(id), exchanges: [], memory: [], last_game_s: 0 };
         convs.set(id, conv);
       }
       conv.exchanges.push({

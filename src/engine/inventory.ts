@@ -244,6 +244,18 @@ export function spawnItem(world: World, itemId: Id, quantity: number, to: Placem
   return { ok: true, moved: inst, remaining: null };
 }
 
+/** Gasta unidades de un ejemplar (se bebe, se come, se quema): baja la cantidad y, a cero, desaparece. Devuelve lo que queda. */
+export function consumeItem(world: World, instanceId: Id, quantity = 1): { ok: true; left: number } | { ok: false; error: string } {
+  const inst = world.itemInstances.get(instanceId);
+  if (!inst) return { ok: false, error: `no existe el ejemplar ${instanceId}` };
+  const q = Math.max(1, Math.floor(quantity));
+  if (inst.quantity < q) return { ok: false, error: `solo hay ${inst.quantity}` };
+  inst.quantity -= q;
+  if (inst.quantity === 0) world.remove('item_instances', inst.id);
+  else world.touch('item_instances', inst.id);
+  return { ok: true, left: inst.quantity };
+}
+
 /** Inventario con identificadores, para el master: dónde está cada ejemplar. */
 export function inventoryDetailed(world: World, characterId: Id): { instance_id: Id; item_id: Id; name: string; quantity: number; where: string }[] {
   const out: { instance_id: Id; item_id: Id; name: string; quantity: number; where: string }[] = [];

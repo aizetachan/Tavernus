@@ -56,7 +56,7 @@ export const SCHEDULE: ScheduledEvent[] = [
     source: 'seed',
   },
   {
-    id: 'se_tobias', title: 'Tobías va al granero', location_id: 'loc_claro', spot_id: 'sp_cl_arroyo',
+    id: 'se_tobias', title: 'la escapada al granero', location_id: 'loc_claro', spot_id: 'sp_cl_arroyo',
     start_h: 23, duration_min: 60, recurrence: 'daily',
     description: 'Cada noche Tobías cruza el Soto por el arroyo con un hatillo de comida, camino del Granero Quemado; vuelve antes del alba con una bolsa de ceniza. Sin antorcha. Si alguien le sale al paso, se asusta y miente mal.',
     npc_ids: ['npc_tobias'], crowd: [],
@@ -67,7 +67,7 @@ export const SCHEDULE: ScheduledEvent[] = [
     source: 'seed',
   },
   {
-    id: 'se_prueba_niebla', title: 'alguien prueba la niebla', location_id: 'loc_lindero', spot_id: 'sp_li_barricada',
+    id: 'se_prueba_niebla', title: 'la prueba de la niebla', location_id: 'loc_lindero', spot_id: 'sp_li_barricada',
     start_h: 22, duration_min: 60, recurrence: 'daily',
     description: 'Cada noche, alguien lo prueba: dos o tres vecinos con antorchas junto a la barricada, uno se ata una cuerda a la cintura y entra en la niebla; al rato sale por el mismo sitio, con ceniza en el pelo, y la cuerda floja. Se discute si mañana lo intentará otro.',
     npc_ids: [], crowd: [{ label: 'vecinos con antorchas', count: 3 }],
