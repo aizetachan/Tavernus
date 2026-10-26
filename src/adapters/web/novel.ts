@@ -236,6 +236,26 @@ export const NOVEL_STYLE = String.raw`
   .msg.row.npc .who { color: var(--npc, #e6a587); }
   .msg.row.cont .who .nm { display: none; }
   .msg.row.cont .who:not(:has(.tts-say)) { display: none; }
+  /* Mensaje de otro jugador al que se puede responder: la flechita (⌄) en la esquina, al pasar el ratón o con el menú abierto. */
+  .msg.row.replyable .body { transition: transform .15s ease; }
+  #log:has(.msg.row.swiping) { overflow-x: hidden; }
+  .msg.row.replyable.swiping .body { transition: none; }
+  .msg-more { position: absolute; top: 3px; right: 4px; display: grid; place-items: center; width: 24px; height: 22px; padding: 0; border: 0; border-radius: 0 14px 0 10px;
+    background: radial-gradient(ellipse at 70% 30%, var(--control) 55%, transparent 80%); color: var(--muted); opacity: 0; transition: opacity .12s ease; cursor: pointer; }
+  .msg-more svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .msg-more:hover { color: var(--text); }
+  .msg.row.replyable:hover .msg-more, .msg.row.replyable.menu-open .msg-more, .msg-more:focus-visible { opacity: 1; }
+  #msg-menu { position: fixed; z-index: 60; min-width: 190px; padding: 6px; border-radius: 14px; background: var(--bubble, #232526); border: 1px solid var(--line); box-shadow: var(--window-shadow, 0 12px 32px rgba(0,0,0,.5)); }
+  #msg-menu[hidden] { display: none; }
+  #msg-menu button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 40px; padding: 6px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--text); font: 500 14px/1.2 var(--sans); text-align: left; }
+  #msg-menu button:hover, #msg-menu button:focus-visible { background: var(--hover); outline: none; }
+  #msg-menu svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #msg-menu [data-do="reply"] svg { stroke: var(--accent); }
+  /* En táctil: el gesto horizontal es nuestro (deslizar para responder) y la pulsación larga no selecciona texto. */
+  @media (hover: none) {
+    .msg.row.replyable .body { touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  }
+  .msg.row.replyable.swipe-ok .body { box-shadow: -3px 0 0 var(--accent); }
   .msg.row .decisive { align-self: flex-start; }
   .msg.row .actions { margin-top: 8px; }
   .nv-av { position: relative; width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 50%; overflow: hidden; font-size: 13px; font-weight: 600;
@@ -619,7 +639,8 @@ export const NOVEL_JS = String.raw`
       host.parentNode.insertBefore(jr, host.nextSibling);
       if (!live) jb.disabled = true;
     }
-    if (m.reply_to || m.offer) { partyButtons(m, host, live); }
+    if (m.reply_to) replyable(m.reply_to, before, main);
+    if (m.offer) partyButtons(m, host, live);
     if (m.reaction) reactionButtons(m.reaction, host);
     if (m.reaction_wait) reactionWait(m.reaction_wait, main);
     if (m.reaction_done) closeReaction(m.reaction_done);
@@ -647,10 +668,7 @@ export const NOVEL_JS = String.raw`
     scroll();
   }
 
-  /**
-   * Entre jugadores (party.ts): «Responder a…» abre el modo Decir hacia quien te habla; «Ignorarle» solo quita
-   * los botones (no hace nada en el juego). Una oferta: «Aceptar» o «Rechazar» mientras siga en pie.
-   */
+  /** Oferta de otro jugador (party.ts): «Aceptar» o «Rechazar» mientras siga en pie. */
   function partyButtons(m, host, live) {
     var row = document.createElement('div');
     row.className = 'actions party';
@@ -660,16 +678,151 @@ export const NOVEL_JS = String.raw`
       b.onclick = function () { b.classList.add('chosen'); row.querySelectorAll('button').forEach(function (x) { x.disabled = true; }); fn(); };
       row.appendChild(b);
     };
-    if (m.offer) {
-      btn('Aceptar', function () { answerOffer(m.offer.id, true); }, 'accept');
-      btn('Rechazar', function () { answerOffer(m.offer.id, false); });
-    } else {
-      btn('Responder a ' + m.reply_to.name, function () { setSayMode(true, m.reply_to); });
-      btn('Ignorarle', function () {});
-    }
+    btn('Aceptar', function () { answerOffer(m.offer.id, true); }, 'accept');
+    btn('Rechazar', function () { answerOffer(m.offer.id, false); });
     host.parentNode.insertBefore(row, host.nextSibling);
-    if (!live || (m.offer && !m.offer.open)) row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+    if (!live || !m.offer.open) row.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
   }
+
+  /**
+   * Otro jugador te habla (party.ts): nada fijo debajo, como en WhatsApp. Sus burbujas de este turno llevan una
+   * flechita (⌄) en la esquina al pasar el ratón; abre un menú con «Responder» (modo Decir hacia él, con la cita
+   * encima del cuadro) e «Ignorar» (quita la flechita; no hace nada en el juego). En el móvil, un toque o una
+   * pulsación larga abren el mismo menú, y deslizar la burbuja a la derecha responde directamente.
+   */
+  function replyable(to, before, main) {
+    var rows = [], e = before ? before.nextElementSibling : log.firstElementChild;
+    for (; e; e = e.nextElementSibling) if (e.getAttribute('data-who') === 'npc:' + to.id) rows.push(e);
+    // Un cierre del máster que te tiene de objetivo no trae burbuja suya: la flechita va en la narración.
+    if (!rows.length && main && main.classList.contains('row')) rows.push(main);
+    rows.forEach(function (r) {
+      var body = r.querySelector('.body');
+      if (!body || body.querySelector('.msg-more')) return;
+      r.classList.add('replyable');
+      r._replyTo = { id: to.id, name: to.name };
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'msg-more';
+      b.setAttribute('aria-label', 'Opciones del mensaje de ' + to.name); b.setAttribute('aria-haspopup', 'menu');
+      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+      body.appendChild(b);
+    });
+  }
+  /** Lo que dice la burbuja, sin el nombre, la frase que la presenta ni sus botones: para la cita. */
+  function rowText(row) {
+    var c = row.querySelector('.body').cloneNode(true);
+    c.querySelectorAll('.who, .lead, button, .decisive').forEach(function (x) { x.remove(); });
+    return (c.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+  function replyToRow(row) {
+    closeMsgMenu();
+    if (row && row._replyTo) replyTo(row._replyTo, rowText(row));
+  }
+  function ignoreRow(row) {
+    closeMsgMenu();
+    if (!row) return;
+    row.classList.remove('replyable');
+    row.classList.add('ignored');
+    var b = row.querySelector('.msg-more'); if (b) b.remove();
+  }
+  var msgMenu = null, msgMenuRow = null;
+  function closeMsgMenu() {
+    if (msgMenuRow) { msgMenuRow.classList.remove('menu-open'); var a = msgMenuRow.querySelector('.msg-more'); if (a) a.setAttribute('aria-expanded', 'false'); }
+    msgMenuRow = null;
+    if (msgMenu) msgMenu.hidden = true;
+  }
+  function openMsgMenu(row) {
+    if (!row || !row.classList.contains('replyable')) return;
+    if (msgMenuRow === row) { closeMsgMenu(); return; }
+    closeMsgMenu();
+    if (!msgMenu) {
+      msgMenu = document.createElement('div');
+      msgMenu.id = 'msg-menu'; msgMenu.setAttribute('role', 'menu'); msgMenu.hidden = true;
+      msgMenu.innerHTML = '<button type="button" role="menuitem" data-do="reply"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 8V4l-7 7 7 7v-4c5 0 8.5 1.6 11 5-1-5-4-10-11-11z"/></svg><span>Responder</span></button>' +
+        '<button type="button" role="menuitem" data-do="ignore"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M6 18L18 6"/></svg><span>Ignorar</span></button>';
+      msgMenu.addEventListener('click', function (ev) {
+        var b = ev.target.closest('button'); if (!b) return;
+        var r = msgMenuRow;
+        if (b.getAttribute('data-do') === 'reply') replyToRow(r); else ignoreRow(r);
+      });
+      msgMenu.addEventListener('keydown', function (ev) {
+        var items = [].slice.call(msgMenu.querySelectorAll('button')), i = items.indexOf(document.activeElement);
+        if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); items[(i + (ev.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+        else if (ev.key === 'Escape' || ev.key === 'Tab') { var a = msgMenuRow && msgMenuRow.querySelector('.msg-more'); closeMsgMenu(); if (a && ev.key === 'Escape') a.focus(); }
+      });
+      document.body.appendChild(msgMenu);
+    }
+    msgMenuRow = row;
+    row.classList.add('menu-open');
+    var arrow = row.querySelector('.msg-more');
+    if (arrow) arrow.setAttribute('aria-expanded', 'true');
+    msgMenu.querySelector('[data-do="reply"] span').textContent = 'Responder a ' + row._replyTo.name;
+    msgMenu.hidden = false;
+    // Bajo la flechita, alineado a la derecha de la burbuja; si no cabe debajo, encima.
+    var r = (arrow || row.querySelector('.body')).getBoundingClientRect(), mw = msgMenu.offsetWidth, mh = msgMenu.offsetHeight;
+    var left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
+    var top = r.bottom + 4 + mh > window.innerHeight - 8 ? Math.max(8, r.top - mh - 4) : r.bottom + 4;
+    msgMenu.style.left = left + 'px'; msgMenu.style.top = top + 'px';
+    msgMenu.querySelector('button').focus({ preventScroll: true });
+  }
+  // Cierra al pulsar fuera, al desplazar el hilo o al cambiar el tamaño.
+  document.addEventListener('pointerdown', function (ev) {
+    if (!msgMenuRow || ev.target.closest('#msg-menu') || ev.target.closest('.msg-more')) return;
+    // Otro toque en la misma burbuja lo cierra el propio toque (abrir ⇄ cerrar).
+    if (ev.pointerType === 'touch' && msgMenuRow.contains(ev.target)) return;
+    closeMsgMenu();
+  }, true);
+  log.addEventListener('scroll', function () { if (msgMenuRow) closeMsgMenu(); });
+  window.addEventListener('resize', function () { if (msgMenuRow) closeMsgMenu(); });
+  /**
+   * Gestos en las burbujas a las que se puede responder: la flechita (ratón o teclado); en táctil, un toque o una
+   * pulsación larga abren el menú y deslizar a la derecha responde. Los botones de dentro (voz, foto) van a lo suyo.
+   */
+  var press = null, LONG_PRESS_MS = 450, SWIPE_PX = 56;
+  function replyRowOf(ev) { var r = ev.target.closest && ev.target.closest('.msg.row.replyable'); return r && log.contains(r) ? r : null; }
+  log.addEventListener('click', function (ev) {
+    var more = ev.target.closest('.msg-more');
+    if (more) { ev.stopPropagation(); openMsgMenu(more.closest('.msg.row')); return; }
+    var row = replyRowOf(ev);
+    if (!row || !press || press.row !== row) return;
+    var p = press; press = null;
+    if (p.type !== 'touch' || p.done || ev.target.closest('button, a, input')) return;
+    openMsgMenu(row);
+  });
+  log.addEventListener('pointerdown', function (ev) {
+    var row = replyRowOf(ev);
+    press = row ? { row: row, type: ev.pointerType, x: ev.clientX, y: ev.clientY, dx: 0, done: false, timer: 0 } : null;
+    if (!press || press.type !== 'touch' || ev.target.closest('button, a, input')) return;
+    var p = press;
+    p.timer = setTimeout(function () { if (press === p && !p.dx) { p.done = true; openMsgMenu(row); } }, LONG_PRESS_MS);
+  });
+  log.addEventListener('pointermove', function (ev) {
+    var p = press;
+    if (!p || p.type !== 'touch' || p.done) return;
+    var dx = ev.clientX - p.x, dy = ev.clientY - p.y;
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { clearTimeout(p.timer); if (!p.dx) press = null; return; }
+    if (dx > 8 || p.dx) {
+      clearTimeout(p.timer);
+      p.dx = Math.max(0, Math.min(dx, SWIPE_PX + 24));
+      p.row.classList.add('swiping');
+      p.row.classList.toggle('swipe-ok', p.dx >= SWIPE_PX);
+      p.row.querySelector('.body').style.transform = 'translateX(' + p.dx + 'px)';
+    }
+  });
+  function endPress(ev) {
+    var p = press;
+    if (!p) return;
+    clearTimeout(p.timer);
+    if (!p.dx) return;
+    var body = p.row.querySelector('.body');
+    p.row.classList.remove('swiping', 'swipe-ok');
+    body.style.transform = '';
+    p.done = true;
+    if (ev.type === 'pointerup' && p.dx >= SWIPE_PX) replyToRow(p.row);
+  }
+  log.addEventListener('pointerup', endPress);
+  log.addEventListener('pointercancel', function (ev) { endPress(ev); press = null; });
+  // La pulsación larga del sistema (menú de copiar, del navegador) no sale encima del nuestro.
+  log.addEventListener('contextmenu', function (ev) { if (press && press.type === 'touch' && replyRowOf(ev)) ev.preventDefault(); });
 
   /**
    * Reacciones (reactions.ts): otro jugador intenta algo sobre ti. «Dejarse», «Resistirse» o tus palabras,

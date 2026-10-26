@@ -140,7 +140,7 @@ export interface WebMessage {
   notice?: WebNotice;
   /** Prólogo o «Donde lo dejamos» (docs/PROLOGO.md): página de libro con su título, sin avatar. */
   chapter?: { kind: 'prologue' | 'recap'; title: string };
-  /** Otro jugador se dirige a este: botones «Responder a…» (abre el modo Decir) e «Ignorarle». */
+  /** Otro jugador se dirige a este: sus burbujas llevan el menú ⌄ con «Responder» (abre el modo Decir) e «Ignorar». */
   reply_to?: { id: Id; name: string };
   /** Oferta de otro jugador a este: «Aceptar» y «Rechazar» mientras siga en pie. */
   offer?: { id: Id; label: string; open: boolean };
@@ -1106,7 +1106,7 @@ export function fragmentsOf(texts: readonly string[]): string {
 /**
  * Lo que otro PJ hace o dice, visto por este (party.ts): si lo oye bien, sus
  * palabras llegan literales como parlamento suyo (con su avatar y el nombre que
- * este conoce) en vez del estilo indirecto; si se dirige a este, «Responder a…»;
+ * este conoce) en vez del estilo indirecto; si se dirige a este, el menú «Responder»;
  * si le ofrece algo, «Aceptar» y «Rechazar».
  */
 function witnessMessage(m: WebMessage, d: Delivery, engine: Engine): WebMessage {
