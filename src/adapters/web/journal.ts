@@ -1,8 +1,8 @@
 /**
  * Diario en la web: la vista del motor (src/engine/journal.ts) con los retratos
- * de los NPC que ya estén ilustrados, y el aviso de una línea que sustituye en
- * el hilo a los mensajes de tablón y de progreso («Tablón actualizado · ver en
- * el Diario»).
+ * de los NPC que ya estén ilustrados. El aviso de una línea que sustituye en el
+ * hilo a los mensajes de tablón y de progreso («Tablón actualizado · ver en el
+ * Diario») está en notice.ts.
  *
  *   GET /api/journal?character=ID
  *
@@ -20,8 +20,8 @@ export interface WebJournal extends Journal {
   conversations: (JournalConversation & { portrait: string | null })[];
 }
 
-/** Aviso discreto en el hilo en lugar de una burbuja; `tab` es la pestaña a la que lleva. */
-export interface WebNotice { text: string; link: string; tab: 'journal' }
+// El aviso de una línea vive en notice.ts; se reexporta aquí para quien ya lo importaba del diario.
+export { noticeOf, type WebNotice } from './notice.js';
 
 export function journalView(engine: Engine, characterId: Id, slug: string): WebJournal {
   const j = journalOf(engine, characterId);
@@ -48,21 +48,6 @@ export function handleJournalRequest(engine: Engine, _req: IncomingMessage, res:
   }
   res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(journalView(engine, id, slug)));
-}
-
-/**
- * Eventos que no van al hilo como burbuja sino como aviso de una línea: la
- * rotación del tablón y los avisos de progreso (pista, encargo, logro,
- * práctica). Lo demás (tiradas, anuncios, narración) sigue igual. null = burbuja.
- */
-export function noticeOf(e: Pick<GameEvent, 'action_type' | 'narration_private' | 'observable'>): WebNotice | null {
-  if (e.action_type === 'board') return { text: 'Tablón actualizado', link: 'ver en el Diario', tab: 'journal' };
-  if (/^progress_/.test(e.action_type)) {
-    const text = (e.narration_private || e.observable || '').replace(/\s+/g, ' ').trim();
-    const first = /^(.+?[.!?])(\s|$)/.exec(text)?.[1] ?? text;
-    return { text: first.replace(/[.]$/, ''), link: 'ver en el Diario', tab: 'journal' };
-  }
-  return null;
 }
 
 /** ¿Cambia este evento algo que el diario recoge? (Para avisar por el stream.) */
