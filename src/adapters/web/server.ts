@@ -22,7 +22,7 @@
  *   GET  /images/<fichero>          ilustraciones descargadas de la partida (data/games/<slug>/images)
  *   GET  /assets/<fichero>          imágenes fijas de la interfaz (public/), sin ?game
  *   POST /api/act      {character, text}
- *   POST /api/say      {character, text, to?, mode?}   decir sin máster: la frase literal del PJ (party.ts)
+ *   POST /api/say      {character, text, to?, mode?}   decir sin máster: la frase literal del PJ (party.ts); si es una acción, {as_action: true} y no se dice
  *   POST /api/offer    {character, offer, accept}      aceptar o rechazar lo que otro PJ le ofrece
  *   POST /api/presence {character, tab, state}         latido de la pestaña: visible | hidden | gone (presence.ts)
  *   POST /api/reaction {character, reaction, answer, text}  dejarse o resistirse a lo que otro PJ intenta hacerle (answer: accept, resist o null con text)
@@ -76,7 +76,7 @@ import { journeyOf } from '../../engine/travel.js';
 import { accessFromEnv, checkSeatCookie, cookies, isAdmin, isHostSeat, adminTokenMatches, newSeat, randomToken, SeatStore, seatCookieName, seatCookieValue, seatIdOf, setAdminCookie, setCookie, type AccessOptions, type Seat } from './access.js';
 import { invitePage, joinPage, seatsPage } from './page-access.js';
 import { PRESENCE_TIMING, PresenceTracker, type PresenceTiming } from './presence.js';
-import { pcLabel, pcName } from '../../engine/party.js';
+import { pcLabel, pcName, sayLooksLikeAction } from '../../engine/party.js';
 import { talkingWith } from '../../engine/scene.js';
 import { descriptorOf } from '../../engine/narrate.js';
 import type { SceneNotice } from '../../engine/engine.js';
@@ -736,6 +736,8 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           // Sin bloqueo de doble acción ni cola: decir algo no espera al narrador.
           const text = typeof body['text'] === 'string' ? body['text'].trim() : '';
           if (!text) { json(res, 400, { ok: false, text: '¿Qué dices?' }); return; }
+          // El modo Decir se queda puesto: una acción («dar mis monedas») no se dice; la página la manda al narrador.
+          if (sayLooksLikeAction(text)) { json(res, 200, { ok: true, text: null, as_action: true }); return; }
           const to = typeof body['to'] === 'string' && body['to'] ? body['to'] : null;
           const mode = body['mode'] === 'shout' || body['mode'] === 'whisper' ? body['mode'] : undefined;
           json(res, 200, reply(await engine.say(id, text, { to, ...(mode ? { mode } : {}) })));

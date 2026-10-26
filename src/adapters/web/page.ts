@@ -9,6 +9,9 @@ import { AVATAR_SCRIPT, AVATAR_STYLE } from './avatar.js';
 import { HEARTBEAT_MS } from './presence.js';
 import { FIGHT_SCRIPT, FIGHT_STYLE } from './fight.js';
 
+/** El modo Decir vuelve solo a Hacer tras este rato sin escribir ni decir nada (revisión de la partida del 2026-10-26, n.º 9). */
+export const SAY_IDLE_MS = 30_000;
+
 export const PAGE = String.raw`<!doctype html>
 <html lang="es">
 <head>
@@ -1081,9 +1084,15 @@ ${FIGHT_SCRIPT}
 
   // --- Entre jugadores: Hacer / Decir (party.ts) -----------------------------------
   /** Decir: lo escrito es la frase literal del PJ; llega al instante a quien la oiga, sin narrador ni coste. */
-  var sayMode = false, sayTo = null;
-  function setSayMode(on, to) {
+  var sayMode = false, sayTo = null, sayIdle = null;
+  /** Decir dura mientras se charla: tras ${SAY_IDLE_MS / 1000} s sin escribir ni decir nada, vuelve solo a Hacer. */
+  function armSayIdle() {
+    clearTimeout(sayIdle);
+    if (sayMode) sayIdle = setTimeout(function () { if (sayMode && !input.value.trim()) setSayMode(false, null, true); }, ${SAY_IDLE_MS});
+  }
+  function setSayMode(on, to, quiet) {
     sayMode = on; sayTo = on ? (to || null) : null;
+    armSayIdle();
     var b = $('saymode');
     b.classList.toggle('say', on);
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -1092,7 +1101,7 @@ ${FIGHT_SCRIPT}
     $('form').classList.toggle('say', on);
     input.placeholder = on ? (sayTo ? '¿Qué le dices a ' + sayTo.name + '?' : '¿Qué dices?') : '¿Qué haces?';
     input.setAttribute('aria-label', on ? 'Lo que dices' : 'Acción');
-    input.focus();
+    if (!quiet) input.focus();
   }
   // «Aren está escribiendo…» (SSE «typing»; caduca sola) y aviso propio, como mucho cada 2,5 s.
   var typers = {}, typingTimer = null, lastTyping = 0;
@@ -1110,6 +1119,7 @@ ${FIGHT_SCRIPT}
     if (names.length) typingTimer = setTimeout(renderTyping, 1000);
   }
   input.addEventListener('input', function () {
+    armSayIdle();
     var v = input.value.trim();
     if (!v || v.charAt(0) === '/' || Date.now() - lastTyping < 2500) return;
     lastTyping = Date.now();
@@ -1136,7 +1146,12 @@ ${FIGHT_SCRIPT}
     if (!left) clearInterval(roundTimer);
   }
   function say(text) {
-    post('/api/say', { text: text, to: sayTo ? sayTo.id : null }).then(function (r) { if (!r.ok) handleReply(r); });
+    armSayIdle();
+    post('/api/say', { text: text, to: sayTo ? sayTo.id : null }).then(function (r) {
+      // Una acción escrita en Decir («dar mis monedas»): no se dice; vuelve a Hacer y va al narrador.
+      if (r.ok && r.as_action) { setSayMode(false, null, true); add('system', 'Eso es una acción: va al narrador. Para decirlo tal cual, empieza con «—».'); act(text); }
+      else if (!r.ok) handleReply(r);
+    });
   }
   function answerReaction(id, answer, text) {
     post('/api/reaction', { reaction: id, answer: answer, text: text || '' }).then(function (r) { if (!r.ok) handleReply(r); loadSheet(); });

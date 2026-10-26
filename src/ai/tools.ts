@@ -30,7 +30,7 @@ import { characterFacts, recordFact } from '../engine/facts.js';
 import type { DialogueLine } from '../engine/moments.js';
 import { fmtCoins, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
 import { inventedPlaces } from '../engine/places.js';
-import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, unansweredInShared, unansweredRejection, withoutDeathPhrases, type DeathHit, type RollCategory } from '../engine/closecheck.js';
+import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, isPlaceholder, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
@@ -367,6 +367,15 @@ function sharedWith(engine: Engine, actorId: string): string[] {
   return [...(h?.group?.members ?? []), ...(h?.round?.members ?? []), ...(h?.round?.hesitant ?? [])].map((m) => m.id);
 }
 
+/** En un turno compartido, lo que escribió cada PJ (los que dudan, sin entrada); null si no lo es. */
+function sharedInputs(engine: Engine, actorId: string): Map<string, string | null> | null {
+  const h = engine.sceneHints(actorId);
+  if (!h?.group && !h?.round) return null;
+  const out = new Map<string, string | null>([...(h.group?.members ?? []), ...(h.round?.members ?? [])].map((m) => [m.id, m.text]));
+  for (const m of h.round?.hesitant ?? []) out.set(m.id, null);
+  return out;
+}
+
 /** Una «línea» del actor que es en realidad su intención («Hablar con Aren», «Preguntarle por…»): no es algo dicho. */
 export const INTENT_LINE = /^(?:hablar|hablarle|preguntar|preguntarle|decir|decirle|contar|contarle|saludar|saludarle|responder|responderle)\b/i;
 
@@ -403,6 +412,43 @@ export function cleanText(t: string): string {
   return t.replace(/<\/?(?:parameter|narration_private|observable|observable_vague|invoke|function_calls)[^>]*>[\s\S]*$/i, '').replace(/<\/?[a-z_]+>\s*$/i, '').trim();
 }
 
+/** Valor de un parámetro rescatado del texto: número, booleano, null o texto. */
+function parsedParam(raw: string): unknown {
+  const v = raw.trim();
+  if (/^-?\d+(?:\.\d+)?$/.test(v)) return Number(v);
+  if (v === 'true' || v === 'false') return v === 'true';
+  if (v === 'null') return null;
+  return v;
+}
+
+/**
+ * Parámetros que el modelo mete dentro del valor de otro con sintaxis de
+ * llamada: `«…se la dio.</npc_memory_note>\n<parameter name="npc_memory_importance">2»`.
+ * El valor se corta donde empieza la sintaxis y cada `<parameter name="X">` se
+ * rescata como X si no venía ya (con valor). Lo que no sea un parámetro del
+ * tool se descarta. Devuelve una copia; los nombres rescatados, en `repaired`.
+ */
+export function repairToolInput(input: Record<string, unknown>, known?: ReadonlySet<string>): { input: Record<string, unknown>; repaired: string[] } {
+  const out: Record<string, unknown> = { ...input };
+  const repaired: string[] = [];
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value !== 'string' || !/<\/?[a-z_]+[^<>]*>/i.test(value)) continue;
+    const head = /<\/[a-z_]+>|<parameter\b|<\/?(?:invoke|function_calls)\b/i.exec(value);
+    if (!head) continue;
+    out[key] = value.slice(0, head.index).trim();
+    for (const m of value.slice(head.index).matchAll(/<parameter name="([a-z_]+)">([\s\S]*?)(?=<\/parameter>|<\/?[a-z_]+[^<>]*>|$)/gi)) {
+      const name = m[1]!;
+      if (name === key || (known && !known.has(name)) || out[name] != null) continue;
+      out[name] = parsedParam(m[2]!);
+      repaired.push(name);
+    }
+  }
+  return { input: out, repaired };
+}
+
+/** Parámetros de cada tool, para saber qué se puede rescatar. */
+const TOOL_PARAMS = new Map(MASTER_TOOLS.map((t) => [t.name, new Set(Object.keys((t.input_schema.properties ?? {}) as object))]));
+
 let rules: RulesIndex | null = null;
 
 /** Índice de reglas (RULES_DIR o data/local/rules), cargado una sola vez y solo si el máster lo consulta. */
@@ -415,8 +461,10 @@ export function resetRulesIndex(): void {
   rules = null;
 }
 
-export function executeTool(ctx: ToolContext, name: string, input: Record<string, unknown>): string {
+export function executeTool(ctx: ToolContext, name: string, raw: Record<string, unknown>): string {
   try {
+    // Parámetros colados dentro de otro (sintaxis de llamada en el texto): se rescatan antes de nada.
+    const { input } = repairToolInput(raw, TOOL_PARAMS.get(name));
     const out = run(ctx, name, input);
     const res = typeof out === 'string' ? out : JSON.stringify(out);
     if (WRITE_TOOLS.has(name) && !res.startsWith('{"error"')) (ctx.ok_tools ??= []).push(name);
@@ -692,6 +740,13 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!r.ok) return { error: r.error.code, detail: r.error };
       // El actor llega ya (viaje rápido): lo que haga después en esta acción ocurre en el destino y lo narras tú, de un tirón.
       const goal = world.spot(r.transit.destination_spot_id);
+      // En un turno compartido el máster mueve también a los demás: llegan ya y su llegada la cuenta este mismo cierre.
+      // Si no, el servidor pediría otra escena de llegada para cada uno (doble narración y su coste).
+      if (mover && mover.id !== actor.id && engine.fastTravel) {
+        const other = engine.arriveNow(mover);
+        if (other.arrived || !mover.transit) return { ok: true, arrived: true, destination: goal.name, hint: `${mover.name} ya está allí: cuéntalo en este cierre; no habrá otra escena de llegada para ${mover.name}.` };
+        return { ok: true, arrived: false, destination: goal.name, hint: `${mover.name} no ha llegado: algo le para por el camino y el servidor lo cuenta aparte. Narra solo que sale.` };
+      }
       const arrival = mover?.id === actor.id ? engine.arriveNow(actor) : null;
       if (arrival) {
         ctx.nowGameS = engine.nowFor(actor);
@@ -987,9 +1042,12 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (req?.kind === 'attack' && req.target !== actor.id && world.characters.has(req.target!) && !sharedWith(engine, actor.id).includes(req.target!)) return { error: 'Contra otro jugador no se pide tirada de ataque: usa request_reaction (kind attack) y él decide si se defiende; cierra sin requires_roll.' };
       if (req?.target && !world.npcs.has(req.target) && !world.characters.has(req.target)) return { error: `objetivo desconocido: ${req.target}` };
       if (req && req.kind === 'skill' && !SKILLS[req.key]) return { error: `skill desconocida: ${req.key}. Válidas: ${Object.keys(SKILLS).join(', ')}` };
-      // Relleno en lugar de narración («placeholder», «x»): siempre se reescribe; si el máster no sale de ahí, el motor dice que reintente.
-      const junk = placeholderFields({ narration_private: s('narration_private'), observable: input['observable'] == null ? null : s('observable') });
+      // Control mínimo, sin límite de rechazos (los de abajo rechazan una vez y luego dejan pasar):
+      // relleno en lugar de narración («placeholder», «x») y cierre sin nada que leer. Si el máster no sale de ahí, el motor dice que reintente.
+      const opt = (k: string) => (input[k] == null ? null : s(k));
+      const junk = placeholderFields({ narration_private: s('narration_private'), observable: opt('observable'), observable_vague: opt('observable_vague'), observable_target: opt('observable_target') });
       if (junk.length) return { error: placeholderRejection(junk) };
+      const empty = !req && emptyClose({ narration: cleanText(s('narration_private')), lines: parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id), (id) => world.characters.has(id)).filter((l) => !isPlaceholder(l.text)) });
       // Turno compartido: cada uno de los que actuaron recibe su respuesta, por su nombre. Se reescribe una vez.
       if ((ctx.shared_rejections ?? 0) < 1) {
         const h = engine.sceneHints(actor.id);
@@ -1069,6 +1127,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: promisedMoveRejection(actor.knows.includes(npc.id) ? npc.name : descriptorOf(world, npc.id), phrase) };
         }
       }
+      // Sin nada que leer: después de los de arriba (en conversación, el suyo lo explica mejor), pero sin límite.
+      if (empty) return { error: EMPTY_REJECTION };
       if (input['npc_id']) {
         const npc = world.npcs.get(s('npc_id'));
         // Habla con alguien de la sala que está a unos metros: el motor lo acerca antes (si no es hostil).
@@ -1120,24 +1180,32 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const closingNpc = input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null;
       // «Hablar con Aren» es lo que quiere hacer, no algo que diga: fuera de lines.
       const sharedIds = sharedWith(engine, actor.id);
-      const closingLines = parseLines(input['lines'], closingNpc, (id) => world.npcs.has(id), (id) => sharedIds.includes(id))
+      const parsedLines = parseLines(input['lines'], closingNpc, (id) => world.npcs.has(id), (id) => sharedIds.includes(id))
         .map((l) => (l.speaker === 'pc' && l.character_id === actor.id ? { speaker: 'actor' as const, text: l.text } : l))
-        .filter((l) => l.speaker !== 'actor' || !INTENT_LINE.test(l.text));
+        .filter((l) => (l.speaker !== 'actor' || !INTENT_LINE.test(l.text)) && !isPlaceholder(l.text));
+      // Turno compartido: lo que dice cada PJ sale de lo que escribió su jugador. Una frase que no está ahí
+      // («¡Quieto!» de «le ataco con la espada») es del máster, no suya: fuera de lines y de la narración.
+      const inputs = sharedInputs(engine, actor.id);
+      const invented = inputs ? parsedLines.filter((l) => (l.speaker === 'pc' || l.speaker === 'actor') && !saidByPlayer(l.text, inputs.get(l.speaker === 'pc' ? l.character_id! : actor.id))) : [];
+      const closingLines = parsedLines.filter((l) => !invented.includes(l));
+      const unsay = (t: string) => invented.reduce((acc, l) => acc.split(`«${l.text}»`).join('').replace(/[ \t]{2,}/g, ' ').trim(), t);
+      // Arranques en falso que el modelo corrige sobre la marcha («MIAU Lenzo... no. MIAU se queda…»): se quitan.
+      const tidy = (t: string) => withoutSelfCorrection(cleanText(t));
       const targetPc = input['target_character_id'] && world.characters.has(s('target_character_id')) && s('target_character_id') !== actor.id ? s('target_character_id') : null;
       ctx.closed = {
         // Lo dicho que no va citado en la narración (en conversación puede ir vacía) se guarda como citas.
-        narration_private: approached + narrationWithLines(withoutDeathPhrases(cleanText(s('narration_private')), deathHits), closingLines),
-        observable: input['observable'] == null ? null : withoutDeathPhrases(cleanText(s('observable')), deathHits) || null,
-        observable_vague: input['observable_vague'] == null ? null : cleanText(s('observable_vague')) || null,
+        narration_private: approached + narrationWithLines(withoutDeathPhrases(unsay(tidy(s('narration_private'))), deathHits), closingLines),
+        observable: input['observable'] == null ? null : withoutDeathPhrases(unsay(tidy(s('observable'))), deathHits) || null,
+        observable_vague: input['observable_vague'] == null ? null : tidy(s('observable_vague')) || null,
         loudness: Number(input['loudness']) || 1,
-        tags: s('tags').split(',').map((t) => t.trim()).filter(Boolean),
+        tags: s('tags').split(',').map((t) => t.trim()).filter((t) => t && !isPlaceholder(t)),
         // Esperar o unirse a un NPC ocupado con otro jugador lo ofrecen los botones del motor (scene.ts), no el máster.
-        suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter(Boolean).filter((t) => !(busyHere(engine, actor, nowGameS) && /^(esperar|aguardar|unirme|unirse|sumarme)\b/i.test(t))).slice(0, 4),
+        suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter((t) => t && !isPlaceholder(t)).filter((t) => !(busyHere(engine, actor, nowGameS) && /^(esperar|aguardar|unirme|unirse|sumarme)\b/i.test(t))).slice(0, 4),
         requires_roll: req,
         decisive: input['decisive_threat'] ? { threat: cleanText(s('decisive_threat')), npc_id: input['decisive_npc_id'] ? s('decisive_npc_id') : null } : null,
         npc_id: closingNpc,
         lines: closingLines,
-        ...(targetPc ? { target_character_id: targetPc, observable_target: input['observable_target'] == null ? null : cleanText(s('observable_target')) || null } : {}),
+        ...(targetPc ? { target_character_id: targetPc, observable_target: input['observable_target'] == null ? null : unsay(tidy(s('observable_target'))) || null } : {}),
       };
       return { ok: true, closed: true };
     }

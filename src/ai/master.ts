@@ -9,9 +9,9 @@ import type { Engine } from '../engine/engine.js';
 import { defaultRng, type Rng, type RollResult } from '../engine/dice.js';
 import type { Character } from '../engine/model.js';
 import { actionContext, systemPrompt, type DecisiveResponse, type RollContext, type Scene } from './prompt.js';
-import { executeTool, MASTER_TOOLS, WRITE_TOOLS, type LogEventInput, type ToolContext } from './tools.js';
+import { cleanText, executeTool, MASTER_TOOLS, WRITE_TOOLS, type LogEventInput, type ToolContext } from './tools.js';
 import type { Approach } from '../engine/movement.js';
-import { rollCategory } from '../engine/closecheck.js';
+import { isPlaceholder, rollCategory, withoutSelfCorrection } from '../engine/closecheck.js';
 import type { ProgressEvent } from '../engine/progress.js';
 import type { ShownRoll } from '../engine/rolls.js';
 
@@ -160,9 +160,10 @@ export class Master {
         const toolUses = res.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use');
         if (toolUses.length === 0) {
           // Terminó sin log_event: usamos el texto como narración privada, sin observable.
-          const txt = res.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('\n').trim();
+          // El mismo control mínimo que el cierre: sin relleno y sin arranques en falso.
+          const txt = withoutSelfCorrection(cleanText(res.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('\n').trim()));
           usage.ms = Date.now() - t0;
-          if (!txt) return { ok: false, reason: 'no_log_event', message: 'respuesta vacía', usage, calls };
+          if (!txt || isPlaceholder(txt)) return { ok: false, reason: 'no_log_event', message: txt ? `relleno en lugar de narración: «${txt.slice(0, 40)}»` : 'respuesta vacía', usage, calls };
           return done({ narration_private: txt, observable: null, observable_vague: null, loudness: 1, tags: ['no_log_event'], suggested_actions: [], requires_roll: null, decisive: null }, res.model);
         }
 

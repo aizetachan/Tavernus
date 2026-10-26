@@ -54,6 +54,24 @@ export function parseSay(raw: string, forced = false): SayIntent | null {
   return t ? { text: t, mode, to } : null;
 }
 
+/** Infinitivos de acción (con su pronombre: «darle», «acercarme»): así se escribe lo que se manda al narrador. */
+const ACTION_VERB = '(?:dar|ir|coger|tomar|atacar|golpear|pegar|pagar|comprar|vender|mirar|examinar|buscar|registrar|abrir|cerrar|entrar|salir|subir|bajar|hablar|preguntar|pedir|entregar|robar|lanzar|beber|sentar|acercar|curar|ayudar|seguir|esperar|descansar|dormir|cargar|llevar|levantar|empujar|saltar|correr|huir|esconder|escuchar|leer|usar|equipar|guardar|sacar|llenar|ofrecer|ensenar|mostrar|empenar|disparar|defender|estabilizar|abrazar|agarrar|soltar|tirar|echar|recoger|cambiar|devolver)(?:le|la|lo|les|las|los|me|te|se|nos)?';
+/** «le doy», «cojo», «me acerco»: primera persona de una acción, no algo que se dice. */
+const ACTION_FIRST = '(?:(?:le|la|lo|les|las|los|me) )?(?:doy|cojo|ataco|golpeo|pago|compro|busco|abro|entrego|robo|lanzo|bebo|acerco|siento|saco|guardo|registro)';
+const LOOKS_LIKE_ACTION = new RegExp(`^(?:${ACTION_VERB}|(?:voy|vamos) a? ?${ACTION_VERB}|${ACTION_FIRST})\\b`);
+
+/**
+ * En el modo Decir de la web todo lo escrito sale como frase dicha. Si se le
+ * ha quedado puesto y lo escrito es una acción («dar mis monedas», «vamos
+ * hablar con la tabernera»), no se dice: va al narrador. Lo que lleva comillas
+ * o raya, pregunta o exclama, se dice tal cual.
+ */
+export function sayLooksLikeAction(raw: string): boolean {
+  const t = raw.trim();
+  if (!t || /^[—–«"“-]/.test(t) || /[¿?¡!]/.test(t)) return false;
+  return LOOKS_LIKE_ACTION.test(t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''));
+}
+
 // ---------------------------------------------------------------------------
 // Quién es quién
 // ---------------------------------------------------------------------------
