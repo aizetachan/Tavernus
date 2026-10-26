@@ -69,7 +69,7 @@ describe('aviso de sistema o narración (engine/notices.ts)', () => {
   it('el progreso y el tablón llevan al Diario', () => {
     expect(forActor(ev('progress_clue', 'Pista: Ceniza en el agua del pozo (1/11). Reputación en Brezal: 2.', null)))
       .toEqual({ text: 'Pista: Ceniza en el agua del pozo (1/11)', link: 'ver en el Diario', tab: 'journal' });
-    expect(forWitness(ev('board', '', '📜 Tablón de Brezal…', { actor_id: null, visibility: 'public' }))).toEqual({ text: 'Tablón actualizado', link: 'ver en el Diario', tab: 'journal' });
+    expect(forWitness(ev('board', '', '📜 Tablón de Brezal…', { actor_id: null, visibility: 'public' }))).toEqual({ text: 'Hay avisos nuevos en el tablón de la plaza: pásate a leerlos' });
   });
 
   it('el máster, el diálogo, el ambiente y la escena siguen siendo narración', () => {

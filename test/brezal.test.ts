@@ -11,7 +11,7 @@ import { MemoryRepository } from '../src/persistence/memory.js';
 import { executeTool, type ToolContext } from '../src/ai/tools.js';
 import { actionContext } from '../src/ai/prompt.js';
 import { seededRng } from '../src/engine/dice.js';
-import { characterStory, hideoutOf, questsOf, storyOf } from '../src/engine/story.js';
+import { characterStory, hideoutOf, questsOf, storyContext, storyOf } from '../src/engine/story.js';
 import { journalOf } from '../src/engine/journal.js';
 import { allRumors } from '../src/engine/rumors.js';
 import { allHooks } from '../src/engine/hooks.js';
@@ -71,6 +71,14 @@ async function drop(engine: Engine, c: Character, itemId: string): Promise<void>
   const inst = engine.world.itemsCarriedBy(c.id).find((i) => i.item_id === itemId)!;
   const r = tool(engine, c, 'transfer_item', { instance_id: inst.id, to_type: 'spot', to_id: engine.world.characterSpot(c)!.id, slot: null, equip_slot: null, quantity: null });
   expect(r.error).toBeUndefined();
+}
+
+/** Habla con un NPC: va a donde está y abre la charla, como hace el máster al cerrar un turno con npc_id. */
+async function talkTo(engine: Engine, time: ReturnType<typeof fakeTime>, c: Character, npcId: string): Promise<void> {
+  const n = engine.world.npc(npcId);
+  await walk(engine, time, c, n.location.id);
+  n.talking_to = { character_id: c.id, since_game_s: engine.nowFor(c) };
+  await engine.tick();
 }
 
 /** Lleva el reloj del mundo hasta tantas horas después de su nacimiento (18:00 del día 0). */
@@ -250,11 +258,19 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(characterStory(c).open).toContain('q_agua');
     await take(engine, c, 'ii_agua_pozo');
     expect(stepOf(engine, c, 'q_agua')!.current!.id).toBe('ilse');
+    // Entrar en casa de Ilse con el agua no basta: el paso se da al dársela, y ahí habla ella.
     await walk(engine, time, c, 'sp_cu_hierbas');
+    expect(stepOf(engine, c, 'q_agua')!.current!.id).toBe('ilse');
+    expect(c.clues).not.toContain('clue_ilse');
+    await talkTo(engine, time, c, 'npc_ilse');
+    const water = engine.world.itemsCarriedBy(c.id).find((i) => i.item_id === 'it_agua_pozo')!;
+    expect(tool(engine, c, 'transfer_item', { instance_id: water.id, to_type: 'npc', to_id: 'npc_ilse', slot: null, equip_slot: null, quantity: null }).error).toBeUndefined();
+    await engine.tick();
     expect(done(c)).toContain('q_agua');
     expect(c.clues).toContain('clue_ilse');
-    expect(characterStory(c).open).toContain('q_cadena'); // se abre el acto II de Ilse
-    await drop(engine, c, 'it_agua_pozo');
+    expect(characterStory(c).open).toContain('q_cadena'); // se abre el acto II de Ilse: se la pide ella, en la charla
+    expect(characterStory(c).origins!['q_cadena']).toMatchObject({ kind: 'giver', text: 'Te lo pide Ilse' });
+    expect(characterStory(c).origins!['q_agua']).toMatchObject({ kind: 'heard' });
 
     // --- Acto I: Ceniza se ha perdido (la madriguera al pie del roble del Soto) ---
     await walk(engine, time, c, 'sp_cl_sendero');
@@ -267,7 +283,10 @@ describe('Brezal sellada: la campaña escrita', () => {
     await walk(engine, time, c, 'sp_tab_barra');
     expect(done(c)).toContain('q_perro');
     expect(engine.world.npc('npc_brenna').attitude.by_character[c.id]).toBe('friendly');
-    expect(characterStory(c).open).toEqual(expect.arrayContaining(['q_sotano', 'q_subida']));
+    expect(characterStory(c).open).toContain('q_subida'); // de oídas
+    expect(characterStory(c).open).not.toContain('q_sotano'); // la pide Brenna: hasta que no hable con ella, no
+    await talkTo(engine, time, c, 'npc_brenna');
+    expect(characterStory(c).open).toContain('q_sotano');
 
     // --- Acto I: Lo que vio Doro (la pista y la vigilia de las 23:00 en el arroyo del Soto) ---
     await walk(engine, time, c, 'sp_pl_porton');
@@ -285,6 +304,8 @@ describe('Brezal sellada: la campaña escrita', () => {
     await walk(engine, time, c, 'sp_mo_desvan');
     await take(engine, c, 'ii_cartas_tobias');
     expect(done(c)).toContain('q_noche');
+    expect(characterStory(c).open).not.toContain('q_tobias');
+    await talkTo(engine, time, c, 'npc_mateo');
     expect(characterStory(c).open).toContain('q_tobias');
 
     // --- Acto II: Bajo el Jabalí ---
@@ -319,11 +340,17 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(stepOf(engine, c, 'q_subida')!.current!.id).toBe('ruinas');
     await walk(engine, time, c, 'sp_ru_patio');
     expect(stepOf(engine, c, 'q_subida')!.current!.id).toBe('ysolde');
+    await talkTo(engine, time, c, 'npc_ysolde');
     expect(tool(engine, c, 'grant_clue', { character_id: c.id, clue_id: 'clue_ysolde' }).ok).toBe(true);
     await engine.tick();
     expect(done(c)).toContain('q_subida');
 
-    // --- Acto III: los tres finales abiertos; templar el ascua ---
+    // --- Acto III: cada final lo abre quien lo da, al hablar con el PJ; templar el ascua ---
+    expect(characterStory(c).open).toContain('q_final_arder'); // Ysolde, que está delante
+    expect(characterStory(c).open).not.toContain('q_final_templar');
+    expect(storyContext(engine.world, c, engine.gameNow())).toContain('Pendiente de que se la pidan: «Templar el ascua»');
+    await talkTo(engine, time, c, 'npc_ilse');
+    await talkTo(engine, time, c, 'npc_brenna');
     expect(characterStory(c).open).toEqual(expect.arrayContaining(['q_final_templar', 'q_final_verdad', 'q_final_arder']));
     // Con tres pistas y reputación, el logro da la llave de los Vharn, que abre el pasadizo del altar.
     expect(c.achievements.some((a) => a.id === 'ach_ceniza')).toBe(true);
@@ -371,7 +398,9 @@ describe('Brezal sellada: la campaña escrita', () => {
     characterStory(c).done.push('q_sotano');
     c.clues.push('clue_ysolde');
     await engine.tick();
-    expect(characterStory(c).open).toEqual(expect.arrayContaining(['q_final_verdad', 'q_final_arder']));
+    expect(characterStory(c).open).not.toContain('q_final_verdad');
+    await talkTo(engine, time, c, 'npc_brenna');
+    expect(characterStory(c).open).toContain('q_final_verdad');
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_verdad', step_id: 'brenna' }).ok).toBe(true);
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_verdad', step_id: 'ysolde' }).ok).toBe(true);
     expect(engine.world.npc('npc_ysolde').location.id).toBe('sp_pl_pozo');
@@ -414,6 +443,9 @@ describe('Brezal sellada: la campaña escrita', () => {
     const c = await newPc(engine, 'Ruy', 'fighter');
     c.clues.push('clue_ysolde');
     await engine.tick();
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_arder', step_id: 'osric' }).error).toMatch(/no está abierta/);
+    engine.world.npc('npc_ysolde').location = { type: 'spot', id: engine.world.characterSpot(c)!.id }; // baja a verle
+    await talkTo(engine, time, c, 'npc_ysolde');
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_arder', step_id: 'osric' }).ok).toBe(true);
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_arder', step_id: 'soltar' }).ok).toBe(true);
     expect(done(c)).toContain('q_final_arder');

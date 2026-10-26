@@ -14,12 +14,23 @@
  * encargo del tablón vuelve a «disponible» (si sigue en el tablón) y una
  * misión dada, también; si se vuelve a hablar de ella, se retoma.
  *
+ * Coherencia: una misión que «la pide X» solo entra si X está con el PJ (se
+ * la pide en persona); si le llega de oídas, va sin quien la pide y con
+ * `heard` («En el Jabalí se comenta que…»), y así se lee en el Diario.
+ *
+ * Tablón: un encargo entra en el Diario cuando el PJ lo lee (de pie ante un
+ * tablón, un punto con la etiqueta `notice`, o con /tablon), no por estar
+ * clavado en la plaza: `readBoard` apunta cuándo vio cada uno.
+ *
  * Todo vive en propiedades opcionales del personaje, sin tocar model.ts:
- * `given_quests?: GivenQuest[]`, `dropped_quests?: DroppedQuest[]`.
+ * `given_quests?: GivenQuest[]`, `dropped_quests?: DroppedQuest[]`,
+ * `board_seen?: Record<Id, number>`.
  */
 
 import { normalize } from './aliases.js';
-import type { Character, Id } from './model.js';
+import type { Character, Id, Job } from './model.js';
+import { activeJobs } from './progress.js';
+import { nameFor } from './story.js';
 import type { World } from './world.js';
 
 export interface GivenQuest {
@@ -32,11 +43,19 @@ export interface GivenQuest {
   status: 'active' | 'completed' | 'failed';
   given_game_s: number;
   updated_game_s: number;
+  /** Cómo le llegó, en palabras del jugador: «Te lo pide Hugo» o de dónde lo oyó. */
+  origin_text: string;
+  /** De oídas (nadie se lo pidió en persona). */
+  heard?: boolean;
+  /** Dónde estaba el PJ cuando le llegó. */
+  location_id?: Id | null;
+  /** Por qué se cerró, si el máster lo dijo. */
+  closed_why?: string | null;
 }
 
 export interface DroppedQuest { id: Id; game_s: number }
 
-type Holder = Character & { given_quests?: GivenQuest[]; dropped_quests?: DroppedQuest[] };
+type Holder = Character & { given_quests?: GivenQuest[]; dropped_quests?: DroppedQuest[]; board_seen?: Record<Id, number> };
 
 /** Tope de misiones dadas por PJ (las cerradas más antiguas se olvidan antes). */
 export const MAX_GIVEN = 30;
@@ -54,6 +73,8 @@ export interface GiveInput {
   giver_npc_id?: Id | null;
   objective?: string | null;
   reward?: string | null;
+  /** Sin quien la pida en persona: de dónde le llega. */
+  heard?: string | null;
 }
 
 /**
@@ -67,6 +88,17 @@ export function giveQuest(world: World, c: Character, input: GiveInput, nowS: nu
   if (!text) return { ok: false, error: 'falta de qué va' };
   const giver = input.giver_npc_id && input.giver_npc_id !== 'null' ? input.giver_npc_id : null;
   if (giver && !world.npcs.has(giver)) return { ok: false, error: `${giver} no es un NPC` };
+  const here = c.transit ? null : world.characterSpot(c)?.location_id ?? null;
+  const heard = input.heard && input.heard !== 'null' && input.heard.trim() ? input.heard.trim().replace(/[.]$/, '') : null;
+  if (giver) {
+    // «Te lo pide X» solo con X delante: si no está, no se lo ha pedido; se lo han contado.
+    const n = world.npc(giver);
+    if (n.status !== 'alive' || !here || world.spots.get(n.location.id)?.location_id !== here) {
+      return { ok: false, error: `${n.name} no está con el actor: no se lo ha pedido en persona. Si se lo han contado, npc_id null y en heard de dónde le llega.` };
+    }
+  } else if (!heard) return { ok: false, error: 'sin npc_id hace falta heard: de dónde le llega (un rumor, quién se lo contó)' };
+  const who = giver ? nameFor(world, c, giver) : null;
+  const originText = who ? `Te lo pide ${who}` : heard!;
   const h = c as Holder;
   const list = h.given_quests ??= [];
   const same = list.find((q) => normalize(q.title) === normalize(title) && q.giver_npc_id === giver);
@@ -84,6 +116,7 @@ export function giveQuest(world: World, c: Character, input: GiveInput, nowS: nu
   const quest: GivenQuest = {
     id, title, text, giver_npc_id: giver, objective: clean(input.objective), reward: clean(input.reward),
     status: 'active', given_game_s: nowS, updated_game_s: nowS,
+    origin_text: originText, ...(giver ? {} : { heard: true }), location_id: here,
   };
   list.push(quest);
   while (list.length > MAX_GIVEN) {
@@ -95,11 +128,12 @@ export function giveQuest(world: World, c: Character, input: GiveInput, nowS: nu
 }
 
 /** Cierra una misión dada: cumplida o fallida. */
-export function finishQuest(world: World, c: Character, questId: Id, outcome: 'completed' | 'failed', nowS: number): { ok: true; quest: GivenQuest } | { ok: false; error: string } {
+export function finishQuest(world: World, c: Character, questId: Id, outcome: 'completed' | 'failed', nowS: number, why: string | null = null): { ok: true; quest: GivenQuest } | { ok: false; error: string } {
   const q = givenQuests(c).find((x) => x.id === questId || normalize(x.title) === normalize(questId));
   if (!q) return { ok: false, error: `el actor no tiene la misión ${questId}` };
   q.status = outcome;
   q.updated_game_s = nowS;
+  q.closed_why = why?.trim() || null;
   world.touch('characters', c.id);
   return { ok: true, quest: q };
 }
@@ -121,11 +155,31 @@ export function dropQuest(world: World, c: Character, questId: Id, nowS: number)
   return { ok: true, title: given?.title ?? job!.title };
 }
 
+/** Cuándo leyó el PJ cada encargo del tablón (la primera vez). */
+export function boardSeen(c: Character): Readonly<Record<Id, number>> { return (c as Holder).board_seen ?? {}; }
+
+/** ¿Está el PJ, parado, ante un tablón (un punto con la etiqueta `notice`)? */
+export function atBoard(world: World, c: Character): boolean {
+  if (c.transit) return false;
+  return world.characterSpot(c)?.tags.includes('notice') ?? false;
+}
+
+/** El PJ lee el tablón: apunta los encargos que no había visto. Devuelve los nuevos para el aviso. */
+export function readBoard(world: World, c: Character, nowS: number): Job[] {
+  const h = c as Holder;
+  const seen = h.board_seen ??= {};
+  const fresh = activeJobs(world).filter((j) => seen[j.id] === undefined && !c.completed_jobs.includes(j.id));
+  if (!fresh.length) return [];
+  for (const j of fresh) seen[j.id] = nowS;
+  world.touch('characters', c.id);
+  return fresh;
+}
+
 /** Bloque del contexto del máster: lo que el PJ tiene entre manos por encargo de alguien. */
 export function givenContext(world: World, c: Character): string | null {
   const open = givenQuests(c).filter((q) => q.status === 'active' && droppedAt(c, q.id) === null);
   if (!open.length) return null;
   const who = (id: Id | null) => (id ? world.npcs.get(id)?.name ?? id : 'nadie en concreto');
-  return ['## Misiones que le han dado', ...open.map((q) => `- [${q.id}] «${q.title}» (de ${who(q.giver_npc_id)}): ${q.objective ?? q.text}${q.reward ? ` · recompensa: ${q.reward}` : ''}`),
+  return ['## Misiones que le han dado', ...open.map((q) => `- [${q.id}] «${q.title}» (${q.heard ? `de oídas: ${q.origin_text}` : `de ${who(q.giver_npc_id)}`}): ${q.objective ?? q.text}${q.reward ? ` · recompensa: ${q.reward}` : ''}`),
     'Cuando la cumpla o ya no se pueda, finish_quest con su ID.'].join('\n');
 }

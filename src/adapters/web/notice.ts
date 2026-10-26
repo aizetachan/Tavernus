@@ -9,12 +9,20 @@
 
 import type { GameEvent, Id } from '../../engine/model.js';
 import { threadKind } from '../../engine/notices.js';
+import type { QuestChange } from '../../engine/progress.js';
 
 /** Pestaña del cajón a la que lleva el enlace de un aviso. */
 export type NoticeTab = 'journal' | 'sheet' | 'bag';
 
-/** Aviso de una línea: `link` + `tab`, un enlace a esa pestaña; `tone` tiñe el texto (una tirada que sale bien o mal). */
-export interface WebNotice { text: string; link?: string; tab?: NoticeTab; tone?: 'good' | 'bad' }
+/**
+ * Aviso de una línea: `link` + `tab`, un enlace a esa pestaña; `tone` tiñe el texto (una tirada que sale bien o mal).
+ * Los de misiones (`quest`) se pintan más visibles: qué ha pasado (alta, paso, cierre) y, debajo, por qué.
+ */
+export interface WebNotice { text: string; link?: string; tab?: NoticeTab; tone?: 'good' | 'bad'; quest?: { id: Id; event: QuestChange['event']; why: string } }
+
+const QUEST_HEAD: Record<QuestChange['event'], string> = {
+  open: 'Nueva misión', available: 'Encargo en el Diario', step: 'Paso cumplido', done: 'Misión cumplida', failed: 'Misión fallida', expired: 'Misión cerrada', dropped: 'Misión dejada',
+};
 
 /** Construye un aviso con el texto limpio: sin negritas ni saltos de línea y, si es una sola frase, sin punto final. */
 export function webNotice(text: string, opts: Omit<WebNotice, 'text'> = {}): WebNotice {
@@ -37,7 +45,13 @@ type NoticeEvent = Pick<GameEvent, 'action_type' | 'narration_private' | 'observ
  * lector (por defecto, lo del actor o, si no hay, lo observable).
  */
 export function noticeOf(e: NoticeEvent, readerId: Id | null = e.actor_id ?? null, text?: string): WebNotice | null {
-  if (e.action_type === 'board') return webNotice('Tablón actualizado', { link: 'ver en el Diario', tab: 'journal' });
+  // El tablón cambia, pero sus encargos no entran en el Diario hasta que el PJ lo lee.
+  if (e.action_type === 'board') return webNotice('Hay avisos nuevos en el tablón de la plaza: pásate a leerlos');
+  const q = e.payload?.['quest'] as QuestChange | undefined;
+  if (/^progress_/.test(e.action_type) && q && QUEST_HEAD[q.event]) {
+    const what = q.event === 'step' && q.step ? `${q.title}: ${q.step}` : `«${q.title}»`;
+    return { text: `${QUEST_HEAD[q.event]} · ${what}`, link: 'ver en el Diario', tab: 'journal', quest: { id: q.id, event: q.event, why: q.why.charAt(0).toUpperCase() + q.why.slice(1) } };
+  }
   const isActor = readerId !== null && readerId === e.actor_id;
   const shown = text ?? ((isActor ? e.narration_private : e.observable) || e.narration_private || e.observable || '');
   if (/^progress_/.test(e.action_type)) {

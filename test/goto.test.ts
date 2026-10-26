@@ -168,17 +168,20 @@ describe('misiones que se aceptan solas', () => {
     expect(q.droppable).toBe(true);
   });
 
-  it('give_quest registra la misión con quién la da, objetivo y recompensa, y avisa en una línea', async () => {
+  it('give_quest registra la misión con quién la da, objetivo y recompensa, y avisa con su origen', async () => {
     const { engine } = await bootEngine(fakeTime());
     const c = engine.world.character('ch_kael');
     c.knows.push('npc_brenna');
     const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] };
     const out = JSON.parse(executeTool(ctx, 'give_quest', { title: 'El perro de Brenna', text: 'Brenna ha perdido a su perro y quiere saber qué fue de él.', npc_id: 'npc_brenna', objective: 'Encontrar al perro', reward: '10 monedas' })) as Record<string, unknown>;
     expect(out['ok']).toBe(true);
-    expect(ctx.progress).toEqual([{ kind: 'quest', text: 'Nueva misión: «El perro de Brenna» (te la da Brenna).' }]);
-    expect(noticeOf({ action_type: 'progress_quest', narration_private: ctx.progress[0]!.text, observable: null })).toMatchObject({ text: 'Nueva misión: «El perro de Brenna» (te la da Brenna)' });
+    expect(ctx.progress).toEqual([{ kind: 'quest', text: 'Nueva misión: «El perro de Brenna». Te lo pide Brenna.', quest: { id: 'gq_perro_brenna', title: 'El perro de Brenna', event: 'open', why: 'Te lo pide Brenna' } }]);
+    expect(noticeOf({ action_type: 'progress_quest', narration_private: ctx.progress[0]!.text, observable: null, payload: { quest: ctx.progress[0]!.quest } }))
+      .toEqual({ text: 'Nueva misión · «El perro de Brenna»', link: 'ver en el Diario', tab: 'journal', quest: { id: 'gq_perro_brenna', event: 'open', why: 'Te lo pide Brenna' } });
     const q = journalOf(engine, c.id).quests.active.find((x) => x.kind === 'given')!;
     expect(q).toMatchObject({ title: 'El perro de Brenna', status: 'active', giver: 'Brenna', reward: '10 monedas', steps: [{ text: 'Encontrar al perro', done: false }] });
+    expect(q.origin).toMatchObject({ kind: 'giver', text: 'Te lo pide Brenna' });
+    expect(q.history).toMatchObject([{ kind: 'added', text: 'Nueva misión', why: 'Te lo pide Brenna' }]);
     // Dársela otra vez no la duplica ni vuelve a avisar.
     const again = JSON.parse(executeTool({ ...ctx, progress: [] }, 'give_quest', { title: 'El perro de Brenna', text: 'Otra vez.', npc_id: 'npc_brenna', objective: null, reward: null })) as Record<string, unknown>;
     expect(again['existing']).toBe(true);
@@ -189,13 +192,14 @@ describe('misiones que se aceptan solas', () => {
     const { engine } = await bootEngine(fakeTime());
     const c = engine.world.character('ch_kael');
     const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] };
-    const out = JSON.parse(executeTool(ctx, 'give_quest', { title: 'Recado', text: 'Llevar un recado al molino.', npc_id: null, objective: null, reward: null })) as { quest_id: string };
+    const out = JSON.parse(executeTool(ctx, 'give_quest', { title: 'Recado', text: 'Llevar un recado al molino.', npc_id: null, heard: 'En la barra se comenta que el molinero busca quien le lleve un recado', objective: null, reward: null })) as { quest_id: string };
     const r = await engine.dropQuest(c.id, out.quest_id);
     expect(r).toEqual({ ok: true, text: 'Has dejado la misión «Recado».' });
     const q = journalOf(engine, c.id).quests.active.find((x) => x.id === out.quest_id)!;
     expect(q.status).toBe('available');
     expect(q.droppable).toBe(false);
-    expect(engine.events.all().at(-1)).toMatchObject({ action_type: 'progress_quest', narration_private: 'Has dejado la misión «Recado».' });
+    expect(engine.events.all().at(-1)).toMatchObject({ action_type: 'progress_quest', narration_private: 'Has dejado la misión «Recado».', visibility: 'private', payload: { quest: { event: 'dropped' } } });
+    expect(q.history.map((x) => x.kind)).toEqual(['added', 'dropped']);
     // Un encargo del tablón en curso, también: vuelve a disponible.
     talk(engine, c.id, 'Hablemos de la leña', [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'La leña, sí: diez leños.' }]);
     expect(journalOf(engine, c.id).quests.active.find((x) => x.id === 'job_lena')!.status).toBe('active');

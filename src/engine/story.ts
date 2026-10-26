@@ -16,6 +16,18 @@
  *   - `character.story`: misiones abiertas, pasos dados, cumplidas y caducadas
  *     de cada PJ.
  *
+ * Alta y avance coherentes (lo que ve el jugador tiene que cuadrar con lo que
+ * ha vivido):
+ *   - Una misión con quien la da (`giver_npc_id`) se abre cuando se cumple su
+ *     condición Y el PJ está hablando con esa persona; o, si la misión trae
+ *     `heard`, de oídas, con ese origen a la vista («lo oíste en…»). Sin
+ *     ninguna de las dos, espera. Una sin quien la da se abre por su condición.
+ *   - Un paso solo cuenta para el PJ si lo ha hecho él (o su grupo, delante):
+ *     las condiciones del mundo (que un NPC tenga algo, muera, esté en un
+ *     sitio, o el estado de un punto) piden que el PJ esté en ese lugar.
+ *   - Cada alta, paso, cierre y caducidad queda en `character.story.log` con
+ *     el porqué en palabras del jugador: lo pinta el Diario y va en el aviso.
+ *
  * Consecuencias: las que tocan al PJ (pista, objeto, conocer a alguien, un
  * punto descubierto) se aplican a cada PJ que cumple; las del mundo (un NPC
  * que se va, un estado, un evento en la agenda) una sola vez. Las misiones
@@ -122,6 +134,12 @@ export interface StoryQuest {
   notes: string;
   /** Se abre cuando se cumple; sin ella, desde el principio. */
   opens_when?: StoryCondition;
+  /**
+   * Cómo le llega al PJ sin que se lo pida quien la da: un rumor, algo que se
+   * oye o se ve («En el Jabalí se comenta que…»). Con ella se abre de oídas en
+   * cuanto se cumple `opens_when`; sin ella, hace falta hablar con quien la da.
+   */
+  heard?: string;
   /** Finales excluyentes: al cumplirse una del grupo, las demás caducan para todos. */
   exclusive?: string;
   steps: StoryStep[];
@@ -170,7 +188,31 @@ export interface CharacterStory {
   steps: Id[];
   done: Id[];
   expired: Id[];
+  /** Cómo le llegó cada misión (las abiertas antes de esto no lo tienen). */
+  origins?: Record<Id, QuestOrigin>;
+  /** Altas, pasos, cierres y caducidades, con el porqué (los últimos MAX_LOG). */
+  log?: QuestLogEntry[];
 }
+
+/** De dónde le viene una misión al PJ: se la pide alguien en persona, de oídas o por su cuenta. */
+export interface QuestOrigin {
+  kind: 'giver' | 'heard' | 'self';
+  game_s: number;
+  location_id: Id | null;
+  /** En palabras del jugador: «Te lo pide Ilse», «En el Jabalí se comenta que…». */
+  text: string;
+}
+
+export interface QuestLogEntry {
+  quest_id: Id;
+  kind: 'open' | 'step' | 'done' | 'expired';
+  step_id?: Id;
+  game_s: number;
+  /** Por qué, en palabras del jugador («conseguiste la pista «La Brasa de Vharn»»). */
+  why: string;
+}
+
+const MAX_LOG = 200;
 
 type StoryCampaign = { story?: Story; story_state?: StoryState; hooks?: Hook[]; rumors?: Rumor[]; schedule?: ScheduledEvent[] };
 
@@ -196,6 +238,27 @@ export function characterStory(c: Character): CharacterStory {
   const x = c as Character & { story?: CharacterStory };
   x.story ??= { open: [], steps: [], done: [], expired: [] };
   return x.story;
+}
+
+function logStory(world: World, c: Character, e: QuestLogEntry): void {
+  const st = characterStory(c);
+  st.log = [...(st.log ?? []), e].slice(-MAX_LOG);
+  world.touch('characters', c.id);
+}
+
+/** Cómo nombra el PJ a un NPC: por su nombre si lo sabe; si no, por su oficio («la curandera»). */
+export function nameFor(world: World, c: Character | null, npcId: Id): string {
+  const n = world.npcs.get(npcId);
+  if (!n) return npcId;
+  if (!c || c.knows.includes(n.id)) return n.name;
+  return /^(el|la|los|las) /.test(n.role) ? n.role : /a$/.test(n.role) ? `la ${n.role}` : `el ${n.role}`;
+}
+
+/** ¿Está ese NPC hablando ahora con el PJ (o el PJ unido a su charla)? */
+export function talkingWith(n: Npc, c: Character): boolean {
+  const t = n.talking_to;
+  if (!t) return false;
+  return (t.character_id === c.id && !t.reserved) || (t.with ?? []).includes(c.id);
 }
 
 const RANK: Record<Attitude, number> = { hostile: 0, unfriendly: 1, neutral: 2, friendly: 3, allied: 4 };
@@ -234,6 +297,56 @@ export function holds(world: World, c: Character | null, cond: StoryCondition): 
     case 'any': return cond.of.some((x) => holds(world, c, x));
     case 'all': return cond.of.every((x) => holds(world, c, x));
     case 'not': return !holds(world, c, cond.of);
+  }
+}
+
+/**
+ * ¿Cuenta como hecho por este PJ? Igual que `holds`, pero las condiciones del
+ * mundo (que un NPC tenga algo, muera o esté en un sitio; el estado de un
+ * punto) solo valen si el PJ está en ese lugar: lo ha hecho él o su grupo,
+ * delante de él. Para los pasos; las aperturas y la amenaza usan `holds`.
+ */
+export function credited(world: World, c: Character, cond: StoryCondition): boolean {
+  const here = c.transit ? null : world.characterSpot(c)?.location_id ?? null;
+  const npcHere = (id: Id) => { const n = world.npcs.get(id); return !!n && !!here && world.spots.get(n.location.id)?.location_id === here; };
+  const spotHere = (id: Id) => !!here && world.spots.get(id)?.location_id === here;
+  switch (cond.kind) {
+    case 'npc_has': case 'npc_status': return npcHere(cond.npc_id) && holds(world, c, cond);
+    case 'npc_at': case 'spot_state': return spotHere(cond.spot_id) && holds(world, c, cond);
+    case 'any': return cond.of.some((x) => credited(world, c, x));
+    case 'all': return cond.of.every((x) => credited(world, c, x));
+    default: return holds(world, c, cond);
+  }
+}
+
+/** Por qué se cumple, en palabras del jugador (en `any`, la primera rama que vale). */
+export function explain(world: World, c: Character, cond: StoryCondition): string {
+  const spot = (id: Id) => world.spots.get(id)?.name ?? id;
+  const loc = (id: Id) => world.locations.get(id)?.name ?? id;
+  const item = (id: Id) => world.itemDefs.get(id)?.name ?? id;
+  const npc = (id: Id) => nameFor(world, c, id);
+  switch (cond.kind) {
+    case 'clue': return `conseguiste la pista «${world.campaign.clues.find((x) => x.id === cond.clue_id)?.title ?? cond.clue_id}»`;
+    case 'visit': return `llegaste a ${spot(cond.spot_id)}`;
+    case 'at_location': return `estás en ${loc(cond.location_id)}`;
+    case 'visit_location': return `has estado en ${loc(cond.location_id)}`;
+    case 'npc_at': return `${npc(cond.npc_id)} está en ${spot(cond.spot_id)}`;
+    case 'carry': return `llevas ${item(cond.item_id)}${(cond.quantity ?? 1) > 1 ? ` ×${cond.quantity}` : ''}`;
+    case 'npc_has': return `${npc(cond.npc_id)} ya tiene ${item(cond.item_id)}`;
+    case 'npc_status': return `${npc(cond.npc_id)} ${cond.status === 'dead' ? 'ha muerto' : cond.status === 'missing' ? 'ha desaparecido' : 'sigue con vida'}`;
+    case 'attitude': return `${npc(cond.npc_id)} se fía más de ti`;
+    case 'spot_state': return `ha cambiado ${spot(cond.spot_id)}`;
+    case 'discovered': return `descubriste ${spot(cond.spot_id)}`;
+    case 'knows': return `sabes quién es ${npc(cond.npc_id)}`;
+    case 'job': return `cumpliste el encargo «${world.campaign.jobs.find((j) => j.id === cond.job_id)?.title ?? cond.job_id}»`;
+    case 'quest': return `cumpliste «${quest(world, cond.quest_id)?.title ?? cond.quest_id}»`;
+    case 'narrative': return 'lo has hecho en la escena';
+    case 'any': {
+      const hit = cond.of.find((x) => credited(world, c, x)) ?? cond.of.find((x) => holds(world, c, x)) ?? cond.of[0];
+      return hit ? explain(world, c, hit) : '';
+    }
+    case 'all': return cond.of.map((x) => explain(world, c, x)).filter(Boolean).join(' y ');
+    case 'not': return 'no ha pasado lo que lo impedía';
   }
 }
 
@@ -435,6 +548,21 @@ function exclusiveTaken(world: World, q: StoryQuest): StoryQuest | null {
   return null;
 }
 
+/**
+ * De dónde le llegaría ahora una misión que ya cumple su condición: en persona
+ * (quien la da está hablando con el PJ), de oídas (`heard`) o, sin quien la
+ * dé, por su cuenta. null = aún no: falta hablar con quien la da.
+ */
+function originFor(world: World, c: Character, q: StoryQuest, nowS: number): QuestOrigin | null {
+  const location_id = c.transit ? null : world.characterSpot(c)?.location_id ?? null;
+  const giver = q.giver_npc_id ? world.npcs.get(q.giver_npc_id) : undefined;
+  if (giver && giver.status === 'alive' && talkingWith(giver, c)) return { kind: 'giver', game_s: nowS, location_id, text: `Te lo pide ${nameFor(world, c, giver.id)}` };
+  if (q.heard) return { kind: 'heard', game_s: nowS, location_id, text: q.heard };
+  if (giver) return null;
+  const why = q.opens_when ? explain(world, c, q.opens_when) : '';
+  return { kind: 'self', game_s: nowS, location_id, text: why ? `Por tu cuenta: ${why}` : 'Por tu cuenta' };
+}
+
 /** Abre, avanza y cierra las misiones de un PJ. */
 function advanceCharacter(world: World, c: Character, nowS: number, o: StoryOutput): void {
   const story = storyOf(world);
@@ -449,18 +577,27 @@ function advanceCharacter(world: World, c: Character, nowS: number, o: StoryOutp
       st.open = st.open.filter((x) => x !== q.id);
       st.expired.push(q.id);
       changed = true;
-      if (wasOpen) tellTo(o, c, [{ kind: 'story', text: `La misión «${q.title}» se cierra: el valle ya ha elegido otro final («${taken.title}»).` }]);
+      if (wasOpen) {
+        const why = `el valle ya ha elegido otro final («${taken.title}»)`;
+        logStory(world, c, { quest_id: q.id, kind: 'expired', game_s: nowS, why });
+        tellTo(o, c, [{ kind: 'story', text: `La misión «${q.title}» se cierra: ${why}.`, quest: { id: q.id, title: q.title, event: 'expired', why } }]);
+      }
       continue;
     }
     if (!st.open.includes(q.id)) {
       if (q.opens_when && !holds(world, c, q.opens_when)) continue;
+      const origin = originFor(world, c, q, nowS);
+      if (!origin) continue;
       st.open.push(q.id);
+      st.origins = { ...(st.origins ?? {}), [q.id]: origin };
       changed = true;
-      tellTo(o, c, [{ kind: 'story', text: `📖 Nueva misión (acto ${ROMAN[q.act]}): «${q.title}». ${q.text}` }]);
+      logStory(world, c, { quest_id: q.id, kind: 'open', game_s: nowS, why: origin.text });
+      const how = origin.kind === 'heard' ? 'de oídas' : `acto ${ROMAN[q.act]}`;
+      tellTo(o, c, [{ kind: 'story', text: `📖 Nueva misión (${how}): «${q.title}». ${origin.text}. ${q.text}`, quest: { id: q.id, title: q.title, event: 'open', why: origin.text } }]);
       applyEffects(world, c, q.on_open, `${q.id}:open`, nowS, o);
     }
-    for (let s = currentStep(c, q); s && holds(world, c, s.done_when); s = currentStep(c, q)) {
-      markStep(world, c, q, s, nowS, o);
+    for (let s = currentStep(c, q); s && credited(world, c, s.done_when); s = currentStep(c, q)) {
+      markStep(world, c, q, s, nowS, o, explain(world, c, s.done_when));
       changed = true;
     }
     if (!currentStep(c, q)) { complete(world, c, q, nowS, o); changed = true; }
@@ -474,18 +611,21 @@ function companionsOf(world: World, c: Character): Character[] {
   return [...world.characters.values()].filter((o) => o.id !== c.id && o.status === 'active' && !o.away && !o.transit && world.characterSpot(o)?.location_id === loc);
 }
 
-function markStep(world: World, c: Character, q: StoryQuest, s: StoryStep, nowS: number, o: StoryOutput): void {
+function markStep(world: World, c: Character, q: StoryQuest, s: StoryStep, nowS: number, o: StoryOutput, why: string): void {
   const key = stepKey(q, s);
   characterStory(c).steps.push(key);
-  if (q.steps.length > 1) tellTo(o, c, [{ kind: 'story', text: `✔ ${q.title}: ${s.text}` }]);
+  logStory(world, c, { quest_id: q.id, kind: 'step', step_id: s.id, game_s: nowS, why });
+  if (q.steps.length > 1) tellTo(o, c, [{ kind: 'story', text: `✔ «${q.title}»: ${s.text}`, quest: { id: q.id, title: q.title, event: 'step', step: s.text, why } }]);
   // Crédito compartido: quien estaba presente y va por ese mismo paso de la misión, lo da también.
   const st = stateOf(world);
   const shared = companionsOf(world, c).filter((p) => characterStory(p).open.includes(q.id) && currentStep(p, q)?.id === s.id);
   if (!st.credits?.[key]) { st.credits = { ...(st.credits ?? {}), [key]: { by: c.id, with: companionsOf(world, c).map((p) => p.id), game_s: nowS } }; world.touch('campaign', world.campaign.id); }
   for (const p of shared) {
     characterStory(p).steps.push(key);
+    const withWhy = `con ${c.name}: ${why}`;
+    logStory(world, p, { quest_id: q.id, kind: 'step', step_id: s.id, game_s: nowS, why: withWhy });
     world.touch('characters', p.id);
-    tellTo(o, p, [{ kind: 'story', text: `✔ ${q.title}: ${s.text} (con ${c.name})` }]);
+    tellTo(o, p, [{ kind: 'story', text: `✔ «${q.title}»: ${s.text} (con ${c.name})`, quest: { id: q.id, title: q.title, event: 'step', step: s.text, why: withWhy } }]);
   }
   applyEffects(world, c, s.on_done, key, nowS, o);
 }
@@ -507,7 +647,9 @@ function complete(world: World, c: Character, q: StoryQuest, nowS: number, o: St
   if (r.xp) { c.xp += r.xp; bits.push(`+${r.xp} PX`); }
   if (r.reputation) bits.push(`reputación en Brezal: ${addReputation(world, c, world.campaign.achievement.faction_id, r.reputation)}`);
   if (r.item_id && world.itemDefs.has(r.item_id) && spawnItem(world, r.item_id, 1, { type: 'character', id: c.id, slot: { kind: 'pocket' } }).ok) bits.push(world.itemDef(r.item_id).name);
-  tellTo(o, c, [{ kind: 'story', text: `🏁 Misión cumplida: «${q.title}»${bits.length ? ` (${bits.join(', ')})` : ''}.`, ...(q.ending ? { public: q.ending.replaceAll('{name}', c.name) } : {}) }]);
+  const why = q.steps.length > 1 ? 'diste todos los pasos' : (q.steps[0]?.text ?? q.title);
+  logStory(world, c, { quest_id: q.id, kind: 'done', game_s: nowS, why });
+  tellTo(o, c, [{ kind: 'story', text: `🏁 Misión cumplida: «${q.title}»${bits.length ? ` (${bits.join(', ')})` : ''}.`, quest: { id: q.id, title: q.title, event: 'done', why: bits.length ? `${why} · ${bits.join(', ')}` : why }, ...(q.ending ? { public: q.ending.replaceAll('{name}', c.name) } : {}) }]);
   applyEffects(world, c, q.on_complete, `${q.id}:done`, nowS, o);
 }
 
@@ -564,7 +706,7 @@ export function tickStory(world: World, nowS: number): StoryOutput {
 }
 
 /** El máster marca un paso narrativo (tool advance_story). Después avanza lo que haya detrás. */
-export function advanceStory(world: World, c: Character, questId: Id, stepId: Id, nowS: number): { ok: true; output: StoryOutput } | { ok: false; error: string } {
+export function advanceStory(world: World, c: Character, questId: Id, stepId: Id, nowS: number, why?: string | null): { ok: true; output: StoryOutput } | { ok: false; error: string } {
   const q = quest(world, questId);
   if (!q) return { ok: false, error: `misión desconocida: ${questId}` };
   const st = characterStory(c);
@@ -574,7 +716,7 @@ export function advanceStory(world: World, c: Character, questId: Id, stepId: Id
   if (!s || s.id !== stepId) return { ok: false, error: `el paso en curso de «${q.title}» es ${s ? `${s.id} («${s.text}»)` : 'ninguno'}` };
   if (!isNarrative(s.done_when)) return { ok: false, error: `ese paso lo detecta el servidor solo (${describeCondition(world, s.done_when)}); no hace falta advance_story` };
   const o = out();
-  markStep(world, c, q, s, nowS, o);
+  markStep(world, c, q, s, nowS, o, why?.trim() || explain(world, c, s.done_when));
   advanceCharacter(world, c, nowS, o);
   world.touch('characters', c.id);
   return { ok: true, output: o };
@@ -663,11 +805,23 @@ export function storyContext(world: World, c: Character, nowS: number): string |
   const next = nextEscalation(world, nowS);
   const L: string[] = ['## Historia escrita (solo tú la ves; los pasos se cumplen con tools, nunca solo con texto)'];
   if (!views.length) L.push('El actor no tiene misiones abiertas: la historia le llega por lo que vea y por quien le hable.');
+  const origins = characterStory(c).origins ?? {};
   for (const v of views.slice(0, 4)) {
     const q = v.quest;
     const giver = q.giver_npc_id ? world.npcs.get(q.giver_npc_id)?.name : null;
-    L.push(`- Acto ${q.act} · «${q.title}» [${q.id}]${giver ? ` (de ${giver})` : ''}: ${q.notes}`);
+    const o = origins[q.id];
+    // Cómo le llegó: si es de oídas, quien la da aún no se la ha pedido; si acaba de pedírsela, que se note en la charla.
+    const how = !o ? '' : o.kind === 'heard' ? `; le llegó de oídas («${o.text}»): ${giver ?? 'nadie'} aún no se la ha pedido en persona`
+      : o.kind === 'giver' && nowS - o.game_s <= 15 * 60 ? `; ${giver} se la acaba de pedir: que se le oiga pedirla en la charla si aún no lo ha hecho` : '';
+    L.push(`- Acto ${q.act} · «${q.title}» [${q.id}]${giver ? ` (de ${giver}${how})` : how ? ` (${how.slice(2)})` : ''}: ${q.notes}`);
     if (v.current) L.push(`  Paso en curso [${v.current.id}]: ${v.current.text}. Se cumple: ${describeCondition(world, v.current.done_when)}.`);
+  }
+  // Las que ya podría tener pero esperan a que se las pida quien las da: se abren solas cuando hable con esa persona.
+  const st0 = characterStory(c);
+  const waiting = story.quests.filter((q) => q.giver_npc_id && !q.heard && !st0.open.includes(q.id) && !st0.done.includes(q.id) && !st0.expired.includes(q.id)
+    && (!q.opens_when || holds(world, c, q.opens_when)) && !exclusiveTaken(world, q));
+  for (const q of waiting.slice(0, 3)) {
+    L.push(`- Pendiente de que se la pidan: «${q.title}» [${q.id}] (de ${world.npcs.get(q.giver_npc_id!)?.name ?? q.giver_npc_id}). Se abre sola cuando el actor hable con esa persona: que ella lo saque en la charla.`);
   }
   if (passed.length) L.push(`Ya ha pasado (la amenaza avanza): ${passed.map((e) => e.title).join('; ')}.`);
   if (next) L.push(`Lo próximo si nadie lo evita: «${next.escalation.title}» en unas ${Math.max(1, Math.round(next.in_s / GAME_HOUR))} h de juego (se evita con: ${describeCondition(world, next.escalation.unless)}).`);
@@ -725,6 +879,7 @@ export function validateStory(story: Story, has: { spot: (id: Id) => boolean; lo
     if (!q.title.trim() || !q.text.trim() || !q.notes.trim()) errs.push(`${w}: falta título, texto o notas.`);
     if (![1, 2, 3].includes(q.act)) errs.push(`${w}: el acto debe ser 1, 2 o 3.`);
     if (q.giver_npc_id && !has.npc(q.giver_npc_id)) errs.push(`${w}: quien la da (${q.giver_npc_id}) no existe.`);
+    if (q.heard !== undefined && !q.heard.trim()) errs.push(`${w}: «heard» vacío (di cómo le llega al PJ, o quítalo).`);
     if (!q.steps.length) errs.push(`${w}: sin pasos.`);
     const sids = new Set<Id>();
     for (const s of q.steps) {

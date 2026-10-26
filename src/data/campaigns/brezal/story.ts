@@ -21,11 +21,16 @@ const QUESTS: StoryQuest[] = [
   {
     id: 'q_agua', act: 1, title: 'Ceniza en el agua', giver_npc_id: 'npc_ilse',
     text: 'El agua del pozo de Brezal baja turbia y tibia, y media aldea tose gris. Alguien debería llevarle una muestra a Ilse, la curandera.',
-    notes: 'Primer hilo: lleva a Ilse y a la Brasa. El agua del pozo se puede coger (it_agua_pozo, en el pozo). Al entrar en casa de Ilse con el agua, el servidor concede la pista de la Brasa y ella explica qué es y cómo se ata: interprétala con su voz de rezo y cocina.',
+    notes: 'Primer hilo: lleva a Ilse y a la Brasa. El agua del pozo se puede coger (it_agua_pozo, en el pozo). Cuando el PJ le dé el agua a Ilse (transfer_item a npc_ilse; o advance_story si se la enseña sin soltarla), el servidor concede la pista de la Brasa y ella explica qué es y cómo se ata: interprétala con su voz de rezo y cocina.',
     opens_when: { kind: 'any', of: [{ kind: 'at_location', location_id: 'loc_plaza' }, { kind: 'knows', npc_id: 'npc_ilse' }, { kind: 'clue', clue_id: 'clue_pozo' }] },
+    heard: 'Junto al pozo, los vecinos tosen gris y se quejan del agua: alguien debería llevársela a Ilse, la curandera',
     steps: [
       { id: 'mirar', text: 'Sacar agua del pozo y mirarla de cerca', done_when: { kind: 'any', of: [{ kind: 'clue', clue_id: 'clue_pozo' }, { kind: 'carry', item_id: 'it_agua_pozo' }] } },
-      { id: 'ilse', text: 'Llevarle el agua a Ilse, la curandera', done_when: { kind: 'all', of: [{ kind: 'carry', item_id: 'it_agua_pozo' }, { kind: 'at_location', location_id: 'loc_curandera' }] },
+      // Se da al dársela (o enseñársela) a Ilse, no al cruzar su puerta: lo que ella dice luego tiene que pasar delante.
+      { id: 'ilse', text: 'Llevarle el agua a Ilse, la curandera', done_when: { kind: 'any', of: [
+        { kind: 'npc_has', npc_id: 'npc_ilse', item_id: 'it_agua_pozo' },
+        { kind: 'narrative', how: 'cuando el PJ le enseñe a Ilse el agua del pozo sin dársela (si se la da, lo detecta el servidor)' },
+      ] },
         on_done: [{ kind: 'know_npc', npc_id: 'npc_ilse' }, { kind: 'clue', clue_id: 'clue_ilse' }, { kind: 'attitude', npc_id: 'npc_ilse', attitude: 'friendly' },
           { kind: 'tell', text: 'Ilse huele el agua, la prueba con la punta de la lengua y escupe: «Esto no es ceniza de hogar. Es de la cripta. La Brasa respira otra vez».' }] },
     ],
@@ -37,6 +42,7 @@ const QUESTS: StoryQuest[] = [
     text: 'Se ha perdido Ceniza, el perro de Brenna: pardo, una oreja rota. Lo vieron por el Soto, detrás de un olor. Quien lo traiga cobra.',
     notes: 'El perro está en la madriguera al pie del roble del Soto, acorralado por la loba de ceniza (hostil, dura para un nivel 1: que el PJ piense antes de pelear; tampoco ella puede salir del valle). Se puede sacar ahuyentándola con fuego, colándose (Sigilo CD 13 mientras duerme), llevando encima ceniza del granero (no ataca a quien la lleva) o matándola. Brenna se ablanda mucho al recuperarlo.',
     opens_when: { kind: 'any', of: [{ kind: 'knows', npc_id: 'npc_brenna' }, { kind: 'at_location', location_id: 'loc_taberna' }] },
+    heard: 'En el Jabalí se comenta que a Brenna se le ha perdido el perro y que paga a quien se lo traiga',
     steps: [
       { id: 'rastro', text: 'Buscar el rastro del perro en el Soto', done_when: { kind: 'at_location', location_id: 'loc_claro' },
         on_done: [{ kind: 'tell', text: 'En el barro del Soto, entre botas, hay huellas de perro que van hacia el pie del roble, y al lado otras enormes, de lobo.' }] },
@@ -57,6 +63,7 @@ const QUESTS: StoryQuest[] = [
     text: 'Doro, el guardia del portón, se pone nervioso cuando alguien mira hacia el granero viejo. Algo ha visto.',
     notes: 'Doro confiesa las luces del Granero Quemado y la figura de la senda (pista clue_doro) si se le trata bien. La figura es Tobías: cada noche, a las 23:00, cruza el arroyo del Soto hacia el granero (evento «Tobías va al granero»). Si el PJ espera allí a esa hora, lo ve con su hatillo. Que lo siga o lo pare es cosa suya.',
     opens_when: { kind: 'any', of: [{ kind: 'knows', npc_id: 'npc_doro' }, { kind: 'visit', spot_id: 'sp_pl_porton' }, { kind: 'clue', clue_id: 'clue_doro' }] },
+    heard: 'Lo notas tú mismo: el guardia del portón no le quita ojo al granero viejo',
     steps: [
       { id: 'confianza', text: 'Ganarte la confianza de Doro', done_when: { kind: 'clue', clue_id: 'clue_doro' } },
       { id: 'vigilar', text: 'Vigilar de noche el arroyo del Soto', done_when: { kind: 'all', of: [{ kind: 'visit', spot_id: 'sp_cl_arroyo' }, { kind: 'npc_at', npc_id: 'npc_tobias', spot_id: 'sp_cl_arroyo' }] },
@@ -123,6 +130,7 @@ const QUESTS: StoryQuest[] = [
     text: 'Lo que pasa en Brezal sale del granero viejo de los Vharn, en el borde del pueblo. Alguien tiene que ir a ver quién enciende las luces.',
     notes: 'Hal sabe que el granero «no está tan vacío como dicen» (pista clue_hal). Desde la torre del reloj de la casona o el tejado del molino se ve el humo del granero y la niebla alrededor de todo. Se llega por la senda del arroyo del Soto. En el granero se esconde Ysolde: no ataca de entrada, pregunta quién te manda. Si el PJ la escucha, cuenta quién es (pista clue_ysolde).',
     opens_when: { kind: 'any', of: [{ kind: 'quest', quest_id: 'q_noche' }, { kind: 'quest', quest_id: 'q_perro' }, { kind: 'clue', clue_id: 'clue_hal' }, { kind: 'at_location', location_id: 'loc_claro' }] },
+    heard: 'Todo apunta al granero viejo de los Vharn: alguien enciende luces donde no debería haber nadie',
     steps: [
       { id: 'hal', text: 'Hablar con Hal, el cazador, del granero viejo', done_when: { kind: 'any', of: [{ kind: 'clue', clue_id: 'clue_hal' }, { kind: 'visit', spot_id: 'sp_ca_torre' }, { kind: 'visit', spot_id: 'sp_mo_tejado' }] } },
       { id: 'mirador', text: 'Subir a la torre del reloj o al tejado del molino y mirar', done_when: { kind: 'any', of: [{ kind: 'visit', spot_id: 'sp_ca_torre' }, { kind: 'visit', spot_id: 'sp_mo_tejado' }] },

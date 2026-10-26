@@ -14,6 +14,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Engine } from '../../engine/engine.js';
 import { journalOf, type Journal, type JournalConversation, type JournalQuest } from '../../engine/journal.js';
 import type { GameEvent, Id } from '../../engine/model.js';
+import type { QuestChange } from '../../engine/progress.js';
 import { illustratorOf } from '../../ai/illustrate.js';
 
 export interface WebJournal extends Journal {
