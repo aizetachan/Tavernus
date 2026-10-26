@@ -147,6 +147,8 @@ export class Engine {
   private readonly now: () => number;
   private pending = new Map<string, Change>();
   private queues = new Map<Id, Promise<unknown>>();
+  /** Acciones de jugadores que esperan en la cola de su localización (el máster las ve como «a la vez»). */
+  private waiting = new Map<Id, { location_id: Id; text: string; since_ms: number }>();
   private tickers: Ticker[] = [];
   private tickerTask: Promise<void> | null = null;
   private master: MasterLike | null = null;
@@ -492,6 +494,12 @@ export class Engine {
   /** Ganchos e imprevisto que acompañan la llamada en curso del master para este PJ. */
   sceneHints(characterId: Id): SceneHints | null { return this.hints.get(characterId) ?? null; }
 
+  /** Acciones que otros jugadores han mandado en esta localización y esperan en la cola, por orden de llegada. */
+  waitingIn(locationId: Id): { character_id: Id; text: string }[] {
+    return [...this.waiting].filter(([, w]) => w.location_id === locationId).sort((a, b) => a[1].since_ms - b[1].since_ms)
+      .map(([character_id, w]) => ({ character_id, text: w.text }));
+  }
+
   /** Ganchos pendientes en una localización (para el contexto del master). */
   hooksIn(locationId: Id): Hook[] { return pendingHooksIn(this.world, locationId); }
 
@@ -629,7 +637,10 @@ export class Engine {
     const betweenPcs = (give && findPresentPc(this.world, c, give.to)) || (party && (party.kind === 'unfollow' || findPresentPc(this.world, c, party.who)));
     const scene = betweenPcs || parseRest(t0) || this.isDeathAction(c, t0) ? null : this.sceneRoute(c, t0);
     if (scene) return scene;
+    // Mientras espera turno en la cola del sitio, quien va delante lo ve en su contexto (no lo resuelve: va después).
+    this.waiting.set(c.id, { location_id: locId, text: t0, since_ms: this.now() });
     return this.runInLocation(locId, async () => {
+      this.waiting.delete(c.id);
       const clean = text.trim();
       // Llegó «del futuro» a donde otro PJ vive una hora anterior: espera a que el reloj lo alcance (irse sí puede).
       const travel = parseTravel(clean);

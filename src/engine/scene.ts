@@ -64,9 +64,27 @@ export function namedNpc(world: World, c: Character, text: string): Npc | null {
   return byName.length === 1 ? byName[0]! : null;
 }
 
-/** A qué NPC va la acción: el que nombra o, sin nombrar a nadie, aquel con quien ya habla el PJ. */
+/**
+ * Otro PJ de la localización al que nombra el texto por su nombre («oye
+ * Leodhin…», «pedir a MIAU que…»), si es uno solo. Lo que va a otro jugador no
+ * es para el NPC con quien se habla.
+ */
+export function namedPc(world: World, c: Character, text: string): Character | null {
+  const t = ` ${normalize(text)} `;
+  const loc = world.characterSpot(c)?.location_id;
+  const hits = [...world.characters.values()].filter((o) => o.id !== c.id && o.status !== 'dead' && o.status !== 'retired'
+    && world.characterSpot(o)?.location_id === loc && normalize(o.name).length > 1 && t.includes(` ${normalize(o.name)} `));
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+/**
+ * A qué NPC va la acción: el que nombra o, sin nombrar a nadie, aquel con quien
+ * ya habla el PJ. Si nombra a otro jugador y a ningún NPC, no va a ningún NPC.
+ */
 export function npcTarget(world: World, events: readonly GameEvent[], c: Character, text: string, nowGameS: number): Npc | null {
-  return namedNpc(world, c, text) ?? talkingWith(world, events, c, nowGameS);
+  const named = namedNpc(world, c, text);
+  if (named) return named;
+  return namedPc(world, c, text) ? null : talkingWith(world, events, c, nowGameS);
 }
 
 /** El NPC con el que habla el PJ ahora (como el que lleva la charla o unido a ella). */
