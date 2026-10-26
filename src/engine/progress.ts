@@ -9,7 +9,16 @@ import { spawnItem, transferItem } from './inventory.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
 import type { World } from './world.js';
 
-export interface ProgressEvent { kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story' | 'quest'; text: string; public?: string }
+export interface ProgressEvent {
+  kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story' | 'quest';
+  text: string;
+  public?: string;
+  /** Si toca una misión: cuál, qué le ha pasado y por qué (el aviso del chat y el Diario lo enseñan). */
+  quest?: QuestChange;
+}
+
+/** Cambio en una misión: alta, paso dado, cumplida, fallida, caducada o dejada, con el porqué en palabras del jugador. */
+export interface QuestChange { id: Id; title: string; event: 'open' | 'available' | 'step' | 'done' | 'failed' | 'expired' | 'dropped'; step?: string; why: string }
 
 export function addReputation(world: World, c: Character, factionId: Id, delta: number): number {
   c.reputation[factionId] = (c.reputation[factionId] ?? 0) + delta;
@@ -55,7 +64,7 @@ export function completeJob(world: World, c: Character, jobId: Id, npcId: Id | n
   c.completed_jobs.push(jobId);
   c.coins += job.reward_coins;
   const rep = addReputation(world, c, world.campaign.achievement.faction_id, job.reward_reputation);
-  const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${job.reward_coins} monedas. Reputación en Brezal: ${rep}.` }];
+  const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${job.reward_coins} monedas. Reputación en Brezal: ${rep}.`, quest: { id: job.id, title: job.title, event: 'done', why: `se lo ${job.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${giver.name} · +${job.reward_coins} monedas` } }];
   const ach = checkAchievement(world, c);
   if (ach) events.push(ach);
   return { ok: true, events };

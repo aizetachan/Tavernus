@@ -127,16 +127,19 @@ export const MASTER_TOOLS: Tool[] = [
   }),
   tool('advance_story', 'Campañas escritas: marca como dado el paso NARRATIVO en curso de una misión del actor (lo dice «Historia escrita» en el contexto: «lo decides tú con advance_story»), SOLO cuando se ha cumplido de verdad en la ficción. Los demás pasos los detecta el servidor solo.', {
     quest_id: str('ID de la misión (q_…)'), step_id: str('ID del paso en curso'),
+    why: nstr('Qué ha hecho el jugador para darlo, en una frase para su Diario («sacaste a Ceniza mientras la loba dormía»), o null'),
   }),
-  tool('give_quest', 'Un NPC le da al actor un encargo o le pide algo concreto que hacer (fuera del tablón): queda en su Diario «en curso» sin que tenga que aceptarlo, y el jugador ve «Nueva misión». Llámalo en el turno en que se lo piden.', {
+  tool('give_quest', 'Un NPC le da al actor un encargo o le pide algo concreto que hacer (fuera del tablón): queda en su Diario «en curso» sin que tenga que aceptarlo, y el jugador ve «Nueva misión». Llámalo en el turno en que se lo piden, con quien la pide delante. Si el actor solo lo ha oído (un rumor, otro que lo cuenta), npc_id null y di en heard de dónde le llega.', {
     title: str('Título corto, como lo apuntaría el PJ («Las tablas de Hugo»)'),
     text: str('De qué va, en una o dos frases, sin secretos'),
-    npc_id: nstr('ID del NPC que la da, o null'),
+    npc_id: nstr('ID del NPC que se lo pide en persona (tiene que estar con el actor), o null'),
+    heard: nstr('Si no se lo pide nadie en persona: de dónde le llega, en una frase («En el Jabalí se comenta que…»), o null'),
     objective: nstr('Qué hay que hacer exactamente, o null'),
     reward: nstr('Recompensa si la dijo («20 monedas», «un favor»), o null'),
   }),
   tool('finish_quest', 'Cierra una misión dada con give_quest: cumplida o fallida (ya no se puede).', {
     quest_id: str('ID de la misión (gq_…)'), outcome: enm(['completed', 'failed'], 'Cómo acaba'),
+    why: nstr('Qué ha hecho el jugador para cerrarla, en una frase para su Diario, o null'),
   }),
   tool('sell_item', 'Vende un objeto a un NPC que lo compre, al precio de su lista. Cobra en el acto.', {
     character_id: str('ID del personaje'), npc_id: str('ID del NPC'), instance_id: str('ID del ejemplar'), quantity: nnum('Cantidad, o null para todo'),
@@ -714,7 +717,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return { ok: true, events: r.events.map((e) => e.text) };
     }
     case 'advance_story': {
-      const r = advanceStory(world, actor, s('quest_id'), s('step_id'), nowGameS);
+      const r = advanceStory(world, actor, s('quest_id'), s('step_id'), nowGameS, input['why'] == null ? null : cleanText(s('why')));
       if (!r.ok) return { error: r.error };
       const mine = r.output.personal.filter((p) => p.character_id === actor.id).flatMap((p) => p.events);
       ctx.progress.push(...mine);
@@ -730,17 +733,19 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return { ok: true, events: r.events.map((e) => e.text), board: activeJobs(world).map((j) => j.title) };
     }
     case 'give_quest': {
-      const r = giveQuest(world, actor, { title: s('title'), text: s('text'), giver_npc_id: s('npc_id') || null, objective: s('objective') || null, reward: s('reward') || null }, nowGameS);
+      const r = giveQuest(world, actor, { title: s('title'), text: s('text'), giver_npc_id: s('npc_id') || null, objective: s('objective') || null, reward: s('reward') || null, heard: input['heard'] == null ? null : s('heard') }, nowGameS);
       if (!r.ok) return { error: 'bad_quest', hint: r.error };
-      const giver = r.quest.giver_npc_id ? world.npcs.get(r.quest.giver_npc_id) : null;
-      if (!r.existing) ctx.progress.push({ kind: 'quest', text: `Nueva misión: «${r.quest.title}»${giver ? ` (te la da ${actor.knows.includes(giver.id) ? giver.name : descriptorOf(world, giver.id)})` : ''}.` });
+      const q = r.quest;
+      if (!r.existing) ctx.progress.push({ kind: 'quest', text: `Nueva misión: «${q.title}». ${q.origin_text}.`, quest: { id: q.id, title: q.title, event: 'open', why: q.origin_text } });
       return { ok: true, quest_id: r.quest.id, existing: r.existing, hint: 'Ya está en su Diario, en curso. No le preguntes si acepta.' };
     }
     case 'finish_quest': {
       const outcome = s('outcome') === 'failed' ? 'failed' : 'completed';
-      const r = finishQuest(world, actor, s('quest_id'), outcome, nowGameS);
+      const why = input['why'] == null ? null : cleanText(s('why'));
+      const r = finishQuest(world, actor, s('quest_id'), outcome, nowGameS, why);
       if (!r.ok) return { error: 'unknown_quest', hint: r.error };
-      ctx.progress.push({ kind: 'quest', text: outcome === 'completed' ? `Misión cumplida: «${r.quest.title}».` : `Misión fallida: «${r.quest.title}».` });
+      ctx.progress.push({ kind: 'quest', text: outcome === 'completed' ? `Misión cumplida: «${r.quest.title}».` : `Misión fallida: «${r.quest.title}».`,
+        quest: { id: r.quest.id, title: r.quest.title, event: outcome === 'completed' ? 'done' : 'failed', why: why || (outcome === 'completed' ? 'la has cumplido' : 'ya no se puede') } });
       return { ok: true };
     }
     case 'sell_item': {

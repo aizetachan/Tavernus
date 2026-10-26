@@ -464,17 +464,27 @@ export const NOVEL_JS = String.raw`
     body.insertBefore(b, body.firstChild);
   }
 
-  /** Aviso de una línea (tablón, progreso): sin burbuja; un enlace lleva a la pestaña que toca (el Diario). */
+  /**
+   * Aviso de una línea (tablón, progreso): sin burbuja; un enlace lleva a la pestaña que toca (el Diario).
+   * Los de misiones (alta, paso, cierre) van destacados, con el porqué debajo.
+   */
   function addNotice(n) {
     var div = document.createElement('div');
-    div.className = 'msg notice';
+    div.className = 'msg notice' + (n.quest ? ' quest q-' + n.quest.event : '');
     var s = document.createElement('span');
     s.textContent = n.text;
     div.appendChild(s);
-    var b = document.createElement('button');
-    b.type = 'button'; b.className = 'link'; b.textContent = n.link;
-    b.addEventListener('click', function () { goTab(n.tab || 'journal'); });
-    div.appendChild(b);
+    if (n.link) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'link'; b.textContent = n.link;
+      b.addEventListener('click', function () { goTab(n.tab || 'journal'); });
+      div.appendChild(b);
+    }
+    if (n.quest && n.quest.why) {
+      var why = document.createElement('small');
+      why.className = 'why'; why.textContent = n.quest.why;
+      div.appendChild(why);
+    }
     log.appendChild(div);
     scroll();
     return div;

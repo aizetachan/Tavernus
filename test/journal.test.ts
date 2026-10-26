@@ -20,12 +20,18 @@ function talk(engine: Engine, characterId: string, input: string, narration: str
 }
 
 describe('diario: misiones', () => {
-  it('los encargos del tablón que el PJ ha visto salen disponibles, con fecha; los que acepta pasan a en curso y suben arriba', async () => {
+  it('los encargos del tablón que el PJ ha leído salen disponibles, con fecha; los que acepta pasan a en curso y suben arriba', async () => {
     const time = fakeTime();
     const { engine } = await bootEngine(time);
     const first = activeJobs(engine.world).map((j) => j.id);
+    // Que estén clavados en el tablón no basta: hasta que no lo lee, no están en su Diario.
     let j = journalOf(engine, 'ch_kael');
+    expect(j.quests.active.filter((q) => q.kind === 'job')).toEqual([]);
+    await engine.command('ch_kael', 'tablon');
+    expect(engine.events.all().filter((e) => e.actor_id === 'ch_kael' && e.action_type === 'progress_quest').map((e) => (e.payload['quest'] as { event: string }).event)).toEqual(['available', 'available', 'available']);
+    j = journalOf(engine, 'ch_kael');
     const jobs = j.quests.active.filter((q) => q.kind === 'job');
+    expect(jobs.every((q) => q.origin?.kind === 'board' && q.history[0]!.kind === 'added')).toBe(true);
     expect(jobs.map((q) => q.id).sort()).toEqual([...first].sort());
     expect(jobs.every((q) => q.status === 'available' && q.seen !== null && q.giver === 'Brenna')).toBe(true);
     expect(jobs.find((q) => q.id === 'job_lena')).toMatchObject({ reward: '900 monedas · +1 de reputación', steps: [{ text: 'Conseguir 10 × leña', done: false }, { text: 'Entregarlo a Brenna', done: false }] });
@@ -42,8 +48,8 @@ describe('diario: misiones', () => {
     j = journalOf(engine, 'ch_kael');
     expect(j.quests.active[0]).toMatchObject({ id: 'job_lena', status: 'active' });
     expect(j.quests.active.filter((q) => q.id !== 'job_lena').every((q) => q.updated_game_s <= j.quests.active[0]!.updated_game_s)).toBe(true);
-    // Mira no ha aceptado nada: para ella sigue disponible.
-    expect(journalOf(engine, 'ch_mira').quests.active.find((q) => q.id === 'job_lena')!.status).toBe('available');
+    // Mira no ha leído el tablón ni ha hablado de la leña: no lo tiene.
+    expect(journalOf(engine, 'ch_mira').quests.active.find((q) => q.id === 'job_lena')).toBeUndefined();
   });
 
   it('al rotar el tablón los encargos no aceptados caducan y los nuevos, recién vistos, van arriba; el completado pasa a su sección con fecha', async () => {
@@ -51,6 +57,7 @@ describe('diario: misiones', () => {
     const { engine } = await bootEngine(time);
     const kael = engine.world.character('ch_kael');
     const first = activeJobs(engine.world).map((j) => j.id);
+    await engine.command('ch_kael', 'tablon');
     time.advanceGame(GAME_HOUR);
     talk(engine, 'ch_kael', 'Acepto el encargo de la leña', 'Brenna asiente.', [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'Diez leños.' }]);
     // Completa el encargo de la leña: los leños en la mano, Brenna delante.
@@ -68,6 +75,10 @@ describe('diario: misiones', () => {
     await engine.tick();
     const second = activeJobs(engine.world).map((j) => j.id);
     expect(second).not.toEqual(first);
+    // El tablón ha cambiado, pero los nuevos no entran hasta que lo vuelve a leer.
+    expect(journalOf(engine, 'ch_kael').quests.active.filter((q) => second.includes(q.id))).toEqual([]);
+    time.advanceGame(60);
+    await engine.command('ch_kael', 'tablon');
     const j = journalOf(engine, 'ch_kael');
     expect(j.quests.completed.map((q) => q.id)).toEqual(['job_lena']);
     expect(j.quests.completed[0]).toMatchObject({ status: 'completed', completed: doneAt, steps: [{ done: true }, { done: true }] });
@@ -265,7 +276,7 @@ describe('diario: crónica y lugares', () => {
 
 describe('diario: web', () => {
   it('el tablón y el progreso no generan burbuja: un aviso de una línea que lleva al Diario', () => {
-    expect(noticeOf({ action_type: 'board', narration_private: '', observable: '📜 Tablón de Brezal: • **Leña** — …' })).toEqual({ text: 'Tablón actualizado', link: 'ver en el Diario', tab: 'journal' });
+    expect(noticeOf({ action_type: 'board', narration_private: '', observable: '📜 Tablón de Brezal: • **Leña** — …' })).toEqual({ text: 'Hay avisos nuevos en el tablón de la plaza: pásate a leerlos', link: '', tab: 'journal' });
     expect(noticeOf({ action_type: 'progress_job', narration_private: 'Encargo completado: Leña para la posada. +900 monedas. Reputación en Brezal: 1.', observable: null }))
       .toEqual({ text: 'Encargo completado: Leña para la posada', link: 'ver en el Diario', tab: 'journal' });
     expect(noticeOf({ action_type: 'master', narration_private: 'Brenna te mira.', observable: null })).toBeNull();

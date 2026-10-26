@@ -17,26 +17,53 @@
  *     El prólogo (prologue.ts) abre la del primer día como entrada `chapter`.
  *   - Lugares: localizaciones conocidas con su estado de descubrimiento.
  *
- * Qué encargos ha «visto» el PJ: cada evento `board` abre un intervalo en el
- * que esos encargos están en el tablón (hasta el siguiente `board`); el PJ los
- * ha visto si existía durante el intervalo. Los eventos nuevos llevan
- * `payload.job_ids`; de los antiguos se leen los títulos del texto.
+ * Qué encargos ha «visto» el PJ: los que leyó en el tablón (quests.ts,
+ * `boardSeen`: de pie ante él o con /tablon) y los que habló con quien los
+ * pide. Que estén clavados en la plaza no basta.
+ *
+ * Cada misión dice de dónde le vino (`origin`: te lo pide X, de oídas, el
+ * tablón, por tu cuenta) y qué ha cambiado y por qué (`history`: alta, pasos,
+ * cierre), para que el jugador no tenga que adivinarlo. El historial de la
+ * historia escrita sale de `character.story.log` (story.ts); el de lo demás,
+ * de los eventos y del estado del PJ.
  */
 
 import { GAME_DAY } from '../clock/clock.js';
 import type { Engine } from './engine.js';
 import { characterFacts } from './facts.js';
 import { debtLine, fmtCoins } from './debts.js';
-import type { Character, GameEvent, Id, Job, Npc } from './model.js';
+import type { Character, GameEvent, Id, Npc } from './model.js';
 import type { DialogueLine } from './moments.js';
 import { activeJobs } from './progress.js';
 import { rumorsHeardBy, rumorsIn, type Rumor } from './rumors.js';
-import { questsOf } from './story.js';
-import { droppedAt, givenQuests } from './quests.js';
+import { characterStory, questsOf } from './story.js';
+import { boardSeen, droppedAt, givenQuests } from './quests.js';
 
 export type QuestStatus = 'available' | 'active' | 'completed' | 'expired';
 
 export interface JournalStep { text: string; done: boolean }
+
+/** De dónde le vino la misión al PJ. */
+export interface JournalOrigin {
+  kind: 'giver' | 'heard' | 'board' | 'self';
+  /** «Te lo pide Ilse», «En el Jabalí se comenta que…», «Aviso del tablón»… */
+  text: string;
+  /** Dónde estaba (si se sabe). */
+  where: string | null;
+}
+
+/** Un cambio en una misión: qué pasó, cuándo y por qué. `key` es estable (la web marca lo no leído). */
+export interface JournalChange {
+  key: string;
+  game_s: number;
+  when: string;
+  /** Corta, para la lista: «18:07» si es hoy; si no, «3 de Brotes, 18:07». */
+  short: string;
+  kind: 'added' | 'accepted' | 'step' | 'completed' | 'failed' | 'expired' | 'dropped';
+  /** Qué pasó: «Nueva misión», «✔ Sacar agua del pozo»… */
+  text: string;
+  why: string | null;
+}
 
 export interface JournalRumor {
   id: Id;
@@ -76,6 +103,10 @@ export interface JournalQuest {
   rumors: JournalRumor[];
   /** La principal va siempre arriba. */
   pinned: boolean;
+  /** De dónde le vino (null en la principal y en el logro, que son del PJ desde el principio). */
+  origin: JournalOrigin | null;
+  /** Qué ha cambiado y por qué, del más antiguo al más reciente. */
+  history: JournalChange[];
   /**
    * Resumen para el jugador, sin datos ocultos: de qué va (una frase), qué toca
    * ahora (el primer objetivo pendiente) y lo último relevante que le han dicho
@@ -160,6 +191,8 @@ function shares(a: Set<string>, b: Set<string>): boolean {
 const EMPTY_SUMMARY = (): JournalQuest['summary'] => ({ text: '', next: null, told: [] });
 
 function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+/** «a» + nombre de sitio, con contracción: «al arroyo», «a la fragua». */
+function aPlace(name: string): string { return /^el /i.test(name) ? `al ${name.slice(3)}` : `a ${name}`; }
 function firstSentence(s: string): string {
   const t = s.replace(/\s+/g, ' ').trim();
   const m = /^(.{12,}?[.!?…])(\s|$)/.exec(t);
@@ -169,19 +202,6 @@ function firstSentence(s: string): string {
 /** Nombre con que el PJ conoce a un NPC: el suyo si lo sabe, su oficio si no. */
 export function npcLabel(c: Character, npc: Npc): string {
   return c.knows.includes(npc.id) ? npc.name : cap(npc.role);
-}
-
-/** Ids de encargos de un evento `board`: del payload o, en eventos antiguos, de los títulos en negrita del texto. */
-function boardJobIds(e: GameEvent, jobs: readonly Job[]): Id[] {
-  const ids = e.payload['job_ids'];
-  if (Array.isArray(ids)) return ids.filter((x): x is Id => typeof x === 'string');
-  const text = e.observable ?? e.narration_private;
-  const out: Id[] = [];
-  for (const m of text.matchAll(/\*\*(.+?)\*\*/g)) {
-    const j = jobs.find((x) => x.title === m[1]);
-    if (j) out.push(j.id);
-  }
-  return out;
 }
 
 /** Texto de un evento tal como lo leyó el actor, con sus parlamentos. */
@@ -208,17 +228,10 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
 
   // --- Misiones --------------------------------------------------------------
   const jobs = w.campaign.jobs;
-  const boards = all.filter((e) => e.action_type === 'board').map((e) => ({ at: e.timestamp_game_s, ids: boardJobIds(e, jobs) }));
   const onBoard = new Set(activeJobs(w).map((j) => j.id));
-  const seenAt = new Map<Id, number>();
-  for (let i = 0; i < boards.length; i++) {
-    const b = boards[i]!;
-    const end = boards[i + 1]?.at ?? Infinity;
-    const from = Math.max(b.at, born);
-    if (from >= end) continue;
-    for (const id of b.ids) if (!seenAt.has(id)) seenAt.set(id, from);
-  }
-  for (const id of onBoard) if (!seenAt.has(id)) seenAt.set(id, Math.max(born, boards.at(-1)?.at ?? born));
+  /** Leídos en el tablón (de pie ante él o con /tablon), con la hora de la primera vez. */
+  const seenAt = new Map<Id, number>(Object.entries(boardSeen(c)));
+  const locName = (id: Id | null | undefined) => (id ? w.locations.get(id)?.name ?? null : null);
 
   const completedAt = new Map<Id, number>();
   for (const e of mine) {
@@ -233,14 +246,17 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
    * hable después.
    */
   const engagedAt = new Map<Id, number>();
+  /** La primera vez que lo habló con quien lo pide, aunque luego lo dejara: desde entonces lo conoce. */
+  const toldAt = new Map<Id, number>();
   for (const e of mine) {
     if (e.actor_id !== c.id || !/^master/.test(e.action_type)) continue;
     const kw = keywords(eventText(e));
     for (const j of jobs) {
       if (engagedAt.has(j.id) || (!seenAt.has(j.id) && !onBoard.has(j.id))) continue;
-      if (e.timestamp_game_s <= (droppedAt(c, j.id) ?? -Infinity)) continue;
       const giverHere = e.payload['npc_id'] === j.giver_npc_id || (Array.isArray(e.payload['lines']) && (e.payload['lines'] as DialogueLine[]).some((l) => l.npc_id === j.giver_npc_id));
-      if (giverHere && shares(keywords(j.title), kw)) engagedAt.set(j.id, e.timestamp_game_s);
+      if (!giverHere || !shares(keywords(j.title), kw)) continue;
+      if (!toldAt.has(j.id)) toldAt.set(j.id, e.timestamp_game_s);
+      if (e.timestamp_game_s > (droppedAt(c, j.id) ?? -Infinity)) engagedAt.set(j.id, e.timestamp_game_s);
     }
   }
 
@@ -254,10 +270,13 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   };
 
   const quests: JournalQuest[] = [];
+  const today = Math.floor(nowS / DAY_S);
+  const short = (s: number) => { const d = clock.dateTime(s); return Math.floor(s / DAY_S) === today ? hhmm(s) : `${d.day_of_month} de ${d.month}, ${hhmm(s)}`; };
+  const at = (s: number) => ({ game_s: s, when: fmt(s), short: short(s) });
   for (const j of jobs) {
     const done = c.completed_jobs.includes(j.id);
     const engaged = engagedAt.get(j.id) ?? null;
-    const seen = seenAt.get(j.id) ?? engaged;
+    const seen = seenAt.get(j.id) ?? toldAt.get(j.id) ?? null;
     if (!done && seen === null) continue;
     const completed = done ? completedAt.get(j.id) ?? engaged ?? seen ?? born : null;
     const status: QuestStatus = done ? 'completed' : engaged !== null ? 'active' : onBoard.has(j.id) ? 'available' : 'expired';
@@ -270,14 +289,31 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     } else if (j.kind === 'visit' && j.visit_spot_id) {
       const sp = w.spots.get(j.visit_spot_id);
       const loc = sp ? w.locations.get(sp.location_id) : undefined;
-      steps.push({ text: `Ir a ${sp?.name ?? j.visit_spot_id}${loc ? ` (${loc.name})` : ''}`, done: done || visitedSpots.has(j.visit_spot_id) });
+      steps.push({ text: `Ir ${aPlace(sp?.name ?? j.visit_spot_id)}${loc ? ` (${loc.name})` : ''}`, done: done || visitedSpots.has(j.visit_spot_id) });
       steps.push({ text: `Volver a contárselo a ${giver ? npcLabel(c, giver) : 'quien lo pide'}`, done });
     } else {
       steps.push({ text: `Cumplirlo y decírselo a ${giver ? npcLabel(c, giver) : 'quien lo pide'}`, done });
     }
     const updated = Math.max(seen ?? 0, engaged ?? 0, completed ?? 0, born);
+    const who = giver ? npcLabel(c, giver) : 'quien lo pide';
+    const history: JournalChange[] = [];
+    const fromBoard = seenAt.has(j.id);
+    if (seen !== null) history.push({ key: `${j.id}:added`, ...at(seen), kind: 'added', text: fromBoard ? 'Lo lees en el tablón' : 'Te lo cuenta quien lo pide', why: fromBoard ? `aviso del tablón: lo pide ${who}` : `hablaste de ello con ${who}` });
+    const told = toldAt.get(j.id) ?? null, left = droppedAt(c, j.id);
+    for (const t of [told, engaged]) {
+      if (t !== null && !history.some((x) => x.key === `${j.id}:accepted:${t}`)) history.push({ key: `${j.id}:accepted:${t}`, ...at(t), kind: 'accepted', text: 'Te pones con ello', why: `hablaste de ello con ${who}` });
+    }
+    if (left !== null && told !== null) history.push({ key: `${j.id}:dropped:${left}`, ...at(left), kind: 'dropped', text: 'Lo dejas', why: 'desde el Diario' });
+    history.sort((x, y) => x.game_s - y.game_s);
+    if (j.kind === 'visit' && j.visit_spot_id) {
+      const went = mine.find((e) => e.actor_id === c.id && e.spot_id === j.visit_spot_id && e.timestamp_game_s >= (seen ?? born));
+      if (went) history.push({ key: `${j.id}:step:visit`, ...at(went.timestamp_game_s), kind: 'step', text: `✔ ${steps[0]!.text}`, why: `llegaste a ${w.spots.get(j.visit_spot_id)?.name ?? 'el sitio'}` });
+    }
+    if (completed !== null) history.push({ key: `${j.id}:completed`, ...at(completed), kind: 'completed', text: 'Encargo cumplido', why: `se lo ${j.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${who}` });
+    else if (status === 'expired') history.push({ key: `${j.id}:expired`, ...at(Math.max(seen ?? born, engaged ?? born)), kind: 'expired', text: 'Ya no está en el tablón', why: 'el tablón cambió' });
     quests.push({
       id: j.id, kind: 'job', title: j.title, text: j.text, status, droppable: status === 'active',
+      origin: fromBoard ? { kind: 'board', text: 'Aviso del tablón', where: null } : { kind: 'giver', text: `Te lo pide ${who}`, where: null }, history,
       giver: giver ? npcLabel(c, giver) : null, giver_npc_id: giver?.id ?? null,
       reward: `${j.reward_coins} monedas${j.reward_reputation ? ` · +${j.reward_reputation} de reputación` : ''}`,
       seen_game_s: seen, seen: seen === null ? null : fmt(seen),
@@ -295,7 +331,8 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     const left = Math.ceil((deadline - nowS) / DAY_S);
     const expired = nowS >= deadline;
     quests.push({
-      id: 'main', kind: 'main', title: 'Lo que te trae aquí', text: s.why_here, status: expired ? 'expired' : 'active',
+      id: 'main', kind: 'main', title: 'Lo que te trae aquí', text: s.why_here, status: expired ? 'expired' : 'active', origin: null,
+      history: [{ key: 'main:added', ...at(born), kind: 'added', text: 'Llegas con esto entre manos', why: null }],
       giver: null, giver_npc_id: null, reward: null,
       seen_game_s: born, seen: fmt(born), completed_game_s: null, completed: null,
       updated_game_s: born, updated: fmt(born),
@@ -312,15 +349,19 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     const got = c.achievements.find((x) => x.id === a.id);
     const faction = w.campaign.factions.find((f) => f.id === a.faction_id)?.name ?? a.faction_id;
     const rep = c.reputation[a.faction_id] ?? 0;
-    const clueTimes = mine.filter((e) => e.action_type === 'progress_clue' && e.actor_id === c.id).map((e) => e.timestamp_game_s);
+    const clueEvents = mine.filter((e) => e.action_type === 'progress_clue' && e.actor_id === c.id);
+    const clueTimes = clueEvents.map((e) => e.timestamp_game_s);
     const achTime = mine.find((e) => e.action_type === 'progress_achievement' && e.actor_id === c.id)?.timestamp_game_s ?? null;
     const steps: JournalStep[] = c.clues.map((id) => ({ text: `Pista: ${w.campaign.clues.find((x) => x.id === id)?.title ?? id}`, done: true }));
     const missing = Math.max(0, a.clues_required - c.clues.length);
     if (missing > 0) steps.push({ text: `${missing} pista${missing === 1 ? '' : 's'} más por descubrir`, done: false });
     steps.push({ text: `Reputación en ${faction}: ${rep} de ${a.reputation_required}`, done: rep >= a.reputation_required });
     const updated = Math.max(born, ...clueTimes, achTime ?? 0);
+    const achHistory: JournalChange[] = clueEvents.map((e, i) => ({ key: `${a.id}:clue:${e.seq}`, ...at(e.timestamp_game_s), kind: 'step' as const, text: `✔ ${e.narration_private.replace(/\s*\(\d+\/\d+\).*$/, '').replace(/[.]$/, '')}`, why: i === 0 ? 'cada pista cuenta para el logro' : null }));
+    if (got) achHistory.push({ key: `${a.id}:completed`, ...at(achTime ?? updated), kind: 'completed', text: 'Logro conseguido', why: `${a.clues_required} pistas y reputación ${a.reputation_required} en ${faction}` });
     quests.push({
       id: a.id, kind: 'achievement', title: a.title, text: `Lo que se cuenta de quien lo consigue, en ${faction}.`, status: got ? 'completed' : c.clues.length ? 'active' : 'available',
+      origin: null, history: achHistory,
       giver: null, giver_npc_id: null, reward: null,
       seen_game_s: born, seen: fmt(born), completed_game_s: got ? achTime ?? updated : null, completed: got ? fmt(achTime ?? updated) : null,
       updated_game_s: updated, updated: fmt(updated),
@@ -340,8 +381,10 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
       : [{ text: `Pagar ${fmtCoins(d.amount)} monedas a ${who} (o saldarla de otro modo)`, done: false }, ...(pawnName ? [{ text: `Recuperar la prenda: ${pawnName}`, done: false }] : [])];
     const updated = Math.max(d.created_game_s, settled?.game_s ?? 0);
     const left = d.due_game_s === null ? null : Math.ceil((d.due_game_s - nowS) / DAY_S);
+    const debtHistory: JournalChange[] = [{ key: `${d.id}:added`, ...at(d.created_game_s), kind: 'added', text: 'Contraes la deuda', why: cap(d.reason) }];
+    if (settled) debtHistory.push({ key: `${d.id}:completed`, ...at(settled.game_s), kind: 'completed', text: steps[0]!.text, why: null });
     quests.push({
-      id: d.id, kind: 'debt', title: `Deuda con ${who}`, text: settled ? cap(d.reason) : `${debtLine(w, d, nowS, (n) => npcLabel(c, n))}. ${cap(d.reason)}.`,
+      id: d.id, kind: 'debt', title: `Deuda con ${who}`, origin: { kind: 'giver', text: `Se la debes a ${who}`, where: null }, history: debtHistory, text: settled ? cap(d.reason) : `${debtLine(w, d, nowS, (n) => npcLabel(c, n))}. ${cap(d.reason)}.`,
       status: settled ? 'completed' : 'active', giver: who, giver_npc_id: npc?.id ?? null, reward: null,
       seen_game_s: d.created_game_s, seen: fmt(d.created_game_s),
       completed_game_s: settled?.game_s ?? null, completed: settled ? fmt(settled.game_s) : null,
@@ -357,9 +400,15 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     const dropped = g.status === 'active' && droppedAt(c, g.id) !== null;
     const status: QuestStatus = g.status === 'completed' ? 'completed' : g.status === 'failed' ? 'expired' : dropped ? 'available' : 'active';
     const closed = g.status !== 'active' ? g.updated_game_s : null;
+    const gHistory: JournalChange[] = [{ key: `${g.id}:added`, ...at(g.given_game_s), kind: 'added', text: 'Nueva misión', why: g.origin_text ?? (giver ? `te lo pide ${npcLabel(c, giver)}` : null) }];
+    const left = droppedAt(c, g.id);
+    if (left !== null) gHistory.push({ key: `${g.id}:dropped:${left}`, ...at(left), kind: 'dropped', text: 'La dejas', why: 'desde el Diario' });
+    if (closed !== null) gHistory.push({ key: `${g.id}:${g.status}`, ...at(closed), kind: g.status === 'completed' ? 'completed' : 'failed', text: g.status === 'completed' ? 'Misión cumplida' : 'Misión fallida', why: g.closed_why ?? null });
     quests.push({
       id: g.id, kind: 'given', title: g.title, text: g.text, status, droppable: status === 'active',
-      giver: giver ? npcLabel(c, giver) : null, giver_npc_id: giver?.id ?? null, reward: g.reward,
+      origin: g.heard ? { kind: 'heard', text: g.origin_text, where: locName(g.location_id) } : giver ? { kind: 'giver', text: g.origin_text ?? `Te lo pide ${npcLabel(c, giver)}`, where: locName(g.location_id) } : null,
+      history: gHistory,
+      giver: giver && !g.heard ? npcLabel(c, giver) : null, giver_npc_id: giver?.id ?? null, reward: g.reward,
       seen_game_s: g.given_game_s, seen: fmt(g.given_game_s), completed_game_s: closed, completed: closed === null ? null : fmt(closed),
       updated_game_s: g.updated_game_s, updated: fmt(g.updated_game_s),
       steps: [{ text: g.objective ?? `Cumplirlo y decírselo a ${giver ? npcLabel(c, giver) : 'quien lo pide'}`, done: g.status === 'completed' }],
@@ -368,18 +417,33 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   }
 
   // Historia escrita (story.ts): las misiones que el PJ conoce, con los pasos dados y el de ahora (los siguientes, no).
+  // Lo que pasó y por qué sale del registro del PJ (story.log); en partidas de antes, de los avisos de progreso.
+  const cst = characterStory(c);
   const storyTimes = mine.filter((e) => e.action_type === 'progress_story' && e.actor_id === c.id);
   for (const v of questsOf(w, c)) {
     const q = v.quest;
+    const log = (cst.log ?? []).filter((x) => x.quest_id === q.id);
     const told = storyTimes.filter((e) => e.narration_private.includes(`«${q.title}»`)).map((e) => e.timestamp_game_s);
-    const seen = told[0] ?? born;
-    const completed = v.status === 'completed' ? told.at(-1) ?? seen : null;
-    const updated = Math.max(seen, ...storyTimes.filter((e) => e.narration_private.includes(q.title)).map((e) => e.timestamp_game_s));
+    const opened = log.find((x) => x.kind === 'open')?.game_s;
+    const seen = opened ?? told[0] ?? born;
+    const closedAt = log.find((x) => x.kind === 'done')?.game_s;
+    const completed = v.status === 'completed' ? closedAt ?? told.at(-1) ?? seen : null;
+    const updated = Math.max(seen, ...log.map((x) => x.game_s), ...storyTimes.filter((e) => e.narration_private.includes(q.title)).map((e) => e.timestamp_game_s));
     const giver = q.giver_npc_id ? w.npcs.get(q.giver_npc_id) ?? null : null;
+    const o = cst.origins?.[q.id];
     const r = q.reward;
+    const history: JournalChange[] = log.map((x) => ({
+      key: `${q.id}:${x.kind}:${x.step_id ?? ''}:${x.game_s}`, ...at(x.game_s),
+      kind: x.kind === 'open' ? 'added' : x.kind === 'done' ? 'completed' : x.kind,
+      text: x.kind === 'open' ? 'Nueva misión' : x.kind === 'done' ? 'Misión cumplida' : x.kind === 'expired' ? 'Se cierra' : `✔ ${q.steps.find((st) => st.id === x.step_id)?.text ?? x.step_id ?? ''}`,
+      why: x.why || null,
+    }));
+    if (!log.length) history.push({ key: `${q.id}:added`, ...at(seen), kind: 'added', text: 'Nueva misión', why: null });
     quests.push({
       id: q.id, kind: 'story', title: `${['', 'I', 'II', 'III'][q.act]} · ${q.title}`, text: q.text, status: v.status,
-      giver: giver ? npcLabel(c, giver) : null, giver_npc_id: giver?.id ?? null,
+      // De oídas: nadie se la ha pedido aún; no se pone «lo pide X».
+      giver: giver && o?.kind !== 'heard' ? npcLabel(c, giver) : null, giver_npc_id: giver?.id ?? null,
+      origin: o ? { kind: o.kind, text: o.text, where: locName(o.location_id) } : giver ? { kind: 'giver', text: `Te lo pide ${npcLabel(c, giver)}`, where: null } : null, history,
       reward: [r.coins ? `${r.coins} monedas` : '', r.reputation ? `+${r.reputation} de reputación` : '', r.xp ? `${r.xp} PX` : ''].filter(Boolean).join(' · ') || null,
       seen_game_s: seen, seen: fmt(seen), completed_game_s: completed, completed: completed === null ? null : fmt(completed),
       updated_game_s: updated, updated: fmt(updated),
@@ -429,8 +493,9 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   const replies = conversations.flatMap((conv) => conv.exchanges.flatMap((x) => x.replied.map((said) => ({ npc_id: conv.npc_id, who: conv.name, said, game_s: x.game_s, when: x.when }))));
   for (const q of [...active, ...completed]) {
     const kw = keywords([q.title, q.text, ...q.steps.map((st) => st.text)].join(' '));
-    const told = replies
-      .filter((r) => r.npc_id === q.giver_npc_id || shares(keywords(r.said), kw))
+    // Lo que le dijo quien la pide (o, sin quien la pida, frases que hablan de lo mismo). El logro no cita a nadie.
+    const told = q.kind === 'achievement' ? [] : replies
+      .filter((r) => (q.giver_npc_id ? r.npc_id === q.giver_npc_id : shares(keywords(r.said), kw)))
       .filter((r) => r.game_s >= (q.seen_game_s ?? 0))
       .sort((x, y) => x.game_s - y.game_s)
       .slice(-2)
@@ -465,7 +530,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   return {
     character: { id: c.id, name: c.name },
     now: fmt(nowS),
-    version: `${maxSeq}.${c.completed_jobs.length}.${c.clues.length}.${rumorsOf.length}.${memoryCount}.${engagedAt.size}.${givenQuests(c).map((g) => `${g.status[0]}${droppedAt(c, g.id) ?? ''}`).join('')}.${(c.debts ?? []).map((d) => `${d.amount}${d.settled ? 's' : ''}`).join('-')}`,
+    version: `${maxSeq}.${[...active, ...completed].reduce((n, q) => n + q.history.length, 0)}.${c.completed_jobs.length}.${c.clues.length}.${rumorsOf.length}.${memoryCount}.${engagedAt.size}.${givenQuests(c).map((g) => `${g.status[0]}${droppedAt(c, g.id) ?? ''}`).join('')}.${(c.debts ?? []).map((d) => `${d.amount}${d.settled ? 's' : ''}`).join('-')}`,
     quests: { active, completed },
     rumors: rumorsOf.filter((r) => !linked.has(r.id)),
     conversations, chronicle, places,

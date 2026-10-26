@@ -303,6 +303,10 @@ export function recapTemplate(engine: Engine, c: Character, since: GameEvent, ho
       doing.push(`Encargo: ${q.title}${q.giver ? ` (lo pide ${q.giver})` : ''}.`);
     } else if (q.kind === 'achievement' && q.status === 'active') {
       doing.push(`${q.title}: ${lowerFirst(q.steps.filter((s) => !s.done).map((s) => s.text).join('; ') || 'en marcha')}.`);
+    } else if ((q.kind === 'story' || q.kind === 'given') && q.status === 'active') {
+      // La historia escrita y lo que le han pedido: con lo que toca ahora (el título entre comillas no se enmascara).
+      const now = q.summary.next ?? q.steps.find((s) => !s.done)?.text;
+      doing.push(`«${q.title.replace(/^[IV]+ · /, '')}»${now ? `: ${lowerFirst(noDot(now))}` : ''}.`);
     }
   }
   if (doing.length) out.push(`**Lo que tienes entre manos.** ${doing.join(' ')}`);

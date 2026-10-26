@@ -20,7 +20,7 @@ import { bounceOff, parseCrossing } from './barrier.js';
 import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, whereAmI, whoIsHere } from './narrate.js';
 import { encounterChance, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
 import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type RouteCut } from './goto.js';
-import { dropQuest } from './quests.js';
+import { atBoard, dropQuest, readBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { tickSchedule } from './schedule.js';
 import { tickStory, type StoryOutput } from './story.js';
@@ -944,10 +944,13 @@ export class Engine {
     }
   }
 
-  /** Avisos de progreso como eventos de sistema: privados al PJ, y públicos en el tablón si procede. */
+  /**
+   * Avisos de progreso como eventos de sistema: privados al PJ (los de otro no le llegan a nadie más), y
+   * públicos en el tablón si procede. Si tocan una misión, llevan el cambio y su porqué (`payload.quest`).
+   */
   private emitProgress(c: Character, events: ProgressEvent[]): void {
     for (const e of events) {
-      this.events.emit({ actor_id: c.id, action_type: `progress_${e.kind}`, narration_private: e.text, observable: null, tags: ['progress', e.kind], payload: {} }, this.now());
+      this.events.emit({ actor_id: c.id, action_type: `progress_${e.kind}`, narration_private: e.text, observable: null, visibility: 'private', tags: ['progress', e.kind], payload: e.quest ? { quest: e.quest } : {} }, this.now());
       if (e.public) {
         const at = positionOf(this.world, c, this.gameNow());
         this.events.emit({ actor_id: null, at, action_type: 'announcement', narration_private: '', observable: e.public, visibility: 'public', tags: ['milestone', e.kind] }, this.now());
@@ -955,9 +958,21 @@ export class Engine {
     }
   }
 
-  /** Historia escrita (story.ts): la amenaza que avanza y las misiones de cada PJ. Sin historia, nada. */
+  /** Historia escrita (story.ts): la amenaza que avanza y las misiones de cada PJ; y quien está ante el tablón lo lee. */
   private advanceStory(nowG: number): void {
     this.emitStory(tickStory(this.world, nowG));
+    for (const c of this.world.characters.values()) {
+      if (c.status === 'active' && atBoard(this.world, c)) this.noteBoard(c, this.nowFor(c));
+    }
+  }
+
+  /** El PJ lee el tablón (ante él o con /tablon): cada encargo que no había visto entra en su Diario como disponible, con aviso. */
+  private noteBoard(c: Character, nowG: number): void {
+    const fresh = readBoard(this.world, c, nowG);
+    this.emitProgress(c, fresh.map((j) => {
+      const why = `Aviso del tablón: lo pide ${this.world.npc(j.giver_npc_id).name} · ${j.reward_coins} monedas`;
+      return { kind: 'quest', text: `Encargo disponible: «${j.title}». ${why}.`, quest: { id: j.id, title: j.title, event: 'available', why } };
+    }));
   }
 
   /** Avisos de la historia: los del PJ como progreso privado; los del mundo, a quien esté en el lugar (o a todos). */
@@ -1029,7 +1044,7 @@ export class Engine {
     const c = this.world.character(characterId);
     const r = dropQuest(this.world, c, questId, this.nowFor(c));
     if (!r.ok) return { ok: false, text: r.error };
-    this.emitProgress(c, [{ kind: 'quest', text: `Has dejado la misión «${r.title}».` }]);
+    this.emitProgress(c, [{ kind: 'quest', text: `Has dejado la misión «${r.title}».`, quest: { id: questId, title: r.title, event: 'dropped', why: 'la dejaste desde el Diario' } }]);
     await this.flush();
     return { ok: true, text: `Has dejado la misión «${r.title}».` };
   }
@@ -1075,7 +1090,7 @@ export class Engine {
         return missed.length ? missed.map((d) => `· ${d.text}`).join('\n') : 'No te has perdido nada.';
       }
       case 'time': return `${this.clock.format(nowG)} (ratio ${this.clock.timeRatio}×).${nowG - this.gameNow() > SAME_TIME_TOLERANCE_S ? ` Vas ${fmtDuration(nowG - this.gameNow())} por delante del reloj del mundo (has viajado).` : ''}`;
-      case 'tablon': return this.boardText();
+      case 'tablon': this.noteBoard(c, nowG); return this.boardText();
       case 'progress': {
         const a = this.world.campaign.achievement;
         const clues = c.clues.map((id) => this.world.campaign.clues.find((x) => x.id === id)?.title ?? id);

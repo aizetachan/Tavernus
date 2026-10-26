@@ -232,17 +232,25 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     for (const c of engine.world.characters.values()) {
       const all = engine.events.forCharacter(c.id, null);
       const start = all.findIndex((d) => d.event.action_type === 'prologue' && d.event.actor_id === c.id);
-      const past = (start > 0 ? all.slice(start) : all).slice(-HISTORY).map((d) => placed(d, toMessage(d, engine)));
+      // Salvo los avisos de misión (la que se abre al llegar): van justo después del prólogo, como en vivo.
+      const quests = start > 0 ? all.slice(0, start).filter((d) => d.event.actor_id === c.id && noticeOf(d.event)?.quest) : [];
+      const ordered = start > 0 ? [all[start]!, ...quests, ...all.slice(start + 1)] : all;
+      const past = ordered.slice(-HISTORY).map((d) => placed(d, toMessage(d, engine)));
       if (past.length) history.set(c.id, past);
     }
     /** PJ que se están presentando: hasta que llega su prólogo, su hilo no recibe nada. */
     const opening = new Set<Id>();
+    /** Avisos de misión de mientras se presenta (la que se abre al llegar): salen justo después del prólogo, no se pierden. */
+    const held = new Map<Id, WebMessage[]>();
     const send = (characterId: Id, type: string, data: unknown) => {
       for (const res of streams.get(characterId) ?? []) res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
     };
     const record = (characterId: Id, m: WebMessage) => {
       if (opening.has(characterId)) {
-        if (m.chapter?.kind !== 'prologue') return;
+        if (m.chapter?.kind !== 'prologue') {
+          if (m.notice?.quest) held.set(characterId, [...(held.get(characterId) ?? []), m]);
+          return;
+        }
         opening.delete(characterId);
       }
       const h = history.get(characterId) ?? [];
@@ -250,6 +258,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       if (h.length > HISTORY) h.splice(0, h.length - HISTORY);
       history.set(characterId, h);
       send(characterId, 'message', withImages(m, illustratorOf(engine), slug));
+      if (m.chapter?.kind === 'prologue') releaseHeld(characterId);
     };
     // El diario cambia con lo que el PJ vive: se avisa (agrupado) y la página lo vuelve a pedir.
     const journalTimers = new Map<Id, NodeJS.Timeout>();
@@ -398,12 +407,18 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     const offRound = engine.onScene((n) => {
       for (const id of streams.keys()) if (locOf(id) === n.location_id) send(id, 'round', roundFor(id, n));
     });
+    function releaseHeld(characterId: Id): void {
+      const ms = held.get(characterId);
+      held.delete(characterId);
+      for (const m of ms ?? []) record(characterId, m);
+    }
     const introduce = (characterId: Id) => {
       opening.add(characterId);
       history.delete(characterId);
+      held.delete(characterId);
       void engine.introduce(characterId)
         .catch((e) => console.error('[web] intro:', e))
-        .finally(() => { opening.delete(characterId); });
+        .finally(() => { opening.delete(characterId); releaseHeld(characterId); });
     };
     return {
       engine, streams, history, introduce, joined, left, presenceFor, begin, end, typing,

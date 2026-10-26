@@ -14,14 +14,27 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Engine } from '../../engine/engine.js';
 import { journalOf, type Journal, type JournalConversation, type JournalQuest } from '../../engine/journal.js';
 import type { GameEvent, Id } from '../../engine/model.js';
+import type { QuestChange } from '../../engine/progress.js';
 import { illustratorOf } from '../../ai/illustrate.js';
 
 export interface WebJournal extends Journal {
   conversations: (JournalConversation & { portrait: string | null })[];
 }
 
-/** Aviso discreto en el hilo en lugar de una burbuja; `tab` es la pestaña a la que lleva. */
-export interface WebNotice { text: string; link: string; tab: 'journal' }
+/**
+ * Aviso discreto en el hilo en lugar de una burbuja; `tab` es la pestaña a la que lleva. Los de misiones
+ * (`quest`) se pintan más visibles: qué ha pasado (alta, paso, cierre) y, debajo, por qué.
+ */
+export interface WebNotice {
+  text: string;
+  link: string;
+  tab: 'journal';
+  quest?: { id: Id; event: QuestChange['event']; why: string };
+}
+
+const QUEST_HEAD: Record<QuestChange['event'], string> = {
+  open: 'Nueva misión', available: 'Encargo en el Diario', step: 'Paso cumplido', done: 'Misión cumplida', failed: 'Misión fallida', expired: 'Misión cerrada', dropped: 'Misión dejada',
+};
 
 export function journalView(engine: Engine, characterId: Id, slug: string): WebJournal {
   const j = journalOf(engine, characterId);
@@ -55,8 +68,14 @@ export function handleJournalRequest(engine: Engine, _req: IncomingMessage, res:
  * rotación del tablón y los avisos de progreso (pista, encargo, logro,
  * práctica). Lo demás (tiradas, anuncios, narración) sigue igual. null = burbuja.
  */
-export function noticeOf(e: Pick<GameEvent, 'action_type' | 'narration_private' | 'observable'>): WebNotice | null {
-  if (e.action_type === 'board') return { text: 'Tablón actualizado', link: 'ver en el Diario', tab: 'journal' };
+export function noticeOf(e: Pick<GameEvent, 'action_type' | 'narration_private' | 'observable'> & { payload?: GameEvent['payload'] }): WebNotice | null {
+  // El tablón cambia, pero sus encargos no entran en el Diario hasta que el PJ lo lee.
+  if (e.action_type === 'board') return { text: 'Hay avisos nuevos en el tablón de la plaza: pásate a leerlos', link: '', tab: 'journal' };
+  const q = e.payload?.['quest'] as QuestChange | undefined;
+  if (/^progress_/.test(e.action_type) && q && QUEST_HEAD[q.event]) {
+    const what = q.event === 'step' && q.step ? `${q.title}: ${q.step}` : `«${q.title}»`;
+    return { text: `${QUEST_HEAD[q.event]} · ${what}`, link: 'ver en el Diario', tab: 'journal', quest: { id: q.id, event: q.event, why: cap(q.why) } };
+  }
   if (/^progress_/.test(e.action_type)) {
     const text = (e.narration_private || e.observable || '').replace(/\s+/g, ' ').trim();
     const first = /^(.+?[.!?])(\s|$)/.exec(text)?.[1] ?? text;
@@ -64,6 +83,8 @@ export function noticeOf(e: Pick<GameEvent, 'action_type' | 'narration_private' 
   }
   return null;
 }
+
+function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 /** ¿Cambia este evento algo que el diario recoge? (Para avisar por el stream.) */
 export function touchesJournal(e: Pick<GameEvent, 'action_type' | 'payload' | 'tags'>): boolean {

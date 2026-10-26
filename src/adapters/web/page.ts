@@ -388,6 +388,27 @@ export const PAGE = String.raw`<!doctype html>
   .qi .nw { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 2px var(--panel); }
   .qi .nw svg.i { width: 9px; height: 9px; stroke-width: 2.4; }
   #journal .q.isnew { box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
+  #journal .orig { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
+  #journal .orig b { color: var(--faint); font-weight: 600; }
+  #journal .hist { margin: 4px 0 8px; padding: 0; list-style: none; border-top: 1px solid var(--sep); }
+  #journal .hist > b { display: block; margin: 8px 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  #journal .hist li { display: flex; gap: 8px; padding: 3px 0; font-size: 12.5px; color: var(--muted); }
+  #journal .hist li .t { flex: none; min-width: 40px; max-width: 120px; color: var(--faint); font-size: 11.5px; padding-top: 1px; font-variant-numeric: tabular-nums; }
+  #journal .hist li small { display: block; color: var(--faint); }
+  #journal .hist li.unseen { color: var(--text); }
+  #journal .hist li.unseen .t { color: var(--accent); }
+  #journal .hist li.unseen::before { content: ''; flex: none; width: 6px; height: 6px; margin: 6px -4px 0 0; border-radius: 50%; background: var(--accent); }
+  /* Indicador de misiones en el panel: punto con el número de altas y check con el de pasos y cierres sin leer. */
+  .qflag { position: relative; display: inline-grid; place-items: center; width: 18px; height: 18px; color: var(--faint); }
+  .qflag svg.i { width: 15px; height: 15px; }
+  .qflag.on { color: var(--accent); }
+  .qbadge { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; }
+  .qbadge i { display: inline-flex; align-items: center; gap: 2px; height: 17px; padding: 0 6px; border-radius: 999px; font-style: normal; font-size: 11px; font-weight: 700; letter-spacing: 0; line-height: 17px; }
+  .qbadge i.dot { background: var(--accent); color: var(--accent-ink); }
+  .qbadge i.dot::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .qbadge i.chk { background: rgba(79,191,122,.18); color: var(--ok); }
+  #to-side.new::after { content: ''; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
+  #to-side { position: relative; }
   #journal summary .trk { flex: none; display: grid; place-items: center; width: 30px; height: 30px; margin: -4px -4px -4px 0; border: 0; border-radius: 50%; background: transparent; color: var(--faint); cursor: pointer; }
   #journal summary .trk:hover { background: var(--hover); color: var(--text); }
   #journal summary .trk.on { color: var(--accent); }
@@ -404,6 +425,7 @@ export const PAGE = String.raw`<!doctype html>
   .sec-row .sec-t { flex: 1; min-width: 0; }
   .qnew { display: inline-flex; align-items: center; gap: 4px; height: 22px; margin-left: 6px; padding: 0 8px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 600 11px/1 var(--sans); cursor: pointer; vertical-align: 1px; }
   .qnew svg.i { width: 11px; height: 11px; stroke-width: 2.2; }
+  .qchip { flex: none; margin: 8px 12px 0 6px; padding: 0; border: 0; background: none; cursor: pointer; }
   /* «Cerca de ti» solo en el tablero o el mapa ampliados, como columna junto al plano. */
   body:not(.board-big):not(.map-big) #near { display: none; }
   body.board-big #near, body.map-big #near { position: fixed; top: 40px; right: 40px; bottom: 40px; z-index: 22; width: 300px; overflow: auto; padding: 14px 10px; border-radius: 0 20px 20px 0; background: var(--panel); box-shadow: inset 1px 0 0 var(--sep); }
@@ -437,6 +459,14 @@ export const PAGE = String.raw`<!doctype html>
   .msg.notice .link { border: 0; padding: 0; background: none; color: var(--accent); font-size: 12.5px; font-weight: 500; }
   .msg.notice .link::before { content: '· '; color: var(--faint); }
   .msg.notice .link:hover { text-decoration: underline; }
+  /* Avisos de misión: destacados, con lo que ha pasado y, debajo, por qué. */
+  .msg.notice.quest { max-width: min(92%, 520px); padding: 7px 14px; border-color: rgba(230,183,90,.45); background: #1f1b12; color: var(--text); font-size: 13px; }
+  .msg.notice.quest > span:first-child::before { content: '✦ '; color: var(--accent); }
+  .msg.notice.q-step > span:first-child::before, .msg.notice.q-done > span:first-child::before { content: '✔ '; color: var(--ok); }
+  .msg.notice.q-done { border-color: rgba(79,191,122,.5); background: #142019; }
+  .msg.notice.q-failed > span:first-child::before, .msg.notice.q-expired > span:first-child::before, .msg.notice.q-dropped > span:first-child::before { content: '✕ '; color: var(--faint); }
+  .msg.notice.q-failed, .msg.notice.q-expired, .msg.notice.q-dropped { border-color: var(--sep); background: #161a1b; }
+  .msg.notice .why { flex-basis: 100%; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
 
   /* Móvil: el chat a pantalla completa; el panel, una vista aparte; Hoja, Diario y Mochila suben desde abajo. */
   @media (max-width: 820px) {
@@ -1800,6 +1830,8 @@ ${PAINT_JS}
   function markJournalSeen() {
     if (!journalData) return;
     store(journalKey(), journalData.version); setJournalNew(false);
+    // Abrir el Diario quita el indicador de misiones del panel.
+    markChangesSeen(journalData);
     if (journalSection === 'quests') markQuestsSeen(journalData);
   }
 
@@ -1829,6 +1861,24 @@ ${PAINT_JS}
     return all.filter(function (q) { return q.status !== 'expired' && seen.indexOf(q.id + ':' + q.status) < 0; });
   }
   function markQuestsSeen(j) { store(qseenKey(), JSON.stringify(j.quests.active.concat(j.quests.completed).map(function (q) { return q.id + ':' + q.status; }))); }
+  // Cambios en las misiones (altas, pasos, cierres) que el jugador aún no ha visto en el Diario. Se dan por vistos al abrirlo.
+  function hseenKey() { return 'tavernus.qhist.' + game + '.' + current; }
+  function questChanges(j) { return j.quests.active.concat(j.quests.completed).reduce(function (a, q) { return a.concat(q.history || []); }, []); }
+  /** Cambios sin ver. La primera vez cuenta todo: el que empieza ve marcada su primera misión. */
+  function unseenChanges(j) {
+    var seen = null;
+    try { seen = JSON.parse(store(hseenKey()) || 'null'); } catch (e) { seen = null; }
+    seen = seen || [];
+    return questChanges(j).filter(function (c) { return seen.indexOf(c.key) < 0; });
+  }
+  function markChangesSeen(j) { store(hseenKey(), JSON.stringify(questChanges(j).map(function (c) { return c.key; }).slice(-600))); }
+  /** Punto con el número de misiones nuevas y check con el de pasos o cierres, para el icono de misiones del panel. */
+  function questBadge(unseen) {
+    var added = unseen.filter(function (c) { return c.kind === 'added'; }).length;
+    var steps = unseen.filter(function (c) { return c.kind === 'step' || c.kind === 'completed' || c.kind === 'accepted'; }).length;
+    var tip = [added ? added + (added === 1 ? ' misión nueva' : ' misiones nuevas') : '', steps ? steps + (steps === 1 ? ' paso cumplido' : ' pasos cumplidos') : ''].filter(Boolean).join(' y ');
+    return { added: added, steps: steps, html: (added || steps) ? '<span class="qbadge" title="' + escapeHtml(tip) + ' (abre el Diario)">' + (added ? '<i class="dot">' + added + '</i>' : '') + (steps ? '<i class="chk">✓' + steps + '</i>' : '') + '</span>' : '' };
+  }
   /** La seguida: la que eligió el jugador si sigue abierta; si no, la principal o la primera en curso. */
   function trackedQuest(j) {
     var qs = j.quests.active, id = store(trackKey());
@@ -1841,8 +1891,11 @@ ${PAINT_JS}
   }
   function questHtml(q, ctx) {
     var isNew = ctx && ctx.fresh.indexOf(q.id) >= 0, tracked = ctx && ctx.tracked === q.id;
-    var sub = [JSTATUS[q.status] || q.status, q.kind === 'main' ? 'misión principal' : q.kind === 'achievement' ? 'logro' : q.kind === 'debt' ? 'deuda' : q.giver ? 'lo pide ' + q.giver : ''].filter(Boolean).join(' · ');
-    var open = tracked || isNew;
+    var o = q.origin, changed = ctx ? ctx.unseen.filter(function (c) { return (q.history || []).some(function (x) { return x.key === c.key; }); }) : [];
+    var whence = q.kind === 'main' ? 'misión principal' : q.kind === 'achievement' ? 'logro' : q.kind === 'debt' ? 'deuda'
+      : o && o.kind === 'heard' ? 'de oídas' : o && o.kind === 'board' ? 'tablón' + (q.giver ? ' · lo pide ' + q.giver : '') : q.giver ? 'lo pide ' + q.giver : o && o.kind === 'self' ? 'por tu cuenta' : '';
+    var sub = [JSTATUS[q.status] || q.status, whence].filter(Boolean).join(' · ');
+    var open = tracked || isNew || changed.length > 0;
     var h = '<details class="q ' + q.status + (q.kind === 'main' ? ' main' : '') + (isNew ? ' isnew' : '') + '"' + (open ? ' open' : '') + '><summary>' + questIcon(q, isNew) +
       '<span class="tt"><b>' + escapeHtml(q.title) + (isNew ? '<span class="pill-new">Nueva</span>' : '') + '</b><small>' + escapeHtml(sub) + '</small></span>' +
       (q.status === 'completed' || q.status === 'expired' ? '' : '<button type="button" class="trk' + (tracked ? ' on' : '') + '" data-track="' + escapeHtml(q.id) + '" title="' + (tracked ? 'La sigues en el panel' : 'Seguir en el panel') + '" aria-pressed="' + tracked + '"><svg class="i"><use href="#i-star"/></svg></button>') +
@@ -1856,6 +1909,14 @@ ${PAINT_JS}
     }
     (s.told || []).forEach(function (t) { h += '<div class="told"><b>' + escapeHtml(t.who) + ':</b> «' + escapeHtml(t.said) + '»<small>' + escapeHtml(t.when) + '</small></div>'; });
     if (q.steps.length > 1) h += '<ul class="steps">' + q.steps.map(function (st) { return '<li class="' + (st.done ? 'done' : '') + '">' + escapeHtml(st.text) + '</li>'; }).join('') + '</ul>';
+    if (o && o.text) h += '<div class="orig"><b>Cómo te llegó:</b> ' + escapeHtml(o.text) + (o.where ? ' <span>(' + escapeHtml(o.where) + ')</span>' : '') + '</div>';
+    var hist = (q.history || []).slice(-6).reverse();
+    if (hist.length) {
+      var unseenKeys = changed.map(function (c) { return c.key; });
+      h += '<ul class="hist"><b>Qué ha pasado</b>' + hist.map(function (x) {
+        return '<li class="' + x.kind + (unseenKeys.indexOf(x.key) >= 0 ? ' unseen' : '') + '"><span class="t" title="' + escapeHtml(x.when) + '">' + escapeHtml(x.short || x.when) + '</span><span>' + escapeHtml(x.text) + (x.why ? '<small>' + escapeHtml(x.why) + '</small>' : '') + '</span></li>';
+      }).join('') + '</ul>';
+    }
     var foot = [q.reward ? 'Recompensa: ' + q.reward : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean).join(' · ');
     if (foot) h += '<div class="rw">' + escapeHtml(foot) + '</div>';
     return h + '</div></details>';
@@ -1898,7 +1959,7 @@ ${PAINT_JS}
   function renderJournal(j) {
     var h = '<div class="jnav">' + JSECTIONS.map(function (s) { return '<button type="button" data-jsec="' + s[0] + '"' + (s[0] === journalSection ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('') + '</div>';
     if (journalSection === 'quests') {
-      var tq = trackedQuest(j), ctx = { fresh: newQuests(j).map(function (q) { return q.id; }), tracked: tq ? tq.id : null };
+      var tq = trackedQuest(j), ctx = { fresh: newQuests(j).map(function (q) { return q.id; }), tracked: tq ? tq.id : null, unseen: unseenChanges(j) };
       var render = function (q) { return withDrop(questHtml(q, ctx), q); };
       h += '<h3>Activas <span>' + j.quests.active.length + '</span></h3>';
       h += j.quests.active.length ? j.quests.active.map(render).join('') : '<p class="empty">Nada entre manos. Mira el tablón o habla con la gente.</p>';
@@ -2067,9 +2128,13 @@ ${PAINT_JS}
    * Con el estado como icono, lo que toca ahora y el plazo; si hay misiones nuevas, una pastilla para verlas.
    */
   function renderQuest(j) {
-    var live = j.quests.active.filter(function (x) { return x.status === 'active'; }), q = trackedQuest(j), fresh = newQuests(j);
-    var chip = fresh.length ? '<button type="button" class="qnew" data-qnew title="Ver qué hay de nuevo en el Diario"><svg class="i"><use href="#i-spark"/></svg>' + fresh.length + (fresh.length === 1 ? ' nueva' : ' nuevas') + '</button>' : '';
-    var h = '<div class="sec-row"><button type="button" class="sec-t" data-col="quest" aria-expanded="' + !document.body.classList.contains('col-quest') + '"><svg class="i chev"><use href="#i-chev"/></svg>Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</button>' + chip + '</div><div class="sec-b">';
+    var live = j.quests.active.filter(function (x) { return x.status === 'active'; }), q = trackedQuest(j);
+    // Indicador en el icono de misiones: altas (punto) y pasos o cierres (check) sin ver; se quita al abrir el Diario.
+    var badge = questBadge(unseenChanges(j)), on = badge.added + badge.steps > 0;
+    var chip = on ? '<button type="button" class="qchip" data-qnew title="Ver qué ha cambiado en el Diario">' + badge.html + '</button>' : '';
+    $('to-side').classList.toggle('new', on);
+    var h = '<div class="sec-row"><button type="button" class="sec-t" data-col="quest" aria-expanded="' + !document.body.classList.contains('col-quest') + '"><svg class="i chev"><use href="#i-chev"/></svg>' +
+      '<span class="qflag' + (on ? ' on' : '') + '" data-qnew title="Misiones: abre el Diario"><svg class="i"><use href="#i-q-active"/></svg></span>Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</button>' + chip + '</div><div class="sec-b">';
     if (!q) { $('quest').innerHTML = h + '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button></div>'; return; }
     var done = q.steps.filter(function (s) { return s.done; }).length, total = q.steps.length;
     var s = q.summary || { text: '', next: null };
