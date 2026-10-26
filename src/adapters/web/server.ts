@@ -29,6 +29,7 @@
  *   POST /api/typing   {character}                     «está escribiendo…» a los demás PJ del sitio (SSE «typing»)
  * SSE «round»: ronda abierta en escena tensa (scene.ts): número, quién falta y cuándo vence.
  *   POST /api/roll     {character}
+ *   POST /api/choice   {character, key, picks}        Hoja: conjuros (cantrips, known, prepared) o elección de clase (levels.ts)
  *   POST /api/command  {character, name}
  *   GET  /api/tts/config  ·  POST /api/tts?game=SLUG   narrador de voz (tts.ts)
  *   GET  /api/sfx?character=ID  ·  GET /api/sfx?key=CLAVE   sonido: estado del PJ y ficheros (sfx.ts)
@@ -775,6 +776,12 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         case '/api/quest/drop': {
           const quest = typeof body['quest'] === 'string' ? body['quest'] : '';
           json(res, 200, await engine.dropQuest(id, quest));
+          return;
+        }
+        case '/api/choice': {
+          const key = typeof body['key'] === 'string' ? body['key'] : '';
+          const picks = Array.isArray(body['picks']) ? body['picks'].filter((x): x is string => typeof x === 'string').slice(0, 40) : [];
+          json(res, 200, await engine.choose(id, key, picks));
           return;
         }
         case '/api/command': {

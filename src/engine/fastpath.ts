@@ -268,7 +268,7 @@ export type InfoIntent =
   | { topic: 'roll'; check: { kind: CheckKind; key: string } | null }
   | { topic: 'rule'; term: string };
 
-export type InfoTopic = 'abilities' | 'skills' | 'spells' | 'inventory' | 'coins' | 'hp' | 'armor' | 'level' | 'quests' | 'people' | 'where';
+export type InfoTopic = 'abilities' | 'skills' | 'features' | 'spells' | 'inventory' | 'coins' | 'hp' | 'armor' | 'level' | 'quests' | 'people' | 'where';
 
 /**
  * Temas y las palabras que los nombran (sin tildes). `words`: dentro de una
@@ -284,6 +284,7 @@ export const INFO_TOPICS: { topic: InfoTopic; words: string[]; bare: string[]; w
   { topic: 'quests', words: ['mision', 'misiones', 'encargo', 'encargos', 'tarea', 'tareas', 'objetivo', 'objetivos', 'trabajos', 'quests'], bare: ['mision', 'misiones', 'encargos', 'tareas', 'objetivos', 'quests'] },
   { topic: 'abilities', words: ['atributos', 'caracteristicas', 'estadisticas', 'stats', 'hoja', 'ficha'], bare: ['atributos', 'caracteristicas', 'estadisticas', 'stats', 'hoja', 'ficha', 'hoja de personaje'] },
   { topic: 'skills', words: ['habilidades', 'competencias', 'pericias'], bare: ['habilidades', 'competencias', 'pericias'] },
+  { topic: 'features', words: ['rasgos', 'rasgo', 'rasgos de clase', 'poderes', 'aptitudes', 'talentos', 'dotes', 'se hacer', 'mejora de caracteristica'], bare: ['rasgos', 'rasgos de clase', 'poderes', 'aptitudes', 'talentos', 'que se hacer', 'lo que se hacer'] },
   { topic: 'inventory', words: ['inventario', 'mochila', 'equipo', 'equipaje', 'pertenencias', 'bolsillos', 'zurron', 'alforjas'], bare: ['mochila', 'equipo', 'equipaje', 'pertenencias', 'bolsillos'], weak: ['llevo', 'encima', 'cosas', 'objetos', 'conmigo', 'manos', 'llevo puesto'] },
 ];
 
@@ -294,7 +295,7 @@ const FILLER = /^(?:(?:oye|a ver|vale|pues|y|entonces|bueno|venga|ok|eh|perdona|
 /** Segunda o tercera persona, o el grupo: pregunta a otro o por otro. Al narrador. */
 const NOT_INFO = /\b(tienes|tiene|teneis|tienen|tenga|tengas|llevas|lleva|llevan|sabes|sabe|saben|puedes|puede|pueden|vendes|vende|venden|cuesta|cuestan|valen|dame|danos|dadme|deme|das|cobras|cobra|quieres|quiere|le|les|tu|tus|su|sus|usted|tenemos|llevamos|nos)\b/;
 const ASK = /^(?:que|cuanto|cuanta|cuantos|cuantas|cual|cuales|como)\b/;
-const SELF = /\b(tengo|llevo|me queda|me quedan|cargo|conozco|mi|mis|estoy|puedo lanzar|se lanzar)\b/;
+const SELF = /\b(tengo|llevo|me queda|me quedan|cargo|conozco|mi|mis|estoy|puedo lanzar|se lanzar|se hacer)\b/;
 const SELF_START = /^(?:tengo|llevo|me queda|me quedan|conozco|estoy)\b/;
 const PEOPLE = /^(?:cuanta gente|cuantas personas|cuantos|cuantas|quien|quienes|hay alguien|hay gente|hay mas gente|con quien)(?: (?:hay|esta|estan|somos|estoy|se ve|veo))?(?: (?:aqui|a mi lado|conmigo|cerca|alrededor|a mi alrededor|por aqui|en la sala|aqui dentro|junto a mi|cerca de mi|ahora))+$/;
 const WHERE = /^donde (?:estoy|me encuentro|ando)(?: ahora)?$/;

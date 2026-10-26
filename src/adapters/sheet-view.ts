@@ -11,6 +11,7 @@ import { ABILITY_ES, SKILLS, armorClass, saveModifier, skillModifier, type Abili
 import { isDying, isStable, respawnSpotId } from '../engine/death.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { hhmm } from '../engine/schedule.js';
+import { classSheet, type ClassSheet } from '../engine/levels.js';
 
 export interface SheetView {
   title: string;
@@ -19,6 +20,8 @@ export interface SheetView {
   footer: string;
   /** Modo de muerte y estado de caída o muerte (la web pinta la cuenta atrás con `respawn_real_ms`). */
   death: { mode: 'casual' | 'hardcore'; state: 'alive' | 'dying' | 'stable' | 'dead'; success?: number; fail?: number; stable_until?: string; respawn_real_ms?: number; respawn_place?: string };
+  /** Clase y nivel (levels.ts): PX, rasgos con usos, elecciones y conjuros. La web lo pinta como sección; Discord, con los campos de texto. */
+  class: ClassSheet;
 }
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : String(n));
@@ -41,6 +44,12 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
   const ab = c.abilities;
   const saves = (['str', 'dex', 'con', 'int', 'wis', 'cha'] as Ability[]).filter((a) => c.proficiencies.saves.includes(a)).map((a) => `${ABILITY_ES[a].slice(0, 3)} ${fmt(saveModifier(c, a))}`).join(' · ');
   const skills = Object.keys(SKILLS).filter((k) => c.proficiencies.skills.includes(k) || c.proficiencies.expert.includes(k)).map((k) => `${SKILLS[k]!.es} ${fmt(skillModifier(c, k))}`).join(' · ');
+  const cls = classSheet(c);
+  const uses = (u: ClassSheet['features'][number]['uses']) => (u ? ` (${u.left}/${u.max})` : '');
+  const pending = cls.choices.filter((ch) => ch.pending).map((ch) => ch.name);
+  const spellText = cls.spells
+    ? [`CD ${cls.spells.save_dc} · ataque ${fmt(cls.spells.attack)}${cls.spells.slots.length ? ` · espacios ${cls.spells.slots.map((x) => `${x.label.toLowerCase()} ${x.left}/${x.max}`).join(', ')}` : ''}`, ...cls.spells.groups.map((g) => `${g.label}: ${g.spells.map((x) => x.name).join(', ')}`)].join('\n')
+    : cls.spells_from ? `Desde nivel ${cls.spells_from}` : '';
   const load = `${inv.encumbrance.weight_lb.toFixed(1)} / ${inv.encumbrance.max_lb} lb` + ({ ok: '', encumbered: ' · cargado', heavily: ' · muy cargado', immobile: ' · inmóvil' }[inv.encumbrance.level]);
   return {
     title: `${c.name} · ${c.race} ${c.class_name} · nivel ${c.level}`,
@@ -51,6 +60,9 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
       { name: 'Muerte', value: deathLine, inline: false },
       { name: 'Características', value: `FUE ${ab.str} · DES ${ab.dex} · CON ${ab.con} · INT ${ab.int} · SAB ${ab.wis} · CAR ${ab.cha}\nSalvaciones: ${saves || '—'}`, inline: false },
       { name: 'Habilidades', value: skills || '—', inline: false },
+      { name: 'Nivel', value: `${c.level} · ${c.xp} PX${cls.next_xp !== null ? ` (siguiente a ${cls.next_xp})` : ''}${pending.length ? `\nPor elegir: ${pending.join(', ')}` : ''}`, inline: false },
+      { name: 'Rasgos', value: cls.features.map((f) => `${f.name}${uses(f.uses)}`).join(' · ') || '—', inline: false },
+      ...(spellText ? [{ name: 'Conjuros', value: spellText.slice(0, 1000), inline: false }] : []),
       { name: 'Manos', value: `${inv.hands.main ?? '—'} / ${inv.hands.off ?? '—'}`, inline: true },
       { name: 'Bolsillos', value: inv.pockets.length ? inv.pockets.join(', ') : '—', inline: true },
       { name: 'Equipado', value: Object.entries(inv.equipped).map(([k, v]) => `${k}: ${v}`).join('\n') || '—', inline: true },
@@ -60,5 +72,6 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
     ],
     footer: engine.clock.format(nowG),
     death,
+    class: cls,
   };
 }

@@ -28,6 +28,7 @@ import { attitudeOf } from './combat.js';
 import { allScheduled, nextStart, routineOf } from './schedule.js';
 import { encounterTable, pickEntry, type EncounterEntry } from './travel.js';
 import type { World } from './world.js';
+import { classResources } from './levels.js';
 
 export const SHORT_REST_S = GAME_HOUR;
 export const LONG_REST_S = 8 * GAME_HOUR;
@@ -36,38 +37,10 @@ export const LONG_REST_EVERY_S = GAME_DAY;
 const NOISY = 0.3;
 
 // ---------------------------------------------------------------------------
-// Recursos de clase (SRD, niveles bajos)
+// Recursos de clase (de los datos SRD: levels.ts)
 // ---------------------------------------------------------------------------
 
-export interface ClassResource { key: string; label: string; max: number; recharge: 'short' | 'long' }
-
-const FULL_CASTER_SLOTS = [[2], [3], [4, 2], [4, 3], [4, 3, 2], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 2], [4, 3, 3, 3, 1], [4, 3, 3, 3, 2]];
-const HALF_CASTER_SLOTS = [[], [2], [3], [3], [4, 2], [4, 2], [4, 3], [4, 3], [4, 3, 2], [4, 3, 2]];
-
-function slots(level: number, table: number[][], recharge: 'short' | 'long' = 'long'): ClassResource[] {
-  const row = table[Math.min(level, table.length) - 1] ?? [];
-  return row.map((n, i) => ({ key: `slot_${i + 1}`, label: `espacios de conjuro de nivel ${i + 1}`, max: n, recharge }));
-}
-
-/** Recursos que gasta y recupera al descansar, según clase y nivel. */
-export function classResources(c: Character): ClassResource[] {
-  const L = c.level;
-  const cha = Math.max(1, abilityModifier(c.abilities.cha));
-  switch (c.class_id) {
-    case 'fighter': return [{ key: 'second_wind', label: 'Tomar aliento', max: 1, recharge: 'short' }, ...(L >= 2 ? [{ key: 'action_surge', label: 'Oleada de acción', max: 1, recharge: 'short' as const }] : [])];
-    case 'barbarian': return [{ key: 'rage', label: 'Furia', max: L >= 6 ? 4 : L >= 3 ? 3 : 2, recharge: 'long' }];
-    case 'bard': return [{ key: 'bardic_inspiration', label: 'Inspiración bárdica', max: cha, recharge: L >= 5 ? 'short' : 'long' }, ...slots(L, FULL_CASTER_SLOTS)];
-    case 'cleric': return [...(L >= 2 ? [{ key: 'channel_divinity', label: 'Canalizar divinidad', max: 1, recharge: 'short' as const }] : []), ...slots(L, FULL_CASTER_SLOTS)];
-    case 'druid': return [...(L >= 2 ? [{ key: 'wild_shape', label: 'Forma salvaje', max: 2, recharge: 'short' as const }] : []), ...slots(L, FULL_CASTER_SLOTS)];
-    case 'monk': return L >= 2 ? [{ key: 'ki', label: 'Puntos de ki', max: L, recharge: 'short' }] : [];
-    case 'paladin': return [{ key: 'lay_on_hands', label: 'Imposición de manos (PG)', max: 5 * L, recharge: 'long' }, { key: 'divine_sense', label: 'Sentido divino', max: 1 + cha, recharge: 'long' }, ...slots(L, HALF_CASTER_SLOTS)];
-    case 'ranger': return slots(L, HALF_CASTER_SLOTS);
-    case 'sorcerer': return [...(L >= 2 ? [{ key: 'sorcery_points', label: 'Puntos de hechicería', max: L, recharge: 'long' as const }] : []), ...slots(L, FULL_CASTER_SLOTS)];
-    case 'warlock': return [{ key: 'slot_pact', label: 'espacios de pacto', max: L >= 2 ? 2 : 1, recharge: 'short' }];
-    case 'wizard': return [{ key: 'arcane_recovery', label: 'Recuperación arcana', max: 1, recharge: 'long' }, ...slots(L, FULL_CASTER_SLOTS)];
-    default: return [];
-  }
-}
+export { classResources, type ClassResource } from './levels.js';
 
 export function restState(c: Character): NonNullable<Character['rest']> {
   return (c.rest ??= { hit_dice_used: 0, used: {}, last_long_rest_game_s: null });

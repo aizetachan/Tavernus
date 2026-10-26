@@ -5,7 +5,7 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Engine } from '../engine/engine.js';
-import { rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
+import { rollD20, rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
 import { inventoryDetailed, inventoryView, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
 import type { Character, Id, Npc, Placement, ReactionKind } from '../engine/model.js';
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
@@ -20,7 +20,8 @@ import { finishQuest, giveQuest } from '../engine/quests.js';
 import { attitudeOf, resolveAttack } from '../engine/combat.js';
 import { bodyHolding, canLoot, damageCharacter, healCharacter, isDying, medicineDc, stabilize } from '../engine/death.js';
 import { spendResource } from '../engine/rest.js';
-import { characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
+import { castSpell } from '../engine/levels.js';
+import { ABILITY_ES, armorClass, characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
 import { aEs, descriptorOf, fmtDuration } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
 import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
@@ -183,7 +184,11 @@ export const MASTER_TOOLS: Tool[] = [
   tool('take_rest', 'Descanso del actor cuando la ficción lo pide (le acogen, acampan…): short = 1 h (gasta dados de golpe, recursos de descanso corto), long = 8 h (PG completos, uno cada 24 h). El servidor aplica el tiempo, la seguridad del sitio y las interrupciones; narra lo que devuelva.', {
     kind: enm(['short', 'long'], 'short (1 h) o long (8 h)'),
   }),
-  tool('spend_resource', 'Gasta usos de un recurso de clase del actor (Tomar aliento, Furia, ki, espacios de conjuro…). Las claves están en el contexto del actor. Sin usos, no puede hacerlo.', {
+  tool('cast_spell', 'El actor lanza un conjuro que tiene (lista en su contexto). El servidor comprueba que lo tiene, gasta el espacio (el más bajo que sirva, o slot_level) y tira sus dados; con target_id y ataque de conjuro, tira el ataque contra su CA. Devuelve CD, daño o curación: aplícalos tú con apply_damage, heal o add_condition y narra. Sin espacios o sin el conjuro, no ocurre.', {
+    spell: str('Conjuro: id o nombre (fire_bolt, «Proyectil mágico»)'), slot_level: nnum('Nivel de espacio para lanzarlo más alto; null = el más bajo que sirva'),
+    ritual: { type: ['boolean', 'null'], description: 'Como ritual (10 min más, sin espacio), si el conjuro lo permite; null = no' }, target_id: nstr('Objetivo de un ataque de conjuro (NPC o PJ); null si no ataca'),
+  }),
+  tool('spend_resource', 'Gasta usos de un recurso de clase del actor (Tomar aliento, Furia, ki, Inspiración…). Para conjuros, cast_spell. Las claves están en el contexto del actor. Sin usos, no puede hacerlo.', {
     key: str('Clave del recurso: second_wind, rage, slot_1…'), amount: nnum('Usos (o PG de Imposición de manos); null = 1'),
   }),
   tool('add_condition', 'Añade una condición a un personaje.', {
@@ -290,7 +295,7 @@ export const MASTER_TOOLS: Tool[] = [
 export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
-  'stabilize', 'take_rest', 'spend_resource', 'request_reaction', 'set_npc_order',
+  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order',
 ]);
 
 export const MEMORY_CAP_PER_CHARACTER = 8;
@@ -959,6 +964,35 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     case 'take_rest': {
       const r = engine.restByMaster(actor, s('kind') === 'long' ? 'long' : 'short');
       return 'error' in r ? { error: r.error } : r;
+    }
+    case 'cast_spell': {
+      const r = castSpell(actor, s('spell'), { slot_level: input['slot_level'] == null ? null : Number(input['slot_level']), ritual: input['ritual'] === true }, ctx.rng);
+      if (!r.ok) return { error: r.error };
+      world.touch('characters', actor.id);
+      const sp = r.spell;
+      const out: Record<string, unknown> = {
+        ok: true, spell: sp.name, level: sp.level === 0 ? 'truco' : r.cast_level, ...(r.ritual ? { ritual: 'lanzado como ritual: 10 minutos más, sin espacio' } : {}),
+        ...(r.slot ? { slot: `${r.slot.label}: le quedan ${r.slot.left}` } : {}), effect: sp.text, ...(sp.concentration ? { concentration: true } : {}),
+      };
+      if (sp.save) out['save'] = `salvación de ${ABILITY_ES[sp.save]} CD ${r.save_dc}`;
+      const tgt = input['target_id'] ? s('target_id') : null;
+      if (sp.attack && tgt) {
+        const npc = world.npcs.get(tgt);
+        const pc = world.characters.get(tgt);
+        if (!npc?.stats && !pc) return { error: `objetivo desconocido o sin CA: ${tgt}` };
+        const ac = npc?.stats ? npc.stats.ac : armorClass(world, pc!);
+        const atk = rollD20(r.attack, ac, 'none', ctx.rng);
+        out['attack'] = `${atk.breakdown} contra CA ${ac}: ${atk.success ? (atk.natural === 20 ? 'impacta, crítico (dobla los dados de daño)' : 'impacta') : 'falla'}`;
+        out['hit'] = atk.success === true;
+        (ctx.shown_rolls ??= []).push({ roller_id: actor.id, target_id: tgt, label: `${sp.name} a ${npc?.name ?? pc!.name}`, dice: atk.breakdown, total: atk.total, outcome: atk.success ? `impacta${r.roll && sp.dice?.kind === 'damage' ? `: ${r.roll.total} de daño` : ''}` : 'falla', ...(atk.natural ? { natural: atk.natural } : {}) });
+      } else if (sp.attack) out['attack'] = `ataque de conjuro ${r.attack >= 0 ? '+' : ''}${r.attack}: pásale target_id para tirarlo`;
+      if (r.roll && sp.dice) {
+        const what = sp.dice.kind === 'heal' ? 'curación' : sp.dice.kind === 'temp_hp' ? 'PG temporales' : sp.dice.kind === 'pool' ? (sp.dice.type ?? 'total') : `daño ${sp.dice.type ?? ''}`.trim();
+        out['roll'] = `${what}: ${r.roll.breakdown}`;
+        out['apply'] = sp.dice.kind === 'heal' ? 'aplícalo con heal' : sp.dice.kind === 'damage' ? (sp.attack ? 'si impacta, aplícalo con apply_damage' : sp.save ? 'aplícalo con apply_damage (mitad o nada si supera la salvación, según el conjuro)' : 'aplícalo con apply_damage') : 'resuélvelo al narrar';
+        if (!(sp.attack && tgt)) (ctx.shown_rolls ??= []).push({ roller_id: actor.id, label: `${sp.name} (${what})`, dice: r.roll.breakdown, total: r.roll.total, outcome: null });
+      }
+      return out;
     }
     case 'spend_resource': {
       const r = spendResource(world, actor, s('key'), input['amount'] == null ? 1 : Number(input['amount']));

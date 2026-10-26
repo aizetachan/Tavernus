@@ -94,8 +94,9 @@ describe('creación con SRD', () => {
     expect(c.darkvision).toBe(true);
     expect(c.proficiencies.saves).toEqual(['dex', 'int']);
     expect(c.proficiencies.skills.sort()).toEqual(['acrobatics', 'athletics', 'deception', 'insight', 'investigation', 'perception', 'stealth']);
-    expect(c.passive_perception).toBe(10 + 0 + 2); // SAB 10, competente por raza
-    expect(skillModifier(c, 'stealth')).toBe(3 + 2);
+    expect(c.proficiencies.expert).toEqual(['stealth', 'perception']); // Pericia del pícaro, por defecto: Sigilo y Percepción
+    expect(c.passive_perception).toBe(10 + 0 + 2 * 2); // SAB 10, competente por raza y con pericia
+    expect(skillModifier(c, 'stealth')).toBe(3 + 2 * 2);
     expect(armorClass(engine.world, c)).toBe(11 + 3); // cuero + DES
     expect(c.death_mode).toBe('hardcore');
     const inv = await engine.command(c.id, '/inventory');
@@ -104,12 +105,12 @@ describe('creación con SRD', () => {
     expect(inv).toContain('body: armadura de cuero');
   });
 
-  it('el guerrero recomendado lleva cota de malla y escudo: CA 18', async () => {
+  it('el guerrero recomendado lleva cota de malla y escudo, con el estilo Defensa: CA 19', async () => {
     const { engine } = await bootEngine();
     const { armorClass } = await import('../src/engine/rules.js');
     const r = await engine.createCharacter('u2', 'Bruno');
     if (!r.ok) throw new Error(r.reason);
     expect(r.character.hp_max).toBe(12); // d10 + CON 14 (13+1 humano)
-    expect(armorClass(engine.world, r.character)).toBe(16 + 0 + 2);
+    expect(armorClass(engine.world, r.character)).toBe(16 + 0 + 2 + 1);
   });
 });

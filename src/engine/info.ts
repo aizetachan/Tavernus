@@ -20,9 +20,11 @@ import type { Character, Id } from './model.js';
 import { positionOf } from './movement.js';
 import { descriptorOf, whereAmI } from './narrate.js';
 import { perceive } from './perception.js';
-import { hitDiceLeft, classResources, restState } from './rest.js';
+import { hitDiceLeft } from './rest.js';
 import { ABILITY_ES, SKILLS, armorClass, modifierFor, saveModifier, skillModifier, type Ability, type CheckKind } from './rules.js';
-import { classById } from '../data/srd/index.js';
+import { casterOf, castableSpells, choiceOptions, classChoices, classFeatures, classResources, nextLevelXp, pendingChoices, preparedCount, rangedStyleBonus, resourceLeft, spellGroups, spellStats, spellsOf } from './levels.js';
+import { progressionOf } from '../data/srd/progression.js';
+import { spellById } from '../data/srd/spells.js';
 
 export interface InfoAnswer { title: string; lines: string[] }
 
@@ -85,10 +87,12 @@ export function answerInfo(engine: Engine, c: Character, intent: InfoIntent): In
         lines: [
           mine.length ? mine.map((k) => `${SKILLS[k]!.es} ${sign(skillModifier(c, k))}${c.proficiencies.expert.includes(k) ? ' (pericia)' : ''}`).join(' · ') : 'Ninguna con competencia.',
           'Las demás, con el modificador de su característica.',
+          ...(classFeatures(c).length ? [`Rasgos de clase: ${classFeatures(c).map((f) => f.name).join(', ')} (pregunta «¿qué sé hacer?»).`] : []),
         ],
       };
     }
-    case 'spells': return spells(engine, c);
+    case 'spells': return spells(c);
+    case 'features': return features(c);
     case 'inventory': {
       const v = inventoryView(w, c.id);
       const eq = Object.values(v.equipped).filter(Boolean);
@@ -124,7 +128,18 @@ export function answerInfo(engine: Engine, c: Character, intent: InfoIntent): In
       };
     }
     case 'armor': return { title: 'Clase de Armadura', lines: [`CA ${armorClass(w, c)}: para darte, un ataque tiene que igualarla o superarla.`] };
-    case 'level': return { title: 'Nivel', lines: [`Nivel ${c.level} · ${c.xp} PX.`] };
+    case 'level': {
+      const next = nextLevelXp(c);
+      const pending = pendingChoices(c);
+      return {
+        title: 'Nivel',
+        lines: [
+          `Nivel ${c.level} · ${c.xp} PX · competencia ${sign(proficiencyBonus(c.level))}.`,
+          next === null ? 'Estás en el nivel más alto.' : `Nivel ${c.level + 1} a los ${next} PX: te faltan ${next - c.xp}. Se ganan venciendo enemigos y cumpliendo misiones; al llegar, subes solo y un aviso te dice qué ganas.`,
+          ...(pending.length ? [`Por elegir en la Hoja: ${pending.map((ch) => ch.name).join(', ')}.`] : []),
+        ],
+      };
+    }
     case 'quests': return quests(engine, c);
     case 'people': return people(engine, c);
     case 'where': return { title: 'Dónde estás', lines: [whereAmI(w, engine.clock, c, engine.nowFor(c))] };
@@ -133,29 +148,60 @@ export function answerInfo(engine: Engine, c: Character, intent: InfoIntent): In
   }
 }
 
-/** Espacios de conjuro y recursos de clase; con qué característica lanza (SRD). */
-function spells(engine: Engine, c: Character): InfoAnswer {
-  const ab = classById(c.class_id)?.spellcasting;
+/** Conjuros que puede lanzar hoy, por nivel, con sus espacios y su CD; el libro del mago aparte. Sale de levels.ts. */
+function spells(c: Character): InfoAnswer {
   const res = classResources(c);
-  const used = restState(c).used;
-  const left = (key: string, max: number) => Math.max(0, max - (used[key] ?? 0));
   const slots = res.filter((r) => r.key.startsWith('slot_'));
   const others = res.filter((r) => !r.key.startsWith('slot_'));
-  if (!ab || !slots.length) {
-    return { title: 'Conjuros', lines: [`No lanzas conjuros: tu clase (${c.class_name}) no tiene espacios de conjuro.`, ...others.map((r) => `${r.label}: ${left(r.key, r.max)} de ${r.max}.`)] };
+  const cd = casterOf(c);
+  const st = spellStats(c);
+  if (!cd || !st) {
+    const later = progressionOf(c.class_id)?.caster;
+    return {
+      title: 'Conjuros',
+      lines: [
+        later ? `Aún no lanzas conjuros: tu clase (${c.class_name}) empieza a nivel ${later.from}.` : `No lanzas conjuros: tu clase (${c.class_name}) no tiene. Lo tuyo son tus rasgos: pregunta «¿qué sé hacer?».`,
+        ...others.map((r) => `${cap(r.label)}: ${resourceLeft(c, r)} de ${r.max}.`),
+      ],
+    };
   }
-  const mod = abilityModifier(c.abilities[ab]) + proficiencyBonus(c.level);
-  const book = engine.world.itemsCarriedBy(c.id).map((i) => engine.world.itemDef(i.item_id))
-    .find((d) => [d.name, ...d.aliases].some((n) => /conjur|hechiz|grimorio|spellbook/i.test(n)));
+  const groups = spellGroups(c);
+  const book = cd.mode === 'book' ? spellsOf(c).known.map((id) => spellById(id)!).filter(Boolean) : [];
+  const rituals = book.filter((s) => s.ritual && !castableSpells(c).includes(s.id));
+  const prepNote = cd.prepared ? ` · preparados ${spellsOf(c).prepared.length} de ${preparedCount(c)}` : '';
   return {
     title: 'Conjuros',
     lines: [
-      ...slots.map((r) => `${cap(r.label)}: ${left(r.key, r.max)} de ${r.max} (vuelven con un descanso ${r.recharge === 'short' ? 'corto' : 'largo'}).`),
-      `Lanzas con ${ABILITY_ES[ab]}: CD de salvación ${8 + mod}, ataque de conjuro ${d20(mod)}.`,
-      ...others.map((r) => `${cap(r.label)}: ${left(r.key, r.max)} de ${r.max}.`),
-      `La hoja no apunta qué conjuros conoces${book ? ` (tu ${book.name} va contigo)` : ''}: al lanzar uno, di cuál y el narrador lo resuelve.`,
+      `Lanzas con ${ABILITY_ES[st.ability]}: CD de salvación ${st.save_dc}, ataque de conjuro ${d20(st.attack)}${prepNote}.`,
+      ...slots.map((r) => `${cap(r.label)}: ${resourceLeft(c, r)} de ${r.max} (vuelven con un descanso ${r.recharge === 'short' ? 'corto' : 'largo'}).`),
+      ...groups.map((g) => `**${g.label}:** ${[...g.spells.map((x) => x.name), ...g.always.map((x) => `${x.name} (siempre)`)].join(', ')}.`),
+      ...(book.length ? [`En tu libro (${book.length}): ${book.map((x) => x.name).join(', ')}.${rituals.length ? ` Sin prepararlos, como ritual: ${rituals.map((x) => x.name).join(', ')}.` : ''}`] : []),
+      ...others.map((r) => `${cap(r.label)}: ${resourceLeft(c, r)} de ${r.max}.`),
+      `Para lanzar uno, dilo al actuar («lanzo ${groups.find((g) => g.level > 0)?.spells[0]?.name ?? groups[0]?.spells[0]?.name ?? 'un conjuro'} a…»). Qué hace cada uno y cuáles preparas, en la Hoja.`,
     ],
   };
+}
+
+/** Lo que sabe hacer: rasgos de clase (con usos), lo elegido, lo que tiene pendiente y un resumen de conjuros y habilidades. */
+function features(c: Character): InfoAnswer {
+  const res = new Map(classResources(c).map((r) => [r.key, r]));
+  const lines = classFeatures(c).map((f) => {
+    const r = f.resource ? res.get(f.resource) : undefined;
+    return `**${f.name}**${r ? ` (${resourceLeft(c, r)} de ${r.max})` : ''}: ${f.text}`;
+  });
+  for (const ch of classChoices(c)) {
+    const picks = c.picks?.[ch.key];
+    if (!picks || ch.kind === 'asi') continue;
+    const opts = choiceOptions(c, ch);
+    lines.push(`**${ch.name}:** ${picks.map((id) => opts.find((o) => o.id === id)?.name ?? id).join(', ')}.`);
+  }
+  const pending = pendingChoices(c);
+  if (pending.length) lines.push(`Por elegir en la Hoja: ${pending.map((ch) => ch.name).join(', ')}.`);
+  const groups = spellGroups(c);
+  if (groups.length) lines.push(`Conjuros: ${groups.map((g) => `${g.spells.length + g.always.length} ${g.level === 0 ? 'trucos' : `de nivel ${g.level}`}`).join(', ')} (pregunta «¿qué hechizos tengo?»).`);
+  const skills = Object.keys(SKILLS).filter((k) => c.proficiencies.skills.includes(k) || c.proficiencies.expert.includes(k));
+  if (skills.length) lines.push(`Habilidades: ${skills.map((k) => `${SKILLS[k]!.es}${c.proficiencies.expert.includes(k) ? ' (pericia)' : ''}`).join(', ')}.`);
+  return { title: `Lo que sabes hacer · ${c.class_name} ${c.level}`, lines: lines.length ? lines : ['Nada especial todavía.'] };
 }
 
 /** Las del Diario, como las ordena él: primero las que lleva en curso y luego las disponibles, con lo que toca ahora. */
@@ -235,5 +281,5 @@ function attackLine(engine: Engine, c: Character): string {
   const str = abilityModifier(c.abilities.str), dex = abilityModifier(c.abilities.dex);
   const mod = wpn.ranged ? dex : wpn.finesse ? Math.max(str, dex) : str;
   const dmg = mod === 0 ? wpn.damage : `${wpn.damage} ${mod < 0 ? '−' : '+'} ${Math.abs(mod)}`;
-  return `Ataque con ${wpn.name}: ${d20(mod + proficiencyBonus(c.level))} · daño ${dmg} (${DAMAGE_ES[wpn.damage_type] ?? wpn.damage_type}).`;
+  return `Ataque con ${wpn.name}: ${d20(mod + proficiencyBonus(c.level) + (wpn.ranged ? rangedStyleBonus(c) : 0))} · daño ${dmg} (${DAMAGE_ES[wpn.damage_type] ?? wpn.damage_type}).`;
 }

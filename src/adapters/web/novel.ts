@@ -467,11 +467,11 @@ export const NOVEL_JS = String.raw`
   /**
    * Aviso de sistema (notice.ts), como «Fulano ha salido del grupo» en WhatsApp: una línea centrada sin burbuja.
    * Si lleva enlace, abre su pestaña (el Diario); si es una tirada, el dado del botón cae en lo que ha salido.
-   * Los de misiones (alta, paso, cierre) van destacados, con el porqué debajo.
+   * Los de misiones (alta, paso, cierre) van destacados, con el porqué debajo; la subida de nivel, con lo que gana.
    */
   function addNotice(n, other) {
     var div = document.createElement('div');
-    div.className = 'msg notice' + (n.tone ? ' tone-' + n.tone : '') + (n.quest ? ' quest q-' + n.quest.event : '');
+    div.className = 'msg notice' + (n.tone ? ' tone-' + n.tone : '') + (n.quest ? ' quest q-' + n.quest.event : '') + (n.level ? ' quest q-level' : '');
     div.setAttribute('role', 'status');
     var s = document.createElement('span');
     s.textContent = n.text;
@@ -487,6 +487,12 @@ export const NOVEL_JS = String.raw`
       why.className = 'why'; why.textContent = n.quest.why;
       div.appendChild(why);
     }
+    // Subida de nivel: lo que gana, una línea por apartado.
+    if (n.level) n.level.gains.forEach(function (g) {
+      var li = document.createElement('small');
+      li.className = 'why'; li.textContent = g;
+      div.appendChild(li);
+    });
     log.appendChild(div);
     if (!other) diceShown(n.text);
     scroll();

@@ -5,6 +5,7 @@
 
 import { abilityModifier, proficiencyBonus, rollD20, type Advantage, type CheckResult, type Rng } from './dice.js';
 import type { Character } from './model.js';
+import { effectsOf } from './levels.js';
 
 export type Ability = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 
@@ -75,12 +76,17 @@ export function characterCheck(c: Character, kind: CheckKind, key: string, dc: n
   return { ...rollD20(modifier, dc, advantage, rng), label };
 }
 
-/** Clase de Armadura (SPEC §4.2): armadura equipada + DES (con tope) + escudo en mano. */
+/** Clase de Armadura (SPEC §4.2): armadura equipada + DES (con tope) + escudo en mano, y lo que sumen los rasgos de clase. */
 export function armorClass(world: { itemsIn: (p: { type: 'character'; id: string; slot: { kind: 'equipped'; slot: 'body' } | { kind: 'hand'; which: 'main' | 'off' | 'both' } }) => { item_id: string }[]; itemDef: (id: string) => { armor?: { ac_base: number; dex_max: number | null }; shield_bonus?: number } }, c: Character): number {
   const dex = abilityModifier(c.abilities.dex);
   const body = world.itemsIn({ type: 'character', id: c.id, slot: { kind: 'equipped', slot: 'body' } })[0];
   const armor = body ? world.itemDef(body.item_id).armor : undefined;
   let ac = armor ? armor.ac_base + (armor.dex_max === null ? dex : Math.min(dex, armor.dex_max)) : 10 + dex;
+  // Rasgos de clase (levels.ts): defensa sin armadura, escamas dracónicas, estilo Defensa.
+  for (const e of effectsOf(c)) {
+    if (!armor && e.unarmored_ac) ac = Math.max(ac, e.unarmored_ac.base + dex + e.unarmored_ac.add.reduce((a, k) => a + abilityModifier(c.abilities[k]), 0));
+    if (armor && e.armored_ac) ac += e.armored_ac;
+  }
   for (const which of ['main', 'off', 'both'] as const) {
     for (const i of world.itemsIn({ type: 'character', id: c.id, slot: { kind: 'hand', which } })) ac += world.itemDef(i.item_id).shield_bonus ?? 0;
   }
