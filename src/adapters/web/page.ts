@@ -285,7 +285,8 @@ export const PAGE = String.raw`<!doctype html>
   form button[type=submit] svg.i { width: 16px; height: 16px; }
   /* El cofre: solo el icono, sin fondo ni borde; abierto, en dorado. */
   #cube { position: relative; width: 36px; height: 36px; color: #c9c1b4; }
-  #cube svg.i { width: 22px; height: 22px; }
+  /* A 22 px, el trazo baja a 1,5 para que se vea igual de fino que el de los iconos de 18 px (1,8). */
+  #cube svg.i { width: 22px; height: 22px; stroke-width: 1.5; }
   #cube:hover:not(:disabled), #cube.on { background: transparent; color: var(--accent); }
   #cube.new::after { content: ''; position: absolute; top: 4px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
 
@@ -904,7 +905,7 @@ ${FIGHT_STYLE}
   #gear-menu .gm-paint small { display: block; font-size: 12px; color: var(--muted); }
   /* Ajustes (móvil): como el cofre, solo el icono y del mismo tamaño. */
   #gear { width: 36px; height: 36px; color: #c9c1b4; }
-  #gear svg.i { width: 22px; height: 22px; }
+  #gear svg.i { width: 22px; height: 22px; stroke-width: 1.5; }
   #gear:hover:not(:disabled), #gear.on { background: transparent; color: var(--accent); }
   #gear .x, #gear.on .g { display: none; }
   #gear.on .x { display: block; }
