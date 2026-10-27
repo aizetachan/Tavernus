@@ -169,12 +169,14 @@ export const TTS_STYLE = String.raw`
      (voz del navegador) o con el volumen real del audio (voz en la nube). */
   .msg .nv-av.tts-voice, .msg.tts-able > .nv-av.tts-voice:hover { --lvl: 0; box-shadow: 0 0 0 2px var(--accent), 0 0 0 calc(2px + var(--lvl) * 9px) rgba(233,169,78, calc(.12 + var(--lvl) * .38)); transition: none; }
   @media (prefers-reduced-motion: reduce) { .nv-av.tts-voice { box-shadow: 0 0 0 2px var(--accent); } }
-  /* Mientras llega el audio (la voz en la nube tarda): el borde es un arco ámbar que gira; al sonar, vuelve a latir. */
-  .msg .nv-av.tts-wait, .msg.tts-able > .nv-av.tts-wait:hover { box-shadow: 0 0 0 2px rgba(233,169,78,.18); }
-  /* El avatar recorta lo que sobresale (overflow: hidden): el arco va por dentro del borde, encima de la foto. */
-  .msg .nv-av.tts-wait::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: 50%; border: 2.5px solid transparent; border-top-color: var(--accent); border-right-color: var(--accent); animation: tts-wait .8s linear infinite; pointer-events: none; }
-  @keyframes tts-wait { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .msg .nv-av.tts-wait::after { animation-duration: 2.4s; } }
+  /* Mientras llega el audio (la voz en la nube tarda): el borde se va llenando en ámbar, como una barra de carga,
+     según lo que se calcula que falta (--load, 0-1, lo mueve el script); lleno, empieza la voz y vuelve a latir.
+     El avatar recorta lo que sobresale (overflow: hidden): el anillo va por dentro del borde, encima de la foto. */
+  .msg .nv-av.tts-wait, .msg.tts-able > .nv-av.tts-wait:hover { box-shadow: none; }
+  .msg .nv-av.tts-wait::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: 50%; pointer-events: none;
+    background: conic-gradient(var(--accent) calc(var(--load, 0) * 360deg), rgba(233,169,78,.2) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px)); }
   .msg .who .tts-say { margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; margin-top: -6px; margin-bottom: -6px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
   .msg .who .tts-say:hover { background: var(--hover); color: var(--text); }
   .msg.tts-on .who .tts-say { color: var(--accent); background: var(--accent-tint); }
@@ -267,11 +269,46 @@ export const TTS_SCRIPT = String.raw`<script>
     while (n && n.classList.contains('cont')) n = n.previousElementSibling;
     return n && n.classList.contains('row') ? n.querySelector('.nv-av') : null;
   }
-  /** Cargando la voz: el borde del avatar gira hasta que empieza a sonar. */
-  function waiting(on) { if (voiceAv) { voiceAv.classList.toggle('tts-wait', on); voiceAv.classList.toggle('tts-voice', !on); } }
+  /*
+   * Cargando la voz: el borde del avatar se llena según lo que se calcula que tarda (un fijo más un tanto por letra,
+   * aprendidos de las lecturas anteriores en este navegador). Llega al 90 % a la hora prevista y, si tarda más, sigue
+   * despacio sin llegar al final; al empezar la voz se completa y el borde vuelve a latir.
+   */
+  var load = null;
+  var speed = (function () { try { var v = JSON.parse(store('tavernus.tts.speed') || 'null'); if (v && v.base > 0 && v.per > 0) return v; } catch (e) {} return { base: 1500, per: 12 }; })();
+  function waiting(on, chars) {
+    if (load) { cancelAnimationFrame(load.raf); load = null; }
+    var av = voiceAv;
+    if (!av) return;
+    if (!on) { av.classList.remove('tts-wait'); av.classList.add('tts-voice'); av.style.removeProperty('--load'); return; }
+    var est = speed.base + speed.per * (chars || 0), t0 = Date.now();
+    av.classList.remove('tts-voice'); av.classList.add('tts-wait'); av.style.setProperty('--load', '0');
+    var me = load = { av: av, t0: t0, chars: chars || 0, raf: 0 };
+    (function tick() {
+      if (load !== me) return;
+      var t = Date.now() - t0, p = t < est ? 0.9 * t / est : 0.9 + 0.08 * (1 - Math.exp(-(t - est) / est));
+      av.style.setProperty('--load', p.toFixed(3));
+      me.raf = requestAnimationFrame(tick);
+    })();
+  }
+  /** Ya suena: el anillo se completa un momento y se aprende lo que ha tardado (media móvil, por letra). */
+  function loaded() {
+    var me = load;
+    if (!me) { waiting(false); return; }
+    cancelAnimationFrame(me.raf); load = null;
+    var t = Date.now() - me.t0;
+    if (t > 300 && me.chars > 0) {
+      var per = Math.max(2, Math.min(80, (t - speed.base * 0.5) / me.chars));
+      speed = { base: Math.round(speed.base * 0.8 + Math.min(4000, t * 0.5) * 0.2), per: Math.round((speed.per * 0.7 + per * 0.3) * 10) / 10 };
+      store('tavernus.tts.speed', JSON.stringify(speed));
+    }
+    me.av.style.setProperty('--load', '1');
+    setTimeout(function () { if (!load && voiceAv === me.av && playing) waiting(false); }, 180);
+  }
   function setVoiceAv(av) {
     if (voiceAv === av) return;
-    if (voiceAv) { voiceAv.classList.remove('tts-voice', 'tts-wait'); voiceAv.style.removeProperty('--lvl'); }
+    if (voiceAv) { voiceAv.classList.remove('tts-voice', 'tts-wait'); voiceAv.style.removeProperty('--lvl'); voiceAv.style.removeProperty('--load'); }
+    if (load) { cancelAnimationFrame(load.raf); load = null; }
     voiceAv = av;
     if (av) av.classList.add('tts-voice');
   }
@@ -438,7 +475,7 @@ export const TTS_SCRIPT = String.raw`<script>
     }
     var got = audioFor(p.div, p.read);
     if (queue[0]) audioFor(queue[0]);
-    waiting(true);
+    waiting(true, stepsOf(p.div, p.read)[0].cloud.reduce(function (n, x) { return n + x.text.length; }, 0));
     got.then(function (blob) {
       if (playing !== p) return;
       if (audio.src) URL.revokeObjectURL(audio.src);
@@ -449,7 +486,7 @@ export const TTS_SCRIPT = String.raw`<script>
       hookAnalyser();
       if (actx && actx.state === 'suspended') actx.resume();
       return audio.play();
-    }).then(function () { if (playing === p) waiting(false); }).catch(function (e) {
+    }).then(function () { if (playing === p) loaded(); }).catch(function (e) {
       if (playing !== p) return;
       waiting(false);
       if (e && e.name === 'NotAllowedError') { hint('Toca la página una vez para que el navegador deje reproducir audio.'); stop(); return; }
