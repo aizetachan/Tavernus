@@ -243,8 +243,8 @@ export const PAGE = String.raw`<!doctype html>
   .msg.error .body { color: var(--error); }
   .decisive { display: inline-flex; gap: 6px; margin-top: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(255,107,94,.12); color: #ff9d94; font-size: 13px; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .actions button, .chips button { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px; background: rgba(20,22,23,.9); color: #e6c98a; font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: 0 1px 1px rgba(0,0,0,.4); }
-  .actions button:hover:not(:disabled), .chips button:hover:not(:disabled) { background: #22262a; }
+  .actions button, .chat-acts > button { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px; background: rgba(20,22,23,.9); color: #e6c98a; font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: 0 1px 1px rgba(0,0,0,.4); }
+  .actions button:hover:not(:disabled), .chat-acts > button:hover:not(:disabled) { background: #22262a; }
   .actions button.roll { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 600; }
   /* Ilustración de la escena: dentro del chat; un clic la abre en grande. */
   .msg.scene { width: 100%; margin: 0; }
@@ -266,9 +266,12 @@ export const PAGE = String.raw`<!doctype html>
 
   /* Redacción: atajos, cuadro de texto, micrófono y pincel, el cubo y Enviar. */
   .compose { position: relative; z-index: 3; flex: none; background: var(--chat); }
-  .chips { display: flex; gap: 8px; padding: 8px max(16px, calc((100% - 980px) / 2)) 10px; overflow-x: auto; scrollbar-width: none; }
-  .chips button { border-color: rgba(255,255,255,.1); color: #b8b1a6; font-family: var(--mono); font-size: 12px; letter-spacing: 0; }
-  body.drawer-open .chips { display: none; }
+  /* Encima del cuadro: cómo va lo que escribes (Hacer / Decir) y, más adelante, otros modos del chat. Los comandos
+     ya no se ven: salen al escribir «/» (#slash). Sin nada visible, la fila no ocupa sitio. */
+  .chat-acts { display: flex; align-items: center; gap: 8px; padding: 8px max(16px, calc((100% - 980px) / 2)) 0; }
+  .chat-acts:not(:has(> :not([hidden]))) { display: none; }
+  .chat-acts > button { border-color: rgba(255,255,255,.1); color: #b8b1a6; font-size: 12.5px; }
+  body.drawer-open .chat-acts { display: none; }
   /* Al ancho del hilo (#log): el campo y sus botones no ocupan toda la pantalla. */
   form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px max(24px, calc((100% - 980px) / 2)); background: var(--panel); border-top: 1px solid var(--sep); }
   form input { flex: 1; min-width: 0; height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--control); outline: none; font-size: 15px; }
@@ -586,7 +589,7 @@ export const PAGE = String.raw`<!doctype html>
     #party button { width: 28px; height: 28px; }
     #log { padding: 12px 10px 8px; }
     #thinking { padding: 0 12px; }
-    .chips { padding: 8px 12px; }
+    .chat-acts { padding: 8px 12px 0; }
     form { padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) 12px; }
     form input { border-radius: 21px; }
     #cube-scrim { position: absolute; inset: 0; z-index: 24; display: block; border: 0; background: rgba(5,6,6,.6); }
@@ -647,10 +650,10 @@ ${FIGHT_STYLE}
   .sfx.on > .sfx-toggle, .tts > button.on { background: var(--accent-tint); }
   .tts-pop, .sfx-pop { top: 44px; border-radius: 16px; background: var(--bubble); box-shadow: var(--window-shadow); }
   /* Hacer / Decir: lo que escribes lo hace tu personaje (al narrador) o lo dice tal cual (a los demás, sin narrador). */
-  form button.mode { width: auto; min-width: 58px; white-space: nowrap; height: 32px; padding: 0 10px; border-radius: 16px; font: 600 12.5px/1 var(--sans); letter-spacing: 0; background: var(--control); color: #b8b1a6; }
-  form button.mode[hidden] { display: none; }
-  form button.mode.say { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
-  form button.mode .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
+  .chat-acts button.mode { border: 0; width: auto; min-width: 58px; white-space: nowrap; height: 32px; padding: 0 10px; border-radius: 16px; font: 600 12.5px/1 var(--sans); letter-spacing: 0; background: var(--control); color: #b8b1a6; }
+  .chat-acts button.mode[hidden] { display: none; }
+  .chat-acts button.mode.say { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
+  .chat-acts button.mode .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
   form.say input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
   /* «Responder» a un mensaje: su frase citada encima del cuadro, como en WhatsApp; la ✕ deja de responder. */
   .quote { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px max(24px, calc((100% - 980px) / 2)) 0; background: var(--panel); border-top: 1px solid var(--sep); }
@@ -705,7 +708,7 @@ ${FIGHT_STYLE}
   body.boot aside, body.boot .chat-head, body.boot form, body.boot #play, body.boot .compose,
   body.entered aside, body.entered .chat-head, body.entered form, body.entered #play, body.entered .compose { background-color: #000; box-shadow: none; }
   body.boot aside, body.boot .chat-head, body.boot form, body.boot #play, body.boot .compose { transition: none; }
-  body.boot #log, body.boot #thinking, body.boot .chips { opacity: 0; }
+  body.boot #log, body.boot #thinking, body.boot .chat-acts { opacity: 0; }
   body.boot .side-head, body.boot .side-scroll > *, body.boot .chat-head > * { opacity: 0; }
   /* Llegada desde el menú: la página aparece desde negro. */
   body::before { content: ''; position: fixed; inset: 0; z-index: 100; background: #000; pointer-events: none; animation: from-black .7s ease 1.2s both; }
@@ -722,7 +725,7 @@ ${FIGHT_STYLE}
   body.entered #near { animation-delay: .53s; }
   body.entered #quest { animation-delay: .63s; }
   body.entered .chat-head > * { animation: enter-fade .45s ease .25s both; }
-  body.entered .chips { animation: enter-fade .45s ease .85s both; }
+  body.entered .chat-acts { animation: enter-fade .45s ease .85s both; }
   body.boot form > button { opacity: 0; }
   body.entered form > button { animation: enter-fade .35s ease both; }
   body.entered form > button:nth-of-type(1) { animation-delay: 0.68s; }
@@ -743,24 +746,11 @@ ${FIGHT_STYLE}
   body.entered #near .sec-b > .prow:nth-child(8) { animation-delay: 1.06s; }
   body.entered #quest .sec-t { animation-delay: 1.1s; }
   body.entered #quest .sec-b > .prow { animation-delay: 1.16s; }
-  body.entered .chips { animation: none; }
-  body.boot .chips button { opacity: 0; }
-  body.entered .chips button { animation: enter-pop .5s cubic-bezier(.2,.8,.25,1) both; }
-  body.entered .chips button:nth-child(1) { animation-delay: 0.95s; }
-  body.entered .chips button:nth-child(2) { animation-delay: 1.00s; }
-  body.entered .chips button:nth-child(3) { animation-delay: 1.05s; }
-  body.entered .chips button:nth-child(4) { animation-delay: 1.10s; }
-  body.entered .chips button:nth-child(5) { animation-delay: 1.15s; }
-  body.entered .chips button:nth-child(6) { animation-delay: 1.20s; }
-  body.entered .chips button:nth-child(7) { animation-delay: 1.25s; }
-  body.entered .chips button:nth-child(8) { animation-delay: 1.30s; }
-  body.entered .chips button:nth-child(9) { animation-delay: 1.35s; }
-  body.entered .chips button:nth-child(10) { animation-delay: 1.40s; }
   @media (prefers-reduced-motion: reduce) {
     .inwrap, .chat-body, #log { transition: none; }
     body.boot form input { animation: none; }
     body::before { animation-duration: .01s; }
-    body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chips, body.entered .chips button, body.entered form > button, body.entered #card .stats-btn, body.entered #card .hpline, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
+    body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chat-acts, body.entered form > button, body.entered #card .stats-btn, body.entered #card .hpline, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
   }
   /* Respuestas del sistema (consultas, errores, notas del pincel): la misma piel que los avisos, un punto más
      legible porque las ha pedido el jugador; rojo si algo falla. */
@@ -856,10 +846,68 @@ ${FIGHT_STYLE}
     .msg.scene, .msg.moment, #log > .actions { margin-left: 36px; }
     form .mic, form .brush { width: 38px; }
   }
+  /* Comandos: escribir «/» en el cuadro abre este menú, con un buscador; ↑ ↓ eligen, Intro lo lanza, Esc lo cierra. */
+  form { position: relative; }
+  #slash { position: absolute; left: max(24px, calc((100% - 980px) / 2)); bottom: calc(100% + 6px); z-index: 26; width: min(420px, calc(100% - 24px));
+    max-height: 340px; overflow-y: auto; padding: 6px; border-radius: 14px; background: var(--bubble); border: 1px solid var(--line); box-shadow: var(--window-shadow); }
+  #slash[hidden] { display: none; }
+  #slash .slash-q { display: flex; align-items: center; gap: 8px; height: 38px; margin: 0 0 4px; padding: 0 10px; border-radius: 10px; background: var(--control); color: var(--faint); }
+  #slash .slash-q input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; outline: none; color: var(--text); font-size: 14px; box-shadow: none; }
+  #slash .slash-q svg.i { width: 15px; height: 15px; }
+  #slash .slash-list button { display: flex; align-items: baseline; gap: 10px; width: 100%; min-height: 38px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--text); text-align: left; }
+  #slash .slash-list button:hover, #slash .slash-list button.on { background: var(--hover); }
+  #slash .slash-list code { flex: none; min-width: 92px; font: 500 13px/1.3 var(--mono); color: var(--accent); }
+  #slash .slash-list span { font-size: 13px; line-height: 1.35; color: var(--muted); }
+  #slash .slash-none { padding: 10px; font-size: 13px; color: var(--faint); }
+  /* Ajustes (solo en el móvil): engranaje a la izquierda del cuadro; sonido, narrador y generar imagen en un panel. */
+  #gear, #gear-menu, #cube-menu .m-only { display: none; }
+  #gear-menu { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 8px); z-index: 26; max-height: min(70vh, 560px); overflow-y: auto; padding: 10px;
+    border-radius: 18px; background: var(--bubble); border: 1px solid var(--line); box-shadow: var(--window-shadow); }
+  #gear-menu h3 { margin: 12px 6px 4px; font: 600 11px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  #gear-menu section:has(> :only-child) { display: none; }
+  #gear-menu .tts-pop, #gear-menu .sfx-pop { display: block !important; position: static; width: auto; margin: 0; padding: 6px; border: 0; border-radius: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  #gear-menu .gm-paint { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 10px; border: 0; border-radius: 12px; background: var(--control); color: var(--text); text-align: left; }
+  #gear-menu .gm-paint[hidden] { display: none; }
+  #gear-menu .gm-paint .bub { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: var(--accent-tint); color: var(--accent); }
+  #gear-menu .gm-paint b { display: block; font-size: 14px; font-weight: 600; }
+  #gear-menu .gm-paint small { display: block; font-size: 12px; color: var(--muted); }
+  #gear.on { background: var(--accent-tint); color: var(--accent); }
+  #cube-menu .bub.home { background: #3a3f44; color: var(--text); }
+  #cube-menu .bub.side { background: #9bb8ef; color: #0f1a2e; }
+  @media (max-width: 820px) {
+    /* Abajo: ajustes · cuadro · Enviar · mochila, pegada al borde para que su menú suba en columna sobre ella. */
+    #gear { display: grid; order: 0; }
+    form .inwrap { order: 1; }
+    form button[type=submit] { order: 2; }
+    #cube { order: 3; }
+    form .brush { display: none !important; }
+    #gear-menu:not([hidden]) { display: block; }
+    #cube-menu { right: 8px; }
+    #cube-menu .m-only { display: flex; }
+    /* Arriba ya no va el botón del panel (está en la mochila) ni el sonido (está en los ajustes); parar la voz, sí. */
+    #to-side, .chat-head .sfx, .chat-head .tts > .tts-auto, .chat-head .tts > .tts-more { display: none; }
+    .chat-head { padding-left: 12px; }
+    /* Letra del hilo algo menor en el móvil; el prólogo, bastante más contenido. */
+    .msg.row .body { font-size: 14px; line-height: 1.45; }
+    .msg.row .who { font-size: 12px; }
+    .msg.row .lead { font-size: 13.5px; }
+    .msg.notice, .msg.system .body { font-size: 12px; }
+    .msg.info .body { font-size: 13px; }
+    .actions button { height: 30px; padding: 0 12px; font-size: 12.5px; }
+    .msg.chapter { margin: 10px 0 8px; padding: 14px 14px 6px; }
+    .msg.chapter .who { font-size: 10px; letter-spacing: .2em; }
+    .msg.chapter h2 { margin: 6px 0 10px; font-size: 18px; }
+    .msg.chapter h2::after { width: 36px; margin-top: 10px; }
+    .msg.chapter .body { font-size: 13.5px; line-height: 1.55; }
+    .msg.chapter .body p { margin-bottom: .7em; text-indent: 1.2em; }
+    .msg.chapter.prologue .body p:first-child::first-letter { font-size: 2.9em; padding: 4px 6px 0 0; }
+    #slash { left: 8px; width: calc(100% - 16px); }
+  }
 </style>
 </head>
 <body class="boot">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></symbol>
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
@@ -947,14 +995,21 @@ ${FIGHT_STYLE}
   <div class="compose">
     <div id="round" class="round-banner" hidden role="status"></div>
     <div id="typing" class="typing" hidden aria-live="polite"></div>
-    <div class="chips">
-      <button data-cmd="look">/look</button><button data-cmd="where">/where</button><button data-cmd="who">/who</button>
-      <button data-cmd="inventory">/inventory</button><button data-cmd="recap">/recap</button><button data-cmd="time">/time</button>
-      <button data-cmd="tablon">/tablon</button><button data-cmd="progress">/progress</button>
+    <div class="chat-acts" id="chat-acts">
+      <button type="button" id="saymode" class="mode" hidden aria-pressed="false" title="Hacer: el narrador cuenta lo que haces. Decir: tu personaje lo dice tal cual, al instante y sin narrador.">Hacer</button>
     </div>
     <div id="quote" class="quote" hidden><div><b></b><span></span></div><button type="button" aria-label="No responder" title="No responder"><svg class="i"><use href="#i-x"/></svg></button></div>
     <form id="form" autocomplete="off">
-      <button type="button" id="saymode" class="mode" hidden aria-pressed="false" title="Hacer: el narrador cuenta lo que haces. Decir: tu personaje lo dice tal cual, al instante y sin narrador.">Hacer</button>
+      <button type="button" id="gear" aria-haspopup="dialog" aria-expanded="false" aria-controls="gear-menu" title="Ajustes: sonido, narrador e imagen" aria-label="Ajustes: sonido, narrador e imagen"><svg class="i"><use href="#i-gear"/></svg></button>
+      <div id="slash" role="listbox" aria-label="Comandos" hidden>
+        <label class="slash-q"><svg class="i"><use href="#i-search"/></svg><input id="slash-q" placeholder="Buscar comando…" aria-label="Buscar comando" autocomplete="off"></label>
+        <div class="slash-list"></div>
+      </div>
+      <div id="gear-menu" role="dialog" aria-label="Ajustes" hidden>
+        <button type="button" class="gm-paint" hidden><span class="bub"></span><span><b>Generar imagen</b><small>Ilustra este momento de la partida</small></span></button>
+        <section data-slot="sfx"><h3>Sonido y música</h3></section>
+        <section data-slot="tts"><h3>Narrador</h3></section>
+      </div>
       <span class="inwrap"><input id="input" placeholder="¿Qué haces?" aria-label="Acción"></span>
       <button type="button" id="cube" aria-haspopup="menu" aria-expanded="false" aria-controls="cube-menu" title="Hoja, diario y mochila" aria-label="Menú de la partida: hoja, diario y mochila"><svg class="i ic-cube"><use href="#i-cube"/></svg><svg class="i ic-x"><use href="#i-x"/></svg></button>
       <button type="submit" aria-label="Enviar" title="Enviar"><svg class="i"><use href="#i-send"/></svg></button>
@@ -962,6 +1017,8 @@ ${FIGHT_STYLE}
   </div>
   <button type="button" id="cube-scrim" hidden aria-label="Cerrar el menú"></button>
   <div id="cube-menu" role="menu" aria-label="Menú de la partida" hidden>
+    <button type="button" role="menuitem" class="m-only" data-go="menu"><span class="bub home"><svg class="i"><use href="#i-home"/></svg></span><span><b class="lbl">Menú principal</b><small>Volver a la lista de partidas</small></span></button>
+    <button type="button" role="menuitem" class="m-only" data-side><span class="bub side"><svg class="i"><use href="#i-map"/></svg></span><span><b class="lbl">Tablero y mapa<i class="dotnew" hidden></i></b><small>Tu ficha, el sitio, la gente y la misión</small></span></button>
     <button type="button" role="menuitem" data-open="sheet"><span class="bub sheet"><svg class="i"><use href="#i-sheet"/></svg></span><span><b class="lbl">Hoja</b><small>Características y habilidades</small></span></button>
     <button type="button" role="menuitem" data-open="journal"><span class="bub journal"><svg class="i"><use href="#i-book"/></svg></span><span><b class="lbl">Diario<i class="dotnew" hidden></i></b><small>Misiones, charlas, crónica y lugares</small></span></button>
     <button type="button" role="menuitem" data-open="pack"><span class="bub pack"><svg class="i"><use href="#i-pack"/></svg></span><span><b class="lbl">Mochila</b><small id="pack-sub">Lo que llevas encima</small></span></button>
@@ -1110,7 +1167,7 @@ ${FIGHT_SCRIPT}
     input.disabled = on;
     $('board').classList.toggle('busy', on);
     $('map').classList.toggle('busy', on);
-    document.querySelectorAll('.chips button, form button').forEach(function (b) { b.disabled = on; });
+    document.querySelectorAll('.chat-acts button, form button').forEach(function (b) { b.disabled = on; });
     // Mientras se espera: los puntos del narrador en el hilo (novel.ts) y, si la acción va en cola, a quién se espera.
     turnShown = false;
     if (on) waitingFor = [];
@@ -2506,9 +2563,49 @@ ${FIGHT_SCRIPT}
   });
   // Hacer ⇄ Decir; con destinatario, el primer toque lo quita y el segundo vuelve a Hacer.
   $('saymode').addEventListener('click', function () { if (sayMode && sayTo) setSayMode(true, null); else setSayMode(!sayMode); });
-  document.querySelectorAll('.chips button').forEach(function (b) {
-    b.addEventListener('click', function () { command(b.dataset.cmd); });
-  });
+
+  // --- Comandos: al escribir «/» sale un menú con todos y un buscador ---------------------
+  var COMMANDS = [
+    ['look', 'Mira a tu alrededor'], ['where', 'Dónde estás y por dónde se sale'], ['who', 'Quién está aquí contigo'],
+    ['inventory', 'Lo que llevas encima'], ['recap', 'Lo que ha pasado mientras no estabas'], ['time', 'Qué hora es en el juego'],
+    ['tablon', 'Los avisos del tablón'], ['progress', 'Cómo vas: nivel, experiencia y misiones'],
+  ];
+  var slash = $('slash'), slashQ = $('slash-q'), slashList = slash.querySelector('.slash-list'), slashOn = 0, slashShown = [];
+  /** Lo que se busca: el buscador del menú o, si está vacío, lo escrito tras la «/». */
+  function slashTerm() {
+    var q = slashQ.value.trim().replace(/^\//, '');
+    if (q) return q.toLowerCase();
+    return input.value.charAt(0) === '/' ? input.value.slice(1).trim().toLowerCase() : '';
+  }
+  function paintSlash() {
+    var t = slashTerm();
+    slashShown = COMMANDS.filter(function (c) { return !t || c[0].indexOf(t) >= 0 || c[1].toLowerCase().indexOf(t) >= 0; });
+    if (slashOn >= slashShown.length) slashOn = 0;
+    slashList.innerHTML = slashShown.length
+      ? slashShown.map(function (c, i) { return '<button type="button" role="option" data-slash="' + c[0] + '"' + (i === slashOn ? ' class="on" aria-selected="true"' : ' aria-selected="false"') + '><code>/' + c[0] + '</code><span>' + c[1] + '</span></button>'; }).join('')
+      : '<p class="slash-none">Ningún comando con «' + escapeHtml(t) + '».</p>';
+  }
+  function openSlash(on) {
+    if (on && !slash.hidden) { paintSlash(); return; }
+    slash.hidden = !on;
+    if (on) { slashOn = 0; paintSlash(); setMenu(false); setGear(false); } else slashQ.value = '';
+  }
+  function runSlash(name) { openSlash(false); input.value = ''; command(name); input.focus(); }
+  function slashKeys(ev) {
+    if (slash.hidden) return;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (slashShown.length) { slashOn = (slashOn + (ev.key === 'ArrowDown' ? 1 : -1) + slashShown.length) % slashShown.length; paintSlash(); }
+    } else if (ev.key === 'Enter' && slashShown.length) { ev.preventDefault(); runSlash(slashShown[slashOn][0]); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); openSlash(false); input.focus(); }
+  }
+  // Con argumento («/time +2h», los de depuración) el menú se aparta y el texto va tal cual al enviar.
+  input.addEventListener('input', function () { var v = input.value; openSlash(v.charAt(0) === '/' && !/\s/.test(v)); });
+  input.addEventListener('keydown', slashKeys);
+  slashQ.addEventListener('keydown', slashKeys);
+  slashQ.addEventListener('input', function () { slashOn = 0; paintSlash(); });
+  slashList.addEventListener('click', function (ev) { var b = ev.target.closest('[data-slash]'); if (b) runSlash(b.getAttribute('data-slash')); });
+  document.addEventListener('click', function (ev) { if (!slash.hidden && !ev.target.closest('#slash') && ev.target !== input) openSlash(false); });
   select.addEventListener('change', function () { connect(select.value); });
 
   // --- Panel: tablero o mapa; en el móvil, el panel es una vista aparte ---------------
@@ -2570,6 +2667,7 @@ ${FIGHT_SCRIPT}
     var badge = questBadge(unseenChanges(j)), on = badge.added + badge.steps > 0;
     var chip = on ? '<button type="button" class="qchip" data-qnew title="Ver qué ha cambiado en el Diario">' + badge.html + '</button>' : '';
     $('to-side').classList.toggle('new', on);
+    var sideDot = document.querySelector('#cube-menu [data-side] .dotnew'); if (sideDot) sideDot.hidden = !on;
     var h = '<div class="sec-row"><button type="button" class="sec-t" data-col="quest" aria-expanded="' + !document.body.classList.contains('col-quest') + '"><svg class="i chev"><use href="#i-chev"/></svg>' +
       '<span class="qflag' + (on ? ' on' : '') + '" data-qnew title="Misiones: abre el Diario"><svg class="i"><use href="#i-q-active"/></svg></span>Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</button>' + chip + '</div><div class="sec-b">';
     if (!q) { $('quest').innerHTML = h + '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button></div>'; return; }
@@ -2642,7 +2740,13 @@ ${FIGHT_SCRIPT}
     setMenu(cubeMenu.hidden);
   });
   $('cube-scrim').addEventListener('click', function () { setMenu(false); });
-  cubeMenu.addEventListener('click', function (ev) { var b = ev.target.closest('[data-open]'); if (b) openDrawer(b.getAttribute('data-open')); });
+  cubeMenu.addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-open]');
+    if (b) openDrawer(b.getAttribute('data-open'));
+    // En el móvil: el panel (ficha, tablero, mapa, gente y misión) y la vuelta al menú también salen de aquí.
+    if (ev.target.closest('[data-side]')) { setMenu(false); showSide(true); }
+    if (ev.target.closest('[data-go=menu]')) location.href = '/';
+  });
   document.querySelectorAll('[data-dr]').forEach(function (b) { b.addEventListener('click', function () { openDrawer(b.getAttribute('data-dr')); }); });
   $('drawer-scrim').addEventListener('click', closeDrawer);
   document.addEventListener('click', function (ev) { if (!cubeMenu.hidden && !ev.target.closest('#cube-menu') && !ev.target.closest('#cube')) setMenu(false); });
@@ -2665,6 +2769,41 @@ ${FIGHT_SCRIPT}
       gear.appendChild(more); gear.appendChild(pop);
     }
   });
+
+  // --- Ajustes en el móvil: sonido, narrador y generar imagen bajo el engranaje del cuadro ---------
+  // Los paneles de sonido (sfx.ts) y de voz (tts.ts) se mudan aquí en el móvil y vuelven a su sitio en escritorio.
+  var gear = $('gear'), gearMenu = $('gear-menu'), mobileQ = window.matchMedia('(max-width: 820px)');
+  function placeSettings() {
+    var sfxPop = document.querySelector('.sfx-pop'), ttsPop = document.querySelector('.tts-pop');
+    if (mobileQ.matches) {
+      if (sfxPop) gearMenu.querySelector('[data-slot=sfx]').appendChild(sfxPop);
+      if (ttsPop) gearMenu.querySelector('[data-slot=tts]').appendChild(ttsPop);
+      return;
+    }
+    var sfxBox = document.querySelector('.chat-head .sfx');
+    if (sfxPop && sfxBox) sfxBox.appendChild(sfxPop);
+    if (ttsPop) $('side-gear').appendChild(ttsPop);
+    setGear(false);
+  }
+  function setGear(on) {
+    gearMenu.hidden = !on;
+    gear.classList.toggle('on', on);
+    gear.setAttribute('aria-expanded', on ? 'true' : 'false');
+    if (!on) return;
+    placeSettings();
+    var brush = document.querySelector('form .brush'), paintBtn = gearMenu.querySelector('.gm-paint');
+    paintBtn.hidden = !brush || brush.hidden;
+    if (brush) paintBtn.querySelector('.bub').innerHTML = brush.innerHTML;
+    // Cada panel rellena sus valores al abrirse con su botón: se le «abre» aunque se vea aquí.
+    [['.sfx-more', '.sfx-pop'], ['.tts-more', '.tts-pop']].forEach(function (x) {
+      var b = document.querySelector(x[0]), p = document.querySelector(x[1]);
+      if (b && p) { p.hidden = true; b.click(); }
+    });
+  }
+  gear.addEventListener('click', function (ev) { ev.stopPropagation(); setMenu(false); openSlash(false); setGear(gearMenu.hidden); });
+  gearMenu.querySelector('.gm-paint').addEventListener('click', function () { var brush = document.querySelector('form .brush'); setGear(false); if (brush) brush.click(); });
+  document.addEventListener('click', function (ev) { if (!gearMenu.hidden && !ev.target.closest('#gear-menu') && !ev.target.closest('#gear')) setGear(false); });
+  mobileQ.addEventListener('change', placeSettings);
 
   /** Avatares del grupo arriba a la derecha: cambian de personaje como el desplegable (que queda oculto). */
   function renderParty() {

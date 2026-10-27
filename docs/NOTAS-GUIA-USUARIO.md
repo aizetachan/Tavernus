@@ -287,3 +287,10 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 - Con `ELEVENLABS_MODEL=eleven_v3` el narrador suena más expresivo: antes de leer, Haiku marca susurros, risas o suspiros sin cambiar el texto del chat. Lo ya escuchado con v2 se sigue oyendo con v2.
 - Si ElevenLabs se queda sin créditos, la partida sigue con la voz del navegador y avisa; se vuelve a intentar a la media hora.
 - En el selector del narrador se puede elegir ElevenLabs v3 (con acotaciones) o ElevenLabs v2 (más sobria y algo más rápida); se recuerda en ese navegador.
+
+## Comandos con «/» y abajo del chat en el móvil (27 oct 2026)
+- Los atajos /look, /where… ya no se ven encima del cuadro: al escribir «/» sale un menú con todos los comandos, su explicación y un buscador. ↑ ↓ para elegir, Intro para lanzarlo, Esc para cerrarlo; también se pueden pulsar.
+- Encima del cuadro queda la fila de cómo va lo que escribes: «Hacer / Decir» (solo con más jugadores) y «Voz: enviar al terminar».
+- Móvil: a la izquierda del cuadro, el engranaje de ajustes (generar imagen, sonido y música, narrador); a la derecha, Enviar y, pegada al borde, la mochila.
+- Móvil: la mochila incluye «Menú principal» (volver a la lista de partidas) y «Tablero y mapa» (ficha, sitio, gente y misión); el botón de arriba a la izquierda ya no está. El sonido tampoco va ya en la cabecera, solo el botón de parar la voz mientras lee.
+- Móvil: letra del chat algo más pequeña y prólogo más contenido.
