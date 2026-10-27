@@ -15,7 +15,7 @@ import { debtLine, fmtCoins, openDebts } from './debts.js';
 import { abilityModifier, proficiencyBonus } from './dice.js';
 import type { InfoIntent } from './fastpath.js';
 import { RULE_TERMS } from './fastpath.js';
-import { inventoryView } from './inventory.js';
+import { DAMAGE_ES, inventoryView } from './inventory.js';
 import type { Character, Id } from './model.js';
 import { positionOf } from './movement.js';
 import { descriptorOf, whereAmI } from './narrate.js';
@@ -30,10 +30,6 @@ export interface InfoAnswer { title: string; lines: string[] }
 
 const ABILITIES: Ability[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 const SHORT: Record<Ability, string> = { str: 'FUE', dex: 'DES', con: 'CON', int: 'INT', wis: 'SAB', cha: 'CAR' };
-const DAMAGE_ES: Record<string, string> = {
-  bludgeoning: 'contundente', piercing: 'perforante', slashing: 'cortante', fire: 'fuego', cold: 'frío', lightning: 'rayo',
-  thunder: 'trueno', poison: 'veneno', acid: 'ácido', necrotic: 'necrótico', radiant: 'radiante', force: 'fuerza', psychic: 'psíquico',
-};
 
 /** +3, −1, +0. */
 const sign = (n: number) => (n < 0 ? `−${Math.abs(n)}` : `+${n}`);

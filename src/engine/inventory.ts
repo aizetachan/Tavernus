@@ -288,8 +288,34 @@ export interface InventoryView {
   encumbrance: Encumbrance;
 }
 
-/** Un objeto de la mochila tal como lo ve la web: su ejemplar (para moverlo) y su rótulo («antorcha ×3»). */
-export interface PackItem { id: Id; label: string }
+/** Daño en español, para la ficha de los objetos y las respuestas de info.ts. */
+export const DAMAGE_ES: Record<string, string> = {
+  bludgeoning: 'contundente', piercing: 'perforante', slashing: 'cortante', fire: 'fuego', cold: 'frío', lightning: 'rayo',
+  thunder: 'trueno', poison: 'veneno', acid: 'ácido', necrotic: 'necrótico', radiant: 'radiante', force: 'fuerza', psychic: 'psíquico',
+};
+
+/** Icono con que la web pinta un objeto: sale de sus datos (tipo y propiedades), nunca de su nombre. */
+export type PackIcon = 'weapon' | 'bow' | 'shield' | 'armor' | 'light' | 'potion' | 'food' | 'container' | 'tool' | 'quest' | 'treasure' | 'misc' | EquipSlot;
+
+/**
+ * Un objeto de la mochila tal como lo ve la web: su ejemplar (para moverlo), su rótulo («antorcha ×3») y su
+ * ficha (peso, daño o CA, propiedades y para qué sirve), que la web enseña al pasar por encima o al tocarlo.
+ */
+export interface PackItem {
+  id: Id;
+  label: string;
+  name: string;
+  quantity: number;
+  icon: PackIcon;
+  /** Peso del ejemplar entero: la pila y lo que lleve dentro. */
+  weight_lb: number;
+  /** Hueco de equipo en que encaja (la web lo resalta al arrastrar). */
+  equip_slot?: EquipSlot;
+  /** La cifra principal, si la tiene: «Daño 1d8 cortante», «CA 11 + DES», «+2 a la CA en la mano». */
+  stat?: string;
+  props: string[];
+  about: string;
+}
 export interface PackView {
   hands: { main: PackItem | null; off: PackItem | null; both: boolean };
   equipped: { slot: EquipSlot; item: PackItem | null }[];
@@ -297,10 +323,63 @@ export interface PackView {
   containers: { id: Id; name: string; items: PackItem[]; slots: number }[];
 }
 
-/** La mochila con cada hueco (libres incluidos) y el ejemplar de cada objeto: la web la pinta y la reordena arrastrando. */
+const EQUIP_AT: Record<EquipSlot, string> = { head: 'la cabeza', body: 'el cuerpo', hands: 'las manos', feet: 'los pies', neck: 'el cuello', ring1: 'un dedo', ring2: 'un dedo', back: 'la espalda', belt: 'el cinturón' };
+const SIZE_ES: Record<ItemSize, string> = { tiny: 'diminuto', small: 'pequeño', medium: 'mediano', large: 'grande', bulky: 'voluminoso: ocupa las dos manos' };
+const thousands = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+function packIcon(def: ItemDef): PackIcon {
+  if (def.weapon) return def.weapon.ranged ? 'bow' : 'weapon';
+  if (def.shield_bonus) return 'shield';
+  if (def.armor) return 'armor';
+  if (def.light_source) return 'light';
+  if (def.container) return 'container';
+  if (def.heals) return 'potion';
+  if (def.equip_slot) return def.equip_slot;
+  return ({ consumable: 'food', tool: 'tool', quest: 'quest', treasure: 'treasure', weapon: 'weapon', armor: 'armor', container: 'container', misc: 'misc' } as const)[def.type];
+}
+
+/** La ficha de un objeto, sacada de sus datos: vale para cualquier campaña. */
+function packItem(world: World, i: ItemInstance): PackItem {
+  const d = world.itemDef(i.item_id);
+  const props: string[] = [];
+  let stat: string | undefined;
+  if (d.weapon) {
+    stat = `Daño ${d.weapon.damage} ${DAMAGE_ES[d.weapon.damage_type] ?? d.weapon.damage_type}`;
+    if (d.weapon.finesse) props.push('sutil: con FUE o DES');
+    if (d.weapon.ranged) props.push('a distancia');
+    if (d.weapon.two_handed) props.push('a dos manos');
+  } else if (d.armor) {
+    stat = `CA ${d.armor.ac_base}${d.armor.dex_max === null ? ' + DES' : d.armor.dex_max > 0 ? ` + DES (máx. ${d.armor.dex_max})` : ''}`;
+    if (d.armor.stealth_disadvantage) props.push('desventaja en Sigilo');
+  } else if (d.shield_bonus) stat = `+${d.shield_bonus} a la CA en la mano`;
+  if (d.heals) props.push(`cura ${d.heals} PG`);
+  if (d.light_source) props.push(i.state.lit === true ? 'encendida: da luz' : 'da luz si la enciendes');
+  if (d.container) props.push(`${d.container.slots} huecos, hasta ${d.container.max_weight_lb} lb`);
+  if (d.equip_slot) props.push(`se lleva en ${EQUIP_AT[d.equip_slot]}`);
+  props.push(SIZE_ES[d.size]);
+  if (d.unique) props.push('único');
+  if (d.value > 0) props.push(`vale ${thousands(d.value)} monedas`);
+  const about = d.description ?? (d.shield_bonus ? 'Un escudo: llévalo en la otra mano para defenderte.' : d.light_source ? 'Da luz donde está oscuro.' : ({
+    weapon: 'Un arma: empúñala para atacar con ella.',
+    armor: 'Una armadura: póntela en el cuerpo y cambia tu CA.',
+    consumable: d.heals ? 'Se gasta al usarla y te devuelve puntos de golpe.' : 'Se gasta al usarlo.',
+    tool: 'Una herramienta: sirve para hacer algo con ella.',
+    quest: 'Tiene que ver con una historia: guárdalo bien.',
+    treasure: 'Un objeto de valor: se puede vender o cambiar.',
+    container: 'Guarda otras cosas dentro.',
+    misc: 'Un objeto corriente.',
+  } as const)[d.type]);
+  return {
+    id: i.id, label: i.quantity > 1 ? `${d.name} ×${i.quantity}` : d.name, name: d.name, quantity: i.quantity,
+    icon: packIcon(d), weight_lb: Math.round(instanceWeight(world, i) * 100) / 100,
+    ...(d.equip_slot ? { equip_slot: d.equip_slot } : {}), ...(stat ? { stat } : {}), props, about,
+  };
+}
+
+/** La mochila con cada hueco (libres incluidos) y la ficha de cada objeto: la web la pinta y la reordena arrastrando. */
 export function packView(world: World, characterId: Id): PackView {
   const c = world.character(characterId);
-  const item = (i: ItemInstance): PackItem => { const d = world.itemDef(i.item_id); return { id: i.id, label: i.quantity > 1 ? `${d.name} ×${i.quantity}` : d.name }; };
+  const item = (i: ItemInstance): PackItem => packItem(world, i);
   const view: PackView = { hands: { main: null, off: null, both: false }, equipped: EQUIP_SLOTS.map((slot) => ({ slot, item: null })), pockets: { items: [], slots: world.campaign.capacity_rules.pockets_slots }, containers: [] };
   for (const i of directlyCarried(world, c.id)) {
     if (i.location.type !== 'character') continue;
