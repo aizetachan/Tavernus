@@ -16,6 +16,9 @@ import { authoredSeed } from '../src/data/campaigns/index.js';
 import { World as WorldClass } from '../src/engine/world.js';
 import { ensureWaypoint } from '../src/engine/travel.js';
 import { ambienceOf } from '../src/adapters/web/soundmap.js';
+import { attachIllustrator, Illustrator } from '../src/ai/illustrate.js';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /** El PJ ya ha pasado por todos los puntos: el revelado (reveal.ts) deja ver todos los muebles. */
 function knowAll(engine: Engine, characterId: string): void {
@@ -87,6 +90,32 @@ describe('tablero web', () => {
     expect(b.presences.find((p) => p.id === 'ch_mira')).toMatchObject({ level: 'hint', label: 'movimiento' });
     // Y quien no percibe nada no aparece: el lobo está en otra localización.
     expect(b.presences.map((p) => p.id)).not.toContain('npc_lobo');
+  });
+
+  it('fichas con retrato: el del actor, el de un PJ y el de un NPC que ve bien; una figura no tiene cara', async () => {
+    const { engine } = await bootEngine();
+    // Sin ilustrador (IMAGES apagado) no hay retratos: la página pinta la inicial.
+    let b = boardState(engine, 'ch_kael', { slug: 'demo' });
+    expect(b.actor.avatar).toBeUndefined();
+    expect(b.presences.every((p) => p.avatar === undefined)).toBe(true);
+
+    const ill = attachIllustrator(engine, new Illustrator({ dir: join(tmpdir(), 'tavernus-board-sin-imagenes'), worldSeed: 'demo' }));
+    const face = (id: string) => ill.pin('portrait', id, { key: `portrait-${id}`, location_id: 'loc_taberna', name: id, kind: 'portrait', entity_id: id, seed: 1, prompt: 'p', url: 'u', file: `portrait-${id}-1.jpg` });
+    face('ch_kael'); face('ch_mira'); face('npc_brenna'); face('npc_doro');
+    engine.world.character('ch_mira').location = { type: 'spot', id: 'sp_tab_mesa' };
+    engine.world.character('ch_kael').knows = [];
+    b = boardState(engine, 'ch_kael', { slug: 'demo' });
+    expect(b.actor.avatar).toBe('/images/portrait-ch_kael-1.jpg?game=demo');
+    expect(b.presences.find((p) => p.id === 'ch_mira')).toMatchObject({ level: 'full', avatar: '/images/portrait-ch_mira-1.jpg?game=demo' });
+    // No sabe cómo se llama, pero la ve: el nombre sigue tapado y la cara se ve, como en el hilo.
+    expect(b.presences.find((p) => p.id === 'npc_brenna')).toMatchObject({ label: 'la tabernera', avatar: '/images/portrait-npc_brenna-1.jpg?game=demo' });
+
+    // En la plaza, Doro al otro lado es una figura: sin retrato aunque lo tenga.
+    engine.world.character('ch_kael').location = { type: 'spot', id: 'sp_pl_taberna' };
+    b = boardState(engine, 'ch_kael', { slug: 'demo' });
+    const doro = b.presences.find((p) => p.id === 'npc_doro')!;
+    expect(doro.level).toBe('vague');
+    expect(doro.avatar).toBeUndefined();
   });
 
   it('salidas: desde qué punto, a qué localización y punto, distancia y bloqueo', async () => {
