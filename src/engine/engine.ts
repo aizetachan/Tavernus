@@ -301,6 +301,9 @@ export class Engine {
     const past = await opts.repo.loadEvents(opts.campaignId, 0);
     const lastSeq = past.reduce((m, e) => Math.max(m, e.seq), 0);
     const engine = new Engine(snapshot, opts, lastSeq);
+    // Al cargar no hay nadie conectado (aunque se guardara así): lo dirá su presencia (una pestaña, Discord) o su primera
+    // acción. Sin dormir a nadie: si no vuelve, el velo llega con setConnected cuando el adaptador lo dé por ido.
+    for (const c of engine.world.characters.values()) c.connected = false;
     // Partidas de antes de la regla: los PJ se conocen por su nombre desde que coinciden en la partida.
     engine.meetAll();
     engine.events.restore(past);
@@ -430,6 +433,7 @@ export class Engine {
         setAhead(c, settleAt, nowGameS);
       }
       const r = settleTransit(this.world, c, settleAt);
+      if (r.arrived && !encounter) this.joinClock(c, nowGameS);
       // Todo el trayecto de una vez (viaje rápido): los puntos de paso del sitio de salida y del de llegada no se cuentan (goto.ts).
       const endLoc = r.arrived && r.reached.length > 1 && this.fastTravel ? this.world.spot(r.reached.at(-1)!.spot_id).location_id : null;
       const passedLocs = new Set<Id>();
@@ -437,6 +441,8 @@ export class Engine {
         const spot = this.world.spot(reached.spot_id);
         const loc = this.world.location(spot.location_id);
         const last = r.arrived && reached === r.reached[r.reached.length - 1];
+        // Hora de la llegada: la del trayecto, o la de los PJ que ya estaban allí si su reloj se igualó (joinClock).
+        const when = last ? Math.min(reached.at_game_s, nowFor(c, nowGameS)) : reached.at_game_s;
         if (!last && endLoc && (loc.id === startLoc || loc.id === endLoc || passedLocs.has(loc.id))) continue;
         if (!last && endLoc) passedLocs.add(loc.id); // un sitio de paso, una sola línea con su nombre
         const firstVisit = loc.discovery[c.id] !== 'visited';
@@ -451,15 +457,15 @@ export class Engine {
           const via = r.reached.filter((x) => x.via_exit_id).at(-1);
           q.arrived = {
             landing_spot_id: via?.spot_id ?? null, ...(via?.via_exit_id ? { exit_id: via.via_exit_id } : {}), crossed, first_visit: firstVisit,
-            note: crossed ? travelNote(this.clock, departed, reached.at_game_s) : '',
+            note: crossed ? travelNote(this.clock, departed, when) : '',
             hooks: [...matchHooks(this.world, { kind: 'spot', spot_id: spot.id, character_id: c.id }), ...(crossed ? matchHooks(this.world, { kind: 'location', location_id: loc.id, character_id: c.id }) : [])],
           };
           this.events.emit({
             actor_id: c.id, at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
             action_type: 'arrived', narration_private: '', observable: `${c.name} llega ${aEs(spot.name)}.`, tags: ['movement'],
             payload: { observable_vague: `Una figura llega ${aEs(spot.name)}.` },
-          }, Math.max(this.clock.realAt(reached.at_game_s), this.lastStamp(c)));
-          if (firstVisit && !isWaypoint(spot)) this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: reached.at_game_s });
+          }, Math.max(this.clock.realAt(when), this.lastStamp(c)));
+          if (firstVisit && !isWaypoint(spot)) this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: when });
           continue;
         }
         // Con master, la llegada al destino la narra él (escena de llegada) salvo que sea trivial: entonces, plantilla.
@@ -470,23 +476,23 @@ export class Engine {
         if (last) this.tripFrom.delete(c.id);
         const template = plan?.kind === 'template';
         // Tiempo que ha costado el viaje: lo lee el jugador («has tardado 2 h; anochece») y, si narra él, el master.
-        const note = last && crossed ? travelNote(this.clock, departed, reached.at_game_s) : '';
-        const travel: TravelHint | null = note ? { kind: 'arrival', departed_game_s: departed, arrived_game_s: reached.at_game_s } : null;
+        const note = last && crossed ? travelNote(this.clock, departed, when) : '';
+        const travel: TravelHint | null = note ? { kind: 'arrival', departed_game_s: departed, arrived_game_s: when } : null;
         this.events.emit({
           actor_id: c.id,
           at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
           action_type: last ? 'arrived' : 'passed',
-          narration_private: template ? [note, crossed ? crossingLine(this.world, r.reached.filter((x) => x.via_exit_id).at(-1)?.via_exit_id, spot.id) : '', arrivalNarration(this.world, this.clock, c, reached.at_game_s, crossed)].filter(Boolean).join('\n')
+          narration_private: template ? [note, crossed ? crossingLine(this.world, r.reached.filter((x) => x.via_exit_id).at(-1)?.via_exit_id, spot.id) : '', arrivalNarration(this.world, this.clock, c, when, crossed)].filter(Boolean).join('\n')
             : plan ? note : last ? [note, `Llegas ${aEs(spot.name)}.`].filter(Boolean).join(' ') : `Pasas por ${endLoc ? loc.name : spot.name}.`,
           observable: last ? `${c.name} llega ${aEs(spot.name)}.` : `${c.name} pasa por ${spot.name}.`,
           tags: template ? ['movement', 'deterministic'] : ['movement'],
           payload: {
             observable_vague: last ? `Una figura llega ${aEs(spot.name)}.` : `Una figura pasa por ${spot.name}.`,
-            ...(template ? { master: null, suggested_actions: suggestActions(this.world, this.clock, c, reached.at_game_s) } : {}),
-            ...(travel ? { travel: { departed_game_s: departed, arrived_game_s: reached.at_game_s } } : {}),
+            ...(template ? { master: null, suggested_actions: suggestActions(this.world, this.clock, c, when) } : {}),
+            ...(travel ? { travel: { departed_game_s: departed, arrived_game_s: when } } : {}),
           },
-        }, Math.max(this.clock.realAt(reached.at_game_s), this.lastStamp(c)));
-        if (firstVisit && !isWaypoint(spot)) this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: reached.at_game_s });
+        }, Math.max(this.clock.realAt(when), this.lastStamp(c)));
+        if (firstVisit && !isWaypoint(spot)) this.firstVisit({ character_id: c.id, location_id: loc.id, game_s: when });
         if (plan?.kind === 'master') this.narrateArrival(c, travel ? { hooks: [], encounter: null, ...plan.hints, travel } : plan.hints);
       }
     }
@@ -727,10 +733,7 @@ export class Engine {
     return this.runInLocation(locId, async () => {
       this.waiting.delete(c.id);
       const clean = text.trim();
-      // Llegó «del futuro» a donde otro PJ vive una hora anterior: espera a que el reloj lo alcance (irse sí puede).
       const travel = parseTravel(clean);
-      const wait = this.aheadWait(c);
-      if (wait && !travel && !this.isLeaving(c, clean)) return { ok: false, text: wait };
       this.pendingRolls.delete(c.id); // una acción nueva anula la tirada pendiente
       let r: ActionResult;
       let decisive: { seconds: number; speed: 'fast' | 'normal'; threat: string } | undefined;
@@ -765,35 +768,28 @@ export class Engine {
   }
 
   /**
-   * Aviso si el PJ va por delante del reloj del mundo (llegó viajando) y en su
-   * localización hay otro PJ activo y conectado que vive una hora anterior. Si
-   * no, null. Dos PJs juntos ven siempre la misma hora: espera el adelantado.
+   * Llega viajando (por delante del mundo) a donde ya hay otros PJ en escena
+   * con una hora anterior: su reloj se iguala al más atrasado de ellos (o al
+   * del mundo) y actúa en el acto. Nadie espera a nadie; los minutos que
+   * «pierde» no se notan. Cuentan los PJ activos y quietos con alguien detrás
+   * (conectado y no ausente: una pestaña viva o una acción reciente).
    */
-  private aheadWait(c: Character): string | null {
-    const g = this.gameNow();
-    const mine = nowFor(c, g);
-    if (mine - g <= SAME_TIME_TOLERANCE_S) return null;
+  private joinClock(c: Character, nowG: number): void {
+    const mine = nowFor(c, nowG);
+    if (mine - nowG <= SAME_TIME_TOLERANCE_S) return;
     const locId = this.world.characterSpot(c)?.location_id;
-    if (!locId) return null;
-    const behind = this.world.charactersInLocation(locId)
-      .filter((o) => o.id !== c.id && o.status === 'active' && o.connected && mine - nowFor(o, g) > SAME_TIME_TOLERANCE_S);
-    if (!behind.length) return null;
-    const theirs = Math.min(...behind.map((o) => nowFor(o, g)));
-    const hhmm = (s: number) => this.clock.format(s).slice(-5);
-    return `⏳ Has llegado antes que el resto: para ti son las ${hhmm(mine)} y aquí aún son las ${hhmm(theirs)}. Podrás actuar en ${fmtDuration(this.clock.gameToReal(mine - g))} reales (marcharte, ya).`;
+    if (!locId) return;
+    const here = this.world.charactersInLocation(locId).filter((o) => o.id !== c.id && o.status === 'active' && o.connected && !o.away && !o.transit);
+    if (!here.length) return;
+    const theirs = Math.min(...here.map((o) => nowFor(o, nowG)));
+    if (mine - theirs <= SAME_TIME_TOLERANCE_S) return;
+    setAhead(c, theirs, nowG);
+    this.world.touch('characters', c.id);
   }
 
   /** ¿Es moverse (a otro punto o a otra localización), sola o con algo que hacer allí? */
   private isMove(c: Character, text: string): boolean {
     return parseTrivial(this.world, c, text)?.kind === 'move' || parseErrand(this.world, c, text, this.nowFor(c)) !== null;
-  }
-
-  /** ¿Es salir hacia otra localización? Eso lo puede hacer aunque vaya por delante del reloj. */
-  private isLeaving(c: Character, text: string): boolean {
-    const intent = parseTrivial(this.world, c, text);
-    if (intent?.kind === 'move' && intent.exit) return true;
-    const e = parseErrand(this.world, c, text, this.nowFor(c));
-    return e !== null && e.dest.location_id !== this.world.characterSpot(c)?.location_id;
   }
 
   /**
@@ -918,8 +914,6 @@ export class Engine {
     this.quiet.delete(c.id);
     // Un encuentro en el camino ya lo ha contado el viaje (travel.ts); aquí, solo que la acción espera.
     if (c.transit || this.world.characterSpot(c)?.id !== goal.id || !arrived) return this.emitPending(c, text, e, pending, null, null);
-    const wait = this.aheadWait(c);
-    if (wait) return this.emitPending(c, text, e, `${this.errandLine(c, arrived)} ${wait} ${pending}`, null, null);
     return this.errandAction(c, text, e, arrived, tense ? `la escena allí está tensa (${tense})` : null);
   }
 
@@ -1085,8 +1079,6 @@ export class Engine {
     const c = this.world.character(characterId);
     const locId = positionOf(this.world, c, this.gameNow()).location_id;
     return this.runInLocation(locId, async () => {
-      const wait = this.aheadWait(c);
-      if (wait) return { ok: false, text: wait };
       const pending = this.pendingRolls.get(c.id);
       if (!pending) return { ok: false, text: 'No tienes ninguna tirada pendiente.' };
       this.pendingRolls.delete(c.id);
@@ -1617,7 +1609,8 @@ export class Engine {
   /** Marca conexión/desconexión del jugador (SPEC §9.1: velo). */
   setConnected(characterId: Id, connected: boolean): void {
     const c = this.world.character(characterId);
-    if (connected === c.connected) return;
+    // Desconectado desde la carga (boot) y aún sin velo: darle por ido sí lo vela.
+    if (connected === c.connected && (connected || c.veiled)) return;
     c.connected = connected;
     if (!connected) {
       if (c.status === 'active') c.status = 'asleep';
