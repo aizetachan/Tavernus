@@ -899,6 +899,8 @@ ${FIGHT_STYLE}
   #gear-menu .gm-paint b { display: block; font-size: 14px; font-weight: 600; }
   #gear-menu .gm-paint small { display: block; font-size: 12px; color: var(--muted); }
   #gear.on { background: var(--accent-tint); color: var(--accent); }
+  #gear .x, #gear.on .g { display: none; }
+  #gear.on .x { display: block; }
   #cube-menu .bub.side { background: #9bb8ef; color: #0f1a2e; }
   @media (max-width: 820px) {
     /* Abajo: ajustes · cuadro · Enviar · mochila, pegada al borde para que su menú suba en columna sobre ella. */
@@ -1048,7 +1050,7 @@ ${FIGHT_STYLE}
     </div>
     <div id="quote" class="quote" hidden><div><b></b><span></span></div><button type="button" aria-label="No responder" title="No responder"><svg class="i"><use href="#i-x"/></svg></button></div>
     <form id="form" autocomplete="off">
-      <button type="button" id="gear" aria-haspopup="dialog" aria-expanded="false" aria-controls="gear-menu" title="Ajustes: sonido, narrador e imagen" aria-label="Ajustes: sonido, narrador e imagen"><svg class="i"><use href="#i-gear"/></svg></button>
+      <button type="button" id="gear" aria-haspopup="dialog" aria-expanded="false" aria-controls="gear-menu" title="Ajustes: sonido, narrador e imagen" aria-label="Ajustes: sonido, narrador e imagen"><svg class="i g"><use href="#i-gear"/></svg><svg class="i x"><use href="#i-x"/></svg></button>
       <div id="slash" role="listbox" aria-label="Comandos" hidden>
         <label class="slash-q"><svg class="i"><use href="#i-search"/></svg><input id="slash-q" placeholder="Buscar comando…" aria-label="Buscar comando" autocomplete="off"></label>
         <div class="slash-list"></div>
@@ -2864,6 +2866,7 @@ ${FIGHT_SCRIPT}
     gearMenu.hidden = !on;
     gear.classList.toggle('on', on);
     gear.setAttribute('aria-expanded', on ? 'true' : 'false');
+    gear.setAttribute('aria-label', on ? 'Cerrar ajustes' : 'Ajustes: sonido, narrador e imagen');
     if (!on) return;
     placeSettings();
     var brush = document.querySelector('form .brush'), paintBtn = gearMenu.querySelector('.gm-paint');

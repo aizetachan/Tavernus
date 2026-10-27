@@ -408,7 +408,7 @@ export const SFX_STYLE = String.raw`
   .sfx-pop label { display: block; margin: 0 0 10px; color: var(--muted); font-size: 12px; font-weight: 500; }
   .sfx-pop label.row { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
   .sfx-pop input[type=range] { display: block; width: 100%; margin-top: 4px; }
-  /* Cada canal: su volumen y, a la derecha, su interruptor. */
+  /* Cada canal: a la izquierda su interruptor y luego su volumen. */
   .sfx-pop .mix { display: flex; align-items: flex-end; gap: 14px; margin: 0 0 10px; }
   .sfx-pop .mix label { flex: 1; min-width: 0; margin: 0; }
   .sfx-pop .mix input[type=checkbox] { flex: none; margin-bottom: 2px; }
@@ -447,9 +447,9 @@ export const SFX_SCRIPT = String.raw`<script>
     '<button type="button" class="sfx-toggle" aria-pressed="false" title="Efectos y ambiente (pasos, puertas, lluvia…)"><span class="fx" aria-hidden="true">FX</span></button>' +
     '<button type="button" class="sfx-more" title="Volumen del sonido" aria-label="Volumen del sonido" aria-expanded="false">' + '${CARET}' + '</button>' +
     '<div class="sfx-pop" hidden>' +
-      '<div class="mix"><label>Música<input type="range" min="0" max="1" step="0.05" data-k="music"></label><input type="checkbox" data-k="musicOn" aria-label="Música"></div>' +
-      '<div class="mix"><label>Efectos<input type="range" min="0" max="1" step="0.05" data-k="volume"></label><input type="checkbox" data-k="on" aria-label="Efectos"></div>' +
-      '<div class="mix"><label>Ambiente<input type="range" min="0" max="1" step="0.05" data-k="ambience"></label><input type="checkbox" data-k="ambOn" aria-label="Ambiente"></div>' +
+      '<div class="mix"><input type="checkbox" data-k="musicOn" aria-label="Música"><label>Música<input type="range" min="0" max="1" step="0.05" data-k="music"></label></div>' +
+      '<div class="mix"><input type="checkbox" data-k="on" aria-label="Efectos"><label>Efectos<input type="range" min="0" max="1" step="0.05" data-k="volume"></label></div>' +
+      '<div class="mix"><input type="checkbox" data-k="ambOn" aria-label="Ambiente"><label>Ambiente<input type="range" min="0" max="1" step="0.05" data-k="ambience"></label></div>' +
       '<p class="note"></p>' +
       '<p class="note credits" hidden></p>' +
     '</div>';
