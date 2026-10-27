@@ -16,6 +16,9 @@
  *     ya nombra en cualquier parte: nombres, alias, tags y descripciones de
  *     sus puntos, objetos y NPCs, sus salidas y los nombres de todas las
  *     localizaciones del mundo.
+ *   - Al aire libre no mira las fachadas (ventanas, balcones, tejados): son de
+ *     las casas de alrededor, no un sitio al que ir («las ventanas de la plaza
+ *     se van apagando», partida del 27-10, seq 39).
  */
 
 import type { Id } from './model.js';
@@ -51,6 +54,9 @@ export const PLACE_WORDS: Record<string, string[]> = {
   capilla: ['capilla'],
   cripta: ['cripta'],
 };
+
+/** Partes de una fachada: al aire libre se ven en las casas de alrededor. */
+const FACADE = new Set(['ventana', 'balcon', 'azotea']);
 
 /** Lo que dice el tag de un punto en palabras (el plano dibuja escaleras en un punto `stairs`). */
 const TAG_WORDS: Record<string, string[]> = {
@@ -98,7 +104,8 @@ export function placeVocabulary(world: World, locationId: Id): Set<string> {
  */
 export function inventedPlaces(world: World, locationId: Id, text: string): string[] {
   const vocab = placeVocabulary(world, locationId);
-  const words = Object.keys(PLACE_WORDS).filter((w) => !PLACE_WORDS[w]!.some((f) => vocab.has(f)));
+  const outdoor = world.locations.get(locationId)?.indoor === false;
+  const words = Object.keys(PLACE_WORDS).filter((w) => !(outdoor && FACADE.has(w)) && !PLACE_WORDS[w]!.some((f) => vocab.has(f)));
   if (!words.length) return [];
   const re = new RegExp(`\\b${DETERMINER}\\s+(${words.join('|')})(?:s|es)?\\b`, 'g');
   const found = new Set<string>();

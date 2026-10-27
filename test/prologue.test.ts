@@ -169,7 +169,7 @@ describe('Donde lo dejamos', () => {
     expect(t).toContain('Han pasado 3 días');
     expect(t).toContain(`Estás en ${engine.world.characterSpot(kael)!.name}`);
     expect(t).toContain('«Pregunto a Brenna por la montaña»');
-    expect(t).toMatch(/Debes 300 a Brenna/);
+    expect(t).toMatch(/Debes 3 de oro a Brenna/);
     expect(t).toContain('Brenna (tabernera) te dijo: «Las cenizas se mueven»');
     expect(t).toContain('**Entretanto.**');
     expect(t).toContain('El tablón de avisos ha cambiado.');

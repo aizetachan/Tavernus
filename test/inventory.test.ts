@@ -111,13 +111,15 @@ describe('inventario y capacidad', () => {
     expect(encumbrance(world, kael).level).toBe('ok');
     kael.location = { type: 'spot', id: 'sp_tab_chimenea' };
     transferItem(world, 'ii_kael_daga', pocket('ch_kael'));
-    transferItem(world, 'ii_barril', hand('ch_kael', 'both')); // +40 → ~78 con monedas
+    transferItem(world, 'ii_barril', hand('ch_kael', 'both')); // +40 → ~48 (las 1500 de cobre son 15 de oro: 0,3 lb)
+    expect(encumbrance(world, kael).level).toBe('ok');
+    kael.coins = 150_000; // 1500 de oro: +30 lb
     expect(encumbrance(world, kael).level).toBe('encumbered');
-    kael.coins = 5000; // +100 lb
+    kael.coins = 500_000; // 5000 de oro: +100 lb
     const e = encumbrance(world, kael);
     expect(e.level).toBe('heavily');
     expect(e.speed_penalty_ft).toBe(20);
-    kael.coins = 10000;
+    kael.coins = 1_000_000;
     expect(encumbrance(world, kael).level).toBe('immobile');
   });
 

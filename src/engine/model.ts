@@ -7,8 +7,11 @@
  *  - Las salidas son entidades con estado, no aristas.
  *  - Los sistemas (combates, crímenes, líneas secundarias) no son objetos del mundo.
  *
- * Unidades: metros, segundos de tiempo de juego, libras (5e) para peso.
+ * Unidades: metros, segundos de tiempo de juego, libras (5e) para peso,
+ * dinero en la moneda más pequeña (money.ts).
  */
+
+import type { Denomination } from './money.js';
 
 export type Id = string;
 
@@ -52,6 +55,10 @@ export interface Campaign {
   perception_rules: PerceptionRules;
   movement_rules: MovementRules;
   capacity_rules: CapacityRules;
+  /** Monedas de la campaña, de mayor a menor valor (money.ts). Sin ellas: oro, plata y cobre del SRD. */
+  currency?: Denomination[];
+  /** Valor (en la moneda más pequeña) con el que empieza un PJ nuevo. Sin él: DEFAULT_STARTING_COINS. */
+  starting_coins?: number;
   /** Identidad de la campaña para el master (SPEC §1.1). */
   premise: string;
   setting: string;
@@ -242,6 +249,7 @@ export interface CapacityRules {
   carry_per_str: number;
   encumbered_at: number;   // × STR
   heavily_at: number;      // × STR
+  /** Piezas por libra (SRD: 50). Pesan las monedas de verdad (15 de oro), no el valor (1500 de cobre): money.ts. */
   coins_per_lb: number;
 }
 
@@ -542,6 +550,8 @@ export interface Npc {
   memory: NpcMemory[];
   /** Cola de conversación (SPEC §9.6): con quién habla ahora. */
   talking_to: { character_id: Id; since_game_s: number; /** Otros PJ unidos a la charla (scene.ts). */ with?: Id[]; /** Turno guardado para quien esperaba: aún no ha hablado. */ reserved?: boolean } | null;
+  /** Su casa (datos de campaña): el máster sabe dónde vive y no se la inventa en otro sitio (prompt.ts, homeLine). */
+  home_spot_id?: Id;
   /** Comercio (SPEC §5.6): qué compra y a qué precio; qué vende. */
   buys: { item_id: Id; price: number }[];
   sells: { item_id: Id; price: number }[];

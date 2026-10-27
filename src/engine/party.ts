@@ -17,6 +17,7 @@ import type { Character, Id, Offer } from './model.js';
 import { normalize } from './aliases.js';
 import { descriptorOf } from './narrate.js';
 import { RACE_WORDS, recentDone, type DoneEvent, type OtherPc } from './closecheck.js';
+import { DEFAULT_CURRENCY, parseMoney, type Denomination } from './money.js';
 import type { World } from './world.js';
 
 /** Lo que dura una oferta sin respuesta (minutos reales). */
@@ -157,10 +158,9 @@ export function parseGive(text: string): GiveIntent | null {
   return m ? { what: m[1]!.trim(), to: m[2]!.trim() } : null;
 }
 
-/** Monedas en «20 monedas», «veinte monedas», «unas 50 monedas de cobre». null si no habla de monedas. */
-export function coinsIn(what: string): number | null {
-  const m = /(\d+)\s*(?:monedas?|mo|piezas?)\b/i.exec(what);
-  return m ? Number(m[1]) : null;
+/** Dinero en «20 monedas», «3 de oro», «2 de plata y 5 de cobre» (money.ts), en la moneda más pequeña. null si no habla de monedas. */
+export function coinsIn(what: string, cur: readonly Denomination[] = DEFAULT_CURRENCY): number | null {
+  return parseMoney(what, cur);
 }
 
 /** Ofertas vivas que alguien ha recibido. */

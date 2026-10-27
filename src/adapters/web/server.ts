@@ -114,6 +114,8 @@ export interface WebMessage {
   text: string;
   /** Botones: solo para el actor del evento. */
   roll?: { kind: string; key: string; dc: number | null };
+  /** En el historial: esta tirada sigue sin tirar y su botón vale aunque haya mensajes después (un aviso de horario, un NPC que llega). */
+  roll_pending?: true;
   /** Tirada a la vista (rolls.ts): la propia (anima el dado del botón) o la de otro (solo el aviso). */
   dice?: 'mine' | 'other';
   suggested?: string[];
@@ -709,7 +711,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       // Si se está presentando, la página no pide la descripción del sitio: el hilo empieza en el prólogo, que está al llegar.
       res.write(`event: cast\ndata: ${JSON.stringify(castOf(engine, id, ill, slug))}\n\n`
         + (rt.isOpening(id) ? 'event: opening\ndata: {}\n\n' : '')
-        + `event: history\ndata: ${JSON.stringify((rt.history.get(id) ?? []).map((m) => withImages(m, ill, slug)))}\n\n`);
+        + `event: history\ndata: ${JSON.stringify(historyFor(engine, id, rt.history.get(id) ?? []).map((m) => withImages(m, ill, slug)))}\n\n`);
       const set = rt.streams.get(id) ?? new Set();
       set.add(res);
       rt.streams.set(id, set);
@@ -1146,6 +1148,12 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   if (decisive) m.decisive_s = decisive.window_s;
   reactionView(m, e, engine.world, d.character_id);
   return m;
+}
+
+/** El historial que recibe la página al abrir o reconectar el stream: la tirada aún pendiente lleva la marca para que su botón siga vivo. */
+export function historyFor(engine: Engine, characterId: Id, history: readonly WebMessage[]): WebMessage[] {
+  const pending = engine.pendingRoll(characterId);
+  return history.map((m) => (pending && m.roll && m.seq === pending.seq ? { ...m, roll_pending: true } : m));
 }
 
 /**

@@ -16,6 +16,7 @@
  */
 
 import { transferItem } from './inventory.js';
+import { money } from './money.js';
 import type { Character, Debt, Id, Npc, Placement } from './model.js';
 import { deliverGoods } from './progress.js';
 import type { World } from './world.js';
@@ -51,13 +52,13 @@ export function dueText(dueGameS: number | null, nowGameS: number): string | nul
   return days === 1 ? 'vence mañana' : `vence en ${days} días`;
 }
 
-/** «Debes 1.000 a Marisa Quijano, vence mañana, prenda: espada larga». */
+/** «Debes 10 de oro a Marisa Quijano, vence mañana, prenda: espada larga». */
 export function debtLine(world: World, d: Debt, nowGameS: number, npcName: (n: Npc) => string, withIds = false): string {
   const npc = world.npcs.get(d.npc_id);
   const who = npc ? `${npcName(npc)}${withIds ? ` [${npc.id}]` : ''}` : d.npc_id;
   const pawn = d.collateral_instance_id ? world.itemInstances.get(d.collateral_instance_id) : undefined;
   const pawnName = pawn ? `${world.itemDef(pawn.item_id).name}${withIds ? ` [${pawn.id}]` : ''}` : null;
-  return [`Debes ${fmtCoins(d.amount)} a ${who}`, dueText(d.due_game_s, nowGameS), pawnName ? `prenda: ${pawnName}` : null].filter(Boolean).join(', ');
+  return [`Debes ${money(world, d.amount)} a ${who}`, dueText(d.due_game_s, nowGameS), pawnName ? `prenda: ${pawnName}` : null].filter(Boolean).join(', ');
 }
 
 function store(c: Character): Debt[] {
@@ -166,7 +167,7 @@ export function settleDebt(world: World, c: Character, input: { npc_id: Id; how:
     const want = input.amount == null ? d.amount : validAmount(input.amount);
     if (want === null) return { ok: false, error: 'amount debe ser un número de monedas mayor que 0, o null para pagarlo todo' };
     paid = Math.min(want, d.amount);
-    if (c.coins < paid) return { ok: false, error: `${c.name} tiene ${fmtCoins(c.coins)} monedas y hacen falta ${fmtCoins(paid)}` };
+    if (c.coins < paid) return { ok: false, error: `${c.name} tiene ${money(world, c.coins)} y hacen falta ${money(world, paid)}` };
     c.coins -= paid;
     d.amount -= paid;
   } else d.amount = 0;

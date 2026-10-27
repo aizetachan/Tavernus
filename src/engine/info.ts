@@ -11,7 +11,8 @@ import { journalOf, npcLabel } from './journal.js';
 import type { Engine } from './engine.js';
 import { weaponOf } from './combat.js';
 import { isDying, isStable } from './death.js';
-import { debtLine, fmtCoins, openDebts } from './debts.js';
+import { debtLine, openDebts } from './debts.js';
+import { money } from './money.js';
 import { abilityModifier, proficiencyBonus } from './dice.js';
 import type { InfoIntent } from './fastpath.js';
 import { RULE_TERMS } from './fastpath.js';
@@ -104,14 +105,14 @@ export function answerInfo(engine: Engine, c: Character, intent: InfoIntent): In
           ...(eq.length ? [`Puesto: ${eq.join(', ')}`] : []),
           ...(v.pockets.length ? [`Bolsillos: ${v.pockets.join(', ')}`] : []),
           ...v.containers.map((k) => `${cap(k.name)}: ${k.items.length ? k.items.join(', ') : 'vacía'}`),
-          `Monedas: ${fmtCoins(v.coins)} · Peso ${v.encumbrance.weight_lb.toFixed(1)} / ${v.encumbrance.max_lb} lb${lvl}`,
+          `Monedas: ${money(w, v.coins)} · Peso ${v.encumbrance.weight_lb.toFixed(1)} / ${v.encumbrance.max_lb} lb${lvl}`,
         ],
       };
     }
     case 'coins': {
       const now = engine.nowFor(c);
       const debts = openDebts(c).map((d) => debtLine(w, d, now, (n) => npcLabel(c, n)));
-      return { title: 'Monedas', lines: [`Llevas ${fmtCoins(c.coins)} monedas.`, ...debts.map((d) => `${d}.`)] };
+      return { title: 'Monedas', lines: [c.coins > 0 ? `Llevas ${money(w, c.coins)}.` : 'No llevas ni una moneda.', ...debts.map((d) => `${d}.`)] };
     }
     case 'hp': {
       const state = c.status === 'dead' ? 'Muerto.'
@@ -142,7 +143,7 @@ export function answerInfo(engine: Engine, c: Character, intent: InfoIntent): In
     }
     case 'quests': return quests(engine, c);
     case 'people': return people(engine, c);
-    case 'where': return { title: 'Dónde estás', lines: [whereAmI(w, engine.clock, c, engine.nowFor(c))] };
+    case 'where': return { title: 'Dónde estás', lines: [whereAmI(w, engine.clock, c, engine.nowFor(c)), ...[engine.aheadNotice(c)].filter((x): x is string => x !== null)] };
     case 'roll': return roll(engine, c, intent.check);
     case 'rule': return { title: 'Regla', lines: [RULE_TERMS.get(intent.term)!] };
   }

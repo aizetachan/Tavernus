@@ -26,10 +26,11 @@ import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type 
 import { parseErrand, pendingLine, trivialAction, type Errand } from './errand.js';
 import { atBoard, dropQuest, readBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
-import { crowdHere, tickSchedule } from './schedule.js';
+import { activeIn, crowdHere, tickSchedule } from './schedule.js';
+import { currencyOf, DEFAULT_STARTING_COINS, money } from './money.js';
 import { tickOrders } from './npcorders.js';
 import { tickStory, type StoryOutput } from './story.js';
-import { aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
+import { aheadNotice, aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
 import { seededRng, type Rng } from './dice.js';
 import { harvest } from './resources.js';
 import { spawnItem } from './inventory.js';
@@ -66,7 +67,7 @@ export interface ActionResult {
 
 export interface RequiresRoll { kind: CheckKind; key: string; dc: number | null; advantage: Advantage; target?: Id }
 
-export interface PendingRoll { text: string; roll: RequiresRoll; event_id: Id }
+export interface PendingRoll { text: string; roll: RequiresRoll; event_id: Id; seq: number }
 
 /** Lo que elige el jugador al crear (SPEC §4.6). Todo se valida en el servidor. */
 export interface CharacterSpec {
@@ -289,6 +290,19 @@ export class Engine {
     }
   }
 
+  /**
+   * Al arrancar: la tirada pedida y sin tirar sigue pendiente (solo vivía en memoria; un reinicio la perdía y el
+   * jugador tenía que repetir la acción). La anula lo mismo que en vivo: otra acción suya, el desenlace o la ventana caducada.
+   */
+  private restorePendingRolls(past: readonly GameEvent[]): void {
+    for (const e of past) {
+      if (!e.actor_id || !this.world.characters.has(e.actor_id)) continue;
+      const roll = e.payload['requires_roll'] as RequiresRoll | undefined;
+      if (roll) this.pendingRolls.set(e.actor_id, { text: e.input_text ?? '', roll, event_id: e.id, seq: e.seq });
+      else if (e.input_text != null || e.action_type === 'master_roll_outcome' || e.action_type === 'decisive_expired') this.pendingRolls.delete(e.actor_id);
+    }
+  }
+
   /** Arranca desde la persistencia, o desde `seed` si no hay nada guardado. */
   static async boot(opts: EngineOptions & { campaignId: Id; seed?: WorldSnapshot }): Promise<Engine> {
     let snapshot = await opts.repo.loadSnapshot(opts.campaignId);
@@ -305,6 +319,7 @@ export class Engine {
     engine.meetAll();
     engine.events.restore(past);
     engine.seedMoments(past);
+    engine.restorePendingRolls(past);
     await engine.installTickers();
     if (migrated) {
       engine.world.touch('campaign', snapshot.campaign.id);
@@ -356,7 +371,7 @@ export class Engine {
     this.events.emit({
       actor_id: null, at: { spot_id: anchor.id, next_spot_id: null, progress: 0, x: anchor.x, y: anchor.y, location_id: anchor.location_id },
       action_type: 'board', narration_private: '', visibility: 'public', tags: ['board'], payload: { job_ids: jobs.map((j) => j.id) },
-      observable: `📜 Tablón de Brezal, ${this.clock.format(tickGameS)}:\n` + jobs.map((j) => `• **${j.title}** — ${j.text} (${j.reward_coins} monedas; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n'),
+      observable: `📜 Tablón de Brezal, ${this.clock.format(tickGameS)}:\n` + jobs.map((j) => `• **${j.title}** — ${j.text} (${money(this.world, j.reward_coins)}; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n'),
     }, this.clock.realAt(tickGameS));
   }
 
@@ -781,6 +796,14 @@ export class Engine {
     const theirs = Math.min(...behind.map((o) => nowFor(o, g)));
     const hhmm = (s: number) => this.clock.format(s).slice(-5);
     return `⏳ Has llegado antes que el resto: para ti son las ${hhmm(mine)} y aquí aún son las ${hhmm(theirs)}. Podrás actuar en ${fmtDuration(this.clock.gameToReal(mine - g))} reales (marcharte, ya).`;
+  }
+
+  /** Aviso al PJ que va por delante del mundo (travel.ts), con lo que sigue en marcha donde está. null si no toca. */
+  aheadNotice(c: Character): string | null {
+    const g = this.gameNow();
+    const locId = this.world.characterSpot(c)?.location_id;
+    const happening = locId ? [...new Set(activeIn(this.world, locId, g).map(({ event }) => event.title))] : [];
+    return aheadNotice(c, g, this.clock, happening);
   }
 
   /** ¿Es moverse (a otro punto o a otra localización), sola o con algo que hacer allí? */
@@ -1210,7 +1233,7 @@ export class Engine {
   private noteBoard(c: Character, nowG: number): void {
     const fresh = readBoard(this.world, c, nowG);
     this.emitProgress(c, fresh.map((j) => {
-      const why = `Aviso del tablón: lo pide ${this.world.npc(j.giver_npc_id).name} · ${j.reward_coins} monedas`;
+      const why = `Aviso del tablón: lo pide ${this.world.npc(j.giver_npc_id).name} · ${money(this.world, j.reward_coins)}`;
       return { kind: 'quest', text: `Encargo disponible: «${j.title}». ${why}.`, quest: { id: j.id, title: j.title, event: 'available', why } };
     }));
   }
@@ -1233,7 +1256,7 @@ export class Engine {
   /** Estado del tablón para /tablon. */
   boardText(): string {
     const jobs = activeJobs(this.world);
-    return jobs.length ? jobs.map((j) => `• **${j.title}** — ${j.text} (${j.reward_coins} monedas; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n') : 'El tablón está vacío.';
+    return jobs.length ? jobs.map((j) => `• **${j.title}** — ${j.text} (${money(this.world, j.reward_coins)}; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n') : 'El tablón está vacío.';
   }
 
   private async resolveWithMaster(c: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string; prologue?: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<ActionResult> {
@@ -1287,7 +1310,7 @@ export class Engine {
     }, this.stampFor(c));
     // Lo que el máster pidió a otro jugador (request_reaction): la petición sale después de su narración.
     this.announcePending(c.id);
-    if (k.requires_roll) this.pendingRolls.set(c.id, { text, roll: k.requires_roll, event_id: event.id });
+    if (k.requires_roll) this.pendingRolls.set(c.id, { text, roll: k.requires_roll, event_id: event.id, seq: event.seq });
     if (k.decisive && scene !== 'decisive_timeout' && c.status === 'active') this.openDecisive(c, k.decisive, event.id);
     for (const sr of out.shown_rolls ?? []) this.announceRoll(sr);
     if (out.progress?.length) this.emitProgress(c, out.progress);
@@ -1363,7 +1386,7 @@ export class Engine {
     const c = this.world.character(characterId);
     const nowG = this.nowFor(c);
     switch (name.replace(/^\//, '')) {
-      case 'where': return whereAmI(this.world, this.clock, c, nowG);
+      case 'where': return [whereAmI(this.world, this.clock, c, nowG), this.aheadNotice(c)].filter(Boolean).join('\n');
       case 'who': return whoIsHere(this.world, this.clock, c, nowG);
       case 'inventory': return formatInventory(inventoryView(this.world, c.id));
       case 'look': return describeSurroundings(this.world, this.clock, c, nowG);
@@ -1445,7 +1468,7 @@ export class Engine {
       location: { type: 'spot', id: this.pickStartingPoint().spot_id },
       transit: null, status: 'active', speed_ft: race.speed_ft,
       abilities, passive_perception: 10, darkvision: race.darkvision, condition_speed_factor: 1,
-      coins: 1500, last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
+      coins: this.world.campaign.starting_coins ?? DEFAULT_STARTING_COINS, last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
     };
     // Lo de su clase (levels.ts): conjuros, pericia, estilo… con sus valores por defecto.
     initClass(c);
@@ -1748,7 +1771,7 @@ export class Engine {
     if (give) {
       const to = findPresentPc(this.world, c, give.to);
       if (!to) return null;
-      const coins = coinsIn(give.what);
+      const coins = coinsIn(give.what, currencyOf(this.world.campaign));
       let instance: Id | null = null;
       if (coins === null) {
         const item = resolveItem(this.world, c, give.what, 'carried');
@@ -1806,7 +1829,7 @@ export class Engine {
     if (!here || !there || here.location_id !== there.location_id) return { ok: false, error: `${toName} no está aquí.` };
     if (to.status !== 'active') return { ok: false, error: `${toName} no está en condiciones de recibir nada.` };
     const coins = Math.max(0, Math.floor(what.coins));
-    if (coins > from.coins) return { ok: false, error: `No tienes ${coins} monedas (llevas ${from.coins}).` };
+    if (coins > from.coins) return { ok: false, error: `No tienes ${money(this.world, coins)} (llevas ${money(this.world, from.coins)}).` };
     let label = '';
     let quantity = 0;
     if (what.instance_id) {
@@ -1816,7 +1839,7 @@ export class Engine {
       const def = this.world.itemDef(inst.item_id);
       label = quantity > 1 ? `${def.name} ×${quantity}` : def.name;
     }
-    if (coins) label = label ? `${label} y ${coins} monedas` : `${coins} monedas`;
+    if (coins) label = label ? `${label} y ${money(this.world, coins)}` : money(this.world, coins);
     if (!label) return { ok: false, error: '¿Qué le das?' };
     if (here.id !== there.id) approachSpot(this.world, from, there.id);
     const nowMs = this.now();
@@ -2622,7 +2645,9 @@ export class Engine {
     const plan = planRest(this.world, this.clock, c, intent.kind, nowG, this.rng);
     const res = this.applyPlan(c, plan, intent.dice);
     const spot = this.world.characterSpot(c)!;
-    const r = this.emitTrivial(c, text, intent.kind === 'long' ? 'sleep' : 'rest', 'rest', this.restText(c, plan, res),
+    // Se levanta por delante del mundo: se dice ya, antes de que la cena o la misa de «su» madrugada le pillen por sorpresa.
+    const ahead = this.aheadNotice(c);
+    const r = this.emitTrivial(c, text, intent.kind === 'long' ? 'sleep' : 'rest', 'rest', this.restText(c, plan, res) + (ahead ? `\n\n${ahead}` : ''),
       plan.interruption ? `${c.name} se acomoda para ${intent.kind === 'long' ? 'dormir' : 'descansar'}.` : `${c.name} ${intent.kind === 'long' ? 'duerme' : 'descansa'} un rato en ${spot.name}.`,
       'Una figura se acomoda para descansar.', undefined, { rest: { kind: plan.kind, completed: res.completed, healed: res.healed, dice_spent: res.dice_spent, recovered: res.recovered, safe: plan.safe, interrupted: plan.interruption?.kind ?? null } });
     const cut = plan.interruption;
@@ -2667,6 +2692,7 @@ export class Engine {
     return {
       ok: true, kind, completed: res.completed, until: hhmm(res.end_game_s), hp: `${c.hp_current}/${c.hp_max}`, healed: res.healed,
       dice_spent: res.dice_spent, dice_regained: res.dice_regained, recovered: res.recovered, safe: plan.safe,
+      ...(this.aheadNotice(c) ? { ahead: `El actor va por delante del mundo: para él son las ${hhmm(res.end_game_s)}, para los demás las ${hhmm(this.gameNow())}. Cuéntaselo: la gente sigue en lo que hacía a esa hora.` } : {}),
       ...(plan.interruption ? { interrupted_by: plan.interruption.what, note: 'Le despiertan a medias: narra eso; el descanso no le cura.' } : {}),
     };
   }
@@ -2735,7 +2761,7 @@ export class Engine {
     if (!allowed.ok) return { ok: false, text: `No: ${allowed.reason}.` };
     const own = bodyStateOf(body)!.owner_id === c.id;
     const got = lootBody(this.world, c, body, (id) => this.takeToHands(c, id) !== null || this.world.itemsCarriedBy(c.id).some((k) => Boolean(this.world.itemDef(k.item_id).container) && transferItem(this.world, id, { type: 'container', id: k.id }).ok));
-    const list = [...got.taken, ...(got.coins ? [`${got.coins} monedas`] : [])];
+    const list = [...got.taken, ...(got.coins ? [money(this.world, got.coins)] : [])];
     if (!list.length) return { ok: false, text: got.left ? 'No te cabe nada más encima.' : `No queda nada en ${label}.` };
     return this.emitTrivial(c, text, own ? 'recover' : 'loot', 'death',
       `${own ? 'Recuperas' : 'Te llevas'} de ${label}: ${list.join(', ')}.${got.left ? ` Se queda${got.left > 1 ? 'n' : ''} ${got.left} ${got.left > 1 ? 'cosas' : 'cosa'} que no te caben.` : ''}`,
@@ -2994,7 +3020,7 @@ export class Engine {
       return { ok: true, text: formatInventory(inventoryView(this.world, c.id)) };
     }
     if (/^(quien|quién|who)\b/.test(lower)) return { ok: true, text: whoIsHere(this.world, this.clock, c, nowG) };
-    if (/^(donde|dónde|where)\b/.test(lower)) return { ok: true, text: whereAmI(this.world, this.clock, c, nowG) };
+    if (/^(donde|dónde|where)\b/.test(lower)) return { ok: true, text: [whereAmI(this.world, this.clock, c, nowG), this.aheadNotice(c)].filter(Boolean).join('\n') };
     if (/^(despierto|despertar|me despierto|wake)\b/.test(lower)) {
       if (c.status !== 'asleep') return { ok: false, text: 'Ya estás despierto.' };
       c.status = 'active';
@@ -3191,6 +3217,7 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     n.description ??= seedNpc?.description ?? ''; n.motivation ??= seedNpc?.motivation ?? ''; n.secret ??= seedNpc?.secret ?? '';
     if (n.buys === undefined || n.stats === undefined) changed = true;
     n.buys ??= seedNpc?.buys ?? []; n.sells ??= seedNpc?.sells ?? [];
+    if (n.home_spot_id === undefined && seedNpc?.home_spot_id) { n.home_spot_id = seedNpc.home_spot_id; changed = true; }
     n.stats ??= seedNpc?.stats ?? null; n.attitude ??= seedNpc?.attitude ?? { default: 'neutral', by_character: {} };
   }
   for (const n of seed?.npcs ?? []) if (!snapshot.npcs.some((x) => x.id === n.id)) { snapshot.npcs.push(structuredClone(n)); changed = true; }
@@ -3228,6 +3255,26 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   if (seed?.campaign.death_rules && !camp2.death_rules) { camp2.death_rules = structuredClone(seed.campaign.death_rules); changed = true; }
   // Partidas de antes de las costumbres de la campaña escrita.
   if (seed?.campaign.customs && !camp2.customs) { camp2.customs = [...seed.campaign.customs]; changed = true; }
+  // Partidas de antes de las monedas de oro, plata y cobre (money.ts): la campaña escrita trae sus monedas y sus
+  // precios nuevos (una cerveza a 4 de cobre, no a 30); se toman de la semilla una vez. El dinero de cada PJ ya
+  // estaba en cobre: no se toca, solo se enseña y se pesa en monedas (1700 → 17 de oro).
+  if (seed?.campaign.currency && !camp2.currency) {
+    camp2.currency = structuredClone(seed.campaign.currency);
+    if (seed.campaign.starting_coins !== undefined) camp2.starting_coins = seed.campaign.starting_coins;
+    for (const j of camp2.jobs ?? []) {
+      const sj = seed.campaign.jobs.find((x) => x.id === j.id);
+      if (sj) j.reward_coins = sj.reward_coins;
+    }
+    for (const n of snapshot.npcs) {
+      const sn = seed.npcs.find((x) => x.id === n.id);
+      if (sn) { n.buys = structuredClone(sn.buys); n.sells = structuredClone(sn.sells); }
+    }
+    for (const d of snapshot.item_defs) {
+      const sd = seed.item_defs.find((x) => x.id === d.id);
+      if (sd) d.value = sd.value;
+    }
+    changed = true;
+  }
   // Mundos generados antes de los cuartos de alquiler: la habitación deja de ser el premio oculto.
   if (migrateRentableRooms(snapshot)) changed = true;
   return changed;

@@ -1353,7 +1353,7 @@ ${FIGHT_SCRIPT}
     $('view-place').textContent = placeName;
     $('place-sub').textContent = [s.footer, comma >= 0 ? where.slice(comma + 2) : '', state !== 'despierto' ? state : '', s.description.split('\n')[1] || ''].filter(Boolean).join(' · ');
     var coins = field(s, 'Monedas');
-    $('pack-sub').textContent = [loadShort(s) !== '—' ? 'Carga ' + loadShort(s) + ' lb' : '', coins ? coins + ' monedas' : ''].filter(Boolean).join(' · ') || 'Lo que llevas encima';
+    $('pack-sub').textContent = [loadShort(s) !== '—' ? 'Carga ' + loadShort(s) + ' lb' : '', coins ? coins : ''].filter(Boolean).join(' · ') || 'Lo que llevas encima';
   }
 
   var ABILS = ['FUE', 'DES', 'CON', 'INT', 'SAB', 'CAR'];
@@ -1562,7 +1562,7 @@ ${FIGHT_SCRIPT}
     };
     var load = p.load.split(' · ');
     var h = '<div class="tile wide money"><span class="l"><b>' + escapeHtml(load[0]) + '</b><small>Carga' + (load[1] ? ' · ' + escapeHtml(load[1]) : '') + '</small></span>' +
-      '<span class="coins"><b>' + escapeHtml(String(p.coins)) + '</b><small>Monedas</small></span></div><p class="pack-msg" id="pack-msg" hidden></p>';
+      '<span class="coins"><b>' + escapeHtml(String(p.money || p.coins)) + '</b><small>Monedas</small></span></div><p class="pack-msg" id="pack-msg" hidden></p>';
     var hands = p.hands.both ? [card(p.hands.main, 'a dos manos', '', 'hand:main')]
       : [card(p.hands.main, p.hands.main ? 'mano principal' : 'Mano principal libre', '', 'hand:main'), card(p.hands.off, p.hands.off ? 'otra mano' : 'Otra mano libre', '', 'hand:off')];
     h += group('En las manos', hands, p.hands.both ? 2 : (p.hands.main ? 1 : 0) + (p.hands.off ? 1 : 0), 2);
@@ -2440,7 +2440,8 @@ ${FIGHT_SCRIPT}
     stream.addEventListener('history', function (e) {
       log.innerHTML = '';
       var h = JSON.parse(e.data);
-      h.forEach(function (m, i) { renderMessage(m, i === h.length - 1); });
+      // Vivo: el último mensaje y la tirada que el servidor aún tiene pendiente, aunque haya avisos detrás.
+      h.forEach(function (m, i) { renderMessage(m, i === h.length - 1 || Boolean(m.roll_pending)); });
       if (!opening && !h.some(function (m) { return !m.scene; })) command('look');
       enterGame();
     });

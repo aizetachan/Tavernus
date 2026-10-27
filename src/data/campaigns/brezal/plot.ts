@@ -90,14 +90,14 @@ export const CLUES: Clue[] = [
 ];
 
 export const JOBS: Job[] = [
-  { id: 'job_lena', title: 'Leña para la posada', text: 'Brenna paga por diez leños secos. Los del roble del Soto sirven.', giver_npc_id: 'npc_brenna', kind: 'deliver', deliver: { item_id: 'it_madera', quantity: 10 }, reward_coins: 900, reward_reputation: 1 },
-  { id: 'job_bayas', title: 'Bayas para la despensa', text: 'Brenna quiere diez bayas del Soto antes de que los pájaros se las lleven.', giver_npc_id: 'npc_brenna', kind: 'deliver', deliver: { item_id: 'it_bayas', quantity: 10 }, reward_coins: 500, reward_reputation: 1 },
-  { id: 'job_ronda', title: 'Ronda hasta el Soto', text: 'Doro no puede dejar el portón. Paga a quien vaya hasta el roble del Soto, mire si hay alguien y vuelva a contárselo.', giver_npc_id: 'npc_doro', kind: 'visit', visit_spot_id: 'sp_cl_roble', reward_coins: 600, reward_reputation: 1 },
-  { id: 'job_fragua', title: 'Carbón para la fragua', text: 'Hugo necesita seis leños para que la fragua no se apague antes del jueves.', giver_npc_id: 'npc_hugo', kind: 'deliver', deliver: { item_id: 'it_madera', quantity: 6 }, reward_coins: 600, reward_reputation: 1 },
-  { id: 'job_pescado', title: 'Pescado fresco', text: 'Cinco truchas del arroyo del Soto para la cena de la posada.', giver_npc_id: 'npc_brenna', kind: 'deliver', deliver: { item_id: 'it_pescado', quantity: 5 }, reward_coins: 800, reward_reputation: 1 },
-  { id: 'job_toma', title: 'La toma del arroyo', text: 'Mateo paga a quien remonte la senda hasta el arroyo del Soto y mire qué atasca el agua que llega al molino.', giver_npc_id: 'npc_mateo', kind: 'visit', visit_spot_id: 'sp_cl_arroyo', reward_coins: 500, reward_reputation: 1 },
-  { id: 'job_huevos', title: 'Huevos para la cena', text: 'Brenna quiere seis huevos de los Corrales de Úrsula para el guiso de mañana.', giver_npc_id: 'npc_brenna', kind: 'deliver', deliver: { item_id: 'it_huevo', quantity: 6 }, reward_coins: 400, reward_reputation: 1 },
-  { id: 'job_cerca', title: 'La cerca del redil', text: 'Úrsula paga a quien le traiga cuatro leños para tapar el boquete del redil antes de que vuelvan los lobos.', giver_npc_id: 'npc_ursula', kind: 'deliver', deliver: { item_id: 'it_madera', quantity: 4 }, reward_coins: 450, reward_reputation: 1 },
+  { id: 'job_lena', title: 'Leña para la posada', text: 'Brenna paga por diez leños secos. Los del roble del Soto sirven.', giver_npc_id: 'npc_brenna', kind: 'deliver', deliver: { item_id: 'it_madera', quantity: 10 }, reward_coins: 60, reward_reputation: 1 },
+  { id: 'job_bayas', title: 'Bayas para la despensa', text: 'Brenna quiere diez bayas del Soto antes de que los pájaros se las lleven.', giver_npc_id: 'npc_brenna', kind: 'deliver', deliver: { item_id: 'it_bayas', quantity: 10 }, reward_coins: 20, reward_reputation: 1 },
+  { id: 'job_ronda', title: 'Ronda hasta el Soto', text: 'Doro no puede dejar el portón. Paga a quien vaya hasta el roble del Soto, mire si hay alguien y vuelva a contárselo.', giver_npc_id: 'npc_doro', kind: 'visit', visit_spot_id: 'sp_cl_roble', reward_coins: 50, reward_reputation: 1 },
+  { id: 'job_fragua', title: 'Carbón para la fragua', text: 'Hugo necesita seis leños para que la fragua no se apague antes del jueves.', giver_npc_id: 'npc_hugo', kind: 'deliver', deliver: { item_id: 'it_madera', quantity: 6 }, reward_coins: 40, reward_reputation: 1 },
+  { id: 'job_pescado', title: 'Pescado fresco', text: 'Cinco truchas del arroyo del Soto para la cena de la posada.', giver_npc_id: 'npc_brenna', kind: 'deliver', deliver: { item_id: 'it_pescado', quantity: 5 }, reward_coins: 50, reward_reputation: 1 },
+  { id: 'job_toma', title: 'La toma del arroyo', text: 'Mateo paga a quien remonte la senda hasta el arroyo del Soto y mire qué atasca el agua que llega al molino.', giver_npc_id: 'npc_mateo', kind: 'visit', visit_spot_id: 'sp_cl_arroyo', reward_coins: 50, reward_reputation: 1 },
+  { id: 'job_huevos', title: 'Huevos para la cena', text: 'Brenna quiere seis huevos de los Corrales de Úrsula para el guiso de mañana.', giver_npc_id: 'npc_brenna', kind: 'deliver', deliver: { item_id: 'it_huevo', quantity: 6 }, reward_coins: 15, reward_reputation: 1 },
+  { id: 'job_cerca', title: 'La cerca del redil', text: 'Úrsula paga a quien le traiga cuatro leños para tapar el boquete del redil antes de que vuelvan los lobos.', giver_npc_id: 'npc_ursula', kind: 'deliver', deliver: { item_id: 'it_madera', quantity: 4 }, reward_coins: 25, reward_reputation: 1 },
 ];
 
 export const ACHIEVEMENT: Achievement = {

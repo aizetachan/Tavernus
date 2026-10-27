@@ -15,7 +15,7 @@ import type { ItemDef, Npc, Spot, WorldSnapshot } from '../engine/model.js';
 
 export const ROOM_KEY_ITEM_ID = 'it_llave_cuarto';
 export const ROOM_NIGHT_ITEM_ID = 'it_noche_posada';
-export const ROOM_NIGHT_PRICE = 100;
+export const ROOM_NIGHT_PRICE = 20;
 
 export const ROOM_ITEMS: readonly ItemDef[] = [
   { id: ROOM_KEY_ITEM_ID, name: 'llave del cuarto', aliases: ['llave', 'llave del cuarto', 'llave de la habitación'], type: 'tool', size: 'tiny', weight_lb: 0.1, value: 0, unique: false, origin: 'custom' },

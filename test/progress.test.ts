@@ -62,7 +62,7 @@ describe('progreso de la demo', () => {
     const coins = kael.coins;
     const r = completeJob(world, kael, jobId, 'npc_brenna');
     expect(r).toMatchObject({ ok: true });
-    expect(kael.coins).toBe(coins + 900);
+    expect(kael.coins).toBe(coins + 60);
     expect(kael.reputation['fac_brezal']).toBe(1);
     expect(world.itemsCarriedBy(kael.id).filter((i) => i.item_id === 'it_madera').reduce((a, i) => a + i.quantity, 0)).toBe(0);
     expect(world.itemsIn({ type: 'npc', id: 'npc_brenna' }).reduce((a, i) => a + i.quantity, 0)).toBe(10);
@@ -88,12 +88,12 @@ describe('progreso de la demo', () => {
     const wood = world.itemsCarriedBy(kael.id).find((i) => i.item_id === 'it_madera')!;
     expect(sellToNpc(world, kael, 'npc_doro', wood.id)).toMatchObject({ ok: false });
     const coins = kael.coins;
-    expect(sellToNpc(world, kael, 'npc_brenna', wood.id, 2)).toEqual({ ok: true, item: 'leña', quantity: 2, total: 40 });
-    expect(kael.coins).toBe(coins + 40);
-    expect(buyFromNpc(world, kael, 'npc_brenna', 'it_cerveza', 1)).toEqual({ ok: true, item: 'jarra de cerveza', quantity: 1, total: 30, unlocked: [] });
-    expect(kael.coins).toBe(coins + 10);
+    expect(sellToNpc(world, kael, 'npc_brenna', wood.id, 2)).toEqual({ ok: true, item: 'leña', quantity: 2, total: 6 });
+    expect(kael.coins).toBe(coins + 6);
+    expect(buyFromNpc(world, kael, 'npc_brenna', 'it_cerveza', 1)).toEqual({ ok: true, item: 'jarra de cerveza', quantity: 1, total: 4, unlocked: [] });
+    expect(kael.coins).toBe(coins + 2);
     expect(buyFromNpc(world, kael, 'npc_brenna', 'it_daga', 1)).toMatchObject({ ok: false });
-    kael.coins = 5;
-    expect(buyFromNpc(world, kael, 'npc_brenna', 'it_cerveza', 1)).toMatchObject({ ok: false, reason: 'faltan 25 monedas' });
+    kael.coins = 1;
+    expect(buyFromNpc(world, kael, 'npc_brenna', 'it_cerveza', 1)).toMatchObject({ ok: false, reason: 'faltan 3 de cobre' });
   });
 });

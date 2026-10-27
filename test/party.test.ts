@@ -132,8 +132,8 @@ describe('ofertas con consentimiento', () => {
     engine.attachMaster(noMaster);
     await engine.act(kael.id, 'dar 20 monedas a Mira');
     const offer = mira.offers![0]!;
-    expect(offer).toMatchObject({ from_id: kael.id, coins: 20, label: '20 monedas', instance_id: null });
-    expect(seen(mira.id).at(-1)!.text).toBe('Kael te ofrece 20 monedas.');
+    expect(offer).toMatchObject({ from_id: kael.id, coins: 20, label: '2 de plata', instance_id: null });
+    expect(seen(mira.id).at(-1)!.text).toBe('Kael te ofrece 2 de plata.');
     const [k0, m0] = [kael.coins, mira.coins];
     await engine.answerOffer(mira.id, offer.id, true);
     expect([kael.coins, mira.coins]).toEqual([k0 - 20, m0 + 20]);
