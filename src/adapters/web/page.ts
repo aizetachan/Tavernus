@@ -650,10 +650,13 @@ ${FIGHT_STYLE}
   .sfx.on > .sfx-toggle, .tts > button.on { background: var(--accent-tint); }
   .tts-pop, .sfx-pop { top: 44px; border-radius: 16px; background: var(--bubble); box-shadow: var(--window-shadow); }
   /* Hacer / Decir: lo que escribes lo hace tu personaje (al narrador) o lo dice tal cual (a los demás, sin narrador). */
-  .chat-acts button.mode { border: 0; width: auto; min-width: 58px; white-space: nowrap; height: 32px; padding: 0 10px; border-radius: 16px; font: 600 12.5px/1 var(--sans); letter-spacing: 0; background: var(--control); color: #b8b1a6; }
-  .chat-acts button.mode[hidden] { display: none; }
-  .chat-acts button.mode.say { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
-  .chat-acts button.mode .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
+  .mode-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 16px; background: var(--control); }
+  .mode-seg button { height: 28px; padding: 0 12px; border: 0; border-radius: 14px; background: transparent; color: #b8b1a6; font: 600 12.5px/1 var(--sans); letter-spacing: 0; white-space: nowrap; }
+  .mode-seg button:hover:not(:disabled) { color: var(--text); }
+  .mode-seg button.on { background: rgba(255,255,255,.1); color: var(--text); }
+  .mode-seg button[data-m="say"].on { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
+  .mode-seg button:disabled { opacity: .4; cursor: default; }
+  .mode-seg .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
   form.say input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
   /* «Responder» a un mensaje: su frase citada encima del cuadro, como en WhatsApp; la ✕ deja de responder. */
   .quote { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px max(24px, calc((100% - 980px) / 2)) 0; background: var(--panel); border-top: 1px solid var(--sep); }
@@ -860,7 +863,7 @@ ${FIGHT_STYLE}
   #slash .slash-list span { font-size: 13px; line-height: 1.35; color: var(--muted); }
   #slash .slash-none { padding: 10px; font-size: 13px; color: var(--faint); }
   /* Ajustes (solo en el móvil): engranaje a la izquierda del cuadro; sonido, narrador y generar imagen en un panel. */
-  #gear, #gear-menu, #cube-menu .m-only { display: none; }
+  #gear, #gear-menu, #cube-menu .m-only, #to-menu { display: none; }
   #gear-menu { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 8px); z-index: 26; max-height: min(70vh, 560px); overflow-y: auto; padding: 10px;
     border-radius: 18px; background: var(--bubble); border: 1px solid var(--line); box-shadow: var(--window-shadow); }
   #gear-menu h3 { margin: 12px 6px 4px; font: 600 11px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
@@ -872,7 +875,6 @@ ${FIGHT_STYLE}
   #gear-menu .gm-paint b { display: block; font-size: 14px; font-weight: 600; }
   #gear-menu .gm-paint small { display: block; font-size: 12px; color: var(--muted); }
   #gear.on { background: var(--accent-tint); color: var(--accent); }
-  #cube-menu .bub.home { background: #3a3f44; color: var(--text); }
   #cube-menu .bub.side { background: #9bb8ef; color: #0f1a2e; }
   @media (max-width: 820px) {
     /* Abajo: ajustes · cuadro · Enviar · mochila, pegada al borde para que su menú suba en columna sobre ella. */
@@ -886,12 +888,13 @@ ${FIGHT_STYLE}
     #cube-menu .m-only { display: flex; }
     /* Arriba ya no va el botón del panel (está en la mochila) ni el sonido (está en los ajustes); parar la voz, sí. */
     #to-side, .chat-head .sfx, .chat-head .tts > .tts-auto, .chat-head .tts > .tts-more { display: none; }
-    .chat-head { padding-left: 12px; }
-    /* Letra del hilo algo menor en el móvil; el prólogo, bastante más contenido. */
-    .msg.row .body { font-size: 14px; line-height: 1.45; }
-    .msg.row .who { font-size: 12px; }
-    .msg.row .lead { font-size: 13.5px; }
-    .msg.notice, .msg.system .body { font-size: 12px; }
+    /* Volver al menú: la flecha, a la izquierda del sitio. */
+    #to-menu { display: inline-grid; margin-right: -4px; }
+    /* Letra del hilo en el móvil: la misma que el prólogo (13,5 px). */
+    #log .msg.row .body { font-size: 13.5px; line-height: 1.5; }
+    #log .msg.row .who { font-size: 12px; }
+    #log .msg.row .lead { font-size: 13px; }
+    #log .msg.notice, #log .msg.system .body { font-size: 12px; }
     .msg.info .body { font-size: 13px; }
     .actions button { height: 30px; padding: 0 12px; font-size: 12.5px; }
     .msg.chapter { margin: 10px 0 8px; padding: 14px 14px 6px; }
@@ -963,6 +966,7 @@ ${FIGHT_STYLE}
 </aside>
 <main id="play">
   <div class="chat-head">
+    <a class="ib" id="to-menu" href="/" title="Volver al menú principal" aria-label="Volver al menú principal"><svg class="i"><use href="#i-back"/></svg></a>
     <button type="button" class="ib" id="to-side" title="La partida: ficha, tablero y mapa" aria-label="Abrir la partida: ficha, tablero y mapa"><svg class="i"><use href="#i-grid"/></svg></button>
     <span class="dot" id="scene-dot"><svg class="i"><use href="#i-pin"/></svg></span>
     <div class="t"><div id="place">Tavernus</div><div id="place-sub"></div></div>
@@ -996,7 +1000,10 @@ ${FIGHT_STYLE}
     <div id="round" class="round-banner" hidden role="status"></div>
     <div id="typing" class="typing" hidden aria-live="polite"></div>
     <div class="chat-acts" id="chat-acts">
-      <button type="button" id="saymode" class="mode" hidden aria-pressed="false" title="Hacer: el narrador cuenta lo que haces. Decir: tu personaje lo dice tal cual, al instante y sin narrador.">Hacer</button>
+      <div id="saymode" class="mode-seg" role="group" aria-label="Lo que escribes">
+        <button type="button" data-m="do" class="on" aria-pressed="true" title="Hacer: el narrador cuenta lo que haces">Hacer</button>
+        <button type="button" data-m="say" aria-pressed="false" disabled title="Decir: tu personaje lo dice tal cual, al instante y sin narrador (con otros jugadores)">Decir</button>
+      </div>
     </div>
     <div id="quote" class="quote" hidden><div><b></b><span></span></div><button type="button" aria-label="No responder" title="No responder"><svg class="i"><use href="#i-x"/></svg></button></div>
     <form id="form" autocomplete="off">
@@ -1017,7 +1024,6 @@ ${FIGHT_STYLE}
   </div>
   <button type="button" id="cube-scrim" hidden aria-label="Cerrar el menú"></button>
   <div id="cube-menu" role="menu" aria-label="Menú de la partida" hidden>
-    <button type="button" role="menuitem" class="m-only" data-go="menu"><span class="bub home"><svg class="i"><use href="#i-home"/></svg></span><span><b class="lbl">Menú principal</b><small>Volver a la lista de partidas</small></span></button>
     <button type="button" role="menuitem" class="m-only" data-side><span class="bub side"><svg class="i"><use href="#i-map"/></svg></span><span><b class="lbl">Tablero y mapa<i class="dotnew" hidden></i></b><small>Tu ficha, el sitio, la gente y la misión</small></span></button>
     <button type="button" role="menuitem" data-open="sheet"><span class="bub sheet"><svg class="i"><use href="#i-sheet"/></svg></span><span><b class="lbl">Hoja</b><small>Características y habilidades</small></span></button>
     <button type="button" role="menuitem" data-open="journal"><span class="bub journal"><svg class="i"><use href="#i-book"/></svg></span><span><b class="lbl">Diario<i class="dotnew" hidden></i></b><small>Misiones, charlas, crónica y lugares</small></span></button>
@@ -1162,12 +1168,16 @@ ${FIGHT_SCRIPT}
     dot.querySelector('img').src = src;
   }
 
+  /** Sin más jugadores conectados, Decir queda apagado (presence). */
+  var alone = true;
+  function sayBtn() { return $('saymode').querySelector('[data-m="say"]'); }
   function setBusy(on) {
     busy = on;
     input.disabled = on;
     $('board').classList.toggle('busy', on);
     $('map').classList.toggle('busy', on);
     document.querySelectorAll('.chat-acts button, form button').forEach(function (b) { b.disabled = on; });
+    if (!on) sayBtn().disabled = alone;
     // Mientras se espera: los puntos del narrador en el hilo (novel.ts) y, si la acción va en cola, a quién se espera.
     turnShown = false;
     if (on) waitingFor = [];
@@ -1185,9 +1195,9 @@ ${FIGHT_SCRIPT}
     presenceList = list || [];
     var box = $('presence'), group = $('group');
     box.innerHTML = ''; group.innerHTML = '';
-    // Hacer / Decir solo tiene sentido con más jugadores en la partida; en solitario, todo va al narrador.
-    var alone = !list || !list.length;
-    $('saymode').hidden = alone;
+    // Decir solo tiene sentido con más jugadores en la partida; en solitario se ve, pero todo va al narrador.
+    alone = !list || !list.length;
+    sayBtn().disabled = alone || busy;
     if (alone && sayMode) setSayMode(false);
     if (!list || !list.length) return;
     list.forEach(function (p) {
@@ -1256,10 +1266,10 @@ ${FIGHT_SCRIPT}
     if (!on || !to || !sayTo || to.id !== sayTo.id) setQuote(null);
     sayMode = on; sayTo = on ? (to || null) : null;
     armSayIdle();
-    var b = $('saymode');
-    b.classList.toggle('say', on);
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.innerHTML = on ? 'Decir' + (sayTo ? '<span class="to"></span>' : '') : 'Hacer';
+    var doB = $('saymode').querySelector('[data-m="do"]'), b = sayBtn();
+    doB.classList.toggle('on', !on); doB.setAttribute('aria-pressed', on ? 'false' : 'true');
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.innerHTML = 'Decir' + (sayTo ? '<span class="to"></span>' : '');
     if (sayTo) b.querySelector('.to').textContent = 'a ' + sayTo.name;
     $('form').classList.toggle('say', on);
     input.placeholder = on ? (sayTo ? '¿Qué le dices a ' + sayTo.name + '?' : '¿Qué dices?') : '¿Qué haces?';
@@ -2557,12 +2567,17 @@ ${FIGHT_SCRIPT}
     // Ni las consultas ni la tirada salen como mensaje del jugador: solo su respuesta.
     // Los de depuración en offline llevan argumento («/time +2h», «/daño 5»); los demás, solo el nombre.
     if (text.charAt(0) === '/') command(/^\/(time|da[ñn]o)\s/i.test(text) ? text.trim() : text.split(/\s+/)[0]);
-    else if (sayMode || (!$('saymode').hidden && /^[—–«"“-]/.test(text))) say(text);
+    else if (sayMode || (!alone && /^[—–«"“-]/.test(text))) say(text);
     else if (text === 'tirar' || text === 'roll') { spendButtons(); roll(); }
     else act(text);
   });
   // Hacer ⇄ Decir; con destinatario, el primer toque lo quita y el segundo vuelve a Hacer.
-  $('saymode').addEventListener('click', function () { if (sayMode && sayTo) setSayMode(true, null); else setSayMode(!sayMode); });
+  $('saymode').addEventListener('click', function (ev) {
+    var m = ev.target.closest('[data-m]'); if (!m || m.disabled) return;
+    if (m.getAttribute('data-m') === 'do') { if (sayMode) setSayMode(false); return; }
+    // Con destinatario, el primer toque lo quita (Decir a todos); si no, pasa a Decir.
+    if (sayMode && sayTo) setSayMode(true, null); else if (!sayMode) setSayMode(true);
+  });
 
   // --- Comandos: al escribir «/» sale un menú con todos y un buscador ---------------------
   var COMMANDS = [
@@ -2743,9 +2758,8 @@ ${FIGHT_SCRIPT}
   cubeMenu.addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-open]');
     if (b) openDrawer(b.getAttribute('data-open'));
-    // En el móvil: el panel (ficha, tablero, mapa, gente y misión) y la vuelta al menú también salen de aquí.
+    // En el móvil: el panel (ficha, tablero, mapa, gente y misión) también sale de aquí.
     if (ev.target.closest('[data-side]')) { setMenu(false); showSide(true); }
-    if (ev.target.closest('[data-go=menu]')) location.href = '/';
   });
   document.querySelectorAll('[data-dr]').forEach(function (b) { b.addEventListener('click', function () { openDrawer(b.getAttribute('data-dr')); }); });
   $('drawer-scrim').addEventListener('click', closeDrawer);
