@@ -20,6 +20,7 @@ import { money } from './money.js';
 import { attitudeOf } from './combat.js';
 import { droppedAt, givenQuests } from './quests.js';
 import { questsOf } from './story.js';
+import { trustTier } from './trust.js';
 
 /** Hasta cuándo un suceso del pueblo sigue en boca de la gente (2 días de juego). */
 const NEWS_S = 2 * 86400;
@@ -80,12 +81,9 @@ export function npcConcerns(world: World, n: Npc, pc: Character, nowG: number): 
 // ---------------------------------------------------------------------------
 
 /**
- * Nivel de trato del NPC con el PJ. Los cuatro de en medio son los mismos
- * nombres que la confianza por niveles (otra rama, `trustTier` en trust.ts):
- * al juntarlas, `stranger`…`ally` salen de allí y esta función solo añade los
- * dos de abajo, que salen de la actitud (y de la opinión numérica, cuando la haya).
- * Mientras tanto: sin charlas, extraño; con algo que recuerda, conocido;
- * amistoso, amigo; aliado, aliado.
+ * Nivel de trato del NPC con el PJ. Los cuatro de en medio son la confianza
+ * por niveles (`trustTier` en trust.ts); esta función solo añade los dos de
+ * abajo, que salen de la actitud.
  */
 export type TalkTier = 'hostile' | 'wary' | 'stranger' | 'acquaintance' | 'friend' | 'ally';
 
@@ -93,9 +91,7 @@ export function talkTier(n: Npc, pc: Character): TalkTier {
   const att = attitudeOf(n, pc.id);
   if (att === 'hostile') return 'hostile';
   if (att === 'unfriendly') return 'wary';
-  if (att === 'allied') return 'ally';
-  if (att === 'friendly') return 'friend';
-  return n.memory.some((m) => m.character_id === pc.id) ? 'acquaintance' : 'stranger';
+  return trustTier(n, pc.id);
 }
 
 /**

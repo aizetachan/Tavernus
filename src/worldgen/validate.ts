@@ -220,8 +220,15 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
     errs.push(...validateStory(c.story, {
       spot: (id) => spots.has(id), location: (id) => locs.has(id), npc: (id) => npcs.has(id), item: (id) => defs.has(id),
       clue: (id) => clues.has(id), job: (id) => jobs.has(id), exit: (id) => exits.has(id),
-      // Una pista que no está en ningún sitio solo la da su gente: si muere, hace falta otro camino.
-      clueNpcs: (id) => { const x = c.clues.find((k) => k.id === id); return x && !x.location_ids?.length ? x.npc_ids ?? [] : []; },
+      // Una pista que no está en ningún sitio solo la da su gente: si muere, hace falta otro camino. Con fuentes,
+      // solo cuenta quien está en todas (si una sale de otro o de un sitio, no depende de nadie).
+      clueNpcs: (id) => {
+        const x = c.clues.find((k) => k.id === id);
+        if (!x) return [];
+        if (x.sources?.length) return x.sources.every((s) => s.npc_id && s.npc_id === x.sources![0]!.npc_id) ? [x.sources[0]!.npc_id!] : [];
+        return !x.location_ids?.length ? x.npc_ids ?? [] : [];
+      },
+      clues: c.clues,
     }));
   }
   // Reglas del mundo (worldrules.ts): referencias, opinión de ±1/5/10 y etiquetas declaradas.

@@ -13,7 +13,8 @@ import { perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
-import { advanceNow, advanceStory, storyOf, storyQuestAction, type StoryOutput } from '../engine/story.js';
+import { advanceNow, advanceStory, clueBlocked, clueReachable, nameFor, openSources, storyOf, storyQuestAction, type StoryOutput } from '../engine/story.js';
+import { adjustTrust, knowledgeFor, MASTER_TRUST_CHANGES, TRUST_LABEL, trustNotice, trustTier, type TrustResult } from '../engine/trust.js';
 import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
 import { finishQuest, giveQuest } from '../engine/quests.js';
@@ -127,8 +128,11 @@ export const MASTER_TOOLS: Tool[] = [
   tool('harvest', 'Extrae de un nodo de recurso (talar, recolectar, pescar). El servidor tira la skill del nodo contra su CD, calcula rendimiento y regeneración y cuenta la práctica. No pidas requires_roll para esto.', {
     character_id: str('ID del personaje'), node_id: str('ID del nodo'),
   }),
-  tool('grant_clue', 'Concede una pista de la demo al actor. SOLO cuando el jugador la ha obtenido de verdad con sus actos (ver "cómo se obtiene" de cada pista). Una vez por personaje.', {
+  tool('grant_clue', 'Concede una pista de la demo al actor. SOLO cuando el jugador la ha obtenido de verdad con sus actos (ver "cómo se obtiene" de cada pista). Una vez por personaje. El servidor comprueba lo que pide la pista (confianza, paso de misión, sitio): si la rechaza, no la ha conseguido; narra en la ficción el motivo que devuelve (se cierra, cambia de tema, no encuentra nada).', {
     character_id: str('ID del personaje'), clue_id: str('ID de la pista'),
+  }),
+  tool('npc_trust', 'Lo que el actor ha hecho en la charla cambia cuánto se fía de él un NPC: favor (le ayuda en algo que le importa), gift (le regala algo; dar un objeto con transfer_item ya cuenta solo), flattery (le adula o le dora la píldora: sube si lo agradece, baja si su línea dice que no lo soporta), insult (le ofende o desprecia), harass (le hostiga: insiste cuando ya dijo que no, le presiona una y otra vez), threat (le amenaza o le presiona con miedo), lie_caught (le pilla en una mentira). Las tiradas sociales y las misiones las cuenta el servidor solo. Lo ganado en una misma charla tiene tope: la confianza de verdad se gana con varias charlas y con hechos.', {
+    npc_id: str('ID del NPC'), change: enm([...MASTER_TRUST_CHANGES], 'favor, gift, flattery, insult, harass, threat o lie_caught'), why: str('Qué ha pasado, en una frase'),
   }),
   tool('complete_job', 'Cierra un encargo del tablón para el actor al entregárselo al NPC que lo pidió. El servidor valida entrega (quita los objetos), paga y sube reputación. Para encargos narrativos, llámalo solo cuando el objetivo se haya cumplido de verdad en la ficción.', {
     character_id: str('ID del personaje'), job_id: str('ID del encargo'), npc_id: str('ID del NPC al que se entrega'),
@@ -313,7 +317,7 @@ export const MASTER_TOOLS: Tool[] = [
 export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story', 'story_quest',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
-  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident',
+  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident', 'npc_trust',
 ]);
 
 export const MEMORY_CAP_PER_CHARACTER = 8;
@@ -559,6 +563,13 @@ function whereIs(ctx: ToolContext, spotId: Id): { spot_id: Id; name: string; dis
  * juego) y lo anota para el evento. Devuelve null si ya lo alcanza, o el
  * error con la distancia y adónde ir.
  */
+/** Si la confianza de un NPC cambia de nivel, aviso al PJ tras la acción (los puntos no se enseñan). */
+function trustProgress(ctx: ToolContext, r: TrustResult): void {
+  const c = ctx.engine.world.characters.get(ctx.actor.id) ?? ctx.actor;
+  const text = trustNotice(nameFor(ctx.engine.world, c, r.npc_id), r);
+  if (text) ctx.progress.push({ kind: 'trust', text });
+}
+
 function reachNpc(ctx: ToolContext, npc: Npc): Record<string, unknown> | null {
   const w = ctx.engine.world;
   if (w.characterSpot(ctx.actor)?.id === npc.location.id) return null;
@@ -685,9 +696,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const n = world.npc(s('npc_id'));
       return {
         id: n.id, name: n.name, role: n.role, status: n.status, spot_id: n.location.id,
-        // Lo que vio del actor va antes que su carácter (crime.ts).
+        // Lo que vio del actor va antes que su carÃ¡cter (crime.ts).
         ...(npcCrimeLine(world, n, actor, nowGameS) ? { first_of_all: npcCrimeLine(world, n, actor, nowGameS) } : {}),
-        description: n.description, motivation: n.motivation, secret: n.secret,
+        description: n.description, motivation: n.motivation,
+        // Solo lo que se fÃ­a de contarle al actor; lo demÃ¡s no llega al mÃ¡ster (trust.ts).
+        trust_with_actor: TRUST_LABEL[trustTier(n, actor.id)], would_tell_actor: knowledgeFor(n, actor.id).map((k) => k.text),
         attitude_to_actor: attitudeOf(n, actor.id), combat: n.stats ? { ac: n.stats.ac, hp: `${n.stats.hp}/${n.stats.hp_max}`, attack: `${n.stats.attack_name} +${n.stats.attack_bonus}, ${n.stats.damage} ${n.stats.damage_type}` } : null,
         remembers_about_actor: n.memory.filter((m) => m.character_id === actor.id).map((m) => `[${engine.clock.format(m.game_s)}] ${m.note}`),
         remembers_about_others: n.memory.filter((m) => m.character_id !== actor.id && m.importance >= 2).slice(-5).map((m) => `[${engine.clock.format(m.game_s)}] ${world.characters.get(m.character_id)?.name ?? '?'}: ${m.note}`),
@@ -739,10 +752,13 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         reputation: actor.reputation[ach.faction_id] ?? 0,
         achievement: { title: ach.title, clues_required: ach.clues_required, reputation_required: ach.reputation_required, done: actor.achievements.some((a) => a.id === ach.id) },
         clues_obtained: actor.clues.map((id) => camp.clues.find((x) => x.id === id)?.title ?? id),
-        clues_pending: camp.clues.filter((x) => !actor.clues.includes(x.id)).map((x) => ({
+        // Solo las que el actor ya puede conseguir (por algún camino); las demás, contadas y sin detalle.
+        clues_pending: camp.clues.filter((x) => !actor.clues.includes(x.id) && clueReachable(world, actor, x)).map((x) => ({
           id: x.id, title: x.title, how: x.how,
+          ...(x.sources?.length ? { ways: openSources(world, actor, x, true).map((w) => w.via) } : {}),
           where: [...(x.location_ids ?? []).map(placeName), ...(x.npc_ids ?? []).map(npcName)],
         })),
+        clues_locked: camp.clues.filter((x) => !actor.clues.includes(x.id) && !clueReachable(world, actor, x)).length,
         board: activeJobs(world).map((j) => ({
           id: j.id, title: j.title, text: j.text, giver: `${npcName(j.giver_npc_id)} [${j.giver_npc_id}]`, kind: j.kind,
           ...(j.deliver ? { deliver: `${world.itemDef(j.deliver.item_id).name} ×${j.deliver.quantity}` } : {}),
@@ -927,6 +943,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         }
       }
       if (!r.ok) return { error: r.error.code, detail: r.error };
+      // Darle algo a un NPC es un regalo (o una entrega): sube su confianza, con el tope de la charla.
+      if (toType === 'npc') { const n = world.npc(s('to_id')); if (n.status === 'alive') trustProgress(ctx, adjustTrust(world, n, actor, 'gift', nowGameS)); }
       return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity, ...(stolen ? crimeNote(ctx) : {}) };
     }
     case 'report_incident': {
@@ -934,10 +952,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!INCIDENT_KINDS.includes(kind) || kind === 'murder') return { error: 'kind debe ser insult, theft, assault, armed_assault o desecration (las muertes las registra el servidor)' };
       const v = world.npcs.get(s('victim_id'));
       if (!v) return { error: `no existe el NPC ${s('victim_id')}` };
-      if (world.spot(v.location.id).location_id !== here()) return { error: `${v.name} no está aquí` };
-      if (kind === 'desecration' ? v.status !== 'dead' : v.status !== 'alive') return { error: kind === 'desecration' ? `${v.name} no está muerto` : `${v.name} no está vivo` };
+      if (world.spot(v.location.id).location_id !== here()) return { error: `${v.name} no estÃ¡ aquÃ­` };
+      if (kind === 'desecration' ? v.status !== 'dead' : v.status !== 'alive') return { error: kind === 'desecration' ? `${v.name} no estÃ¡ muerto` : `${v.name} no estÃ¡ vivo` };
       const i = reportIncident(world, { kind, perpetrator_id: actor.id, victim_id: v.id, spot_id: v.location.id, weapon: input['weapon'] == null ? null : s('weapon') }, nowGameS);
-      if (!i) return { ok: true, note: 'ya constaba algo igual o más grave de este actor contra esa persona: nada nuevo' };
+      if (!i) return { ok: true, note: 'ya constaba algo igual o mÃ¡s grave de este actor contra esa persona: nada nuevo' };
       return { ok: true, incident: i.id, kind: i.kind, witnesses: i.knowers.map((k) => world.npcs.get(k.npc_id)?.name).filter(Boolean), ...crimeNote(ctx) };
     }
     case 'spawn_item': {
@@ -976,7 +994,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return { ok: true, check: check.breakdown, quantity: r.quantity, item: world.itemDef(node.resource_item_id).name, regen_after: r.regen_after };
     }
     case 'grant_clue': {
-      const r = grantClue(world, world.character(s('character_id')), s('clue_id'));
+      const clue = world.campaign.clues.find((x) => x.id === s('clue_id'));
+      const who = world.character(s('character_id'));
+      const blocked = clue && !who.clues.includes(clue.id) ? clueBlocked(world, who, clue) : null;
+      if (blocked) return { error: 'clue_locked', reason: blocked, hint: 'No la ha conseguido: no la cuentes. Narra el motivo dentro de la ficción, sin decir qué escondía.' };
+      const r = grantClue(world, who, s('clue_id'));
       if (!r.ok) return { error: r.reason };
       ctx.progress.push(...r.events);
       return { ok: true, events: r.events.map((e) => e.text) };
@@ -996,12 +1018,22 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         : action === 'turn_in' ? 'Que quien la recibe le dé la recompensa en la charla.' : 'Queda apuntado que dijo que no; quien la pidió no insiste.';
       return { ok: true, events: told?.changes ?? [], ...(told?.tell_now ? { tell_now: told.tell_now } : {}), hint };
     }
+    case 'npc_trust': {
+      const n = world.npc(s('npc_id'));
+      const change = s('change') as (typeof MASTER_TRUST_CHANGES)[number];
+      if (!MASTER_TRUST_CHANGES.includes(change)) return { error: 'bad_change' };
+      if (n.status !== 'alive') return { error: 'npc_not_alive' };
+      const r = adjustTrust(world, n, actor, change, nowGameS);
+      trustProgress(ctx, r);
+      return { ok: true, trust: TRUST_LABEL[r.after], ...(r.delta === 0 && r.after === r.before ? { note: 'Ya ha ganado lo que se puede en esta charla: para fiarse más hace falta otra charla u otros hechos.' } : {}) };
+    }
     case 'complete_job': {
       const missJ = s('character_id') === actor.id ? reachNpc(ctx, world.npc(s('npc_id'))) : null;
       if (missJ) return missJ;
       const r = completeJob(world, world.character(s('character_id')), s('job_id'), s('npc_id'));
       if (!r.ok) return { error: r.reason };
       ctx.progress.push(...r.events);
+      trustProgress(ctx, adjustTrust(world, world.npc(s('npc_id')), world.character(s('character_id')), 'job', nowGameS));
       return { ok: true, events: r.events.map((e) => e.text), board: activeJobs(world).map((j) => j.title) };
     }
     case 'give_quest': {

@@ -13,7 +13,7 @@ import { priceFor } from './standing.js';
 import type { World } from './world.js';
 
 export interface ProgressEvent {
-  kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story' | 'quest' | 'level';
+  kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story' | 'quest' | 'level' | 'trust';
   text: string;
   public?: string;
   /** Si toca una misión: cuál, qué le ha pasado y por qué (el aviso del chat y el Diario lo enseñan). */

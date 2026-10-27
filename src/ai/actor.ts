@@ -22,6 +22,7 @@ import type { DialogueLine } from '../engine/moments.js';
 import { dealWithoutState, isPlaceholder, recentNpcLines, repeatedLines } from '../engine/closecheck.js';
 import { narratorProse, transcriptOf, transcriptText, TRANSCRIPT_LINES } from '../engine/conversation.js';
 import { npcConcerns, tierLine, TRUST_MOVES_TEXT } from '../engine/concerns.js';
+import { knowledgeFor } from '../engine/trust.js';
 import { orderOf, promisedMove } from '../engine/npcorders.js';
 import { positionOf } from '../engine/movement.js';
 import { money } from '../engine/money.js';
@@ -82,15 +83,11 @@ const SYSTEM = [
 ].join('\n');
 
 /**
- * Lo que el NPC sabe y puede contar a este PJ, aparte de su ficha pública.
- *
- * Punto de enganche para la confianza por niveles (otra rama): ella decide qué
- * parte del secreto llega aquí según lo que el PJ se ha ganado. Mientras tanto,
- * nada: el secreto no llega al actor y lo que el director quiera soltar ya va en
- * su borrador.
+ * Lo que el NPC sabe y puede contar a este PJ, aparte de su ficha pública: lo
+ * de su nivel de confianza con él (trust.ts). El resto del secreto no llega al actor.
  */
-export function npcKnowledge(_world: Engine['world'], _n: Npc, _pc: Character): string[] {
-  return [];
+export function npcKnowledge(_world: Engine['world'], n: Npc, pc: Character): string[] {
+  return knowledgeFor(n, pc.id).map((k) => k.text);
 }
 
 /** ¿Es un turno para el actor? Un solo NPC vivo habla en un cierre normal, sin tirada pendiente ni turno compartido. */
@@ -206,7 +203,7 @@ export function actorProblems(engine: Engine, pc: Character, n: Npc, lines: read
   // Lo que podía saber: el borrador, lo ya dicho, su ficha pública, lo que le ronda, la gente que el PJ conoce y los lugares.
   const w = engine.world;
   const allowed = [draft, ...transcriptOf(engine.events.all(), pc.id, n.id, 40).map((l) => l.text), n.description, n.motivation, n.role, closed.narration_private,
-    ...npcConcerns(w, n, pc, engine.nowFor(pc)), ...pc.knows.map((id) => w.npcs.get(id)?.name ?? ''), ...[...w.locations.values()].map((l) => l.name)].join(' ');
+    ...npcConcerns(w, n, pc, engine.nowFor(pc)), ...npcKnowledge(w, n, pc), ...pc.knows.map((id) => w.npcs.get(id)?.name ?? ''), ...[...w.locations.values()].map((l) => l.name)].join(' ');
   const leak = secretLeaks(n.secret, said, allowed);
   if (leak.length) out.push(`Dices cosas que tu personaje no cuenta (${leak.join(', ')}): quítalas.`);
   const names = unknownNames(engine, pc, n, said, draft);

@@ -13,6 +13,8 @@
 
 import type { Denomination } from './money.js';
 
+import type { StoryCondition } from './story.js';
+
 export type Id = string;
 
 /** Dónde está algo. Exactamente un sitio (SPEC §5.3, §14.2). */
@@ -195,9 +197,16 @@ export interface Faction { id: Id; name: string; description: string }
 export interface Clue {
   id: Id;
   title: string;
-  /** Solo para el master: cómo se obtiene y qué revela. */
+  /** Solo para el master: qué revela (y, sin `sources`, cómo se obtiene). */
   how: string;
   reputation: number;
+  /** Pista clave: la historia la necesita. El validador de campaña le exige al menos dos fuentes. */
+  key?: boolean;
+  /**
+   * Caminos para conseguirla, cada uno con lo que pide. grant_clue solo la da si se cumple alguno; si no, la
+   * rechaza con el motivo (`refusal`) para que el máster lo narre. Sin `sources`, cualquier camino vale.
+   */
+  sources?: ClueSource[];
   /** Anclas: el contexto del máster solo trae el "cómo" de la pista si el actor está en una de estas localizaciones o tiene delante a uno de estos NPCs. Sin anclas, va siempre. */
   location_ids?: Id[];
   npc_ids?: Id[];
@@ -208,6 +217,20 @@ export interface Clue {
    * (src/engine/moments.ts).
    */
   image?: string;
+}
+
+/** Un camino para conseguir una pista. */
+export interface ClueSource {
+  /** Para el máster: de quién o de qué sale y cómo («Ilse lo cuenta si se fía de ti»). */
+  via: string;
+  /** Quién la da: tiene que estar con el PJ. */
+  npc_id?: Id;
+  /** Dónde se encuentra: el PJ tiene que estar allí. */
+  location_id?: Id;
+  /** Lo que hace falta (confianza, paso de misión, objeto…); sin requisito, basta con estar. */
+  requires?: StoryCondition;
+  /** Por qué no sale aún, en ficción, para que el máster lo narre («Ilse aún no se fía de ti»). */
+  refusal?: string;
 }
 
 export interface Job {
@@ -611,8 +634,17 @@ export interface Npc {
   passive_perception: number;
   description: string;
   motivation: string;
-  /** Lo que el master sabe y no debe soltar sin motivo. */
+  /**
+   * Lo que esconde, entero: para el análisis y los mundos generados. Al máster no le llega tal cual: le llega
+   * `knowledge` por niveles (trust.ts); sin `knowledge`, el secreto cuenta como de nivel amigo.
+   */
   secret: string;
+  /** Lo que sabe y cuenta según cuánto se fíe del PJ (trust.ts). Cada nivel suma a los de debajo. */
+  knowledge?: NpcKnowledge[];
+  /** Carácter: la adulación le resta confianza en vez de sumarla (trust.ts). Sin campo, la agradece. */
+  dislikes_flattery?: boolean;
+  /** Confianza en cada PJ (trust.ts): puntos y lo ganado en la última charla. */
+  trust?: Record<Id, NpcTrust>;
   memory: NpcMemory[];
   /** Cola de conversación (SPEC §9.6): con quién habla ahora. */
   talking_to: { character_id: Id; since_game_s: number; /** Otros PJ unidos a la charla (scene.ts). */ with?: Id[]; /** Turno guardado para quien esperaba: aún no ha hablado. */ reserved?: boolean } | null;
@@ -670,6 +702,15 @@ export interface NpcDeath {
 }
 
 export type Attitude = 'hostile' | 'unfriendly' | 'neutral' | 'friendly' | 'allied';
+
+/** Nivel de confianza de un NPC en un PJ (trust.ts), de menos a más. */
+export type TrustTier = 'stranger' | 'acquaintance' | 'friend' | 'ally';
+
+/** Una parte de lo que sabe un NPC: la cuenta a quien tenga al menos ese nivel de confianza con él. */
+export interface NpcKnowledge { tier: TrustTier; text: string }
+
+/** Confianza de un NPC en un PJ. `talk`: lo ganado en la conversación en curso, para el tope por charla. */
+export interface NpcTrust { points: number; talk?: { since_game_s: number; gained: number; last_game_s: number } }
 
 export interface NpcStats {
   ac: number;

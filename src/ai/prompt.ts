@@ -21,7 +21,8 @@ import { describeHook } from '../engine/hooks.js';
 import { AHEAD_NOTICE_S, aheadBy, travelBlock } from '../engine/travel.js';
 import { scheduleContext } from '../engine/schedule.js';
 import { orderLine } from '../engine/npcorders.js';
-import { storyContext } from '../engine/story.js';
+import { clueBlocked, openSources, storyContext } from '../engine/story.js';
+import { heldBackTier, knowledgeFor, nextTier, TRUST_LABEL, trustTier } from '../engine/trust.js';
 import { givenContext } from '../engine/quests.js';
 import { worldLaws } from '../engine/laws.js';
 import { describeRumor, rumorBudget, rumorsHeardBy, rumorsIn } from '../engine/rumors.js';
@@ -86,6 +87,7 @@ export function systemPrompt(c: Campaign, opts: { actor?: boolean } = {}): strin
     'GANCHOS: lo trivial (moverse entre puntos, salir por una salida, coger o soltar, esperar, llegar a un sitio ya visitado) lo resuelve el servidor sin llamarte. Para que el mundo siga vivo, siembra con plant_hook lo que deba pasar después: alguien que llega a una hora, una consecuencia al acercarse a un sitio o al coger algo. Con mesura: uno o dos por escena como mucho, y nunca para empujar al jugador hacia un secreto.',
     'AGENDA: lo que un NPC anuncia con hora (una misa, un mercado, una reunión, una llegada) prográmalo con schedule_event para que ocurra de verdad: a su hora el servidor trae a la gente y a los NPC, y lo cuenta a quien esté. Para saber qué hay y cuándo, get_schedule. No narres como presente lo que la agenda no tiene en marcha.',
     'IMPARCIALIDAD: sabes cosas que los personajes no saben (secretos, motivaciones). Eres neutral: no guías al jugador hacia ellas, no las insinúas con el ambiente ni con las acciones sugeridas, no premias ni castigas por acercarse. El mundo reacciona a lo que el jugador hace, no a lo que tú sabes.',
+    'CONFIANZA: cada NPC cuenta solo lo que su confianza con el actor permite (extraño, conocido, amigo, aliado). Su línea en «Presentes» trae lo que contaría a ese nivel y nada más: lo que calla no te llega, así que no inventes secretos suyos ni le hagas soltar más con una tirada. Una tirada social con éxito le hace hablar mejor de lo que ya contaría, no saltarse niveles. La confianza sube con misiones, encargos, regalos, favores y adulación a quien la agradece (npc_trust) y tiradas sociales con éxito, con tope por charla; baja con amenazas, mentiras pilladas, insultos, hostigar (insistir cuando ya dijo que no) y adular a quien no lo soporta (npc_trust), y con crímenes. Si grant_clue rechaza una pista, el actor no la consigue: narra el motivo que devuelve dentro de la ficción.',
     'COMBATE: no hay turnos; es conversación. Un NPC hostil en el mismo punto (o que llega hasta el actor) actúa: resuelve su ataque con attack y narra. El ataque del jugador va con requires_roll kind=attack y requires_roll_target; el servidor tira contra la CA y aplica el daño; tú narras el resultado que te devuelve. Huir es move_to (el enemigo puede perseguir). A 0 PG el PJ cae inconsciente y el servidor tira sus salvaciones contra muerte: tú no las tiras ni decides si muere. MUERTE: un PJ solo muere si attack o apply_damage devuelven died (o el contexto dice MUERTO); nunca narres por tu cuenta que un PJ muere, resucita o vuelve de la muerte: su vuelta la cuenta el servidor. Atender a un caído: stabilize; curarle: heal; descanso que pide la ficción: take_rest; recursos de clase: spend_resource; conjuros: cast_spell (solo los de su lista). Ventana decisiva (decisive_threat): solo con una amenaza real e inmediata contra el actor, nunca dos seguidas; si no responde en 60 s, la amenaza se ejecuta.',
     'PROGRESO: recolectar (harvest) tira solo y cuenta práctica. Las misiones de la historia escrita (q_…, ver «Historia escrita») las pide alguien en escena: quien la da la cuenta con su voz y entra en el Diario (story_quest ask), sin preguntar si acepta; si el jugador dice que no, story_quest decline; la recompensa la da quien la recibe al entregarla (story_quest turn_in); nunca abras ni insinúes una que no esté disponible. Los demás encargos no se aceptan: si un NPC le da uno al actor o le pide algo concreto que hacer, ya es suyo; no le preguntes si acepta ni esperes un «acepto», y hacerlo o no es cosa suya. Uno del tablón queda en su Diario con que lo hablen; cualquier otro, regístralo con give_quest en ese mismo turno (título corto, de qué va, quién lo da, objetivo y recompensa si se dijo), y cuando lo cumpla o ya no se pueda, finish_quest. Los encargos del tablón se cierran con complete_job al entregarlos al NPC que los pidió; los de entrega los valida el servidor. Las pistas se conceden con grant_clue únicamente cuando el jugador las ha obtenido con sus actos. Vender y comprar: sell_item y buy_item con los precios del NPC; el master no negocia fuera de esa lista salvo una tirada de Persuasión que como mucho mueve un 10 %. El contexto solo trae las pistas de este lugar o de quien está delante y los títulos del tablón: si el jugador busca otra pista, pregunta por un encargo o va a entregarlo, consulta get_campaign_notes antes de responder.',
     'NOMBRES: los jugadores de la partida se conocen siempre por su nombre: llámalos por él. De los NPC, el actor solo conoce los nombres marcados como conocidos; a los demás los nombras por lo que se ve (la tabernera, el guardia del portón), también en suggested_actions. El nombre de un NPC se aprende cuando se presenta o alguien lo nombra: entonces va en names_learned.',
@@ -206,14 +208,35 @@ function clueIsHere(c: Clue, locationId: Id, npcIds: Id[]): boolean {
   return (c.location_ids ?? []).includes(locationId) || (c.npc_ids ?? []).some((id) => npcIds.includes(id));
 }
 
-/** Pistas sin obtener: las de aquí con su "cómo"; las demás, solo contadas (detalle con get_campaign_notes). */
-function cluesBlock(pending: Clue[], locationId: Id, npcIds: Id[]): string[] {
-  const here = pending.filter((c) => clueIsHere(c, locationId, npcIds));
+/**
+ * Pistas sin obtener: las de aquí con su "cómo"; las demás, solo contadas (detalle con get_campaign_notes). Con
+ * fuentes (trust.ts, story.ts), solo van las que el actor puede conseguir ya aquí, con el camino que tiene abierto:
+ * lo que aún no se ha ganado no llega al máster.
+ */
+function cluesBlock(engine: Engine, actor: Character, pending: Clue[], locationId: Id, npcIds: Id[]): string[] {
+  const world = engine.world;
+  const here = pending.filter((c) => clueIsHere(c, locationId, npcIds) && (!c.sources?.length || !clueBlocked(world, actor, c)));
   const rest = pending.length - here.length;
+  const ways = (c: Clue) => (c.sources?.length ? ` Cómo, aquí: ${openSources(world, actor, c).map((w) => w.via).join(' / ')}` : '');
   return [
-    ...(here.length ? ['Pistas de aquí (secretas, nunca las insinúes; grant_clue SOLO cuando el jugador la obtenga de verdad):', ...here.map((x) => `- ${x.title} [${x.id}]: ${x.how}`)] : []),
+    ...(here.length ? ['Pistas de aquí (secretas, nunca las insinúes; grant_clue SOLO cuando el jugador la obtenga de verdad):', ...here.map((x) => `- ${x.title} [${x.id}]: ${x.how}${ways(x)}`)] : []),
     ...(rest ? [`Otras ${rest} pista${rest > 1 ? 's' : ''} sin obtener, de otros sitios (get_campaign_notes).`] : []),
   ];
+}
+
+/**
+ * Lo que el NPC contaría al actor con la confianza que le tiene (trust.ts). Lo de niveles más altos no se pone:
+ * el máster no puede soltar lo que no sabe.
+ */
+function knowledgeLine(n: Npc, actor: Character): string {
+  const tier = trustTier(n, actor.id);
+  const told = knowledgeFor(n, actor.id);
+  const held = heldBackTier(n, actor.id);
+  // Hostil o recelosa con él, no hay siguiente nivel: no lo contará mientras dure.
+  const more = held ? ` Calla algo más que no sabes${nextTier(n, actor.id) ? `: lo contaría a un ${TRUST_LABEL[held]}` : ': ahora no se lo contará'}. No lo inventes ni lo insinúes.` : '';
+  const flattery = n.dislikes_flattery ? ' No soporta la adulación: si le doran la píldora, se cierra (npc_trust flattery).' : '';
+  if (!told.length && !more) return flattery ? `  Confianza con ${actor.name}: ${TRUST_LABEL[tier]}.${flattery}` : '';
+  return `  Confianza con ${actor.name}: ${TRUST_LABEL[tier]}. ${told.length ? `Lo que le contaría si viene a cuento (por partes, sin soltarlo de golpe; nunca por su cuenta): ${told.map((k) => dot(k.text)).join(' ')}` : 'A este nivel no le cuenta nada suyo.'}${more}${flattery}`;
 }
 
 /** Categoría de la tirada por su margen (closecheck.ts) con lo que significa, en una línea. */
@@ -346,7 +369,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, priceFor(n, actor.id, b.price, 'buy'))}`).join(', ')}` : '',
       carriedBy(world, n.id),
       saidBy(engine.events.recentInLocation(loc.id, 60), n.id),
-      n.secret ? `  Solo tú sabes (NUNCA lo reveles ni lo insinúes por tu cuenta): ${dot(n.secret)} Sale solo a medias y si se lo gana: confianza en varias charlas, presión creíble o tirada social contra CD alta.` : '',
+      knowledgeLine(n, actor),
       `  Recuerda de ${actor.name}: ${mine.length ? mine.join(' · ') : 'nada, es la primera vez que hablan'}`,
       said.length ? `  Lo último que se han dicho, literal (sigue el hilo; no repitas):\n${said.map((l) => `    ${l}`).join('\n')}` : '',
       close ? concernsLine(world, n, actor, nowG, '  ') : '',
@@ -397,7 +420,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     `## Brezal: reputación, pistas y tablón`,
     `Reputación con ${camp.factions.find((f) => f.id === ach.faction_id)?.name ?? ach.faction_id}: ${rep} (logro «${ach.title}»: ${ach.clues_required} pistas y ${ach.reputation_required} de reputación${actor.achievements.some((a) => a.id === ach.id) ? '; YA CONSEGUIDO' : ''}).`,
     `Pistas del actor: ${actor.clues.length ? actor.clues.map((id) => camp.clues.find((x) => x.id === id)?.title ?? id).join('; ') : 'ninguna'}.`,
-    ...cluesBlock(camp.clues.filter((x) => !actor.clues.includes(x.id)), loc.id, presentNpcIds),
+    ...cluesBlock(engine, actor, camp.clues.filter((x) => !actor.clues.includes(x.id)), loc.id, presentNpcIds),
     boardLine(activeJobs(world).map((j) => `${j.title} [${j.id}]${actor.completed_jobs.includes(j.id) ? ' (ya hecho)' : ''}`)),
   ].join('\n'));
 

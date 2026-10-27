@@ -30,6 +30,7 @@ import { abilityModifier, rollDie, type Rng } from './dice.js';
 import { directlyCarried } from './inventory.js';
 import type { CarrySlot, Character, DeathRules, Id, ItemDef, ItemInstance, Npc } from './model.js';
 import { ABILITY_ES, type Ability } from './rules.js';
+import { adjustTrust } from './trust.js';
 import type { World } from './world.js';
 
 export const DEFAULT_DEATH_RULES: DeathRules = {
@@ -454,6 +455,8 @@ export function npcDeathReport(world: World, n: Npc, crowd: string | null, nowG:
     if (!o.memory.some((m) => m.character_id === killer.id && m.note === note)) o.memory.push({ character_id: killer.id, game_s: nowG, note, importance: 3 });
     const a = o.attitude.by_character[killer.id] ?? o.attitude.default;
     if (a === 'neutral' || a === 'friendly' || a === 'allied') o.attitude.by_character[killer.id] = 'unfriendly';
+    // Ver un crimen resta confianza aunque luego se le pase el recelo (trust.ts).
+    adjustTrust(world, o, killer, 'witnessed_crime', nowG);
     world.touch('npcs', o.id);
   }
   const by = d.by_name ? ` por el golpe de ${d.by_name}` : '';

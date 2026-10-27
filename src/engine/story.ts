@@ -50,13 +50,14 @@ import { GAME_HOUR } from '../clock/clock.js';
 import { attitudeOf } from './combat.js';
 import type { Hook } from './hooks.js';
 import { spawnItem } from './inventory.js';
-import type { Attitude, Character, Id, Npc } from './model.js';
+import type { Attitude, Character, Clue, ClueSource, Id, Npc, TrustTier } from './model.js';
 import { addReputation, checkAchievement, grantClue, type ProgressEvent, type QuestChange } from './progress.js';
 import { RUMOR_KINDS, type Rumor, type RumorKind } from './rumors.js';
 import type { NpcRoutine, ScheduledEvent } from './schedule.js';
 import { money } from './money.js';
 import { hasTag, opinionOf } from './standing.js';
 import { hasFact } from './worldfacts.js';
+import { adjustTrust, TRUST_LABEL, TRUST_THRESHOLD, trustAtLeast, type TrustChange, type TrustResult, trustNotice } from './trust.js';
 import type { World } from './world.js';
 
 // ---------------------------------------------------------------------------
@@ -84,6 +85,10 @@ export type StoryCondition =
   | { kind: 'spot_state'; spot_id: Id; key: string; value?: string | number | boolean }
   | { kind: 'discovered'; spot_id: Id }
   | { kind: 'knows'; npc_id: Id }
+  /** El NPC se fía del PJ al menos hasta ese nivel (trust.ts). */
+  | { kind: 'trust'; npc_id: Id; at_least: TrustTier }
+  /** El PJ ha dado ese paso de esa misión. */
+  | { kind: 'step'; quest_id: Id; step_id: Id }
   /** El PJ está con ese NPC, en persona: hablando con él o en su mismo punto. */
   | { kind: 'talk'; npc_id: Id }
   | { kind: 'level'; at_least: number }
@@ -121,6 +126,8 @@ export type StoryEffect =
   | { kind: 'learn_place'; location_id: Id }
   | { kind: 'know_npc'; npc_id: Id }
   | { kind: 'attitude'; npc_id: Id; attitude: Attitude }
+  /** Mueve la confianza del NPC en el PJ (trust.ts): un cambio con su regla, o subirla al menos hasta un nivel. */
+  | { kind: 'trust'; npc_id: Id; change?: TrustChange; at_least?: TrustTier }
   /** Lo que pasa en la escena. No lo narra el motor: se lo pasa al máster, que lo cuenta con su voz. */
   | { kind: 'tell'; text: string }
   // Al mundo (una vez)
@@ -410,6 +417,8 @@ export function holds(world: World, c: Character | null, cond: StoryCondition): 
     }
     case 'discovered': return world.spots.get(cond.spot_id)?.discovered_by.includes(c!.id) ?? false;
     case 'knows': return c!.knows.includes(cond.npc_id);
+    case 'trust': { const n = world.npcs.get(cond.npc_id); return !!n && trustAtLeast(n, c!.id, cond.at_least); }
+    case 'step': return characterStory(c!).steps.includes(`${cond.quest_id}/${cond.step_id}`);
     case 'talk': return withNpc(world, c!, cond.npc_id);
     case 'level': return c!.level >= cond.at_least;
     case 'reputation': return (c!.reputation[cond.faction_id ?? world.campaign.achievement.faction_id] ?? 0) >= cond.at_least;
@@ -471,6 +480,8 @@ export function explain(world: World, c: Character, cond: StoryCondition): strin
     case 'spot_state': return `ha cambiado ${spot(cond.spot_id)}`;
     case 'discovered': return `descubriste ${spot(cond.spot_id)}`;
     case 'knows': return `sabes quién es ${npc(cond.npc_id)}`;
+    case 'trust': return `${npc(cond.npc_id)} te tiene por ${TRUST_LABEL[cond.at_least]}`;
+    case 'step': return `diste el paso «${quest(world, cond.quest_id)?.steps.find((x) => x.id === cond.step_id)?.text ?? cond.step_id}»`;
     case 'talk': return `fuiste a ver a ${npc(cond.npc_id)}`;
     case 'level': return `ya eres de nivel ${cond.at_least}`;
     case 'reputation': return `tu reputación llega a ${cond.at_least}`;
@@ -500,7 +511,7 @@ function isPersonal(cond: StoryCondition): boolean {
 // Consecuencias
 // ---------------------------------------------------------------------------
 
-const PERSONAL = new Set<StoryEffect['kind']>(['clue', 'give_item', 'reveal_spot', 'learn_place', 'know_npc', 'attitude', 'tell']);
+const PERSONAL = new Set<StoryEffect['kind']>(['clue', 'give_item', 'reveal_spot', 'learn_place', 'know_npc', 'attitude', 'trust', 'tell']);
 
 /**
  * Lo que el motor tiene que contar: al PJ (como progreso), a una localización,
@@ -528,6 +539,12 @@ export function applyStoryEffects(world: World, c: Character | null, effects: re
 
 /** Efectos que se aplican a cada PJ (los demás, al mundo, una vez). */
 export function isPersonalEffect(e: StoryEffect): boolean { return PERSONAL.has(e.kind); }
+
+/** Si la confianza cambia de nivel, se le dice al PJ (los puntos no se enseñan). */
+function tellTrust(world: World, c: Character, r: TrustResult, o: StoryOutput): void {
+  const text = trustNotice(nameFor(world, c, r.npc_id), r);
+  if (text) tellTo(o, c, [{ kind: 'trust', text }]);
+}
 
 function tellTo(o: StoryOutput, c: Character, events: ProgressEvent[]): void {
   if (!events.length) return;
@@ -585,6 +602,18 @@ function applyPersonal(world: World, c: Character, e: StoryEffect, o: StoryOutpu
     case 'attitude': {
       const n = world.npcs.get(e.npc_id);
       if (n) { n.attitude.by_character[c.id] = e.attitude; world.touch('npcs', n.id); }
+      break;
+    }
+    case 'trust': {
+      const n = world.npcs.get(e.npc_id);
+      if (!n) break;
+      const nowS = stateOf(world).last_game_s ?? 0;
+      if (e.change) tellTrust(world, c, adjustTrust(world, n, c, e.change, nowS), o);
+      if (e.at_least && !trustAtLeast(n, c.id, e.at_least)) {
+        const st = (n.trust ??= {})[c.id] ??= { points: 0 };
+        st.points = Math.max(st.points, TRUST_THRESHOLD[e.at_least]);
+        world.touch('npcs', n.id);
+      }
       break;
     }
     case 'tell': o.beats.push({ character_id: c.id, text: e.text }); break;
@@ -1047,6 +1076,11 @@ function complete(world: World, c: Character, q: StoryQuest, nowS: number, o: St
   logStory(world, c, { quest_id: q.id, kind: 'done', game_s: nowS, why });
   const head = byNpc ? `🏁 Misión entregada a ${nameFor(world, c, byNpc)}` : '🏁 Misión cumplida';
   tellTo(o, c, [{ kind: 'story', text: `${head}: «${q.title}»${bits.length ? ` (${bits.join(', ')})` : ''}.`, quest: change(q, 'done', bits.length ? `${why} · ${bits.join(', ')}` : why), ...(q.ending ? { public: q.ending.replaceAll('{name}', c.name) } : {}) }]);
+  // Quien la encargó y quien la recibe se fían más (trust.ts): una misión cumplida pesa más que una charla.
+  for (const id of new Set([q.giver_npc_id, byNpc].filter((x): x is Id => !!x))) {
+    const n = world.npcs.get(id);
+    if (n && n.status === 'alive') tellTrust(world, c, adjustTrust(world, n, c, 'quest', nowS), o);
+  }
   applyEffects(world, c, q.on_complete, `${q.id}:done`, nowS, o);
   // La reputación de la recompensa también cuenta para el logro.
   if (r.reputation) { const ach = checkAchievement(world, c); if (ach) tellTo(o, c, [ach]); }
@@ -1197,6 +1231,48 @@ export function storyQuestAction(world: World, c: Character, questId: Id, action
 // Lectura (Diario y contexto del máster)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Pistas con requisitos (grant_clue)
+// ---------------------------------------------------------------------------
+
+/** ¿Está esta fuente al alcance del PJ ahora: su NPC con él, en su sitio? */
+function sourceHere(world: World, c: Character, s: ClueSource): boolean {
+  if (s.npc_id && !withNpc(world, c, s.npc_id)) return false;
+  if (s.location_id && (c.transit || world.characterSpot(c)?.location_id !== s.location_id)) return false;
+  return true;
+}
+
+/** Los caminos de la pista que el PJ puede usar ya (al alcance y con lo que piden cumplido). Sin `sources`, ninguno. */
+export function openSources(world: World, c: Character, clue: Clue, anywhere = false): ClueSource[] {
+  return (clue.sources ?? []).filter((s) => (anywhere || sourceHere(world, c, s)) && (!s.requires || holds(world, c, s.requires)));
+}
+
+/** ¿Puede el PJ conseguir esta pista (en algún sitio)? Sin `sources`, sí. */
+export function clueReachable(world: World, c: Character, clue: Clue): boolean {
+  return !clue.sources?.length || openSources(world, c, clue, true).length > 0;
+}
+
+/** Lo que falta, en ficción: la confianza en palabras de la gente; lo demás, como condición. */
+function refusalFor(world: World, c: Character, cond: StoryCondition): string {
+  if (cond.kind === 'trust') return `${cap(nameFor(world, c, cond.npc_id))} aún no se fía de ti lo bastante para contarlo`;
+  if (cond.kind === 'all' || cond.kind === 'any') {
+    const miss = cond.of.find((x) => !holds(world, c, x));
+    if (miss) return refusalFor(world, c, miss);
+  }
+  return `aún no: falta ${describeCondition(world, cond)}`;
+}
+
+/**
+ * grant_clue: null si el PJ puede conseguir la pista aquí y ahora; si no, por qué, para que el máster lo narre
+ * («Ilse aún no se fía de ti»). Las pistas que da la historia (un paso, una misión) no pasan por aquí.
+ */
+export function clueBlocked(world: World, c: Character, clue: Clue): string | null {
+  if (!clue.sources?.length || openSources(world, c, clue).length) return null;
+  const here = clue.sources.find((s) => sourceHere(world, c, s));
+  if (here?.requires) return here.refusal ?? refusalFor(world, c, here.requires);
+  return 'esta pista no sale de aquí ni de quien está con el actor: no la des y narra que no consigue nada nuevo';
+}
+
 /** La condición en castellano, para el máster. */
 export function describeCondition(world: World, cond: StoryCondition): string {
   const spot = (id: Id) => world.spots.get(id)?.name ?? id;
@@ -1216,6 +1292,8 @@ export function describeCondition(world: World, cond: StoryCondition): string {
     case 'spot_state': return `estado de ${spot(cond.spot_id)}: ${cond.key}${cond.value === undefined ? '' : ` = ${JSON.stringify(cond.value)}`} (update_spot_state)`;
     case 'discovered': return `descubrir ${spot(cond.spot_id)} (discover_spot)`;
     case 'knows': return `saber quién es ${npc(cond.npc_id)}`;
+    case 'trust': return `que ${npc(cond.npc_id)} le tenga por ${TRUST_LABEL[cond.at_least]} (confianza: misiones, favores, regalos, tiradas sociales)`;
+    case 'step': return `el paso «${quest(world, cond.quest_id)?.steps.find((x) => x.id === cond.step_id)?.text ?? cond.step_id}» de «${quest(world, cond.quest_id)?.title ?? cond.quest_id}»`;
     case 'talk': return `estar con ${npc(cond.npc_id)} en persona`;
     case 'level': return `nivel ${cond.at_least}`;
     case 'reputation': return `reputación ${cond.at_least}`;
@@ -1345,7 +1423,7 @@ export function storyContext(world: World, c: Character, nowS: number): string |
  */
 function npcsNeeded(c: StoryCondition, clueNpcs: (id: Id) => Id[]): Set<Id> {
   switch (c.kind) {
-    case 'talk': case 'npc_has': case 'npc_at': case 'attitude': case 'opinion': case 'debt_paid': return new Set([c.npc_id]);
+    case 'talk': case 'npc_has': case 'npc_at': case 'attitude': case 'opinion': case 'debt_paid': case 'trust': return new Set([c.npc_id]);
     case 'clue': return new Set(clueNpcs(c.clue_id));
     case 'all': return new Set(c.of.flatMap((x) => [...npcsNeeded(x, clueNpcs)]));
     case 'any': {
@@ -1357,10 +1435,10 @@ function npcsNeeded(c: StoryCondition, clueNpcs: (id: Id) => Id[]): Set<Id> {
 }
 
 /** Lo que existe en el mundo, para validar referencias de la historia y de las reglas del mundo. */
-export interface StoryRefs { spot: (id: Id) => boolean; location: (id: Id) => boolean; npc: (id: Id) => boolean; item: (id: Id) => boolean; clue: (id: Id) => boolean; job: (id: Id) => boolean; exit: (id: Id) => boolean; clueNpcs?: (id: Id) => Id[] }
+export interface StoryRefs { spot: (id: Id) => boolean; location: (id: Id) => boolean; npc: (id: Id) => boolean; item: (id: Id) => boolean; clue: (id: Id) => boolean; job: (id: Id) => boolean; exit: (id: Id) => boolean; clueNpcs?: (id: Id) => Id[]; clues?: Clue[] }
 
 /** Errores de referencias de una condición (también la usan las reglas del mundo). */
-export function conditionErrors(where: string, c: StoryCondition, has: StoryRefs, ids: { quests: ReadonlySet<Id>; escalations: ReadonlySet<Id> }, errs: string[]): void {
+export function conditionErrors(where: string, c: StoryCondition, has: StoryRefs, ids: { quests: ReadonlySet<Id>; escalations: ReadonlySet<Id>; steps?: ReadonlySet<string> }, errs: string[]): void {
   const cond = (w: string, x: StoryCondition) => conditionErrors(w, x, has, ids, errs);
   switch (c.kind) {
     case 'clue': if (!has.clue(c.clue_id)) errs.push(`${where}: la pista ${c.clue_id} no existe.`); break;
@@ -1370,7 +1448,8 @@ export function conditionErrors(where: string, c: StoryCondition, has: StoryRefs
     case 'npc_at': if (!has.npc(c.npc_id) || !has.spot(c.spot_id)) errs.push(`${where}: ${c.npc_id} o ${c.spot_id} no existe.`); break;
     case 'carry': if (!has.item(c.item_id)) errs.push(`${where}: el objeto ${c.item_id} no existe.`); break;
     case 'npc_has': if (!has.npc(c.npc_id) || !has.item(c.item_id)) errs.push(`${where}: ${c.npc_id} o ${c.item_id} no existe.`); break;
-    case 'npc_status': case 'attitude': case 'knows': case 'talk': case 'debt_paid': if (!has.npc(c.npc_id)) errs.push(`${where}: el NPC ${c.npc_id} no existe.`); break;
+    case 'npc_status': case 'attitude': case 'knows': case 'talk': case 'debt_paid': case 'trust': if (!has.npc(c.npc_id)) errs.push(`${where}: el NPC ${c.npc_id} no existe.`); break;
+    case 'step': if (ids.steps && !ids.steps.has(`${c.quest_id}/${c.step_id}`)) errs.push(`${where}: el paso ${c.quest_id}/${c.step_id} no existe.`); break;
     case 'level': if (!(c.at_least >= 1)) errs.push(`${where}: nivel no válido.`); break;
     case 'escalated': if (!ids.escalations.has(c.id)) errs.push(`${where}: el escalón ${c.id} no existe.`); break;
     case 'world_hours': if (!(c.at_least > 0)) errs.push(`${where}: horas no válidas.`); break;
@@ -1394,6 +1473,7 @@ export function effectErrors(where: string, e: StoryEffect, has: StoryRefs, errs
   if ('location_id' in e && !has.location(e.location_id)) errs.push(`${where}: la localización ${e.location_id} no existe.`);
   if (e.kind === 'clue' && !has.clue(e.clue_id)) errs.push(`${where}: la pista ${e.clue_id} no existe.`);
   if (e.kind === 'give_item' && !has.item(e.item_id)) errs.push(`${where}: el objeto ${e.item_id} no existe.`);
+  if (e.kind === 'trust' && !e.change && !e.at_least) errs.push(`${where}: efecto de confianza sin change ni at_least.`);
   if (e.kind === 'exit_state' && !has.exit(e.exit_id)) errs.push(`${where}: la salida ${e.exit_id} no existe.`);
   if (e.kind === 'rumor' && !RUMOR_KINDS.includes(e.rumor_kind)) errs.push(`${where}: tipo de rumor no válido ${e.rumor_kind}.`);
   if (e.kind === 'hook' && e.trigger === 'spot' && !e.spot_id) errs.push(`${where}: gancho de punto sin spot_id.`);
@@ -1417,7 +1497,8 @@ export function validateStory(story: Story, has: StoryRefs): string[] {
     if (qids.has(q.id)) errs.push(`historia: la misión ${q.id} está repetida.`);
     qids.add(q.id);
   }
-  const ids = { quests: qids, escalations: new Set(story.escalation.map((e) => e.id)) };
+  const stepIds = new Set(story.quests.flatMap((q) => [...q.steps, ...(q.on_npc_dead ?? []).flatMap((r) => (r.outcome === 'reroute' ? r.steps ?? [] : []))].map((x) => `${q.id}/${x.id}`)));
+  const ids = { quests: qids, escalations: new Set(story.escalation.map((e) => e.id)), steps: stepIds };
   const cond = (where: string, c: StoryCondition): void => conditionErrors(where, c, has, ids, errs);
   const eff = (where: string, e: StoryEffect): void => effectErrors(where, e, has, errs);
   const steps = (w: string, list: StoryStep[], sids: Set<Id>, same: StoryStep[] = []): void => {
@@ -1490,6 +1571,7 @@ export function validateStory(story: Story, has: StoryRefs): string[] {
     }
     [...(q.on_accept ?? []), ...q.on_complete].forEach((e) => eff(w, e));
   }
+  if (has.clues) errs.push(...validateClueSources(story, has.clues, has, cond));
   const eids = new Set<Id>();
   for (const e of story.escalation) {
     const w = `escalón ${e.id}`;
@@ -1500,6 +1582,38 @@ export function validateStory(story: Story, has: StoryRefs): string[] {
     if (!(e.after_hours > 0)) errs.push(`${w}: after_hours debe ser positivo.`);
     cond(w, e.unless);
     e.effects.forEach((x) => eff(w, x));
+  }
+  return errs;
+}
+
+/**
+ * Las fuentes de cada pista: que existan su NPC y su sitio y que sus requisitos tengan sentido. Una pista clave
+ * (`key`) necesita al menos dos caminos distintos (otra persona, otro sitio o una misión que la da), para que no
+ * se cierre la historia si muere quien la sabe o no se fía nunca (Obsidian, «Investigación misiones y
+ * reactividad»: siempre otro camino).
+ */
+function validateClueSources(story: Story, clues: Clue[], has: { npc: (id: Id) => boolean; location: (id: Id) => boolean }, cond: (where: string, c: StoryCondition) => void): string[] {
+  const errs: string[] = [];
+  // Misiones que dan cada pista con sus efectos (al dar un paso, al cumplirla, al aceptarla).
+  const byQuest = new Map<Id, Set<Id>>();
+  for (const q of story.quests) {
+    const effects = [...q.steps.flatMap((s) => s.on_done ?? []), ...q.on_complete, ...(q.on_accept ?? []), ...(q.on_npc_dead ?? []).flatMap((r) => (r.outcome === 'reroute' ? (r.steps ?? []).flatMap((s) => s.on_done ?? []) : []))];
+    for (const e of effects) if (e.kind === 'clue') (byQuest.get(e.clue_id) ?? byQuest.set(e.clue_id, new Set()).get(e.clue_id)!).add(q.id);
+  }
+  for (const clue of clues) {
+    const w = `pista ${clue.id}`;
+    for (const [i, s] of (clue.sources ?? []).entries()) {
+      if (!s.via.trim()) errs.push(`${w}: la fuente ${i + 1} no dice cómo («via»).`);
+      if (s.npc_id && !has.npc(s.npc_id)) errs.push(`${w}: la fuente ${i + 1} la da ${s.npc_id}, que no existe.`);
+      if (s.location_id && !has.location(s.location_id)) errs.push(`${w}: la fuente ${i + 1} está en ${s.location_id}, que no existe.`);
+      if (s.requires) cond(`${w} (fuente ${i + 1})`, s.requires);
+    }
+    if (!clue.key) continue;
+    const ways = new Set<string>([
+      ...(clue.sources ?? []).map((s, i) => (s.npc_id ? `npc:${s.npc_id}` : s.location_id ? `loc:${s.location_id}` : `via:${i}`)),
+      ...[...(byQuest.get(clue.id) ?? [])].map((q) => `quest:${q}`),
+    ]);
+    if (ways.size < 2) errs.push(`${w}: es clave y solo tiene ${ways.size === 1 ? 'un camino' : 'ningún camino'}; hacen falta dos (otra persona, otro sitio o una misión que la dé).`);
   }
   return errs;
 }

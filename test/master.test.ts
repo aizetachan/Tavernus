@@ -246,7 +246,9 @@ describe('memoria y cola de conversación de NPC', () => {
     await engine.act('ch_kael', 'la miro');
     const ctx = requests[2]!.messages[0]!.content as string;
     expect(ctx).toContain('Recuerda de Kael: Kael preguntó por el incendio de Vharn y dijo venir del sur. · Pidió una cerveza.');
-    expect(ctx).toContain('NUNCA lo reveles ni lo insinúes por tu cuenta): Estuvo en Vharn');
+    // A un extraño no le llega el secreto (trust.ts): solo que lo calla y a quién se lo contaría.
+    expect(ctx).not.toContain('Estuvo en Vharn');
+    expect(ctx).toContain('Calla algo más que no sabes: lo contaría a un amigo');
     // Pasan 4 días de juego: la de importancia 1 se olvida, la de 2 sigue.
     time.advanceGame(4 * 24 * 3600);
     await engine.tick();
