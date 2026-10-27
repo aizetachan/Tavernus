@@ -220,6 +220,7 @@ export const TTS_STYLE = String.raw`
   .tts-pop input[type=range]::-webkit-slider-thumb, .sfx-pop input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff8ea; box-shadow: 0 0 0 3px rgba(230,183,90,.35), 0 1px 3px rgba(0,0,0,.5); }
   .tts-pop input[type=range]::-moz-range-thumb, .sfx-pop input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff8ea; box-shadow: 0 0 0 3px rgba(230,183,90,.35), 0 1px 3px rgba(0,0,0,.5); }
   .tts-pop .note { margin: 6px 0 0; color: var(--faint); font-size: 11.5px; line-height: 1.4; }
+  .tts-pop .note:empty { display: none; }
   .tts-hint { align-self: center; padding: 6px 12px; border-radius: 12px; background: var(--platter); color: var(--muted); font-size: 12.5px; }
   @media (max-width: 820px) {
     .tts > .tts-auto span { display: none; }
@@ -244,7 +245,6 @@ export const TTS_SCRIPT = String.raw`<script>
   // Modelos de la nube que se pueden elegir (ElevenLabs v3 / v2); el primero es el de la partida.
   var models = [];
   function cloudModel() { var m = store('tavernus.tts.model'); return models.some(function (x) { return x.id === m; }) ? m : (models[0] ? models[0].id : ''); }
-  function cloudLabel() { var id = cloudModel(), m = models.filter(function (x) { return x.id === id; })[0]; return m ? m.label : providerLabel; }
   /** Lee la voz de la nube (ElevenLabs…) si el servidor la tiene y no se ha elegido una del navegador en el selector. */
   function cloud() { return provider !== 'browser' && store('tavernus.tts.engine') !== 'browser'; }
   var auto = store('tavernus.tts.auto') === '1';
@@ -473,7 +473,7 @@ export const TTS_SCRIPT = String.raw`<script>
     '<button type="button" class="tts-auto" aria-pressed="false" title="Leer en alto cada narración nueva">' + SPEAKER + '<span>Leer solo</span></button>' +
     '<button type="button" class="tts-more" title="Voz del narrador" aria-label="Voz del narrador" aria-expanded="false"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>' +
     '<div class="tts-pop" hidden>' +
-      '<label>Narrador<select data-k="voice"></select></label>' +
+      '<label><select data-k="voice" aria-label="Voz del narrador"></select></label>' +
       '<label>Personajes<select data-k="npcvoice"></select></label>' +
       '<label>Velocidad <b class="rate"></b><input type="range" min="0.7" max="1.5" step="0.05" data-k="rate"></label>' +
       '<label class="row"><input type="checkbox" data-k="auto">Leer automáticamente las narraciones nuevas</label>' +
@@ -506,7 +506,7 @@ export const TTS_SCRIPT = String.raw`<script>
     pop.querySelector('[data-k=awake]').checked = awake;
     pop.querySelector('.note').textContent = browser
       ? (list.length ? list.length + ' voces en castellano en este navegador. Las «Natural» de Edge (escritorio) son las que mejor suenan.' : 'Este navegador no ofrece voces en castellano; leerá con la voz por defecto.')
-      : 'Voz: ' + cloudLabel() + ' (audio cacheado por partida).';
+      : '';
   }
   /** Desplegable de la aplicación sobre un select (que sigue con el valor y avisa con «change»). */
   function niceSelect(sel) {

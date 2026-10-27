@@ -287,3 +287,24 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 - Con `ELEVENLABS_MODEL=eleven_v3` el narrador suena más expresivo: antes de leer, Haiku marca susurros, risas o suspiros sin cambiar el texto del chat. Lo ya escuchado con v2 se sigue oyendo con v2.
 - Si ElevenLabs se queda sin créditos, la partida sigue con la voz del navegador y avisa; se vuelve a intentar a la media hora.
 - En el selector del narrador se puede elegir ElevenLabs v3 (con acotaciones) o ElevenLabs v2 (más sobria y algo más rápida); se recuerda en ese navegador.
+
+## Comandos con «/» y abajo del chat en el móvil (27 oct 2026)
+- Los atajos /look, /where… ya no se ven encima del cuadro: al escribir «/» sale un menú con todos los comandos, su explicación y un buscador. ↑ ↓ para elegir, Intro para lanzarlo, Esc para cerrarlo; también se pueden pulsar.
+- Encima del cuadro queda la fila de cómo va lo que escribes: «Hacer | Decir», que solo sale con más jugadores conectados. En escritorio, ahí va también «Dictado: enviar al dejar de hablar» (con el micrófono, manda lo dictado sin esperar a que lo revises); en el móvil ese ajuste está en el engranaje.
+- Móvil: a la izquierda del cuadro, el engranaje de ajustes (generar imagen, sonido y música, narrador); a la derecha, Enviar y, pegada al borde, la mochila.
+- Móvil: arriba a la izquierda, una flecha vuelve al menú principal; la mochila incluye «Tablero y mapa» (ficha, sitio, gente y misión). El sonido tampoco va ya en la cabecera, solo el botón de parar la voz mientras lee.
+- Móvil: la letra de las burbujas es la misma que la del prólogo (13,5 px), y ninguna burbuja llega al borde contrario: las del narrador y las tuyas dejan el mismo hueco.
+- Con el cuadro vacío, en el sitio de Enviar está el micrófono (mismo botón ámbar): púlsalo para dictar. En cuanto hay texto, vuelve Enviar; mientras dictas, el micrófono se queda en rojo.
+- El prólogo ya no va en una caja: es texto de libro sobre el fondo, con el altavoz para escucharlo, y lo cierra un ornamento dorado antes de que hable el narrador.
+- Hoja, Diario y Mochila se abren en un modal; sus pestañas van abajo, cada una con su parte del ancho. En el móvil hay una cuarta, «Tablero», con el tablero, el mapa, la gente cerca y la misión; el cuadro de texto y el botón de cerrar siguen debajo, y la cabecera de la partida no se tapa ni con el mapa en grande.
+- Móvil: la pantalla no hace zoom ni se desplaza de lado (antes, al cerrar la mochila, se ampliaba al enfocar el cuadro); cerrar la mochila ya no abre el teclado.
+- Móvil: las opciones de la mochila son pastillas como las del chat (texto y su icono dentro, sin círculos de color); la página entera ya no se desplaza al arrastrar dentro del modal o del chat.
+- Sonido en tres canales, cada uno con su volumen y, a la derecha, su interruptor: Música (la canción de la partida, que suena en bucle hasta que se apaga), Efectos y Ambiente. En escritorio la cabecera lleva tres iconos: narrador, música (nota) y FX (efectos y ambiente). En el móvil todo está en el engranaje, bajo «Generar imagen, sonido y música».
+- Narrador en los ajustes: ya sin la etiqueta «Narrador» encima del desplegable ni la nota de «audio cacheado».
+- Sonido: ahora son dos canales, Música y «Efectos y ambiente» (un volumen y un interruptor para los dos); los interruptores van a la izquierda. En el móvil el engranaje se vuelve una X mientras los ajustes están abiertos.
+- Móvil: arriba, el nombre de la partida y debajo la hora y el lugar («18:48 · La herrería»).
+
+## Aspecto del menú: Penumbra y Taberna (27 oct 2026)
+- En el engranaje del menú principal, «Aspecto»: **Penumbra** (por defecto, plano, con el estilo de la pantalla de partida) o **Taberna** (ilustrado: tablones, marco dorado y la madera que se vuelve tecnología al entrar). Se recuerda en ese navegador.
+- En Penumbra las imágenes van en duotono (negro y dorado) y la de cada partida es la última vista de un sitio pintada en ella; si no tiene, la taberna. Al entrar en una partida, un fundido a negro corto.
+- En Taberna, la partida lleva los tablones oscuros del menú (sin el marco dorado) en el panel lateral, la cabecera y la barra del cuadro de texto; en Penumbra sigue plana.

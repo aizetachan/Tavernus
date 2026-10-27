@@ -109,6 +109,8 @@ export interface GameInfo {
   world: { seed: number; tone: Tone; /** Salió en modo plantilla (sin Claude). */ template: boolean } | null;
   /** Dónde está la partida, para el menú: la última narración, en una o dos frases (null si aún no ha pasado nada). */
   synopsis: string | null;
+  /** La última vista de un sitio pintada en la partida, para el menú (null si aún no hay ninguna). */
+  cover: string | null;
 }
 
 export interface CreateGameInput {
@@ -290,6 +292,7 @@ export class GameManager {
       dice_seed: m.dice_seed, characters, cache_entries: m.mode === 'record' || m.mode === 'replay' ? await countJson(p.cache) : 0, open,
       world: m.world ? { seed: m.world.seed, tone: m.world.tone, template: m.world.model === 'offline' } : null,
       synopsis: await synopsisOf(join(p.data, `${m.campaign_id}.events.jsonl`)),
+      cover: await coverOf(join(p.dir, 'images'), m.slug),
     };
   }
 
@@ -611,6 +614,14 @@ async function exists(p: string): Promise<boolean> {
 
 async function mtime(p: string): Promise<Date | null> {
   try { return (await stat(p)).mtime; } catch { return null; }
+}
+
+/** La última vista de un sitio de images/index.json (los retratos y objetos llevan `kind`; los sitios, no). */
+export async function coverOf(dir: string, slug: string): Promise<string | null> {
+  let index: Record<string, { file?: string; kind?: string }>;
+  try { index = JSON.parse(await readFile(join(dir, 'index.json'), 'utf8')) as typeof index; } catch { return null; }
+  const last = Object.values(index).filter((x) => !x.kind && x.file).pop();
+  return last ? `/images/${last.file}?game=${encodeURIComponent(slug)}` : null;
 }
 
 async function countJson(dir: string): Promise<number> {

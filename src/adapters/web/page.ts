@@ -16,8 +16,9 @@ export const PAGE = String.raw`<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Tavernus</title>
+<script>/* El tema elegido en el menú (Penumbra o Taberna); de momento la partida solo lo marca, para darle estilo más adelante. */ (function () { var t = null; try { t = localStorage.getItem('tavernus.theme'); } catch (e) {} document.documentElement.setAttribute('data-theme', t === 'taberna' ? 'taberna' : 'penumbra'); })();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
 <meta name="theme-color" content="#141617">
@@ -204,6 +205,7 @@ export const PAGE = String.raw`<!doctype html>
   .chat-head .dot img { width: 100%; height: 100%; object-fit: cover; filter: saturate(.85); }
   .chat-head .t { min-width: 0; flex: 1; }
   #place { font: 700 16px/1.2 var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #place .gn, #place-sub .sub-pl { display: none; }
   #place-sub { margin-top: 1px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #party { display: flex; align-items: center; flex: none; }
   #party:empty { display: none; }
@@ -244,8 +246,8 @@ export const PAGE = String.raw`<!doctype html>
   .msg.error .body { color: var(--error); }
   .decisive { display: inline-flex; gap: 6px; margin-top: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(255,107,94,.12); color: #ff9d94; font-size: 13px; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .actions button, .chips button { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px; background: rgba(20,22,23,.9); color: #e6c98a; font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: 0 1px 1px rgba(0,0,0,.4); }
-  .actions button:hover:not(:disabled), .chips button:hover:not(:disabled) { background: #22262a; }
+  .actions button, .chat-acts > button { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px; background: rgba(20,22,23,.9); color: #e6c98a; font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: 0 1px 1px rgba(0,0,0,.4); }
+  .actions button:hover:not(:disabled), .chat-acts > button:hover:not(:disabled) { background: #22262a; }
   .actions button.roll { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 600; }
   /* Ilustración de la escena: dentro del chat; un clic la abre en grande. */
   .msg.scene { width: 100%; margin: 0; }
@@ -267,9 +269,12 @@ export const PAGE = String.raw`<!doctype html>
 
   /* Redacción: atajos, cuadro de texto, micrófono y pincel, el cubo y Enviar. */
   .compose { position: relative; z-index: 3; flex: none; background: var(--chat); }
-  .chips { display: flex; gap: 8px; padding: 8px max(16px, calc((100% - 980px) / 2)) 10px; overflow-x: auto; scrollbar-width: none; }
-  .chips button { border-color: rgba(255,255,255,.1); color: #b8b1a6; font-family: var(--mono); font-size: 12px; letter-spacing: 0; }
-  body.drawer-open .chips { display: none; }
+  /* Encima del cuadro: cómo va lo que escribes (Hacer / Decir) y, más adelante, otros modos del chat. Los comandos
+     ya no se ven: salen al escribir «/» (#slash). Sin nada visible, la fila no ocupa sitio. */
+  .chat-acts { display: flex; align-items: center; gap: 8px; padding: 8px max(16px, calc((100% - 980px) / 2)) 0; }
+  .chat-acts:not(:has(> :not([hidden]))) { display: none; }
+  .chat-acts > button { border-color: rgba(255,255,255,.1); color: #b8b1a6; font-size: 12.5px; }
+  body.drawer-open .chat-acts { display: none; }
   /* Al ancho del hilo (#log): el campo y sus botones no ocupan toda la pantalla. */
   form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px max(24px, calc((100% - 980px) / 2)); background: var(--panel); border-top: 1px solid var(--sep); }
   form input { flex: 1; min-width: 0; height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--control); outline: none; font-size: 15px; }
@@ -280,10 +285,12 @@ export const PAGE = String.raw`<!doctype html>
   form button[type=submit] { background: var(--accent); color: var(--accent-ink); }
   form button[type=submit]:hover:not(:disabled) { background: var(--glow); color: var(--accent-ink); }
   form button[type=submit] svg.i { width: 16px; height: 16px; }
-  #cube svg.i { width: 18px; height: 18px; }
-  #cube.on { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.5); }
-  #cube { position: relative; }
-  #cube.new::after { content: ''; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
+  /* El cofre: solo el icono, sin fondo ni borde; abierto, en dorado. */
+  #cube { position: relative; width: 36px; height: 36px; color: #c9c1b4; }
+  /* A 22 px, el trazo baja a 1,5 para que se vea igual de fino que el de los iconos de 18 px (1,8). */
+  #cube svg.i { width: 22px; height: 22px; stroke-width: 1.5; }
+  #cube:hover:not(:disabled), #cube.on { background: transparent; color: var(--accent); }
+  #cube.new::after { content: ''; position: absolute; top: 4px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
 
   /* Menú del cubo: Hoja, Diario y Mochila. */
   #cube-menu { position: absolute; right: 58px; bottom: 66px; z-index: 25; width: 270px; padding: 6px; border-radius: 16px; background: var(--bubble); border: 1px solid var(--line); box-shadow: var(--window-shadow); }
@@ -311,10 +318,14 @@ export const PAGE = String.raw`<!doctype html>
   .dr-back { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 8px; border: 0; border-radius: 999px; background: rgba(255,255,255,.06); color: var(--text); font-size: 13px; font-weight: 500; }
   .dr-back:hover { background: rgba(255,255,255,.1); }
   #dr-title { margin: 0 0 0 4px; font: 700 16px/1.2 var(--display); letter-spacing: -.02em; }
-  .dr-head .seg { margin-left: auto; }
   .dr-head { padding-left: 20px; }
-  .dr-head .seg button { position: relative; }
-  .dr-head .seg button.new::after { content: ''; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  /* Hoja, Diario, Mochila (y en el móvil, Tablero): abajo del modal, cada una con su parte del ancho. */
+  .dr-tabs { display: flex; gap: 4px; flex: none; padding: 8px; border-top: 1px solid var(--sep); }
+  .dr-tabs button { position: relative; flex: 1; min-width: 0; height: 40px; padding: 0 8px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-size: 13.5px; font-weight: 600; }
+  .dr-tabs button:hover { background: var(--hover); color: var(--text); }
+  .dr-tabs button.on { background: var(--accent-tint); color: var(--accent); }
+  .dr-tabs .m-only { display: none; }
+  .dr-tabs button.new::after { content: ''; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
   .dr-x { display: none; }
   .dr-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.12) transparent; }
   .dr-pane { max-width: 720px; margin: 0 auto; padding: 16px 16px 28px; }
@@ -660,25 +671,30 @@ export const PAGE = String.raw`<!doctype html>
     #party button { width: 28px; height: 28px; }
     #log { padding: 12px 10px 8px; }
     #thinking { padding: 0 12px; }
-    .chips { padding: 8px 12px; }
+    .chat-acts { padding: 8px 12px 0; }
     form { padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) 12px; }
     form input { border-radius: 21px; }
     #cube-scrim { position: absolute; inset: 0; z-index: 24; display: block; border: 0; background: rgba(5,6,6,.6); }
     #cube-scrim[hidden] { display: none; }
     #cube-menu { right: 50px; left: auto; bottom: 74px; width: auto; padding: 0; background: transparent; border: 0; box-shadow: none; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
     #cube-menu[hidden] { display: none; }
-    #cube-menu button { flex-direction: row-reverse; width: auto; min-height: 32px; padding: 0; gap: 10px; background: transparent; }
-    #cube-menu button:hover { background: transparent; }
-    #cube-menu .bub { width: 32px; height: 32px; box-shadow: 0 6px 16px rgba(0,0,0,.55); }
-    #cube-menu .lbl { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--bubble); box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+    /* Cada opción, una pastilla como las del chat: el texto y su icono dentro, sin círculos de color. */
+    #cube-menu button { flex-direction: row-reverse; width: auto; min-height: 36px; height: 36px; padding: 0 10px 0 14px; gap: 8px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px;
+      background: rgba(20,22,23,.94); color: #e6c98a; box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+    #cube-menu button:hover, #cube-menu button:focus-visible { background: #22262a; }
+    #cube-menu .bub, #cube-menu .bub.sheet, #cube-menu .bub.journal, #cube-menu .bub.pack, #cube-menu .bub.side { width: 18px; height: 18px; background: transparent !important; color: var(--accent) !important; box-shadow: none; }
+    #cube-menu .bub svg.i { width: 18px; height: 18px; }
+    #cube-menu .lbl { display: inline-flex; align-items: center; height: auto; padding: 0; background: none; box-shadow: none; font-size: 13px; font-weight: 500; }
     #cube-menu small { display: none; }
+    #cube-menu button { position: relative; }
+    #cube-menu .dotnew { position: absolute; top: 1px; right: 4px; width: 10px; height: 10px; margin: 0; box-shadow: 0 0 0 2px var(--panel); }
     #drawer-scrim { position: absolute; inset: 0; z-index: 4; display: block; border: 0; background: rgba(5,6,6,.6); }
     #drawer-scrim[hidden] { display: none; }
-    #drawer { top: 24px; bottom: 0; left: 0; width: 100%; transform: none; z-index: 5; border: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 24px rgba(0,0,0,.5); }
-    .dr-grab { display: block; align-self: center; width: 40px; height: 4px; margin: 8px 0 0; border-radius: 999px; background: rgba(255,255,255,.2); }
-    #dr-title { display: none; }
-    .dr-head { padding-left: 16px; }
-    .dr-head .seg { margin-left: 0; }
+    /* Modal, no hoja que sube: con margen alrededor; el cuadro de texto y el botón de cerrar siguen debajo. */
+    #drawer { top: 10px; bottom: 10px; left: 10px; width: calc(100% - 20px); transform: none; z-index: 5; border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--window-shadow); }
+    .dr-head { min-height: 48px; padding-left: 16px; }
+    .dr-tabs .m-only { display: block; }
+    .dr-pane[data-drpane="side"] { padding: 10px 6px 16px; }
     body.map-big #map, body.board-big #board { inset: 12px; bottom: 42vh; border-radius: 20px 20px 0 0; }
     body.board-big #near, body.map-big #near { top: auto; left: 12px; right: 12px; bottom: 12px; width: auto; height: calc(42vh - 12px); border-radius: 0 0 20px 20px; box-shadow: inset 0 1px 0 var(--sep); }
   }
@@ -692,7 +708,7 @@ ${FIGHT_STYLE}
   /* B5 sobre los módulos (novel, tts, sfx, voz, pincel, avatar): mismas piezas, otra piel. */
   .msg.row { gap: 8px; margin-top: 8px; max-width: min(760px, 100%); }
   .msg.scene, .moment.combat, .moment.discovery, .moment.manual { width: min(640px, calc(100% - 42px)); }
-  .msg.row .body { padding: 8px 12px 7px; border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
+  .msg.row .body { padding: 8px 12px 7px; border-radius: 18px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
   .msg.row:not(.cont):not(.mine) .body { border-top-left-radius: 4px; }
   .msg.row.mine:not(.cont) .body { border-top-right-radius: 4px; }
   .msg.row.master .body, .msg.row.npc .body { background: var(--bubble); }
@@ -703,7 +719,10 @@ ${FIGHT_STYLE}
   .msg.row.master .nv-av { background: #22262a; }
   .msg.row.mine .nv-av { background: #2a1d05; }
   .moment .shot, .scene .shot { border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
-  .msg.chapter { border-radius: 12px; background: var(--bubble); box-shadow: 0 1px 1px rgba(0,0,0,.45), inset 0 0 0 1px rgba(230,183,90,.18); }
+  /* El prólogo, como la página de un libro: sin caja; al final, un ornamento dorado separa el libro del narrador. */
+  .msg.chapter { border-radius: 0; background: none; box-shadow: none; }
+  .msg.chapter .orn { display: flex; justify-content: center; margin: 14px 0 0; color: var(--accent); }
+  .msg.chapter .orn svg { width: 200px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .msg.chapter h2 { font: 800 22px/1.25 var(--display); letter-spacing: -.02em; }
   .msg.chapter .body { font: 16px/1.65 var(--sans); background: none; box-shadow: none; text-align: left; hyphens: manual; }
   #journal .en.chapter > span:last-child { font-family: var(--sans); }
@@ -712,7 +731,7 @@ ${FIGHT_STYLE}
   .chat-head .sfx + .tts { margin-left: 0; }
   .chat-head .tts { margin-left: 0; gap: 2px; }
   .sfx > button, .tts > button { height: 32px; background: transparent; }
-  .sfx > .sfx-toggle span, .tts > .tts-auto span { display: none; }
+  .sfx > .sfx-toggle span:not(.fx), .tts > .tts-auto span { display: none; }
   .sfx > .sfx-toggle { width: 32px; padding: 0; justify-content: center; border-radius: 50%; }
   .sfx > .sfx-more { width: 22px; padding: 0; border-radius: 50%; }
   .tts > .tts-auto, .tts > .tts-more { width: 32px; padding: 0; justify-content: center; border-radius: 50%; }
@@ -721,10 +740,14 @@ ${FIGHT_STYLE}
   .sfx.on > .sfx-toggle, .tts > button.on { background: var(--accent-tint); }
   .tts-pop, .sfx-pop { top: 44px; border-radius: 16px; background: var(--bubble); box-shadow: var(--window-shadow); }
   /* Hacer / Decir: lo que escribes lo hace tu personaje (al narrador) o lo dice tal cual (a los demás, sin narrador). */
-  form button.mode { width: auto; min-width: 58px; white-space: nowrap; height: 32px; padding: 0 10px; border-radius: 16px; font: 600 12.5px/1 var(--sans); letter-spacing: 0; background: var(--control); color: #b8b1a6; }
-  form button.mode[hidden] { display: none; }
-  form button.mode.say { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
-  form button.mode .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
+  .mode-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 16px; background: var(--control); }
+  .mode-seg button { height: 28px; padding: 0 12px; border: 0; border-radius: 14px; background: transparent; color: #b8b1a6; font: 600 12.5px/1 var(--sans); letter-spacing: 0; white-space: nowrap; }
+  .mode-seg button:hover:not(:disabled) { color: var(--text); }
+  .mode-seg button.on { background: rgba(255,255,255,.1); color: var(--text); }
+  .mode-seg button[data-m="say"].on { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
+  .mode-seg[hidden] { display: none; }
+  .mode-seg button:disabled { opacity: .4; cursor: default; }
+  .mode-seg .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
   form.say input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
   /* «Responder» a un mensaje: su frase citada encima del cuadro, como en WhatsApp; la ✕ deja de responder. */
   .quote { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px max(24px, calc((100% - 980px) / 2)) 0; background: var(--panel); border-top: 1px solid var(--sep); }
@@ -779,7 +802,7 @@ ${FIGHT_STYLE}
   body.boot aside, body.boot .chat-head, body.boot form, body.boot #play, body.boot .compose,
   body.entered aside, body.entered .chat-head, body.entered form, body.entered #play, body.entered .compose { background-color: #000; box-shadow: none; }
   body.boot aside, body.boot .chat-head, body.boot form, body.boot #play, body.boot .compose { transition: none; }
-  body.boot #log, body.boot #thinking, body.boot .chips { opacity: 0; }
+  body.boot #log, body.boot #thinking, body.boot .chat-acts { opacity: 0; }
   body.boot .side-head, body.boot .side-scroll > *, body.boot .chat-head > * { opacity: 0; }
   /* Llegada desde el menú: la página aparece desde negro. */
   body::before { content: ''; position: fixed; inset: 0; z-index: 100; background: #000; pointer-events: none; animation: from-black .7s ease 1.2s both; }
@@ -796,7 +819,7 @@ ${FIGHT_STYLE}
   body.entered #near { animation-delay: .53s; }
   body.entered #quest { animation-delay: .63s; }
   body.entered .chat-head > * { animation: enter-fade .45s ease .25s both; }
-  body.entered .chips { animation: enter-fade .45s ease .85s both; }
+  body.entered .chat-acts { animation: enter-fade .45s ease .85s both; }
   body.boot form > button { opacity: 0; }
   body.entered form > button { animation: enter-fade .35s ease both; }
   body.entered form > button:nth-of-type(1) { animation-delay: 0.68s; }
@@ -817,24 +840,11 @@ ${FIGHT_STYLE}
   body.entered #near .sec-b > .prow:nth-child(8) { animation-delay: 1.06s; }
   body.entered #quest .sec-t { animation-delay: 1.1s; }
   body.entered #quest .sec-b > .prow { animation-delay: 1.16s; }
-  body.entered .chips { animation: none; }
-  body.boot .chips button { opacity: 0; }
-  body.entered .chips button { animation: enter-pop .5s cubic-bezier(.2,.8,.25,1) both; }
-  body.entered .chips button:nth-child(1) { animation-delay: 0.95s; }
-  body.entered .chips button:nth-child(2) { animation-delay: 1.00s; }
-  body.entered .chips button:nth-child(3) { animation-delay: 1.05s; }
-  body.entered .chips button:nth-child(4) { animation-delay: 1.10s; }
-  body.entered .chips button:nth-child(5) { animation-delay: 1.15s; }
-  body.entered .chips button:nth-child(6) { animation-delay: 1.20s; }
-  body.entered .chips button:nth-child(7) { animation-delay: 1.25s; }
-  body.entered .chips button:nth-child(8) { animation-delay: 1.30s; }
-  body.entered .chips button:nth-child(9) { animation-delay: 1.35s; }
-  body.entered .chips button:nth-child(10) { animation-delay: 1.40s; }
   @media (prefers-reduced-motion: reduce) {
     .inwrap, .chat-body, #log { transition: none; }
     body.boot form input { animation: none; }
     body::before { animation-duration: .01s; }
-    body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chips, body.entered .chips button, body.entered form > button, body.entered #card .stats-btn, body.entered #card .hpline, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
+    body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chat-acts, body.entered form > button, body.entered #card .stats-btn, body.entered #card .hpline, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
   }
   /* Respuestas del sistema (consultas, errores, notas del pincel): la misma piel que los avisos, un punto más
      legible porque las ha pedido el jugador; rojo si algo falla. */
@@ -915,8 +925,8 @@ ${FIGHT_STYLE}
   .chat-head .tts > button:first-child:not([hidden]), .chat-head .tts > .tts-stop[hidden] + .tts-auto { border-radius: 12px 0 0 12px; }
   .chat-head .tts > .tts-auto { width: 32px; padding: 0; justify-content: center; }
   .chat-head .tts > .tts-auto:not(.on) { color: var(--muted); background: rgba(230,183,90,.07); }
-  .chat-head .sfx > .sfx-toggle { width: 32px; padding: 0; justify-content: center; }
-  .chat-head .sfx:not(.on) > .sfx-toggle { color: var(--muted); background: rgba(230,183,90,.07); }
+  .chat-head .sfx > .sfx-toggle, .chat-head .sfx > .sfx-music { width: 32px; padding: 0; justify-content: center; }
+  .chat-head .sfx:not(.on) > .sfx-toggle, .chat-head .sfx > .sfx-music:not(.on) { color: var(--muted); background: rgba(230,183,90,.07); }
   .chat-head .sfx > .sfx-more { width: 26px; padding: 0; border-radius: 0 12px 12px 0; }
   .chat-head .sfx, .chat-head .sfx.on { height: 32px; background: transparent; border-radius: 12px; }
   #party { order: 2; margin-right: 6px; }
@@ -930,15 +940,115 @@ ${FIGHT_STYLE}
     .msg.scene, .msg.moment, #log > .actions { margin-left: 36px; }
     form .mic, form .brush { width: 38px; }
   }
+  /* Micrófono y Enviar en el mismo sitio y con la misma piel: sin texto, dictar; con texto (o al dictar), Enviar. */
+  .inwrap input { padding-right: 16px; }
+  form .mic { order: 2; width: 32px !important; height: 32px !important; margin: 0; background: var(--accent); color: var(--accent-ink); }
+  form .mic:hover:not(:disabled) { background: var(--glow); color: var(--accent-ink); }
+  form .mic svg.i { width: 17px; height: 17px; }
+  form .mic.on { background: var(--rec); color: #fff; }
+  form:has(.mic):not(.has-text) button[type=submit], form:has(.mic.on) button[type=submit] { display: none; }
+  form.has-text .mic:not(.on) { display: none; }
+  /* Comandos: escribir «/» en el cuadro abre este menú, con un buscador; ↑ ↓ eligen, Intro lo lanza, Esc lo cierra. */
+  form { position: relative; }
+  #slash { position: absolute; left: max(24px, calc((100% - 980px) / 2)); bottom: calc(100% + 6px); z-index: 26; width: min(420px, calc(100% - 24px));
+    max-height: 340px; overflow-y: auto; padding: 6px; border-radius: 14px; background: var(--bubble); border: 1px solid var(--line); box-shadow: var(--window-shadow); }
+  #slash[hidden] { display: none; }
+  #slash .slash-q { display: flex; align-items: center; gap: 8px; height: 38px; margin: 0 0 4px; padding: 0 10px; border-radius: 10px; background: var(--control); color: var(--faint); }
+  #slash .slash-q input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; outline: none; color: var(--text); font-size: 14px; box-shadow: none; }
+  #slash .slash-q svg.i { width: 15px; height: 15px; }
+  #slash .slash-list button { display: flex; align-items: baseline; gap: 10px; width: 100%; min-height: 38px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--text); text-align: left; }
+  #slash .slash-list button:hover, #slash .slash-list button.on { background: var(--hover); }
+  #slash .slash-list code { flex: none; min-width: 92px; font: 500 13px/1.3 var(--mono); color: var(--accent); }
+  #slash .slash-list span { font-size: 13px; line-height: 1.35; color: var(--muted); }
+  #slash .slash-none { padding: 10px; font-size: 13px; color: var(--faint); }
+  /* Ajustes (solo en el móvil): engranaje a la izquierda del cuadro; sonido, narrador y generar imagen en un panel. */
+  #gear, #gear-menu, #cube-menu .m-only, #to-menu { display: none; }
+  #gear-menu { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 8px); z-index: 26; max-height: min(70vh, 560px); overflow-y: auto; padding: 10px;
+    border-radius: 18px; background: var(--bubble); border: 1px solid var(--line); box-shadow: var(--window-shadow); }
+  #gear-menu h3 { margin: 12px 6px 4px; font: 600 11px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  #gear-menu section:has(> h3:only-child), #gear-menu section:empty { display: none; }
+  #gear-menu > h3:first-child { margin-top: 2px; }
+  #gear-menu .gm-paint { margin-bottom: 8px; }
+  #gear-menu .note:empty { display: none; }
+  #gear-menu .tts-pop, #gear-menu .sfx-pop { display: block !important; position: static; width: auto; margin: 0; padding: 6px; border: 0; border-radius: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  #gear-menu .gm-paint { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 10px; border: 0; border-radius: 12px; background: var(--control); color: var(--text); text-align: left; }
+  #gear-menu .gm-paint[hidden] { display: none; }
+  #gear-menu .voice-auto { display: flex; width: 100%; height: auto; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--control); color: var(--text); font-size: 13px; text-align: left; white-space: normal; }
+  #gear-menu .voice-auto[aria-pressed="true"] { color: var(--accent); background: var(--accent-tint); border-color: rgba(230,183,90,.45); }
+  #gear-menu .gm-paint .bub { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: var(--accent-tint); color: var(--accent); }
+  #gear-menu .gm-paint b { display: block; font-size: 14px; font-weight: 600; }
+  #gear-menu .gm-paint small { display: block; font-size: 12px; color: var(--muted); }
+  /* Ajustes (móvil): como el cofre, solo el icono y del mismo tamaño. */
+  #gear { width: 36px; height: 36px; color: #c9c1b4; }
+  #gear svg.i { width: 22px; height: 22px; stroke-width: 1.5; }
+  #gear:hover:not(:disabled), #gear.on { background: transparent; color: var(--accent); }
+  #gear .x, #gear.on .g { display: none; }
+  #gear.on .x { display: block; }
+  #cube-menu .bub.side { background: #9bb8ef; color: #0f1a2e; }
+  @media (max-width: 820px) {
+    /* Abajo: ajustes · cuadro · Enviar · mochila, pegada al borde para que su menú suba en columna sobre ella. */
+    #gear { display: grid; order: 0; }
+    form .inwrap { order: 1; }
+    form button[type=submit] { order: 2; }
+    #cube { order: 3; }
+    form .brush { display: none !important; }
+    #gear-menu:not([hidden]) { display: block; }
+    #cube-menu { right: 8px; }
+    #cube-menu .m-only { display: flex; }
+    /* Arriba ya no va el botón del panel (está en la mochila) ni el sonido (está en los ajustes); parar la voz, sí. */
+    #to-side, .chat-head .sfx, .chat-head .tts > .tts-auto, .chat-head .tts > .tts-more { display: none; }
+    /* Volver al menú: la flecha, a la izquierda del sitio. */
+    #to-menu { display: inline-grid; margin-right: -4px; }
+    #place-sub .sub-x, #place-sub .sub-d, #place .pl { display: none; }
+    #place .gn, #place-sub .sub-pl { display: inline; }
+    /* Como en WhatsApp: ninguna burbuja llega al borde contrario; las dos dejan el mismo hueco. */
+    #log .msg.row { max-width: calc(100% - 64px); }
+    #log .msg.scene, #log .moment.combat, #log .moment.discovery, #log .moment.manual { width: auto; max-width: calc(100% - 36px - 64px); }
+    /* Letra del hilo en el móvil: la misma que el prólogo (13,5 px). */
+    #log .msg.row .body { font-size: 13.5px; line-height: 1.5; }
+    #log .msg.row .who { font-size: 12px; }
+    #log .msg.row .lead { font-size: 13px; }
+    #log .msg.notice, #log .msg.system .body { font-size: 12px; }
+    .msg.info .body { font-size: 13px; }
+    .actions button { height: 30px; padding: 0 12px; font-size: 12.5px; }
+    .msg.chapter { margin: 10px 0 8px; padding: 14px 14px 6px; }
+    .msg.chapter .who { font-size: 10px; letter-spacing: .2em; }
+    .msg.chapter h2 { margin: 6px 0 10px; font-size: 18px; }
+    .msg.chapter h2::after { width: 36px; margin-top: 10px; }
+    .msg.chapter .body { font-size: 13.5px; line-height: 1.55; }
+    .msg.chapter .body p { margin-bottom: .7em; text-indent: 1.2em; }
+    .msg.chapter.prologue .body p:first-child::first-letter { font-size: 2.9em; padding: 4px 6px 0 0; }
+    #slash { left: 8px; width: calc(100% - 16px); }
+    /* Sin zoom ni desplazamiento lateral: iOS amplía al enfocar un campo de menos de 16 px. */
+    html, body { overflow-x: hidden; }
+    /* La página no se mueve nunca (ni el rebote de iOS): solo se desplaza lo que tiene más contenido que sitio. */
+    html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; }
+    #log, .dr-body, #gear-menu, #slash, .side-scroll { overscroll-behavior: contain; }
+    input:not([type]), input[type=text], input[type=search], textarea, select { font-size: 16px !important; }
+    /* Tablero o mapa en grande: debajo de la cabecera de la partida, que no se tapa. */
+    body.map-big::after, body.board-big::after { top: 60px; }
+    body.map-big #map, body.board-big #board { top: 70px; }
+    /* El tablero en grande vive dentro del modal: el chat sube por encima del velo para que se vea entero. */
+    body.map-big .chat-body, body.board-big .chat-body { position: relative; z-index: 20; }
+    body.map-big #drawer, body.board-big #drawer { z-index: 20; }
+  }
+  /* Tema Taberna (el ilustrado del menú): el panel lateral, la cabecera y la barra del cuadro de texto, con los mismos
+     tablones oscuros del menú (public/menu-madera.jpg), sin su marco dorado. Penumbra es el resto de la hoja. */
+  :root[data-theme="taberna"] { --wood: linear-gradient(180deg, rgba(14,10,6,.5), rgba(14,10,6,.66)), url(/assets/menu-madera.jpg?v=2) center top / 760px auto repeat #2a1d12; }
+  :root[data-theme="taberna"] aside, :root[data-theme="taberna"] .chat-head, :root[data-theme="taberna"] form, :root[data-theme="taberna"] .quote { background: var(--wood); }
+  :root[data-theme="taberna"] aside { border-right-color: rgba(0,0,0,.5); }
+  :root[data-theme="taberna"] .chat-head { border-bottom-color: rgba(0,0,0,.5); box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  :root[data-theme="taberna"] form, :root[data-theme="taberna"] .quote { border-top-color: rgba(0,0,0,.5); }
 </style>
 </head>
 <body class="boot">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></symbol>
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2l-7 20-4-9-9-4z"/><path d="M22 2L11 13"/></symbol>
-  <symbol id="i-cube" viewBox="0 0 24 24"><path d="M9 6V5a3 3 0 0 1 6 0v1"/><path d="M5 10a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/><path d="M8 13h8v4H8zM12 13v2"/></symbol>
+  <symbol id="i-cube" viewBox="0 0 24 24"><path d="M3 11a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 11h7M14 11h7M7 5.6V20M17 5.6V20"/><rect x="10" y="9.5" width="4" height="4.5" rx="1"/></symbol>
   <symbol id="i-max" viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></symbol>
@@ -1013,9 +1123,10 @@ ${FIGHT_STYLE}
 </aside>
 <main id="play">
   <div class="chat-head">
+    <a class="ib" id="to-menu" href="/" title="Volver al menú principal" aria-label="Volver al menú principal"><svg class="i"><use href="#i-back"/></svg></a>
     <button type="button" class="ib" id="to-side" title="La partida: ficha, tablero y mapa" aria-label="Abrir la partida: ficha, tablero y mapa"><svg class="i"><use href="#i-grid"/></svg></button>
     <span class="dot" id="scene-dot"><svg class="i"><use href="#i-pin"/></svg></span>
-    <div class="t"><div id="place">Tavernus</div><div id="place-sub"></div></div>
+    <div class="t"><div id="place"><span class="pl">Tavernus</span><span class="gn">Tavernus</span></div><div id="place-sub"></div></div>
     <div id="presence" role="status" aria-label="Quién más juega"></div>
     <div id="party" role="group" aria-label="Personaje"></div>
     <select id="character" class="vh" aria-label="Personaje" tabindex="-1"></select>
@@ -1029,30 +1140,44 @@ ${FIGHT_STYLE}
       <span class="dr-grab" aria-hidden="true"></span>
       <div class="dr-head">
         <h2 id="dr-title">Hoja</h2>
-        <div class="seg" role="tablist" aria-label="Contenido de la partida">
-          <button type="button" role="tab" data-dr="sheet">Hoja</button>
-          <button type="button" role="tab" data-dr="journal">Diario</button>
-          <button type="button" role="tab" data-dr="pack">Mochila</button>
-        </div>
       </div>
       <div class="dr-body">
         <div class="dr-pane" data-drpane="sheet"><div id="group" aria-live="polite"></div><div id="sheet"></div><p class="none">Cargando la hoja…</p></div>
         <div class="dr-pane" data-drpane="journal"><div id="journal"></div><p class="none">El diario está en blanco.</p></div>
         <div class="dr-pane" data-drpane="pack"><div id="pack"></div><p class="none">Cargando la mochila…</p><p class="vh" id="pk-live" aria-live="polite"></p></div>
+        <div class="dr-pane" data-drpane="side"></div>
+      </div>
+      <div class="dr-tabs" role="tablist" aria-label="Contenido de la partida">
+        <button type="button" role="tab" data-dr="sheet">Hoja</button>
+        <button type="button" role="tab" data-dr="journal">Diario</button>
+        <button type="button" role="tab" data-dr="pack">Mochila</button>
+        <button type="button" role="tab" data-dr="side" class="m-only">Tablero</button>
       </div>
     </section>
   </div>
   <div class="compose">
     <div id="round" class="round-banner" hidden role="status"></div>
     <div id="typing" class="typing" hidden aria-live="polite"></div>
-    <div class="chips">
-      <button data-cmd="look">/look</button><button data-cmd="where">/where</button><button data-cmd="who">/who</button>
-      <button data-cmd="inventory">/inventory</button><button data-cmd="recap">/recap</button><button data-cmd="time">/time</button>
-      <button data-cmd="tablon">/tablon</button><button data-cmd="progress">/progress</button>
+    <div class="chat-acts" id="chat-acts">
+      <div id="saymode" class="mode-seg" role="group" aria-label="Lo que escribes" hidden>
+        <button type="button" data-m="do" class="on" aria-pressed="true" title="Hacer: el narrador cuenta lo que haces">Hacer</button>
+        <button type="button" data-m="say" aria-pressed="false" disabled title="Decir: tu personaje lo dice tal cual, al instante y sin narrador (con otros jugadores)">Decir</button>
+      </div>
     </div>
     <div id="quote" class="quote" hidden><div><b></b><span></span></div><button type="button" aria-label="No responder" title="No responder"><svg class="i"><use href="#i-x"/></svg></button></div>
     <form id="form" autocomplete="off">
-      <button type="button" id="saymode" class="mode" hidden aria-pressed="false" title="Hacer: el narrador cuenta lo que haces. Decir: tu personaje lo dice tal cual, al instante y sin narrador.">Hacer</button>
+      <button type="button" id="gear" aria-haspopup="dialog" aria-expanded="false" aria-controls="gear-menu" title="Ajustes: sonido, narrador e imagen" aria-label="Ajustes: sonido, narrador e imagen"><svg class="i g"><use href="#i-gear"/></svg><svg class="i x"><use href="#i-x"/></svg></button>
+      <div id="slash" role="listbox" aria-label="Comandos" hidden>
+        <label class="slash-q"><svg class="i"><use href="#i-search"/></svg><input id="slash-q" placeholder="Buscar comando…" aria-label="Buscar comando" autocomplete="off"></label>
+        <div class="slash-list"></div>
+      </div>
+      <div id="gear-menu" role="dialog" aria-label="Ajustes" hidden>
+        <h3>Imagen</h3>
+        <button type="button" class="gm-paint" hidden><span class="bub"></span><span><b>Generar imagen</b><small>Ilustra este momento de la partida</small></span></button>
+        <section data-slot="sfx"><h3>Audio</h3></section>
+        <section data-slot="tts"><h3>Narrador</h3></section>
+        <section data-slot="voice"><h3>Dictar con la voz</h3></section>
+      </div>
       <span class="inwrap"><input id="input" placeholder="¿Qué haces?" aria-label="Acción"></span>
       <button type="button" id="cube" aria-haspopup="menu" aria-expanded="false" aria-controls="cube-menu" title="Hoja, diario y mochila" aria-label="Menú de la partida: hoja, diario y mochila"><svg class="i ic-cube"><use href="#i-cube"/></svg><svg class="i ic-x"><use href="#i-x"/></svg></button>
       <button type="submit" aria-label="Enviar" title="Enviar"><svg class="i"><use href="#i-send"/></svg></button>
@@ -1060,6 +1185,7 @@ ${FIGHT_STYLE}
   </div>
   <button type="button" id="cube-scrim" hidden aria-label="Cerrar el menú"></button>
   <div id="cube-menu" role="menu" aria-label="Menú de la partida" hidden>
+    <button type="button" role="menuitem" class="m-only" data-side><span class="bub side"><svg class="i"><use href="#i-map"/></svg></span><span><b class="lbl">Tablero y mapa<i class="dotnew" hidden></i></b><small>Tu ficha, el sitio, la gente y la misión</small></span></button>
     <button type="button" role="menuitem" data-open="sheet"><span class="bub sheet"><svg class="i"><use href="#i-sheet"/></svg></span><span><b class="lbl">Hoja</b><small>Características y habilidades</small></span></button>
     <button type="button" role="menuitem" data-open="journal"><span class="bub journal"><svg class="i"><use href="#i-book"/></svg></span><span><b class="lbl">Diario<i class="dotnew" hidden></i></b><small>Misiones, charlas, crónica y lugares</small></span></button>
     <button type="button" role="menuitem" data-open="pack"><span class="bub pack"><svg class="i"><use href="#i-pack"/></svg></span><span><b class="lbl">Mochila</b><small id="pack-sub">Lo que llevas encima</small></span></button>
@@ -1085,6 +1211,7 @@ ${FIGHT_STYLE}
     var g = d && d.game;
     if (!g) return;
     $('game-name').textContent = g.name;
+    document.querySelector('#place .gn').textContent = g.name;
     var badge = $('game-mode');
     // Solo la bolita del color del máster; el tipo, al pasar el ratón (y para lectores de pantalla).
     badge.setAttribute('data-tip', MODE_LABEL[g.mode] || g.mode); badge.setAttribute('aria-label', 'Máster: ' + (MODE_LABEL[g.mode] || g.mode)); badge.className = 'badge dot ' + g.mode; badge.hidden = false;
@@ -1203,12 +1330,16 @@ ${FIGHT_SCRIPT}
     dot.querySelector('img').src = src;
   }
 
+  /** Sin más jugadores conectados, Decir queda apagado (presence). */
+  var alone = true;
+  function sayBtn() { return $('saymode').querySelector('[data-m="say"]'); }
   function setBusy(on) {
     busy = on;
     input.disabled = on;
     $('board').classList.toggle('busy', on);
     $('map').classList.toggle('busy', on);
-    document.querySelectorAll('.chips button, form button').forEach(function (b) { b.disabled = on; });
+    document.querySelectorAll('.chat-acts button, form button').forEach(function (b) { b.disabled = on; });
+    if (!on) sayBtn().disabled = alone;
     // Mientras se espera: los puntos del narrador en el hilo (novel.ts) y, si la acción va en cola, a quién se espera.
     turnShown = false;
     if (on) waitingFor = [];
@@ -1226,9 +1357,10 @@ ${FIGHT_SCRIPT}
     presenceList = list || [];
     var box = $('presence'), group = $('group');
     box.innerHTML = ''; group.innerHTML = '';
-    // Hacer / Decir solo tiene sentido con más jugadores en la partida; en solitario, todo va al narrador.
-    var alone = !list || !list.length;
+    // Hacer | Decir solo tiene sentido con más jugadores en la partida; en solitario no se ve y todo va al narrador.
+    alone = !list || !list.length;
     $('saymode').hidden = alone;
+    sayBtn().disabled = alone || busy;
     if (alone && sayMode) setSayMode(false);
     if (!list || !list.length) return;
     list.forEach(function (p) {
@@ -1297,10 +1429,10 @@ ${FIGHT_SCRIPT}
     if (!on || !to || !sayTo || to.id !== sayTo.id) setQuote(null);
     sayMode = on; sayTo = on ? (to || null) : null;
     armSayIdle();
-    var b = $('saymode');
-    b.classList.toggle('say', on);
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.innerHTML = on ? 'Decir' + (sayTo ? '<span class="to"></span>' : '') : 'Hacer';
+    var doB = $('saymode').querySelector('[data-m="do"]'), b = sayBtn();
+    doB.classList.toggle('on', !on); doB.setAttribute('aria-pressed', on ? 'false' : 'true');
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.innerHTML = 'Decir' + (sayTo ? '<span class="to"></span>' : '');
     if (sayTo) b.querySelector('.to').textContent = 'a ' + sayTo.name;
     $('form').classList.toggle('say', on);
     input.placeholder = on ? (sayTo ? '¿Qué le dices a ' + sayTo.name + '?' : '¿Qué dices?') : '¿Qué haces?';
@@ -1447,9 +1579,15 @@ ${FIGHT_SCRIPT}
     var where = i >= 0 ? d.slice(i + 3) : d, state = i >= 0 ? d.slice(0, i) : '';
     var comma = where.indexOf(', ');
     var placeName = comma >= 0 ? where.slice(0, comma) : where;
-    $('place').textContent = placeName;
+    document.querySelector('#place .pl').textContent = placeName;
     $('view-place').textContent = placeName;
-    $('place-sub').textContent = [s.footer, comma >= 0 ? where.slice(comma + 2) : '', state !== 'despierto' ? state : '', s.description.split('\n')[1] || ''].filter(Boolean).join(' · ');
+    // En el móvil solo la hora (el lugar ya va encima): el rincón y el estado se quedan para el escritorio.
+    var extra = [comma >= 0 ? where.slice(comma + 2) : '', state !== 'despierto' ? state : '', s.description.split('\n')[1] || ''].filter(Boolean).join(' · ');
+    // En el móvil arriba va el nombre de la partida, y el lugar baja aquí, tras la hora.
+    // La fecha («Miércoles 3 de Brotes, año 1, »), solo en el escritorio: en el móvil, la hora sola.
+    var hm = /^(.*?)(\d{1,2}:\d{2})$/.exec(s.footer || ''), when = hm ? '<span class="sub-d">' + escapeHtml(hm[1]) + '</span>' + hm[2] : escapeHtml(s.footer || '');
+    $('place-sub').innerHTML = when + '<span class="sub-pl">' + (s.footer ? ' · ' : '') + escapeHtml(placeName) + '</span>' +
+      (extra ? '<span class="sub-x">' + (s.footer ? ' · ' : '') + escapeHtml(extra) + '</span>' : '');
     var coins = field(s, 'Monedas');
     $('pack-sub').textContent = [loadShort(s) !== '—' ? 'Carga ' + loadShort(s) + ' lb' : '', coins ? coins : ''].filter(Boolean).join(' · ') || 'Lo que llevas encima';
   }
@@ -2530,9 +2668,14 @@ ${FIGHT_SCRIPT}
   /** Novedades en el diario: punto en el cubo, en «Diario» del menú y en su pestaña. */
   function setJournalNew(on) {
     document.querySelectorAll('[data-dr="journal"]').forEach(function (b) { b.classList.toggle('new', on); });
-    $('cube').classList.toggle('new', on);
-    var dot = document.querySelector('#cube-menu .dotnew');
+    var dot = document.querySelector('#cube-menu [data-open="journal"] .dotnew');
     if (dot) dot.hidden = !on;
+    cubeNew();
+  }
+  /** El punto del cofre: hay novedades en alguna de sus opciones (el Diario o, en el móvil, el tablero). */
+  function cubeNew() {
+    var journal = document.querySelector('#cube-menu [data-open="journal"] .dotnew'), side = document.querySelector('#cube-menu [data-side] .dotnew');
+    $('cube').classList.toggle('new', !journal.hidden || (!side.hidden && window.matchMedia('(max-width: 820px)').matches));
   }
   function markJournalSeen() {
     if (!journalData) return;
@@ -2824,15 +2967,65 @@ ${FIGHT_SCRIPT}
     // Ni las consultas ni la tirada salen como mensaje del jugador: solo su respuesta.
     // Los de depuración en offline llevan argumento («/time +2h», «/daño 5»); los demás, solo el nombre.
     if (text.charAt(0) === '/') command(/^\/(time|da[ñn]o)\s/i.test(text) ? text.trim() : text.split(/\s+/)[0]);
-    else if (sayMode || (!$('saymode').hidden && /^[—–«"“-]/.test(text))) say(text);
+    else if (sayMode || (!alone && /^[—–«"“-]/.test(text))) say(text);
     else if (text === 'tirar' || text === 'roll') { spendButtons(); roll(); }
     else act(text);
   });
   // Hacer ⇄ Decir; con destinatario, el primer toque lo quita y el segundo vuelve a Hacer.
-  $('saymode').addEventListener('click', function () { if (sayMode && sayTo) setSayMode(true, null); else setSayMode(!sayMode); });
-  document.querySelectorAll('.chips button').forEach(function (b) {
-    b.addEventListener('click', function () { command(b.dataset.cmd); });
+  $('saymode').addEventListener('click', function (ev) {
+    var m = ev.target.closest('[data-m]'); if (!m || m.disabled) return;
+    if (m.getAttribute('data-m') === 'do') { if (sayMode) setSayMode(false); return; }
+    // Con destinatario, el primer toque lo quita (Decir a todos); si no, pasa a Decir.
+    if (sayMode && sayTo) setSayMode(true, null); else if (!sayMode) setSayMode(true);
   });
+
+  // --- Comandos: al escribir «/» sale un menú con todos y un buscador ---------------------
+  var COMMANDS = [
+    ['look', 'Mira a tu alrededor'], ['where', 'Dónde estás y por dónde se sale'], ['who', 'Quién está aquí contigo'],
+    ['inventory', 'Lo que llevas encima'], ['recap', 'Lo que ha pasado mientras no estabas'], ['time', 'Qué hora es en el juego'],
+    ['tablon', 'Los avisos del tablón'], ['progress', 'Cómo vas: nivel, experiencia y misiones'],
+  ];
+  var slash = $('slash'), slashQ = $('slash-q'), slashList = slash.querySelector('.slash-list'), slashOn = 0, slashShown = [];
+  /** Lo que se busca: el buscador del menú o, si está vacío, lo escrito tras la «/». */
+  function slashTerm() {
+    var q = slashQ.value.trim().replace(/^\//, '');
+    if (q) return q.toLowerCase();
+    return input.value.charAt(0) === '/' ? input.value.slice(1).trim().toLowerCase() : '';
+  }
+  function paintSlash() {
+    var t = slashTerm();
+    slashShown = COMMANDS.filter(function (c) { return !t || c[0].indexOf(t) >= 0 || c[1].toLowerCase().indexOf(t) >= 0; });
+    if (slashOn >= slashShown.length) slashOn = 0;
+    slashList.innerHTML = slashShown.length
+      ? slashShown.map(function (c, i) { return '<button type="button" role="option" data-slash="' + c[0] + '"' + (i === slashOn ? ' class="on" aria-selected="true"' : ' aria-selected="false"') + '><code>/' + c[0] + '</code><span>' + c[1] + '</span></button>'; }).join('')
+      : '<p class="slash-none">Ningún comando con «' + escapeHtml(t) + '».</p>';
+  }
+  function openSlash(on) {
+    if (on && !slash.hidden) { paintSlash(); return; }
+    slash.hidden = !on;
+    if (on) { slashOn = 0; paintSlash(); setMenu(false); setGear(false); } else slashQ.value = '';
+  }
+  function runSlash(name) { openSlash(false); input.value = ''; command(name); input.focus(); }
+  function slashKeys(ev) {
+    if (slash.hidden) return;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (slashShown.length) { slashOn = (slashOn + (ev.key === 'ArrowDown' ? 1 : -1) + slashShown.length) % slashShown.length; paintSlash(); }
+    } else if (ev.key === 'Enter' && slashShown.length) { ev.preventDefault(); runSlash(slashShown[slashOn][0]); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); openSlash(false); input.focus(); }
+  }
+  /** Con texto en el cuadro se ve Enviar; vacío, el micrófono en su sitio. El texto también llega por el dictado
+   *  o por código (sugerencias, «Hablo con…»): se revisa a menudo además de con cada tecla. */
+  function syncSend() { $('form').classList.toggle('has-text', !!input.value.trim()); }
+  input.addEventListener('input', syncSend);
+  setInterval(syncSend, 250);
+  // Con argumento («/time +2h», los de depuración) el menú se aparta y el texto va tal cual al enviar.
+  input.addEventListener('input', function () { var v = input.value; openSlash(v.charAt(0) === '/' && !/\s/.test(v)); });
+  input.addEventListener('keydown', slashKeys);
+  slashQ.addEventListener('keydown', slashKeys);
+  slashQ.addEventListener('input', function () { slashOn = 0; paintSlash(); });
+  slashList.addEventListener('click', function (ev) { var b = ev.target.closest('[data-slash]'); if (b) runSlash(b.getAttribute('data-slash')); });
+  document.addEventListener('click', function (ev) { if (!slash.hidden && !ev.target.closest('#slash') && ev.target !== input) openSlash(false); });
   select.addEventListener('change', function () { connect(select.value); });
 
   // --- Panel: tablero o mapa; en el móvil, el panel es una vista aparte ---------------
@@ -2846,8 +3039,7 @@ ${FIGHT_SCRIPT}
   }
   function showSide(on) {
     if (!window.matchMedia('(max-width: 820px)').matches) return;
-    document.body.classList.toggle('show-side', on);
-    if (on) { if (view === 'board' && boardData) renderBoard(boardData); if (view === 'map' && mapData) renderMap(mapData); }
+    if (on) openDrawer('side'); else if (drawerKey === 'side') closeDrawer();
   }
   document.querySelectorAll('[data-view-tab]').forEach(function (b) { b.addEventListener('click', function () { setView(b.getAttribute('data-view-tab')); }); });
   $('to-side').addEventListener('click', function () { showSide(true); });
@@ -2901,6 +3093,8 @@ ${FIGHT_SCRIPT}
     var badge = questBadge(unseenChanges(j)), on = badge.added + badge.steps > 0;
     var chip = on ? '<button type="button" class="qchip" data-qnew title="Ver qué ha cambiado en el Diario">' + badge.html + '</button>' : '';
     $('to-side').classList.toggle('new', on);
+    var sideDot = document.querySelector('#cube-menu [data-side] .dotnew'); if (sideDot) sideDot.hidden = !on;
+    cubeNew();
     var h = '<div class="sec-row"><button type="button" class="sec-t" data-col="quest" aria-expanded="' + !document.body.classList.contains('col-quest') + '"><svg class="i chev"><use href="#i-chev"/></svg>' +
       '<span class="qflag' + (on ? ' on' : '') + '" data-qnew title="Misiones: abre el Diario"><svg class="i"><use href="#i-q-active"/></svg></span>Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</button>' + chip + '</div><div class="sec-b">';
     if (!q) { $('quest').innerHTML = h + '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button></div>'; return; }
@@ -2936,7 +3130,13 @@ ${FIGHT_SCRIPT}
 
   // --- El cubo: Hoja, Diario y Mochila en la misma columna del chat ---------------------
   var cube = $('cube'), cubeMenu = $('cube-menu'), drawer = $('drawer'), drawerKey = null;
-  var DR_TITLE = { sheet: 'Hoja', journal: 'Diario', pack: 'Mochila' };
+  var DR_TITLE = { sheet: 'Hoja', journal: 'Diario', pack: 'Mochila', side: 'Tablero y mapa' };
+  /** En el móvil, «Tablero» del modal se lleva del panel el tablero, el mapa, la gente cerca y la misión, y al cerrar los devuelve. */
+  var SIDE_PARTS = ['.views', '.pane[data-pane="board"]', '.pane[data-pane="map"]', '#near', '#quest'];
+  function moveSide(toDrawer) {
+    var dest = toDrawer ? document.querySelector('[data-drpane="side"]') : document.querySelector('#side .side-scroll');
+    SIDE_PARTS.forEach(function (sel) { var el = document.querySelector(sel); if (el && el.parentNode !== dest) dest.appendChild(el); });
+  }
   function setMenu(on) {
     cubeMenu.hidden = !on; $('cube-scrim').hidden = !on;
     cube.setAttribute('aria-expanded', on ? 'true' : 'false');
@@ -2945,6 +3145,8 @@ ${FIGHT_SCRIPT}
   }
   function openDrawer(k) {
     drawerKey = k; setMenu(false);
+    moveSide(k === 'side');
+    if (k === 'side') { if (view === 'board' && boardData) renderBoard(boardData); if (view === 'map' && mapData) renderMap(mapData); }
     drawer.hidden = false; $('drawer-scrim').hidden = false;
     document.body.classList.add('drawer-open');
     $('dr-title').textContent = k === 'sheet' && sheetData ? 'Hoja de ' + sheetData.title.split(' · ')[0] : DR_TITLE[k];
@@ -2962,18 +3164,25 @@ ${FIGHT_SCRIPT}
   }
   function closeDrawer() {
     drawerKey = null;
+    moveSide(false);
     drawer.hidden = true; $('drawer-scrim').hidden = true;
     document.body.classList.remove('drawer-open');
     cube.classList.remove('on');
     cube.setAttribute('aria-label', 'Menú de la partida: hoja, diario y mochila'); cube.title = 'Hoja, diario y mochila';
-    input.focus();
+    // En el móvil, cerrar no abre el teclado.
+    if (!mobileQ.matches) input.focus();
   }
   cube.addEventListener('click', function () {
     if (drawerKey) { closeDrawer(); return; }
     setMenu(cubeMenu.hidden);
   });
   $('cube-scrim').addEventListener('click', function () { setMenu(false); });
-  cubeMenu.addEventListener('click', function (ev) { var b = ev.target.closest('[data-open]'); if (b) openDrawer(b.getAttribute('data-open')); });
+  cubeMenu.addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-open]');
+    if (b) openDrawer(b.getAttribute('data-open'));
+    // En el móvil: el panel (ficha, tablero, mapa, gente y misión) también sale de aquí.
+    if (ev.target.closest('[data-side]')) { setMenu(false); showSide(true); }
+  });
   document.querySelectorAll('[data-dr]').forEach(function (b) { b.addEventListener('click', function () { openDrawer(b.getAttribute('data-dr')); }); });
   $('drawer-scrim').addEventListener('click', closeDrawer);
   document.addEventListener('click', function (ev) { if (!cubeMenu.hidden && !ev.target.closest('#cube-menu') && !ev.target.closest('#cube')) setMenu(false); });
@@ -2986,8 +3195,9 @@ ${FIGHT_SCRIPT}
   document.addEventListener('DOMContentLoaded', function () {
     var f = $('form');
     f.insertBefore(cube, f.querySelector('button[type=submit]'));
+    // El micrófono ocupa el sitio de Enviar mientras el cuadro está vacío (syncSend).
     var mic = f.querySelector('.mic');
-    if (mic) document.querySelector('.inwrap').appendChild(mic);
+    if (mic) f.insertBefore(mic, f.querySelector('button[type=submit]'));
     // Ajustes de la voz (tts.ts): el engranaje va en la cabecera del panel, donde estaba la casa.
     var more = document.querySelector('.chat-head .tts-more'), pop = document.querySelector('.chat-head .tts-pop'), gear = $('side-gear');
     if (more && pop) {
@@ -2996,6 +3206,45 @@ ${FIGHT_SCRIPT}
       gear.appendChild(more); gear.appendChild(pop);
     }
   });
+
+  // --- Ajustes en el móvil: sonido, narrador y generar imagen bajo el engranaje del cuadro ---------
+  // Los paneles de sonido (sfx.ts) y de voz (tts.ts) se mudan aquí en el móvil y vuelven a su sitio en escritorio.
+  var gear = $('gear'), gearMenu = $('gear-menu'), mobileQ = window.matchMedia('(max-width: 820px)');
+  function placeSettings() {
+    var sfxPop = document.querySelector('.sfx-pop'), ttsPop = document.querySelector('.tts-pop'), voice = document.querySelector('.voice-auto');
+    if (mobileQ.matches) {
+      if (sfxPop) gearMenu.querySelector('[data-slot=sfx]').appendChild(sfxPop);
+      if (ttsPop) gearMenu.querySelector('[data-slot=tts]').appendChild(ttsPop);
+      if (voice) gearMenu.querySelector('[data-slot=voice]').appendChild(voice);
+      return;
+    }
+    if (voice) $('chat-acts').appendChild(voice);
+    var sfxBox = document.querySelector('.chat-head .sfx');
+    if (sfxPop && sfxBox) sfxBox.appendChild(sfxPop);
+    if (ttsPop) $('side-gear').appendChild(ttsPop);
+    setGear(false);
+  }
+  function setGear(on) {
+    gearMenu.hidden = !on;
+    gear.classList.toggle('on', on);
+    gear.setAttribute('aria-expanded', on ? 'true' : 'false');
+    gear.setAttribute('aria-label', on ? 'Cerrar ajustes' : 'Ajustes: sonido, narrador e imagen');
+    if (!on) return;
+    placeSettings();
+    var brush = document.querySelector('form .brush'), paintBtn = gearMenu.querySelector('.gm-paint');
+    paintBtn.hidden = !brush || brush.hidden;
+    if (brush) paintBtn.querySelector('.bub').innerHTML = brush.innerHTML;
+    // Cada panel rellena sus valores al abrirse con su botón: se le «abre» aunque se vea aquí.
+    [['.sfx-more', '.sfx-pop'], ['.tts-more', '.tts-pop']].forEach(function (x) {
+      var b = document.querySelector(x[0]), p = document.querySelector(x[1]);
+      if (b && p) { p.hidden = true; b.click(); }
+    });
+  }
+  gear.addEventListener('click', function (ev) { ev.stopPropagation(); setMenu(false); openSlash(false); setGear(gearMenu.hidden); });
+  gearMenu.querySelector('.gm-paint').addEventListener('click', function () { var brush = document.querySelector('form .brush'); setGear(false); if (brush) brush.click(); });
+  document.addEventListener('click', function (ev) { if (!gearMenu.hidden && !ev.target.closest('#gear-menu') && !ev.target.closest('#gear')) setGear(false); });
+  mobileQ.addEventListener('change', placeSettings);
+  document.addEventListener('DOMContentLoaded', function () { if (mobileQ.matches) placeSettings(); });
 
   /** Avatares del grupo arriba a la derecha: cambian de personaje como el desplegable (que queda oculto). */
   function renderParty() {

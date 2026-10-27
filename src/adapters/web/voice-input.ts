@@ -59,8 +59,8 @@ export const VOICE_STYLE = String.raw`
   @keyframes mic-pulse { 0% { box-shadow: 0 0 0 0 rgba(224,90,74,.45); } 100% { box-shadow: 0 0 0 12px rgba(224,90,74,0); } }
   @media (prefers-reduced-motion: reduce) { form .mic.on { animation: none; box-shadow: 0 0 0 2px rgba(224,90,74,.5); } }
   #input.voice-interim { color: var(--muted); font-style: italic; }
-  .chips .voice-auto { font-family: var(--sans); }
-  .chips .voice-auto[aria-pressed="true"] { color: var(--accent); background: var(--accent-tint); }
+  .chat-acts .voice-auto { font-family: var(--sans); }
+  .chat-acts .voice-auto[aria-pressed="true"] { color: var(--accent); background: var(--accent-tint); }
 `;
 
 export const VOICE_SCRIPT = String.raw`<script>
@@ -88,12 +88,12 @@ export const VOICE_SCRIPT = String.raw`<script>
   mic.type = 'button'; mic.className = 'mic'; mic.innerHTML = MIC;
   form.insertBefore(mic, form.querySelector('button[type=submit]'));
 
-  // Ajuste «enviar al terminar de hablar»: una pastilla al final de los atajos.
+  // Ajuste «enviar al terminar de hablar»: una pastilla junto a Hacer / Decir.
   var auto = store('tavernus.voice.autosend') === '1';
   var chip = document.createElement('button');
-  chip.type = 'button'; chip.className = 'voice-auto'; chip.textContent = 'Voz: enviar al terminar';
+  chip.type = 'button'; chip.className = 'voice-auto'; chip.textContent = 'Dictado: enviar al dejar de hablar';
   chip.title = 'Al dejar de hablar, envía lo dictado sin esperar a que lo revises';
-  var chips = document.querySelector('.chips');
+  var chips = document.querySelector('.chat-acts');
   if (chips) chips.appendChild(chip);
   function paint() {
     chip.setAttribute('aria-pressed', auto ? 'true' : 'false');

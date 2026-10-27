@@ -274,9 +274,10 @@ export const NOVEL_STYLE = String.raw`
   .msg.scene, .msg.moment { margin: 4px 0 0 42px; animation: nv-in .5s ease-out; }
   .msg.scene { width: min(560px, calc(100% - 42px)); }
   /* La vista del sitio dentro de la burbuja del narrador que cuenta la llegada, como una foto en un mensaje. */
-  /* Con foto: el mismo margen arriba que a los lados (4 px) y un clic en la foto la amplía. */
-  .msg.row.has-place .body { width: min(520px, 100%); padding-top: 4px; }
-  .place-shot { position: relative; display: block; width: calc(100% + 16px); margin: 0 -8px 8px; padding: 0; border: 0; border-radius: 14px; overflow: hidden;
+  /* Con foto: debajo del texto, con el mismo margen abajo que a los lados (4 px); un clic en la foto la amplía.
+     Sus esquinas de abajo siguen las de la burbuja (18 − 4 px); las de arriba, más cerradas. */
+  .msg.row.has-place .body { width: min(520px, 100%); padding-bottom: 4px; }
+  .place-shot { position: relative; display: block; width: calc(100% + 16px); margin: 8px -8px 0; padding: 0; border: 0; border-radius: 8px 8px 14px 14px; overflow: hidden;
     aspect-ratio: 16 / 9; background: var(--platter); cursor: zoom-in; }
   .place-shot img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
   .place-shot.ready img { opacity: 1; }
@@ -480,8 +481,8 @@ export const NOVEL_JS = String.raw`
     img.addEventListener('error', function () { b.remove(); row.classList.remove('has-place'); });
     b.addEventListener('click', function () { openLightbox({ src: p.src, name: p.name || '' }); });
     img.src = p.src;
-    // Arriba del todo: la foto, con el mismo margen por arriba que por los lados; debajo, el nombre y el texto.
-    body.insertBefore(b, body.firstChild);
+    // Debajo del texto del narrador, con el mismo margen por abajo que por los lados.
+    body.appendChild(b);
   }
 
   /**
@@ -535,11 +536,16 @@ export const NOVEL_JS = String.raw`
   /** Un mensaje del stream en el hilo: lo del PJ a la derecha, la narración y los NPCs a la izquierda. */
   /** Prólogo o «Donde lo dejamos» (docs/PROLOGO.md): una página de libro a todo el ancho, sin avatar, con su título. */
   var CHAPTER_KICKER = { prologue: 'Prólogo', recap: 'Recapitulación' };
+  /** Remate de libro tras el capítulo: filetes, volutas y un rombo, en el dorado de la casa. */
+  var CHAPTER_ORNAMENT = '<div class="orn" aria-hidden="true"><svg viewBox="0 0 200 30">' +
+    '<path d="M14 15h50M136 15h50"/><circle cx="9" cy="15" r="1.6" fill="currentColor" stroke="none"/><circle cx="191" cy="15" r="1.6" fill="currentColor" stroke="none"/>' +
+    '<path d="M64 15c5-7 13-7 16-1-2 6-9 6-10 1M136 15c-5-7-13-7-16-1 2 6 9 6 10 1"/>' +
+    '<path d="M82 15h8M110 15h8"/><path d="M100 6l7 9-7 9-7-9z" fill="currentColor" fill-opacity=".9"/><path d="M100 1v3M100 26v3"/></svg></div>';
   function addChapter(m) {
     var div = document.createElement('article');
     div.className = 'msg chapter ' + m.chapter.kind;
     div.setAttribute('data-seq', String(m.seq));
-    div.innerHTML = '<div class="who"><span class="kicker"></span></div><h2></h2><div class="body">' + format(m.text) + '</div>';
+    div.innerHTML = '<div class="who"><span class="kicker"></span></div><h2></h2><div class="body">' + format(m.text) + '</div>' + CHAPTER_ORNAMENT;
     div.querySelector('.kicker').textContent = CHAPTER_KICKER[m.chapter.kind] || '';
     div.querySelector('h2').textContent = m.chapter.title;
     log.appendChild(div);
