@@ -21,6 +21,7 @@ import { seededRng, type Rng } from '../engine/dice.js';
 import type { Id, WorldSnapshot } from '../engine/model.js';
 import { makeSeed } from '../data/seed/demo.js';
 import { authoredSeed, isAuthoredCampaign } from '../data/campaigns/index.js';
+import { chatterWriter } from '../ai/chatter-writer.js';
 import { CLASSES, RACES } from '../data/srd/index.js';
 import { JsonFileRepository } from '../persistence/jsonfile.js';
 import { claimSituation, generateSeed, TONES, type GenerateOptions, type Tone } from '../worldgen/index.js';
@@ -338,6 +339,8 @@ export class GameManager {
     // El máster lleva su propia secuencia, derivada de la misma semilla.
     const master = this.masterFor(engine, m, p, m.dice_seed !== null ? seededRng((m.dice_seed ^ 0x9e3779b9) >>> 0) : undefined);
     engine.attachMaster(master && this.budget && (m.mode === 'live' || m.mode === 'record') ? this.withBudget(engine, master, p) : master);
+    // Comentarios del mundo sin plantillas en los datos (chatter.ts): un modelo pequeño, una vez por tanda. Solo con IA de verdad.
+    if (master && (m.mode === 'live' || m.mode === 'record') && this.env['ANTHROPIC_API_KEY']) engine.attachChatterWriter(chatterWriter());
     if (imagesEnabled(this.env, m.mode)) {
       const ill = attachIllustrator(engine, new Illustrator({
         dir: join(p.dir, 'images'), worldSeed: m.dice_seed ?? m.campaign_id,

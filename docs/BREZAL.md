@@ -318,6 +318,18 @@ Lo que el motor hace cuando alguien comete un crimen delante de la gente (`src/e
 
 El caso que lo motivó: en la partida del 27-10, Leodhin mató a Hugo en la barra delante de Brenna, Garrán y la cena, y Brenna le alquiló un cuarto. Ahora, en el acto: Brenna retrocede y no le atiende, Garrán le da el alto, los vecinos gritan; está buscado, sin PX y con infamia, y no duerme tranquilo en el Jabalí.
 
+### 2.15 Cómo reacciona el valle **[nuevo, 2026-10-27]**
+
+Etiquetas, reglas y vida diaria en `src/data/campaigns/brezal/reactions.ts` (motor: `src/engine/worldrules.ts`, SPEC §9.4, «hechos y reglas del mundo»):
+
+- **Etiquetas**: *asesino*, *ladrón*, *salvó a Ceniza*, *amigo de Ilse*; y las de raza, clase y trasfondo.
+- **La muerte de Hugo**, muera como muera: Doro guarda luto (un tema para el máster: los ojos rojos, aprieta la lanza) y Brenna le guarda el taburete; en la plaza y en el Jabalí se habla del herrero tres días («¿Os habéis enterado de lo del herrero?»), pero solo quien ya lo sabe. Si lo mató un PJ: Doro, −10 cuando le llega la noticia (hostilidad, sumada a lo de crime.ts), y la gente le señala si pasa por delante.
+- **Matar a quien no atacaba** (incidente `murder`): la etiqueta *asesino* y −5 de quien lo vio. Con la etiqueta, Garrán le busca en cuanto lo sabe (la caza es de crime.ts) y la gente dice «Ahí va… Garrán anda buscándole». Robar: *ladrón* y −5.
+- **Devolver a Ceniza**: Brenna +10, que la vuelve amistosa (sustituye al `attitude: friendly` de `on_complete`); la etiqueta *salvó a Ceniza*; el hecho `ceniza_salvado`; un tema para Brenna y lo que comenta la gente. Si Ceniza se pierde, Brenna no quiere hablar de ello.
+- **Ilse**: +5 por cada recado suyo cumplido (`q_agua`, `q_tonico_mateo`, `q_cadena`); a +25, *amigo de Ilse*.
+- **Reacciones por etiqueta** (`tag_reactions` en `people.ts`): Doro trata de igual a igual a quien fue soldado (+5 y una opción con Persuasión CD 12); Garrán se vuelve servil con un noble (+5, Intimidación CD 12); Ilse habla de hierbas con un druida (+5, Naturaleza CD 12); Hal, de rastros con un explorador (+5, Supervivencia CD 12); Úrsula trata como a uno del pueblo a un héroe del pueblo (+5). Brenna sirve sin cobrar a quien salvó a Ceniza y teme al asesino.
+- **Vida diaria** (`CHATTER`): la plaza de día, el Jabalí por la noche y Mateo en el molino. Ceniza y los lobos son `mute`: ven, pero no cuentan.
+
 ---
 
 ## 3. Formato de campaña escrita
@@ -331,6 +343,7 @@ generateSeed: esqueleto + relleno ── buildSnapshot ─────┘ (el mi
 - **Tipos del motor tal cual**: `Spot`, `Npc`, `Clue`, `Job`, `Achievement`, `InitialSituation`, `ScheduledEvent`, `EncounterTable`, `Story`. El formato solo quita el estado de partida (descubrimientos, memoria, conversación) y lo que el código sabe poner: la localización de cada punto (van anidados en su lugar), el punto de entrada (el primero), el reloj (`start_hour`) y los instantes de rumores y ganchos (en horas desde que nace el mundo).
 - **Extras por NPC**: `spot_id`, `attitude`, `routine`; `knows` y `ties` son para este documento y no llegan al motor.
 - **Ejemplares**: `{ at: { spot } | { npc } | { container } }`.
+- **Reglas del mundo**: `campaign.tags`, `campaign.reactions` y `campaign.chatter` (vida diaria); por NPC, `tag_reactions` y `mute` (§2.15).
 - **Salidas**: `{ id, from, to, distance_m, terrain_multiplier?, state? }`; el Cerco lleva en `state` `blocked_by` y `rebound`.
 - **`authoredSeed('brezal', { now })`** devuelve un `WorldSnapshot` como `generateSeed`: nace en `now` a las 18:00 de juego, valida con `validateSnapshot` y lanza si algo no cuadra. Es puro: misma campaña y mismo instante, mismo mundo.
 - **`validateSnapshot`** (`src/worldgen/validate.ts`) lo usan los dos caminos. Comprueba ids únicos, referencias, puntos de inicio pisables, que todo el mapa se alcanza desde el inicio (contando salidas cerradas y bloqueadas, que se abren jugando), bloques SRD dentro de rango, comercio con objetos del catálogo, Biblia (5-10) y leyes (3-8), situaciones completas (tres caminos, plazo 1-30), agenda, ganchos, rumores y la historia (también que el escondite de un `npc_status` exista).
@@ -343,6 +356,7 @@ generateSeed: esqueleto + relleno ── buildSnapshot ─────┘ (el mi
   - Para `give_quest` (encargos libres, fuera de la historia escrita) sigue la regla de antes: con `npc_id`, esa persona tiene que estar con el PJ; si no, `heard`.
   - **Avance por lo que hace el PJ.** Las condiciones del mundo de un paso (`npc_has`, `npc_status`, `npc_at`, `spot_state`) solo cuentan si el PJ está en ese lugar: lo ha hecho él o su grupo delante. `talk` pide estar con ese NPC en persona (hablando o en su punto); en un `all` con un `narrative`, el máster solo puede marcarlo si se cumple lo demás. Otras condiciones: `level`, `reputation`, `debt_paid`, y `npc_has` con `quantity`.
   - **Visibilidad.** Cada alta, paso, cierre o caducidad va al registro del PJ (`character.story.log`) con el porqué en palabras del jugador; sale como aviso de misión en el chat (privado al PJ) y en el Diario, en «Qué ha pasado». El panel marca lo no leído en el icono de misiones (punto con las altas, check con los pasos) hasta que se abre el Diario.
+  - **Pistas abiertas o cerradas por reglas.** Una regla del mundo puede abrir o cerrar un paso para un PJ (`lead`, en `character.story.leads`): cerrado, ni se ve ni cuenta; abierto, se ve aunque nadie lo haya mencionado. Condiciones nuevas: `fact`, `tag` y `opinion` (§2.15).
   - **Tablón.** Un encargo entra en el Diario cuando el PJ lo lee (de pie ante un punto con la etiqueta `notice` o con /tablon), no por estar clavado.
 
 ## 4. Qué queda de `demo.ts`

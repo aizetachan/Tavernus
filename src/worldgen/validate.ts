@@ -19,11 +19,14 @@ import { RUMOR_KINDS, type Rumor } from '../engine/rumors.js';
 import { RECURRENCES, scheduleTitleProblem, type NpcRoutine, type ScheduledEvent } from '../engine/schedule.js';
 import { validateStory, type Story } from '../engine/story.js';
 import type { EncounterTable } from '../engine/travel.js';
+import type { TagDef } from '../engine/model.js';
+import { validateReactions, type WorldRule } from '../engine/worldrules.js';
+import type { ChatterDef } from '../engine/chatter.js';
 
 const norm = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const blank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
 
-type Extras = { schedule?: ScheduledEvent[]; hooks?: Hook[]; rumors?: Rumor[]; encounters?: EncounterTable; story?: Story };
+type Extras = { schedule?: ScheduledEvent[]; hooks?: Hook[]; rumors?: Rumor[]; encounters?: EncounterTable; story?: Story; reactions?: WorldRule[]; tags?: TagDef[]; chatter?: ChatterDef[] };
 
 export function validateSnapshot(snap: WorldSnapshot): string[] {
   const errs: string[] = [];
@@ -220,6 +223,26 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
       // Una pista que no está en ningún sitio solo la da su gente: si muere, hace falta otro camino.
       clueNpcs: (id) => { const x = c.clues.find((k) => k.id === id); return x && !x.location_ids?.length ? x.npc_ids ?? [] : []; },
     }));
+  }
+  // Reglas del mundo (worldrules.ts): referencias, opinión de ±1/5/10 y etiquetas declaradas.
+  if (c.reactions?.length) {
+    const quests = new Set((c.story?.quests ?? []).map((q) => q.id));
+    const escalations = new Set((c.story?.escalation ?? []).map((e) => e.id));
+    const tags = new Set((c.tags ?? []).map((t) => t.id));
+    errs.push(...validateReactions(c.reactions, {
+      spot: (id) => spots.has(id), location: (id) => locs.has(id), npc: (id) => npcs.has(id), item: (id) => defs.has(id),
+      clue: (id) => clues.has(id), job: (id) => jobs.has(id), exit: (id) => exits.has(id),
+      quest: (id) => quests.has(id), escalation: (id) => escalations.has(id), tag: (id) => tags.has(id),
+    }, { quests, escalations }));
+  }
+  for (const n of snap.npcs) for (const r of n.tag_reactions ?? []) {
+    if (!r.tag.includes(':') && !(c.tags ?? []).some((t) => t.id === r.tag)) errs.push(`NPC ${n.id}: reacciona a la etiqueta ${r.tag}, que no está en campaign.tags.`);
+    if (r.opinion !== undefined && ![1, 5, 10].includes(Math.abs(r.opinion))) errs.push(`NPC ${n.id}: la opinión por etiqueta cambia ±1, ±5 o ±10 (no ${r.opinion}).`);
+  }
+  for (const d of c.chatter ?? []) {
+    for (const id of d.location_ids) if (!locs.has(id)) errs.push(`comentarios ${d.id}: la localización ${id} no existe.`);
+    for (const id of d.npc_ids ?? []) if (!npcs.has(id)) errs.push(`comentarios ${d.id}: el NPC ${id} no existe.`);
+    if (!d.texts.length) errs.push(`comentarios ${d.id}: sin frases.`);
   }
   return errs;
 }

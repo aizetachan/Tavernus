@@ -23,6 +23,8 @@ import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, isDyi
 import { spendResource } from '../engine/rest.js';
 import { castSpell } from '../engine/levels.js';
 import { ABILITY_ES, armorClass, characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
+import { SOCIAL_SKILLS, socialDcShift } from '../engine/standing.js';
+import { tagOptions } from '../engine/worldrules.js';
 import { aEs, descriptorOf, fmtDuration, maskUnknownNames } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
 import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
@@ -1248,6 +1250,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (req?.kind === 'attack' && req.target !== actor.id && world.characters.has(req.target!) && !sharedWith(engine, actor.id).includes(req.target!)) return { error: 'Contra otro jugador no se pide tirada de ataque: usa request_reaction (kind attack) y él decide si se defiende; cierra sin requires_roll.' };
       if (req?.target && !world.npcs.has(req.target) && !world.characters.has(req.target)) return { error: `objetivo desconocido: ${req.target}` };
       if (req && req.kind === 'skill' && !SKILLS[req.key]) return { error: `skill desconocida: ${req.key}. Válidas: ${Object.keys(SKILLS).join(', ')}` };
+      // La opinión del NPC con quien habla mueve la CD social (standing.ts): el máster pone la base y el servidor la ajusta.
+      if (req && req.kind === 'skill' && req.dc != null && SOCIAL_SKILLS.has(req.key)) {
+        const target = (input['npc_id'] ? world.npcs.get(s('npc_id')) : undefined) ?? [...world.npcs.values()].find((n) => n.talking_to?.character_id === actor.id);
+        if (target) req.dc = Math.max(1, req.dc + socialDcShift(target, actor.id));
+      }
       // Control mínimo, sin límite de rechazos (los de abajo rechazan una vez y luego dejan pasar):
       // relleno en lugar de narración («placeholder», «x») y cierre sin nada que leer. Si el máster no sale de ahí, el motor dice que reintente.
       const opt = (k: string) => (input[k] == null ? null : s(k));
@@ -1440,7 +1447,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         // Esperar o unirse a un NPC ocupado con otro jugador lo ofrecen los botones del motor (scene.ts), no el máster.
         suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter((t) => t && !isPlaceholder(t)).filter((t) => !(busyHere(engine, actor, nowGameS) && /^(esperar|aguardar|unirme|unirse|sumarme)\b/i.test(t))).slice(0, 4)
           // Un nombre que el actor no sabe no se le escapa en los botones: «Preguntar a la tabernera», no «a Brenna».
-          .map((t) => capFirst(maskUnknownNames(world, actor.id, t))),
+          .map((t) => capFirst(maskUnknownNames(world, actor.id, t)))
+          // Una opción con etiqueta (worldrules.ts), como las de BG3: «[Soldado] Hablarle de tú a tú (Persuasión CD 12)».
+          .concat(req ? [] : tagOptions(world, actor, (k) => SKILLS[k]?.es ?? k).slice(0, 1))
+          .filter((t, i, all) => all.indexOf(t) === i).slice(-4),
         requires_roll: req,
         decisive: input['decisive_threat'] ? { threat: cleanText(s('decisive_threat')), npc_id: input['decisive_npc_id'] ? s('decisive_npc_id') : null } : null,
         npc_id: closingNpc,

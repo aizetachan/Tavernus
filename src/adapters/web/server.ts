@@ -83,6 +83,7 @@ import { PRESENCE_TIMING, PresenceTracker, type PresenceTiming } from './presenc
 import { pcLabel, pcName, sayLooksLikeAction } from '../../engine/party.js';
 import { talkingWith } from '../../engine/scene.js';
 import { descriptorOf } from '../../engine/narrate.js';
+import { speakerLabel } from '../../engine/chatter.js';
 import type { SceneNotice } from '../../engine/engine.js';
 import { encounterAt, type Encounter } from '../../engine/encounter.js';
 import { combatView, type CombatEnd, type CombatView, type TurnContext } from './fight.js';
@@ -161,6 +162,8 @@ export interface WebMessage {
   overheard?: { npc: string; join: string; well: boolean };
   /** Aviso de combate en el hilo (fight.ts): empieza, o se acaba (o el PJ sale de él). */
   combat?: { phase: 'start' | 'end'; text: string };
+  /** Comentario del mundo al pasar (chatter.ts): ambiente, no narración. Quién (como lo conoce el lector) y qué dice. */
+  ambient?: { npc_id: Id | null; name: string; text: string; kind: string };
 }
 
 /** Lo que la web cuelga de cada motor abierto: conexiones SSE e historial en memoria. */
@@ -1096,6 +1099,9 @@ function reply(r: ActionResult): { ok: boolean; text: string | null; say_to?: { 
 export function toMessage(d: Delivery, engine: Engine): WebMessage {
   const e: GameEvent = d.event;
   const m: WebMessage = { seq: e.seq, kind: MASTER_TYPES.has(e.action_type) ? 'master' : 'system', text: d.text };
+  // Lo que la gente comenta al pasar (chatter.ts): una línea de ambiente con quien lo dice, sin burbuja de narrador.
+  const chat = e.action_type === 'chatter' ? e.payload['chatter'] as { npc_id: Id | null; text: string; kind: string } | undefined : undefined;
+  if (chat) { m.ambient = { npc_id: chat.npc_id, name: speakerLabel(engine.world, chat.npc_id, d.character_id), text: chat.text, kind: chat.kind }; return m; }
   // Lo informativo no es narración (notice.ts): sale como aviso de sistema de una línea, también en el historial
   // restaurado. El tablón y el progreso llevan al Diario. Sigue con sus botones, momentos y sonido.
   const notice = noticeOf(e, d.character_id, d.text);

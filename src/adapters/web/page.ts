@@ -619,6 +619,12 @@ export const PAGE = String.raw`<!doctype html>
      semitransparente, para que no compita con la narración. Puede llevar un enlace (al Diario) al final. */
   .msg.notice { align-self: center; max-width: min(86%, 520px); margin: 4px 0 2px; padding: 3px 10px 4px; border-radius: 7px; background: rgba(6,8,8,.62); box-shadow: 0 1px 0 rgba(0,0,0,.3); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); color: rgba(198,191,180,.66); font-size: 11.5px; font-weight: 500; line-height: 1.45; letter-spacing: .01em; text-align: center; }
   .msg.notice + .msg.notice { margin-top: 0; }
+  /* Comentario del mundo al pasar (chatter.ts): ambiente, a un lado y apagado; ni burbuja ni narrador. */
+  .msg.ambient { align-self: flex-start; display: flex; align-items: center; gap: 7px; max-width: min(86%, 520px); margin: 2px 0 2px 6px; padding: 2px 10px 3px 4px; border-left: 2px solid rgba(198,191,180,.22); color: rgba(198,191,180,.72); font-size: 12.5px; font-style: italic; line-height: 1.45; }
+  .msg.ambient b { font-style: normal; font-weight: 600; color: rgba(220,212,200,.82); }
+  .msg.ambient .amb-face { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; opacity: .85; flex: none; }
+  .msg.ambient.k-rumor { border-left-color: rgba(240,200,80,.35); }
+  .msg.ambient.k-reaction { border-left-color: rgba(140,205,165,.4); }
   .msg.notice .link { display: inline; height: auto; margin: 0 0 0 .35em; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--accent); opacity: .8; font: inherit; cursor: pointer; }
   .msg.notice .link::before { content: '· '; color: rgba(198,191,180,.4); }
   .msg.notice .link:hover { opacity: 1; text-decoration: underline; }

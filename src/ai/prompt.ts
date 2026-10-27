@@ -41,6 +41,8 @@ import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { abilitiesForMaster } from '../engine/levels.js';
 import { hhmm } from '../engine/schedule.js';
 import { currencyOf, money } from '../engine/money.js';
+import { priceFor } from '../engine/standing.js';
+import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
 const LENGTH_ES = { short: 'uno o dos párrafos cortos, unas 60-90 palabras; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
@@ -325,8 +327,10 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     present.push([
       `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}.${crime ? `\n  ${crime}\n ` : ''} ${n.description}`,
       `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage}).` : ' No combate.'}`,
-      n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${money(world, b.price)}`).join(', ')}` : '',
-      n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, b.price)}`).join(', ')}` : '',
+      // Opinión con el actor, temas que tiene en la cabeza y reacción a sus etiquetas (standing.ts, worldrules.ts).
+      ...npcStandingLines(world, n, actor, nowG),
+      n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${money(world, priceFor(n, actor.id, b.price, 'sell'))}`).join(', ')}` : '',
+      n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, priceFor(n, actor.id, b.price, 'buy'))}`).join(', ')}` : '',
       carriedBy(world, n.id),
       saidBy(engine.events.recentInLocation(loc.id, 60), n.id),
       n.secret ? `  Solo tú sabes (NUNCA lo reveles ni lo insinúes por tu cuenta): ${dot(n.secret)} Sale solo a medias y si se lo gana: confianza en varias charlas, presión creíble o tirada social contra CD alta.` : '',
@@ -342,6 +346,9 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   // Crimen y ley (crime.ts): el incidente que hay que contar, y si el actor está buscado, detenido o preso.
   const law = crimeContext(world, actor, nowG);
   if (law) L.push(law);
+  // Hechos del mundo (worldfacts.ts) con quién los sabe: lo que se salvó o se condenó vuelve.
+  const facts = factsContext(world, actor);
+  if (facts) L.push(facts);
   // Quién oye lo que dice el actor (otros jugadores): el NPC puede notarlo (bajar la voz, callarse, mirarlos), sin narrar lo que hacen ellos.
   const ears = witnesses(world, engine.clock, positionOf(world, actor, nowG), nowG, 1, actor.id)
     .filter((w) => w.perceived.sound !== 'none' && w.perceived.sound !== 'hint')
@@ -355,6 +362,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     `${actor.race} ${actor.class_name} nivel ${actor.level}. PG ${actor.hp_current}/${actor.hp_max}${actor.hp_temp ? ` (+${actor.hp_temp} temp)` : ''}. CA ${armorClass(world, actor)}. Estado: ${actor.status}${actor.conditions.length ? `; condiciones: ${actor.conditions.map((x) => x.name).join(', ')}` : ''}.${downLine(actor)} Modo de muerte: ${actor.death_mode}.`,
     `Dados de golpe: ${hitDiceLeft(actor)}/${actor.level} (d${actor.hit_die}).${resourceLines(actor).length ? ` Recursos (spend_resource; espacios con cast_spell): ${resourceLines(actor).join('; ')}.` : ''}`,
     ...abilitiesForMaster(actor),
+    // Raza, clase, trasfondo y lo que ha ganado con lo que hace (standing.ts).
+    tagsLine(world, actor),
     `FUE ${actor.abilities.str} DES ${actor.abilities.dex} CON ${actor.abilities.con} INT ${actor.abilities.int} SAB ${actor.abilities.wis} CAR ${actor.abilities.cha}. Competente en: ${skills.join(', ') || 'nada'}.`,
     actor.appearance ? `Aspecto: ${actor.appearance}` : '',
     actor.backstory ? `Historia: ${actor.backstory}` : '',

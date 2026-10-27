@@ -26,6 +26,10 @@ export const NPCS: AuthoredNpc[] = [
     knows: 'Quién prendió el fuego; dónde está el libro; que la niña de Vharn salió viva. Que la niebla bajó el día que volvió «una niña que ella sacó del fuego», aunque no sabe quién es.',
     ties: 'Teme a Osric y desprecia a Garrán. Quiere a Doro como a un sobrino tonto. Respeta a Ilse. Ceniza es su perro.',
     bonds: [{ npc_id: 'npc_doro', kind: 'friend' }, { npc_id: 'npc_ilse', kind: 'friend' }, { npc_id: 'npc_ceniza', kind: 'kin' }, { npc_id: 'npc_garran', kind: 'rival' }],
+    tag_reactions: [
+      { tag: 'salvo_ceniza', note: 'le sirve sin cobrar y le guarda el sitio junto al fuego; habla con él más de lo que habla con nadie' },
+      { tag: 'asesino', note: 'le tiene miedo: no le sirve y no le quita ojo' },
+    ],
     buys: [{ item_id: 'it_madera', price: 3 }, { item_id: 'it_bayas', price: 1 }, { item_id: 'it_pescado', price: 5 }, { item_id: 'it_harina', price: 15 }, { item_id: 'it_huevo', price: 1 }],
     sells: [{ item_id: 'it_cerveza', price: 4 }, { item_id: 'it_racion', price: 10 }, { item_id: 'it_antorcha', price: 2 }, { item_id: 'it_pocion', price: 2500 }, { item_id: ROOM_NIGHT_ITEM_ID, price: ROOM_NIGHT_PRICE }],
     stats: srd('commoner', 9, { attack_name: 'jarra' }),
@@ -40,6 +44,10 @@ export const NPCS: AuthoredNpc[] = [
     knows: 'Las luces, la figura de la senda, a qué hora cambia la guardia. Que su tío paga a Garrán por algo que no le cuentan.',
     ties: 'Sobrino de Osric, a quien admira y teme. Bebe por las noches en el Jabalí. Garrán se burla de él.',
     bonds: [{ npc_id: 'npc_osric', kind: 'kin' }, { npc_id: 'npc_hugo', kind: 'friend', reaction: 'fight' }, { npc_id: 'npc_brenna', kind: 'friend' }],
+    tag_reactions: [
+      { tag: 'trasfondo:soldier', opinion: 5, note: 'le trata de igual a igual, como a un compañero de guardia', option: { text: 'Hablarle de tú a tú, entre soldados', skill: 'persuasion', dc: 12 } },
+      { tag: 'asesino', note: 'le cierra el paso con la lanza y no le deja acercarse al portón' },
+    ],
     buys: [], sells: [],
     stats: srd('guard', 11),
     routine: { day: 'sp_pl_porton', afternoon: 'sp_li_barricada', night: 'sp_tab_barra' },
@@ -66,6 +74,11 @@ export const NPCS: AuthoredNpc[] = [
     knows: 'Quién debe qué en Brezal. Que arriba hay alguien. Que el regidor guarda algo en el arcón (lleva la llave).',
     ties: 'Perro de Osric. Se burla de Doro. Ilse le cura la tos y le da miedo. Odia a Hal, que le rompió la nariz la segunda vez.',
     bonds: [{ npc_id: 'npc_osric', kind: 'patron', reaction: 'fight' }, { npc_id: 'npc_hal', kind: 'rival' }],
+    tag_reactions: [
+      { tag: 'trasfondo:noble', opinion: 5, note: 'se vuelve servil: huele dinero y apellido', option: { text: 'Recordarle con quién está hablando', skill: 'intimidation', dc: 12 } },
+      { tag: 'asesino', note: 'le busca: si le ve, le da el alto' },
+      { tag: 'ladron', note: 'le mira las manos y le cobra el diezmo por adelantado' },
+    ],
     buys: [], sells: [],
     stats: srd('thug', 30),
     routine: { day: 'sp_pl_tablon', afternoon: 'sp_tab_barra', night: 'sp_ca_banco' },
@@ -78,6 +91,10 @@ export const NPCS: AuthoredNpc[] = [
     knows: 'Qué es la Brasa y cómo se templa un ascua. Que la tos gris viene de la ceniza del agua. Que Hugo guarda eslabones. Que la niebla es un cerrojo. No sabe quién prendió el fuego.',
     ties: 'Dirige la misa del pozo. Cuida a Garrán aunque le asuste. Tiene a Brenna por buena mujer con un peso dentro.',
     bonds: [{ npc_id: 'npc_brenna', kind: 'friend' }],
+    tag_reactions: [
+      { tag: 'clase:druid', opinion: 5, note: 'le habla de hierbas como a un igual', option: { text: 'Hablar de hierbas y raíces', skill: 'nature', dc: 12 } },
+      { tag: 'amigo_ilse', note: 'le cuenta lo que no cuenta a nadie y le deja entrar en el cuarto de los frascos' },
+    ],
     buys: [{ item_id: 'it_bayas', price: 2 }, { item_id: 'it_agua_pozo', price: 1 }],
     sells: [{ item_id: 'it_tonico', price: 50 }, { item_id: 'it_pocion', price: 2000 }],
     stats: srd('acolyte', 9, { attack_name: 'cayado' }),
@@ -146,6 +163,10 @@ export const NPCS: AuthoredNpc[] = [
     knows: 'La madriguera del roble. Que la caza no puede salir del valle: vio un ciervo entrar en la niebla y volver a salir. Que la loba no es un lobo normal: lleva ceniza en el pelo y no se cansa.',
     ties: 'Le rompió la nariz a Garrán. Doro le tiene miedo. Vende pieles a Brenna. Es lo más parecido a un amigo que tiene Ysolde.',
     bonds: [{ npc_id: 'npc_ysolde', kind: 'friend', reaction: 'fight' }, { npc_id: 'npc_garran', kind: 'rival' }],
+    tag_reactions: [
+      { tag: 'clase:ranger', opinion: 5, note: 'le habla de rastros como a uno de los suyos', option: { text: 'Preguntarle por las huellas del Soto', skill: 'survival', dc: 12 } },
+      { tag: 'salvo_ceniza', note: 'respeta a quien se metió en la lobera' },
+    ],
     buys: [{ item_id: 'it_piel', price: 150 }, { item_id: 'it_flechas', price: 1 }, { item_id: 'it_cerveza', price: 3 }],
     sells: [{ item_id: 'it_pescado', price: 6 }, { item_id: 'it_flechas', price: 1 }, { item_id: 'it_antorcha', price: 1 }],
     stats: srd('scout', 16, { attack_name: 'arco' }),
@@ -164,6 +185,7 @@ export const NPCS: AuthoredNpc[] = [
     stats: srd('commoner', 8, { attack_name: 'horca' }),
     routine: { day: 'sp_co_gallinero', afternoon: 'sp_co_huerto', night: 'sp_co_casa' },
     home_spot_id: 'sp_co_casa',
+    tag_reactions: [{ tag: 'trasfondo:folk-hero', opinion: 5, note: 'la gente sencilla le recuerda: le trata como a uno del pueblo' }],
   },
   {
     id: 'npc_lobo', name: 'un lobo flaco', role: 'lobo', spot_id: 'sp_cl_arroyo', passive_perception: 13, attitude: 'hostile',
@@ -171,6 +193,7 @@ export const NPCS: AuthoredNpc[] = [
     motivation: 'Hambre. La niebla lo dejó dentro del valle y ya no queda caza.',
     secret: '', buys: [], sells: [],
     stats: srd('wolf', 11),
+    mute: true,
   },
   {
     id: 'npc_loba', name: 'la loba de ceniza', role: 'loba', spot_id: 'sp_cs_cueva', passive_perception: 15, attitude: 'hostile',
@@ -179,6 +202,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'No ataca a quien lleva encima ceniza del Granero Quemado: la huele como suya.',
     buys: [], sells: [],
     stats: { ac: 14, hp_max: 37, hp: 37, attack_bonus: 5, damage: '2d6+3', damage_type: 'piercing', attack_name: 'mordisco', xp: 200 },
+    mute: true,
   },
   {
     id: 'npc_ceniza', name: 'Ceniza', role: 'perro', spot_id: 'sp_cs_cueva', passive_perception: 14, attitude: 'friendly',
@@ -186,5 +210,6 @@ export const NPCS: AuthoredNpc[] = [
     motivation: 'Volver a casa, a la manta de delante de la chimenea.',
     secret: '', buys: [], sells: [],
     stats: null,
+    mute: true,
   },
 ];

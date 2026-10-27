@@ -27,6 +27,7 @@ import type { Character, Id, Npc, Spot } from './model.js';
 import type { Position } from './movement.js';
 import type { World } from './world.js';
 import { attitudeOf } from './combat.js';
+import { opinionOf, refusesHelp } from './standing.js';
 import { healCharacter, isDying, stabilize } from './death.js';
 import { transferItem } from './inventory.js';
 
@@ -162,6 +163,7 @@ export function setNpcOrder(world: World, input: OrderInput, nowS: number): Orde
     if (c.status === 'dead' || c.status === 'retired') return { ok: false, error: `${c.name} no está para que le sigan` };
     if (world.characterSpot(c)?.location_id !== world.spot(n.location.id).location_id) return { ok: false, error: `${n.name} no está donde ${c.name}: no puede ir con él` };
     if (attitudeOf(n, c.id) === 'hostile') return { ok: false, error: `${n.name} es hostil a ${c.name}: no le acompaña` };
+    if (refusesHelp(n, c.id)) return { ok: false, error: `${n.name} no se fía de ${c.name} (opinión ${opinionOf(n, c.id)}): no le acompaña` };
     const t = validTask(world, input.task, 'follow');
     if ('error' in t) return { ok: false, error: t.error };
     setOrder(world, n, { kind: 'follow', character_id: c.id, since_game_s: nowS, until_game_s: nowS + (mins ?? FOLLOW_DEFAULT_MIN) * GAME_MINUTE, task: t.task, hp_at_start: n.stats?.hp ?? null });

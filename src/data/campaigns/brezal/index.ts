@@ -11,6 +11,7 @@ import { EXITS, LOCATIONS, REGIONS, ZONES } from './map.js';
 import { NPCS } from './people.js';
 import { ACHIEVEMENT, BIBLE, CLUES, CUSTOMS, FACTIONS, JOBS, LAW, LAWS, PREMISE, SITUATIONS, STARTING_POINTS, WELCOME } from './plot.js';
 import { STORY } from './story.js';
+import { CHATTER, REACTIONS, TAGS } from './reactions.js';
 
 export const BREZAL: AuthoredCampaign = {
   format: 1,
@@ -64,6 +65,10 @@ export const BREZAL: AuthoredCampaign = {
     schedule: SCHEDULE,
     encounters: ENCOUNTERS,
     story: STORY,
+    // Cómo reacciona el valle (worldrules.ts): etiquetas, reglas y lo que se dice al pasar.
+    tags: TAGS,
+    reactions: REACTIONS,
+    chatter: CHATTER,
   },
   rumors: RUMORS,
   hooks: HOOKS,

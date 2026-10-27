@@ -459,7 +459,15 @@ export interface Character {
   jailed?: { until_game_s: number; spot_id: Id; reason: string } | null;
   /** Infamia: muertes de quien no era hostil y cadáveres profanados (crime.ts). En lugar de PX. */
   infamy?: number;
+  /** Etiquetas ganadas con lo que ha hecho (standing.ts): *asesino*, *salvó a Ceniza*. Las de raza, clase y trasfondo salen de la ficha. */
+  tags?: EarnedTag[];
 }
+
+/** Una etiqueta ganada (standing.ts): cuál, cuándo, por qué y el hecho que la dio (quien lo sabe, sabe la etiqueta). */
+export interface EarnedTag { id: Id; game_s: number; why: string; fact_id: Id | null }
+
+/** Una etiqueta de la campaña (datos): el nombre que se lee y, para el máster, qué significa. */
+export interface TagDef { id: Id; label: string; text?: string }
 
 /** Lo que sabe la autoridad de un PJ (crime.ts). */
 export interface Wanted {
@@ -621,6 +629,28 @@ export interface Npc {
   death?: NpcDeath;
   /** Vínculos con otros NPC (crime.ts): quien hace daño a uno se las ve con los suyos. Datos de campaña. */
   bonds?: NpcBond[];
+  /** Opinión de cada PJ (standing.ts), como la aprobación de BG3: número y motivos. Estado de partida. */
+  opinion?: Record<Id, OpinionEntry>;
+  /** Cómo reacciona a las etiquetas del PJ (standing.ts). Datos de campaña. */
+  tag_reactions?: TagReaction[];
+  /** No habla (un animal): ni comenta al pasar ni cuenta noticias, aunque vea lo que pasa (chatter.ts, worldrules.ts). */
+  mute?: boolean;
+}
+
+/** Opinión de un NPC con un PJ: de −100 a 100, con los últimos motivos; y las etiquetas a las que ya ha reaccionado. */
+export interface OpinionEntry { value: number; log: { delta: number; why: string; game_s: number }[]; tags_seen?: Id[] }
+
+/**
+ * Reacción de un NPC a una etiqueta del PJ (datos de campaña), cuando sabe que la tiene: un cambio de opinión la
+ * primera vez (±1, ±5, ±10), lo que el máster tiene que saber y, si se da, una opción con tirada (botón de sugerencia).
+ */
+export interface TagReaction {
+  tag: Id;
+  opinion?: number;
+  /** Para el máster: «le tiene miedo y no le da la espalda». */
+  note: string;
+  /** Opción de diálogo con tirada, como las de BG3 con etiqueta: «Hablarle de tú a tú, entre soldados» (Persuasión CD 12). */
+  option?: { text: string; skill: string; dc: number };
 }
 
 /** Un vínculo de un NPC con otro. `reaction`: qué hace si le hacen daño (sin ella, se deduce). */

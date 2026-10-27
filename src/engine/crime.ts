@@ -43,6 +43,7 @@ import { orderOf, setNpcOrder } from './npcorders.js';
 import type { Rumor } from './rumors.js';
 import { crowdHere, routineOf } from './schedule.js';
 import { stabilize } from './death.js';
+import { opinionRefusal } from './standing.js';
 import type { World } from './world.js';
 
 export type { IncidentKind } from './model.js';
@@ -842,7 +843,8 @@ export function refusesService(world: World, n: Npc, c: Character): string | nul
     return `${n.name} no quiere tratos con ${c.name}: sabe que ${deedText(k.incident)}`;
   }
   if ((n.attitude.by_character[c.id] ?? n.attitude.default) === 'hostile') return `${n.name} es hostil con ${c.name}: no le vende ni le compra nada`;
-  return null;
+  // Lo que piensa de él (standing.ts): por debajo de un umbral, tampoco.
+  return opinionRefusal(n, c);
 }
 
 /**

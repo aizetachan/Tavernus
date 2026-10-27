@@ -19,6 +19,9 @@ import type { Hook } from '../../engine/hooks.js';
 import type { Rumor } from '../../engine/rumors.js';
 import type { NpcRoutine, ScheduledEvent } from '../../engine/schedule.js';
 import type { Story } from '../../engine/story.js';
+import type { ChatterDef } from '../../engine/chatter.js';
+import type { TagDef } from '../../engine/model.js';
+import type { WorldRule } from '../../engine/worldrules.js';
 import type { EncounterTable } from '../../engine/travel.js';
 
 /** Un punto tal como se escribe: la localización la pone la que lo contiene; lo demás tiene valor por defecto. */
@@ -75,6 +78,10 @@ export interface AuthoredCampaign {
     schedule: ScheduledEvent[];
     encounters: EncounterTable;
     story: Story;
+    /** Etiquetas que se ganan, reglas del mundo y vida diaria (worldrules.ts, chatter.ts). */
+    tags?: TagDef[];
+    reactions?: WorldRule[];
+    chatter?: ChatterDef[];
   };
   rumors: AuthoredRumor[];
   hooks: AuthoredHook[];
