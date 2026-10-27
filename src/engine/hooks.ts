@@ -116,6 +116,21 @@ export function plantHook(world: World, input: PlantInput, nowGameS: number): { 
   return { ok: true, hook };
 }
 
+/**
+ * Lo que pasa en la escena por la historia escrita (story.ts, efecto `tell`): un gancho de hora ya vencida
+ * para ese PJ, que salta en el mismo tick y lo cuenta el máster con su voz, en vez de narrarlo el motor.
+ */
+export function plantBeat(world: World, locationId: Id, characterId: Id, what: string, nowGameS: number): Hook {
+  const hook: Hook = {
+    id: `hk_beat_${Math.round(nowGameS).toString(36)}_${characterId}_${Math.random().toString(36).slice(2, 6)}`,
+    location_id: locationId, trigger: { kind: 'time', at_game_s: nowGameS }, what: what.slice(0, 600),
+    for_character_id: characterId, created_game_s: nowGameS, expires_game_s: nowGameS + 3600,
+  };
+  store(world).push(hook);
+  world.touch('campaign', world.campaign.id);
+  return hook;
+}
+
 export function cancelHook(world: World, hookId: Id): boolean {
   const hooks = store(world);
   const i = hooks.findIndex((h) => h.id === hookId);

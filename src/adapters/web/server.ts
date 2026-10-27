@@ -813,6 +813,12 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           json(res, 200, await rt.actions.track(id, 'quest_drop', () => engine.dropQuest(id, quest), refused));
           return;
         }
+        // Responder a una misión ofrecida (story.ts): { quest, accept }.
+        case '/api/quest/answer': {
+          const quest = typeof body['quest'] === 'string' ? body['quest'] : '';
+          json(res, 200, await rt.actions.track(id, 'quest_answer', () => engine.answerQuest(id, quest, body['accept'] === true), refused));
+          return;
+        }
         case '/api/choice': {
           const key = typeof body['key'] === 'string' ? body['key'] : '';
           const picks = Array.isArray(body['picks']) ? body['picks'].filter((x): x is string => typeof x === 'string').slice(0, 40) : [];

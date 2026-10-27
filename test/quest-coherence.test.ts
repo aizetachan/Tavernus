@@ -63,47 +63,52 @@ const questEvents = (engine: Engine, c: Character): GameEvent[] => engine.events
 const stepOf = (engine: Engine, c: Character, id: string) => questsOf(engine.world, c).find((v) => v.quest.id === id);
 
 describe('misiones: alta coherente', () => {
-  it('una misión que llega de oídas lo dice: sin «lo pide», con su origen, aviso y por qué en el Diario', async () => {
-    const { engine } = await boot();
+  it('lo que se oye entra en el Diario como una pista hacia quien la da, sin contar de qué va', async () => {
+    const { engine, time } = await boot();
     const c = await newPc(engine, 'Lia');
     await engine.tick();
-    // Empieza en el Jabalí: lo del perro de Brenna se oye en la sala, pero Brenna no se lo ha pedido.
-    expect(characterStory(c).open).toContain('q_perro');
-    expect(characterStory(c).origins!['q_perro']).toMatchObject({ kind: 'heard', location_id: 'loc_taberna' });
-    const q = journalOf(engine, c.id).quests.active.find((x) => x.id === 'q_perro')!;
-    expect(q.giver).toBeNull();
-    expect(q.origin).toMatchObject({ kind: 'heard', text: expect.stringContaining('En el Jabalí se comenta'), where: 'Taberna del Jabalí' });
-    expect(q.history).toMatchObject([{ kind: 'added', text: 'Nueva misión', why: expect.stringContaining('se le ha perdido el perro') }]);
-    // En el chat: un aviso de misión con el porqué.
-    const ev = questEvents(engine, c).find((e) => (e.payload['quest'] as { id: string }).id === 'q_perro')!;
-    expect(noticeOf(ev)).toMatchObject({ text: 'Nueva misión · «Ceniza se ha perdido»', link: 'ver en el Diario', quest: { event: 'open', why: expect.stringContaining('En el Jabalí se comenta') } });
+    await engine.tick();
+    // Empieza en el Jabalí: se oye que Brenna busca a alguien; la misión no se abre.
+    expect(characterStory(c).open).toEqual(['q_main_deuda']);
+    expect(Object.keys(characterStory(c).rumors ?? {})).toEqual(expect.arrayContaining(['q_cena_doro', 'q_perro']));
+    const j = journalOf(engine, c.id);
+    expect(j.quests.active.some((q) => q.id === 'q_perro')).toBe(false);
+    expect(j.quests.active.find((q) => q.id === 'lead:q_perro')).toMatchObject({ kind: 'lead', title: 'Buscar a Brenna', text: 'Hemos oído en el Jabalí que Brenna lleva días con mala cara, mirando a la puerta.' });
+    // El perro no sale en lo oído: es de lo que va la misión.
+    expect(questEvents(engine, c).map((e) => e.narration_private).join('\n')).not.toMatch(/perro/);
+    // Cuando Brenna la pide, la pista deja su sitio a la misión.
+    await talkTo(engine, time, c, 'npc_brenna');
+    expect(tool(engine, c, 'story_quest', { quest_id: 'q_perro', action: 'ask' }).ok).toBe(true);
+    expect(journalOf(engine, c.id).quests.active.some((q) => q.id === 'lead:q_perro')).toBe(false);
   });
 
-  it('una misión que «la pide X» espera a que X hable con el PJ; el máster sabe que está pendiente', async () => {
+  it('quien la da la pide al hablar con el PJ y entra en el Diario; el máster lo sabe, y el origen dice la verdad', async () => {
     const { engine, time } = await boot();
     const c = await newPc(engine, 'Bru');
     await walk(engine, time, c, 'sp_pl_pozo');
     expect(tool(engine, c, 'transfer_item', { instance_id: 'ii_agua_pozo', to_type: 'character', to_id: c.id, slot: 'pocket', equip_slot: null, quantity: 1 }).error).toBeUndefined();
     await walk(engine, time, c, 'sp_cu_hierbas');
-    // Se la enseña sin dársela y sin que ella le hable (el máster lo marca a mano): «Ceniza en el agua» se cumple…
+    // Estar en su casa, sin hablar, no la abre: el máster sabe que Ilse puede pedirla.
+    expect(characterStory(c).open).not.toContain('q_agua');
+    expect(storyContext(engine.world, c, engine.gameNow())).toContain('Ilse puede pedirle «El agua turbia» [q_agua]');
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_agua', step_id: 'ilse' }).error).toMatch(/no la tiene el actor \(available\)/);
+    await talkTo(engine, time, c, 'npc_ilse');
+    expect(characterStory(c).open).toContain('q_agua');
+    expect(characterStory(c).origins!['q_agua']).toMatchObject({ kind: 'giver', text: 'Ilse nos lo pidió', location_id: 'loc_curandera' });
+    expect(c.knows).toContain('npc_ilse'); // quien te pide algo se presenta
+    expect(storyContext(engine.world, c, engine.gameNow())).toContain('En curso · acto 1 · «El agua turbia» [q_agua] (nivel 1; la pidió Ilse)');
+    expect(storyContext(engine.world, c, engine.gameNow())).toContain('Ilse acaba de pedirle «El agua turbia» [q_agua]');
+    expect(storyContext(engine.world, c, engine.gameNow())).toContain('Paso en curso [ilse]');
+    // Se la enseña sin dársela: el paso narrativo pide estar con ella, y guarda el porqué que dio el máster.
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_agua', step_id: 'ilse', why: 'le enseñaste a Ilse el agua turbia' }).ok).toBe(true);
     expect(characterStory(c).done).toContain('q_agua');
-    // …pero «La cadena de hierro frío» la pide Ilse: hasta que no hable con él, no entra.
-    expect(characterStory(c).open).not.toContain('q_cadena');
-    expect(storyContext(engine.world, c, engine.gameNow())).toContain('Pendiente de que se la pidan: «La cadena de hierro frío» [q_cadena] (de Ilse)');
-    await talkTo(engine, time, c, 'npc_ilse');
-    expect(characterStory(c).open).toContain('q_cadena');
-    expect(characterStory(c).origins!['q_cadena']).toMatchObject({ kind: 'giver', text: 'Te lo pide Ilse', location_id: 'loc_curandera' });
-    expect(storyContext(engine.world, c, engine.gameNow())).toContain('Ilse se la acaba de pedir');
-    const q = journalOf(engine, c.id).quests.active.find((x) => x.id === 'q_cadena')!;
-    expect(q).toMatchObject({ giver: 'Ilse', origin: { kind: 'giver', text: 'Te lo pide Ilse' } });
-    // El paso narrativo guarda el porqué que dio el máster.
     const agua = journalOf(engine, c.id).quests.completed.find((x) => x.id === 'q_agua')!;
-    expect(agua.history.map((h) => [h.kind, h.why])).toEqual([
-      ['added', expect.stringContaining('Junto al pozo')],
-      ['step', 'llevas agua del pozo'],
-      ['step', 'le enseñaste a Ilse el agua turbia'],
-      ['completed', 'diste todos los pasos'],
+    expect(agua).toMatchObject({ giver: 'Ilse', origin: { kind: 'giver', text: 'Ilse nos lo pidió' } });
+    expect(agua.history.map((h) => [h.kind, h.text, h.why])).toEqual([
+      ['added', 'Ilse nos lo pidió', null],
+      ['step', '✔ Sacar agua del pozo y mirarla de cerca', 'Llevas agua del pozo'],
+      ['step', 'Le dimos el agua a Ilse. La probó y escupió: es ceniza de la cripta.', 'Le enseñaste a Ilse el agua turbia'],
+      ['completed', 'Lo hemos conseguido', 'Se lo contamos a Ilse'],
     ]);
   });
 
@@ -123,9 +128,12 @@ describe('misiones: alta coherente', () => {
 });
 
 describe('misiones: avance por lo que hace el PJ', () => {
-  it('entrar en casa de Ilse con el agua no da el paso: se da al dársela, y su respuesta va entonces', async () => {
+  it('entrar en casa de Ilse con el agua no da el paso: se da al dársela, y lo que dice ella va al máster', async () => {
     const { engine, time } = await boot();
     const c = await newPc(engine, 'Fen');
+    await talkTo(engine, time, c, 'npc_ilse');
+    expect(characterStory(c).open).toContain('q_agua');
+    engine.world.npc('npc_ilse').talking_to = null;
     await walk(engine, time, c, 'sp_pl_pozo');
     expect(tool(engine, c, 'transfer_item', { instance_id: 'ii_agua_pozo', to_type: 'character', to_id: c.id, slot: 'pocket', equip_slot: null, quantity: 1 }).error).toBeUndefined();
     await engine.tick();
@@ -134,33 +142,34 @@ describe('misiones: avance por lo que hace el PJ', () => {
     expect(stepOf(engine, c, 'q_agua')!.current!.id).toBe('ilse');
     expect(engine.events.all().some((e) => e.actor_id === c.id && /Ilse huele el agua/.test(e.narration_private))).toBe(false);
     const water = engine.world.itemsCarriedBy(c.id).find((i) => i.item_id === 'it_agua_pozo')!;
-    expect(tool(engine, c, 'transfer_item', { instance_id: water.id, to_type: 'npc', to_id: 'npc_ilse', slot: null, equip_slot: null, quantity: null }).error).toBeUndefined();
-    await engine.tick();
-    expect(characterStory(c).done).toContain('q_agua');
-    const steps = questEvents(engine, c).map((e) => e.payload['quest'] as { event: string; step?: string; why: string }).filter((x) => x.event === 'step');
-    expect(steps).toEqual([
-      { id: 'q_agua', title: 'Ceniza en el agua', event: 'step', step: 'Sacar agua del pozo y mirarla de cerca', why: 'llevas agua del pozo' },
-      { id: 'q_agua', title: 'Ceniza en el agua', event: 'step', step: 'Llevarle el agua a Ilse, la curandera', why: 'la curandera ya tiene agua del pozo' },
+    const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] };
+    const r = JSON.parse(executeTool(ctx, 'transfer_item', { instance_id: water.id, to_type: 'npc', to_id: 'npc_ilse', slot: null, equip_slot: null, quantity: null })) as { story: { tell_now: string } };
+    expect(r.story.tell_now).toMatch(/Ilse huele el agua/);
+    // Lo ha dado en su casa, pero sin charla abierta: queda lista para entregar a Ilse.
+    expect(ctx.progress.map((e) => e.quest).filter(Boolean)).toEqual([
+      { id: 'q_agua', title: 'El agua turbia', event: 'step', step: 'Darle el agua a Ilse, la curandera', why: 'Ilse ya tiene agua del pozo' },
+      { id: 'q_agua', title: 'El agua turbia', event: 'ready', why: 'tenemos que volver con Ilse' },
     ]);
-    const ev = questEvents(engine, c).find((e) => (e.payload['quest'] as { event: string }).event === 'step')!;
-    expect(noticeOf(ev)).toMatchObject({ text: 'Paso cumplido · Ceniza en el agua: Sacar agua del pozo y mirarla de cerca', quest: { why: 'Llevas agua del pozo' } });
+    expect(c.clues).toContain('clue_ilse');
+    await talkTo(engine, time, c, 'npc_ilse');
+    expect(characterStory(c).done).toContain('q_agua');
   });
 
   it('lo que pasa en el mundo lejos del PJ no le da pasos; delante de él (o de su grupo), sí', async () => {
     const { engine, time } = await boot();
     const a = await newPc(engine, 'Ana');
-    await engine.tick();
+    await talkTo(engine, time, a, 'npc_brenna');
+    expect(tool(engine, a, 'story_quest', { quest_id: 'q_perro', action: 'ask' }).ok).toBe(true);
     const st = characterStory(a);
-    expect(st.open).toContain('q_perro');
     st.steps.push('q_perro/rastro', 'q_perro/lobera');
     expect(stepOf(engine, a, 'q_perro')!.current!.id).toBe('sacar');
     // Otro mata a la loba en el Soto mientras Ana sigue en el Jabalí: a Ana no le cuenta.
     engine.world.npc('npc_loba').status = 'dead';
     await engine.tick();
     expect(stepOf(engine, a, 'q_perro')!.current!.id).toBe('sacar');
-    // Cuando llega a la madriguera y lo ve, sí.
+    // Cuando llega a la madriguera y lo ve, sí; y queda lista para entregar a Brenna.
     await walk(engine, time, a, 'sp_cs_cueva');
-    expect(stepOf(engine, a, 'q_perro')!.current!.id).toBe('volver');
+    expect(stepOf(engine, a, 'q_perro')!.status).toBe('ready');
     const log = characterStory(a).log!.filter((x) => x.quest_id === 'q_perro' && x.kind === 'step');
     expect(log.at(-1)).toMatchObject({ step_id: 'sacar', why: 'la loba ha muerto' });
   });
@@ -186,13 +195,16 @@ describe('misiones: «Donde lo dejamos»', () => {
   it('nombra las misiones de la historia con lo que toca ahora, sin enmascarar el título', async () => {
     const { engine, time } = await boot();
     const c = await newPc(engine, 'Rui');
+    await talkTo(engine, time, c, 'npc_brenna');
+    expect(tool(engine, c, 'story_quest', { quest_id: 'q_perro', action: 'ask' }).ok).toBe(true);
     await walk(engine, time, c, 'sp_pl_pozo');
     expect(tool(engine, c, 'transfer_item', { instance_id: 'ii_agua_pozo', to_type: 'character', to_id: c.id, slot: 'pocket', equip_slot: null, quantity: 1 }).error).toBeUndefined();
     await engine.tick();
     const text = recapTemplate(engine, c, lastOwnEvent(engine, c.id)!, 1);
     // «Ceniza» es también el nombre del perro: dentro del título no se cambia por «el perro».
-    expect(text).toContain('«Ceniza en el agua»: llevarle el agua a la curandera'); // aún no sabe que se llama Ilse
     expect(text).toContain('«Ceniza se ha perdido»: buscar el rastro del perro en el Soto.');
+    // La principal, con el acto en curso.
+    expect(text).toContain('La deuda con el regidor: librarte de la deuda con Garrán; quedan 3 días');
   });
 });
 

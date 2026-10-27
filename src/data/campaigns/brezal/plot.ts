@@ -65,7 +65,7 @@ export const FACTIONS: Faction[] = [
 ];
 
 export const CLUES: Clue[] = [
-  { id: 'clue_pozo', title: 'Ceniza en el agua del pozo', reputation: 2, location_ids: ['loc_plaza'],
+  { id: 'clue_pozo', title: 'El agua turbia del pozo', reputation: 2, location_ids: ['loc_plaza'],
     how: 'Al sacar agua del pozo o mirar el cubo con atención: el agua trae ceniza fina, está tibia y huele a azufre. El pozo lo alimenta un manantial que pasa por debajo del granero de Vharn. Tirada de Percepción CD 11 o Naturaleza CD 10.' },
   { id: 'clue_hacha', title: 'El hacha con hollín', reputation: 2, location_ids: ['loc_claro'],
     how: 'Examinar de cerca el hacha de leñador del sendero del Soto: el hollín del mango es reciente y huele a resina quemada, no a leña de hogar; en el mango, grabadas a punta de cuchillo, las letras T. M. (Tobías, del molino). Alguien vuelve del Granero Quemado de noche. Investigación CD 10 o Supervivencia CD 10 al examinarla con intención.' },
@@ -102,8 +102,9 @@ export const JOBS: Job[] = [
 
 export const ACHIEVEMENT: Achievement = {
   id: 'ach_ceniza', title: 'Quien ha mirado la ceniza', faction_id: 'fac_brezal', clues_required: 3, reputation_required: 5,
-  reward_item_id: 'it_llave_vharn', reward_spot_id: 'sp_tab_trampilla',
-  announcement: 'En Brezal empiezan a decir que {name} ha mirado la ceniza de frente. Brenna le ha enseñado la trampilla de la mesa del fondo y le ha dado una llave vieja con el sello de Vharn: abre el pasadizo bajo el altar del Granero Quemado.',
+  // Solo reputación y lo que se dice: la llave de los Vharn y la trampilla salen de «Bajo el Jabalí», con su escena.
+  reward_item_id: null, reward_spot_id: null, reward_reputation: 2,
+  announcement: 'Se corre la voz por Brezal: {name} ha mirado la ceniza de frente.',
 };
 
 /**

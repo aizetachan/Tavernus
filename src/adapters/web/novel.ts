@@ -507,6 +507,19 @@ export const NOVEL_JS = String.raw`
       why.className = 'why'; why.textContent = n.quest.why;
       div.appendChild(why);
     }
+    // Nos la acaban de pedir en escena (story.ts): aceptar es implícito; aquí, o en el Diario, se puede decir que no.
+    // Si el Diario ya dice que no se puede (empezada o rechazada antes de recargar), sin botón; si llega después, syncAnswers lo quita.
+    var stillDeclinable = function (id) { var q = journalData && journalData.quests.active.concat(journalData.quests.completed).filter(function (x) { return x.id === id; })[0]; return !q || !!q.declinable; };
+    if (n.quest && n.quest.declinable && !other && stillDeclinable(n.quest.id)) {
+      var box = document.createElement('div');
+      box.innerHTML = answerHtml(n.quest.id);
+      var row = box.firstChild;
+      row.addEventListener('click', function (ev) {
+        var b = ev.target.closest('[data-answer]');
+        if (b) answerQuest(b.getAttribute('data-answer'), b.getAttribute('data-accept') === '1', Array.prototype.slice.call(row.querySelectorAll('button')));
+      });
+      div.appendChild(row);
+    }
     // Subida de nivel: lo que gana, una línea por apartado.
     if (n.level) n.level.gains.forEach(function (g) {
       var li = document.createElement('small');

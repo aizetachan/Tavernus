@@ -248,11 +248,11 @@ describe('n.º 14: lo que el PJ no sabe no se le escapa', () => {
     expect(npcTag(c, brenna)).toBe('Tabernera');
     c.knows.push(brenna.id);
     expect(npcLabel(c, brenna)).toBe('Brenna');
-    // Las misiones de la historia: no sabe quién es Ilse.
+    // Las misiones de la historia: no sabe quién es Ilse. Lo que oye en la plaza entra en el Diario como pista hacia ella.
     c.location = { type: 'spot', id: 'sp_pl_pozo' };
-    await engine.act(c.id, 'mirar el pozo');
+    await engine.tick();
     const j = journalOf(engine, c.id);
-    const water = j.quests.active.find((q) => q.id === 'q_agua');
+    const water = j.quests.active.find((q) => q.id === 'lead:q_agua');
     expect(water).toBeDefined();
     const all = [water!.text, ...water!.steps.map((s) => s.text)].join(' ');
     expect(all).toMatch(/curandera/);

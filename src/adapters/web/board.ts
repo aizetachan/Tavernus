@@ -25,6 +25,7 @@ import { descriptorOf } from '../../engine/narrate.js';
 import { lightAt, perceive } from '../../engine/perception.js';
 import { describeNode } from '../../engine/resources.js';
 import { talkersOf } from '../../engine/scene.js';
+import { questLeads } from '../../engine/story.js';
 import { pcName } from '../../engine/party.js';
 
 /** «Aren» o «tú y Aren»: quién habla con ese NPC, visto por el lector. */
@@ -79,6 +80,8 @@ export interface BoardPresence {
   talking_with?: string;
   /** PJ: su jugador se ha ido y el personaje se queda, ausente. */
   away?: boolean;
+  /** NPC: una pista activa del lector lleva a él (story.ts, `questLeads`): la web le pone un punto discreto. */
+  lead?: boolean;
 }
 
 export interface BoardState {
@@ -172,6 +175,7 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
       ...(other.away ? { away: true } : {}),
     });
   }
+  const leads = questLeads(world, c);
   for (const n of world.npcs.values()) {
     if (n.status !== 'alive') continue;
     const ns = world.spot(n.location.id);
@@ -183,6 +187,7 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
       label: labelFor(p.level, c.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)),
       asleep: false, moving: false,
       ...(p.level === 'full' ? talkingLabel(engine, c.id, n.id) : {}),
+      ...(leads.has(n.id) && p.level !== 'hint' ? { lead: true } : {}),
     });
   }
 

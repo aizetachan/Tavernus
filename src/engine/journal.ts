@@ -37,16 +37,17 @@ import type { DialogueLine } from './moments.js';
 import { maskUnknownNames } from './narrate.js';
 import { activeJobs } from './progress.js';
 import { rumorsHeardBy, rumorsIn, type Rumor } from './rumors.js';
-import { characterStory, questsOf } from './story.js';
+import { characterStory, difficultyOf, heardLine, mainQuestFor, nameFor, questsOf, storyRumors, type QuestDifficulty, type QuestLogEntry, type StoryQuest } from './story.js';
 import { boardSeen, droppedAt, givenQuests } from './quests.js';
 
-export type QuestStatus = 'available' | 'active' | 'completed' | 'expired';
+/** `ready`: lista para entregar a quien la recibe; `declined`: se la pidieron y dijo que no. */
+export type QuestStatus = 'available' | 'active' | 'ready' | 'completed' | 'expired' | 'failed' | 'declined';
 
 export interface JournalStep { text: string; done: boolean }
 
 /** De dónde le vino la misión al PJ. */
 export interface JournalOrigin {
-  kind: 'giver' | 'heard' | 'board' | 'self';
+  kind: 'giver' | 'heard' | 'board' | 'self' | 'main';
   /** «Te lo pide Ilse», «En el Jabalí se comenta que…», «Aviso del tablón»… */
   text: string;
   /** Dónde estaba (si se sabe). */
@@ -60,7 +61,7 @@ export interface JournalChange {
   when: string;
   /** Corta, para la lista: «18:07» si es hoy; si no, «3 de Brotes, 18:07». */
   short: string;
-  kind: 'added' | 'accepted' | 'step' | 'completed' | 'failed' | 'expired' | 'dropped';
+  kind: 'added' | 'offered' | 'declined' | 'accepted' | 'step' | 'ready' | 'changed' | 'warned' | 'completed' | 'failed' | 'expired' | 'dropped';
   /** Qué pasó: «Nueva misión», «✔ Sacar agua del pozo»… */
   text: string;
   why: string | null;
@@ -79,9 +80,15 @@ export interface JournalRumor {
 
 export interface JournalQuest {
   id: Id;
-  kind: 'main' | 'job' | 'achievement' | 'debt' | 'story' | 'given';
+  /** `lead`: una pista que lleva a alguien (algo que hemos oído), antes de que nos pidan nada. */
+  kind: 'main' | 'job' | 'achievement' | 'debt' | 'story' | 'given' | 'lead';
   /** Se puede dejar desde el Diario (encargos del tablón y misiones dadas, en curso). */
   droppable?: boolean;
+  /** Historia escrita: nivel de la misión y su dificultad para el PJ (el color del Diario). */
+  level?: number;
+  difficulty?: QuestDifficulty;
+  /** Se la acaban de pedir y no ha dado ningún paso: el Diario deja decir que no. */
+  declinable?: boolean;
   title: string;
   text: string;
   status: QuestStatus;
@@ -286,6 +293,28 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   const today = Math.floor(nowS / DAY_S);
   const short = (s: number) => { const d = clock.dateTime(s); return Math.floor(s / DAY_S) === today ? hhmm(s) : `${d.day_of_month} de ${d.month}, ${hhmm(s)}`; };
   const at = (s: number) => ({ game_s: s, when: fmt(s), short: short(s) });
+  const cst = characterStory(c);
+  /** Lo que ha pasado en una misión de la historia escrita, del registro del PJ (story.log). */
+  const storyHistory = (q: StoryQuest, log: QuestLogEntry[]): JournalChange[] => {
+    const step = (id: string | undefined) => [...q.steps, ...(q.on_npc_dead ?? []).flatMap((r) => (r.outcome === 'reroute' ? r.steps ?? [] : []))].find((st) => st.id === id);
+    const giverName = q.giver_npc_id ? npcLabel(c, w.npc(q.giver_npc_id)) : 'alguien';
+    // En primera persona del grupo, como un diario de viaje: lo que pasó es el texto; el porqué, debajo.
+    return log.filter((x) => x.kind !== 'rumor').map((x) => {
+      const s = step(x.step_id);
+      const [kind, text]: [JournalChange['kind'], string] = x.kind === 'offered' ? ['offered', `${cap(giverName)} nos pidió ayuda`]
+        : x.kind === 'open' ? (q.main_for ? ['added', 'Llegamos con esto entre manos'] : ['added', cap(x.why)])
+        : x.kind === 'declined' ? ['declined', cap(x.why)]
+        : x.kind === 'ready' ? ['ready', 'Ya lo tenemos todo']
+        : x.kind === 'changed' ? ['changed', cap(x.why)]
+        : x.kind === 'warned' ? ['warned', cap(x.why)]
+        : x.kind === 'done' ? ['completed', q.main_for ? 'Se acabó' : 'Lo hemos conseguido']
+        : x.kind === 'failed' ? ['failed', cap(x.why)]
+        : x.kind === 'expired' ? ['expired', 'Ya no se puede']
+        : ['step', s?.journal ? masked(s.journal) : `✔ ${masked(s?.text ?? x.step_id ?? '')}`];
+      const why = ['open', 'declined', 'changed', 'warned', 'failed'].includes(x.kind) ? null : x.why ? masked(x.why) : null;
+      return { key: `${q.id}:${x.kind}:${x.step_id ?? ''}:${x.game_s}`, ...at(x.game_s), kind, text: masked(text), why };
+    });
+  };
   for (const j of jobs) {
     const done = c.completed_jobs.includes(j.id);
     const engaged = engagedAt.get(j.id) ?? null;
@@ -343,13 +372,19 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     const deadline = s.deadline_game_s ?? born + s.clock_days * DAY_S;
     const left = Math.ceil((deadline - nowS) / DAY_S);
     const expired = nowS >= deadline;
+    // Campañas escritas: la misión principal de su situación, con sus pasos por actos y lo que ha pasado.
+    const mq = mainQuestFor(w, c);
+    const mv = mq ? questsOf(w, c).find((v) => v.quest.id === mq.id) : undefined;
+    const mHistory = mq ? storyHistory(mq, (cst.log ?? []).filter((x) => x.quest_id === mq.id && x.kind !== 'open')) : [];
+    const mDone = mv?.status === 'completed' ? (cst.log ?? []).find((x) => x.quest_id === mq!.id && x.kind === 'done')?.game_s ?? nowS : null;
+    const mUpdated = Math.max(born, ...mHistory.map((x) => x.game_s));
     quests.push({
-      id: 'main', kind: 'main', title: 'Lo que te trae aquí', text: s.why_here, status: expired ? 'expired' : 'active', origin: null,
-      history: [{ key: 'main:added', ...at(born), kind: 'added', text: 'Llegas con esto entre manos', why: null }],
+      id: 'main', kind: 'main', title: mq ? mq.title : 'Lo que te trae aquí', text: s.why_here, status: mDone !== null ? 'completed' : expired ? 'expired' : 'active', origin: null,
+      history: [{ key: 'main:added', ...at(born), kind: 'added', text: 'Llegas con esto entre manos', why: null }, ...mHistory],
       giver: null, giver_npc_id: null, reward: null,
-      seen_game_s: born, seen: fmt(born), completed_game_s: null, completed: null,
-      updated_game_s: born, updated: fmt(born),
-      steps: [{ text: s.wants, done: false }],
+      seen_game_s: born, seen: fmt(born), completed_game_s: mDone, completed: mDone === null ? null : fmt(mDone),
+      updated_game_s: mUpdated, updated: fmt(mUpdated),
+      steps: mv?.steps.length ? mv.steps.map((x) => ({ text: masked(x.step.text), done: x.done })) : [{ text: s.wants, done: false }],
       clock: { days_left: Math.max(0, left), deadline: fmt(deadline), runs_out: s.clock_runs_out },
       antagonist: ant && c.knows.includes(ant.id) ? { id: ant.id, name: ant.name, role: ant.role } : null,
       paths: [...s.paths], rumors: questRumors([s.why_here, s.wants, s.threat, ...s.paths]), pinned: true, summary: EMPTY_SUMMARY(),
@@ -431,11 +466,13 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
 
   // Historia escrita (story.ts): las misiones que el PJ conoce, con los pasos dados y el de ahora (los siguientes, no).
   // Lo que pasó y por qué sale del registro del PJ (story.log); en partidas de antes, de los avisos de progreso.
-  const cst = characterStory(c);
+  // La principal va arriba, en la de su situación.
   const storyTimes = mine.filter((e) => e.action_type === 'progress_story' && e.actor_id === c.id);
+  const mainId = s ? mainQuestFor(w, c)?.id ?? null : null;
   for (const v of questsOf(w, c)) {
     const q = v.quest;
-    const log = (cst.log ?? []).filter((x) => x.quest_id === q.id);
+    if (q.id === mainId) continue;
+    const log = (cst.log ?? []).filter((x) => x.quest_id === q.id && x.kind !== 'rumor');
     const told = storyTimes.filter((e) => e.narration_private.includes(`«${q.title}»`)).map((e) => e.timestamp_game_s);
     const opened = log.find((x) => x.kind === 'open')?.game_s;
     const seen = opened ?? told[0] ?? born;
@@ -445,27 +482,43 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     const giver = q.giver_npc_id ? w.npcs.get(q.giver_npc_id) ?? null : null;
     const o = cst.origins?.[q.id];
     const r = q.reward;
-    const history: JournalChange[] = log.map((x) => ({
-      key: `${q.id}:${x.kind}:${x.step_id ?? ''}:${x.game_s}`, ...at(x.game_s),
-      kind: x.kind === 'open' ? 'added' : x.kind === 'done' ? 'completed' : x.kind,
-      text: x.kind === 'open' ? 'Nueva misión' : x.kind === 'done' ? 'Misión cumplida' : x.kind === 'expired' ? 'Se cierra' : `✔ ${masked(q.steps.find((st) => st.id === x.step_id)?.text ?? x.step_id ?? '')}`,
-      why: x.why || null,
-    }));
-    if (!log.length) history.push({ key: `${q.id}:added`, ...at(seen), kind: 'added', text: 'Nueva misión', why: null });
+    const history = storyHistory(q, log);
+    if (!history.length) history.push({ key: `${q.id}:added`, ...at(seen), kind: 'added', text: 'Nueva misión', why: null });
+    // Quien la recibe, como último objetivo: «Volver con Brenna para entregarla».
+    const back = v.turn_in_npc_id && (v.status === 'active' || v.status === 'ready' || v.status === 'completed')
+      ? [{ text: `Volver con ${nameFor(w, c, v.turn_in_npc_id)} para entregarla`, done: v.status === 'completed' }] : [];
+    const started = v.steps.some((x) => x.done);
     quests.push({
       id: q.id, kind: 'story', title: `${['', 'I', 'II', 'III'][q.act]} · ${q.title}`, text: masked(q.text), status: v.status,
-      // De oídas: nadie se la ha pedido aún; no se pone «lo pide X».
+      level: q.level, difficulty: difficultyOf(q.level, c.level), ...(v.status === 'active' && o?.kind === 'giver' && !started ? { declinable: true } : {}),
+      // De oídas (partidas de antes): nadie se la ha pedido; no se pone «lo pide X».
       giver: giver && o?.kind !== 'heard' ? npcTag(c, giver) : null, giver_npc_id: giver?.id ?? null,
-      origin: o ? { kind: o.kind, text: masked(o.text), where: locName(o.location_id) } : giver ? { kind: 'giver', text: `Te lo pide ${npcLabel(c, giver)}`, where: null } : null, history,
+      origin: o ? { kind: o.kind, text: masked(o.text), where: locName(o.location_id) } : null, history,
       reward: [r.coins ? `${r.coins} monedas` : '', r.reputation ? `+${r.reputation} de reputación` : '', r.xp ? `${r.xp} PX` : ''].filter(Boolean).join(' · ') || null,
       seen_game_s: seen, seen: fmt(seen), completed_game_s: completed, completed: completed === null ? null : fmt(completed),
       updated_game_s: updated, updated: fmt(updated),
-      steps: v.steps.map((s) => ({ text: masked(s.step.text), done: s.done })),
+      steps: [...v.steps.map((s) => ({ text: masked(s.step.text), done: s.done })), ...back],
       clock: null, antagonist: null, paths: [], rumors: questRumors([q.title, q.text]), pinned: false, summary: EMPTY_SUMMARY(),
     });
   }
 
-  const byRecent = (x: JournalQuest, y: JournalQuest) => Number(y.pinned) - Number(x.pinned) || y.updated_game_s - x.updated_game_s || x.title.localeCompare(y.title);
+  // Lo que hemos oído y lleva a alguien: una pista en el Diario, hacia quien la da, sin contar de qué va.
+  for (const r of storyRumors(w, c)) {
+    const g = r.quest.giver_npc_id ? w.npc(r.quest.giver_npc_id) : null;
+    const who = g ? npcLabel(c, g) : 'alguien';
+    const heard = masked(heardLine(r.text));
+    quests.push({
+      id: `lead:${r.quest.id}`, kind: 'lead', title: `Buscar ${/^el /.test(who) ? `al ${who.slice(3)}` : `a ${who}`}`, text: `${heard}.`, status: 'active',
+      giver: null, giver_npc_id: g?.id ?? null, reward: null, origin: { kind: 'heard', text: masked(r.text), where: null },
+      history: [{ key: `lead:${r.quest.id}`, ...at(r.game_s), kind: 'added', text: heard, why: null }],
+      seen_game_s: r.game_s, seen: fmt(r.game_s), completed_game_s: null, completed: null, updated_game_s: r.game_s, updated: fmt(r.game_s),
+      steps: [{ text: `Hablar con ${who}`, done: false }], clock: null, antagonist: null, paths: [], rumors: [], pinned: false, summary: EMPTY_SUMMARY(),
+    });
+  }
+
+  // Abiertas primero (en curso, listas, pistas); las rechazadas, caducadas y fallidas, al final.
+  const closed = (q: JournalQuest) => Number(q.status === 'expired' || q.status === 'failed' || q.status === 'declined');
+  const byRecent = (x: JournalQuest, y: JournalQuest) => Number(y.pinned) - Number(x.pinned) || closed(x) - closed(y) || y.updated_game_s - x.updated_game_s || x.title.localeCompare(y.title);
   const active = quests.filter((q) => q.status !== 'completed').sort(byRecent);
   const completed = quests.filter((q) => q.status === 'completed').sort((x, y) => (y.completed_game_s ?? 0) - (x.completed_game_s ?? 0));
 

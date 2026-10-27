@@ -25,10 +25,10 @@ import { answerInfo, infoText, type InfoAnswer } from './info.js';
 import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type RouteCut } from './goto.js';
 import { parseErrand, pendingLine, trivialAction, type Errand } from './errand.js';
 import { atBoard, dropQuest, readBoard } from './quests.js';
-import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
+import { consumeHooks, matchHooks, pendingHooksIn, plantBeat, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { crowdHere, tickSchedule } from './schedule.js';
 import { tickOrders } from './npcorders.js';
-import { tickStory, type StoryOutput } from './story.js';
+import { storyQuestAction, tickStory, type StoryOutput } from './story.js';
 import { aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
 import { seededRng, type Rng } from './dice.js';
 import { harvest } from './resources.js';
@@ -1200,10 +1200,13 @@ export class Engine {
 
   /** Historia escrita (story.ts): la amenaza que avanza y las misiones de cada PJ; y quien está ante el tablón lo lee. */
   private advanceStory(nowG: number): void {
-    this.emitStory(tickStory(this.world, nowG));
+    const out = tickStory(this.world, nowG);
+    this.emitStory(out);
     for (const c of this.world.characters.values()) {
       if (c.status === 'active' && atBoard(this.world, c)) this.noteBoard(c, this.nowFor(c));
     }
+    // Lo que acaba de pasar en la escena (beats) lo cuenta el máster ya, tras la acción, sin esperar al tick.
+    if (out.beats.length) this.fireTimeHooks(nowG);
   }
 
   /** El PJ lee el tablón (ante él o con /tablon): cada encargo que no había visto entra en su Diario como disponible, con aviso. */
@@ -1215,11 +1218,24 @@ export class Engine {
     }));
   }
 
-  /** Avisos de la historia: los del PJ como progreso privado; los del mundo, a quien esté en el lugar (o a todos). */
+  /**
+   * Avisos de la historia: los del PJ como progreso privado; los del mundo, a quien esté en el lugar (o a todos).
+   * Lo que pasa en la escena (`beats`) lo cuenta el máster, con un gancho para ese PJ que salta en este mismo
+   * tick: una sola voz. Sin máster, sale como aviso.
+   */
   emitStory(out: StoryOutput): void {
     for (const p of out.personal) {
       const c = this.world.characters.get(p.character_id);
       if (c) this.emitProgress(c, p.events);
+    }
+    const beats = new Map<Id, string[]>();
+    for (const b of out.beats ?? []) beats.set(b.character_id, [...(beats.get(b.character_id) ?? []), b.text]);
+    for (const [id, texts] of beats) {
+      const c = this.world.characters.get(id);
+      const loc = c && !c.transit ? this.world.characterSpot(c)?.location_id : undefined;
+      if (!c || !loc) continue;
+      if (this.master) plantBeat(this.world, loc, c.id, `Historia escrita: acaba de pasar esto; cuéntalo tú, con tus palabras y sin contradecirlo: ${texts.join(' / ')}`, this.gameNow());
+      else this.emitProgress(c, texts.map((text) => ({ kind: 'story', text })));
     }
     for (const a of out.announcements) {
       const spot = this.world.spots.get(a.spot_id ?? this.world.location(a.location_id).default_spot_id)!;
@@ -1310,6 +1326,17 @@ export class Engine {
     this.emitProgress(c, [{ kind: 'quest', text: `Has dejado la misión «${r.title}».`, quest: { id: questId, title: r.title, event: 'dropped', why: 'la dejaste desde el Diario' } }]);
     await this.flush();
     return { ok: true, text: `Has dejado la misión «${r.title}».` };
+  }
+
+  /** Aceptar o rechazar desde la web una misión que le han ofrecido (story.ts): sin máster, con su aviso. */
+  async answerQuest(characterId: Id, questId: Id, accept: boolean): Promise<{ ok: boolean; text: string }> {
+    const c = this.world.character(characterId);
+    const r = storyQuestAction(this.world, c, questId, accept ? 'accept' : 'decline', this.nowFor(c));
+    if (!r.ok) return { ok: false, text: r.error };
+    this.emitStory(r.output);
+    // Lo que pasa al aceptarla (quien la da enseña algo) lo cuenta el máster: el tick salta su gancho.
+    await this.tick();
+    return { ok: true, text: accept ? 'Misión aceptada.' : 'Misión rechazada.' };
   }
 
   /**

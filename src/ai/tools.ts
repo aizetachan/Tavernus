@@ -13,7 +13,7 @@ import { perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
-import { advanceStory } from '../engine/story.js';
+import { advanceNow, advanceStory, storyOf, storyQuestAction, type StoryOutput } from '../engine/story.js';
 import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
 import { finishQuest, giveQuest } from '../engine/quests.js';
@@ -132,6 +132,9 @@ export const MASTER_TOOLS: Tool[] = [
   tool('advance_story', 'Campañas escritas: marca como dado el paso NARRATIVO en curso de una misión del actor (lo dice «Historia escrita» en el contexto: «lo decides tú con advance_story»), SOLO cuando se ha cumplido de verdad en la ficción. Los demás pasos los detecta el servidor solo.', {
     quest_id: str('ID de la misión (q_…)'), step_id: str('ID del paso en curso'),
     why: nstr('Qué ha hecho el jugador para darlo, en una frase para su Diario («sacaste a Ceniza mientras la loba dormía»), o null'),
+  }),
+  tool('story_quest', 'Campañas escritas: el ciclo de una misión (q_…) con quien la da delante. ask: quien la da se la pide al actor en la charla (solo las que «Historia escrita» dice que puede pedir) y entra en su Diario, sin preguntar si acepta. Pídela con su voz y por partes: el gancho, el problema, los detalles solo si los pide, y al final la tarea concreta (qué hacer y a quién); sin más de lo que dice su texto. decline: el jugador ha dicho que no (antes de empezar). accept: el jugador se ofrece o cambia de idea. turn_in: entrega una lista para entregar a quien la recibe, que le da la recompensa en la charla. Nunca abras una misión de otra forma.', {
+    quest_id: str('ID de la misión (q_…)'), action: enm(['ask', 'accept', 'decline', 'turn_in'], 'Qué pasa'),
   }),
   tool('give_quest', 'Un NPC le da al actor un encargo o le pide algo concreto que hacer (fuera del tablón): queda en su Diario «en curso» sin que tenga que aceptarlo, y el jugador ve «Nueva misión». Llámalo en el turno en que se lo piden, con quien la pide delante. Si el actor solo lo ha oído (un rumor, otro que lo cuenta), npc_id null y di en heard de dónde le llega.', {
     title: str('Título corto, como lo apuntaría el PJ («Las tablas de Hugo»)'),
@@ -299,7 +302,7 @@ export const MASTER_TOOLS: Tool[] = [
 
 /** Tools que cambian el mundo: si fallan, eso no ha ocurrido y no se puede narrar (master.ts). */
 export const WRITE_TOOLS = new Set([
-  'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story',
+  'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story', 'story_quest',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
   'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order',
 ]);
@@ -485,12 +488,33 @@ export function executeTool(ctx: ToolContext, name: string, raw: Record<string, 
     // Parámetros colados dentro de otro (sintaxis de llamada en el texto): se rescatan antes de nada.
     const { input } = repairToolInput(raw, TOOL_PARAMS.get(name));
     const out = run(ctx, name, input);
-    const res = typeof out === 'string' ? out : JSON.stringify(out);
-    if (WRITE_TOOLS.has(name) && !res.startsWith('{"error"')) (ctx.ok_tools ??= []).push(name);
+    let res = typeof out === 'string' ? out : JSON.stringify(out);
+    if (WRITE_TOOLS.has(name) && !res.startsWith('{"error"')) {
+      (ctx.ok_tools ??= []).push(name);
+      // La historia avanza ya (dar el agua a Ilse da el paso en esta misma respuesta): lo que pasa, a contarlo ahora.
+      if (name !== 'advance_story' && name !== 'story_quest' && storyOf(ctx.engine.world)) {
+        const told = storyTold(ctx, advanceNow(ctx.engine.world, ctx.actor, ctx.nowGameS));
+        if (told) { try { res = JSON.stringify({ ...(JSON.parse(res) as object), story: told }); } catch { /* respuesta no JSON: va sin historia */ } }
+      }
+    }
     return res;
   } catch (e) {
     return JSON.stringify({ error: unknownIdError(ctx, (e as Error).message) });
   }
+}
+
+/**
+ * Reparte lo que ha hecho avanzar la historia durante un tool: los avisos del actor van tras su turno
+ * (ctx.progress), los de otros PJ y lo del mundo salen ya, y lo que pasa en la escena del actor vuelve al máster
+ * en la respuesta del tool, para que lo cuente él en esta misma narración (una sola voz). null si no ha pasado nada.
+ */
+function storyTold(ctx: ToolContext, o: StoryOutput): { changes: string[]; tell_now?: string } | null {
+  const mine = o.personal.filter((p) => p.character_id === ctx.actor.id).flatMap((p) => p.events);
+  ctx.progress.push(...mine);
+  const beats = o.beats.filter((b) => b.character_id === ctx.actor.id).map((b) => b.text);
+  ctx.engine.emitStory({ personal: o.personal.filter((p) => p.character_id !== ctx.actor.id), announcements: o.announcements, beats: o.beats.filter((b) => b.character_id !== ctx.actor.id) });
+  if (!mine.length && !beats.length) return null;
+  return { changes: mine.map((e) => e.text), ...(beats.length ? { tell_now: `Cuéntalo tú en esta misma respuesta, con tus palabras y sin contradecirlo: ${beats.join(' / ')}` } : {}) };
 }
 
 /** Lo que hay aquí, para los errores de «eso no existe»: el máster lo lee y no inventa. */
@@ -913,10 +937,17 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     case 'advance_story': {
       const r = advanceStory(world, actor, s('quest_id'), s('step_id'), nowGameS, input['why'] == null ? null : cleanText(s('why')));
       if (!r.ok) return { error: r.error };
-      const mine = r.output.personal.filter((p) => p.character_id === actor.id).flatMap((p) => p.events);
-      ctx.progress.push(...mine);
-      engine.emitStory({ personal: r.output.personal.filter((p) => p.character_id !== actor.id), announcements: r.output.announcements });
-      return { ok: true, events: mine.map((e) => e.text) };
+      const told = storyTold(ctx, r.output);
+      return { ok: true, events: told?.changes ?? [], ...(told?.tell_now ? { tell_now: told.tell_now } : {}) };
+    }
+    case 'story_quest': {
+      const action = s('action') as 'ask' | 'offer' | 'accept' | 'decline' | 'turn_in';
+      const r = storyQuestAction(world, actor, s('quest_id'), action, nowGameS);
+      if (!r.ok) return { error: r.error };
+      const told = storyTold(ctx, r.output);
+      const hint = action === 'ask' || action === 'offer' || action === 'accept' ? 'Ya está en su Diario, en curso: no preguntes si acepta. Si dice que no, story_quest decline.'
+        : action === 'turn_in' ? 'Que quien la recibe le dé la recompensa en la charla.' : 'Queda apuntado que dijo que no; quien la pidió no insiste.';
+      return { ok: true, events: told?.changes ?? [], ...(told?.tell_now ? { tell_now: told.tell_now } : {}), hint };
     }
     case 'complete_job': {
       const missJ = s('character_id') === actor.id ? reachNpc(ctx, world.npc(s('npc_id'))) : null;
