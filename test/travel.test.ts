@@ -7,6 +7,7 @@ import { estimateTravel, moveTo } from '../src/engine/movement.js';
 import {
   aheadUntil, journeyOf, parseTravel, rollTravelEncounter, travelEncounterChance, travelNote, waypointSpotId,
 } from '../src/engine/travel.js';
+import { makeSeed } from '../src/data/seed/demo.js';
 import { bootEngine, fakeTime, freshWorld } from './helpers.js';
 
 const NO_ENCOUNTER = () => 0.99;
@@ -84,25 +85,35 @@ describe('viaje rápido', () => {
     expect(engine.nowFor(kael)).toBe(engine.gameNow());
   });
 
-  it('dos PJs en el mismo lugar comparten hora: el que llega «del futuro» espera, el otro no', async () => {
-    const { engine, time } = await atGate();
-    engine.world.character('ch_mira').location = { type: 'spot', id: 'sp_cl_roble' }; // Mira ya está en el claro
-    await engine.act('ch_kael', 'salir hacia el claro del roble');
+  it('dos PJs en la plaza: uno viaja y vuelve, actúa sin espera y su reloj queda igualado al del otro', async () => {
+    const { engine } = await atGate();
+    engine.world.character('ch_mira').location = { type: 'spot', id: 'sp_pl_pozo' }; // Mira se queda en la plaza
+    engine.setPresence('ch_mira', true);
     const kael = engine.world.character('ch_kael');
-    expect(engine.world.spot(kael.location.id).location_id).toBe('loc_claro');
+    await engine.act('ch_kael', 'salir hacia el claro del roble');
+    expect(aheadUntil(kael)).not.toBeNull(); // en el claro, solo: va por delante
+    await engine.act('ch_kael', 'ir al pozo');
+    expect(engine.world.spot(kael.location.id).location_id).toBe('loc_plaza');
 
-    const blocked = await engine.act('ch_kael', 'mirar');
-    expect(blocked.ok).toBe(false);
-    expect(blocked.text).toMatch(/^⏳ Has llegado antes que el resto/);
-    expect(blocked.text).toMatch(/Podrás actuar en \d+ min reales/);
-    // Mira, que va a la hora del mundo, actúa sin esperar.
-    expect((await engine.act('ch_mira', 'mirar')).ok).toBe(true);
-
-    // Cuando el reloj del mundo lo alcanza, los dos ven la misma hora y Kael actúa.
-    time.advanceGame(aheadUntil(kael)! - engine.gameNow() + 1);
-    expect((await engine.act('ch_kael', 'mirar')).ok).toBe(true);
-    expect(await engine.command('ch_kael', '/time')).toBe(await engine.command('ch_mira', '/time'));
+    // De vuelta con Mira: su hora es la de ella, sin «has llegado antes» ni espera.
+    expect(aheadUntil(kael)).toBeNull();
     expect(engine.nowFor('ch_kael')).toBe(engine.nowFor('ch_mira'));
+    const r = await engine.act('ch_kael', 'mirar');
+    expect(r.ok).toBe(true);
+    expect(r.text).not.toMatch(/⏳/);
+    expect(await engine.command('ch_kael', '/time')).toBe(await engine.command('ch_mira', '/time'));
+  });
+
+  it('llega a donde ya hay otro PJ con una hora anterior: actúa en el acto, también la tirada', async () => {
+    const { engine } = await atGate();
+    engine.world.character('ch_mira').location = { type: 'spot', id: 'sp_cl_roble' }; // Mira ya está en el claro
+    engine.setPresence('ch_mira', true);
+    await engine.act('ch_kael', 'salir hacia el claro del roble');
+    expect(engine.world.spot(engine.world.character('ch_kael').location.id).location_id).toBe('loc_claro');
+    expect(engine.nowFor('ch_kael')).toBe(engine.nowFor('ch_mira'));
+    expect((await engine.act('ch_kael', 'mirar')).ok).toBe(true);
+    expect((await engine.act('ch_mira', 'mirar')).ok).toBe(true);
+    expect((await engine.rollPending('ch_kael')).text).not.toMatch(/⏳/);
   });
 
   it('adelantado y con alguien detrás, sí puede marcharse', async () => {
@@ -115,12 +126,32 @@ describe('viaje rápido', () => {
     expect(engine.world.spot(engine.world.character('ch_kael').location.id).location_id).toBe('loc_plaza');
   });
 
-  it('con nadie más en el destino no espera, aunque vaya por delante', async () => {
+  it('con nadie más mirando en el destino sigue por delante, sin esperar', async () => {
     const { engine } = await atGate();
     engine.world.character('ch_mira').location = { type: 'spot', id: 'sp_cl_roble' };
-    engine.world.character('ch_mira').connected = false; // no mira nadie: no hay hora que compartir
+    engine.setPresence('ch_mira', true);
+    engine.setAway('ch_mira', true); // cerró la pestaña: su PJ se queda, pero no hay hora que compartir
     await engine.act('ch_kael', 'salir hacia el claro del roble');
+    expect(aheadUntil(engine.world.character('ch_kael'))).not.toBeNull();
     expect((await engine.act('ch_kael', 'mirar')).ok).toBe(true);
+  });
+
+  it('un PJ guardado como conectado no cuenta al cargar: nadie está conectado hasta que abre su pestaña', async () => {
+    expect(makeSeed().characters.find((c) => c.id === 'ch_mira')!.connected).toBe(true); // así quedó guardada
+    const { engine } = await atGate({ offline: true });
+    const mira = engine.world.character('ch_mira');
+    expect(mira.connected).toBe(false);
+    expect(mira.veiled).toBe(false); // un reinicio no duerme a nadie
+    expect(mira.status).toBe('active');
+    mira.location = { type: 'spot', id: 'sp_cl_roble' };
+    // Sin pestaña de Mira, Kael llega al claro con su hora y actúa.
+    await engine.act('ch_kael', 'salir hacia el claro del roble');
+    expect(aheadUntil(engine.world.character('ch_kael'))).not.toBeNull();
+    expect((await engine.act('ch_kael', 'mirar')).ok).toBe(true);
+    // Si el adaptador la da por ida sin haber vuelto, llega el velo como siempre.
+    engine.setPresence('ch_mira', false);
+    expect(mira.veiled).toBe(true);
+    expect(mira.status).toBe('asleep');
   });
 });
 

@@ -7,8 +7,13 @@
  *  - Las salidas son entidades con estado, no aristas.
  *  - Los sistemas (combates, crímenes, líneas secundarias) no son objetos del mundo.
  *
- * Unidades: metros, segundos de tiempo de juego, libras (5e) para peso.
+ * Unidades: metros, segundos de tiempo de juego, libras (5e) para peso,
+ * dinero en la moneda más pequeña (money.ts).
  */
+
+import type { Denomination } from './money.js';
+
+import type { StoryCondition } from './story.js';
 
 export type Id = string;
 
@@ -52,6 +57,10 @@ export interface Campaign {
   perception_rules: PerceptionRules;
   movement_rules: MovementRules;
   capacity_rules: CapacityRules;
+  /** Monedas de la campaña, de mayor a menor valor (money.ts). Sin ellas: oro, plata y cobre del SRD. */
+  currency?: Denomination[];
+  /** Valor (en la moneda más pequeña) con el que empieza un PJ nuevo. Sin él: DEFAULT_STARTING_COINS. */
+  starting_coins?: number;
   /** Identidad de la campaña para el master (SPEC §1.1). */
   premise: string;
   setting: string;
@@ -87,6 +96,34 @@ export interface Campaign {
   situations?: { for_name: string; for_classes?: string[]; keep?: boolean; companion_of?: string; situation: InitialSituation }[];
   /** Muerte y reaparición (SPEC §4.7, death.ts). Sin campo, los valores por defecto. */
   death_rules?: Partial<DeathRules>;
+  /** La ley del sitio (crime.ts): quién la hace cumplir, dónde encierra, multas, dueños de cada local. Sin campo, se deduce de los roles. */
+  law?: LawRules;
+  /** Los rincones se descubren (spots.ts): ya migrada la partida que daba por conocidos todos los puntos no ocultos. */
+  spot_sight?: boolean;
+}
+
+/** Tipos de incidente que el motor reconoce (crime.ts), de menos a más grave. */
+export type IncidentKind = 'insult' | 'theft' | 'assault' | 'armed_assault' | 'desecration' | 'murder';
+
+/**
+ * La ley de una campaña (crime.ts). Datos de campaña: el motor no sabe quién
+ * es Garrán; lo lee de aquí. Lo que falte se deduce (autoridad por su rol).
+ */
+export interface LawRules {
+  /** Facción cuya reputación baja con el autor (la del pueblo). null: ninguna. */
+  faction_id?: Id | null;
+  /** NPC que hacen cumplir la ley: dan el alto, detienen y, si te resistes, pelean. */
+  enforcers?: Id[];
+  /** Dónde encierran (un punto). Sin él, solo hay multas. */
+  jail_spot_id?: Id | null;
+  /** Multa en monedas por tipo, para lo que no lleva al calabozo. */
+  fines?: Partial<Record<IncidentKind, number>>;
+  /** Horas de juego de calabozo por tipo. */
+  jail_hours?: Partial<Record<IncidentKind, number>>;
+  /** Dueños de cada local: no sirven ni alojan a quien saben culpable. */
+  owners?: { npc_id: Id; location_ids: Id[] }[];
+  /** Carácter de la gente corriente ante un crimen: brave va a avisar a la autoridad o se mete; timid huye. Sin entrada, grita y se aparta. */
+  temperament?: Record<Id, 'brave' | 'timid'>;
 }
 
 /** Reglas de muerte de la campaña (SPEC §1.2 death_rule, §4.7). Esperas en tiempo real. */
@@ -162,12 +199,40 @@ export interface Faction { id: Id; name: string; description: string }
 export interface Clue {
   id: Id;
   title: string;
-  /** Solo para el master: cómo se obtiene y qué revela. */
+  /** Solo para el master: qué revela (y, sin `sources`, cómo se obtiene). */
   how: string;
   reputation: number;
+  /** Pista clave: la historia la necesita. El validador de campaña le exige al menos dos fuentes. */
+  key?: boolean;
+  /**
+   * Caminos para conseguirla, cada uno con lo que pide. grant_clue solo la da si se cumple alguno; si no, la
+   * rechaza con el motivo (`refusal`) para que el máster lo narre. Sin `sources`, cualquier camino vale.
+   */
+  sources?: ClueSource[];
   /** Anclas: el contexto del máster solo trae el "cómo" de la pista si el actor está en una de estas localizaciones o tiene delante a uno de estos NPCs. Sin anclas, va siempre. */
   location_ids?: Id[];
   npc_ids?: Id[];
+  /**
+   * Qué se ve al encontrarla, para la imagen del descubrimiento («un cubo de agua
+   * turbia con un poso de ceniza gris»). Sin él se pinta el título; y si la pista
+   * llega hablando con un NPC, se tiene por oída y no hay imagen de descubrimiento
+   * (src/engine/moments.ts).
+   */
+  image?: string;
+}
+
+/** Un camino para conseguir una pista. */
+export interface ClueSource {
+  /** Para el máster: de quién o de qué sale y cómo («Ilse lo cuenta si se fía de ti»). */
+  via: string;
+  /** Quién la da: tiene que estar con el PJ. */
+  npc_id?: Id;
+  /** Dónde se encuentra: el PJ tiene que estar allí. */
+  location_id?: Id;
+  /** Lo que hace falta (confianza, paso de misión, objeto…); sin requisito, basta con estar. */
+  requires?: StoryCondition;
+  /** Por qué no sale aún, en ficción, para que el máster lo narre («Ilse aún no se fía de ti»). */
+  refusal?: string;
 }
 
 export interface Job {
@@ -188,8 +253,12 @@ export interface Achievement {
   faction_id: Id;
   clues_required: number;
   reputation_required: number;
+  /** Lo que da al conseguirlo. En las campañas escritas, mejor nada que se salte la historia (llaves y pasadizos salen de misiones). */
   reward_item_id: Id | null;
   reward_spot_id: Id | null;
+  /** Reputación extra con la facción al conseguirlo. */
+  reward_reputation?: number;
+  /** Lo que se cuenta en público: solo hechos ciertos (que se habla de él), nunca lo que no ha pasado. */
   announcement: string;
 }
 
@@ -242,6 +311,7 @@ export interface CapacityRules {
   carry_per_str: number;
   encumbered_at: number;   // × STR
   heavily_at: number;      // × STR
+  /** Piezas por libra (SRD: 50). Pesan las monedas de verdad (15 de oro), no el valor (1500 de cobre): money.ts. */
   coins_per_lb: number;
 }
 
@@ -278,7 +348,13 @@ export interface Spot {
   capacity: number | null;
   hidden: boolean;
   dc_to_find?: number;
+  /** Quién lo conoce (spots.ts): lo ha visto, lo ha encontrado o se lo han nombrado. */
   discovered_by: Id[];
+  /**
+   * Desde qué puntos se ve de un vistazo al llegar (spots.ts). Sin el campo, desde
+   * los de su misma estancia: los que no tienen un enlace que tape la vista.
+   */
+  visible_from?: Id[];
   state: Record<string, unknown>;
   tags: string[];
   terrain_multiplier: number;
@@ -408,6 +484,35 @@ export interface Character {
   spells?: CharacterSpells;
   /** Elecciones de clase hechas (levels.ts): clave de la elección → lo elegido (estilo, pericia, mejora de característica). */
   picks?: Record<string, string[]>;
+  /** Buscado por la autoridad (crime.ts): por qué, desde cuándo, dónde le vieron por última vez y si le están deteniendo. */
+  wanted?: Wanted | null;
+  /** Encerrado en el calabozo (crime.ts) hasta ese instante de juego (el suyo). */
+  jailed?: { until_game_s: number; spot_id: Id; reason: string } | null;
+  /** Infamia: muertes de quien no era hostil y cadáveres profanados (crime.ts). En lugar de PX. */
+  infamy?: number;
+  /** Etiquetas ganadas con lo que ha hecho (standing.ts): *asesino*, *salvó a Ceniza*. Las de raza, clase y trasfondo salen de la ficha. */
+  tags?: EarnedTag[];
+}
+
+/** Una etiqueta ganada (standing.ts): cuál, cuándo, por qué y el hecho que la dio (quien lo sabe, sabe la etiqueta). */
+export interface EarnedTag { id: Id; game_s: number; why: string; fact_id: Id | null }
+
+/** Una etiqueta de la campaña (datos): el nombre que se lee y, para el máster, qué significa. */
+export interface TagDef { id: Id; label: string; text?: string }
+
+/** Lo que sabe la autoridad de un PJ (crime.ts). */
+export interface Wanted {
+  since_game_s: number;
+  /** Incidentes por los que le buscan. */
+  incident_ids: Id[];
+  /** «mató a Hugo en la Taberna del Jabalí». */
+  reason: string;
+  /** Dónde le vio por última vez alguien que lo sabe; null si nadie. */
+  last_seen: { location_id: Id; spot_id: Id; game_s: number } | null;
+  /** Quien le busca activamente (va a donde le vieron). */
+  hunter_id?: Id | null;
+  /** Le están deteniendo: quién, desde cuándo, si el motor ya dio el alto y si se ha resistido. */
+  arrest: { npc_id: Id; since_game_s: number; announced: boolean; resisted: boolean } | null;
 }
 
 /**
@@ -532,16 +637,34 @@ export interface Npc {
   id: Id;
   name: string;
   role: string;
+  /**
+   * Forma corta del oficio para el texto corrido cuando el PJ no sabe su nombre
+   * (narrate.ts, `descriptorOf`), con artículo si no es el que toca: «el alguacil»
+   * para «alguacil y recaudador», «el guardia». Sin campo, el oficio entero.
+   */
+  role_short?: string;
   location: Extract<Placement, { type: 'spot' }>;
-  status: 'alive' | 'dead' | 'missing';
+  /** `unconscious`: a 0 PG sin morir (golpe no letal, combat.ts); vuelve en sí solo (`down`). */
+  status: 'alive' | 'unconscious' | 'dead' | 'missing';
   passive_perception: number;
   description: string;
   motivation: string;
-  /** Lo que el master sabe y no debe soltar sin motivo. */
+  /**
+   * Lo que esconde, entero: para el análisis y los mundos generados. Al máster no le llega tal cual: le llega
+   * `knowledge` por niveles (trust.ts); sin `knowledge`, el secreto cuenta como de nivel amigo.
+   */
   secret: string;
+  /** Lo que sabe y cuenta según cuánto se fíe del PJ (trust.ts). Cada nivel suma a los de debajo. */
+  knowledge?: NpcKnowledge[];
+  /** Carácter: la adulación le resta confianza en vez de sumarla (trust.ts). Sin campo, la agradece. */
+  dislikes_flattery?: boolean;
+  /** Confianza en cada PJ (trust.ts): puntos y lo ganado en la última charla. */
+  trust?: Record<Id, NpcTrust>;
   memory: NpcMemory[];
   /** Cola de conversación (SPEC §9.6): con quién habla ahora. */
   talking_to: { character_id: Id; since_game_s: number; /** Otros PJ unidos a la charla (scene.ts). */ with?: Id[]; /** Turno guardado para quien esperaba: aún no ha hablado. */ reserved?: boolean } | null;
+  /** Su casa (datos de campaña): el máster sabe dónde vive y no se la inventa en otro sitio (prompt.ts, homeLine). */
+  home_spot_id?: Id;
   /** Comercio (SPEC §5.6): qué compra y a qué precio; qué vende. */
   buys: { item_id: Id; price: number }[];
   sells: { item_id: Id; price: number }[];
@@ -551,6 +674,41 @@ export interface Npc {
   attitude: { default: Attitude; by_character: Record<Id, Attitude> };
   /** Cómo murió (death.ts, killNpc): su cuerpo sigue en su punto y el motor lo anuncia una vez (`told`). */
   death?: NpcDeath;
+  /** Cómo cayó inconsciente (death.ts, knockOutNpc): sigue en su punto, sin actuar, hasta `wakes_game_s`. */
+  down?: NpcDown;
+  /** Atado (tool restrain_npc): despierto o no, no se mueve ni pelea hasta que le suelten. */
+  bound?: { by_id: Id | null; since_game_s: number } | null;
+  /** Vínculos con otros NPC (crime.ts): quien hace daño a uno se las ve con los suyos. Datos de campaña. */
+  bonds?: NpcBond[];
+  /** Opinión de cada PJ (standing.ts), como la aprobación de BG3: número y motivos. Estado de partida. */
+  opinion?: Record<Id, OpinionEntry>;
+  /** Cómo reacciona a las etiquetas del PJ (standing.ts). Datos de campaña. */
+  tag_reactions?: TagReaction[];
+  /** No habla (un animal): ni comenta al pasar ni cuenta noticias, aunque vea lo que pasa (chatter.ts, worldrules.ts). */
+  mute?: boolean;
+}
+
+/** Opinión de un NPC con un PJ: de −100 a 100, con los últimos motivos; y las etiquetas a las que ya ha reaccionado. */
+export interface OpinionEntry { value: number; log: { delta: number; why: string; game_s: number }[]; tags_seen?: Id[] }
+
+/**
+ * Reacción de un NPC a una etiqueta del PJ (datos de campaña), cuando sabe que la tiene: un cambio de opinión la
+ * primera vez (±1, ±5, ±10), lo que el máster tiene que saber y, si se da, una opción con tirada (botón de sugerencia).
+ */
+export interface TagReaction {
+  tag: Id;
+  opinion?: number;
+  /** Para el máster: «le tiene miedo y no le da la espalda». */
+  note: string;
+  /** Opción de diálogo con tirada, como las de BG3 con etiqueta: «Hablarle de tú a tú, entre soldados» (Persuasión CD 12). */
+  option?: { text: string; skill: string; dc: number };
+}
+
+/** Un vínculo de un NPC con otro. `reaction`: qué hace si le hacen daño (sin ella, se deduce). */
+export interface NpcBond {
+  npc_id: Id;
+  kind: 'kin' | 'friend' | 'patron' | 'rival';
+  reaction?: 'fight' | 'mourn';
 }
 
 export interface NpcDeath {
@@ -562,7 +720,27 @@ export interface NpcDeath {
   told?: boolean;
 }
 
+/** Un NPC a 0 PG que no ha muerto: lo dejó así un golpe no letal. `told`: el motor ya lo ha anunciado. */
+export interface NpcDown {
+  since_game_s: number;
+  /** Cuándo vuelve en sí con 1 PG (SRD: 1d4 h; aquí, determinista). */
+  wakes_game_s: number;
+  by_id: Id | null;
+  by_name: string | null;
+  cause: string;
+  told?: boolean;
+}
+
 export type Attitude = 'hostile' | 'unfriendly' | 'neutral' | 'friendly' | 'allied';
+
+/** Nivel de confianza de un NPC en un PJ (trust.ts), de menos a más. */
+export type TrustTier = 'stranger' | 'acquaintance' | 'friend' | 'ally';
+
+/** Una parte de lo que sabe un NPC: la cuenta a quien tenga al menos ese nivel de confianza con él. */
+export interface NpcKnowledge { tier: TrustTier; text: string }
+
+/** Confianza de un NPC en un PJ. `talk`: lo ganado en la conversación en curso, para el tope por charla. */
+export interface NpcTrust { points: number; talk?: { since_game_s: number; gained: number; last_game_s: number } }
 
 export interface NpcStats {
   ac: number;
@@ -574,6 +752,10 @@ export interface NpcStats {
   attack_name: string;
   /** XP 5e por derrotarlo. */
   xp: number;
+  /** Multiataque SRD: cuántos ataques hace en su turno (matón, explorador, veterano: 2). Sin él, 1. */
+  multiattack?: number;
+  /** Ataca a distancia (arco, honda): no necesita llegar al punto del objetivo. */
+  ranged?: boolean;
 }
 
 export interface Vehicle {
@@ -620,8 +802,15 @@ export interface ItemDef {
    * vendedor cerrados con esa llave (`spot.state.key_item_id`).
    */
   service?: { gives_item_id: Id };
+  /**
+   * Si se pinta como «objeto en la mano» al cogerlo, comprarlo o examinarlo. Por
+   * defecto sí, salvo los servicios; `false` para consumibles abstractos (una ronda).
+   */
+  illustrate?: boolean;
   /** Consumible que cura (poción): dados de PG que devuelve al gastarlo («2d4+2»). */
   heals?: string;
+  /** Para qué sirve, en una frase (la ficha de la mochila). Sin ella, la ficha sale del tipo y las propiedades. */
+  description?: string;
   origin: 'srd' | 'custom';
 }
 

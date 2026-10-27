@@ -245,53 +245,60 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(tool(engine, c, 'move_to', { character_id: c.id, target_spot_id: 'sp_va_camino', pace: 'walk' }).error).toBe('no_route');
   });
 
-  it('el acto I, el acto II y el final «Templar el ascua» se completan por tools, en orden', async () => {
+  it('el acto I, el acto II y el final «Templar el ascua» se completan por tools, en orden, subiendo de nivel', async () => {
     const { engine, time } = await boot();
     const c = await newPc(engine, 'Fen', 'rogue');
     c.abilities.str = 18; // las recompensas en monedas pesan
     await engine.tick();
-    // Al empezar en el Jabalí y conocer a Brenna: el perro perdido.
-    expect(characterStory(c).open).toContain('q_perro');
+    // La deuda es su misión principal; lo demás se lo tienen que ofrecer.
+    expect(characterStory(c).open).toEqual(['q_main_deuda']);
+    const accept = (id: string) => expect(tool(engine, c, 'story_quest', { quest_id: id, action: 'accept' }), id).toMatchObject({ ok: true });
+    const level = async (n: number) => { await engine.tick(); expect(c.level).toBe(n); };
 
-    // --- Acto I: Ceniza en el agua (sin máster: andar, coger, andar) ---
+    // --- Acto I: El agua turbia (Ilse la ofrece al hablar; el paso, al darle el agua) ---
     await walk(engine, time, c, 'sp_pl_pozo');
-    expect(characterStory(c).open).toContain('q_agua');
+    expect(characterStory(c).open).not.toContain('q_agua');
     await take(engine, c, 'ii_agua_pozo');
-    expect(stepOf(engine, c, 'q_agua')!.current!.id).toBe('ilse');
-    // Entrar en casa de Ilse con el agua no basta: el paso se da al dársela, y ahí habla ella.
-    await walk(engine, time, c, 'sp_cu_hierbas');
-    expect(stepOf(engine, c, 'q_agua')!.current!.id).toBe('ilse');
-    expect(c.clues).not.toContain('clue_ilse');
     await talkTo(engine, time, c, 'npc_ilse');
+    expect(characterStory(c).open).toContain('q_agua'); // se la pide en escena: entra activa
+    expect(stepOf(engine, c, 'q_agua')!.current!.id).toBe('ilse');
     const water = engine.world.itemsCarriedBy(c.id).find((i) => i.item_id === 'it_agua_pozo')!;
     expect(tool(engine, c, 'transfer_item', { instance_id: water.id, to_type: 'npc', to_id: 'npc_ilse', slot: null, equip_slot: null, quantity: null }).error).toBeUndefined();
-    await engine.tick();
     expect(done(c)).toContain('q_agua');
     expect(c.clues).toContain('clue_ilse');
-    expect(characterStory(c).open).toContain('q_cadena'); // se abre el acto II de Ilse: se la pide ella, en la charla
-    expect(characterStory(c).origins!['q_cadena']).toMatchObject({ kind: 'giver', text: 'Te lo pide Ilse' });
-    expect(characterStory(c).origins!['q_agua']).toMatchObject({ kind: 'heard' });
+    // La cadena es del acto II: pide nivel 2.
+    expect(tool(engine, c, 'story_quest', { quest_id: 'q_cadena', action: 'ask' }).error).toMatch(/pide nivel 2/);
 
-    // --- Acto I: Ceniza se ha perdido (la madriguera al pie del roble del Soto) ---
+    // --- Acto I: Ceniza se ha perdido (la madriguera al pie del roble del Soto); la recompensa, de Brenna ---
+    await talkTo(engine, time, c, 'npc_brenna');
+    accept('q_perro');
+    engine.world.npc('npc_brenna').talking_to = null;
     await walk(engine, time, c, 'sp_cl_sendero');
     expect(stepOf(engine, c, 'q_perro')!.current!.id).toBe('lobera');
     await walk(engine, time, c, 'sp_cs_cueva');
-    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'volver' }).error).toMatch(/paso en curso/);
-    const r = tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'sacar' });
-    expect(r.ok).toBe(true);
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'rastro' }).error).toMatch(/paso en curso/);
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'sacar' }).ok).toBe(true);
     expect(engine.world.npc('npc_ceniza').location.id).toBe('sp_tab_chimenea');
-    await walk(engine, time, c, 'sp_tab_barra');
-    expect(done(c)).toContain('q_perro');
-    expect(engine.world.npc('npc_brenna').attitude.by_character[c.id]).toBe('friendly');
-    expect(characterStory(c).open).toContain('q_subida'); // de oídas
-    expect(characterStory(c).open).not.toContain('q_sotano'); // la pide Brenna: hasta que no hable con ella, no
+    expect(stepOf(engine, c, 'q_perro')!.status).toBe('ready');
+    const coins = c.coins;
     await talkTo(engine, time, c, 'npc_brenna');
-    expect(characterStory(c).open).toContain('q_sotano');
+    expect(done(c)).toContain('q_perro');
+    expect(c.coins).toBe(coins + 100);
+    expect(engine.world.npc('npc_brenna').attitude.by_character[c.id]).toBe('friendly');
 
-    // --- Acto I: Lo que vio Doro (la pista y la vigilia de las 23:00 en el arroyo del Soto) ---
-    await walk(engine, time, c, 'sp_pl_porton');
-    expect(characterStory(c).open).toContain('q_noche');
+    // --- Acto I: La cena del portón (presenta a Doro) y Lo que vio Doro ---
+    accept('q_cena_doro');
+    engine.world.npc('npc_brenna').talking_to = null;
+    await walk(engine, time, c, engine.world.npc('npc_doro').location.id);
+    const ration = engine.world.itemsCarriedBy(c.id).find((i) => i.item_id === 'it_racion')!;
+    expect(tool(engine, c, 'transfer_item', { instance_id: ration.id, to_type: 'npc', to_id: 'npc_doro', slot: null, equip_slot: null, quantity: null }).error).toBeUndefined();
+    expect(c.knows).toContain('npc_doro');
+    await talkTo(engine, time, c, 'npc_brenna');
+    expect(done(c)).toContain('q_cena_doro');
+    await talkTo(engine, time, c, 'npc_doro');
+    accept('q_noche');
     expect(tool(engine, c, 'grant_clue', { character_id: c.id, clue_id: 'clue_doro' }).ok).toBe(true);
+    engine.world.npc('npc_doro').talking_to = null;
     await walk(engine, time, c, 'sp_cl_arroyo');
     const day = Math.floor(engine.gameNow() / (24 * H));
     const at23 = day * 24 * H + 23 * H + 5 * 60;
@@ -303,29 +310,47 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(tool(engine, c, 'discover_spot', { character_id: c.id, spot_id: 'sp_mo_desvan' }).error).toBeUndefined();
     await walk(engine, time, c, 'sp_mo_desvan');
     await take(engine, c, 'ii_cartas_tobias');
+    expect(stepOf(engine, c, 'q_noche')!.status).toBe('ready');
+    await talkTo(engine, time, c, 'npc_doro');
     expect(done(c)).toContain('q_noche');
-    expect(characterStory(c).open).not.toContain('q_tobias');
-    await talkTo(engine, time, c, 'npc_mateo');
-    expect(characterStory(c).open).toContain('q_tobias');
+    await level(2); // 100 + 150 + 75 + 150 PX
 
-    // --- Acto II: Bajo el Jabalí ---
-    expect(tool(engine, c, 'discover_spot', { character_id: c.id, spot_id: 'sp_tab_trampilla' }).error).toBeUndefined();
+    // --- Acto II: Bajo el Jabalí (Brenna enseña la trampilla al aceptarla y da la llave al entregarla) ---
+    await talkTo(engine, time, c, 'npc_brenna');
+    expect(characterStory(c).open).toContain('q_sotano');
+    expect(engine.world.spot('sp_tab_trampilla').discovered_by).toContain(c.id);
+    engine.world.npc('npc_brenna').talking_to = null;
     await walk(engine, time, c, 'sp_so_escalera');
     expect(tool(engine, c, 'discover_spot', { character_id: c.id, spot_id: 'sp_so_hueco' }).error).toBeUndefined();
     await walk(engine, time, c, 'sp_so_hueco');
     await take(engine, c, 'ii_libro_cuentas');
     expect(c.clues).toContain('clue_libro');
+    expect(stepOf(engine, c, 'q_sotano')!.status).toBe('ready');
+    await talkTo(engine, time, c, 'npc_brenna');
     expect(done(c)).toContain('q_sotano');
+    expect(engine.world.itemsCarriedBy(c.id).some((i) => i.item_id === 'it_llave_vharn')).toBe(true);
     expect(allHooks(engine.world).some((h) => h.id === 'hk_garran_sotano')).toBe(true);
 
-    // --- Acto II: El hijo del molinero (narrativos) ---
+    // --- Acto II: El hijo del molinero (narrativos; Mateo paga en la misma charla) ---
+    await talkTo(engine, time, c, 'npc_mateo');
+    accept('q_tobias');
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_tobias', step_id: 'confesar' }).ok).toBe(true);
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_tobias', step_id: 'parar' }).ok).toBe(true);
     expect(done(c)).toContain('q_tobias');
     expect(allScheduled(engine.world).some((e) => e.id === 'se_tobias')).toBe(false);
 
-    // --- Acto II: La cadena de hierro frío ---
+    // --- Acto II: La cadena de hierro frío (preguntar a Hugo en persona; los eslabones, a Ilse) ---
+    await talkTo(engine, time, c, 'npc_ilse');
+    accept('q_cadena');
+    engine.world.npc('npc_ilse').talking_to = null;
+    // Sin Hugo delante, la pista no sale (trust.ts); de parte de Ilse, Hugo le recibe como a un conocido y le habla de la cadena.
+    expect(tool(engine, c, 'grant_clue', { character_id: c.id, clue_id: 'clue_hugo' }).error).toBe('clue_locked');
+    expect(stepOf(engine, c, 'q_cadena')!.current!.id).toBe('hugo');
+    await talkTo(engine, time, c, 'npc_hugo');
     expect(tool(engine, c, 'grant_clue', { character_id: c.id, clue_id: 'clue_hugo' }).ok).toBe(true);
+    await engine.tick();
+    expect(stepOf(engine, c, 'q_cadena')!.current!.id).toBe('eslabones');
+    engine.world.npc('npc_hugo').talking_to = null;
     expect(tool(engine, c, 'discover_spot', { character_id: c.id, spot_id: 'sp_he_losa' }).error).toBeUndefined();
     await walk(engine, time, c, 'sp_he_losa');
     await drop(engine, c, 'it_cartas_tobias');
@@ -333,28 +358,34 @@ describe('Brezal sellada: la campaña escrita', () => {
     const mochila = engine.world.itemsCarriedBy(c.id).find((i) => i.item_id === 'it_mochila')!;
     expect(tool(engine, c, 'transfer_item', { instance_id: 'ii_cadena_fria', to_type: 'container', to_id: mochila.id, slot: null, equip_slot: null, quantity: null }).error).toBeUndefined();
     await walk(engine, time, c, 'sp_cu_puerta');
+    expect(done(c)).not.toContain('q_cadena'); // cruzar su puerta no basta
+    await talkTo(engine, time, c, 'npc_ilse');
     expect(done(c)).toContain('q_cadena');
 
-    // --- Acto II: El Granero Quemado (la torre del reloj sustituye al mirador) ---
+    // --- Acto II: El Granero Quemado (la torre del reloj sustituye al mirador); de vuelta con Hal ---
+    await talkTo(engine, time, c, 'npc_hal');
+    accept('q_subida');
+    engine.world.npc('npc_hal').talking_to = null;
     await walk(engine, time, c, 'sp_ca_torre');
     expect(stepOf(engine, c, 'q_subida')!.current!.id).toBe('ruinas');
     await walk(engine, time, c, 'sp_ru_patio');
     expect(stepOf(engine, c, 'q_subida')!.current!.id).toBe('ysolde');
     await talkTo(engine, time, c, 'npc_ysolde');
     expect(tool(engine, c, 'grant_clue', { character_id: c.id, clue_id: 'clue_ysolde' }).ok).toBe(true);
-    await engine.tick();
+    expect(stepOf(engine, c, 'q_subida')!.status).toBe('ready');
+    engine.world.npc('npc_ysolde').talking_to = null;
+    await talkTo(engine, time, c, 'npc_hal');
     expect(done(c)).toContain('q_subida');
+    await level(3);
 
-    // --- Acto III: cada final lo abre quien lo da, al hablar con el PJ; templar el ascua ---
-    expect(characterStory(c).open).toContain('q_final_arder'); // Ysolde, que está delante
+    // --- Acto III: nivel 3; cada final lo ofrece quien lo da ---
     expect(characterStory(c).open).not.toContain('q_final_templar');
-    expect(storyContext(engine.world, c, engine.gameNow())).toContain('Pendiente de que se la pidan: «Templar el ascua»');
     await talkTo(engine, time, c, 'npc_ilse');
-    await talkTo(engine, time, c, 'npc_brenna');
-    expect(characterStory(c).open).toEqual(expect.arrayContaining(['q_final_templar', 'q_final_verdad', 'q_final_arder']));
-    // Con tres pistas y reputación, el logro da la llave de los Vharn, que abre el pasadizo del altar.
+    accept('q_final_templar');
+    expect(characterStory(c).open).toContain('q_final_templar');
+    // El logro ya no regala nada: la llave salió de «Bajo el Jabalí».
     expect(c.achievements.some((a) => a.id === 'ach_ceniza')).toBe(true);
-    expect(engine.world.itemsCarriedBy(c.id).some((i) => i.item_id === 'it_llave_vharn')).toBe(true);
+    expect(engine.world.itemsCarriedBy(c.id).filter((i) => i.item_id === 'it_llave_vharn')).toHaveLength(1);
     await walk(engine, time, c, 'sp_ru_cripta');
     expect(stepOf(engine, c, 'q_final_templar')!.current!.id).toBe('ascua');
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_templar', step_id: 'ascua' }).ok).toBe(true);
@@ -370,7 +401,7 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(actx.progress.some((e) => e.text.includes('Misión cumplida: «Templar el ascua»'))).toBe(true);
     expect(actx.progress.some((e) => e.public?.includes('ascua de Ysolde se apagó') && e.public.includes('Fen'))).toBe(true);
     expect(done(c)).toContain('q_final_templar');
-    expect(c.coins).toBe(before + 2000);
+    expect(c.coins).toBe(before + 1000);
     expect(c.reputation['fac_brezal']).toBe(rep + 3);
     expect(engine.world.spot('sp_pl_pozo').state['templado']).toBe(true);
     expect(engine.world.npc('npc_ysolde').location.id).toBe('sp_ru_capilla');
@@ -387,9 +418,18 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(publicSaid(engine, /Cambia\. Pero sigue cerrada.*Brezal sigue sellada\. La Guarda de Vharn tiene más nudos\./)).toBe(true);
     expect(engine.world.exits.get('ex_lindero_cerco')!.state.blocked_by).toBe('El Cerco de Ceniza');
 
-    // El Diario cuenta las misiones; el máster ve la historia en su contexto.
+    // El Diario cuenta las misiones; la principal avanza por actos.
     const j = journalOf(engine, c.id);
-    expect(j.quests.completed.filter((q) => q.kind === 'story').map((q) => q.id)).toEqual(expect.arrayContaining(['q_agua', 'q_perro', 'q_noche', 'q_sotano', 'q_cadena', 'q_tobias', 'q_subida', 'q_final_templar']));
+    expect(j.quests.completed.filter((q) => q.kind === 'story').map((q) => q.id)).toEqual(expect.arrayContaining(['q_agua', 'q_perro', 'q_cena_doro', 'q_noche', 'q_sotano', 'q_cadena', 'q_tobias', 'q_subida', 'q_final_templar']));
+    // La principal: las pistas que fue siguiendo, y la deuda sin saldar.
+    const main = [...j.quests.active, ...j.quests.completed].find((q) => q.kind === 'main')!;
+    expect(main.steps.map((s) => [s.text, s.done])).toEqual([
+      ['Librarte de la deuda con Garrán', false],
+      ['Preguntar al guardia del portón por las luces del granero', true],
+      ['Preguntar al cazador del Soto qué hay en el granero', false],
+      ['Ir al Granero Quemado y averiguar quién enciende las luces', true],
+      ['Decidir qué pasa con el ascua antes de la noche de la Brasa', true],
+    ]);
   });
 
   it('«La verdad en el pozo»: Osric no puede huir y se esconde en el pueblo, vivo, hasta que alguien da con él', async () => {
@@ -397,9 +437,13 @@ describe('Brezal sellada: la campaña escrita', () => {
     const c = await newPc(engine, 'Gala', 'rogue');
     characterStory(c).done.push('q_sotano');
     c.clues.push('clue_ysolde');
+    c.xp = 900;
     await engine.tick();
+    expect(c.level).toBe(3);
     expect(characterStory(c).open).not.toContain('q_final_verdad');
     await talkTo(engine, time, c, 'npc_brenna');
+    // Brenna saca antes sus recados de nivel 1: el final se lo ofrece el máster.
+    expect(tool(engine, c, 'story_quest', { quest_id: 'q_final_verdad', action: 'accept' }).ok).toBe(true);
     expect(characterStory(c).open).toContain('q_final_verdad');
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_verdad', step_id: 'brenna' }).ok).toBe(true);
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_verdad', step_id: 'ysolde' }).ok).toBe(true);
@@ -442,10 +486,12 @@ describe('Brezal sellada: la campaña escrita', () => {
     const { engine, time } = await boot();
     const c = await newPc(engine, 'Ruy', 'fighter');
     c.clues.push('clue_ysolde');
+    c.xp = 900;
     await engine.tick();
-    expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_arder', step_id: 'osric' }).error).toMatch(/no está abierta/);
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_arder', step_id: 'osric' }).error).toMatch(/no la tiene el actor/);
     engine.world.npc('npc_ysolde').location = { type: 'spot', id: engine.world.characterSpot(c)!.id }; // baja a verle
     await talkTo(engine, time, c, 'npc_ysolde');
+    expect(characterStory(c).open).toContain('q_final_arder'); // se la pide en escena
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_arder', step_id: 'osric' }).ok).toBe(true);
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_final_arder', step_id: 'soltar' }).ok).toBe(true);
     expect(done(c)).toContain('q_final_arder');
@@ -538,16 +584,20 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(engine.world.locations.get('loc_valcruz')!.discovery[c.id]).not.toBe('visited');
   });
 
-  it('el máster ve la historia del actor: misión, paso en curso y amenaza', async () => {
-    const { engine } = await boot();
+  it('el máster ve la historia del actor: misión, paso en curso, lo que puede ofrecer quien está delante y amenaza', async () => {
+    const { engine, time } = await boot();
     const c = await newPc(engine, 'Hela', 'wizard');
     await engine.tick();
     const ctx = actionContext(engine, c, 'miro el agua del pozo');
     expect(ctx).toContain('## Historia escrita');
-    expect(ctx).toContain('«Ceniza en el agua» [q_agua]');
-    expect(ctx).toContain('Paso en curso [mirar]');
+    expect(ctx).toContain('Nivel del actor: 1.');
+    expect(ctx).toContain('«La carta de Vharn» [q_main_carta] (nivel 1; misión principal del actor)');
+    expect(ctx).toContain('Ilse puede pedirle «El agua turbia» [q_agua]');
     expect(ctx).toContain('«La tos gris»');
-    expect(storyOf(engine.world)!.quests.length).toBeGreaterThanOrEqual(9);
+    await talkTo(engine, time, c, 'npc_ilse');
+    expect(characterStory(c).open).toContain('q_agua');
+    expect(actionContext(engine, c, 'miro el agua')).toContain('Paso en curso [mirar]');
+    expect(storyOf(engine.world)!.quests.length).toBeGreaterThanOrEqual(15);
   });
 });
 

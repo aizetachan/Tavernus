@@ -16,9 +16,12 @@
  */
 
 import { transferItem } from './inventory.js';
+import { money } from './money.js';
 import type { Character, Debt, Id, Npc, Placement } from './model.js';
 import { deliverGoods } from './progress.js';
 import type { World } from './world.js';
+import { refusesService } from './crime.js';
+import { priceFor } from './standing.js';
 
 const DAY_S = 24 * 3600;
 /** Saldadas que se conservan para el Diario. */
@@ -51,13 +54,13 @@ export function dueText(dueGameS: number | null, nowGameS: number): string | nul
   return days === 1 ? 'vence mañana' : `vence en ${days} días`;
 }
 
-/** «Debes 1.000 a Marisa Quijano, vence mañana, prenda: espada larga». */
+/** «Debes 10 de oro a Marisa Quijano, vence mañana, prenda: espada larga». */
 export function debtLine(world: World, d: Debt, nowGameS: number, npcName: (n: Npc) => string, withIds = false): string {
   const npc = world.npcs.get(d.npc_id);
   const who = npc ? `${npcName(npc)}${withIds ? ` [${npc.id}]` : ''}` : d.npc_id;
   const pawn = d.collateral_instance_id ? world.itemInstances.get(d.collateral_instance_id) : undefined;
   const pawnName = pawn ? `${world.itemDef(pawn.item_id).name}${withIds ? ` [${pawn.id}]` : ''}` : null;
-  return [`Debes ${fmtCoins(d.amount)} a ${who}`, dueText(d.due_game_s, nowGameS), pawnName ? `prenda: ${pawnName}` : null].filter(Boolean).join(', ');
+  return [`Debes ${money(world, d.amount)} a ${who}`, dueText(d.due_game_s, nowGameS), pawnName ? `prenda: ${pawnName}` : null].filter(Boolean).join(', ');
 }
 
 function store(c: Character): Debt[] {
@@ -108,7 +111,10 @@ export function pawnItem(world: World, c: Character, input: { npc_id: Id; instan
   if (cur?.collateral_instance_id) return { ok: false, error: `${npc.name} ya guarda una prenda de ${c.name} por esa deuda` };
   const offer = input.for_item_id ? npc.sells.find((s) => s.item_id === input.for_item_id) : undefined;
   if (input.for_item_id && !offer) return { ok: false, error: `${npc.name} no vende ${input.for_item_id}: mira su lista «Vende» en el contexto` };
-  const amount = offer ? offer.price : validAmount(input.amount) ?? (cur ? 0 : null);
+  // Quien sabe lo que ha hecho no le fía ni le guarda nada (crime.ts).
+  const no = refusesService(world, npc, c);
+  if (no) return { ok: false, error: no };
+  const amount = offer ? priceFor(npc, c.id, offer.price, 'buy') : validAmount(input.amount) ?? (cur ? 0 : null);
   if (amount === null) return { ok: false, error: 'sin for_item_id hace falta amount (lo que garantiza la prenda) o una deuda ya anotada con set_debt' };
 
   const from = inst.location;
@@ -166,7 +172,7 @@ export function settleDebt(world: World, c: Character, input: { npc_id: Id; how:
     const want = input.amount == null ? d.amount : validAmount(input.amount);
     if (want === null) return { ok: false, error: 'amount debe ser un número de monedas mayor que 0, o null para pagarlo todo' };
     paid = Math.min(want, d.amount);
-    if (c.coins < paid) return { ok: false, error: `${c.name} tiene ${fmtCoins(c.coins)} monedas y hacen falta ${fmtCoins(paid)}` };
+    if (c.coins < paid) return { ok: false, error: `${c.name} tiene ${money(world, c.coins)} y hacen falta ${money(world, paid)}` };
     c.coins -= paid;
     d.amount -= paid;
   } else d.amount = 0;

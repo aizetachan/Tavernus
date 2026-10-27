@@ -508,6 +508,19 @@ export const NOVEL_JS = String.raw`
       why.className = 'why'; why.textContent = n.quest.why;
       div.appendChild(why);
     }
+    // Nos la acaban de pedir en escena (story.ts): aceptar es implícito; aquí, o en el Diario, se puede decir que no.
+    // Si el Diario ya dice que no se puede (empezada o rechazada antes de recargar), sin botón; si llega después, syncAnswers lo quita.
+    var stillDeclinable = function (id) { var q = journalData && journalData.quests.active.concat(journalData.quests.completed).filter(function (x) { return x.id === id; })[0]; return !q || !!q.declinable; };
+    if (n.quest && n.quest.declinable && !other && stillDeclinable(n.quest.id)) {
+      var box = document.createElement('div');
+      box.innerHTML = answerHtml(n.quest.id);
+      var row = box.firstChild;
+      row.addEventListener('click', function (ev) {
+        var b = ev.target.closest('[data-answer]');
+        if (b) answerQuest(b.getAttribute('data-answer'), b.getAttribute('data-accept') === '1', Array.prototype.slice.call(row.querySelectorAll('button')));
+      });
+      div.appendChild(row);
+    }
     // Subida de nivel: lo que gana, una línea por apartado.
     if (n.level) n.level.gains.forEach(function (g) {
       var li = document.createElement('small');
@@ -569,7 +582,24 @@ export const NOVEL_JS = String.raw`
       setTimeout(function () { if (busy && !log.querySelector('.msg.row.typing')) { var t = typingSince; typing(true); typingSince = t; } }, 600);
     });
   }
+  /**
+   * Comentario del mundo al pasar (chatter.ts): ambiente, no narración. Una línea al margen, en cursiva, con quien
+   * lo dice (su retrato pequeño si ya lo tenemos) y sin voz del narrador.
+   */
+  function addAmbient(a, seq) {
+    var div = document.createElement('div');
+    div.className = 'msg ambient k-' + (a.kind || 'daily');
+    div.setAttribute('role', 'note');
+    div.setAttribute('data-seq', String(seq));
+    var src = a.npc_id && portraits[a.npc_id];
+    div.innerHTML = (src ? '<img class="amb-face" alt="" src="' + escapeHtml(src) + '">' : '') +
+      '<span><b>' + escapeHtml(a.name) + '</b>, al pasar: «' + escapeHtml(a.text) + '»</span>';
+    log.appendChild(div);
+    scroll();
+    return div;
+  }
   function chatTurn(m, live) {
+    if (m.ambient) { addAmbient(m.ambient, m.seq); return; }
     if (m.combat) { fightMark(m.combat); return; }
     if (m.scene) { showScene(m.scene); return; }
     if (m.chapter) { addChapter(m); return; }

@@ -154,7 +154,9 @@ describe('contexto del máster: eventos y memoria', () => {
     expect(ctx).toContain('Recuerda de otros: Mira: Le salvó la vida.');
     expect(ctx).not.toContain('treinta monedas');
     expect(ctx).toContain('Vende: jarra de cerveza');
-    expect(ctx).toContain('NUNCA lo reveles ni lo insinúes por tu cuenta): Estuvo en Vharn');
+    // El secreto no llega a un extraño (trust.ts): solo que calla algo, y a quién se lo contaría.
+    expect(ctx).not.toContain('Estuvo en Vharn');
+    expect(ctx).toContain('Calla algo más que no sabes: lo contaría a un amigo');
   });
 });
 

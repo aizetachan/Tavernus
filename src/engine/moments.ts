@@ -3,10 +3,14 @@
  * lo que acaba de pasar merece una imagen y de qué clase:
  *
  *   - portrait:  primera conversación de un PJ con un NPC concreto (su retrato).
- *   - item:      el PJ coge o examina un objeto (el objeto en la mano).
+ *   - item:      el PJ coge, compra o examina un objeto (el objeto en la mano), salvo los
+ *                servicios y lo que los datos marcan `illustrate: false` (`itemIllustrable`).
  *   - scene:     llegada a un sitio que el PJ no había pisado (la vista; la genera la primera visita).
  *   - combat:    desenlace de un combate: alguien cae o muere, o el primer golpe que hiere a un rival.
- *   - discovery: un punto oculto descubierto o una pista concedida.
+ *                El rival es siempre el otro: si el golpe lo recibe el PJ, quien lo da.
+ *   - discovery: un punto oculto descubierto o una pista encontrada. La pista que llega
+ *                hablando con un NPC se *oye*: no es descubrimiento (queda el retrato de quien
+ *                habla, si aún no lo tenía), salvo que sus datos digan qué se ve (`Clue.image`).
  *
  * Mirar alrededor, moverse dentro del lugar, esperar o seguir hablando con quien
  * ya tiene retrato no generan nada. Cada momento tiene una clave y no se repite:
@@ -14,7 +18,8 @@
  * eventos pasados al arrancar.
  */
 
-import type { GameEvent, Id } from './model.js';
+import type { Clue, GameEvent, Id, ItemDef } from './model.js';
+import type { World } from './world.js';
 
 export type MomentKind = 'portrait' | 'item' | 'scene' | 'combat' | 'discovery';
 
@@ -28,7 +33,7 @@ export interface Moment {
    * (scene); en combat y discovery, el propio evento (una imagen por evento).
    */
   entity_id: Id;
-  /** combat y discovery: qué ha pasado, para el prompt (el NPC caído, el punto, la pista). */
+  /** combat: el rival (nunca el propio PJ); discovery: el punto o la pista. */
   subject?: Id;
 }
 
@@ -44,9 +49,28 @@ export interface DialogueLine {
   text: string;
 }
 
-/** Lo que el clasificador necesita del mundo: de qué tipo es un ejemplar. */
+/** Lo que el clasificador necesita del mundo. */
 export interface MomentLookup {
+  /** De qué tipo es un ejemplar. */
   itemOfInstance(instanceId: Id): Id | null;
+  /** Si ese tipo de objeto se pinta (`itemIllustrable`); sin esto, todos. */
+  itemIllustrable?(itemId: Id): boolean;
+  /** Los datos de una pista: si dice qué se ve (`image`), es un hallazgo aunque llegue hablando. */
+  clue?(clueId: Id): Pick<Clue, 'image'> | null;
+}
+
+/** Si un objeto se pinta en la mano: los servicios (noche de posada) no, salvo `illustrate: true`; `illustrate: false`, tampoco. */
+export function itemIllustrable(def: Pick<ItemDef, 'service' | 'illustrate'>): boolean {
+  return def.illustrate ?? !def.service;
+}
+
+/** El lookup del clasificador sobre un mundo: lo que usa el motor. */
+export function momentLookupOf(world: World): MomentLookup {
+  return {
+    itemOfInstance: (id) => world.itemInstances.get(id)?.item_id ?? null,
+    itemIllustrable: (id) => { const def = world.itemDefs.get(id); return def ? itemIllustrable(def) : true; },
+    clue: (id) => world.campaign.clues.find((c) => c.id === id) ?? null,
+  };
 }
 
 type Draft = Pick<GameEvent, 'id' | 'actor_id' | 'action_type' | 'input_text' | 'location_id' | 'payload'>;
@@ -108,31 +132,35 @@ export function classifyMoments(e: Draft, seen: ReadonlySet<string>, lookup: Mom
       if (it) items.push(it);
     }
   }
-  for (const id of items) add({ kind: 'item', key: `item:${actor}:${id}`, entity_id: id });
+  for (const id of items) if (lookup.itemIllustrable?.(id) ?? true) add({ kind: 'item', key: `item:${actor}:${id}`, entity_id: id });
 
   // Combate: alguien cae o muere (siempre), o el primer golpe que hiere a un rival concreto.
-  const blows: { target: Id; damage: boolean; down: boolean }[] = [];
+  // El rival es el otro: el objetivo, o quien golpea si el objetivo es el propio PJ; sin otro (daño sin atacante al PJ), nada.
+  const blows: { attacker: Id | null; target: Id; damage: boolean; down: boolean }[] = [];
   const atk = p['attack'] as { target_id?: string; hit?: boolean; down?: boolean; dead?: boolean } | undefined;
-  if (atk?.target_id) blows.push({ target: atk.target_id, damage: atk.hit === true, down: atk.down === true || atk.dead === true });
+  if (atk?.target_id) blows.push({ attacker: actor, target: atk.target_id, damage: atk.hit === true, down: atk.down === true || atk.dead === true });
   for (const c of calls) {
     const r = ok(c.result);
     if (!r) continue;
     if (c.name === 'attack') {
       const target = str(c.input['target_id']);
-      if (target) blows.push({ target, damage: r['hit'] === true && Number(r['damage'] ?? 1) > 0, down: r['target_down'] === true || r['target_dead'] === true });
+      if (target) blows.push({ attacker: str(c.input['attacker_id']), target, damage: r['hit'] === true && Number(r['damage'] ?? 1) > 0, down: r['target_down'] === true || r['target_dead'] === true });
     } else if (c.name === 'apply_damage') {
       const target = str(c.input['target_id']);
-      if (target && Number(c.input['amount']) > 0) blows.push({ target, damage: true, down: r['status'] === 'dead' || r['status'] === 'unconscious' });
+      if (target && Number(c.input['amount']) > 0) blows.push({ attacker: null, target, damage: true, down: r['status'] === 'dead' || r['status'] === 'unconscious' });
     }
   }
   for (const b of blows) {
-    if (b.down) add({ kind: 'combat', key: `combat:${e.id}`, entity_id: e.id, subject: b.target });
-    else if (b.damage && !seen.has(`combat:${actor}:${b.target}`)) {
-      add({ kind: 'combat', key: `combat:${actor}:${b.target}`, entity_id: e.id, subject: b.target });
+    const rival = b.target !== actor ? b.target : b.attacker !== actor ? b.attacker : null;
+    if (!rival) continue;
+    if (b.down) add({ kind: 'combat', key: `combat:${e.id}`, entity_id: e.id, subject: rival });
+    else if (b.damage && !seen.has(`combat:${actor}:${rival}`)) {
+      add({ kind: 'combat', key: `combat:${actor}:${rival}`, entity_id: e.id, subject: rival });
     }
   }
 
-  // Descubrimientos: punto oculto o pista.
+  // Descubrimientos: punto oculto o pista. La pista que llega hablando con alguien se oye: queda el retrato de arriba.
+  const talking = npcs.length > 0;
   for (const c of calls) {
     if (!ok(c.result)) continue;
     if (c.name === 'discover_spot' && c.input['character_id'] === actor) {
@@ -140,7 +168,7 @@ export function classifyMoments(e: Draft, seen: ReadonlySet<string>, lookup: Mom
       if (spot) add({ kind: 'discovery', key: `discovery:${actor}:${spot}`, entity_id: e.id, subject: spot });
     } else if (c.name === 'grant_clue' && c.input['character_id'] === actor) {
       const clue = str(c.input['clue_id']);
-      if (clue) add({ kind: 'discovery', key: `discovery:${actor}:${clue}`, entity_id: e.id, subject: clue });
+      if (clue && (!talking || lookup.clue?.(clue)?.image)) add({ kind: 'discovery', key: `discovery:${actor}:${clue}`, entity_id: e.id, subject: clue });
     }
   }
 

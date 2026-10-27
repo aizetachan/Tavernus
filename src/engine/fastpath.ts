@@ -17,6 +17,7 @@ import { enterDestination, exitDestination, nameScore, npcDestination, resolveDe
 import { positionOf } from './movement.js';
 import { aEs, descriptorOf } from './narrate.js';
 import { perceive } from './perception.js';
+import { glanceSees, knownSpots, knowsSpot, lookWouldReveal } from './spots.js';
 import { ABILITY_ES, SKILLS, type Ability, type CheckKind } from './rules.js';
 import type { World } from './world.js';
 import { RULES_CHEATSHEET } from '../ai/rules-cheatsheet.js';
@@ -245,9 +246,13 @@ export function suggestActions(world: World, clock: GameClock, c: Character, now
       if (!exits.includes(name)) exits.push(name);
     }
   }
-  // Los puntos más cercanos hasta llenar.
-  const near = world.spotsOf(pos.location_id)
-    .filter((s) => s.id !== pos.spot_id && (!s.hidden || s.discovered_by.includes(c.id)))
+  // Preso (crime.ts): ni sale ni se mueve; dormir, para que pase el tiempo.
+  if (c.jailed && nowGameS < c.jailed.until_game_s) return [...out, 'Dormir'].slice(0, max);
+  // Lo que la estancia guarda fuera del primer vistazo (spots.ts): se ve mirando.
+  if (!goal && out.length < max - 1 && lookWouldReveal(world, c)) out.push('Mirar alrededor');
+  // Los puntos que conoce (de camino, más lo que verá al llegar), los más cercanos hasta llenar.
+  const near = (goal ? world.spotsOf(goal.location_id).filter((s) => knowsSpot(c, s) || glanceSees(goal, s)) : knownSpots(world, c, pos.location_id))
+    .filter((s) => s.id !== pos.spot_id)
     .sort((a, b) => Math.hypot(a.x - pos.x, a.y - pos.y) - Math.hypot(b.x - pos.x, b.y - pos.y));
   const room = Math.max(1, max - out.length - (exits.length ? 1 : 0));
   for (const s of near.slice(0, room)) out.push(`Ir ${aEs(s.name)}`);

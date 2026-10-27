@@ -83,6 +83,7 @@ import { PRESENCE_TIMING, PresenceTracker, type PresenceTiming } from './presenc
 import { pcLabel, pcName, sayLooksLikeAction } from '../../engine/party.js';
 import { talkingWith } from '../../engine/scene.js';
 import { descriptorOf } from '../../engine/narrate.js';
+import { speakerLabel } from '../../engine/chatter.js';
 import type { SceneNotice } from '../../engine/engine.js';
 import { encounterAt, type Encounter } from '../../engine/encounter.js';
 import { combatView, type CombatEnd, type CombatView, type TurnContext } from './fight.js';
@@ -114,6 +115,8 @@ export interface WebMessage {
   text: string;
   /** Botones: solo para el actor del evento. */
   roll?: { kind: string; key: string; dc: number | null };
+  /** En el historial: esta tirada sigue sin tirar y su botón vale aunque haya mensajes después (un aviso de horario, un NPC que llega). */
+  roll_pending?: true;
   /** Tirada a la vista (rolls.ts): la propia (anima el dado del botón) o la de otro (solo el aviso). */
   dice?: 'mine' | 'other';
   suggested?: string[];
@@ -159,6 +162,8 @@ export interface WebMessage {
   overheard?: { npc: string; join: string; well: boolean };
   /** Aviso de combate en el hilo (fight.ts): empieza, o se acaba (o el PJ sale de él). */
   combat?: { phase: 'start' | 'end'; text: string };
+  /** Comentario del mundo al pasar (chatter.ts): ambiente, no narración. Quién (como lo conoce el lector) y qué dice. */
+  ambient?: { npc_id: Id | null; name: string; text: string; kind: string };
 }
 
 /** Lo que la web cuelga de cada motor abierto: conexiones SSE e historial en memoria. */
@@ -709,7 +714,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       // Si se está presentando, la página no pide la descripción del sitio: el hilo empieza en el prólogo, que está al llegar.
       res.write(`event: cast\ndata: ${JSON.stringify(castOf(engine, id, ill, slug))}\n\n`
         + (rt.isOpening(id) ? 'event: opening\ndata: {}\n\n' : '')
-        + `event: history\ndata: ${JSON.stringify((rt.history.get(id) ?? []).map((m) => withImages(m, ill, slug)))}\n\n`);
+        + `event: history\ndata: ${JSON.stringify(historyFor(engine, id, rt.history.get(id) ?? []).map((m) => withImages(m, ill, slug)))}\n\n`);
       const set = rt.streams.get(id) ?? new Set();
       set.add(res);
       rt.streams.set(id, set);
@@ -729,7 +734,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       res.on('close', () => { clearInterval(ping); set.delete(res); rt.left(id, tab); });
       return;
     }
-    if (req.method === 'GET' && url.pathname === '/api/board') { handleBoardRequest(engine, req, res, url); return; }
+    if (req.method === 'GET' && url.pathname === '/api/board') { handleBoardRequest(engine, req, res, url, slug); return; }
     if (req.method === 'GET' && url.pathname === '/api/board/background') { await handleBoardBackgroundRequest(engine, res, url); return; }
     if (req.method === 'GET' && url.pathname === '/api/journal') { handleJournalRequest(engine, req, res, url, slug); return; }
     if (url.pathname === '/api/avatar') { await handleAvatarRequest(engine, req, res, url, slug); return; }
@@ -811,6 +816,12 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         case '/api/quest/drop': {
           const quest = typeof body['quest'] === 'string' ? body['quest'] : '';
           json(res, 200, await rt.actions.track(id, 'quest_drop', () => engine.dropQuest(id, quest), refused));
+          return;
+        }
+        // Responder a una misión ofrecida (story.ts): { quest, accept }.
+        case '/api/quest/answer': {
+          const quest = typeof body['quest'] === 'string' ? body['quest'] : '';
+          json(res, 200, await rt.actions.track(id, 'quest_answer', () => engine.answerQuest(id, quest, body['accept'] === true), refused));
           return;
         }
         case '/api/choice': {
@@ -1088,6 +1099,9 @@ function reply(r: ActionResult): { ok: boolean; text: string | null; say_to?: { 
 export function toMessage(d: Delivery, engine: Engine): WebMessage {
   const e: GameEvent = d.event;
   const m: WebMessage = { seq: e.seq, kind: MASTER_TYPES.has(e.action_type) ? 'master' : 'system', text: d.text };
+  // Lo que la gente comenta al pasar (chatter.ts): una línea de ambiente con quien lo dice, sin burbuja de narrador.
+  const chat = e.action_type === 'chatter' ? e.payload['chatter'] as { npc_id: Id | null; text: string; kind: string } | undefined : undefined;
+  if (chat) { m.ambient = { npc_id: chat.npc_id, name: speakerLabel(engine.world, chat.npc_id, d.character_id), text: chat.text, kind: chat.kind }; return m; }
   // Lo informativo no es narración (notice.ts): sale como aviso de sistema de una línea, también en el historial
   // restaurado. El tablón y el progreso llevan al Diario. Sigue con sus botones, momentos y sonido.
   const notice = noticeOf(e, d.character_id, d.text);
@@ -1146,6 +1160,12 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   if (decisive) m.decisive_s = decisive.window_s;
   reactionView(m, e, engine.world, d.character_id);
   return m;
+}
+
+/** El historial que recibe la página al abrir o reconectar el stream: la tirada aún pendiente lleva la marca para que su botón siga vivo. */
+export function historyFor(engine: Engine, characterId: Id, history: readonly WebMessage[]): WebMessage[] {
+  const pending = engine.pendingRoll(characterId);
+  return history.map((m) => (pending && m.roll && m.seq === pending.seq ? { ...m, roll_pending: true } : m));
 }
 
 /**

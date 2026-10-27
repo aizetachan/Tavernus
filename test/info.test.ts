@@ -122,7 +122,7 @@ describe('el sistema contesta sin narrador', () => {
     expect(inv.text).toContain('daga');
 
     const gold = await engine.act('ch_kael', '¿cuánto oro tengo?');
-    expect(gold.info?.lines[0]).toBe('Llevas 1.500 monedas.');
+    expect(gold.info?.lines[0]).toBe('Llevas 15 de oro.');
 
     const hp = await engine.act('ch_kael', '¿cuántos PV me quedan?');
     expect(hp.info?.lines[0]).toBe('PG 12 de 12.');

@@ -9,8 +9,8 @@
  *     falta tener al menos 1 PG.
  *
  * El tiempo corre en el reloj propio del PJ (travel.ts): descansar es como un
- * viaje rápido, sale al acabar y su reloj queda adelantado. Si comparte sitio
- * con otro PJ despierto que va por detrás, espera a que el reloj le alcance.
+ * viaje rápido, sale al acabar y su reloj queda adelantado. Nunca le hace
+ * esperar, aunque comparta sitio con otro PJ que va por detrás.
  *
  * No se descansa con una amenaza delante (fastpath.ts, `tension`). En un sitio
  * inseguro el descanso puede interrumpirse: por la agenda (algo ruidoso
@@ -25,6 +25,7 @@ import { abilityModifier, rollDie, type Rng } from './dice.js';
 import { encounterChance } from './fastpath.js';
 import type { Character, Id, Npc } from './model.js';
 import { attitudeOf } from './combat.js';
+import { lawKnowsWhere } from './crime.js';
 import { allScheduled, nextStart, routineOf } from './schedule.js';
 import { encounterTable, pickEntry, type EncounterEntry } from './travel.js';
 import type { World } from './world.js';
@@ -74,9 +75,12 @@ export function spendResource(world: World, c: Character, key: string, amount = 
 // ---------------------------------------------------------------------------
 
 /** Por qué es seguro descansar aquí, o null si no lo es. */
-export function safeRest(world: World, c: Character): string | null {
+export function safeRest(world: World, c: Character, nowG?: number): string | null {
   const spot = world.characterSpot(c);
   if (!spot) return null;
+  // Preso: nadie le molesta. Buscado y la autoridad sabe dónde está: ningún cerrojo le salva (crime.ts).
+  if (c.jailed) return 'el calabozo, encerrado';
+  if (nowG !== undefined && lawKnowsWhere(world, c, nowG)) return null;
   const loc = world.location(spot.location_id);
   const key = spot.state['key_item_id'];
   if (typeof key === 'string' && world.itemsCarriedBy(c.id).some((i) => i.item_id === key)) return 'un cuarto cerrado con tu llave';
@@ -103,8 +107,8 @@ export type RestKind = 'short' | 'long';
 
 export interface RestInterruption {
   at_game_s: number;
-  /** Agenda (algo ruidoso empieza aquí) o un encuentro de la tabla. */
-  kind: 'schedule' | 'encounter';
+  /** Agenda (algo ruidoso empieza aquí), un encuentro de la tabla o la autoridad que viene a por él (crime.ts). */
+  kind: 'schedule' | 'encounter' | 'law';
   what: string;
   teaser: string;
   entry?: EncounterEntry;
@@ -124,6 +128,7 @@ export interface RestPlan {
 export function cannotRest(c: Character, kind: RestKind, nowG: number): string | null {
   if (c.status === 'dead') return 'Estás muerto.';
   if (c.status === 'unconscious') return 'Estás inconsciente.';
+  if (c.wanted?.arrest && !c.jailed) return 'Te están deteniendo: o te entregas o te resistes, pero no vas a dormir ahora.';
   if (kind === 'long') {
     if (c.hp_current < 1) return 'Con 0 PG no puedes descansar.';
     const last = restState(c).last_long_rest_game_s;
@@ -140,10 +145,20 @@ export function cannotRest(c: Character, kind: RestKind, nowG: number): string |
  */
 export function planRest(world: World, clock: GameClock, c: Character, kind: RestKind, nowG: number, rng: Rng): RestPlan {
   const dur = kind === 'long' ? LONG_REST_S : SHORT_REST_S;
-  const plan: RestPlan = { kind, start_game_s: nowG, end_game_s: nowG + dur, safe: safeRest(world, c), interruption: null };
+  const plan: RestPlan = { kind, start_game_s: nowG, end_game_s: nowG + dur, safe: safeRest(world, c, nowG), interruption: null };
   if (plan.safe) return plan;
   const spot = world.characterSpot(c)!;
   const loc = world.location(spot.location_id);
+  // Le buscan y saben dónde está: vienen a por él antes de que acabe (crime.ts).
+  const law = lawKnowsWhere(world, c, nowG);
+  if (law) {
+    plan.interruption = {
+      at_game_s: nowG + Math.min(dur - GAME_MINUTE, 20 * GAME_MINUTE), kind: 'law', chance: 1, roll: 0,
+      what: `${law.name} viene a detenerle: alguien que sabe lo que ha hecho (${c.wanted!.reason}) le ha visto aquí y se lo ha dicho.`,
+      teaser: 'Golpes en la puerta y pasos que suben: alguien viene a por ti.',
+    };
+    return plan;
+  }
   // Agenda: lo ruidoso que empiece aquí mientras descansa.
   let first: RestInterruption | null = null;
   for (const e of allScheduled(world)) {

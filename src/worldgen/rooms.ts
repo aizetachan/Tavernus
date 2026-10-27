@@ -15,7 +15,7 @@ import type { ItemDef, Npc, Spot, WorldSnapshot } from '../engine/model.js';
 
 export const ROOM_KEY_ITEM_ID = 'it_llave_cuarto';
 export const ROOM_NIGHT_ITEM_ID = 'it_noche_posada';
-export const ROOM_NIGHT_PRICE = 100;
+export const ROOM_NIGHT_PRICE = 20;
 
 export const ROOM_ITEMS: readonly ItemDef[] = [
   { id: ROOM_KEY_ITEM_ID, name: 'llave del cuarto', aliases: ['llave', 'llave del cuarto', 'llave de la habitación'], type: 'tool', size: 'tiny', weight_lb: 0.1, value: 0, unique: false, origin: 'custom' },
@@ -60,6 +60,8 @@ export function migrateRentableRooms(snap: WorldSnapshot): boolean {
     }
     room.hidden = false;
     room.state = { ...room.state, ...lockedRoomState() };
+    // Su puerta se ve desde la sala (spots.ts).
+    room.visible_from ??= snap.spots.filter((s) => s.location_id === room.location_id && s.id !== room.id && !s.hidden).map((s) => s.id);
     if (!seller.sells.some((x) => x.item_id === ROOM_NIGHT_ITEM_ID)) seller.sells.push({ item_id: ROOM_NIGHT_ITEM_ID, price: ROOM_NIGHT_PRICE });
     changed = true;
   }

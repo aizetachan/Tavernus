@@ -30,7 +30,8 @@ export const COMBAT_SETTLE_S = 30;
 /** Cuántas entradas del registro corto se guardan. */
 export const COMBAT_LOG_MAX = 8;
 
-export type FighterState = 'ok' | 'hurt' | 'bloodied' | 'down' | 'stable' | 'dead';
+/** `out`: un NPC inconsciente (golpe no letal); `down`/`stable`: un PJ a 0 PG. */
+export type FighterState = 'ok' | 'hurt' | 'bloodied' | 'down' | 'stable' | 'out' | 'dead';
 
 export interface Fighter {
   id: Id;
@@ -45,7 +46,7 @@ export interface Fighter {
 }
 
 export type EncounterEntry =
-  | { seq: number; kind: 'attack'; actor_id: Id; target_id: Id; hit: boolean; damage: number; down: boolean; dead: boolean }
+  | { seq: number; kind: 'attack'; actor_id: Id; target_id: Id; hit: boolean; damage: number; down: boolean; dead: boolean; /** Cae inconsciente, no muerto. */ ko?: boolean }
   | { seq: number; kind: 'damage' | 'heal'; actor_id: null; target_id: Id; amount: number }
   | { seq: number; kind: 'down' | 'dead' | 'stabilized' | 'revived'; actor_id: null; target_id: Id };
 
@@ -84,15 +85,15 @@ function okResult(r: unknown): Record<string, unknown> | null {
 /** Lo que el evento aporta al registro del combate. */
 function entriesOf(e: GameEvent): EncounterEntry[] {
   const out: EncounterEntry[] = [];
-  const atk = e.payload['attack'] as { target_id: Id; hit: boolean; down: boolean; dead: boolean; damage?: number } | undefined;
-  if (atk && e.actor_id) out.push({ seq: e.seq, kind: 'attack', actor_id: e.actor_id, target_id: atk.target_id, hit: atk.hit, damage: atk.damage ?? 0, down: atk.down, dead: atk.dead });
+  const atk = e.payload['attack'] as { target_id: Id; hit: boolean; down: boolean; dead: boolean; damage?: number; ko?: boolean } | undefined;
+  if (atk && e.actor_id) out.push({ seq: e.seq, kind: 'attack', actor_id: e.actor_id, target_id: atk.target_id, hit: atk.hit, damage: atk.damage ?? 0, down: atk.down, dead: atk.dead, ...(atk.ko ? { ko: true } : {}) });
   for (const c of callsOf(e)) {
     const r = okResult(c.result);
     if (!r) continue;
     const target = String(c.input['target_id'] ?? '');
     if (!target) continue;
     if (c.name === 'attack') {
-      out.push({ seq: e.seq, kind: 'attack', actor_id: String(c.input['attacker_id'] ?? ''), target_id: target, hit: r['hit'] === true, damage: Number(r['damage']) || 0, down: r['target_down'] === true, dead: r['target_dead'] === true });
+      out.push({ seq: e.seq, kind: 'attack', actor_id: String(c.input['attacker_id'] ?? ''), target_id: target, hit: r['hit'] === true, damage: Number(r['damage']) || 0, down: r['target_down'] === true, dead: r['target_dead'] === true, ...(r['knocked_out'] === true ? { ko: true } : {}) });
     } else if (c.name === 'apply_damage' || c.name === 'heal') {
       out.push({ seq: e.seq, kind: c.name === 'heal' ? 'heal' : 'damage', actor_id: null, target_id: target, amount: Math.max(0, Math.floor(Number(c.input['amount']) || 0)) });
     }
@@ -124,6 +125,7 @@ function pcState(c: Character): FighterState {
 }
 
 function npcState(n: Npc): FighterState {
+  if (n.status === 'unconscious') return 'out';
   if (n.status === 'dead' || !n.stats || n.stats.hp === 0) return 'dead';
   return stateOf(n.stats.hp, n.stats.hp_max);
 }

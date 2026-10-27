@@ -25,6 +25,8 @@ import { descriptorOf } from '../../engine/narrate.js';
 import { lightAt, perceive } from '../../engine/perception.js';
 import { describeNode } from '../../engine/resources.js';
 import { talkersOf } from '../../engine/scene.js';
+import { questLeads } from '../../engine/story.js';
+import { knownSpots } from '../../engine/spots.js';
 import { pcName } from '../../engine/party.js';
 
 /** «Aren» o «tú y Aren»: quién habla con ese NPC, visto por el lector. */
@@ -37,6 +39,7 @@ function talkingLabel(engine: Engine, readerId: Id, npcId: Id): { talking_with?:
 }
 import type { LocationMap, MapPoint } from '../../data/seed/maps.js';
 import { assetsFor, writtenMapBackground } from '../../ai/assets.js';
+import { illustratorOf } from '../../ai/illustrate.js';
 import { mapCacheOf } from './mapcache.js';
 import { generateMap, mapExtent, mapInputOf } from './mapgen.js';
 import { revealMap, revealTrackerOf } from './reveal.js';
@@ -79,6 +82,10 @@ export interface BoardPresence {
   talking_with?: string;
   /** PJ: su jugador se ha ido y el personaje se queda, ausente. */
   away?: boolean;
+  /** Retrato ya hecho (el elegido, si es un PJ). Solo si lo ve bien: una figura o un movimiento no tienen cara. */
+  avatar?: string;
+  /** NPC: una pista activa del lector lleva a él (story.ts, `questLeads`): la web le pone un punto discreto. */
+  lead?: boolean;
 }
 
 export interface BoardState {
@@ -99,6 +106,7 @@ export interface BoardState {
     x: number;
     y: number;
     transit: { to_spot_id: Id; to_spot_name: string; destination_spot_id: Id; destination_name: string; progress: number } | null;
+    avatar?: string;
   };
   presences: BoardPresence[];
   /**
@@ -112,6 +120,8 @@ export interface BoardState {
 export interface BoardOptions {
   /** Depuración: semilla del plano en vez de la de la campaña (sin caché). */
   mapSeed?: number | undefined;
+  /** Partida en la URL de los retratos (/images/…?game=SLUG). */
+  slug?: string | undefined;
 }
 
 export function boardState(engine: Engine, characterId: Id, opts: BoardOptions = {}): BoardState {
@@ -120,8 +130,14 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
   const nowG = engine.gameNow();
   const pos = positionOf(world, c, nowG);
   const loc = world.location(pos.location_id);
+  const ill = illustratorOf(engine);
+  const avatar = (id: Id, level: PerceptionLevel = 'full'): { avatar?: string } => {
+    const img = level === 'full' ? ill?.entityImage('portrait', id) : null;
+    return img ? { avatar: `/images/${img.file}${opts.slug ? `?game=${encodeURIComponent(opts.slug)}` : ''}` } : {};
+  };
 
-  const visible = world.spotsOf(loc.id).filter((s) => !s.hidden || s.discovered_by.includes(c.id));
+  // Solo los rincones que conoce (spots.ts): lo que ha visto, encontrado o le han nombrado.
+  const visible = knownSpots(world, c, loc.id);
   const visibleIds = new Set(visible.map((s) => s.id));
 
   const spots: BoardSpot[] = visible.map((s) => ({
@@ -170,8 +186,10 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
       label: labelFor(p.level, other.name),
       asleep: other.status === 'asleep', moving: other.transit !== null,
       ...(other.away ? { away: true } : {}),
+      ...avatar(other.id, p.level),
     });
   }
+  const leads = questLeads(world, c);
   for (const n of world.npcs.values()) {
     if (n.status !== 'alive') continue;
     const ns = world.spot(n.location.id);
@@ -183,6 +201,8 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
       label: labelFor(p.level, c.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)),
       asleep: false, moving: false,
       ...(p.level === 'full' ? talkingLabel(engine, c.id, n.id) : {}),
+      ...avatar(n.id, p.level),
+      ...(leads.has(n.id) && p.level !== 'hint' ? { lead: true } : {}),
     });
   }
 
@@ -208,7 +228,7 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
     background: painted ? { src: `/api/board/background?character=${encodeURIComponent(c.id)}&loc=${encodeURIComponent(loc.id)}`, bounds: base.bounds } : null,
     spots,
     exits,
-    actor: { id: c.id, name: c.name, spot_id: pos.spot_id, x: pos.x, y: pos.y, transit },
+    actor: { id: c.id, name: c.name, spot_id: pos.spot_id, x: pos.x, y: pos.y, transit, ...avatar(c.id) },
     presences,
     neighbors,
   };
@@ -257,7 +277,7 @@ function labelFor(level: PerceptionLevel, full: string): string {
   return 'movimiento';
 }
 
-export function handleBoardRequest(engine: Engine, req: IncomingMessage, res: ServerResponse, url: URL): void {
+export function handleBoardRequest(engine: Engine, req: IncomingMessage, res: ServerResponse, url: URL, slug?: string): void {
   const id = url.searchParams.get('character');
   if (!id || !engine.world.characters.has(id)) {
     res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
@@ -265,7 +285,7 @@ export function handleBoardRequest(engine: Engine, req: IncomingMessage, res: Se
     return;
   }
   res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
-  res.end(JSON.stringify(boardState(engine, id, { mapSeed: mapSeedParam(url, req) })));
+  res.end(JSON.stringify(boardState(engine, id, { mapSeed: mapSeedParam(url, req), slug })));
 }
 
 /** Fondo pintado del plano donde está el PJ; 404 si no hay. `loc` solo sirve para que la caché cambie al cambiar de sitio. */

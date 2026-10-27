@@ -18,6 +18,7 @@
 
 import type { DialogueLine } from './moments.js';
 import type { GameEvent } from './model.js';
+import { nameRe, npcNameForms } from './narrate.js';
 
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -550,4 +551,53 @@ export function receivedWithoutOffer(input: { texts: readonly string[]; givers: 
 
 export function receivedRejection(names: readonly string[]): string {
   return `La narración dice que el actor recibe algo de ${names.join(' y ')}, y en este turno no ha cambiado nada de manos: entre jugadores, solo pasa cuando el otro lo ofrece y este lo acepta (lo hace el servidor). Reescribe log_event sin darlo por recibido: como mucho, alarga la mano o se lo pide.`;
+}
+
+// ---------------------------------------------------------------------------
+// Lo que sabe el PJ: nombres que se dicen delante de él
+// ---------------------------------------------------------------------------
+
+/** Un NPC que el cierre puede encontrar nombrado: si está en el sitio, oír su nombre lo presenta. */
+export interface NamedNpc { id: string; name: string; present: boolean }
+
+const named = (text: string, name: string) => npcNameForms(name).some((f) => nameRe(f, 'u').test(text));
+/** Lo citado («…») y lo que no lo está, por separado. */
+const quoted = (t: string) => [...t.matchAll(/«([^»]*)»/g)].map((m) => m[1]!);
+const unquoted = (t: string) => t.replace(/«[^»]*»/g, ' ');
+/** Giros que presentan a alguien justo antes de su nombre: «se presenta como Hugo», «Brenna te presenta a Hugo». */
+const INTRO_BEFORE = /(?:se presenta(?: como)?|dice llamarse|dice que se llama|responde que se llama|se llama|su nombre es|(?:le|lo|la) llaman|(?:te |os |le |les )?presenta a)\s*:?\s*$/;
+
+/**
+ * NPC cuyo nombre aprende el actor en este cierre (y los de su turno
+ * compartido, que oyen lo mismo):
+ *   - el NPC dice su propio nombre en sus `lines` («Soy Hugo», «Brenna, para servirte»);
+ *   - otro lo nombra en voz alta (lines o citas de la narración) y está delante: un tercero lo presenta;
+ *   - la narración lo presenta con un giro claro («se presenta como Hugo», «te presenta a Hugo»).
+ * Lo que dice el propio actor no le enseña nada; las citas que repiten lo que escribió el jugador, tampoco.
+ */
+export function introducedIn(o: { npcs: readonly NamedNpc[]; lines: readonly DialogueLine[]; narration: string; playerText?: string | null | undefined }): string[] {
+  const heard = quoted(o.narration).filter((q) => !saidByPlayer(q, o.playerText));
+  const plain = unquoted(o.narration);
+  return o.npcs.filter((n) => {
+    if (o.lines.some((l) => l.speaker === 'npc' && l.npc_id === n.id && named(l.text, n.name))) return true;
+    if (n.present && o.lines.some((l) => l.speaker !== 'actor' && l.npc_id !== n.id && named(l.text, n.name))) return true;
+    if (n.present && heard.some((q) => named(q, n.name))) return true;
+    return npcNameForms(n.name).some((f) => [...plain.matchAll(nameRe(f))].some((m) => INTRO_BEFORE.test(norm(plain.slice(Math.max(0, m.index! - 40), m.index!)))));
+  }).map((n) => n.id);
+}
+
+/**
+ * `names_learned` del máster, comprobado: solo los NPC cuyo nombre se ha dicho
+ * en este turno (narración o lines). Un nombre que no ha sonado no se aprende.
+ */
+export function confirmedNames(ids: readonly string[], npcs: readonly NamedNpc[], texts: readonly string[]): string[] {
+  return ids.filter((id) => {
+    const n = npcs.find((x) => x.id === id);
+    return n !== undefined && texts.some((t) => named(t, n.name));
+  });
+}
+
+/** NPC que el jugador nombró al escribir: lo sabe (o lo da por sabido) y no se le tapa en la respuesta. */
+export function namedByPlayer(npcs: readonly NamedNpc[], playerText: string | null | undefined): string[] {
+  return playerText ? npcs.filter((n) => named(playerText, n.name)).map((n) => n.id) : [];
 }

@@ -231,7 +231,7 @@ describe('muerte y vuelta', () => {
     expect(kael.coins).toBe(1500);
     expect(engine.world.itemInstances.has(body.id)).toBe(false);
     const chron = journalOf(engine, kael.id).chronicle.flatMap((d) => d.entries.map((e) => e.text));
-    expect(chron.some((t) => /^Mueres en .+, la barra\. Tu cuerpo queda allí con .*1500 monedas/.test(t))).toBe(true);
+    expect(chron.some((t) => /^Mueres en .+, la barra\. Tu cuerpo queda allí con .*15 de oro/.test(t))).toBe(true);
     expect(chron.some((t) => t.startsWith('Vuelves de la muerte en la puerta. Tus cosas te esperan en la barra.'))).toBe(true);
   });
 
@@ -242,7 +242,7 @@ describe('muerte y vuelta', () => {
     await engine.tick();
     expect(kael.status).toBe('dead');
     const r = await engine.act(mira.id, 'saquear el cuerpo de Kael');
-    expect(r.text).toMatch(/^Te llevas de cuerpo de Kael: .*1500 monedas/);
+    expect(r.text).toMatch(/^Te llevas de cuerpo de Kael: .*15 de oro/);
     expect(mira.coins).toBe(3000);
     time.advanceReal(30 * 60 + 1);
     await engine.tick();

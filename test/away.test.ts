@@ -7,7 +7,7 @@ import type { Engine, MasterLike } from '../src/engine/engine.js';
 import type { Delivery } from '../src/engine/events.js';
 import { moveTo } from '../src/engine/movement.js';
 import { recapTemplate, absence, absenceRule, lastOwnEvent } from '../src/engine/prologue.js';
-import { advanceStory, characterStory, finalsMissedBy, tickStory, type Story } from '../src/engine/story.js';
+import { advanceStory, characterStory, finalsMissedBy, storyQuestAction, tickStory, type Story } from '../src/engine/story.js';
 import { talkersOf } from '../src/engine/scene.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
@@ -187,10 +187,14 @@ describe('7. misiones y finales', () => {
   const STORY: Story = {
     escalation: [],
     quests: [
-      { id: 'q_pozo', act: 1, title: 'El pozo', giver_npc_id: null, text: 'Mirad el pozo.', notes: '', steps: [{ id: 'mirar', text: 'Mirar el pozo', done_when: { kind: 'narrative', how: 'lo miran' } }, { id: 'bajar', text: 'Bajar al pozo', done_when: { kind: 'narrative', how: 'bajan' } }], reward: {}, on_complete: [] },
-      { id: 'q_fin_a', act: 3, title: 'Cerrar el pozo', giver_npc_id: null, text: '', notes: '', exclusive: 'fin', steps: [{ id: 'cerrar', text: 'Cerrarlo', done_when: { kind: 'narrative', how: 'lo cierran' } }], reward: {}, on_complete: [], ending: 'El pozo quedó cerrado por {name}.' },
-      { id: 'q_fin_b', act: 3, title: 'Abrir el pozo', giver_npc_id: null, text: '', notes: '', exclusive: 'fin', steps: [{ id: 'abrir', text: 'Abrirlo', done_when: { kind: 'narrative', how: 'lo abren' } }], reward: {}, on_complete: [] },
+      { id: 'q_pozo', act: 1, title: 'El pozo', giver_npc_id: 'npc_brenna', turn_in_npc_id: null, level: 1, text: 'Mirad el pozo.', notes: '', steps: [{ id: 'mirar', text: 'Mirar el pozo', done_when: { kind: 'narrative', how: 'lo miran' } }, { id: 'bajar', text: 'Bajar al pozo', done_when: { kind: 'narrative', how: 'bajan' } }], reward: {}, on_complete: [] },
+      { id: 'q_fin_a', act: 3, title: 'Cerrar el pozo', giver_npc_id: 'npc_brenna', turn_in_npc_id: null, level: 1, text: '', notes: '', exclusive: 'fin', steps: [{ id: 'cerrar', text: 'Cerrarlo', done_when: { kind: 'narrative', how: 'lo cierran' } }], reward: {}, on_complete: [], ending: 'El pozo quedó cerrado por {name}.' },
+      { id: 'q_fin_b', act: 3, title: 'Abrir el pozo', giver_npc_id: 'npc_brenna', turn_in_npc_id: null, level: 1, text: '', notes: '', exclusive: 'fin', steps: [{ id: 'abrir', text: 'Abrirlo', done_when: { kind: 'narrative', how: 'lo abren' } }], reward: {}, on_complete: [] },
     ],
+  };
+  /** Cada uno acepta lo que le ofrece Brenna (en la barra, con ellos). */
+  const accept = (engine: Engine, pcs: import('../src/engine/model.js').Character[], ids: string[]) => {
+    for (const pc of pcs) for (const id of ids) expect(storyQuestAction(engine.world, pc, id, 'accept', engine.gameNow()).ok).toBe(true);
   };
 
   it('crédito compartido: quien estaba presente da el mismo paso; el ausente, no', async () => {
@@ -198,7 +202,7 @@ describe('7. misiones y finales', () => {
     const tam = (await engine.createCharacter('u_t', 'Tamsin')) as { ok: true; character: import('../src/engine/model.js').Character };
     tam.character.location = { type: 'spot', id: 'sp_tab_barra' };
     (engine.world.campaign as unknown as { story: Story }).story = STORY;
-    tickStory(engine.world, engine.gameNow());
+    accept(engine, [kael, mira, tam.character], ['q_pozo']);
     engine.setAway(tam.character.id, true);
     advanceStory(engine.world, kael, 'q_pozo', 'mirar', engine.gameNow());
     expect(characterStory(mira).steps).toContain('q_pozo/mirar');
@@ -210,7 +214,8 @@ describe('7. misiones y finales', () => {
   it('un final excluyente cerrado mientras el otro estaba ausente es lo primero de su «Donde lo dejamos»', async () => {
     const { engine, time, kael, mira } = await bar();
     (engine.world.campaign as unknown as { story: Story }).story = STORY;
-    tickStory(engine.world, engine.gameNow());
+    accept(engine, [kael], ['q_fin_a']);
+    accept(engine, [mira], ['q_fin_b']);
     await engine.say(mira.id, 'Voy un momento fuera.');
     engine.setAway(mira.id, true);
     time.advanceReal(600);

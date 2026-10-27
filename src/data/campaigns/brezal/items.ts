@@ -24,10 +24,10 @@ export const ITEM_DEFS: ItemDef[] = [
   { id: 'it_copa_vharn', name: 'copa de plata con el sello de Vharn', aliases: ['copa', 'copa de plata', 'plata'], type: 'treasure', size: 'small', weight_lb: 1, value: 4000, unique: true, origin: 'custom' },
   { id: 'it_agua_pozo', name: 'agua del pozo', aliases: ['agua', 'agua turbia', 'muestra', 'cubo', 'agua del pozo'], type: 'misc', size: 'small', weight_lb: 2, value: 0, unique: false, origin: 'custom' },
   { id: 'it_carta_sello', name: 'carta lacrada con el sello de Vharn', aliases: ['carta', 'carta lacrada', 'lacre'], type: 'quest', size: 'tiny', weight_lb: 0.1, value: 0, unique: false, origin: 'custom' },
-  { id: 'it_tonico', name: 'tónico de corteza', aliases: ['tónico', 'tonico', 'remedio', 'jarabe'], type: 'consumable', size: 'tiny', weight_lb: 0.2, value: 150, unique: false, origin: 'custom' },
+  { id: 'it_tonico', name: 'tónico de corteza', aliases: ['tónico', 'tonico', 'remedio', 'jarabe'], type: 'consumable', size: 'tiny', weight_lb: 0.2, value: 50, unique: false, origin: 'custom' },
   { id: 'it_harina', name: 'saco de harina', aliases: ['harina', 'saco'], type: 'misc', size: 'medium', weight_lb: 10, value: 20, unique: false, origin: 'custom' },
-  { id: 'it_huevo', name: 'huevo', aliases: ['huevos', 'huevo de gallina', 'egg'], type: 'consumable', size: 'tiny', weight_lb: 0.1, value: 4, unique: false, origin: 'custom' },
-  { id: 'it_col', name: 'col', aliases: ['coles', 'repollo', 'verdura', 'nabos'], type: 'consumable', size: 'small', weight_lb: 2, value: 3, unique: false, origin: 'custom' },
+  { id: 'it_huevo', name: 'huevo', aliases: ['huevos', 'huevo de gallina', 'egg'], type: 'consumable', size: 'tiny', weight_lb: 0.1, value: 1, unique: false, origin: 'custom' },
+  { id: 'it_col', name: 'col', aliases: ['coles', 'repollo', 'verdura', 'nabos'], type: 'consumable', size: 'small', weight_lb: 2, value: 1, unique: false, origin: 'custom' },
   { id: 'it_piel', name: 'piel de lobo', aliases: ['piel', 'pellejo'], type: 'misc', size: 'medium', weight_lb: 5, value: 150, unique: false, origin: 'custom' },
 ];
 

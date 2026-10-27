@@ -66,7 +66,7 @@ La demo de `src/data/seed/demo.ts` era un mundo de pruebas con alma de aventura:
 | Rumores iniciales | no | 15 **[cambia]** |
 | Cuarto alquilable | no (la habitación era el premio oculto) | sí: visible, cerrado, Brenna vende la noche |
 | Encuentros de camino | tabla por defecto | tabla propia de aldea (toda la demo es aldea) **[cambia]** |
-| Momentos ilustrables | solo los que salen solos | 10 lugares descritos para la escena de llegada, 11 retratos, el ascua y la niebla |
+| Momentos ilustrables | solo los que salen solos | 10 lugares descritos para la escena de llegada, 11 retratos, el ascua y la niebla; 4 pistas que dicen qué se ve al encontrarlas (`image`: el cubo del pozo, el hacha, la trampilla, el libro). Las demás se oyen y dan el retrato de quien habla (`docs/ARTE.md`) |
 | Misiones encadenadas | no (pistas y tablón sueltos) | 10 misiones en 3 actos, con 3 finales y un epílogo |
 | Amenaza que avanza sola | no | 5 escalones en 3 días **[cambia]** |
 
@@ -128,33 +128,35 @@ Tensiones que mueven la historia: Brenna calla por miedo a Osric; Ysolde odia a 
 
 Bloques SRD de los arquetipos del generador (`ARCHETYPES`, mismos rangos que valida `fill.ts`).
 
+**Lo que cuenta cada uno depende de cuánto se fíe del PJ** **[cambia, 2026-10-27]**. La columna «Secreto» ya no va entera al máster: en `people.ts` cada persona lleva `knowledge`, el secreto repartido en cuatro niveles de confianza (extraño, conocido, amigo, aliado), y el máster solo recibe lo del nivel que ese PJ ha alcanzado con ella (§3, «Confianza»). A un extraño le cuentan lo que sabe todo el pueblo: Ilse habla de la tos y de sus tónicos; la Brasa, la cripta y las cadenas son de amigo. Nadie cuenta a un extraño nada que abra la historia, ni con una buena tirada. La loba no habla: lo de la ceniza va en su motivación.
+
 | NPC | Papel | Cómo es | Quiere | Secreto | Sabe | Vende / compra | SRD | Horario (día / tarde / noche) |
 |---|---|---|---|---|---|---|---|---|
 | **Brenna** | tabernera | 50 años, brazos de amasar, quemadura en la mano; frases cortas, cambia de tema al precio de la cerveza | la taberna en pie, su perro de vuelta, que nadie remueva el granero | vio a Osric prender el fuego, salvó a Ysolde, guarda el libro | quién fue, dónde está el libro, que la niebla bajó cuando volvió «la niña» | cerveza, ración, antorcha, poción, **noche de posada**; compra leña, bayas, truchas, harina, huevos | plebeyo, 9 PG | barra / barra / mesa del fondo; misa a las 20 |
 | **Doro** | guardia | joven, botas nuevas, habla de más y se corrige | que lo tomen en serio | vio luces en el granero y una figura en la senda **[cambia]** | la hora de la figura, que su tío paga a Garrán | — | guardia, 11 PG | portón / **barricada del Lindero** / barra **[cambia]** |
 | **Osric Malvez** | regidor | 60 años, anillos, sonríe con la boca cerrada, «vecino» | que nadie remueva el granero y todos se queden quietos | prendió el fuego, robó la plata, manda deudores al granero; tiene una bodega tapiada | todo | compra el libro y la copa (para destruirlos) | noble, 9 PG | despacho / tablón / alcoba |
-| **Garrán** | alguacil y recaudador | ancho como una puerta, nariz rota, cuenta con los dedos | cobrar y no ir nunca al granero | cobra por cada deudor que no vuelve; vio a Ysolde y huyó; sisa el diezmo | quién debe qué; lleva la llave del arcón | — | matón, 30 PG | tablón / barra / banco de la casona |
+| **Garrán** | alguacil y recaudador | ancho como una puerta, nariz rota, cuenta con los dedos | cobrar y no ir nunca al granero | cobra por cada deudor que no vuelve; vio a Ysolde y huyó; sisa el diezmo | quién debe qué; lleva la llave del arcón | — | alguacil: CA 13 (jubón de cuero), 24 PG, maza corta 1d6+2; si te resistes acude Doro | tablón / barra / banco de la casona |
 | **Ilse** | curandera | muy vieja, ojos de agua, mezcla rezo y cocina | curar la tos, dejar el rito en buenas manos, entender el cerrojo | última sacerdotisa de la llama; sabe templar el ascua; reconoce la Guarda **[cambia]** | qué es la Brasa y cómo se templa un ascua | tónico de corteza, poción; compra bayas y agua del pozo | acólito, 9 PG | hierbas / caldero / camastro; dirige la misa |
-| **Hugo** | herrero | calvo, quemaduras pequeñas, habla a golpes | pagar a Osric sin traicionar a su maestro | guarda los eslabones bajo la losa; le han ordenado fundirlos | para qué servía la cadena; «no fue el fuego lo que lo mató»; el «cinturón de hierro» | daga, hacha, hachuela, espada corta, escudo; compra leña | matón, 28 PG | fragua / yunque / mesa del Jabalí |
+| **Hugo** | herrero | calvo, quemaduras pequeñas, habla a golpes | pagar a Osric sin traicionar a su maestro | guarda los eslabones bajo la losa; le han ordenado fundirlos | para qué servía la cadena; «no fue el fuego lo que lo mató»; el «cinturón de hierro» | daga, hacha, hachuela, espada corta, escudo; compra leña | herrero: CA 12 (mandil), 22 PG, martillo de fragua 1d8+2 | fragua / yunque / mesa del Jabalí |
 | **Mateo** | molinero | redondo, enharinado, tose gris, chistes malos | que el molino no se pare | encubre a su hijo | a qué hora sale Tobías; que el grano no llega ni sale | harina, raciones; compra truchas y leña | plebeyo, 5 PG | muelas / muelas / sacos |
 | **Tobías** | hijo del molinero | 17 años, uñas negras, contesta con preguntas | ser alguien | echa ceniza al pozo para Ysolde; cartas en el desván; el hacha es suya | quién se esconde en el granero, que la loba respeta la ceniza | — | plebeyo, 6 PG | sacos / roble del Soto / desván; a las 23 va al granero por el arroyo **[cambia]** |
 | **Ysolde** (Vharn) | mujer del ascua | 25 años, cicatriz de quemadura, un ascua en el guante, habla como en los libros | justicia o fuego | es la heredera; cree culpable a Brenna; no sabe que despertó la Guarda **[cambia]** | su historia, cómo despertar la Brasa (no sabe templar el ascua) | compra raciones y el libro | 12 CA, 22 PG, llama de la Brasa 2d6 | pajar del granero / pajar / capilla **[cambia]** |
-| **Hal** | cazador | flaco, pieles, mira antes los pies que la cara | que lo dejen en paz en su Soto | lleva caza a Ysolde por plata del sello | la madriguera, la loba; vio un ciervo entrar en la niebla y volver | truchas, flechas, antorchas; compra pieles | explorador, 16 PG | piedra / choza / choza |
-| **Úrsula** **[nuevo]** | granjera | viuda, recia, pañuelo a la nuca, riñe a las gallinas como a la gente; mira siempre hacia la niebla | que su hijo Pol vuelva; que no le maten las ovejas | Pol salió a Valcruz la víspera de la niebla; ella ha entrado tres veces a buscarlo y ha salido por donde entró; deja un farol en la cerca cada noche | que la niebla devuelve a quien entra; que los lobos rondan el redil | huevos, coles, raciones; compra leña y bayas | plebeyo, 8 PG | gallinero / huerto / casa; vende en el mercado |
+| **Hal** | cazador | flaco, pieles, mira antes los pies que la cara | que lo dejen en paz en su Soto | lleva caza a Ysolde por plata del sello | la madriguera, la loba; vio un ciervo entrar en la niebla y volver | truchas, flechas, antorchas; compra pieles | explorador, 16 PG, arco (a distancia, multiataque ×2) | piedra / choza / choza |
+| **Úrsula** **[nuevo]** | granjera | viuda, recia, pañuelo a la nuca, riñe a las gallinas como a la gente; mira siempre hacia la niebla | que su hijo Pol vuelva; que no le maten las ovejas | Pol salió a Valcruz la víspera de la niebla; ella ha entrado tres veces a buscarlo y ha salido por donde entró; deja un farol en la cerca cada noche | que la niebla devuelve a quien entra; que los lobos rondan el redil | huevos, coles, raciones; compra leña y bayas | plebeyo, 8 PG, horca 1d6 | gallinero / huerto / casa; vende en el mercado |
 | un lobo flaco | lobo | flaco, ceniza en el lomo | hambre | — | — | — | lobo | arroyo del Soto |
 | **la loba de ceniza** | loba | grande como un poni, humea, ojos de brasa | defender la madriguera | no ataca a quien lleva ceniza del granero | — | — | 14 CA, 37 PG, 2d6+3 | la madriguera **[cambia]** |
 | **Ceniza** | perro de Brenna | pardo, oreja rota | volver a casa | — | — | — | sin combate | la madriguera (luego, la chimenea) |
 
 ### 2.6 Lugares **[cambia]**
 
-**Una zona jugable** (Aldea de Brezal), **diez lugares** (la taberna cuenta con su sótano) y 62 puntos. Los planos salen de mapgen con las coordenadas, tags y alias de cada punto. Las ids de siempre se conservan: el Soto es `loc_claro`, el Granero Quemado es `loc_ruinas`, la madriguera es `sp_cs_cueva` y el mojón del Lindero es `sp_cs_mojon`.
+**Una zona jugable** (Aldea de Brezal), **diez lugares** (la taberna cuenta con su sótano) y 63 puntos. Los planos salen de mapgen con las coordenadas, tags y alias de cada punto. Las ids de siempre se conservan: el Soto es `loc_claro`, el Granero Quemado es `loc_ruinas`, la madriguera es `sp_cs_cueva` y el mojón del Lindero es `sp_cs_mojon`.
 
 | # | Lugar | Puntos | Estado | Lo que esconde |
 |---|---|---|---|---|
 | 1 | **Taberna del Jabalí** (con sótano) | puerta, barra, mesa del fondo, chimenea, trampilla (oculta, CD 14), habitación de arriba (cerrada, se alquila); sótano: escalera, cajas con el sello, barriles, hueco tras el barril (oculto, CD 12) | olor a cerveza y humo; la manta del perro vacía | la trampilla y el libro de cuentas de Vharn |
 | 2 | **Plaza del Pozo** | puerta de la taberna, pozo, tablón, portón norte (al Soto y al Lindero), puertas de la herrería y la casona, callejón de la curandera, camino del molino, **camino de los corrales** | el agua del cubo está turbia; la niebla asoma sobre los tejados del norte | la ceniza del pozo la echa Tobías |
 | 3 | **La herrería** (de Hugo) | puerta, fragua, yunque, banco, losa suelta (oculta, CD 13) | calor, hierro | los eslabones de hierro frío |
-| 4 | **La casona** (del regidor) | zaguán, banco de espera, despacho, arcón de los registros (llave de Garrán), alcoba, **torre del reloj** (sustituye al mirador), **bodega tapiada** (oculta, CD 15) | muebles demasiado buenos | la copa de plata con el sello; el escondite de Osric |
+| 4 | **La casona** (del regidor) | zaguán, banco de espera, despacho, arcón de los registros (llave de Garrán), alcoba, **torre del reloj** (sustituye al mirador), **calabozo** (donde encierra Garrán), **bodega tapiada** (oculta, CD 15) | muebles demasiado buenos | la copa de plata con el sello; el escondite de Osric |
 | 5 | **Casa de las hierbas** (de Ilse) | puerta, hierbas, caldero, camastro | hierve corteza para la tos | el rito, en su memoria |
 | 6 | **El molino** | puerta, muelas, sacos, rueda (senda al Soto), desván (oculto, CD 12), **tejado** (otro mirador) | el agua sale tibia y gris | las cartas de Ysolde y la bolsa de ceniza |
 | 7 | **Los Corrales** **[nuevo]** | cancela, gallinero (huevos), redil, huerto (coles), casa de la granja | gallinas pardas, ovejas que tosen | la carta de Pol bajo el colchón |
@@ -168,40 +170,90 @@ Al otro lado de la niebla está el **Camino de Valcruz** (`loc_valcruz`, zona «
 
 Salidas: taberna-plaza (3 m), trampilla-sótano (3 m), plaza-herrería, plaza-casona, plaza-curandera (25 m), plaza-molino (150 m), plaza-corrales (180 m), portón-Soto (250 m), portón-Lindero (450 m), molino-Soto por el arroyo (220 m), corrales-Soto (200 m), Soto-granero (180 m) y **el Cerco**: borde de la niebla → camino de Valcruz, `blocked_by: 'El Cerco de Ceniza'` con `rebound` (§2.13).
 
-### 2.7 Pistas (11)
+### 2.7 Pistas (11) **[cambia, 2026-10-27: pistas con requisitos]**
 
-`clue_pozo` ceniza en el agua · `clue_hacha` el hacha con hollín y las letras T. M. · `clue_doro` luces en el granero y la figura de la senda · `clue_brenna` «no fue un accidente» · `clue_trampilla` el sótano · `clue_libro` la plata entregada a O. Malvez · `clue_ilse` qué es la Brasa y cómo se templa un ascua; «es un cerrojo» · `clue_hugo` la cadena de hierro frío · `clue_tobias` las cartas del desván · `clue_hal` la plata vieja de Hal · `clue_ysolde` la heredera.
+`clue_pozo` el agua turbia del pozo · `clue_hacha` el hacha con hollín y las letras T. M. · `clue_doro` luces en el granero y la figura de la senda · `clue_brenna` «no fue un accidente» · `clue_trampilla` el sótano · `clue_libro` la plata entregada a O. Malvez · `clue_ilse` qué es la Brasa y cómo se templa un ascua; «es un cerrojo» · `clue_hugo` la cadena de hierro frío · `clue_tobias` las cartas del desván · `clue_hal` la plata vieja de Hal · `clue_ysolde` la heredera.
 
-Logro «Quien ha mirado la ceniza» (3 pistas y 5 de reputación en la aldea): Brenna enseña la trampilla y da **la llave de los Vharn**, que ahora abre **el pasadizo bajo el altar del Granero**. **[cambia]**
+Cada pista dice qué revela (`how`) y por dónde se consigue (`sources`), con lo que pide cada camino. `grant_clue` solo la da si el PJ tiene uno abierto; si no, devuelve el motivo para que el máster lo cuente en la ficción. Las **clave** (`key`) tienen al menos dos caminos, y el validador lo exige:
 
-### 2.8 Misiones en tres actos
+| Pista clave | Caminos (y lo que piden) |
+|---|---|
+| `clue_ilse` | Ilse, si es amiga · *El agua turbia* (al darle el agua) · Ysolde, si ya le conoce |
+| `clue_doro` | Doro, si es amigo o, tras *La cena del portón*, conocido · verlo uno mismo en el arroyo cuando pasa Tobías |
+| `clue_brenna` | Brenna, si es amiga (devolverle el perro) · Hugo, si es amigo («lo encerraron») |
+| `clue_hugo` | Hugo, si es amigo o conocido sabiendo lo de la Brasa (de parte de Ilse llega como conocido) · la losa suelta, descubierta |
+| `clue_libro` | el sótano · *Bajo el Jabalí* |
+| `clue_tobias` | el desván, descubierto · Tobías, si es amigo o con las cartas o la bolsa delante |
+| `clue_hal` | Hal, si es amigo · lo que hay colgado en el Granero |
+| `clue_ysolde` | Ysolde, si ya le conoce o llegas sabiendo algo (Doro, Hal, las cartas, el libro) · Tobías o Hal, si son aliados |
 
-Los pasos se cumplen solos cuando el motor ve la condición; los marcados *(máster)* los marca el máster con `advance_story`.
+Las de sitio (`clue_pozo`, `clue_hacha`, `clue_trampilla`) se encuentran mirando, con su tirada. `test/confianza.test.ts` comprueba que ninguna clave sale en la primera charla con un extraño, ni tras una tirada buena.
+
+Logro «Quien ha mirado la ceniza» (3 pistas y 5 de reputación en la aldea): **+2 de reputación** y un anuncio público que solo cuenta lo cierto («Se corre la voz por Brezal: {name} ha mirado la ceniza de frente»). No regala contenido: **la trampilla y la llave de los Vharn**, que abre **el pasadizo bajo el altar del Granero**, salen de *Bajo el Jabalí*, con su escena (Brenna enseña la trampilla al dártela y te da la llave al entregarla). **[cambia, 2026-10-27]**
+
+### 2.8 Misiones en tres actos **[cambia, 2026-10-27: misiones al estilo de Baldur's Gate 3]**
+
+El modelo es Baldur's Gate 3 (Obsidian, «Modelo Baldur's Gate 3»), no un MMO: nada flota sobre nadie y no hay mostrador de aceptar (motor en §3, «Historia»).
+
+1. **Disponible** (no se ve): quien la da la tiene si el PJ cumple sus requisitos (nivel mínimo y misión previa).
+2. **Te la piden en escena**: al hablar con quien la da (una por charla), o cuando el máster la pide con `story_quest ask`, entra en el Diario ya activa. Aceptar es implícito. Mientras no haya dado ningún paso, el jugador puede **decir que no** (aviso del chat, Diario o de palabra, `story_quest decline`), y el Diario lo apunta («No quisimos ayudar a Brenna»). Quien la pidió no insiste; si el jugador cambia de idea, `story_quest accept`.
+3. **Activa** → **lista para entregar** → **entregada**: la recompensa la da quien la recibe (por defecto, quien la dio), al hablar con él.
+
+**Se entra al enterarse.** Nada se abre por pisar un sitio. Lo que se oye por ahí (`rumor`) entra en el Diario como una **pista** hacia quien la da, sin contar de qué va («Hemos oído en la barra que Brenna busca a alguien de fiar»). En la web, un **punto discreto** junto a quien está al final de una pista activa (lo oído, el paso en curso, una pista de la principal, la entrega); en el mapa solo se marca lo que alguien ha dicho dónde está. Los iconos y el ✓ de la barra de misiones se mantienen.
+
+**Diario en primera persona del grupo**: «Brenna nos lo pidió», «Ya lo tenemos todo», «Lo hemos conseguido». Los pasos pueden traer su línea (`journal`), y la muerte o la pérdida quedan escritas: «Hugo murió antes de enseñarnos los eslabones, pero siguen escondidos en su herrería». Los objetivos cambian de texto cuando la misión cambia de camino.
+
+**Plazos por descansos e hitos** (`deadline`), no por horas: avisan antes («⏳ Ceniza no aguantará mucho más en la madriguera: si descansamos otra vez, será tarde») y, al pasar el punto sin vuelta atrás, lo perdido queda en el Diario y en el mundo (`on_lost`).
+
+Los pasos de **llevar algo** se cumplen al dárselo en mano a esa persona (`npc_has`). Lo que «pasa» en la escena (`tell`) lo cuenta el máster. Si **muere alguien** de quien depende una misión, falla o sigue por otro camino (`on_npc_dead`).
+
+**Niveles.** Cada misión tiene `level` (dificultad con color en el Diario: gris, verde, amarillo, naranja, rojo, respecto al nivel del PJ) y `min_level`. El acto I es de nivel 1–2; el **acto II pide nivel 2** (son de nivel 3) y el hilo del acto I de quien la da; el **acto III pide nivel 3** (son de nivel 4).
+
+Los pasos se cumplen solos cuando el motor ve la condición; los marcados *(máster)* los marca el máster con `advance_story`. «Se entrega a» es quien da la recompensa. Las monedas van en cobre (1 de oro = 10 de plata = 100 de cobre), con la propuesta del bloque G.
+
+**Misión principal: un problema con varias pistas** (como «Find a Cure»). Una por situación inicial, activa desde el principio. Cada pista (`optional`) aparece en el Diario cuando alguien la menciona o algo la abre (`revealed_by`); se siguen en cualquier orden y todas llevan al cierre del acto (el Granero, o el libro de cuentas para el hijo del herrero) y de ahí al final.
+
+| Situación | Misión | Pistas (quién o qué la abre) | Cierre del acto | Final |
+|---|---|---|---|---|
+| La carta (y su compañero) | **La carta de Vharn** | el sello (Ilse, desde el principio) · el pozo (estar en la plaza) · Vharn (lo que contó Ilse, o el perro devuelto: Brenna) · las luces (conocer a Doro) · la cadena (lo que contó Ilse: Hugo) | el Granero Quemado (pista de Ysolde) | cualquier final |
+| El hijo del herrero (y su compañero: **Lo prometido**) | **Lo que dejó tu padre** | lo que guarda Hugo · lo que vio Brenna · las luces (Doro) | la prueba de la plata (el libro de cuentas) | cualquier final |
+| La deuda | **La deuda con el regidor** | las luces (Doro) · el cazador del Soto (Hal) | saldar la deuda y el Granero Quemado | cualquier final |
+
+**Acto I · Recados que presentan al pueblo** (nivel 1; cada uno deja presentado a quien lo encarga y a quien lo recibe; se alternan los tipos: llevar, preguntar, mirar, recoger)
+
+| Misión | La ofrece | Requisito | Paso | Se entrega a | Recompensa |
+|---|---|---|---|---|---|
+| **La cena del portón** | Brenna (te da una ración) | — | darle la cena a Doro → conoces a Doro | Brenna | 20, 75 PX |
+| **Un jarabe para el molino** | Ilse (te da un tónico) | — | darle el tónico a Mateo → conoces a Mateo | Ilse | 20, 75 PX |
+| **La reja del molino** | Mateo | conocer a Mateo | preguntarle a Hugo para cuándo estará la reja → conoces a Hugo | Mateo | 30, 75 PX |
+| **La ronda de los Corrales** | Doro | conocer a Doro | mirar la cerca del redil e ir a ver a Úrsula → conoces a Úrsula | Doro | 20, 75 PX |
+| **Lo que no cuesta no sana** | Úrsula | conocer a Úrsula | coger dos huevos del ponedero y dárselos a Ilse → conoces a Ilse | Úrsula | 15, 75 PX |
+| **Una jarra para el cazador** | Hal | — | darle una cerveza del Jabalí | Hal | 30, 75 PX |
 
 **Acto I · Lo que trae el agua**
 
-| Misión | Se abre | Pasos | Recompensa | Consecuencia |
+| Misión | La ofrece (nivel) | Requisito | Pasos | Se entrega a | Recompensa | Consecuencia |
+|---|---|---|---|---|---|---|
+| **El agua turbia** (antes *Ceniza en el agua*) | Ilse (1) | — | 1. sacar agua del pozo (pista o llevar el agua) · 2. **dársela a Ilse** *(o enseñársela, máster, con ella delante)* → **pista de la Brasa** | Ilse | 50, 100 PX | se oye hablar del Granero Quemado. Si muere Ilse, falla |
+| **Ceniza se ha perdido** | Brenna (2) | — | 1. rastro en el Soto · 2. llegar a la madriguera · 3. sacar al perro *(máster, o la loba muerta)* → el perro corre a la chimenea | Brenna | 100, +2 rep., 150 PX | Brenna pasa a amiga: «Hay cosas que te debo contar». Si muere el perro, falla |
+| **Lo que vio Doro** | Doro (2) | *La cena del portón* | 1. que Doro cuente lo que vio (pista) · 2. estar en el arroyo del Soto cuando pasa Tobías (23:00) → conoces a Tobías · 3. descubrir qué lleva (pista, cartas o bolsa) | Doro | 60, +1 rep., 150 PX | se oye hablar del granero |
+
+**Acto II · Lo que esconde Brezal** (nivel 3; piden nivel 2)
+
+| Misión | La ofrece | Requisito | Pasos | Se entrega a | Recompensa | Consecuencia |
+|---|---|---|---|---|---|---|
+| **Bajo el Jabalí** | Brenna | *Ceniza se ha perdido* | al aceptarla, Brenna **enseña la trampilla** · 1. bajar al sótano · 2. coger el libro → **pista del libro** | Brenna, que da **la llave de los Vharn** | 150, 250 PX | Osric se vuelve hostil-frío; gancho: Garrán entra preguntando quién movió barriles. Si muere Brenna, se cumple al encontrar el libro (sin llave) |
+| **La cadena de hierro frío** | Ilse | *El agua turbia* | 1. preguntar a Hugo **en persona** (pista de Hugo) · 2. tener los eslabones · 3. llevárselos a Ilse **y hablar con ella** → aprendes las palabras | Ilse | 150, 300 PX | Hugo pasa a amigo. **Si muere Hugo**: buscar los eslabones en la herrería y llevárselos a Ilse. Si muere Ilse, falla |
+| **El hijo del molinero** | Mateo | *Lo que vio Doro* o la pista de Tobías | 1. que Tobías confiese *(máster)* · 2. que pare *(máster, o la bolsa en manos de Mateo)* | Mateo | 150, +2 rep., 250 PX | se cancela la ida nocturna, Tobías se queda en el molino, el pozo se aclara, corre el rumor del chico del molino; **evita la tos gris**. Si muere Tobías, falla |
+| **El Granero Quemado** | Hal | *Lo que vio Doro* o *Ceniza se ha perdido* | 1. **la torre del reloj o el tejado del molino** · 2. llegar al granero · 3. **pista de Ysolde** | Hal | 200, 300 PX | Ysolde conocida. Si muere Hal, se cumple sola |
+
+**Acto III · La noche de la Brasa** (nivel 4; piden nivel 3; finales que se excluyen: al cumplirse uno, los otros caducan para todos; no se entregan: se cumplen al dar el último paso)
+
+| Final | Requisito (lo ofrece quien va entre paréntesis) | Pasos | Recompensa | Lo que queda |
 |---|---|---|---|---|
-| **Ceniza en el agua** (Ilse) | al pisar la plaza o conocer a Ilse | 1. sacar agua del pozo (pista o llevar el agua) · 2. llevársela a Ilse (estar en su casa con el agua) → **pista de la Brasa** | 300, 50 PX | se oye hablar del Granero Quemado; se abre *La cadena* |
-| **Ceniza se ha perdido** (Brenna) | al conocer a Brenna o entrar en el Jabalí | 1. rastro en el Soto · 2. llegar a la madriguera · 3. sacar al perro *(máster, o la loba muerta)* → el perro corre a la chimenea · 4. volver al Jabalí | 1000, +2 rep., 100 PX | Brenna pasa a amiga: «Hay cosas que te debo contar» |
-| **Lo que vio Doro** (Doro) | al pasar por el portón o conocer a Doro | 1. pista de Doro · 2. estar en el arroyo del Soto cuando pasa Tobías (23:00) → conoces a Tobías · 3. descubrir qué lleva (pista, cartas o bolsa) | 600, +1 rep., 100 PX | se oye hablar del granero |
-
-**Acto II · Lo que esconde Brezal**
-
-| Misión | Se abre | Pasos | Recompensa | Consecuencia |
-|---|---|---|---|---|
-| **Bajo el Jabalí** (Brenna) | pista de Brenna, de la trampilla, o el perro devuelto | 1. bajar al sótano · 2. coger el libro → **pista del libro** | 500, 150 PX | Osric se vuelve hostil-frío; gancho: Garrán entra preguntando quién movió barriles |
-| **La cadena de hierro frío** (Ilse) | *Ceniza en el agua* cumplida | 1. pista de Hugo · 2. tener los eslabones · 3. llevárselos a Ilse → aprendes las palabras | 400, 150 PX | Hugo pasa a amigo |
-| **El hijo del molinero** (Mateo) | *Lo que vio Doro*, la pista o las cartas | 1. que Tobías confiese *(máster)* · 2. que pare *(máster, o la bolsa en manos de Mateo)* | 500, +2 rep., 100 PX | se cancela la ida nocturna, Tobías se queda en el molino, el pozo se aclara, corre el rumor del chico del molino; **evita la tos gris** |
-| **El Granero Quemado** (Hal) **[cambia]** (antes *La cuesta gris*; misma id `q_subida`) | *Lo que vio Doro*, el perro, la pista de Hal o pisar el Soto | 1. hablar con Hal (o subir a un mirador) · 2. **la torre del reloj o el tejado del molino** · 3. llegar al granero · 4. **pista de Ysolde** | 600, 200 PX | Ysolde conocida; se abre el final oscuro |
-
-**Acto III · La noche de la Brasa** (finales que se excluyen: al cumplirse uno, los otros caducan para todos)
-
-| Final | Se abre | Pasos | Recompensa | Lo que queda |
-|---|---|---|---|---|
-| **A · Templar el ascua** (Ilse) **[cambia]** (sustituye a *Atar la Brasa*) | *La cadena* y *El Granero Quemado* | 1. llevar el ascua al pozo: `spot_state sp_pl_pozo ascua: true` *(máster: Ysolde acepta, o se la quitan; CA 12, 22 PG, 2d6 de fuego; o Ysolde muerta)* · 2. estar en el pozo con `it_cadena_fria` · 3. templar *(máster, o `spot_state templado: true`; Atletismo/Arcanos CD 14, 2d6 de fuego por fallo)* | 2000, +3 rep., 700 PX | el pozo claro y frío, la tos se va, Ysolde a la capilla del granero; anuncio público. **El Cerco sigue** |
-| **B · La verdad en el pozo** (Brenna) **[cambia]** | *Bajo el Jabalí* y la pista de Ysolde | 1. Brenna acepta hablar *(máster)* · 2. Ysolde baja a la misa *(máster)* → Ysolde junto al pozo · 3. estar en el pozo con las dos (la misa de las 20 trae a Brenna) | 1500, +4 rep., 700 PX | Osric **no puede huir**: `npc_status missing` con escondite en la bodega tapiada de la casona; Ysolde amiga, Garrán neutral, la casona vacía |
-| **C · Que arda Vharn** (Ysolde) **[cambia]** | la pista de Ysolde | 1. entregarle a Osric *(máster, o Osric muerto)* · 2. dejar que suelte el ascua **en la plaza** *(máster)* | 1000, 450 PX | la casona arde, Osric muerto, Brenna hostil; **el humo no sale del valle** |
+| **A · Templar el ascua** (Ilse) **[cambia]** (sustituye a *Atar la Brasa*) | *La cadena* y *El Granero Quemado* | 1. llevar el ascua al pozo: `spot_state sp_pl_pozo ascua: true` *(máster: Ysolde acepta, o se la quitan; CA 12, 22 PG, 2d6 de fuego; o Ysolde muerta)* · 2. estar en el pozo con `it_cadena_fria` · 3. templar *(máster, o `spot_state templado: true`; Atletismo/Arcanos CD 14, 2d6 de fuego por fallo)* | 1000, +3 rep., 700 PX | el pozo claro y frío, la tos se va, Ysolde a la capilla del granero; anuncio público. **El Cerco sigue** |
+| **B · La verdad en el pozo** (Brenna) **[cambia]** | *Bajo el Jabalí* y la pista de Ysolde | 1. Brenna acepta hablar *(máster)* · 2. Ysolde baja a la misa *(máster)* → Ysolde junto al pozo · 3. estar en el pozo con las dos (la misa de las 20 trae a Brenna) | 800, +4 rep., 700 PX | Osric **no puede huir**: `npc_status missing` con escondite en la bodega tapiada de la casona; Ysolde amiga, Garrán neutral, la casona vacía |
+| **C · Que arda Vharn** (Ysolde) **[cambia]** | la pista de Ysolde | 1. entregarle a Osric *(máster, o Osric muerto)* · 2. dejar que suelte el ascua **en la plaza** *(máster)* | 500, 450 PX | la casona arde, Osric muerto, Brenna hostil; **el humo no sale del valle** |
 
 **Epílogo común** **[nuevo]**: al amanecer del día 6 (108 h después de las 18:00 del día 1), pase lo que pase, la niebla está donde estaba. Ilse sube al tejado del molino, la mira un rato largo y dice: «Cambia. Pero sigue cerrada». Según el final cumplido la niebla **se retira un paso** (A: el mojón queda limpio y frío), **se oye una voz al otro lado** (B: Úrsula corre a la cerca) o **se vuelve roja** (C). El anuncio público cierra: «Brezal sigue sellada. La Guarda de Vharn tiene más nudos», y corre el rumor de la Guarda. Son cuatro escalones a las 108 h: tres variantes con `unless: { kind: 'not', of: <su final> }` y el común, que solo se evitaría si el Cerco se abriera (`spot_state sp_li_niebla abierta`).
 
@@ -249,7 +301,9 @@ Tres días desde las 18:00 del día 1 (72 h de juego, 24 h reales al ritmo 3×).
 
 - **Ganchos sembrados**: la corriente fría bajo la alfombra de la mesa del fondo, la voz de Ysolde al llegar al granero, la loba que se levanta al acercarse a la madriguera, **la niebla quieta al llegar al Lindero** **[nuevo]**, Garrán que entra en el Jabalí a la hora y media de empezar.
 - **Encuentros de camino** (solo aldea): un vecino con tos, la ronda de Garrán, ceniza que cae y la niebla devuelve, un lobo entre las cercas, un buhonero atrapado, huellas de Tobías y de lobo. **[cambia]**
-- **Tablón**: leña y bayas para Brenna, la ronda de Doro al Soto, carbón para Hugo, truchas, la toma del arroyo para Mateo, **huevos para la cena** (Brenna) y **la cerca del redil** (Úrsula) **[nuevo]**.
+- **Tablón**: leña y bayas para Brenna, la ronda de Doro al Soto, carbón para Hugo, truchas, la toma del arroyo para Mateo, **huevos para la cena** (Brenna) y **la cerca del redil** (Úrsula) **[nuevo]**. Pagan en plata (27-10-2026): 6 de plata los diez leños; 4 o 5 el carbón, las truchas y las rondas; 1 o 2 las bayas, los huevos o la cerca.
+- **Dinero (27-10-2026)**: oro, plata y cobre (`currency` en `index.ts`). El PJ llega con 1 de oro y 5 de plata (`starting_coins`). En el Jabalí, una cerveza vale 4 de cobre, una ración 1 de plata y la noche 2 de plata; Hugo vende a precio SRD (daga 2 de oro, espada corta 10). Las partidas guardadas cogen los precios nuevos al abrirse (`migrate`); el dinero de cada PJ no cambia, solo se enseña en monedas.
+- **Casas (27-10-2026)**: cada vecino con casa lleva `home_spot_id` y el máster ve «Vive en Casa de las hierbas (desde aquí, por el callejón de las hierbas)» cuando no está en ella (`homeLine`, `prompt.ts`). Así no se la inventa en otro sitio: en la partida del 27-10 llevó a «la casa de Ilse en el Soto». Su secreto aclara que el parto de la noche del incendio fue en el Soto, lejos de su casa, y la descripción del Soto dice que hoy solo vive allí Hal.
 
 ### 2.12 Trasfondo y costumbres **[nuevo]**
 
@@ -268,6 +322,31 @@ Hay que estar en el Lindero; desde otro sitio, el otro lado no tiene ruta.
 
 **NPC desaparecido con escondite** (`src/engine/story.ts`). El efecto `npc_status` admite `hideout_spot_id`: con `missing`, el NPC se va a ese punto, pierde su horario y deja de hablar con nadie. Sigue vivo, pero no se percibe (tablero, prompt, `who_is_here`, narrador, atajos) ni lo mueven el horario ni la agenda, porque todo eso mira `status === 'alive'`. Cuando un PJ se planta en el escondite (en Brezal, la bodega tapiada de la casona, oculta CD 15), vuelve a estar a la vista allí mismo y el PJ recibe «Das con Osric Malvez, escondido en la bodega tapiada». También es nueva la condición `{ kind: 'not', of }`, que usa el epílogo.
 
+### 2.14 La ley de Brezal **[nuevo]**
+
+Lo que el motor hace cuando alguien comete un crimen delante de la gente (`src/engine/crime.ts`, SPEC §9.4) sale de estos datos (`LAW` en `plot.ts` y `bonds` en `people.ts`):
+
+- **Autoridad**: Garrán (alguacil) y Doro (guardia del portón). Dan el alto, detienen y, si te resistes, pelean.
+- **Calabozo**: en la casona (`sp_ca_calabozo`). Muerte, 24 h de juego; agresión con arma o profanar un cadáver, 8 h. Robo (150), agresión sin arma (100): multa; si no puedes pagar, calabozo.
+- **Reputación**: lo que se sabe se paga con la aldea de Brezal (`fac_brezal`), tanto como la gravedad.
+- **Dueños**: Brenna (taberna y sótano), Hugo (herrería), Osric (casona), Ilse (casa de las hierbas), Mateo (molino), Úrsula (corrales). No sirven ni alojan a quien saben culpable.
+- **Carácter**: Hal y Úrsula corren a avisar o se meten; Mateo, Tobías e Ilse huyen; el resto grita y se aparta.
+- **Vínculos** (de los `ties` de cada uno): Hugo bebe con Doro (se mete si le hacen daño); Doro es sobrino de Osric (Osric se mete); Garrán es el perro de Osric (se mete por él); Brenna quiere a Doro, aprecia a Ilse y Ceniza es su perro; Mateo y Tobías, padre e hijo; Ysolde, Hal y Tobías se tienen por amigos. Los rivales no reaccionan.
+
+El caso que lo motivó: en la partida del 27-10, Leodhin mató a Hugo en la barra delante de Brenna, Garrán y la cena, y Brenna le alquiló un cuarto. Ahora, en el acto: Brenna retrocede y no le atiende, Garrán le da el alto, los vecinos gritan; está buscado, sin PX y con infamia, y no duerme tranquilo en el Jabalí.
+
+### 2.15 Cómo reacciona el valle **[nuevo, 2026-10-27]**
+
+Etiquetas, reglas y vida diaria en `src/data/campaigns/brezal/reactions.ts` (motor: `src/engine/worldrules.ts`, SPEC §9.4, «hechos y reglas del mundo»):
+
+- **Etiquetas**: *asesino*, *ladrón*, *salvó a Ceniza*, *amigo de Ilse*; y las de raza, clase y trasfondo.
+- **La muerte de Hugo**, muera como muera: Doro guarda luto (un tema para el máster: los ojos rojos, aprieta la lanza) y Brenna le guarda el taburete; en la plaza y en el Jabalí se habla del herrero tres días («¿Os habéis enterado de lo del herrero?»), pero solo quien ya lo sabe. Si lo mató un PJ: Doro, −10 cuando le llega la noticia (hostilidad, sumada a lo de crime.ts), y la gente le señala si pasa por delante.
+- **Matar a quien no atacaba** (incidente `murder`): la etiqueta *asesino* y −5 de quien lo vio. Con la etiqueta, Garrán le busca en cuanto lo sabe (la caza es de crime.ts) y la gente dice «Ahí va… Garrán anda buscándole». Robar: *ladrón* y −5.
+- **Devolver a Ceniza**: Brenna +10, que la vuelve amistosa (sustituye al `attitude: friendly` de `on_complete`); la etiqueta *salvó a Ceniza*; el hecho `ceniza_salvado`; un tema para Brenna y lo que comenta la gente. Si Ceniza se pierde, Brenna no quiere hablar de ello.
+- **Ilse**: +5 por cada recado suyo cumplido (`q_agua`, `q_tonico_mateo`, `q_cadena`); a +25, *amigo de Ilse*.
+- **Reacciones por etiqueta** (`tag_reactions` en `people.ts`): Doro trata de igual a igual a quien fue soldado (+5 y una opción con Persuasión CD 12); Garrán se vuelve servil con un noble (+5, Intimidación CD 12); Ilse habla de hierbas con un druida (+5, Naturaleza CD 12); Hal, de rastros con un explorador (+5, Supervivencia CD 12); Úrsula trata como a uno del pueblo a un héroe del pueblo (+5). Brenna sirve sin cobrar a quien salvó a Ceniza y teme al asesino.
+- **Vida diaria** (`CHATTER`): la plaza de día, el Jabalí por la noche y Mateo en el molino. Ceniza y los lobos son `mute`: ven, pero no cuentan.
+
 ---
 
 ## 3. Formato de campaña escrita
@@ -281,15 +360,28 @@ generateSeed: esqueleto + relleno ── buildSnapshot ─────┘ (el mi
 - **Tipos del motor tal cual**: `Spot`, `Npc`, `Clue`, `Job`, `Achievement`, `InitialSituation`, `ScheduledEvent`, `EncounterTable`, `Story`. El formato solo quita el estado de partida (descubrimientos, memoria, conversación) y lo que el código sabe poner: la localización de cada punto (van anidados en su lugar), el punto de entrada (el primero), el reloj (`start_hour`) y los instantes de rumores y ganchos (en horas desde que nace el mundo).
 - **Extras por NPC**: `spot_id`, `attitude`, `routine`; `knows` y `ties` son para este documento y no llegan al motor.
 - **Ejemplares**: `{ at: { spot } | { npc } | { container } }`.
+- **Reglas del mundo**: `campaign.tags`, `campaign.reactions` y `campaign.chatter` (vida diaria); por NPC, `tag_reactions` y `mute` (§2.15).
 - **Salidas**: `{ id, from, to, distance_m, terrain_multiplier?, state? }`; el Cerco lleva en `state` `blocked_by` y `rebound`.
 - **`authoredSeed('brezal', { now })`** devuelve un `WorldSnapshot` como `generateSeed`: nace en `now` a las 18:00 de juego, valida con `validateSnapshot` y lanza si algo no cuadra. Es puro: misma campaña y mismo instante, mismo mundo.
 - **`validateSnapshot`** (`src/worldgen/validate.ts`) lo usan los dos caminos. Comprueba ids únicos, referencias, puntos de inicio pisables, que todo el mapa se alcanza desde el inicio (contando salidas cerradas y bloqueadas, que se abren jugando), bloques SRD dentro de rango, comercio con objetos del catálogo, Biblia (5-10) y leyes (3-8), situaciones completas (tres caminos, plazo 1-30), agenda, ganchos, rumores y la historia (también que el escondite de un `npc_status` exista).
 - **Situaciones**: la bolsa de la campaña admite `for_classes` (ids SRD) y `keep` (no se gasta); `InitialSituation` admite `debt`, `items` y `knows`. `claimSituation` elige por nombre, luego por clase, luego una de reserva.
 - **Historia** (`src/engine/story.ts`): misiones con `act`, `opens_when`, pasos con `done_when` y `on_done`, `reward`, `on_complete`, `exclusive` y `ending`; y la escalada con `after_hours`, `unless` y `effects`. El motor la evalúa en cada tick y tras cada acción; el Diario la enseña (pasos dados y el actual, nunca los siguientes) y el máster la ve en su contexto con el paso en curso y cómo se cumple.
-  - **Alta coherente.** Una misión con `giver_npc_id` solo se abre cuando se cumple `opens_when` y el PJ está hablando con esa persona («Te lo pide Ilse»). Si la misión trae `heard` («En el Jabalí se comenta que…»), se abre de oídas y así se lee en el Diario, sin «lo pide». Sin ninguna de las dos, espera, y el máster la ve como «pendiente de que se la pidan» para que quien la da la saque en la charla. Lo mismo vale para `give_quest`: con `npc_id`, esa persona tiene que estar con el PJ; si no, `heard`.
-  - **Avance por lo que hace el PJ.** Las condiciones del mundo de un paso (`npc_has`, `npc_status`, `npc_at`, `spot_state`) solo cuentan si el PJ está en ese lugar: lo ha hecho él o su grupo delante. Un paso que dice lo que un NPC responde (un `tell`) tiene que darse cuando el PJ interactúa con él, no al cruzar su puerta.
+  - **Ciclo de vida** (2026-10-27, modelo Baldur's Gate 3). Cada misión lleva `giver_npc_id` (null solo en la principal, `main_for: [situaciones]`), `level`, `min_level`, `requires` (misión previa, pista, reputación, conocer a alguien), `rumor: { text, where }` (con `{giver}`), `turn_in_npc_id` (por defecto quien la da; null = se cumple sola), `on_accept`, `deadline: { rests?, milestone?, warn_when?, warn, lost, on_lost? }` y `on_npc_dead: [{ npc_id, why, outcome: 'fail' | 'reroute', steps?, turn_in_npc_id? }]`. Los pasos admiten `revealed_by`, `optional` y `journal`. Condiciones nuevas: `escalated` (un escalón de la amenaza, como hito) y `world_hours`. Estado por PJ (`questStatus`): `locked` → `available` → `active` → `ready` → `done` (o `declined`, `failed`, `expired`). Quien la da la pide sola cuando el PJ habla con él (una por charla) y entra activa; el máster la pide, la abre si el PJ cambia de idea, la rechaza o la entrega con `story_quest` (`ask`, `accept`, `decline`, `turn_in`), y el jugador puede decir que no desde la web (`POST /api/quest/answer`). Quien la pide se presenta (`know_npc`) y el origen dice la verdad («Ilse nos lo pidió»). `questLeads` da los NPC al final de una pista activa (van en `BoardPresence.lead`: un punto discreto). Los descansos largos se cuentan desde `character.rest`.
+  - **Pedirla por fases.** El contexto y `story_quest` piden contarla así: gancho, problema, detalles solo si los pide y la tarea concreta (qué hacer y a quién), sin preguntar si acepta. El `text` de cada misión y de cada paso dice la tarea; el misterio queda para la escena.
+  - **Lista de casos límite** (como Larian en BG3). `validateStory`, con `clueNpcs`, falla si una misión depende de un NPC (un paso `talk`, `npc_has`, `npc_at`, `attitude` o `debt_paid`, la entrega, o una pista que solo da él porque no tiene `location_ids`) y no tiene `on_npc_dead` para él. En un `any`, cuenta solo lo que hace falta en todas las ramas. El otro camino no puede volver a depender del muerto y puede repetir pasos del principal (mismo id y condición), y lo ya hecho cuenta. Brezal la pasa entera.
+  - **Una sola voz.** Los `tell` de un paso no salen como texto del motor: si el paso lo provoca un tool del máster (dar el agua con `transfer_item`), la historia avanza en ese mismo tool (`advanceNow`) y vuelve en su respuesta como `story.tell_now`, para contarlo en esa narración; si pasa en un tick, se le planta al máster un gancho para ese PJ (`plantBeat`) que salta en el acto. Sin máster, sale como aviso.
+  - Para `give_quest` (encargos libres, fuera de la historia escrita) sigue la regla de antes: con `npc_id`, esa persona tiene que estar con el PJ; si no, `heard`.
+  - **Avance por lo que hace el PJ.** Las condiciones del mundo de un paso (`npc_has`, `npc_status`, `npc_at`, `spot_state`) solo cuentan si el PJ está en ese lugar: lo ha hecho él o su grupo delante. `talk` pide estar con ese NPC en persona (hablando o en su punto); en un `all` con un `narrative`, el máster solo puede marcarlo si se cumple lo demás. Otras condiciones: `level`, `reputation`, `debt_paid`, y `npc_has` con `quantity`.
   - **Visibilidad.** Cada alta, paso, cierre o caducidad va al registro del PJ (`character.story.log`) con el porqué en palabras del jugador; sale como aviso de misión en el chat (privado al PJ) y en el Diario, en «Qué ha pasado». El panel marca lo no leído en el icono de misiones (punto con las altas, check con los pasos) hasta que se abre el Diario.
+  - **Pistas abiertas o cerradas por reglas.** Una regla del mundo puede abrir o cerrar un paso para un PJ (`lead`, en `character.story.leads`): cerrado, ni se ve ni cuenta; abierto, se ve aunque nadie lo haya mencionado. Condiciones nuevas: `fact`, `tag` y `opinion` (§2.15).
   - **Tablón.** Un encargo entra en el Diario cuando el PJ lo lee (de pie ante un punto con la etiqueta `notice` o con /tablon), no por estar clavado.
+- **Confianza y saber por niveles** (`src/engine/trust.ts`, 2026-10-27). Cada NPC lleva `knowledge: [{ tier, text }]` con `tier` = `stranger` | `acquaintance` | `friend` | `ally` (extraño, conocido, amigo, aliado); en campañas escritas sustituye a `secret`, que el formato rellena con la suma de los niveles para el análisis. Sin `knowledge` (mundos generados, partidas de antes), el secreto cuenta como de amigo.
+  - **El nivel** sale de `trustTier(npc, pj)`: puntos en `npc.trust[pj]` (conocido 2, amigo 5, aliado 9), con la actitud por encima (hostil o recelosa con ese PJ, extraño; amistosa, al menos amigo; aliada, aliado). Cuando llegue la opinión numérica con umbrales (bloque I), basta con que esta función la lea.
+  - **Sube** con misiones cumplidas (+3 a quien la encargó y a quien la recibe), encargos del tablón (+2), recados que le llegan en mano (efecto `trust` con `change: 'errand'`, +2) y, en la charla, regalos (`transfer_item` a un NPC), favores y adulación (`npc_trust`) y Persuasión, Interpretación o Perspicacia con éxito: todo esto, con tope de 1 por conversación (dos charlas a menos de una hora son la misma). El efecto `trust` con `at_least` sube hasta un nivel: en Brezal, ir de parte de Ilse hace a Hugo conocido.
+  - **Baja** con amenazas (Intimidación, salga o no, o `npc_trust`), mentiras pilladas (Engaño fallido), insultos, hostigar (`harass`: insistir cuando ya dijo que no, −1 cada vez), ver un crimen (−3) y que le ataquen (−5).
+  - **Adular** (`flattery`) depende del carácter: suma con tope a quien lo agradece y resta a quien lleva `dislikes_flattery` (en Brezal, Brenna, Ilse, Hugo, Hal, Ysolde y Úrsula). Su línea en el contexto lo dice («No soporta la adulación»).
+  - **Al máster** le llega en «Presentes» el nivel y lo que contaría a ese nivel; si calla algo más, que lo calla y a qué nivel lo contaría, sin el texto. `get_npc` igual; `get_campaign_notes` solo trae las pistas que el PJ ya puede conseguir. Condición nueva `{ kind: 'trust', npc_id, at_least }` (y `{ kind: 'step', quest_id, step_id }`) para pistas y misiones.
+  - **Pistas con requisitos**: `clue.sources: [{ via, npc_id?, location_id?, requires?, refusal? }]` y `clue.key`. `clueBlocked` (story.ts) decide `grant_clue`; las que da la historia (un paso, una misión) no pasan por ahí. `validateStory` (con `clues`) exige dos caminos distintos a cada clave: otra persona, otro sitio o una misión que la dé.
 
 ## 4. Qué queda de `demo.ts`
 
@@ -298,8 +390,10 @@ generateSeed: esqueleto + relleno ── buildSnapshot ─────┘ (el mi
 ## 5. Cómo se juega y se prueba
 
 - Menú web → Nueva partida → «Brezal (demo)». El personaje recibe su situación según la clase.
-- `npm test`: `test/brezal.test.ts` valida la campaña (una zona, diez lugares, el Cerco), comprueba los planos, reparte situaciones a 3 días, recorre a pie los diez lugares, completa el acto I, el acto II y el final A por tools (andar, coger, dar, `grant_clue`, `discover_spot`, `advance_story`), prueba los finales B (Osric escondido y encontrado) y C, la escalada hora a hora en tres días, el epílogo de cada final, el choque con la niebla (por texto y por `move_to`) y que el menú carga la campaña.
-- Offline (`MASTER_MODE=offline`): el acto I de *Ceniza en el agua* se puede jugar sin IA (ir al pozo, coger el agua, ir a casa de Ilse), igual que ir al Lindero y meterse en la niebla; los pasos narrativos necesitan un máster real.
+- `npm test`: `test/brezal.test.ts` valida la campaña (una zona, diez lugares, el Cerco), comprueba los planos, reparte situaciones a 3 días, recorre a pie los diez lugares, completa el acto I, el acto II y el final A por tools (andar, coger, dar, hablar, `story_quest`, `grant_clue`, `discover_spot`, `advance_story`) subiendo de nivel por el camino, prueba los finales B (Osric escondido y encontrado) y C, la escalada hora a hora en tres días, el epílogo de cada final, el choque con la niebla (por texto y por `move_to`) y que el menú carga la campaña.
+- `test/confianza.test.ts`: el caso de Ilse (seq 21–24) por el motor, con una Persuasión con éxito: sigue siendo extraño, el máster no recibe la Brasa y `grant_clue` la rechaza con motivo; el tope por charla; Ilse amiga tras *El agua turbia*; el recado de Doro y la llegada de parte de Ilse; las bajadas; que ninguna pista clave salga en la primera charla con un extraño; el validador de dos caminos y las partidas guardadas.
+- `test/misiones-progresivas.test.ts`: *La cena del portón* de principio a fin (lo oído como pista, pedida en escena, dar en mano, cobrar), decir que no, el bloqueo por nivel, la principal como problema con pistas, los plazos por descansos y por hito, y los casos de la partida del 2026-10-27 (con el estado real de Leodhin en `test/fixtures/partida-2026-10-27-leodhin.json`: Hugo muerto con *La cadena* abierta).
+- Offline (`MASTER_MODE=offline`): se ven lo oído como pista, el punto discreto, la misión que te piden al hablar con quien la da y decir que no (aviso o Diario), igual que ir al Lindero y meterse en la niebla; dar objetos a un NPC y los pasos narrativos necesitan un máster real.
 
 ### Nombres que no estorban al atajo determinista
 

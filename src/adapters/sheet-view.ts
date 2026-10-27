@@ -11,6 +11,7 @@ import { ABILITY_ES, SKILLS, armorClass, saveModifier, skillModifier, type Abili
 import { isDying, isStable, respawnSpotId } from '../engine/death.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { hhmm } from '../engine/schedule.js';
+import { money } from '../engine/money.js';
 import { classSheet, type ClassSheet } from '../engine/levels.js';
 
 export interface SheetView {
@@ -23,8 +24,11 @@ export interface SheetView {
   /** Clase y nivel (levels.ts): PX, rasgos con usos, elecciones y conjuros. La web lo pinta como sección; Discord, con los campos de texto. */
   class: ClassSheet;
   /** Lo que lleva, con sus huecos (la web pinta los libres): manos, cada hueco de equipo, bolsillos y contenedores. */
-  pack: PackView & { coins: number; load: string };
+  pack: PackView & { coins: number; money: string; load: string; carry: Carry };
 }
+
+/** La carga para la barra de peso de la web: lo que llevas, el tope y dónde empiezan «cargado» y «muy cargado». */
+export interface Carry { weight_lb: number; max_lb: number; encumbered_lb: number; heavily_lb: number; level: 'ok' | 'encumbered' | 'heavily' | 'immobile'; speed_penalty_ft: number }
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : String(n));
 
@@ -69,12 +73,17 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
       { name: 'Bolsillos', value: inv.pockets.length ? inv.pockets.join(', ') : '—', inline: true },
       { name: 'Equipado', value: Object.entries(inv.equipped).map(([k, v]) => `${k}: ${v}`).join('\n') || '—', inline: true },
       ...inv.containers.map((k) => ({ name: k.name, value: k.items.length ? k.items.join(', ') : 'vacía', inline: false })),
-      { name: 'Monedas', value: String(inv.coins), inline: true },
+      { name: 'Monedas', value: money(engine.world, inv.coins), inline: true },
       { name: 'Carga', value: load, inline: true },
     ],
     footer: engine.clock.format(nowG),
     death,
     class: cls,
-    pack: { ...packView(engine.world, c.id), coins: inv.coins, load },
+    pack: { ...packView(engine.world, c.id), coins: inv.coins, money: money(engine.world, inv.coins), load, carry: carryOf(engine, c.abilities.str, inv.encumbrance) },
   };
+}
+
+function carryOf(engine: Engine, str: number, e: ReturnType<typeof inventoryView>['encumbrance']): Carry {
+  const rules = engine.world.campaign.capacity_rules;
+  return { weight_lb: Math.round(e.weight_lb * 10) / 10, max_lb: e.max_lb, encumbered_lb: str * rules.encumbered_at, heavily_lb: str * rules.heavily_at, level: e.level, speed_penalty_ft: e.speed_penalty_ft };
 }

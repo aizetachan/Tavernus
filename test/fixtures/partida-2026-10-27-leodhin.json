@@ -1,0 +1,138 @@
+{
+  "_fuente": "data/local/servidor/2026-10-27_noche/la-noche-del-brezal/data/brezal.world.json (al final de la partida, seq 121). Solo lo que toca a las misiones.",
+  "character": {
+    "name": "Leodhin",
+    "class_id": "wizard",
+    "level": 1,
+    "xp": 150,
+    "coins": 1700,
+    "clues": [
+      "clue_ilse",
+      "clue_pozo",
+      "clue_hugo"
+    ],
+    "knows": [
+      "npc_osric",
+      "npc_ilse"
+    ],
+    "achievements": [
+      {
+        "id": "ach_ceniza",
+        "game_s": 0
+      }
+    ],
+    "reputation": {
+      "fac_brezal": 6
+    },
+    "story": {
+      "open": [
+        "q_cadena",
+        "q_perro",
+        "q_sotano"
+      ],
+      "steps": [
+        "q_agua/mirar",
+        "q_agua/ilse",
+        "q_cadena/hugo",
+        "q_sotano/bajar"
+      ],
+      "done": [
+        "q_agua"
+      ],
+      "expired": [],
+      "origins": {
+        "q_agua": {
+          "kind": "heard",
+          "game_s": 64800.192,
+          "location_id": "loc_plaza",
+          "text": "Junto al pozo, los vecinos tosen gris y se quejan del agua: alguien debería llevársela a Ilse, la curandera"
+        },
+        "q_cadena": {
+          "kind": "giver",
+          "game_s": 68894.145,
+          "location_id": "loc_curandera",
+          "text": "Te lo pide Ilse"
+        },
+        "q_perro": {
+          "kind": "heard",
+          "game_s": 69217.098,
+          "location_id": "loc_taberna",
+          "text": "En el Jabalí se comenta que a Brenna se le ha perdido el perro y que paga a quien se lo traiga"
+        },
+        "q_sotano": {
+          "kind": "giver",
+          "game_s": 70990.257,
+          "location_id": "loc_taberna",
+          "text": "Te lo pide la tabernera"
+        }
+      },
+      "log": [
+        {
+          "quest_id": "q_agua",
+          "kind": "open",
+          "game_s": 64800.192,
+          "why": "Junto al pozo, los vecinos tosen gris y se quejan del agua: alguien debería llevársela a Ilse, la curandera"
+        },
+        {
+          "quest_id": "q_agua",
+          "kind": "step",
+          "step_id": "mirar",
+          "game_s": 68723.406,
+          "why": "conseguiste la pista «Ceniza en el agua del pozo»"
+        },
+        {
+          "quest_id": "q_agua",
+          "kind": "step",
+          "step_id": "ilse",
+          "game_s": 68887.05,
+          "why": "Ilse ya tiene agua del pozo"
+        },
+        {
+          "quest_id": "q_agua",
+          "kind": "done",
+          "game_s": 68887.05,
+          "why": "diste todos los pasos"
+        },
+        {
+          "quest_id": "q_cadena",
+          "kind": "open",
+          "game_s": 68894.145,
+          "why": "Te lo pide Ilse"
+        },
+        {
+          "quest_id": "q_perro",
+          "kind": "open",
+          "game_s": 69217.098,
+          "why": "En el Jabalí se comenta que a Brenna se le ha perdido el perro y que paga a quien se lo traiga"
+        },
+        {
+          "quest_id": "q_cadena",
+          "kind": "step",
+          "step_id": "hugo",
+          "game_s": 69346.728,
+          "why": "conseguiste la pista «La cadena de hierro frío»"
+        },
+        {
+          "quest_id": "q_sotano",
+          "kind": "open",
+          "game_s": 70990.257,
+          "why": "Te lo pide la tabernera"
+        },
+        {
+          "quest_id": "q_sotano",
+          "kind": "step",
+          "step_id": "bajar",
+          "game_s": 71416.563,
+          "why": "estás en Sótano del Jabalí"
+        }
+      ]
+    }
+  },
+  "situation_id": "sit_carta",
+  "dead_npcs": [
+    "npc_hugo"
+  ],
+  "discovered": [
+    "sp_tab_trampilla"
+  ]
+}

@@ -9,8 +9,9 @@ import { ITEM_DEFS, ITEMS, RESOURCES } from './items.js';
 import { ENCOUNTERS, HOOKS, RUMORS, SCHEDULE } from './life.js';
 import { EXITS, LOCATIONS, REGIONS, ZONES } from './map.js';
 import { NPCS } from './people.js';
-import { ACHIEVEMENT, BIBLE, CLUES, CUSTOMS, FACTIONS, JOBS, LAWS, PREMISE, SITUATIONS, STARTING_POINTS, WELCOME } from './plot.js';
+import { ACHIEVEMENT, BIBLE, CLUES, CUSTOMS, FACTIONS, JOBS, LAW, LAWS, PREMISE, SITUATIONS, STARTING_POINTS, WELCOME } from './plot.js';
 import { STORY } from './story.js';
+import { CHATTER, REACTIONS, TAGS } from './reactions.js';
 
 export const BREZAL: AuthoredCampaign = {
   format: 1,
@@ -32,6 +33,10 @@ export const BREZAL: AuthoredCampaign = {
     },
     movement_rules: { base_speed_mps: 1.5, pace: { stealth: 0.5, walk: 1, run: 2 } },
     capacity_rules: { pockets_slots: 4, carry_per_str: 15, encumbered_at: 5, heavily_at: 10, coins_per_lb: 50 },
+    // Oro, plata y cobre (1 de oro = 10 de plata = 100 de cobre): una cerveza son 4 de cobre; una espada, unas monedas de oro.
+    currency: [{ name: 'oro', value: 100 }, { name: 'plata', value: 10 }, { name: 'cobre', value: 1 }],
+    // Llega con poco: 1 de oro y 5 de plata (unas noches de posada y algo de comer).
+    starting_coins: 150,
     premise: PREMISE,
     setting: 'Fantasía medieval oscura. Tecnología de hierro y madera; magia rara y temida.',
     tone: 'grim',
@@ -49,6 +54,8 @@ export const BREZAL: AuthoredCampaign = {
     bible: BIBLE,
     customs: CUSTOMS,
     laws: LAWS,
+    // Quién hace cumplir la ley, dónde encierra y quién es dueño de qué (crime.ts).
+    law: LAW,
     situations: SITUATIONS,
     // Quien muere vuelve en el camastro de Ilse (SPEC §4.7): ella le encontró.
     death_rules: {
@@ -58,6 +65,10 @@ export const BREZAL: AuthoredCampaign = {
     schedule: SCHEDULE,
     encounters: ENCOUNTERS,
     story: STORY,
+    // Cómo reacciona el valle (worldrules.ts): etiquetas, reglas y lo que se dice al pasar.
+    tags: TAGS,
+    reactions: REACTIONS,
+    chatter: CHATTER,
   },
   rumors: RUMORS,
   hooks: HOOKS,

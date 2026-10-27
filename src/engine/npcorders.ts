@@ -27,6 +27,7 @@ import type { Character, Id, Npc, Spot } from './model.js';
 import type { Position } from './movement.js';
 import type { World } from './world.js';
 import { attitudeOf } from './combat.js';
+import { opinionOf, refusesHelp } from './standing.js';
 import { healCharacter, isDying, stabilize } from './death.js';
 import { transferItem } from './inventory.js';
 
@@ -148,7 +149,7 @@ function validTask(world: World, t: NpcTask | null | undefined, order: 'follow' 
 export function setNpcOrder(world: World, input: OrderInput, nowS: number): OrderResult {
   const n = world.npcs.get(input.npc_id);
   if (!n) return { ok: false, error: `no existe el NPC ${input.npc_id}` };
-  if (n.status !== 'alive') return { ok: false, error: `${n.name} no puede (${n.status})` };
+  if (n.status !== 'alive' || n.bound) return { ok: false, error: `${n.name} no puede (${n.bound ? 'está atado' : n.status})` };
   if (input.order === 'stop') {
     const prev = orderOf(n);
     // Despedido: se queda un poco donde está y vuelve a lo suyo.
@@ -162,6 +163,7 @@ export function setNpcOrder(world: World, input: OrderInput, nowS: number): Orde
     if (c.status === 'dead' || c.status === 'retired') return { ok: false, error: `${c.name} no está para que le sigan` };
     if (world.characterSpot(c)?.location_id !== world.spot(n.location.id).location_id) return { ok: false, error: `${n.name} no está donde ${c.name}: no puede ir con él` };
     if (attitudeOf(n, c.id) === 'hostile') return { ok: false, error: `${n.name} es hostil a ${c.name}: no le acompaña` };
+    if (refusesHelp(n, c.id)) return { ok: false, error: `${n.name} no se fía de ${c.name} (opinión ${opinionOf(n, c.id)}): no le acompaña` };
     const t = validTask(world, input.task, 'follow');
     if ('error' in t) return { ok: false, error: t.error };
     setOrder(world, n, { kind: 'follow', character_id: c.id, since_game_s: nowS, until_game_s: nowS + (mins ?? FOLLOW_DEFAULT_MIN) * GAME_MINUTE, task: t.task, hp_at_start: n.stats?.hp ?? null });
@@ -218,7 +220,7 @@ export function tickOrders(world: World, nowS: number, emit: OrderEmit, nowFor: 
   for (const n of world.npcs.values()) {
     const o = orderOf(n);
     if (!o) continue;
-    if (n.status !== 'alive') { setOrder(world, n, null); continue; }
+    if (n.status !== 'alive' || n.bound) { setOrder(world, n, null); continue; }
     if (o.kind === 'follow') { follow(world, n, o, nowS, emit, nowFor, rng); continue; }
     if (o.kind === 'go') {
       if (world.spots.has(o.spot_id) && o.spot_id !== n.location.id) moveNpc(world, n, o.spot_id, nowS, emit, null);

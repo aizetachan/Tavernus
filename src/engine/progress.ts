@@ -6,19 +6,32 @@
 
 import { GAME_DAY } from '../clock/clock.js';
 import { consumeItem, spawnItem, transferItem } from './inventory.js';
+import { refusesService } from './crime.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
+import { money } from './money.js';
+import { priceFor } from './standing.js';
+import { discoverSpot } from './spots.js';
 import type { World } from './world.js';
 
 export interface ProgressEvent {
-  kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story' | 'quest' | 'level';
+  kind: 'clue' | 'job' | 'reputation' | 'practice' | 'achievement' | 'story' | 'quest' | 'level' | 'trust';
   text: string;
   public?: string;
   /** Si toca una misión: cuál, qué le ha pasado y por qué (el aviso del chat y el Diario lo enseñan). */
   quest?: QuestChange;
 }
 
-/** Cambio en una misión: alta, paso dado, cumplida, fallida, caducada o dejada, con el porqué en palabras del jugador. */
-export interface QuestChange { id: Id; title: string; event: 'open' | 'available' | 'step' | 'done' | 'failed' | 'expired' | 'dropped'; step?: string; why: string }
+/**
+ * Cambio en una misión, con el porqué en palabras del jugador: un rumor que apunta a quien la da, rechazada,
+ * alta (se la piden en escena), paso dado, lista para entregar, cambio de camino (alguien ha muerto), aviso de
+ * plazo, cumplida, fallida, caducada o dejada. En `rumor`, `title` va vacío: el rumor no dice de qué va.
+ * (`offered` solo sale en partidas de antes.)
+ */
+export interface QuestChange {
+  id: Id; title: string; event: 'rumor' | 'offered' | 'declined' | 'open' | 'available' | 'step' | 'ready' | 'changed' | 'warned' | 'done' | 'failed' | 'expired' | 'dropped'; step?: string; why: string;
+  /** Se la acaban de pedir en escena: aún puede decir que no (la web lo ofrece en el aviso). */
+  declinable?: boolean;
+}
 
 export function addReputation(world: World, c: Character, factionId: Id, delta: number): number {
   c.reputation[factionId] = (c.reputation[factionId] ?? 0) + delta;
@@ -64,7 +77,7 @@ export function completeJob(world: World, c: Character, jobId: Id, npcId: Id | n
   c.completed_jobs.push(jobId);
   c.coins += job.reward_coins;
   const rep = addReputation(world, c, world.campaign.achievement.faction_id, job.reward_reputation);
-  const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${job.reward_coins} monedas. Reputación en Brezal: ${rep}.`, quest: { id: job.id, title: job.title, event: 'done', why: `se lo ${job.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${giver.name} · +${job.reward_coins} monedas` } }];
+  const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${money(world, job.reward_coins)}. Reputación en Brezal: ${rep}.`, quest: { id: job.id, title: job.title, event: 'done', why: `se lo ${job.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${giver.name} · +${money(world, job.reward_coins)}` } }];
   const ach = checkAchievement(world, c);
   if (ach) events.push(ach);
   return { ok: true, events };
@@ -110,8 +123,10 @@ export function checkAchievement(world: World, c: Character): ProgressEvent | nu
     const sp = world.spot(a.reward_spot_id);
     if (!sp.discovered_by.includes(c.id)) { sp.discovered_by.push(c.id); world.touch('spots', sp.id); }
   }
+  const rep = a.reward_reputation ? addReputation(world, c, a.faction_id, a.reward_reputation) : null;
   world.touch('characters', c.id);
-  return { kind: 'achievement', text: `Logro: ${a.title}.`, public: a.announcement.replaceAll('{name}', c.name) };
+  const faction = world.campaign.factions.find((f) => f.id === a.faction_id)?.name ?? a.faction_id;
+  return { kind: 'achievement', text: `Logro: ${a.title}.${rep !== null ? ` +${a.reward_reputation} de reputación en ${faction} (${rep}).` : ''}`, public: a.announcement.replaceAll('{name}', c.name) };
 }
 
 /** Rotación diaria del tablón: 3 encargos, en orden, sin repetir el día anterior. */
@@ -137,6 +152,9 @@ export function activeJobs(world: World): Job[] {
 export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id, quantity?: number): { ok: true; item: string; quantity: number; total: number } | { ok: false; reason: string } {
   const npc = world.npc(npcId);
   if (world.characterSpot(c)?.id !== npc.location.id) return { ok: false, reason: `${npc.name} no está aquí` };
+  // Quien sabe lo que ha hecho no trata con él (crime.ts).
+  const no = refusesService(world, npc, c);
+  if (no) return { ok: false, reason: no };
   const inst = world.itemInstances.get(instanceId);
   if (!inst) return { ok: false, reason: 'ese objeto no existe' };
   const offer = npc.buys.find((b) => b.item_id === inst.item_id);
@@ -144,7 +162,8 @@ export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id,
   const q = quantity ?? inst.quantity;
   const r = transferItem(world, inst.id, { type: 'npc', id: npc.id }, q);
   if (!r.ok) return { ok: false, reason: r.error.code };
-  const total = offer.price * q;
+  // Lo que piensa de él cambia el precio (standing.ts).
+  const total = priceFor(npc, c.id, offer.price, 'sell') * q;
   c.coins += total;
   world.touch('characters', c.id);
   return { ok: true, item: world.itemDef(inst.item_id).name, quantity: q, total };
@@ -155,9 +174,12 @@ export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, qu
   if (world.characterSpot(c)?.id !== npc.location.id) return { ok: false, reason: `${npc.name} no está aquí` };
   const offer = npc.sells.find((s) => s.item_id === itemId);
   if (!offer) return { ok: false, reason: `${npc.name} no vende eso` };
+  // Ni le vende ni le aloja quien sabe lo que ha hecho (crime.ts).
+  const no = refusesService(world, npc, c);
+  if (no) return { ok: false, reason: no };
   const q = Math.max(1, Math.floor(quantity));
-  const total = offer.price * q;
-  if (c.coins < total) return { ok: false, reason: `faltan ${total - c.coins} monedas` };
+  const total = priceFor(npc, c.id, offer.price, 'buy') * q;
+  if (c.coins < total) return { ok: false, reason: `faltan ${money(world, total - c.coins)}` };
   const r = deliverGoods(world, c, npc, itemId, q);
   if (!r.ok) return r;
   c.coins -= total; world.touch('characters', c.id);
@@ -199,6 +221,7 @@ export function deliverGoods(world: World, c: Character, npc: Npc, itemId: Id, q
       if (sp.state['key_item_id'] !== give.id) continue;
       const open = Array.isArray(sp.state['unlocked_for']) ? (sp.state['unlocked_for'] as Id[]) : [];
       if (!open.includes(c.id)) { sp.state['unlocked_for'] = [...open, c.id]; world.touch('spots', sp.id); }
+      discoverSpot(world, c, sp); // le dicen cuál es su cuarto (spots.ts)
       unlocked.push(sp.name);
     }
   }

@@ -5,22 +5,26 @@
 
 import type { Engine } from '../engine/engine.js';
 import type { CheckResult } from '../engine/dice.js';
-import type { Campaign, Character, Clue, GameEvent, Id } from '../engine/model.js';
+import type { Campaign, Character, Clue, GameEvent, Id, Npc } from '../engine/model.js';
+import type { World } from '../engine/world.js';
 import { readerText } from '../engine/events.js';
 import { namedNpc, namedPc } from '../engine/scene.js';
 import { positionOf } from '../engine/movement.js';
 import { lightAt, perceive, witnesses } from '../engine/perception.js';
 import { regenState } from '../engine/resources.js';
+import { hiddenSpots, knownSpots, unseenSpots } from '../engine/spots.js';
 import { inventoryDetailed, inventoryView } from '../engine/inventory.js';
 import { SKILLS, armorClass } from '../engine/rules.js';
 import { activeJobs } from '../engine/progress.js';
-import { descriptorOf } from '../engine/narrate.js';
-import { attitudeOf } from '../engine/combat.js';
+import { contractArticles, descriptorOf } from '../engine/narrate.js';
+import { attitudeOf, dueNpcTurns } from '../engine/combat.js';
+import { encounterAt } from '../engine/encounter.js';
 import { describeHook } from '../engine/hooks.js';
-import { travelBlock } from '../engine/travel.js';
+import { AHEAD_NOTICE_S, aheadBy, travelBlock } from '../engine/travel.js';
 import { scheduleContext } from '../engine/schedule.js';
 import { orderLine } from '../engine/npcorders.js';
-import { storyContext } from '../engine/story.js';
+import { clueBlocked, openSources, storyContext } from '../engine/story.js';
+import { heldBackTier, knowledgeFor, nextTier, TRUST_LABEL, trustTier } from '../engine/trust.js';
 import { givenContext } from '../engine/quests.js';
 import { worldLaws } from '../engine/laws.js';
 import { describeRumor, rumorBudget, rumorsHeardBy, rumorsIn } from '../engine/rumors.js';
@@ -29,22 +33,28 @@ import { debtLine, openDebts } from '../engine/debts.js';
 import { spotLockedFor } from '../engine/movement.js';
 import { reboundOf } from '../engine/barrier.js';
 import { ROLL_CATEGORY, rollCategory } from '../engine/closecheck.js';
-import { conversationBlock, conversationOf } from '../engine/conversation.js';
+import { conversationBlock, conversationOf, transcriptOf, transcriptText, TRANSCRIPT_LINES } from '../engine/conversation.js';
 import { offersOf, pcName } from '../engine/party.js';
 import { pendingFrom } from '../engine/reactions.js';
 import { RULES_CHEATSHEET } from './rules-cheatsheet.js';
-import { bodiesAt, bodyStateOf, deadNpcsAt, isDying, isStable } from '../engine/death.js';
+import { bodiesAt, bodyStateOf, deadNpcsAt, isDying, isStable, NPC_DOWN_HINT } from '../engine/death.js';
+import { crimeContext, npcCrimeLine, recentIncidents } from '../engine/crime.js';
+import { TALK_RULES } from './actor.js';
+import { concernsLine } from '../engine/concerns.js';
 import { recentNpcLines } from '../engine/closecheck.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { abilitiesForMaster } from '../engine/levels.js';
 import { hhmm } from '../engine/schedule.js';
+import { currencyOf, money } from '../engine/money.js';
+import { priceFor } from '../engine/standing.js';
+import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
-const LENGTH_ES = { short: 'uno o dos párrafos cortos, unas 60-90 palabras; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
+const LENGTH_ES = { short: 'uno o dos párrafos cortos de narración, unas 60-90 palabras sin contar lo que se dice; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
 const RATING_ES = ['sin violencia explícita ni temas adultos', 'violencia leve, sin gore', 'violencia y gore moderados, temas adultos sugeridos', 'sin restricciones más allá de la ley'];
 
 /** Estable por campaña: no interpolar nada que cambie por acción. */
-export function systemPrompt(c: Campaign): string {
+export function systemPrompt(c: Campaign, opts: { actor?: boolean } = {}): string {
   const m = c.master;
   const persp = m.perspective === 'second' ? 'Habla al jugador en segunda persona ("ves", "oyes").' : 'Narra en tercera persona usando el nombre del personaje.';
   return [
@@ -55,10 +65,10 @@ export function systemPrompt(c: Campaign): string {
     c.house_rules ? `Reglas de la casa: ${c.house_rules}` : '',
     '',
     `Voz: ${m.voice.join('; ')}. Longitud: ${LENGTH_ES[m.narration_length]}. ${persp}`,
-    'Se lee en el móvil: párrafos de dos o tres líneas, sin listas ni encabezados. Mejor un mensaje corto y fluido que uno largo; lo que no haga falta ahora, se cuenta cuando el jugador lo busque.',
+    'Se lee en el móvil: párrafos de dos o tres líneas, sin listas ni encabezados. La narración, corta y fluida: lo que no haga falta ahora se cuenta cuando el jugador lo busque. Lo que se dice no se recorta: si alguien habla, habla como habla la gente.',
     `Dificultad: ${m.difficulty}. CD orientativas: fácil 10, media 13, difícil 16, muy difícil 20.`,
     '',
-    'PRINCIPIO RECTOR: la base de datos es la verdad. Solo existe lo que los tools devuelven. Nunca describas puntos, salidas, objetos, NPCs o personajes que no estén en los datos. Si el jugador menciona algo que no existe, dilo en ficción ("no ves nada así") en vez de inventarlo. Solo existen los puntos de la lista «Puntos» y las salidas: no hay cocinas, escaleras ni cuartos que no estén ahí.',
+    'PRINCIPIO RECTOR: la base de datos es la verdad. Solo existe lo que los tools devuelven. Nunca describas puntos, salidas, objetos, NPCs o personajes que no estén en los datos. Si el jugador menciona algo que no existe, dilo en ficción ("no ves nada así") en vez de inventarlo. Solo existen los puntos de las listas de puntos (los que el actor conoce, los que aún no ha visto y los ocultos) y las salidas: no hay cocinas, escaleras ni cuartos que no estén ahí. El actor solo conoce los de «Puntos que el actor conoce»: no le sugieras ir a los demás ni los des por vistos.',
     `LEYES DEL MUNDO: ${worldLaws(c).join(' ')}`,
     c.customs?.length ? `COSTUMBRES DEL LUGAR (detalle de fondo: úsalas cuando vengan a cuento, sin explicarlas ni meter una en cada mensaje; no son pistas): ${c.customs.join(' ')}` : '',
     'LO IMPOSIBLE Y LO QUE AÚN NO EXISTE: lo que las leyes del mundo no permiten no ocurre, pero nunca lo despaches con un «no puedes» ni con una negativa seca: recházalo en ficción, con ingenio y con tu voz, dejando que el personaje lo intente y que el mundo responda como es (el cuerpo, la física, quien mira, el ridículo, el precio). Lo que es posible pero no está en los datos no se niega con desgana: se trata con curiosidad. Aquí no está, y eso no cambia; pero quizá alguien haya oído algo. Un rumor (plant_rumor) es algo que se dice, nunca algo que está: no lo describas como presente ni lo des por cierto.',
@@ -79,10 +89,16 @@ export function systemPrompt(c: Campaign): string {
     'GANCHOS: lo trivial (moverse entre puntos, salir por una salida, coger o soltar, esperar, llegar a un sitio ya visitado) lo resuelve el servidor sin llamarte. Para que el mundo siga vivo, siembra con plant_hook lo que deba pasar después: alguien que llega a una hora, una consecuencia al acercarse a un sitio o al coger algo. Con mesura: uno o dos por escena como mucho, y nunca para empujar al jugador hacia un secreto.',
     'AGENDA: lo que un NPC anuncia con hora (una misa, un mercado, una reunión, una llegada) prográmalo con schedule_event para que ocurra de verdad: a su hora el servidor trae a la gente y a los NPC, y lo cuenta a quien esté. Para saber qué hay y cuándo, get_schedule. No narres como presente lo que la agenda no tiene en marcha.',
     'IMPARCIALIDAD: sabes cosas que los personajes no saben (secretos, motivaciones). Eres neutral: no guías al jugador hacia ellas, no las insinúas con el ambiente ni con las acciones sugeridas, no premias ni castigas por acercarse. El mundo reacciona a lo que el jugador hace, no a lo que tú sabes.',
-    'COMBATE: no hay turnos; es conversación. Un NPC hostil en el mismo punto (o que llega hasta el actor) actúa: resuelve su ataque con attack y narra. El ataque del jugador va con requires_roll kind=attack y requires_roll_target; el servidor tira contra la CA y aplica el daño; tú narras el resultado que te devuelve. Huir es move_to (el enemigo puede perseguir). A 0 PG el PJ cae inconsciente y el servidor tira sus salvaciones contra muerte: tú no las tiras ni decides si muere. MUERTE: un PJ solo muere si attack o apply_damage devuelven died (o el contexto dice MUERTO); nunca narres por tu cuenta que un PJ muere, resucita o vuelve de la muerte: su vuelta la cuenta el servidor. Atender a un caído: stabilize; curarle: heal; descanso que pide la ficción: take_rest; recursos de clase: spend_resource; conjuros: cast_spell (solo los de su lista). Ventana decisiva (decisive_threat): solo con una amenaza real e inmediata contra el actor, nunca dos seguidas; si no responde en 60 s, la amenaza se ejecuta.',
-    'PROGRESO: recolectar (harvest) tira solo y cuenta práctica. Los encargos no se aceptan: si un NPC le da uno al actor o le pide algo concreto que hacer, ya es suyo; no le preguntes si acepta ni esperes un «acepto», y hacerlo o no es cosa suya. Uno del tablón queda en su Diario con que lo hablen; cualquier otro, regístralo con give_quest en ese mismo turno (título corto, de qué va, quién lo da, objetivo y recompensa si se dijo), y cuando lo cumpla o ya no se pueda, finish_quest. Los encargos del tablón se cierran con complete_job al entregarlos al NPC que los pidió; los de entrega los valida el servidor. Las pistas se conceden con grant_clue únicamente cuando el jugador las ha obtenido con sus actos. Vender y comprar: sell_item y buy_item con los precios del NPC; el master no negocia fuera de esa lista salvo una tirada de Persuasión que como mucho mueve un 10 %. El contexto solo trae las pistas de este lugar o de quien está delante y los títulos del tablón: si el jugador busca otra pista, pregunta por un encargo o va a entregarlo, consulta get_campaign_notes antes de responder.',
+    'CONFIANZA: cada NPC cuenta solo lo que su confianza con el actor permite (extraño, conocido, amigo, aliado). Su línea en «Presentes» trae lo que contaría a ese nivel y nada más: lo que calla no te llega, así que no inventes secretos suyos ni le hagas soltar más con una tirada. Una tirada social con éxito le hace hablar mejor de lo que ya contaría, no saltarse niveles. La confianza sube con misiones, encargos, regalos, favores y adulación a quien la agradece (npc_trust) y tiradas sociales con éxito, con tope por charla; baja con amenazas, mentiras pilladas, insultos, hostigar (insistir cuando ya dijo que no) y adular a quien no lo soporta (npc_trust), y con crímenes. Si grant_clue rechaza una pista, el actor no la consigue: narra el motivo que devuelve dentro de la ficción.',
+    'COMBATE: no hay turnos fijos; es conversación. Cada NPC hostil del combate actúa en CADA turno: resuelve su ataque con attack (una llamada por NPC; su multiataque lo tira el servidor en esa misma llamada) y narra; si no lo haces, el servidor lo hace al cerrar y tendrás que contarlo. Golpe no letal: a 0 PG un NPC cae INCONSCIENTE si el golpe es contundente (bastón, maza, puños) o el jugador dice pegar, golpear o reducir; muere si dice que quiere matar, si el arma corta o perfora y no dice lo contrario, o si remata a quien ya está en el suelo. Lo decide el servidor: narra lo que devuelve. Al inconsciente se le puede atar (restrain_npc), registrar o rematar. Nadie es inmortal. El ataque del jugador va con requires_roll kind=attack y requires_roll_target; el servidor tira contra la CA y aplica el daño; tú narras el resultado que te devuelve. Huir es move_to (el enemigo puede perseguir). A 0 PG el PJ cae inconsciente y el servidor tira sus salvaciones contra muerte: tú no las tiras ni decides si muere. MUERTE: un PJ solo muere si attack o apply_damage devuelven died (o el contexto dice MUERTO); nunca narres por tu cuenta que un PJ muere, resucita o vuelve de la muerte: su vuelta la cuenta el servidor. Atender a un caído: stabilize; curarle: heal; descanso que pide la ficción: take_rest; recursos de clase: spend_resource; conjuros: cast_spell (solo los de su lista). Ventana decisiva (decisive_threat): solo con una amenaza real e inmediata contra el actor, nunca dos seguidas; si no responde en 60 s, la amenaza se ejecuta.',
+    'PROGRESO: recolectar (harvest) tira solo y cuenta práctica. Las misiones de la historia escrita (q_…, ver «Historia escrita») las pide alguien en escena: quien la da la cuenta con su voz y entra en el Diario (story_quest ask), sin preguntar si acepta; si el jugador dice que no, story_quest decline; la recompensa la da quien la recibe al entregarla (story_quest turn_in); nunca abras ni insinúes una que no esté disponible. Los demás encargos no se aceptan: si un NPC le da uno al actor o le pide algo concreto que hacer, ya es suyo; no le preguntes si acepta ni esperes un «acepto», y hacerlo o no es cosa suya. Uno del tablón queda en su Diario con que lo hablen; cualquier otro, regístralo con give_quest en ese mismo turno (título corto, de qué va, quién lo da, objetivo y recompensa si se dijo), y cuando lo cumpla o ya no se pueda, finish_quest. Los encargos del tablón se cierran con complete_job al entregarlos al NPC que los pidió; los de entrega los valida el servidor. Las pistas se conceden con grant_clue únicamente cuando el jugador las ha obtenido con sus actos. Vender y comprar: sell_item y buy_item con los precios del NPC; el master no negocia fuera de esa lista salvo una tirada de Persuasión que como mucho mueve un 10 %. El contexto solo trae las pistas de este lugar o de quien está delante y los títulos del tablón: si el jugador busca otra pista, pregunta por un encargo o va a entregarlo, consulta get_campaign_notes antes de responder.',
     'NOMBRES: los jugadores de la partida se conocen siempre por su nombre: llámalos por él. De los NPC, el actor solo conoce los nombres marcados como conocidos; a los demás los nombras por lo que se ve (la tabernera, el guardia del portón), también en suggested_actions. El nombre de un NPC se aprende cuando se presenta o alguien lo nombra: entonces va en names_learned.',
     'NPCs: interprétalos según su descripción, lo que quieren y lo que recuerdan. Si el actor habla con uno, pon su ID en npc_id; y solo si esa persona recordaría algo de la conversación, escríbelo en npc_memory_note con su importancia. Un NPC atiende a una persona a la vez: si está ocupado con otro, responde en ficción que espere, salvo motivo de peso.',
+    `NPC QUE CONVERSAN: cuando un NPC habla, no es un mostrador ni lee el tablón en voz alta: tiene su día, su carácter y sus intereses, y lleva su parte de la charla. Su «Trato» con el actor (en el contexto) marca el tono y lo que suelta: si el jugador insiste en algo delicado que el trato aún no permite, el NPC se cierra, duda o pide algo a cambio; una tirada social (requires_roll) o un favor pueden abrirlo, a medias.
+${TALK_RULES}`,
+    opts.actor
+      ? 'VOZ DE LOS NPC: las palabras exactas de un NPC las escribe después su actor, con su ficha, lo que le ronda y lo que se han dicho. Tú decides la sustancia del turno: en lines, lo que dice el NPC (hechos, precios, negativas, lo que cuenta y lo que calla, lo que pregunta o pide, el tema suyo que saca), en una o dos frases llanas por réplica; el actor lo dirá con su voz. Lo que no deba soltar no va en lines. En conversación, la narración es una línea de gesto como mucho, o nada.'
+      : '',
     'NPC QUE DECIDEN: lo que un NPC acepta o decide hacer tiene que pasar de verdad. Si acepta acompañar al actor («te sigo», «ve delante»), set_npc_order follow en ese turno; si se va él a otro sitio, set_npc_order go; si además va a hacer algo allí (curar al herido, atenderle, darle algo), ponlo como encargo y lo hace al llegar. Sin eso el servidor lo deja donde está y sigue su horario. Para que deje de acompañar (le despiden, se niega a seguir), set_npc_order stop. Su llegada y su marcha las cuenta el servidor: no las narres.',
     'En log_event: narration_private para el actor; observable para testigos con detalle completo (tercera persona, con nombre); observable_vague para quien solo ve una figura. suggested_actions: 2-4 cosas que ESTE personaje querría hacer AHORA MISMO, en esta situación concreta y desde donde está: reacciones inmediatas a lo que acaba de pasar, no planes ni siguientes pasos de la historia. En infinitivo y breves ("Registrar el cofre", "Preguntar a Brenna por el incendio", "Guardar las bayas").',
     'HABLAR CON OTRO JUGADOR: «hablar con X» sin frase es una intención, no algo dicho: no inventes lo que dice ni lo pongas en lines; acércalo si hace falta y pregunta qué le dice. Lo que los jugadores se dicen entre ellos llega sin ti (modo Decir).',
@@ -194,20 +210,62 @@ function clueIsHere(c: Clue, locationId: Id, npcIds: Id[]): boolean {
   return (c.location_ids ?? []).includes(locationId) || (c.npc_ids ?? []).some((id) => npcIds.includes(id));
 }
 
-/** Pistas sin obtener: las de aquí con su "cómo"; las demás, solo contadas (detalle con get_campaign_notes). */
-function cluesBlock(pending: Clue[], locationId: Id, npcIds: Id[]): string[] {
-  const here = pending.filter((c) => clueIsHere(c, locationId, npcIds));
+/**
+ * Pistas sin obtener: las de aquí con su "cómo"; las demás, solo contadas (detalle con get_campaign_notes). Con
+ * fuentes (trust.ts, story.ts), solo van las que el actor puede conseguir ya aquí, con el camino que tiene abierto:
+ * lo que aún no se ha ganado no llega al máster.
+ */
+function cluesBlock(engine: Engine, actor: Character, pending: Clue[], locationId: Id, npcIds: Id[]): string[] {
+  const world = engine.world;
+  const here = pending.filter((c) => clueIsHere(c, locationId, npcIds) && (!c.sources?.length || !clueBlocked(world, actor, c)));
   const rest = pending.length - here.length;
+  const ways = (c: Clue) => (c.sources?.length ? ` Cómo, aquí: ${openSources(world, actor, c).map((w) => w.via).join(' / ')}` : '');
   return [
-    ...(here.length ? ['Pistas de aquí (secretas, nunca las insinúes; grant_clue SOLO cuando el jugador la obtenga de verdad):', ...here.map((x) => `- ${x.title} [${x.id}]: ${x.how}`)] : []),
+    ...(here.length ? ['Pistas de aquí (secretas, nunca las insinúes; grant_clue SOLO cuando el jugador la obtenga de verdad):', ...here.map((x) => `- ${x.title} [${x.id}]: ${x.how}${ways(x)}`)] : []),
     ...(rest ? [`Otras ${rest} pista${rest > 1 ? 's' : ''} sin obtener, de otros sitios (get_campaign_notes).`] : []),
   ];
+}
+
+/**
+ * Lo que el NPC contaría al actor con la confianza que le tiene (trust.ts). Lo de niveles más altos no se pone:
+ * el máster no puede soltar lo que no sabe.
+ */
+function knowledgeLine(n: Npc, actor: Character): string {
+  const tier = trustTier(n, actor.id);
+  const told = knowledgeFor(n, actor.id);
+  const held = heldBackTier(n, actor.id);
+  // Hostil o recelosa con él, no hay siguiente nivel: no lo contará mientras dure.
+  const more = held ? ` Calla algo más que no sabes${nextTier(n, actor.id) ? `: lo contaría a un ${TRUST_LABEL[held]}` : ': ahora no se lo contará'}. No lo inventes ni lo insinúes.` : '';
+  const flattery = n.dislikes_flattery ? ' No soporta la adulación: si le doran la píldora, se cierra (npc_trust flattery).' : '';
+  if (!told.length && !more) return flattery ? `  Confianza con ${actor.name}: ${TRUST_LABEL[tier]}.${flattery}` : '';
+  return `  Confianza con ${actor.name}: ${TRUST_LABEL[tier]}. ${told.length ? `Lo que le contaría si viene a cuento (por partes, sin soltarlo de golpe; nunca por su cuenta): ${told.map((k) => dot(k.text)).join(' ')}` : 'A este nivel no le cuenta nada suyo.'}${more}${flattery}`;
 }
 
 /** Categoría de la tirada por su margen (closecheck.ts) con lo que significa, en una línea. */
 function rollLine(r: CheckResult): string {
   const cat = rollCategory(r);
   return cat ? `\nCategoría: ${ROLL_CATEGORY[cat].label.toUpperCase()}${r.dc !== null ? ` (margen ${r.total - r.dc >= 0 ? '+' : ''}${r.total - r.dc})` : ''}: ${ROLL_CATEGORY[cat].rule}` : '';
+}
+
+/**
+ * Dónde vive un NPC (`home_spot_id`, de los datos) si no es aquí, y por dónde se va desde aquí. Sin esto el
+ * máster se inventa la casa: «la casa de Ilse en el Soto», cuando está al fondo del callejón (partida del 27-10, seq 27–30).
+ */
+export function homeLine(world: World, n: Npc, hereLocId: Id): string {
+  const home = n.home_spot_id ? world.spots.get(n.home_spot_id) : undefined;
+  if (!home || home.location_id === hereLocId) return '';
+  const via = world.spotsOf(hereLocId).find((s) => world.exitsFrom(s.id).some((x) => world.spot(x.to_spot_id).location_id === home.location_id));
+  return ` Vive en ${world.location(home.location_id).name}${via ? ` (desde aquí, por ${via.name})` : ''}.`;
+}
+
+/**
+ * El actor va por delante del mundo (ha dormido o viajado: travel.ts): la gente, los horarios y los ruidos son de la
+ * hora del mundo. Sin esto el máster contaba «ocho horas después» con la cena aún en marcha (partida del 27-10, seq 98–106).
+ */
+function aheadText(engine: Engine, actor: Character): string {
+  const g = engine.gameNow();
+  if (aheadBy(actor, g) < AHEAD_NOTICE_S) return '';
+  return `\nVA POR DELANTE DEL MUNDO: esa es su hora, pero para todos los demás son las ${hhmm(g)}. Los NPC, los horarios y los ruidos son de las ${hhmm(g)}: la gente sigue en lo que hacía a esa hora (para ellos no ha pasado la noche). No narres que el pueblo duerme ni que han pasado horas para nadie más que el actor; si lo nota, es que va adelantado, y el mundo le alcanza solo.`;
 }
 
 function boardLine(jobs: string[]): string {
@@ -222,12 +280,13 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   const spot = world.spot(pos.spot_id);
   const L: string[] = [];
 
-  L.push(`## Tiempo\n${engine.clock.format(nowG)}. Luz: ${lightAt(engine.clock, loc, nowG)}. 1 h real = 3 h de juego.`);
+  L.push(`## Tiempo\n${engine.clock.format(nowG)}. Luz: ${lightAt(engine.clock, loc, nowG)}. 1 h real = 3 h de juego.${aheadText(engine, actor)}`);
 
   // La luz real ya va en Tiempo; el estado solo si hay algo.
   L.push(`## Localización: ${loc.name} (${loc.id})\n${loc.description_base}\nAmbiente: ruido ${loc.ambience.noise}${loc.ambience.smell ? `, olor a ${loc.ambience.smell}` : ''}.${Object.keys(loc.state).length ? ` Estado: ${JSON.stringify(loc.state)}` : ''}`);
-  const spots = world.spotsOf(loc.id).filter((s) => !s.hidden || s.discovered_by.includes(actor.id));
-  L.push('Puntos:\n' + spots.map((s) => {
+  // Solo los rincones que el actor conoce (spots.ts); los demás van aparte, sin descripción.
+  const spots = knownSpots(world, actor, loc.id);
+  L.push('Puntos que el actor conoce:\n' + spots.map((s) => {
     const items = world.itemsIn({ type: 'spot', id: s.id }).map((i) => `${world.itemDef(i.item_id).name}${i.quantity > 1 ? ` ×${i.quantity}` : ''} [${i.id}]`);
     const nodes = [...world.resourceNodes.values()].filter((n) => n.spot_id === s.id).map((n) => `${n.name} ${Math.round(regenState(n, nowG) * 100)}% [${n.id}]`);
     const d = Math.round(Math.hypot(s.x - pos.x, s.y - pos.y));
@@ -239,8 +298,13 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const st = (Object.keys(rest).length ? ` estado ${JSON.stringify(rest)}` : '') + lock;
     return `- ${s.name} [${s.id}]${s.id === spot.id ? ' ← actor aquí' : ` a ${d} m`}: ${s.description}${st}${items.length ? ` Objetos: ${items.join(', ')}.` : ''}${nodes.length ? ` Recursos: ${nodes.join(', ')}.` : ''}`;
   }).join('\n'));
+  const unseen = unseenSpots(world, actor, loc.id);
+  if (unseen.length) L.push(`Puntos que el actor aún no ha visto (no los des por vistos; los ve si mira alrededor o va hacia allí, o los conoce si alguien se los nombra; entonces discover_spot): ${unseen.map((s) => `${s.name} [${s.id}]`).join(', ')}.`);
+  const hidden = hiddenSpots(world, actor, loc.id);
+  if (hidden.length) L.push(`Ocultos (el actor no sabe que existen: ni los nombres ni los insinúes. Solo si busca y saca la tirada —requires_roll de Percepción o Investigación contra su CD— o si alguien se los enseña; entonces discover_spot): ${hidden.map((s) => `${s.name} [${s.id}] CD ${s.dc_to_find ?? 10}`).join(', ')}.`);
   const exits: string[] = [];
-  for (const s of world.spotsOf(loc.id)) for (const { exit, to_spot_id } of world.exitsFrom(s.id)) {
+  // Las de un punto oculto que no ha encontrado, no (la trampilla al sótano).
+  for (const s of world.spotsOf(loc.id).filter((x) => !hidden.includes(x))) for (const { exit, to_spot_id } of world.exitsFrom(s.id)) {
     exits.push(`- desde ${s.name} a ${world.locationOfSpot(to_spot_id).name} [${to_spot_id}], ${exit.distance_m} m${exit.state.blocked_by ? `, bloqueada (${exit.state.blocked_by})${reboundOf(exit) ? ': no se cruza; si el actor lo intenta, move_to hacia allí y el motor le hace volver por donde entró' : ''}` : ''}`);
   }
   if (exits.length) L.push('Salidas:\n' + exits.join('\n'));
@@ -255,6 +319,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
 
   const present: string[] = [];
   const presentNpcIds: Id[] = [];
+  // Conversación en curso (conversation.ts): su NPC lleva la transcripción entera y lo que le ronda.
+  const conv = intro || scene ? null : conversationOf(engine.events.all(), actor.id, pos);
   for (const o of world.characters.values()) {
     if (o.id === actor.id || o.status === 'dead' || o.status === 'retired') continue;
     const op = positionOf(world, o, nowG);
@@ -277,11 +343,17 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       const dead = owner.status === 'dead';
       present.push(`- ${world.itemDef(b.item_id).name} [${b.id}] en ${sp.name}: ${dead ? `${owner.name} está MUERTO (modo ${st.mode}); vuelve solo, por el servidor; no narres que se levanta ni que resucita.` : `lo que ${owner.name} dejó al morir (ya ha vuelto).`} ${st.mode === 'casual' ? `Solo ${owner.name} puede coger lo que hay dentro.` : 'Cualquiera puede saquearlo.'}`);
     }
+    // NPC inconscientes (golpe no letal): siguen vivos, en el suelo, con lo que llevan.
+    for (const n of world.npcs.values()) {
+      if (n.status !== 'unconscious' || n.location.id !== sp.id) continue;
+      const label = actor.knows.includes(n.id) ? n.name : descriptorOf(world, n.id);
+      present.push(`- ${label} [${n.id}] en ${sp.name}: INCONSCIENTE a 0 PG${n.down?.by_name ? ` (le dejó así ${n.down.by_name})` : ''}${n.bound ? ', ATADO' : ''}. Respira; no habla, no se mueve, no pelea${n.down ? ` y vuelve en sí hacia las ${hhmm(n.down.wakes_game_s)}` : ''}. ${NPC_DOWN_HINT}${carriedBy(world, n.id) ? `\n${carriedBy(world, n.id)}` : ''}`);
+    }
     // NPC muertos: el cuerpo sigue ahí hasta que alguien se lo lleve; los vivos lo ven y reaccionan.
     for (const n of deadNpcsAt(world, sp.id)) {
       const d = n.death;
       const label = actor.knows.includes(n.id) ? n.name : descriptorOf(world, n.id);
-      present.push(`- El cuerpo de ${label} [${n.id}] en ${sp.name}: MUERTO${d ? ` desde las ${hhmm(d.died_game_s)}${d.by_name ? `, a manos de ${d.by_name}` : ''}` : ''}. No se levanta, no habla y no desaparece; quien esté y lo vea reacciona (miedo, rabia, avisar a alguien). Lo que llevaba está en el suelo.`);
+      present.push(`- ${contractArticles(`El cuerpo de ${label}`)} [${n.id}] en ${sp.name}: MUERTO${d ? ` desde las ${hhmm(d.died_game_s)}${d.by_name ? `, a manos de ${d.by_name}` : ''}` : ''}. No se levanta, no habla y no desaparece; quien esté y lo vea reacciona (miedo, rabia, avisar a alguien). Lo que llevaba está en el suelo.`);
     }
   }
   for (const n of world.npcs.values()) {
@@ -296,15 +368,25 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const others = n.memory.filter((m) => m.character_id !== actor.id && m.importance >= 3).slice(-3).map((m) => `${world.characters.get(m.character_id)?.name ?? 'alguien'}: ${m.note}`);
     const busy = n.talking_to && n.talking_to.character_id !== actor.id ? ` OCUPADO hablando con ${world.characters.get(n.talking_to.character_id)?.name ?? 'alguien'}: atiende al actor solo si hay motivo, si no le pide que espere. No sugieras esperar ni unirse: eso lo ofrece el servidor.` : '';
     const knownNpc = actor.knows.includes(n.id);
+    // Lo último que se han dicho, literal (la memoria es el resumen de lo de antes) y, si lo tiene delante, lo que le ronda.
+    const talking = conv?.npc_id === n.id;
+    const said = transcriptText(transcriptOf(engine.events.all(), actor.id, n.id, talking ? TRANSCRIPT_LINES : 4), 'Actor', 'NPC');
+    const close = talking || ns.id === spot.id;
+    // Lo que vio o sabe del actor (crime.ts) va antes que su carácter: manda sobre cómo le trata.
+    const crime = npcCrimeLine(world, n, actor, nowG);
     present.push([
-      `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}. ${n.description}`,
-      `  Quiere: ${dot(n.motivation)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage}).` : ' No combate.'}`,
-      n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${b.price}`).join(', ')}` : '',
-      n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${b.price}`).join(', ')}` : '',
+      `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}.${crime ? `\n  ${crime}\n ` : ''} ${n.description}`,
+      `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage})${(n.stats.multiattack ?? 1) > 1 ? `, multiataque ×${n.stats.multiattack}` : ''}.${n.bound ? ' ATADO: no se mueve ni pelea.' : ''}` : ' No combate.'}`,
+      // Opinión con el actor, temas que tiene en la cabeza y reacción a sus etiquetas (standing.ts, worldrules.ts).
+      ...npcStandingLines(world, n, actor, nowG),
+      n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${money(world, priceFor(n, actor.id, b.price, 'sell'))}`).join(', ')}` : '',
+      n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, priceFor(n, actor.id, b.price, 'buy'))}`).join(', ')}` : '',
       carriedBy(world, n.id),
       saidBy(engine.events.recentInLocation(loc.id, 60), n.id),
-      n.secret ? `  Solo tú sabes (NUNCA lo reveles ni lo insinúes por tu cuenta): ${dot(n.secret)} Sale solo a medias y si se lo gana: confianza en varias charlas, presión creíble o tirada social contra CD alta.` : '',
+      knowledgeLine(n, actor),
       `  Recuerda de ${actor.name}: ${mine.length ? mine.join(' · ') : 'nada, es la primera vez que hablan'}`,
+      said.length ? `  Lo último que se han dicho, literal (sigue el hilo; no repitas):\n${said.map((l) => `    ${l}`).join('\n')}` : '',
+      close ? concernsLine(world, n, actor, nowG, '  ') : '',
       others.length ? `  Recuerda de otros: ${others.join(' · ')}` : '',
       busy,
       orderLine(world, n, nowG) ? `  Ahora: ${orderLine(world, n, nowG)}.` : '',
@@ -313,6 +395,21 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   // Testigos: otros PJs que percibirían al actor aunque gritara. Sin ninguno, observable no le llega a nadie y es salida tirada.
   if (!witnesses(world, engine.clock, pos, nowG, WITNESS_LOUDNESS, actor.id).length) present.push(NO_WITNESSES);
   L.push('## Presentes que el actor percibe\n' + (present.length ? present.join('\n') : 'Nadie.'));
+  // Crimen y ley (crime.ts): el incidente que hay que contar, y si el actor está buscado, detenido o preso.
+  const law = crimeContext(world, actor, nowG);
+  if (law) L.push(law);
+  // Hechos del mundo (worldfacts.ts) con quién los sabe: lo que se salvó o se condenó vuelve.
+  const facts = factsContext(world, actor);
+  if (facts) L.push(facts);
+  // Combate en curso (encounter.ts): quién tiene que actuar en este turno. Si el máster no lo hace, lo hace el servidor.
+  if (encounterAt(world, engine.events.recentInLocation(loc.id, 400), loc.id, nowG)) {
+    const h = engine.sceneHints(actor.id);
+    const pcs = [actor.id, ...[...(h?.round?.members ?? []), ...(h?.group?.members ?? [])].map((m) => m.id).filter((id) => id !== actor.id)];
+    const due = dueNpcTurns(world, pcs, new Set());
+    if (due.length) {
+      L.push(`## Turno de los NPC hostiles\n${due.map((d) => `- ${actor.knows.includes(d.npc.id) ? d.npc.name : descriptorOf(world, d.npc.id)} [${d.npc.id}] ataca a ${d.target.id === actor.id ? 'el actor' : d.target.name} [${d.target.id}]${(d.npc.stats!.multiattack ?? 1) > 1 ? ` (multiataque ×${d.npc.stats!.multiattack}, en una sola llamada)` : ''}.`).join('\n')}\nEn este turno, después de resolver lo del jugador: un attack por cada uno (attacker_id = el NPC) y nárralo. Si cae o se rinde antes, no ataca. Si no lo haces, el servidor lo resuelve al cerrar y tendrás que reescribir.`);
+    }
+  }
   // Quién oye lo que dice el actor (otros jugadores): el NPC puede notarlo (bajar la voz, callarse, mirarlos), sin narrar lo que hacen ellos.
   const ears = witnesses(world, engine.clock, positionOf(world, actor, nowG), nowG, 1, actor.id)
     .filter((w) => w.perceived.sound !== 'none' && w.perceived.sound !== 'hint')
@@ -326,11 +423,13 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     `${actor.race} ${actor.class_name} nivel ${actor.level}. PG ${actor.hp_current}/${actor.hp_max}${actor.hp_temp ? ` (+${actor.hp_temp} temp)` : ''}. CA ${armorClass(world, actor)}. Estado: ${actor.status}${actor.conditions.length ? `; condiciones: ${actor.conditions.map((x) => x.name).join(', ')}` : ''}.${downLine(actor)} Modo de muerte: ${actor.death_mode}.`,
     `Dados de golpe: ${hitDiceLeft(actor)}/${actor.level} (d${actor.hit_die}).${resourceLines(actor).length ? ` Recursos (spend_resource; espacios con cast_spell): ${resourceLines(actor).join('; ')}.` : ''}`,
     ...abilitiesForMaster(actor),
+    // Raza, clase, trasfondo y lo que ha ganado con lo que hace (standing.ts).
+    tagsLine(world, actor),
     `FUE ${actor.abilities.str} DES ${actor.abilities.dex} CON ${actor.abilities.con} INT ${actor.abilities.int} SAB ${actor.abilities.wis} CAR ${actor.abilities.cha}. Competente en: ${skills.join(', ') || 'nada'}.`,
     actor.appearance ? `Aspecto: ${actor.appearance}` : '',
     actor.backstory ? `Historia: ${actor.backstory}` : '',
     characterFacts(actor).length ? `Ha contado de sí (verdad para su personaje, no para el mundo; record_character_fact): ${characterFacts(actor).slice(-FACTS_IN_CONTEXT).map((f) => dot(f.text)).join(' ')}` : '',
-    `Manos: ${inv.hands.main ?? '—'} / ${inv.hands.off ?? '—'}. Monedas: ${inv.coins}. Carga: ${inv.encumbrance.level}.`,
+    `Manos: ${inv.hands.main ?? '—'} / ${inv.hands.off ?? '—'}. Monedas: ${money(world, inv.coins)} (= ${inv.coins} de ${currencyOf(world.campaign).at(-1)!.name}; los amount de los tools van en esa moneda). Carga: ${inv.encumbrance.level}.`,
     openDebts(actor).length ? `Deudas (set_debt, pawn_item, settle_debt; lo que no esté aquí no se debe):\n${openDebts(actor).map((d) => `- ${debtLine(world, d, nowG, (n) => n.name, true)}. Motivo: ${d.reason}.`).join('\n')}` : '',
     'Inventario (IDs para transfer_item):\n' + (inventoryDetailed(world, actor.id).map((i) => `- ${i.name}${i.quantity > 1 ? ` ×${i.quantity}` : ''} [${i.instance_id}] (${i.where})`).join('\n') || '- nada'),
     actor.transit ? `En camino hacia ${world.spot(actor.transit.destination_spot_id).name}.` : '',
@@ -344,7 +443,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     `## Brezal: reputación, pistas y tablón`,
     `Reputación con ${camp.factions.find((f) => f.id === ach.faction_id)?.name ?? ach.faction_id}: ${rep} (logro «${ach.title}»: ${ach.clues_required} pistas y ${ach.reputation_required} de reputación${actor.achievements.some((a) => a.id === ach.id) ? '; YA CONSEGUIDO' : ''}).`,
     `Pistas del actor: ${actor.clues.length ? actor.clues.map((id) => camp.clues.find((x) => x.id === id)?.title ?? id).join('; ') : 'ninguna'}.`,
-    ...cluesBlock(camp.clues.filter((x) => !actor.clues.includes(x.id)), loc.id, presentNpcIds),
+    ...cluesBlock(engine, actor, camp.clues.filter((x) => !actor.clues.includes(x.id)), loc.id, presentNpcIds),
     boardLine(activeJobs(world).map((j) => `${j.title} [${j.id}]${actor.completed_jobs.includes(j.id) ? ' (ya hecho)' : ''}`)),
   ].join('\n'));
 
@@ -359,8 +458,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   const others = intro ? null : othersBlock(engine, actor, loc.id);
   if (others) L.push(others);
 
-  // Conversación en curso (conversation.ts): el narrador solo entra cuando aporta.
-  const conv = intro || scene ? null : conversationOf(engine.events.all(), actor.id, pos);
+  // Conversación en curso: el narrador solo entra cuando aporta.
   const convNpc = conv ? world.npcs.get(conv.npc_id) : undefined;
   if (conv && convNpc) L.push(conversationBlock(conv, actor.knows.includes(convNpc.id) ? convNpc.name : descriptorOf(world, convNpc.id)));
 
@@ -416,7 +514,9 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
 
   // Ganchos e imprevisto que el motor pone delante en esta llamada (hooks.ts, fastpath.ts).
   const hints = engine.sceneHints(actor.id);
-  if (hints?.hooks.length) L.push(`## Gancho que salta ahora\n${hints.hooks.map((h) => `- ${h.what}`).join('\n')}\nHazlo ocurrir ahora, encajado con lo que hace el actor (puedes interrumpir su movimiento o dejar la acción a medias). Ya está consumido: no lo repitas.`);
+  // Un gancho escrito de antemano no sabe lo que acaba de pasar aquí: si hay un incidente reciente, manda el incidente (crime.ts).
+  const crimeHere = hints?.hooks.length ? recentIncidents(world, loc.id, nowG) : [];
+  if (hints?.hooks.length) L.push(`## Gancho que salta ahora\n${hints.hooks.map((h) => `- ${h.what}`).join('\n')}\nHazlo ocurrir ahora, encajado con lo que hace el actor (puedes interrumpir su movimiento o dejar la acción a medias). Ya está consumido: no lo repitas.${crimeHere.length ? `\nOJO: aquí acaba de pasar algo (ver «Incidente» y «LO PRIMERO» de cada NPC). El gancho se adapta a eso: quien llega ve lo que ha pasado (el cuerpo, la sangre, la gente alterada) y reacciona según quién es; la autoridad pregunta y detiene, no pide una cerveza como si nada. Si el gancho ya no encaja, cuéntalo cambiado o déjalo para otro momento.` : ''}`);
   if (hints?.encounter) L.push('## Imprevisto\nHa salido la tirada de imprevisto del servidor: mientras el actor hace esto pasa algo que no buscaba (alguien llega o se va, un ruido, un animal, un cambio de luz o de tiempo), acorde al lugar y la hora. Pequeño y concreto; combate solo si encaja. Resuelve también la acción.');
   if (hints?.travel) L.push(travelBlock(world, engine.clock, hints.travel));
   if (hints?.errand) {

@@ -14,6 +14,7 @@ import type { Approach } from '../engine/movement.js';
 import { isPlaceholder, rollCategory, withoutSelfCorrection } from '../engine/closecheck.js';
 import type { ProgressEvent } from '../engine/progress.js';
 import type { ShownRoll } from '../engine/rolls.js';
+import { actorConfigFromEnv, actorTurn, performNpc, type ActorConfig, type ActorUsage } from './actor.js';
 
 export interface MasterClient {
   create(params: Anthropic.Beta.MessageCreateParamsNonStreaming): Promise<Anthropic.Beta.BetaMessage>;
@@ -45,7 +46,7 @@ export function noCredit(message: string): boolean {
 }
 
 export type MasterOutcome =
-  | { ok: true; closed: LogEventInput; usage: MasterUsage; calls: ToolCallRecord[]; rolls: RollResult[]; context: string; model: string; progress: ProgressEvent[]; shown_rolls: ShownRoll[]; tool_errors?: ToolFailure[]; approach?: Approach }
+  | { ok: true; closed: LogEventInput; usage: MasterUsage; calls: ToolCallRecord[]; rolls: RollResult[]; context: string; model: string; progress: ProgressEvent[]; shown_rolls: ShownRoll[]; tool_errors?: ToolFailure[]; approach?: Approach; /** El actor que dio voz al NPC (actor.ts), si hubo. */ actor?: ActorUsage }
   | { ok: false; reason: 'refusal' | 'no_log_event' | 'api_error' | 'no_credit' | 'max_iterations' | 'not_configured'; message: string; usage?: MasterUsage; calls?: ToolCallRecord[] };
 
 export interface MasterOptions {
@@ -53,6 +54,11 @@ export interface MasterOptions {
   rng?: Rng;
   /** Tiempo máximo por acción, ms reales. */
   timeoutMs?: number;
+  /**
+   * Actor de los NPC (actor.ts). null lo apaga. Sin decir nada: el del entorno (ACTOR_MODEL) si el
+   * máster va contra la API con el cliente de serie, y ninguno con un cliente inyectado (offline, tests).
+   */
+  actor?: ActorConfig | null;
 }
 
 const CACHE_TTL: Anthropic.Beta.BetaCacheControlEphemeral = { type: 'ephemeral', ttl: '1h' };
@@ -83,11 +89,22 @@ export class Master {
   private readonly client: MasterClient;
   private readonly rng: Rng;
   private readonly timeoutMs: number;
+  readonly actor: ActorConfig | null;
 
   constructor(private readonly engine: Engine, opts: MasterOptions = {}) {
     this.rng = opts.rng ?? defaultRng;
     this.timeoutMs = opts.timeoutMs ?? 90_000;
     this.client = opts.client ?? liveClient(this.timeoutMs);
+    this.actor = opts.actor !== undefined ? opts.actor : opts.client ? null : actorConfigFromEnv();
+  }
+
+  /** Con actor, el NPC que habla en el cierre pasa por su voz (actor.ts); si no toca o falla, el cierre sigue igual. */
+  private async voiced(out: MasterOutcome, pc: Character, playerText: string | null, okTools: readonly string[], opts: { intro: boolean; scene: boolean }): Promise<MasterOutcome> {
+    if (!out.ok || !this.actor) return out;
+    const npc = actorTurn(this.engine, pc, out.closed, opts);
+    if (!npc) return out;
+    const r = await performNpc({ ...this.actor, client: this.actor.client ?? this.client }, this.engine, pc, npc, out.closed, playerText, okTools);
+    return { ...out, closed: r.closed, actor: r.usage };
   }
 
   /** ¿Se puede arrancar el máster? Los modos sin API (offline, replay) siempre; live y record necesitan clave. */
@@ -148,7 +165,7 @@ export class Master {
           max_tokens: 4096,
           ...safeguards,
           output_config: { effort },
-          system: [{ type: 'text', text: systemPrompt(engine.world.campaign), cache_control: CACHE_TTL }],
+          system: [{ type: 'text', text: systemPrompt(engine.world.campaign, { actor: Boolean(this.actor) }), cache_control: CACHE_TTL }],
           tools: MASTER_TOOLS,
           messages,
         });
@@ -182,6 +199,8 @@ export class Master {
             ? JSON.stringify({ error: `log_event rechazado: ${failedNow.map((f) => f.name).join(', ')} falló en este mismo mensaje, así que no ha ocurrido. Vuelve a cerrar con log_event narrando que NO ha pasado (o pidiendo lo que falta).` })
             : executeTool(ctx, tu.name, input);
           calls.push({ name: tu.name, input, result });
+          // Lo que el motor resolvió por su cuenta en ese tool (el turno de un NPC que no actuó, combat.ts) va detrás.
+          if (ctx.engine_calls?.length) calls.push(...ctx.engine_calls.splice(0));
           byId.set(tu.id, result);
           if (WRITE_TOOLS.has(tu.name) && result.startsWith('{"error"')) failedNow.push({ name: tu.name, input, error: result });
         }
@@ -195,16 +214,18 @@ export class Master {
 
         if (ctx.closed) {
           usage.ms = Date.now() - t0;
-          return done(ctx.closed, res.model);
+          return this.voiced(done(ctx.closed, res.model), actor, roll?.original_text ?? (intro || scene ? null : text), ctx.ok_tools ?? [], { intro: Boolean(intro), scene: Boolean(scene) });
         }
       }
       // Tope alcanzado: una última llamada solo con log_event para que cierre narrando lo conseguido y lo que falló.
+      // En el último cierre no se rechaza por los turnos de los NPC: el motor los añade a la narración si faltan.
+      ctx.npc_turn_rejections = 1;
       messages.push({ role: 'user', content: 'Has agotado las llamadas a tools. Cierra AHORA con log_event: narra lo que sí ha ocurrido y, si algo no fue posible, dilo en ficción. No intentes más cambios.' });
       const fin = await this.client.create({
         model, max_tokens: 2048,
         ...safeguards,
         output_config: { effort },
-        system: [{ type: 'text', text: systemPrompt(engine.world.campaign), cache_control: CACHE_TTL }],
+        system: [{ type: 'text', text: systemPrompt(engine.world.campaign, { actor: Boolean(this.actor) }), cache_control: CACHE_TTL }],
         tools: MASTER_TOOLS.filter((t) => t.name === 'log_event'),
         tool_choice: { type: 'auto' },
         messages,
@@ -214,6 +235,7 @@ export class Master {
       for (const tu of fin.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use')) {
         const input = (tu.input ?? {}) as Record<string, unknown>;
         calls.push({ name: tu.name, input, result: executeTool(ctx, tu.name, input) });
+        if (ctx.engine_calls?.length) calls.push(...ctx.engine_calls.splice(0));
       }
       usage.ms = Date.now() - t0;
       if (ctx.closed) return done({ ...ctx.closed, tags: [...ctx.closed.tags, 'max_iterations'] }, fin.model);

@@ -4,11 +4,12 @@
  */
 
 import type { GameClock } from '../clock/clock.js';
-import type { Character, Id } from './model.js';
+import type { Character, Id, Npc } from './model.js';
 import { positionOf } from './movement.js';
 import { lightAt, perceive } from './perception.js';
 import { describeNode } from './resources.js';
 import { presenceLine } from './schedule.js';
+import { knownSpots } from './spots.js';
 import type { World } from './world.js';
 
 const LIGHT_ES = { day: 'Es de día', twilight: 'La luz es escasa', night_moon: 'Es de noche, con algo de luna', night_dark: 'Es noche cerrada' } as const;
@@ -53,7 +54,12 @@ export function describeSurroundings(world: World, clock: GameClock, c: Characte
   if (people.length) lines.push(`Ves: ${people.join('; ')}.`);
   // Cuerpos de NPC muertos: siguen donde cayeron.
   const bodies = [...world.npcs.values()].filter((n) => n.status === 'dead' && world.spots.get(n.location.id)?.location_id === loc.id)
-    .map((n) => `el cuerpo de ${c.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)}${n.location.id === pos.spot_id ? ' aquí mismo' : ` en ${world.spot(n.location.id).name}`}`);
+    .map((n) => `${contractArticles(`el cuerpo de ${c.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)}`)}${n.location.id === pos.spot_id ? ' aquí mismo' : ` en ${world.spot(n.location.id).name}`}`);
+  // Y los que un golpe no letal dejó inconscientes: vivos, pero en el suelo.
+  for (const n of world.npcs.values()) {
+    if (n.status !== 'unconscious' || world.spots.get(n.location.id)?.location_id !== loc.id) continue;
+    bodies.push(`${c.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)}, inconsciente${n.bound ? ' y atado' : ''}${n.location.id === pos.spot_id ? ', aquí mismo' : `, en ${world.spot(n.location.id).name}`}`);
+  }
   if (bodies.length) lines.push(`En el suelo: ${bodies.join('; ')}.`);
   // Gente de la agenda (schedule.ts): el mercado, la misa… como presencia del lugar.
   const crowd = presenceLine(world, loc.id, nowGameS);
@@ -68,7 +74,7 @@ export function describeSurroundings(world: World, clock: GameClock, c: Characte
   if (items.length || nodes.length) lines.push(`Aquí hay: ${[...items, ...nodes].join(', ')}.`);
 
   // Otros puntos de la localización y salidas.
-  const others = world.spotsOf(loc.id).filter((s) => s.id !== spot.id && (!s.hidden || s.discovered_by.includes(c.id)));
+  const others = knownSpots(world, c, loc.id).filter((s) => s.id !== spot.id);
   if (others.length) lines.push(`Puntos cercanos: ${others.map((s) => `${s.name} (${Math.round(Math.hypot(s.x - pos.x, s.y - pos.y))} m)`).join(', ')}.`);
   const exits: string[] = [];
   for (const s of world.spotsOf(loc.id)) {
@@ -98,8 +104,8 @@ export function arrivalNarration(world: World, clock: GameClock, c: Character, n
     lines.push(`**${loc.name}** — ${spot.name}. ${LIGHT_ES[lightAt(clock, loc, nowGameS)]}.`);
     lines.push(loc.description_base);
     lines.push(spot.description);
-    const others = world.spotsOf(loc.id)
-      .filter((s) => s.id !== spot.id && (!s.hidden || s.discovered_by.includes(c.id)))
+    const others = knownSpots(world, c, loc.id)
+      .filter((s) => s.id !== spot.id)
       .sort((a, b) => Math.hypot(a.x - pos.x, a.y - pos.y) - Math.hypot(b.x - pos.x, b.y - pos.y))
       .slice(0, 3).map((s) => s.name);
     if (others.length) lines.push(`Más allá: ${listEs(others)}.`);
@@ -148,7 +154,7 @@ export function aEs(name: string): string {
   return /^el /i.test(name) ? `al ${name.slice(3)}` : `a ${name}`;
 }
 
-function listEs(xs: string[]): string {
+export function listEs(xs: string[]): string {
   return xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs.at(-1)}`;
 }
 
@@ -189,26 +195,88 @@ export function descriptorOf(world: World, id: Id): string {
   const c = world.characters.get(id);
   if (c) return c.appearance ? `${c.appearance}` : `${c.race === 'humano' ? 'un humano' : `un ${c.race}`} con pinta de ${c.class_name}`;
   const n = world.npcs.get(id);
-  if (n) return n.role.startsWith('el ') || n.role.startsWith('la ') ? n.role : (/a$/.test(n.role) ? `la ${n.role}` : `el ${n.role}`);
+  if (n) return roleLabel(n);
   return 'alguien';
 }
 
-/** Sustituye en un texto los nombres de quienes el lector no conoce por su descripción. */
-export function maskUnknownNames(world: World, readerId: Id, text: string): string {
+/**
+ * El oficio con artículo, para el texto corrido: la forma corta si los datos
+ * la dan («el alguacil» por «alguacil y recaudador», «el guardia»); si no, el
+ * oficio entero, con «la» si acaba en «a» («la curandera»).
+ */
+export function roleLabel(n: Pick<Npc, 'role' | 'role_short'>, long = false): string {
+  const r = (long ? null : n.role_short) ?? n.role;
+  return /^(el|la|los|las|un|una) /i.test(r) ? r : /a$/.test(r) ? `la ${r}` : `el ${r}`;
+}
+
+/**
+ * Formas de nombrar a un NPC: su nombre y, si es compuesto, el de pila
+ * («Osric» de «Osric Malvez»). Un nombre en minúscula («un lobo flaco») es una
+ * descripción: solo él.
+ */
+export function npcNameForms(name: string): string[] {
+  const first = name.split(/\s+/)[0]!;
+  return /^\p{Lu}/u.test(name) && first !== name && first.length >= 3 ? [name, first] : [name];
+}
+
+/** El nombre suelto en un texto, sin partir palabras (vale con tildes: «Úrsula», «Garrán»). */
+export function nameRe(name: string, flags = 'gu'): RegExp {
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(name)}(?![\\p{L}\\p{N}])`, flags);
+}
+
+/** «a el herrero» → «al herrero», «de el» → «del» (no toca «a él» ni «El Escorial»). */
+export function contractArticles(text: string): string {
+  return text.replace(/(?<![\p{L}\p{N}])([Aa]|[Dd]e) el(?![\p{L}\p{N}])/gu, '$1l');
+}
+
+/** Palabras de la campaña (descripciones de sitios y puntos, objetos): un nombre que también es palabra («Ceniza») no se tapa a principio de frase. */
+const commonWords = new WeakMap<World, Set<string>>();
+function isCommonWord(world: World, name: string): boolean {
+  let set = commonWords.get(world);
+  if (!set) {
+    const text = [...world.locations.values()].map((l) => l.description_base)
+      .concat([...world.spots.values()].flatMap((s) => [s.name, s.description]), [...world.itemDefs.values()].map((d) => d.name)).join(' ');
+    // Solo lo que sale en minúscula: «la fragua de Hugo» no hace de «Hugo» una palabra.
+    set = new Set(text.split(/[^\p{L}]+/u).filter((w) => /^\p{Ll}/u.test(w)));
+    commonWords.set(world, set);
+  }
+  return !/\s/.test(name) && set.has(name.toLowerCase());
+}
+
+/**
+ * Sustituye en un texto los nombres de quienes el lector no conoce por su
+ * descripción, con la contracción que toque («habla al herrero»). Lo citado
+ * («…») son palabras de alguien y se deja. `keep`: los que no se tapan aunque
+ * no los conozca (los que nombró el propio jugador). `authored`: texto escrito
+ * por la campaña (el Diario), donde un nombre siempre es un nombre, también
+ * el que es palabra («Ceniza murió…»).
+ */
+export function maskUnknownNames(world: World, readerId: Id, text: string, keep: readonly Id[] = [], authored = false): string {
   const reader = world.characters.get(readerId);
   if (!reader) return text;
   // Lo citado son palabras de alguien: un nombre dicho en voz alta se oye tal cual.
-  if (/«[^»]*»/.test(text)) return text.split(/(«[^»]*»)/).map((part, i) => (i % 2 ? part : maskUnknownNames(world, readerId, part))).join('');
+  if (/«[^»]*»/.test(text)) return text.split(/(«[^»]*»)/).map((part, i) => (i % 2 ? part : maskUnknownNames(world, readerId, part, keep, authored))).join('');
   let out = text;
   // Los PJ de la partida se conocen siempre por su nombre: solo se enmascaran NPC.
   for (const n of world.npcs.values()) {
-    if (reader.knows.includes(n.id)) continue;
+    if (reader.knows.includes(n.id) || keep.includes(n.id)) continue;
     const desc = descriptorOf(world, n.id);
-    // «Ilse, la curandera» → «la curandera» (no «la curandera, la curandera»).
-    out = out.replace(new RegExp(`\\b${escapeRe(n.name)},\\s*${escapeRe(desc)}\\b`, 'g'), desc);
-    out = out.replace(new RegExp(`\\b${escapeRe(n.name)}\\b`, 'g'), desc);
+    const long = roleLabel(n, true);
+    const common = !authored && isCommonWord(world, n.name);
+    // A principio de frase, con mayúscula; «Ceniza cubre la plaza», ahí, es la palabra y no el perro.
+    const put = (m: string, at: number, all: string) => {
+      const start = /(^\s*|[.!?…]\s+|\n\s*)$/.test(all.slice(0, at));
+      if (common && start) return m;
+      return start ? desc.charAt(0).toUpperCase() + desc.slice(1) : desc;
+    };
+    for (const f of npcNameForms(n.name)) {
+      // «Ilse, la curandera» → «la curandera» (no «la curandera, la curandera»).
+      out = out.replace(new RegExp(`${nameRe(f).source},\\s*(?:${escapeRe(long)}|${escapeRe(desc)})(?![\\p{L}\\p{N}])`, 'gu'), put);
+      out = out.replace(nameRe(f), put);
+    }
   }
-  return out;
+  // La contracción, también donde el texto ya venía mal («Ir a el roble viejo»).
+  return contractArticles(out);
 }
 
 function escapeRe(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }

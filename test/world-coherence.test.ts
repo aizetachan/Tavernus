@@ -248,11 +248,11 @@ describe('n.º 14: lo que el PJ no sabe no se le escapa', () => {
     expect(npcTag(c, brenna)).toBe('Tabernera');
     c.knows.push(brenna.id);
     expect(npcLabel(c, brenna)).toBe('Brenna');
-    // Las misiones de la historia: no sabe quién es Ilse.
+    // Las misiones de la historia: no sabe quién es Ilse. Lo que oye en la plaza entra en el Diario como pista hacia ella.
     c.location = { type: 'spot', id: 'sp_pl_pozo' };
-    await engine.act(c.id, 'mirar el pozo');
+    await engine.tick();
     const j = journalOf(engine, c.id);
-    const water = j.quests.active.find((q) => q.id === 'q_agua');
+    const water = j.quests.active.find((q) => q.id === 'lead:q_agua');
     expect(water).toBeDefined();
     const all = [water!.text, ...water!.steps.map((s) => s.text)].join(' ');
     expect(all).toMatch(/curandera/);
@@ -349,12 +349,15 @@ describe('la muerte de un NPC: aviso, cuerpo y reacción del sitio', () => {
     const ev = deaths[0]!;
     expect(ev.delivered_to.map((d) => d.character_id).sort()).toEqual([leo.id, miau.id].sort());
     const textFor = (c: Character) => engine.events.forCharacter(c.id, null).find((d) => d.event.id === ev.id)!.text;
-    // Leodhin no sabe cómo se llama: «la guardia».
-    expect(textFor(leo)).toMatch(/^☠ La guardia cae al suelo|^☠ la guardia cae al suelo/i);
+    // Leodhin no sabe cómo se llama: «el guardia» (role_short en los datos; antes salía «la guardia» por acabar en «a»).
+    expect(textFor(leo)).toMatch(/^☠ el guardia cae al suelo/i);
     expect(textFor(leo)).toMatch(/ha muerto por el golpe de Miau\. El cuerpo queda en la barra\./);
     expect(textFor(miau)).toMatch(/ha muerto por tu golpe/);
-    // La cena: diez vecinos se apartan… si es la hora; si no, quienes están cerca miran.
-    expect(ev.observable).toMatch(/se apartan del cuerpo|se quedan mirando el cuerpo/);
+    // Doro no era hostil: es un crimen (crime.ts). La reacción de la sala no va en la muerte, sino en el incidente que la sigue.
+    expect(ev.observable).not.toMatch(/se apartan del cuerpo|se quedan mirando el cuerpo/);
+    const inc = since(engine, from).find((e) => e.action_type === 'incident');
+    expect(inc?.observable).toMatch(/^⚖ Lo han visto: Miau mató a Doro\. .*Brenna/);
+    expect(inc!.seq).toBeGreaterThan(ev.seq);
     await engine.tick();
     expect(engine.events.all().filter((e) => e.action_type === 'npc_death')).toHaveLength(1);
 
@@ -367,9 +370,9 @@ describe('la muerte de un NPC: aviso, cuerpo y reacción del sitio', () => {
     expect(doro.location.id).toBe('sp_tab_barra');
     const who = JSON.parse(executeTool(ctxFor(engine, miau), 'who_is_here', {})) as { id: string; status?: string; name: string }[];
     expect(who.find((x) => x.id === 'npc_doro')).toMatchObject({ status: 'dead', name: 'cuerpo de Doro' });
-    expect(actionContext(engine, miau, 'mirar a la guardia')).toMatch(/El cuerpo de la guardia \[npc_doro\] en la barra: MUERTO desde las \d\d:\d\d, a manos de Miau/);
+    expect(actionContext(engine, miau, 'mirar a la guardia')).toMatch(/El cuerpo del guardia \[npc_doro\] en la barra: MUERTO desde las \d\d:\d\d, a manos de Miau/);
     expect(actionContext(engine, miau, 'mirar a la guardia')).toMatch(/Recuerda de Miau: .*Vio cómo Miau mataba a Doro/);
-    expect(describeSurroundings(engine.world, engine.clock, leo, engine.nowFor(leo))).toMatch(/En el suelo: el cuerpo de la guardia aquí mismo\./);
+    expect(describeSurroundings(engine.world, engine.clock, leo, engine.nowFor(leo))).toMatch(/En el suelo: el cuerpo del guardia aquí mismo\./);
     // Ni se cura ni se vuelve a matar.
     expect(tool(ctxFor(engine, miau), 'heal', { target_id: 'npc_doro', amount: 5, healer_id: null, item_instance_id: null }).error).toMatch(/muerto/);
     expect(tool(ctxFor(engine, miau), 'apply_damage', { target_id: 'npc_doro', amount: 5, damage_type: 'slashing', source: 'espada' }).error).toMatch(/muerto/);

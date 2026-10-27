@@ -110,7 +110,7 @@ export interface Skeleton {
 }
 
 // ---------------------------------------------------------------------------
-// Bloques de combate (SRD 5e, CR 0-3). El relleno no los toca.
+// Bloques de combate (SRD 5e, CR 0-3), con el multiataque de los que lo tienen. El relleno no los toca.
 // ---------------------------------------------------------------------------
 
 export const ARCHETYPES: Record<Archetype, Omit<NpcStats, 'hp_max'>> = {
@@ -119,10 +119,10 @@ export const ARCHETYPES: Record<Archetype, Omit<NpcStats, 'hp_max'>> = {
   noble: { ac: 15, hp: 9, attack_bonus: 3, damage: '1d8', damage_type: 'piercing', attack_name: 'estoque', xp: 25 },
   acolyte: { ac: 10, hp: 9, attack_bonus: 2, damage: '1d4', damage_type: 'bludgeoning', attack_name: 'garrote', xp: 50 },
   bandit: { ac: 12, hp: 11, attack_bonus: 3, damage: '1d6+1', damage_type: 'slashing', attack_name: 'cimitarra', xp: 25 },
-  scout: { ac: 13, hp: 16, attack_bonus: 4, damage: '1d6+2', damage_type: 'piercing', attack_name: 'espada corta', xp: 100 },
-  thug: { ac: 11, hp: 32, attack_bonus: 4, damage: '1d6+2', damage_type: 'bludgeoning', attack_name: 'maza', xp: 100 },
+  scout: { ac: 13, hp: 16, attack_bonus: 4, damage: '1d6+2', damage_type: 'piercing', attack_name: 'espada corta', xp: 100, multiattack: 2 },
+  thug: { ac: 11, hp: 32, attack_bonus: 4, damage: '1d6+2', damage_type: 'bludgeoning', attack_name: 'maza', xp: 100, multiattack: 2 },
   priest: { ac: 13, hp: 27, attack_bonus: 2, damage: '1d6', damage_type: 'bludgeoning', attack_name: 'maza', xp: 450 },
-  veteran: { ac: 17, hp: 58, attack_bonus: 5, damage: '1d8+3', damage_type: 'slashing', attack_name: 'espada larga', xp: 700 },
+  veteran: { ac: 17, hp: 58, attack_bonus: 5, damage: '1d8+3', damage_type: 'slashing', attack_name: 'espada larga', xp: 700, multiattack: 2 },
   mage: { ac: 10, hp: 9, attack_bonus: 4, damage: '1d10', damage_type: 'fire', attack_name: 'descarga de fuego', xp: 100 },
   wolf: { ac: 13, hp: 11, attack_bonus: 4, damage: '2d4+2', damage_type: 'piercing', attack_name: 'mordisco', xp: 50 },
   boar: { ac: 11, hp: 11, attack_bonus: 3, damage: '1d6+1', damage_type: 'slashing', attack_name: 'colmillos', xp: 50 },
@@ -266,11 +266,11 @@ export function buildSkeleton(input: SkeletonInput): Skeleton {
 
   // Encargos: entregar algo que da el campo (si da algo), ir a mirar un punto de fuera y, a veces, uno narrativo.
   const jobs: SkJob[] = [];
-  if (resources.length) { const r = pick(resources); jobs.push({ id: 'job_1', kind: 'deliver', deliver: { item_id: r.item_id, quantity: int(4, 10) }, reward_coins: int(5, 10) * 100, reward_reputation: 1 }); }
+  if (resources.length) { const r = pick(resources); jobs.push({ id: 'job_1', kind: 'deliver', deliver: { item_id: r.item_id, quantity: int(4, 10) }, reward_coins: int(2, 6) * 10, reward_reputation: 1 }); }
   const far = [...w1.spots, ...w2.spots].filter((s) => !s.hidden && !s.leads_to && !exits.some((e) => e.from_spot_id === s.id || e.to_spot_id === s.id));
-  jobs.push({ id: `job_${jobs.length + 1}`, kind: 'visit', visit_spot_id: (far.length ? pick(far) : w2.spots[0]!).id, reward_coins: int(5, 9) * 100, reward_reputation: 1 });
+  jobs.push({ id: `job_${jobs.length + 1}`, kind: 'visit', visit_spot_id: (far.length ? pick(far) : w2.spots[0]!).id, reward_coins: int(2, 5) * 10, reward_reputation: 1 });
   const nJobs = int(2, 3);
-  while (jobs.length < nJobs) jobs.push({ id: `job_${jobs.length + 1}`, kind: 'narrative', reward_coins: int(6, 12) * 100, reward_reputation: int(1, 2) });
+  while (jobs.length < nJobs) jobs.push({ id: `job_${jobs.length + 1}`, kind: 'narrative', reward_coins: int(3, 8) * 10, reward_reputation: int(1, 2) });
 
   // Lo que se gana con el logro: un punto oculto del asentamiento (la trampilla de la posada…) o un escondrijo nuevo en el centro.
   // El cuarto de la posada no: está a la vista, cerrado, y se alquila.
