@@ -127,7 +127,7 @@ interface Batch { items: { id: Id; text: string }[]; members: Id[]; done: Promis
 interface Round { n: number; items: Map<Id, string>; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; deadline_ms: number; timer: NodeJS.Timeout }
 
 export type MasterResolution =
-  | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number } }
+  | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number }; /** El actor que dio voz al NPC (ai/actor.ts), si hubo: su gasto aparte. */ actor?: unknown }
   | { ok: false; reason: string; message: string; usage?: unknown; calls?: unknown };
 
 /**
@@ -1310,7 +1310,7 @@ export class Engine {
       observable_vague: k.observable_vague ?? undefined,
       suggested_actions: k.suggested_actions,
       requires_roll: k.requires_roll ?? undefined,
-      master: { model: out.model, usage: out.usage, calls: out.calls, context: out.context },
+      master: { model: out.model, usage: out.usage, calls: out.calls, context: out.context, ...(out.actor ? { actor: out.actor } : {}) },
       ...(this.hints.has(c.id) ? { scene_hints: this.hints.get(c.id) } : {}),
       ...(k.decisive ? { decisive: { threat: k.decisive.threat, window_s: Engine.DECISIVE_WINDOW_S } } : {}),
       ...(k.npc_id ? { npc_id: k.npc_id } : {}),

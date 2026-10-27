@@ -667,6 +667,7 @@ Facciones creadas por jugadores, en la misma tabla que las del mundo: `factions{
 - B sí puede hablar con A directamente (jugador a jugador, mismo punto) mientras espera, y oye la conversación si está en su radio de audición (§9.2).
 - El NPC puede romper la regla si tiene motivo (B saca un arma, B es su hijo, B grita): lo decide el master.
 - `npc.memory` guarda ambas conversaciones por separado.
+- Cómo habla el NPC (docs/CONVERSACION.md): el máster decide la sustancia (director) y un actor escribe sus palabras con su ficha, lo que le ronda, el trato con el PJ y la transcripción literal de lo último que se han dicho. El actor no ve el secreto, y sus líneas pasan por el control del cierre. Modelo del actor: `ACTOR_MODEL` (`off` lo apaga).
 
 Broadcast: cada evento se entrega **por punto de vista**: el servidor calcula qué PJs lo perciben (mismo punto, línea de visión, rango de audición, `visibility: public`) y solo a ellos se lo envía. No hay canal de localización; la localización sigue siendo la unidad de cola de acciones.
 

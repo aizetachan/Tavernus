@@ -207,6 +207,40 @@ export function conversationRejection(p: ConversationProblem, name: string): str
   return `Estás en conversación con ${name}: la narración repite gestos ya narrados (${p.gestures.join(', ')}), que son relleno. ${fix}`;
 }
 
+/** Réplicas literales de la transcripción que ven el máster y el actor (ai/actor.ts). */
+export const TRANSCRIPT_LINES = 10;
+
+/** Una réplica de la transcripción: quién habla y qué dijo, tal cual. */
+export interface TranscriptLine { who: 'pc' | 'npc'; text: string; game_s: number }
+
+/**
+ * Lo último que se han dicho un PJ y un NPC, literal y en orden: las líneas del
+ * PJ (como actor o en un turno compartido) y las del NPC en los cierres de ese
+ * PJ, y lo que el NPC le dijo a él en un turno de grupo (`to`). Las `max` más
+ * recientes. La memoria del NPC (`npc.memory`) es el resumen de lo de antes.
+ */
+export function transcriptOf(events: readonly GameEvent[], pcId: Id, npcId: Id, max = TRANSCRIPT_LINES): TranscriptLine[] {
+  const out: TranscriptLine[] = [];
+  for (const e of events) {
+    const lines = linesOf(e);
+    if (!lines.length) continue;
+    const mine = e.actor_id === pcId;
+    const group = !mine && lines.some((l) => (l.speaker === 'pc' && l.character_id === pcId) || (l.speaker === 'npc' && l.to === pcId));
+    if (!mine && !group) continue;
+    if (!lines.some((l) => l.speaker === 'npc' && l.npc_id === npcId)) continue;
+    for (const l of lines) {
+      if (l.speaker === 'npc' && l.npc_id === npcId && (mine || !l.to || l.to === pcId)) out.push({ who: 'npc', text: l.text.trim(), game_s: e.timestamp_game_s });
+      else if ((mine && l.speaker === 'actor') || (l.speaker === 'pc' && l.character_id === pcId)) out.push({ who: 'pc', text: l.text.trim(), game_s: e.timestamp_game_s });
+    }
+  }
+  return out.slice(-max);
+}
+
+/** La transcripción en líneas de texto («Tú: …» / «Ilse: …»), para un contexto. */
+export function transcriptText(t: readonly TranscriptLine[], pcName: string, npcName: string): string[] {
+  return t.map((l) => `${l.who === 'pc' ? pcName : npcName}: «${l.text}»`);
+}
+
 /**
  * Narración que se guarda cuando el máster deja fuera lo dicho (en
  * conversación narration_private puede ir vacía o ser solo la presentación):
