@@ -91,7 +91,7 @@ export const VOICE_SCRIPT = String.raw`<script>
   // Ajuste «enviar al terminar de hablar»: una pastilla junto a Hacer / Decir.
   var auto = store('tavernus.voice.autosend') === '1';
   var chip = document.createElement('button');
-  chip.type = 'button'; chip.className = 'voice-auto'; chip.textContent = 'Voz: enviar al terminar';
+  chip.type = 'button'; chip.className = 'voice-auto'; chip.textContent = 'Dictado: enviar al dejar de hablar';
   chip.title = 'Al dejar de hablar, envía lo dictado sin esperar a que lo revises';
   var chips = document.querySelector('.chat-acts');
   if (chips) chips.appendChild(chip);

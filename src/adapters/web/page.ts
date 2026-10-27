@@ -655,6 +655,7 @@ ${FIGHT_STYLE}
   .mode-seg button:hover:not(:disabled) { color: var(--text); }
   .mode-seg button.on { background: rgba(255,255,255,.1); color: var(--text); }
   .mode-seg button[data-m="say"].on { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
+  .mode-seg[hidden] { display: none; }
   .mode-seg button:disabled { opacity: .4; cursor: default; }
   .mode-seg .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
   form.say input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
@@ -871,6 +872,8 @@ ${FIGHT_STYLE}
   #gear-menu .tts-pop, #gear-menu .sfx-pop { display: block !important; position: static; width: auto; margin: 0; padding: 6px; border: 0; border-radius: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
   #gear-menu .gm-paint { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 10px; border: 0; border-radius: 12px; background: var(--control); color: var(--text); text-align: left; }
   #gear-menu .gm-paint[hidden] { display: none; }
+  #gear-menu .voice-auto { display: flex; width: 100%; height: auto; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--control); color: var(--text); font-size: 13px; text-align: left; white-space: normal; }
+  #gear-menu .voice-auto[aria-pressed="true"] { color: var(--accent); background: var(--accent-tint); border-color: rgba(230,183,90,.45); }
   #gear-menu .gm-paint .bub { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: var(--accent-tint); color: var(--accent); }
   #gear-menu .gm-paint b { display: block; font-size: 14px; font-weight: 600; }
   #gear-menu .gm-paint small { display: block; font-size: 12px; color: var(--muted); }
@@ -890,6 +893,10 @@ ${FIGHT_STYLE}
     #to-side, .chat-head .sfx, .chat-head .tts > .tts-auto, .chat-head .tts > .tts-more { display: none; }
     /* Volver al menú: la flecha, a la izquierda del sitio. */
     #to-menu { display: inline-grid; margin-right: -4px; }
+    /* Como en WhatsApp: ninguna burbuja llega al borde contrario; las dos dejan el mismo hueco. */
+    #log .msg.row:not(.mine) { max-width: calc(100% - 44px); }
+    #log .msg.row.mine { max-width: calc(100% - 44px); }
+    #log .msg.scene, #log .moment.combat, #log .moment.discovery, #log .moment.manual { width: auto; max-width: calc(100% - 36px - 44px); }
     /* Letra del hilo en el móvil: la misma que el prólogo (13,5 px). */
     #log .msg.row .body { font-size: 13.5px; line-height: 1.5; }
     #log .msg.row .who { font-size: 12px; }
@@ -1000,7 +1007,7 @@ ${FIGHT_STYLE}
     <div id="round" class="round-banner" hidden role="status"></div>
     <div id="typing" class="typing" hidden aria-live="polite"></div>
     <div class="chat-acts" id="chat-acts">
-      <div id="saymode" class="mode-seg" role="group" aria-label="Lo que escribes">
+      <div id="saymode" class="mode-seg" role="group" aria-label="Lo que escribes" hidden>
         <button type="button" data-m="do" class="on" aria-pressed="true" title="Hacer: el narrador cuenta lo que haces">Hacer</button>
         <button type="button" data-m="say" aria-pressed="false" disabled title="Decir: tu personaje lo dice tal cual, al instante y sin narrador (con otros jugadores)">Decir</button>
       </div>
@@ -1016,6 +1023,7 @@ ${FIGHT_STYLE}
         <button type="button" class="gm-paint" hidden><span class="bub"></span><span><b>Generar imagen</b><small>Ilustra este momento de la partida</small></span></button>
         <section data-slot="sfx"><h3>Sonido y música</h3></section>
         <section data-slot="tts"><h3>Narrador</h3></section>
+        <section data-slot="voice"><h3>Dictar con la voz</h3></section>
       </div>
       <span class="inwrap"><input id="input" placeholder="¿Qué haces?" aria-label="Acción"></span>
       <button type="button" id="cube" aria-haspopup="menu" aria-expanded="false" aria-controls="cube-menu" title="Hoja, diario y mochila" aria-label="Menú de la partida: hoja, diario y mochila"><svg class="i ic-cube"><use href="#i-cube"/></svg><svg class="i ic-x"><use href="#i-x"/></svg></button>
@@ -1195,8 +1203,9 @@ ${FIGHT_SCRIPT}
     presenceList = list || [];
     var box = $('presence'), group = $('group');
     box.innerHTML = ''; group.innerHTML = '';
-    // Decir solo tiene sentido con más jugadores en la partida; en solitario se ve, pero todo va al narrador.
+    // Hacer | Decir solo tiene sentido con más jugadores en la partida; en solitario no se ve y todo va al narrador.
     alone = !list || !list.length;
+    $('saymode').hidden = alone;
     sayBtn().disabled = alone || busy;
     if (alone && sayMode) setSayMode(false);
     if (!list || !list.length) return;
@@ -2788,12 +2797,14 @@ ${FIGHT_SCRIPT}
   // Los paneles de sonido (sfx.ts) y de voz (tts.ts) se mudan aquí en el móvil y vuelven a su sitio en escritorio.
   var gear = $('gear'), gearMenu = $('gear-menu'), mobileQ = window.matchMedia('(max-width: 820px)');
   function placeSettings() {
-    var sfxPop = document.querySelector('.sfx-pop'), ttsPop = document.querySelector('.tts-pop');
+    var sfxPop = document.querySelector('.sfx-pop'), ttsPop = document.querySelector('.tts-pop'), voice = document.querySelector('.voice-auto');
     if (mobileQ.matches) {
       if (sfxPop) gearMenu.querySelector('[data-slot=sfx]').appendChild(sfxPop);
       if (ttsPop) gearMenu.querySelector('[data-slot=tts]').appendChild(ttsPop);
+      if (voice) gearMenu.querySelector('[data-slot=voice]').appendChild(voice);
       return;
     }
+    if (voice) $('chat-acts').appendChild(voice);
     var sfxBox = document.querySelector('.chat-head .sfx');
     if (sfxPop && sfxBox) sfxBox.appendChild(sfxPop);
     if (ttsPop) $('side-gear').appendChild(ttsPop);
@@ -2818,6 +2829,7 @@ ${FIGHT_SCRIPT}
   gearMenu.querySelector('.gm-paint').addEventListener('click', function () { var brush = document.querySelector('form .brush'); setGear(false); if (brush) brush.click(); });
   document.addEventListener('click', function (ev) { if (!gearMenu.hidden && !ev.target.closest('#gear-menu') && !ev.target.closest('#gear')) setGear(false); });
   mobileQ.addEventListener('change', placeSettings);
+  document.addEventListener('DOMContentLoaded', function () { if (mobileQ.matches) placeSettings(); });
 
   /** Avatares del grupo arriba a la derecha: cambian de personaje como el desplegable (que queda oculto). */
   function renderParty() {

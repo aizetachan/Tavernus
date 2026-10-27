@@ -290,7 +290,7 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 
 ## Comandos con «/» y abajo del chat en el móvil (27 oct 2026)
 - Los atajos /look, /where… ya no se ven encima del cuadro: al escribir «/» sale un menú con todos los comandos, su explicación y un buscador. ↑ ↓ para elegir, Intro para lanzarlo, Esc para cerrarlo; también se pueden pulsar.
-- Encima del cuadro queda la fila de cómo va lo que escribes: «Hacer | Decir» (Decir se apaga si juegas solo) y «Voz: enviar al terminar».
+- Encima del cuadro queda la fila de cómo va lo que escribes: «Hacer | Decir», que solo sale con más jugadores conectados. En escritorio, ahí va también «Dictado: enviar al dejar de hablar» (con el micrófono, manda lo dictado sin esperar a que lo revises); en el móvil ese ajuste está en el engranaje.
 - Móvil: a la izquierda del cuadro, el engranaje de ajustes (generar imagen, sonido y música, narrador); a la derecha, Enviar y, pegada al borde, la mochila.
 - Móvil: arriba a la izquierda, una flecha vuelve al menú principal; la mochila incluye «Tablero y mapa» (ficha, sitio, gente y misión). El sonido tampoco va ya en la cabecera, solo el botón de parar la voz mientras lee.
-- Móvil: la letra de las burbujas es la misma que la del prólogo (13,5 px), más pequeña que en escritorio.
+- Móvil: la letra de las burbujas es la misma que la del prólogo (13,5 px), y ninguna burbuja llega al borde contrario: las del narrador y las tuyas dejan el mismo hueco.
