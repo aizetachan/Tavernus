@@ -274,9 +274,10 @@ export const NOVEL_STYLE = String.raw`
   .msg.scene, .msg.moment { margin: 4px 0 0 42px; animation: nv-in .5s ease-out; }
   .msg.scene { width: min(560px, calc(100% - 42px)); }
   /* La vista del sitio dentro de la burbuja del narrador que cuenta la llegada, como una foto en un mensaje. */
-  /* Con foto: el mismo margen arriba que a los lados (4 px) y un clic en la foto la amplía. */
-  .msg.row.has-place .body { width: min(520px, 100%); padding-top: 4px; }
-  .place-shot { position: relative; display: block; width: calc(100% + 16px); margin: 0 -8px 8px; padding: 0; border: 0; border-radius: 14px; overflow: hidden;
+  /* Con foto: debajo del texto, con el mismo margen abajo que a los lados (4 px); un clic en la foto la amplía.
+     Sus esquinas de abajo siguen las de la burbuja (18 − 4 px); las de arriba, más cerradas. */
+  .msg.row.has-place .body { width: min(520px, 100%); padding-bottom: 4px; }
+  .place-shot { position: relative; display: block; width: calc(100% + 16px); margin: 8px -8px 0; padding: 0; border: 0; border-radius: 8px 8px 14px 14px; overflow: hidden;
     aspect-ratio: 16 / 9; background: var(--platter); cursor: zoom-in; }
   .place-shot img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
   .place-shot.ready img { opacity: 1; }
@@ -480,8 +481,8 @@ export const NOVEL_JS = String.raw`
     img.addEventListener('error', function () { b.remove(); row.classList.remove('has-place'); });
     b.addEventListener('click', function () { openLightbox({ src: p.src, name: p.name || '' }); });
     img.src = p.src;
-    // Arriba del todo: la foto, con el mismo margen por arriba que por los lados; debajo, el nombre y el texto.
-    body.insertBefore(b, body.firstChild);
+    // Debajo del texto del narrador, con el mismo margen por abajo que por los lados.
+    body.appendChild(b);
   }
 
   /**

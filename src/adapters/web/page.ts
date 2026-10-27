@@ -631,7 +631,7 @@ ${FIGHT_STYLE}
   /* B5 sobre los módulos (novel, tts, sfx, voz, pincel, avatar): mismas piezas, otra piel. */
   .msg.row { gap: 8px; margin-top: 8px; max-width: min(760px, 100%); }
   .msg.scene, .moment.combat, .moment.discovery, .moment.manual { width: min(640px, calc(100% - 42px)); }
-  .msg.row .body { padding: 8px 12px 7px; border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
+  .msg.row .body { padding: 8px 12px 7px; border-radius: 18px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
   .msg.row:not(.cont):not(.mine) .body { border-top-left-radius: 4px; }
   .msg.row.mine:not(.cont) .body { border-top-right-radius: 4px; }
   .msg.row.master .body, .msg.row.npc .body { background: var(--bubble); }
