@@ -567,15 +567,22 @@ export function reportAssault(world: World, c: Character, n: Npc, weapon: string
   return reportIncident(world, { kind: armed ? 'armed_assault' : 'assault', perpetrator_id: c.id, victim_id: n.id, spot_id: n.location.id, weapon: armed ? weapon : null }, nowG);
 }
 
+/** ¿Empezó el PJ la pelea con ese NPC? Hay una agresión suya abierta contra él (y entonces vencerle no da PX). */
+export function startedBy(world: World, c: Character, n: Npc, nowG: number): boolean {
+  return store(world).some((x) => x.status === 'open' && x.perpetrator_id === c.id && x.victim_id === n.id && VIOLENT.includes(x.kind) && nowG - x.updated_game_s < ESCALATE_S);
+}
+
 /**
  * Un PJ ha matado a un NPC. Es una muerte (crimen) si él empezó: hay una
  * agresión suya abierta contra ese NPC. Entonces no da PX, sino infamia.
+ * Rematar a quien estaba inconsciente o atado (`helpless`) es una muerte
+ * siempre, empezara quien empezara la pelea.
  */
-export function reportKill(world: World, c: Character, n: Npc, nowG: number): { murder: boolean; incident: Incident | null } {
+export function reportKill(world: World, c: Character, n: Npc, nowG: number, opts: { helpless?: boolean } = {}): { murder: boolean; incident: Incident | null } {
   const open = store(world).find((x) => x.status === 'open' && x.perpetrator_id === c.id && x.victim_id === n.id && VIOLENT.includes(x.kind) && nowG - x.updated_game_s < ESCALATE_S);
   // Matar a quien venía a detenerle también es una muerte, aunque ya peleara con él.
   const lawman = isEnforcer(world, n.id) && c.wanted?.arrest?.npc_id === n.id;
-  if (!open && !lawman) return { murder: false, incident: null };
+  if (!open && !lawman && !opts.helpless) return { murder: false, incident: null };
   const i = reportIncident(world, { kind: 'murder', perpetrator_id: c.id, victim_id: n.id, spot_id: n.location.id }, nowG) ?? open ?? null;
   return { murder: true, incident: i };
 }
@@ -731,15 +738,27 @@ export function surrender(world: World, c: Character, nowG: number, nowC: number
   return { kind: 'fine', paid, until_game_s: null, spot_id: null, by, reason };
 }
 
-/** Se resiste: la autoridad que le detiene (y la que lo sepa y esté aquí) pasa a hostil y entra en el combate. */
+/**
+ * Se resiste: la autoridad que le detiene (y la que lo sepa y esté aquí) pasa a
+ * hostil y entra en el combate. El resto de la autoridad acude como apoyo: va
+ * hacia él y llega ya hostil (combat.ts la hace pelear en cuanto está en la sala).
+ */
 export function resist(world: World, c: Character, nowG: number): Npc[] {
   const w = c.wanted;
   if (!w?.arrest) return [];
   w.arrest.resisted = true;
-  const here = world.characterSpot(c)?.location_id;
+  const spot = world.characterSpot(c);
+  const here = spot?.location_id;
   const out = authoritiesWhoKnow(world, c).filter((n) => world.spot(n.location.id).location_id === here);
   for (const n of out) { n.attitude.by_character[c.id] = 'hostile'; world.touch('npcs', n.id); }
-  void nowG;
+  for (const id of enforcerIds(world)) {
+    const n = world.npcs.get(id);
+    if (!n || !spot || n.status !== 'alive' || n.bound || out.includes(n) || !n.stats) continue;
+    if (setNpcOrder(world, { npc_id: n.id, order: 'go', spot_id: spot.id, task: { kind: 'act', text: `viene a ayudar a detener a ${c.name}`, target_id: c.id }, minutes: 30 }, nowG).ok) {
+      n.attitude.by_character[c.id] = 'hostile';
+      world.touch('npcs', n.id);
+    }
+  }
   world.touch('characters', c.id);
   return out;
 }

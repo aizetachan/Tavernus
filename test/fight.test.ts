@@ -228,7 +228,9 @@ describe('combate en la web (SSE «combat»)', () => {
       expect(text).toContain('"combat":{"phase":"start","text":"⚔ Empieza el combate en ');
       const last = combats(text).filter((c): c is CombatView => c.active).at(-1)!;
       expect(last.fighters.map((f) => f.id).sort()).toEqual([lia, tor, brenna.id].sort());
-      expect(last.log.at(-1)!.text).toMatch(/^Lia → .+: (impacta|falla)/);
+      // El golpe de Lia y, si ya ha llegado la narración, el turno de Brenna, que se defiende sola (combat.ts).
+      expect(last.log.some((x) => /^Lia → .+: (impacta|falla)/.test(x.text))).toBe(true);
+      expect(last.log.at(-1)!.text).toMatch(/^(Lia → .+|La tabernera → Lia): (impacta|falla)/);
     }
     const forTor = combats(torText).filter((c): c is CombatView => c.active).at(-1)!;
     const forLia = combats(liaText).filter((c): c is CombatView => c.active).at(-1)!;

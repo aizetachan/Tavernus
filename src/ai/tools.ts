@@ -5,6 +5,7 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Engine } from '../engine/engine.js';
+import type { World } from '../engine/world.js';
 import { rollD20, rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
 import { consumeItem, inventoryDetailed, inventoryView, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
 import type { Character, Id, Npc, Placement, ReactionKind } from '../engine/model.js';
@@ -17,9 +18,10 @@ import { advanceStory } from '../engine/story.js';
 import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
 import { finishQuest, giveQuest } from '../engine/quests.js';
-import { attitudeOf, resolveAttack } from '../engine/combat.js';
+import { attitudeOf, forcedTurnText, forceNpcTurns, intentOf, lethalBlow, npcTurn, resolveAttack, type ForcedTurn } from '../engine/combat.js';
+import { encounterAt } from '../engine/encounter.js';
 import { INCIDENT_KINDS, incidentRejection, npcCrimeLine, pendingIncidents, reactionSentences, readsAsTheft, reportAssault, reportIncident, reportKill, unnarratedReactors, type IncidentKind } from '../engine/crime.js';
-import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, isDying, killNpc, medicineDc, stabilize } from '../engine/death.js';
+import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, helplessNpc, isDying, killNpc, knockOutNpc, medicineDc, NPC_DOWN_HINT, reviveNpc, stabilize } from '../engine/death.js';
 import { spendResource } from '../engine/rest.js';
 import { castSpell } from '../engine/levels.js';
 import { ABILITY_ES, armorClass, characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
@@ -164,8 +166,11 @@ export const MASTER_TOOLS: Tool[] = [
   tool('settle_debt', 'Salda (o rebaja) la deuda del actor con un NPC: coins paga con sus monedas (amount o todo), work la da por pagada con un trabajo ya hecho, forfeit la da por perdida y el NPC se queda la prenda. Al saldarla, la prenda vuelve al actor.', {
     npc_id: str('ID del NPC'), how: enm([...SETTLE_HOW], 'coins (paga), work (trabajo hecho), forfeit (pierde la prenda)'), amount: nnum('Solo coins: monedas que paga; null = todo'),
   }),
-  tool('attack', 'Ataque de un NPC (o de un PJ fuera del flujo de tirada del jugador). El servidor tira contra la CA, calcula y aplica el daño. Para el ataque del propio jugador usa requires_roll con kind=attack y requires_roll_target.', {
+  tool('attack', 'Ataque de un NPC (o de un PJ fuera del flujo de tirada del jugador). El servidor tira contra la CA, calcula y aplica el daño. Un NPC hace aquí su turno entero (con su multiataque, si lo tiene): una llamada por NPC y turno. Para el ataque del propio jugador usa requires_roll con kind=attack y requires_roll_target. A 0 PG un NPC cae inconsciente si el golpe es contundente o el jugador solo quiere pegar o reducir; muere si quiere matar o el arma corta o perfora (el servidor lo decide por la acción y el arma).', {
     attacker_id: str('ID del que ataca (NPC o personaje)'), target_id: str('ID del objetivo'), advantage: enm(ADV, 'Ventaja o desventaja'),
+  }),
+  tool('restrain_npc', 'Atar (o soltar) a un NPC inconsciente que el actor tiene delante. Atado, aunque vuelva en sí, no se mueve ni pelea hasta que le suelten. A quien está despierto y se resiste no se le ata: primero hay que reducirle.', {
+    npc_id: str('ID del NPC'), release: { type: ['boolean', 'null'], description: 'true para soltarle; null o false para atarle' },
   }),
   tool('request_reaction', 'El actor hace algo con las manos a OTRO JUGADOR presente (agarrarlo, llevárselo a rastras, empujarlo, sujetarlo, quitarle algo, atacarlo). No lo resuelvas tú: el otro decide en su pantalla si se deja (sin tirada) o se resiste (tirada enfrentada que hace el servidor) y luego te toca narrar el desenlace. Narra SOLO el intento (alarga la mano, se lanza…), nunca cómo reacciona ni el resultado. Dar algo es transfer_item (oferta), no esto.', {
     target_character_id: str('ID del otro PJ (ch_…)'),
@@ -307,7 +312,7 @@ export const MASTER_TOOLS: Tool[] = [
 export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
-  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident',
+  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident', 'restrain_npc',
 ]);
 
 export const MEMORY_CAP_PER_CHARACTER = 8;
@@ -360,6 +365,16 @@ export interface ToolContext {
   incident_rejections?: number;
   /** Es la escena de apertura: el actor no se acerca a quien habla (la apertura ya le pone con él). */
   intro?: boolean;
+  /** NPC que ya han hecho su turno en esta acción (attack o el motor): uno por NPC (combat.ts). */
+  npc_turns?: Set<Id>;
+  /** Turnos que ha tenido que hacer el motor porque el máster no los hizo (combat.ts, forceNpcTurns). */
+  forced_turns?: ForcedTurn[];
+  /** Cierres rechazados para que cuente esos turnos (uno como mucho; luego los añade el motor). */
+  npc_turn_rejections?: number;
+  /** La narración que se rechazó por no contarlos: si vuelve igual, el motor los añade. */
+  untold_narration?: string;
+  /** Tools que ha resuelto el motor por su cuenta (los ataques de esos turnos): el máster los guarda con los suyos. */
+  engine_calls?: { name: string; input: Record<string, unknown>; result: string }[];
 }
 
 export interface LogEventInput {
@@ -587,6 +602,19 @@ function norm(s: string): string {
 }
 
 const NPC_DEATH_NOTE = 'ha muerto: su cuerpo se queda donde ha caído y el servidor lo anuncia a quien esté; narra el golpe y la reacción de los presentes, no que se levante ni que desaparezca';
+const NPC_DOWN_NOTE = `cae INCONSCIENTE, no muerto (golpe no letal): respira, el servidor lo anuncia y volverá en sí en unas horas. Narra que se desploma sin sentido, no que muere. ${NPC_DOWN_HINT}`;
+
+/** Nombre de un NPC para el actor: el suyo si lo sabe; si no, cómo se le ve. */
+function npcLabel(world: World, actor: Character, id: Id): string {
+  return actor.knows.includes(id) ? world.npc(id).name : descriptorOf(world, id);
+}
+
+/** ¿Nombra la narración a ese NPC (por su nombre, su oficio o cómo se le ve)? */
+function mentionsNpc(world: World, texts: readonly string[], n: Npc): boolean {
+  const all = norm(texts.join(' '));
+  const refs = [n.name, n.role, n.role.split(/\s+/)[0] ?? '', descriptorOf(world, n.id).replace(/^(el|la|los|las|un|una) /i, '')].map(norm).filter((r) => r.length >= 3);
+  return refs.some((r) => all.includes(r));
+}
 
 /** Si hay un incidente con testigos por contar aquí (crime.ts): lo que ya ha decidido el servidor, para que la narración lo cuente. */
 function crimeNote(ctx: ToolContext): { incident?: string } {
@@ -603,6 +631,17 @@ function damageByActor(ctx: ToolContext, source: string): boolean {
   const a = ctx.actor;
   if (a.status !== 'active' || !ctx.engine.world.characters.has(a.id)) return false;
   return norm(source).includes(norm(a.name)) || (ctx.ok_tools ?? []).some((t) => t === 'cast_spell' || t === 'attack');
+}
+
+/**
+ * ¿Hay pelea en el sitio del actor? Un combate en curso (encounter.ts) o un
+ * golpe en esta misma acción: entonces los NPC hostiles hacen su turno.
+ */
+function fightingHere(ctx: ToolContext): boolean {
+  if ((ctx.ok_tools ?? []).some((t) => t === 'attack' || t === 'apply_damage')) return true;
+  const { engine, actor, nowGameS } = ctx;
+  const loc = positionOf(engine.world, actor, nowGameS).location_id;
+  return encounterAt(engine.world, engine.events.recentInLocation(loc, 400), loc, nowGameS) !== null;
 }
 
 /**
@@ -885,7 +924,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Quitarle algo a alguien que lo lleva encima («le robo la bolsa»): un robo, salvo que la tirada lo haya hecho sin que se note.
       const held = world.itemInstances.get(s('instance_id'))?.location;
       const victim = held?.type === 'npc' ? world.npcs.get(held.id) : undefined;
-      const stolen = Boolean(victim && victim.status === 'alive' && toType === 'character' && s('to_id') === actor.id && readsAsTheft(ctx.action_text) && !['exito_justo', 'exito_claro', 'critico'].includes(ctx.roll_category ?? ''));
+      // Al inconsciente se le registra sin tirada, pero quien lo vea lo ve como un robo.
+      const stolen = Boolean(victim && toType === 'character' && s('to_id') === actor.id
+        && ((victim.status === 'alive' && readsAsTheft(ctx.action_text) && !['exito_justo', 'exito_claro', 'critico'].includes(ctx.roll_category ?? '')) || victim.status === 'unconscious'));
       const r = transferItem(world, s('instance_id'), to, input['quantity'] == null ? undefined : Number(input['quantity']));
       if (r.ok && stolen) reportIncident(world, { kind: 'theft', perpetrator_id: actor.id, victim_id: victim!.id }, nowGameS);
       if (!r.ok && r.error.code === 'not_reachable' && r.error.reason === 'no está a tu alcance') {
@@ -1060,13 +1101,20 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           if (!ranged) return { error: 'not_reachable', detail: { reason: `el objetivo está en ${t.name}, a ${d} m: fuera del alcance de un arma cuerpo a cuerpo`, distance_m: d, go_to: t.id }, hint: `move_to ${t.id} primero (o un arma a distancia); hasta que llegue, no ha atacado` };
         }
       }
-      const r = resolveAttack(world, s('attacker_id'), s('target_id'), (ADV.includes(s('advantage')) ? s('advantage') : 'none') as Advantage, ctx.rng, nowGameS);
+      // Un NPC hace aquí su turno entero (multiataque incluido), y uno solo por acción.
+      const npcAtk = world.npcs.get(s('attacker_id'));
+      const acted = (ctx.npc_turns ??= new Set());
+      if (npcAtk && acted.has(npcAtk.id)) return { error: `${npcAtk.name} ya ha hecho su turno en esta acción${npcAtk.stats?.multiattack ? ' (su multiataque iba entero en ese attack)' : ''}: no vuelve a atacar hasta el siguiente. Narra lo que ya ha pasado.` };
+      const adv = (ADV.includes(s('advantage')) ? s('advantage') : 'none') as Advantage;
+      const r = npcAtk ? npcTurn(world, npcAtk.id, s('target_id'), adv, ctx.rng, nowGameS) : resolveAttack(world, s('attacker_id'), s('target_id'), adv, ctx.rng, nowGameS, { intent: ctx.action_text ?? null });
       if ('error' in r) return { error: r.error };
+      if (npcAtk) acted.add(npcAtk.id);
       ctx.rolls.push({ expr: 'attack', total: r.attack_total, breakdown: r.attack_breakdown, rolls: [] });
       // Las tiradas de los enemigos son ocultas (SPEC §9.3); la del PJ que ataca, a la vista.
       if (world.characters.has(s('attacker_id'))) (ctx.shown_rolls ??= []).push(attackRoll(s('attacker_id'), s('target_id'), r));
       const crime = crimeNote(ctx);
-      return r.target_dead && world.npcs.has(s('target_id')) ? { ...r, note: NPC_DEATH_NOTE, ...crime } : { ...r, ...crime };
+      if (world.npcs.has(s('target_id')) && (r.target_dead || r.knocked_out)) return { ...r, note: r.knocked_out ? NPC_DOWN_NOTE : NPC_DEATH_NOTE, ...crime };
+      return { ...r, ...crime };
     }
     case 'apply_damage': {
       const npcT = world.npcs.get(s('target_id'));
@@ -1076,11 +1124,19 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         // Daño que hace el actor (un conjuro suyo, su golpe narrado): es suyo, con sus testigos y su muerte (crime.ts).
         const by = damageByActor(ctx, s('source'));
         if (by) { reportAssault(world, actor, npcT, s('source') || s('damage_type') || 'un arma', nowGameS); npcT.attitude.by_character[actor.id] = 'hostile'; }
-        npcT.stats.hp = Math.max(0, npcT.stats.hp - Math.max(0, Math.floor(Number(input['amount']) || 0)));
-        const killed = npcT.stats.hp === 0 && killNpc(world, npcT, nowGameS, by ? { id: actor.id, name: actor.name } : null, s('source') || s('damage_type') || 'daño');
-        const murder = killed && by ? reportKill(world, actor, npcT, nowGameS).murder : false;
+        const amount = Math.max(0, Math.floor(Number(input['amount']) || 0));
+        // A quien ya estaba en el suelo (inconsciente o atado), el daño le remata.
+        const helpless = helplessNpc(npcT);
+        npcT.stats.hp = Math.max(0, npcT.stats.hp - amount);
+        const cause = s('source') || s('damage_type') || 'daño';
+        const atZero = amount > 0 && npcT.stats.hp === 0;
+        // Golpe no letal del actor (contundente, o «pegar», «reducir»): inconsciente. El daño del mundo (caída, fuego) mata.
+        const spare = atZero && by && !helpless && !lethalBlow(intentOf(ctx.action_text, actor.name), `${s('damage_type')} ${s('source')}`);
+        const ko = spare && knockOutNpc(world, npcT, nowGameS, { id: actor.id, name: actor.name }, cause);
+        const killed = atZero && !spare && killNpc(world, npcT, nowGameS, by ? { id: actor.id, name: actor.name } : null, cause);
+        const murder = killed && by ? reportKill(world, actor, npcT, nowGameS, { helpless }).murder : false;
         world.touch('npcs', npcT.id);
-        return { ok: true, hp: `${npcT.stats.hp}/${npcT.stats.hp_max}`, status: npcT.status, ...(killed ? { died: true, note: NPC_DEATH_NOTE } : {}), ...(murder ? { murder: true } : {}), ...crimeNote(ctx) };
+        return { ok: true, hp: `${npcT.stats.hp}/${npcT.stats.hp_max}`, status: npcT.status, ...(killed ? { died: true, note: NPC_DEATH_NOTE } : {}), ...(ko ? { knocked_out: true, note: NPC_DOWN_NOTE } : {}), ...(murder ? { murder: true } : {}), ...crimeNote(ctx) };
       }
       const c = world.character(s('target_id'));
       if (c.veiled) return { error: `${c.name} está bajo el velo: no puede recibir daño` };
@@ -1119,9 +1175,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         }
       }
       if (npcH) {
-        npcH.stats!.hp = Math.min(npcH.stats!.hp_max, npcH.stats!.hp + amount);
+        // Al inconsciente, cualquier curación le despierta.
+        const revived = amount > 0 && reviveNpc(world, npcH, amount);
+        if (!revived) npcH.stats!.hp = Math.min(npcH.stats!.hp_max, npcH.stats!.hp + amount);
         world.touch('npcs', npcH.id);
-        return { ok: true, healed: amount, hp: `${npcH.stats!.hp}/${npcH.stats!.hp_max}`, ...(used ? { used } : {}) };
+        return { ok: true, healed: amount, hp: `${npcH.stats!.hp}/${npcH.stats!.hp_max}`, ...(used ? { used } : {}), ...(revived ? { revived: true, note: 'vuelve en sí' } : {}) };
       }
       const healer = world.characters.get(healerId)?.name ?? world.npcs.get(healerId)?.name ?? actor.name;
       const r = healCharacter(world, c!, amount, healer);
@@ -1137,6 +1195,26 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const r = consumeItem(world, inst.id, input['quantity'] == null ? 1 : Number(input['quantity']));
       if (!r.ok) return { error: r.error };
       return { ok: true, used: def.name, left: r.left, ...(def.heals ? { hint: 'Esto cura: si se lo ha bebido para curarse, era heal con item_instance_id.' } : {}) };
+    }
+    case 'restrain_npc': {
+      const n = world.npc(s('npc_id'));
+      if (n.status === 'dead') return { error: `${n.name} está muerto` };
+      const mine = world.characterSpot(actor);
+      if (!mine || mine.id !== n.location.id) {
+        const at = whereIs(ctx, n.location.id);
+        return { error: 'not_reachable', detail: { reason: `está en ${at.name}, a ${at.distance_m} m`, distance_m: at.distance_m, go_to: at.spot_id }, hint: `move_to ${at.spot_id} primero` };
+      }
+      if (input['release'] === true) {
+        if (!n.bound) return { error: `${n.name} no está atado` };
+        n.bound = null;
+        world.touch('npcs', n.id);
+        return { ok: true, released: true };
+      }
+      if (n.bound) return { error: `${n.name} ya está atado` };
+      if (n.status !== 'unconscious') return { error: 'not_helpless', hint: `${n.name} está despierto: no se deja atar. Si el jugador quiere reducirle, es pelea (attack, golpe no letal) o una prueba enfrentada; atar solo a quien está inconsciente.` };
+      n.bound = { by_id: actor.id, since_game_s: nowGameS };
+      world.touch('npcs', n.id);
+      return { ok: true, bound: true, hint: 'Atado: aunque vuelva en sí, no se mueve ni pelea hasta que alguien le suelte (restrain_npc con release=true).' };
     }
     case 'stabilize': {
       const c = world.character(s('target_id'));
@@ -1330,8 +1408,31 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: incidentRejection(world, bad.i, bad.missing, actor) };
         }
       }
+      // Los NPC hostiles del combate actúan en cada turno (combat.ts): el que no ha atacado, lo hace ahora el motor y
+      // el máster lo cuenta (se reescribe una vez; si aun así no lo nombra, el motor lo añade a la narración).
+      // No con una tirada pendiente (el turno acaba al tirar) ni con la amenaza que se abre (la ventana decisiva).
+      const decisiveNpc = input['decisive_threat'] ? (input['decisive_npc_id'] ? s('decisive_npc_id') : '*') : null;
+      if (!req && !ctx.intro && decisiveNpc !== '*' && fightingHere(ctx)) {
+        const acted = (ctx.npc_turns ??= new Set());
+        if (decisiveNpc) acted.add(decisiveNpc);
+        const forced = forceNpcTurns(world, [actor.id, ...sharedWith(engine, actor.id)], acted, ctx.rng, nowGameS);
+        if (forced.length) {
+          (ctx.forced_turns ??= []).push(...forced);
+          for (const f of forced) (ctx.engine_calls ??= []).push({ name: 'attack', input: { attacker_id: f.npc_id, target_id: f.target_id, advantage: 'none', by_engine: true }, result: JSON.stringify(f.outcome) });
+          if ((ctx.npc_turn_rejections ?? 0) < 1) {
+            ctx.npc_turn_rejections = (ctx.npc_turn_rejections ?? 0) + 1;
+            ctx.untold_narration = s('narration_private');
+            const told = forced.map((f) => forcedTurnText(world, f, actor.id, (id) => npcLabel(world, actor, id))).join(' ');
+            return { error: `Turno de los NPC hostiles: no se lo pueden saltar. El servidor ya lo ha resuelto (no llames a attack por ellos): ${told} Reescribe log_event contando también eso, después de lo que hace el jugador, con el resultado tal cual (daño y si alguien cae).` };
+          }
+        }
+      }
+      // Turnos que hizo el motor y la narración no cuenta (no lo nombra, o no ha reescrito nada): van al final, en la voz del motor.
+      const same = ctx.untold_narration !== undefined && cleanText(ctx.untold_narration) === cleanText(s('narration_private'));
+      const untold = (ctx.forced_turns ?? []).filter((f) => same || !mentionsNpc(world, [s('narration_private'), ...parseLines(input['lines'], null, (id) => world.npcs.has(id)).map((l) => l.text)], world.npc(f.npc_id)));
+      const forcedTail = untold.map((f) => forcedTurnText(world, f, actor.id, (id) => npcLabel(world, actor, id))).join(' ');
       // Sin nada que leer: después de los de arriba (en conversación, el suyo lo explica mejor), pero sin límite.
-      if (empty) return { error: EMPTY_REJECTION };
+      if (empty && !forcedTail) return { error: EMPTY_REJECTION };
       if (input['npc_id']) {
         const npc = world.npcs.get(s('npc_id'));
         // Habla con alguien de la sala que está a unos metros: el motor lo acerca antes (si no es hostil).
@@ -1399,7 +1500,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       for (const i of pendingCrime) { i.narrated_to.push(actor.id); world.touch('campaign', world.campaign.id); }
       ctx.closed = {
         // Lo dicho que no va citado en la narración (en conversación puede ir vacía) se guarda como citas.
-        narration_private: approached + narrationWithLines(withoutDeathPhrases(unsay(tidy(s('narration_private'))), deathHits), closingLines),
+        narration_private: approached + narrationWithLines(withoutDeathPhrases(unsay(tidy(s('narration_private'))), deathHits), closingLines) + (forcedTail ? `\n\n${forcedTail}` : ''),
         observable: input['observable'] == null ? null : withoutDeathPhrases(unsay(tidy(s('observable'))), deathHits) || null,
         observable_vague: input['observable_vague'] == null ? null : tidy(s('observable_vague')) || null,
         loudness: Number(input['loudness']) || 1,

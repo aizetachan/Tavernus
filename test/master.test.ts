@@ -353,12 +353,16 @@ describe('combate', () => {
     const { client, requests } = fakeClient([
       msg([logEvent('Levantas la daga.', 'Kael se lanza contra el lobo.', { requires_roll_kind: 'attack', requires_roll_key: 'melee', requires_roll_dc: null, requires_roll_advantage: 'none', requires_roll_target: 'npc_lobo' })]),
       msg([logEvent('El lobo retrocede.', 'Kael hiere al lobo.')]),
+      // El lobo, hostil, hace su turno aunque el máster no le haga atacar: el servidor lo resuelve y pide contarlo (combat.ts).
+      msg([logEvent('El lobo retrocede y vuelve a por ti.', 'Kael hiere al lobo.')]),
     ]);
     engine.attachMaster(new Master(engine, { client, rng: seededRng(2) }));
     const r = await engine.act('ch_kael', 'ataco al lobo con la daga');
     expect(r.requires_roll?.target).toBe('npc_lobo');
     const r2 = await engine.rollPending('ch_kael');
     expect(r2.ok).toBe(true);
+    const turn = requests[2]!.messages.at(-1)!.content as { type: string; content?: string }[];
+    expect(turn.find((b) => b.type === 'tool_result')!.content).toMatch(/Turno de los NPC hostiles/);
     const ctx = requests[1]!.messages[0]!.content as string;
     expect(ctx).toContain('ataque con daga a un lobo gris');
     const wolf = engine.world.npc('npc_lobo');

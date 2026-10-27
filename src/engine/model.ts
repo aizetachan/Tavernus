@@ -580,7 +580,8 @@ export interface Npc {
   name: string;
   role: string;
   location: Extract<Placement, { type: 'spot' }>;
-  status: 'alive' | 'dead' | 'missing';
+  /** `unconscious`: a 0 PG sin morir (golpe no letal, combat.ts); vuelve en sí solo (`down`). */
+  status: 'alive' | 'unconscious' | 'dead' | 'missing';
   passive_perception: number;
   description: string;
   motivation: string;
@@ -598,6 +599,10 @@ export interface Npc {
   attitude: { default: Attitude; by_character: Record<Id, Attitude> };
   /** Cómo murió (death.ts, killNpc): su cuerpo sigue en su punto y el motor lo anuncia una vez (`told`). */
   death?: NpcDeath;
+  /** Cómo cayó inconsciente (death.ts, knockOutNpc): sigue en su punto, sin actuar, hasta `wakes_game_s`. */
+  down?: NpcDown;
+  /** Atado (tool restrain_npc): despierto o no, no se mueve ni pelea hasta que le suelten. */
+  bound?: { by_id: Id | null; since_game_s: number } | null;
   /** Vínculos con otros NPC (crime.ts): quien hace daño a uno se las ve con los suyos. Datos de campaña. */
   bonds?: NpcBond[];
 }
@@ -618,6 +623,17 @@ export interface NpcDeath {
   told?: boolean;
 }
 
+/** Un NPC a 0 PG que no ha muerto: lo dejó así un golpe no letal. `told`: el motor ya lo ha anunciado. */
+export interface NpcDown {
+  since_game_s: number;
+  /** Cuándo vuelve en sí con 1 PG (SRD: 1d4 h; aquí, determinista). */
+  wakes_game_s: number;
+  by_id: Id | null;
+  by_name: string | null;
+  cause: string;
+  told?: boolean;
+}
+
 export type Attitude = 'hostile' | 'unfriendly' | 'neutral' | 'friendly' | 'allied';
 
 export interface NpcStats {
@@ -630,6 +646,10 @@ export interface NpcStats {
   attack_name: string;
   /** XP 5e por derrotarlo. */
   xp: number;
+  /** Multiataque SRD: cuántos ataques hace en su turno (matón, explorador, veterano: 2). Sin él, 1. */
+  multiattack?: number;
+  /** Ataca a distancia (arco, honda): no necesita llegar al punto del objetivo. */
+  ranged?: boolean;
 }
 
 export interface Vehicle {

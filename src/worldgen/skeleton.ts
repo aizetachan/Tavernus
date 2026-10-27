@@ -110,7 +110,7 @@ export interface Skeleton {
 }
 
 // ---------------------------------------------------------------------------
-// Bloques de combate (SRD 5e, CR 0-3). El relleno no los toca.
+// Bloques de combate (SRD 5e, CR 0-3), con el multiataque de los que lo tienen. El relleno no los toca.
 // ---------------------------------------------------------------------------
 
 export const ARCHETYPES: Record<Archetype, Omit<NpcStats, 'hp_max'>> = {
@@ -119,10 +119,10 @@ export const ARCHETYPES: Record<Archetype, Omit<NpcStats, 'hp_max'>> = {
   noble: { ac: 15, hp: 9, attack_bonus: 3, damage: '1d8', damage_type: 'piercing', attack_name: 'estoque', xp: 25 },
   acolyte: { ac: 10, hp: 9, attack_bonus: 2, damage: '1d4', damage_type: 'bludgeoning', attack_name: 'garrote', xp: 50 },
   bandit: { ac: 12, hp: 11, attack_bonus: 3, damage: '1d6+1', damage_type: 'slashing', attack_name: 'cimitarra', xp: 25 },
-  scout: { ac: 13, hp: 16, attack_bonus: 4, damage: '1d6+2', damage_type: 'piercing', attack_name: 'espada corta', xp: 100 },
-  thug: { ac: 11, hp: 32, attack_bonus: 4, damage: '1d6+2', damage_type: 'bludgeoning', attack_name: 'maza', xp: 100 },
+  scout: { ac: 13, hp: 16, attack_bonus: 4, damage: '1d6+2', damage_type: 'piercing', attack_name: 'espada corta', xp: 100, multiattack: 2 },
+  thug: { ac: 11, hp: 32, attack_bonus: 4, damage: '1d6+2', damage_type: 'bludgeoning', attack_name: 'maza', xp: 100, multiattack: 2 },
   priest: { ac: 13, hp: 27, attack_bonus: 2, damage: '1d6', damage_type: 'bludgeoning', attack_name: 'maza', xp: 450 },
-  veteran: { ac: 17, hp: 58, attack_bonus: 5, damage: '1d8+3', damage_type: 'slashing', attack_name: 'espada larga', xp: 700 },
+  veteran: { ac: 17, hp: 58, attack_bonus: 5, damage: '1d8+3', damage_type: 'slashing', attack_name: 'espada larga', xp: 700, multiattack: 2 },
   mage: { ac: 10, hp: 9, attack_bonus: 4, damage: '1d10', damage_type: 'fire', attack_name: 'descarga de fuego', xp: 100 },
   wolf: { ac: 13, hp: 11, attack_bonus: 4, damage: '2d4+2', damage_type: 'piercing', attack_name: 'mordisco', xp: 50 },
   boar: { ac: 11, hp: 11, attack_bonus: 3, damage: '1d6+1', damage_type: 'slashing', attack_name: 'colmillos', xp: 50 },

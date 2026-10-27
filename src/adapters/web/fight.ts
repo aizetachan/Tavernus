@@ -62,8 +62,8 @@ export interface TurnContext {
   avatar?: (id: Id) => string | null;
 }
 
-const STATE_LABEL: Record<FighterState, string> = { ok: 'Ileso', hurt: 'Herido', bloodied: 'Malherido', down: 'Caído', stable: 'Estable', dead: 'Muerto' };
-const NPC_FRAC: Record<FighterState, number> = { ok: 1, hurt: 0.75, bloodied: 0.35, down: 0, stable: 0, dead: 0 };
+const STATE_LABEL: Record<FighterState, string> = { ok: 'Ileso', hurt: 'Herido', bloodied: 'Malherido', down: 'Caído', stable: 'Estable', out: 'Inconsciente', dead: 'Muerto' };
+const NPC_FRAC: Record<FighterState, number> = { ok: 1, hurt: 0.75, bloodied: 0.35, down: 0, stable: 0, out: 0, dead: 0 };
 
 function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
 
@@ -84,7 +84,7 @@ function entryText(world: World, viewerId: Id, x: EncounterEntry): { text: strin
   const nm = (id: Id) => cap(fighterName(world, viewerId, id));
   switch (x.kind) {
     case 'attack': {
-      const tail = x.dead ? ' y cae muerto' : x.down ? ' y cae' : '';
+      const tail = x.dead ? ' y cae muerto' : x.ko ? ' y cae inconsciente' : x.down ? ' y cae' : '';
       return x.hit
         ? { text: `${nm(x.actor_id)} → ${nm(x.target_id)}: impacta${x.damage ? `, ${x.damage} de daño` : ''}${tail}`, tone: x.down || x.dead ? 'down' : 'hit' }
         : { text: `${nm(x.actor_id)} → ${nm(x.target_id)}: falla`, tone: 'miss' };
@@ -178,7 +178,7 @@ export const FIGHT_STYLE = String.raw`
   #fight .fx-f { position: relative; display: flex; align-items: center; gap: 7px; flex: none; min-width: 0; padding: 4px 9px 4px 4px; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid transparent; }
   #fight .fx-f.me { background: rgba(230,183,90,.1); }
   #fight .fx-f.acting, #fight .fx-f.turn-now { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(230,183,90,.18); }
-  #fight .fx-f.st-dead, #fight .fx-f.st-down, #fight .fx-f.st-stable { opacity: .55; }
+  #fight .fx-f.st-dead, #fight .fx-f.st-down, #fight .fx-f.st-stable, #fight .fx-f.st-out { opacity: .55; }
   #fight .fx-f .ini { position: absolute; left: -2px; top: -4px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 999px; background: #120b0a; border: 1px solid var(--fight-line); color: var(--fight-ink); font: 700 9.5px/14px var(--sans); text-align: center; }
   #fight .fx-f .av { position: relative; width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 50%; overflow: hidden; background: #22262a; background-size: cover; background-position: center; color: var(--muted); font-size: 11.5px; font-weight: 700; box-shadow: inset 0 0 0 2px rgba(255,255,255,.12); }
   #fight .fx-f.pc .av { color: var(--accent); background-color: #2a1d05; box-shadow: inset 0 0 0 2px rgba(230,183,90,.6); }
