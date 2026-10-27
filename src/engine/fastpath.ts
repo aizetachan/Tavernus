@@ -245,6 +245,8 @@ export function suggestActions(world: World, clock: GameClock, c: Character, now
       if (!exits.includes(name)) exits.push(name);
     }
   }
+  // Preso (crime.ts): ni sale ni se mueve; dormir, para que pase el tiempo.
+  if (c.jailed && nowGameS < c.jailed.until_game_s) return [...out, 'Dormir'].slice(0, max);
   // Los puntos más cercanos hasta llenar.
   const near = world.spotsOf(pos.location_id)
     .filter((s) => s.id !== pos.spot_id && (!s.hidden || s.discovered_by.includes(c.id)))

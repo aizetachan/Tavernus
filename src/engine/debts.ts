@@ -19,6 +19,7 @@ import { transferItem } from './inventory.js';
 import type { Character, Debt, Id, Npc, Placement } from './model.js';
 import { deliverGoods } from './progress.js';
 import type { World } from './world.js';
+import { refusesService } from './crime.js';
 
 const DAY_S = 24 * 3600;
 /** Saldadas que se conservan para el Diario. */
@@ -108,6 +109,9 @@ export function pawnItem(world: World, c: Character, input: { npc_id: Id; instan
   if (cur?.collateral_instance_id) return { ok: false, error: `${npc.name} ya guarda una prenda de ${c.name} por esa deuda` };
   const offer = input.for_item_id ? npc.sells.find((s) => s.item_id === input.for_item_id) : undefined;
   if (input.for_item_id && !offer) return { ok: false, error: `${npc.name} no vende ${input.for_item_id}: mira su lista «Vende» en el contexto` };
+  // Quien sabe lo que ha hecho no le fía ni le guarda nada (crime.ts).
+  const no = refusesService(world, npc, c);
+  if (no) return { ok: false, error: no };
   const amount = offer ? offer.price : validAmount(input.amount) ?? (cur ? 0 : null);
   if (amount === null) return { ok: false, error: 'sin for_item_id hace falta amount (lo que garantiza la prenda) o una deuda ya anotada con set_debt' };
 

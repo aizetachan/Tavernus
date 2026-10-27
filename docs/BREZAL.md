@@ -147,14 +147,14 @@ Bloques SRD de los arquetipos del generador (`ARCHETYPES`, mismos rangos que val
 
 ### 2.6 Lugares **[cambia]**
 
-**Una zona jugable** (Aldea de Brezal), **diez lugares** (la taberna cuenta con su sótano) y 62 puntos. Los planos salen de mapgen con las coordenadas, tags y alias de cada punto. Las ids de siempre se conservan: el Soto es `loc_claro`, el Granero Quemado es `loc_ruinas`, la madriguera es `sp_cs_cueva` y el mojón del Lindero es `sp_cs_mojon`.
+**Una zona jugable** (Aldea de Brezal), **diez lugares** (la taberna cuenta con su sótano) y 63 puntos. Los planos salen de mapgen con las coordenadas, tags y alias de cada punto. Las ids de siempre se conservan: el Soto es `loc_claro`, el Granero Quemado es `loc_ruinas`, la madriguera es `sp_cs_cueva` y el mojón del Lindero es `sp_cs_mojon`.
 
 | # | Lugar | Puntos | Estado | Lo que esconde |
 |---|---|---|---|---|
 | 1 | **Taberna del Jabalí** (con sótano) | puerta, barra, mesa del fondo, chimenea, trampilla (oculta, CD 14), habitación de arriba (cerrada, se alquila); sótano: escalera, cajas con el sello, barriles, hueco tras el barril (oculto, CD 12) | olor a cerveza y humo; la manta del perro vacía | la trampilla y el libro de cuentas de Vharn |
 | 2 | **Plaza del Pozo** | puerta de la taberna, pozo, tablón, portón norte (al Soto y al Lindero), puertas de la herrería y la casona, callejón de la curandera, camino del molino, **camino de los corrales** | el agua del cubo está turbia; la niebla asoma sobre los tejados del norte | la ceniza del pozo la echa Tobías |
 | 3 | **La herrería** (de Hugo) | puerta, fragua, yunque, banco, losa suelta (oculta, CD 13) | calor, hierro | los eslabones de hierro frío |
-| 4 | **La casona** (del regidor) | zaguán, banco de espera, despacho, arcón de los registros (llave de Garrán), alcoba, **torre del reloj** (sustituye al mirador), **bodega tapiada** (oculta, CD 15) | muebles demasiado buenos | la copa de plata con el sello; el escondite de Osric |
+| 4 | **La casona** (del regidor) | zaguán, banco de espera, despacho, arcón de los registros (llave de Garrán), alcoba, **torre del reloj** (sustituye al mirador), **calabozo** (donde encierra Garrán), **bodega tapiada** (oculta, CD 15) | muebles demasiado buenos | la copa de plata con el sello; el escondite de Osric |
 | 5 | **Casa de las hierbas** (de Ilse) | puerta, hierbas, caldero, camastro | hierve corteza para la tos | el rito, en su memoria |
 | 6 | **El molino** | puerta, muelas, sacos, rueda (senda al Soto), desván (oculto, CD 12), **tejado** (otro mirador) | el agua sale tibia y gris | las cartas de Ysolde y la bolsa de ceniza |
 | 7 | **Los Corrales** **[nuevo]** | cancela, gallinero (huevos), redil, huerto (coles), casa de la granja | gallinas pardas, ovejas que tosen | la carta de Pol bajo el colchón |
@@ -267,6 +267,19 @@ Las partidas guardadas reciben las costumbres al cargar (`migrate`); las descrip
 Hay que estar en el Lindero; desde otro sitio, el otro lado no tiene ruta.
 
 **NPC desaparecido con escondite** (`src/engine/story.ts`). El efecto `npc_status` admite `hideout_spot_id`: con `missing`, el NPC se va a ese punto, pierde su horario y deja de hablar con nadie. Sigue vivo, pero no se percibe (tablero, prompt, `who_is_here`, narrador, atajos) ni lo mueven el horario ni la agenda, porque todo eso mira `status === 'alive'`. Cuando un PJ se planta en el escondite (en Brezal, la bodega tapiada de la casona, oculta CD 15), vuelve a estar a la vista allí mismo y el PJ recibe «Das con Osric Malvez, escondido en la bodega tapiada». También es nueva la condición `{ kind: 'not', of }`, que usa el epílogo.
+
+### 2.14 La ley de Brezal **[nuevo]**
+
+Lo que el motor hace cuando alguien comete un crimen delante de la gente (`src/engine/crime.ts`, SPEC §9.4) sale de estos datos (`LAW` en `plot.ts` y `bonds` en `people.ts`):
+
+- **Autoridad**: Garrán (alguacil) y Doro (guardia del portón). Dan el alto, detienen y, si te resistes, pelean.
+- **Calabozo**: en la casona (`sp_ca_calabozo`). Muerte, 24 h de juego; agresión con arma o profanar un cadáver, 8 h. Robo (150), agresión sin arma (100): multa; si no puedes pagar, calabozo.
+- **Reputación**: lo que se sabe se paga con la aldea de Brezal (`fac_brezal`), tanto como la gravedad.
+- **Dueños**: Brenna (taberna y sótano), Hugo (herrería), Osric (casona), Ilse (casa de las hierbas), Mateo (molino), Úrsula (corrales). No sirven ni alojan a quien saben culpable.
+- **Carácter**: Hal y Úrsula corren a avisar o se meten; Mateo, Tobías e Ilse huyen; el resto grita y se aparta.
+- **Vínculos** (de los `ties` de cada uno): Hugo bebe con Doro (se mete si le hacen daño); Doro es sobrino de Osric (Osric se mete); Garrán es el perro de Osric (se mete por él); Brenna quiere a Doro, aprecia a Ilse y Ceniza es su perro; Mateo y Tobías, padre e hijo; Ysolde, Hal y Tobías se tienen por amigos. Los rivales no reaccionan.
+
+El caso que lo motivó: en la partida del 27-10, Leodhin mató a Hugo en la barra delante de Brenna, Garrán y la cena, y Brenna le alquiló un cuarto. Ahora, en el acto: Brenna retrocede y no le atiende, Garrán le da el alto, los vecinos gritan; está buscado, sin PX y con infamia, y no duerme tranquilo en el Jabalí.
 
 ---
 

@@ -76,8 +76,19 @@ function suggestions(p: ParsedContext): string[] {
 
 function lower(s: string): string { return s.charAt(0).toLowerCase() + s.slice(1); }
 
-/** Construye la entrada del log_event para un contexto. Exportado para tests. */
+/**
+ * Construye la entrada del log_event para un contexto. Exportado para tests.
+ * Con un incidente pendiente (crime.ts), cuenta la reacción de los testigos
+ * tal como la da el contexto: el control de cierre no deja ignorarla.
+ */
 export function offlineLogEvent(context: string): Record<string, unknown> {
+  const out = logEventFor(context);
+  const crime = /^Cuéntalo así \(hechos\): (.+)$/m.exec(context)?.[1];
+  if (crime && !out['requires_roll_kind']) out['narration_private'] = `${String(out['narration_private'])} ${crime}`;
+  return out;
+}
+
+function logEventFor(context: string): Record<string, unknown> {
   const p = parseContext(context);
   const base = {
     observable: null, observable_vague: null, loudness: 1, tags: 'offline',

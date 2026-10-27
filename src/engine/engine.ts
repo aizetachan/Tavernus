@@ -19,7 +19,7 @@ import { witnesses } from './perception.js';
 import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, readsAsAccept } from './reactions.js';
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { bounceOff, parseCrossing } from './barrier.js';
-import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, whereAmI, whoIsHere } from './narrate.js';
+import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, maskUnknownNames, whereAmI, whoIsHere } from './narrate.js';
 import { encounterChance, parseInfo, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
 import { answerInfo, infoText, type InfoAnswer } from './info.js';
 import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type RouteCut } from './goto.js';
@@ -27,6 +27,7 @@ import { parseErrand, pendingLine, trivialAction, type Errand } from './errand.j
 import { atBoard, dropQuest, readBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { crowdHere, tickSchedule } from './schedule.js';
+import { allIncidents, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, surrender, type LawNotice } from './crime.js';
 import { tickOrders } from './npcorders.js';
 import { tickStory, type StoryOutput } from './story.js';
 import { aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
@@ -611,6 +612,8 @@ export class Engine {
       // Agenda (schedule.ts): eventos a su hora y horarios de NPC, sin IA.
       tickSchedule(this.world, nowG, (i, s) => { this.events.emit(i, this.clock.realAt(s)); });
       this.advanceStory(nowG);
+      // La agenda ha movido a la gente: corre la noticia de lo que haya pasado y la ley actúa (crime.ts).
+      this.announceIncidents();
       for (const id of this.presence.keys()) this.refreshConnection(id);
       this.expireOffers();
       this.expireReactions();
@@ -741,7 +744,9 @@ export class Engine {
       }
       // Quien sigue a otro y se mueve por su cuenta deja de seguirle.
       if (c.following && (travel || this.isMove(c, clean))) { c.following = null; this.world.touch('characters', c.id); }
-      const fast = decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryTrivial(c, clean);
+      // La ley delante (crime.ts): entregarse o resistirse a un alto; y lo que el motor ve como crimen antes de que narre el máster.
+      const law = this.tryLaw(c, clean);
+      const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryTrivial(c, clean));
       if (fast) {
         r = fast;
       } else if (this.master && c.status === 'active' && !Engine.MECHANICAL.test(clean)) {
@@ -2843,6 +2848,7 @@ export class Engine {
   private announceDeathStates(): void {
     this.announceLevelUps();
     for (const n of this.world.npcs.values()) if (n.status === 'dead' && n.death && !n.death.told) this.announceNpcDeath(n);
+    this.announceIncidents();
     for (const c of this.world.characters.values()) {
       if (c.status === 'dead' && c.death && !c.death.told) { this.announceDeath(c); continue; }
       const d = c.dying;
@@ -2890,7 +2896,9 @@ export class Engine {
     this.world.touch('npcs', n.id);
     const spot = this.world.spot(n.location.id);
     const nowG = this.gameNow();
-    const r = npcDeathReport(this.world, n, crowdHere(this.world, spot.location_id, nowG), nowG);
+    // Si es un crimen, la reacción de la sala la cuenta el incidente (announceIncidents), justo después.
+    const crime = allIncidents(this.world).some((i) => i.victim_id === n.id && i.kind === 'murder');
+    const r = npcDeathReport(this.world, n, crowdHere(this.world, spot.location_id, nowG), nowG, { crime });
     const killer = d.by_id && this.world.characters.has(d.by_id) ? d.by_id : null;
     this.events.emit({
       actor_id: null, at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
@@ -2902,6 +2910,125 @@ export class Engine {
         ...(killer && r.killer_text ? { target_character_id: killer, observable_target: r.killer_text } : {}),
       },
     }, this.now());
+  }
+
+  /**
+   * Incidentes (crime.ts): la reacción de cada presente, en el acto y una vez
+   * por gravedad (si sube, se cuenta otra vez); y lo que la ley hace sola
+   * (corre la noticia, da el alto, encierra, suelta). Lo llaman la acción, el
+   * tick y las rondas, como las muertes: los incidentes los crean el combate y
+   * los tools del máster, que no emiten.
+   */
+  private announceIncidents(): void {
+    const notices = lawTick(this.world, this.gameNow(), (c) => this.nowFor(c));
+    for (const i of allIncidents(this.world)) {
+      if (i.status !== 'open' || i.severity < 2 || i.announced >= i.severity) continue;
+      i.announced = i.severity;
+      this.world.touch('campaign', this.world.campaign.id);
+      const spot = this.world.spot(i.spot_id);
+      const perp = this.world.characters.get(i.perpetrator_id);
+      // Los que se lanzan contra él entran en el combate (encounter.ts los cuenta por estar hostiles; el evento lo mantiene vivo).
+      const fight = i.knowers.some((k) => k.how === 'saw' && k.response === 'fight');
+      this.events.emit({
+        actor_id: null, at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
+        action_type: 'incident', narration_private: '', observable: incidentText(this.world, i, false), loudness: 3,
+        tags: ['incident', 'crime', 'deterministic', ...(fight ? ['combat'] : [])],
+        ...(perp ? { also_to: [perp.id] } : {}),
+        payload: {
+          master: null, observable_vague: 'Gritos, bancos que se arrastran y gente que corre.',
+          incident: { id: i.id, kind: i.kind, severity: i.severity, perpetrator_id: i.perpetrator_id, victim_id: i.victim_id, reactions: i.knowers.filter((k) => k.how !== 'told').map((k) => ({ npc_id: k.npc_id, role: k.role, response: k.response })) },
+          ...(perp ? { target_character_id: perp.id, observable_target: incidentText(this.world, i, true) } : {}),
+        },
+      }, this.now());
+    }
+    for (const n of notices) this.emitLaw(n);
+  }
+
+  /** Lo que la ley le hace a un PJ (crime.ts): el alto, el calabozo al caer, la salida. */
+  private emitLaw(n: LawNotice): void {
+    const c = n.character;
+    // Para él, con los nombres que sabe («el alguacil», no «Garrán»).
+    const by = n.npc ? (c.knows.includes(n.npc.id) ? n.npc.name : descriptorOf(this.world, n.npc.id)) : 'la autoridad';
+    const By = by.charAt(0).toUpperCase() + by.slice(1);
+    const mine = (t: string) => contract(maskUnknownNames(this.world, c.id, t));
+    if (n.kind === 'arrest') {
+      const reason = c.wanted?.reason ?? 'lo que has hecho';
+      this.events.emit({
+        actor_id: c.id, action_type: 'arrest',
+        narration_private: mine(`${By} se te planta delante: «¡Alto! Quedas detenido.» Te acusa de esto: ${c.name} ${reason}. Si te entregas, te espera ${sentencePreview(this.world, c)}; si te resistes o huyes, irá a por ti.`),
+        observable: `${n.npc?.name ?? 'La autoridad'} le da el alto a ${c.name}: «¡Alto! Quedas detenido.»`, loudness: 3,
+        tags: ['crime', 'law', 'deterministic'],
+        payload: { master: null, npc_id: n.npc?.id ?? null, observable_vague: 'Una voz grita «¡Alto!».', suggested_actions: ['Entregarme', 'Resistirme', 'Huir'], arrest: { npc_id: n.npc?.id ?? null, reason } },
+      }, this.stampFor(c));
+      return;
+    }
+    if (n.kind === 'jailed') {
+      const s = n.sentence!;
+      const where = s.spot_id ? this.world.spot(s.spot_id).name : 'el calabozo';
+      this.events.emit({
+        actor_id: c.id, action_type: 'jailed',
+        narration_private: mine(`Caes delante de ${by}, que no te deja morir: te ata, te arrastra hasta ${where} y te encierra. Cargo: ${c.name} ${s.reason}. No sales hasta las ${hhmm(s.until_game_s!)}.`),
+        observable: `${n.npc?.name ?? 'La autoridad'} se lleva a rastras a ${c.name}, malherido.`, tags: ['crime', 'law', 'deterministic'],
+        payload: { master: null, npc_id: n.npc?.id ?? null, jailed: { until_game_s: s.until_game_s, spot_id: s.spot_id, reason: s.reason } },
+      }, this.stampFor(c));
+      return;
+    }
+    this.events.emit({
+      actor_id: c.id, action_type: 'released',
+      narration_private: 'Se abre la puerta del calabozo: has cumplido y eres libre. Lo que hiciste no se olvida.',
+      observable: `${c.name} sale del calabozo.`, tags: ['crime', 'law', 'deterministic'], payload: { master: null },
+    }, this.stampFor(c));
+  }
+
+  /**
+   * La ley delante (crime.ts). Con un alto encima: «me entrego» lo resuelve el
+   * motor (calabozo o multa); «me resisto» también; pelear o huir es
+   * resistirse y sigue al máster. Además, lo que el motor reconoce como crimen
+   * antes de que narre nadie: registrar un cadáver o insultar a alguien a la
+   * cara. null si la acción sigue su camino.
+   */
+  private tryLaw(c: Character, text: string): ActionResult | null {
+    const nowG = this.nowFor(c);
+    const arrest = c.wanted?.arrest;
+    if (arrest && !arrest.resisted && c.status === 'active') {
+      if (parseSurrender(text)) return this.surrenderNow(c, text);
+      if (parseResist(text) || readsAsResisting(text) || this.isLeaving(c, text) || parseTravel(text)) {
+        const who = resist(this.world, c, nowG);
+        const names = who.map((n) => n.name).join(' y ') || 'La autoridad';
+        if (parseResist(text)) {
+          return this.emitTrivial(c, text, 'resist', 'crime', `No te entregas. ${names} ${who.length > 1 ? 'echan' : 'echa'} mano al arma y ${who.length > 1 ? 'vienen' : 'viene'} a por ti.`, `${c.name} se resiste: ${names} va a por él.`, 'Alguien se revuelve.', undefined, { incident: { resisted: true } });
+        }
+      }
+    }
+    const dead = parseDesecration(this.world, c, text);
+    if (dead) {
+      reportIncident(this.world, { kind: 'desecration', perpetrator_id: c.id, victim_id: dead.id, spot_id: dead.location.id }, nowG);
+      return null;
+    }
+    const locId = this.world.characterSpot(c)?.location_id;
+    const target = locId ? npcTarget(this.world, this.events.recentInLocation(locId, 60), c, text, nowG) : null;
+    const insulted = parseInsult(text, target);
+    if (insulted) reportIncident(this.world, { kind: 'insult', perpetrator_id: c.id, victim_id: insulted.id, spot_id: insulted.location.id }, nowG);
+    return null;
+  }
+
+  /** Se entrega: el motor dicta la pena (crime.ts) y lo cuenta donde estaba, aunque se lo lleven al calabozo. */
+  private surrenderNow(c: Character, text: string): ActionResult {
+    const from = this.world.characterSpot(c)!;
+    const s = surrender(this.world, c, this.gameNow(), this.nowFor(c))!;
+    const by = s.by ? (c.knows.includes(s.by.id) ? s.by.name : descriptorOf(this.world, s.by.id)) : 'la autoridad';
+    const By = by.charAt(0).toUpperCase() + by.slice(1);
+    const priv = contract(maskUnknownNames(this.world, c.id, s.kind === 'jail'
+      ? `Levantas las manos. ${By} te sujeta del brazo y te lleva ${aEs(s.spot_id ? this.world.spot(s.spot_id).name : 'el calabozo')}. Cargo: ${c.name} ${s.reason}. No sales hasta las ${hhmm(s.until_game_s!)}.`
+      : `Levantas las manos. ${By} te cobra la multa: ${s.paid} monedas. Cargo: ${c.name} ${s.reason}. Quedas libre, pero nadie lo olvida.`));
+    const event = this.events.emit({
+      actor_id: c.id, at: { spot_id: from.id, next_spot_id: null, progress: 0, x: from.x, y: from.y, location_id: from.location_id },
+      action_type: 'surrender', input_text: text, narration_private: priv,
+      observable: s.kind === 'jail' ? `${c.name} levanta las manos; ${s.by?.name ?? 'la autoridad'} se lo lleva detenido.` : `${c.name} levanta las manos y paga la multa a ${s.by?.name ?? 'la autoridad'}.`,
+      tags: ['crime', 'law', 'deterministic'],
+      payload: { master: null, observable_vague: 'Alguien levanta las manos.', sentence: { kind: s.kind, paid: s.paid, until_game_s: s.until_game_s, spot_id: s.spot_id, reason: s.reason } },
+    }, this.stampFor(c));
+    return { ok: true, text: priv, event };
   }
 
   private announceDeath(c: Character): void {
@@ -3279,4 +3406,9 @@ function usageOf(u: unknown): MasterCall['usage'] {
   const o = u as Record<string, unknown>;
   const n = (k: string) => (typeof o[k] === 'number' ? o[k] as number : 0);
   return { input: n('input'), output: n('output'), cache_read: n('cache_read'), cache_write: n('cache_write'), iterations: n('iterations') };
+}
+
+/** «a el herrero» → «al herrero», «de el» → «del»: al poner el rol en lugar del nombre. */
+function contract(t: string): string {
+  return t.replace(/\b([Aa]) el\b/g, '$1l').replace(/\b([Dd])e el\b/g, '$1el');
 }

@@ -6,6 +6,7 @@
 import { abilityModifier, proficiencyBonus, rollD20, rollExpr, type Advantage, type Rng } from './dice.js';
 import type { Character, Id, Npc } from './model.js';
 import { damageCharacter, killNpc, worldNow } from './death.js';
+import { reportAssault, reportKill } from './crime.js';
 import { armorClass } from './rules.js';
 import { rangedStyleBonus } from './levels.js';
 import type { World } from './world.js';
@@ -55,6 +56,8 @@ export interface AttackOutcome {
   xp_gained: number;
   /** Golpe a un PJ ya a 0 PG: fallos de salvación contra muerte que suma (2 si es crítico). */
   death_save_failures?: number;
+  /** Ha matado a quien no era hostil (crime.ts): sin PX, con infamia. */
+  murder?: boolean;
 }
 
 /** `autoHit`: el objetivo no se defiende (un PJ que se deja, reactions.ts): impacta sin tirada de ataque; el daño se tira. */
@@ -93,8 +96,12 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
     dmgBreakdown = `${d.breakdown}${dmgMod ? ` ${dmgMod >= 0 ? '+' : '-'} ${Math.abs(dmgMod)}` : ''}${crit ? ' (crítico)' : ''} = ${damage}`;
   }
 
+  // Un PJ que golpea a un NPC que no era hostil con él comete una agresión (crime.ts): testigos y reacciones, ya.
+  const nowG = nowGameS ?? worldNow(world);
+  if (a.kind === 'character' && t.kind === 'npc') reportAssault(world, a.c, t.n, weaponName, nowG);
+
   // Aplicar.
-  let targetHp = ''; let down = false; let dead = false; let xp = 0; let failures = 0;
+  let targetHp = ''; let down = false; let dead = false; let xp = 0; let failures = 0; let murder = false;
   if (t.kind === 'character') {
     const c = t.c;
     if (hit) {
@@ -108,21 +115,26 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
       s.hp = Math.max(0, s.hp - damage);
       if (s.hp === 0) {
         // Muere: su cuerpo se queda y el motor lo anuncia (death.ts).
-        killNpc(world, n, nowGameS ?? worldNow(world), { id: a.kind === 'character' ? a.c.id : a.n.id, name: nameOfCombatant(a) }, `${nameOfCombatant(a)} (${weaponName})`);
+        killNpc(world, n, nowG, { id: a.kind === 'character' ? a.c.id : a.n.id, name: nameOfCombatant(a) }, `${nameOfCombatant(a)} (${weaponName})`);
         dead = true; down = true; xp = s.xp;
-        if (a.kind === 'character') { a.c.xp += xp; world.touch('characters', a.c.id); }
+        // Matar a quien no era hostil no da PX, sino infamia (crime.ts).
+        if (a.kind === 'character') murder = reportKill(world, a.c, n, nowG).murder;
+        if (murder) xp = 0;
+        if (a.kind === 'character' && xp) { a.c.xp += xp; world.touch('characters', a.c.id); }
       }
       world.touch('npcs', n.id);
     }
     targetHp = `${s.hp}/${s.hp_max}`;
   }
-  // Un NPC atacado pasa a hostil con quien le ataca.
+  // Un NPC atacado pasa a hostil con quien le ataca; y el que ataca a un PJ, también (así se sabe quién empezó).
   if (t.kind === 'npc' && a.kind === 'character') { t.n.attitude.by_character[a.c.id] = 'hostile'; world.touch('npcs', t.n.id); }
+  if (a.kind === 'npc' && t.kind === 'character') { a.n.attitude.by_character[t.c.id] = 'hostile'; world.touch('npcs', a.n.id); }
 
   return {
     attacker: nameOfCombatant(a), target: nameOfCombatant(t), weapon: weaponName,
     attack_breakdown: roll.breakdown, attack_total: roll.total, target_ac: ac, hit, natural: roll.natural ?? null,
     damage, damage_breakdown: dmgBreakdown, damage_type: dmgType, target_hp: targetHp, target_down: down, target_dead: dead, xp_gained: xp,
+    ...(murder ? { murder: true } : {}),
     ...(failures ? { death_save_failures: failures } : {}),
   };
 }

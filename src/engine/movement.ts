@@ -233,6 +233,8 @@ export function settleTransit(world: World, c: Character, nowGameS: number): Set
 export function moveTo(world: World, characterId: Id, targetSpotId: Id, pace: Pace, nowGameS: number): MoveResult {
   const c = world.character(characterId);
   if (c.status !== 'active') return { ok: false, error: { code: 'not_active', status: c.status } };
+  // Preso (crime.ts): no sale del calabozo hasta que cumpla.
+  if (c.jailed && nowGameS < c.jailed.until_game_s) return { ok: false, error: { code: 'cannot_move', reason: `estás encerrado en el calabozo (${c.jailed.reason}); te sueltan cuando cumplas` } };
   const target = world.spots.get(targetSpotId);
   if (!target) return { ok: false, error: { code: 'unknown_spot', spot_id: targetSpotId } };
 

@@ -6,7 +6,7 @@
  * clase de personaje y vencen a la vez que la amenaza: a los tres días.
  */
 
-import type { Achievement, Campaign, Clue, Faction, Job } from '../../../engine/model.js';
+import type { Achievement, Campaign, Clue, Faction, Job, LawRules } from '../../../engine/model.js';
 
 export const PREMISE = 'Hace veinte años el fuego arrasó a los señores de Vharn y nadie ha vuelto a remover sus ruinas. Hace tres semanas una niebla gris bajó del monte y cerró el valle: quien entra en ella sale por donde entró. Dentro, la aldea de Brezal tose ceniza, los lobos rondan los corrales y de noche hay luz en el granero quemado.';
 
@@ -57,6 +57,30 @@ export const LAWS: string[] = [
   'El hierro frío no se calienta ni se funde con fuego de fragua corriente: solo un herrero que conozca el secreto puede trabajarlo.',
   'Nadie cruza el Cerco de Ceniza: quien entra en la niebla sale por donde entró, una hora después, con ceniza en el pelo. Ni la caza, ni los pájaros, ni los muertos.',
 ];
+
+/**
+ * La ley de Brezal (crime.ts). Garrán, el alguacil, y Doro, el guardia del
+ * portón, son la autoridad: dan el alto y detienen. Encierran en el calabozo
+ * de la casona; lo leve se paga en monedas. Cada local tiene su dueño, que no
+ * sirve ni aloja a quien sabe culpable. Hal y Úrsula no se callan: corren a
+ * avisar o se meten; Mateo, Tobías e Ilse huyen.
+ */
+export const LAW: LawRules = {
+  faction_id: 'fac_brezal',
+  enforcers: ['npc_garran', 'npc_doro'],
+  jail_spot_id: 'sp_ca_calabozo',
+  fines: { insult: 0, theft: 150, assault: 100, armed_assault: 300, desecration: 300 },
+  jail_hours: { armed_assault: 8, desecration: 8, murder: 24 },
+  owners: [
+    { npc_id: 'npc_brenna', location_ids: ['loc_taberna', 'loc_sotano'] },
+    { npc_id: 'npc_hugo', location_ids: ['loc_herreria'] },
+    { npc_id: 'npc_osric', location_ids: ['loc_casona'] },
+    { npc_id: 'npc_ilse', location_ids: ['loc_curandera'] },
+    { npc_id: 'npc_mateo', location_ids: ['loc_molino'] },
+    { npc_id: 'npc_ursula', location_ids: ['loc_corrales'] },
+  ],
+  temperament: { npc_hal: 'brave', npc_ursula: 'brave', npc_mateo: 'timid', npc_tobias: 'timid', npc_ilse: 'timid' },
+};
 
 export const FACTIONS: Faction[] = [
   { id: 'fac_brezal', name: 'la aldea de Brezal', description: 'Los vecinos de Brezal, encerrados por la niebla. Desconfían de los forasteros hasta que hacen algo por la aldea; tosen gris y rezan en el pozo.' },

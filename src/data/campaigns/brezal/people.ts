@@ -5,7 +5,8 @@
  * compra y vende, un bloque de combate SRD de nivel bajo (los mismos
  * arquetipos y rangos que el generador, skeleton.ts) y su horario por franjas.
  * `knows` y `ties` son para el análisis (docs/BREZAL.md); al motor llegan
- * descripción, motivación y secreto.
+ * descripción, motivación, secreto y `bonds`, lo que de `ties` usa el motor
+ * (crime.ts: quien hace daño a uno se las ve con los suyos).
  */
 
 import type { NpcStats } from '../../../engine/model.js';
@@ -24,6 +25,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'La noche del incendio servía en las cocinas de Vharn. Vio a Osric Malvez, entonces mayordomo, sacar la plata por la poterna y prender el granero para taparlo; el fuego llegó a la cripta. Ella sacó en brazos a la niña de los señores, Ysolde, y la dejó con unos carboneros del sur. Osric le dio la taberna a cambio de callar. Guarda en el sótano el libro de cuentas de Vharn, la prueba, por si algún día tiene valor para usarla. La jarra era de su hermano, que trabajaba con ella en la cocina de Vharn y llevaba sus cuentas; el pueblo culpa del incendio al candil de esa cocina, y ella deja que culpen a su hermano antes que decir quién fue. La quemadura es de una viga que le cayó en la mano izquierda mientras llevaba a la niña contra el pecho; la antorcha iba en la derecha. Su culpa no es el fuego: es haberse dejado comprar con la taberna y haber cerrado los ojos. Del libro solo ha leído la última página, porque las demás llevan la letra de su hermano. Tararea sin darse cuenta la nana que cantaba al sacar a la niña. Durante años mandó a los carboneros del sur, sin firmar, una olla de manteca cada invierno.',
     knows: 'Quién prendió el fuego; dónde está el libro; que la niña de Vharn salió viva. Que la niebla bajó el día que volvió «una niña que ella sacó del fuego», aunque no sabe quién es.',
     ties: 'Teme a Osric y desprecia a Garrán. Quiere a Doro como a un sobrino tonto. Respeta a Ilse. Ceniza es su perro.',
+    bonds: [{ npc_id: 'npc_doro', kind: 'friend' }, { npc_id: 'npc_ilse', kind: 'friend' }, { npc_id: 'npc_ceniza', kind: 'kin' }, { npc_id: 'npc_garran', kind: 'rival' }],
     buys: [{ item_id: 'it_madera', price: 20 }, { item_id: 'it_bayas', price: 5 }, { item_id: 'it_pescado', price: 25 }, { item_id: 'it_harina', price: 25 }, { item_id: 'it_huevo', price: 6 }],
     sells: [{ item_id: 'it_cerveza', price: 30 }, { item_id: 'it_racion', price: 50 }, { item_id: 'it_antorcha', price: 10 }, { item_id: 'it_pocion', price: 2500 }, { item_id: ROOM_NIGHT_ITEM_ID, price: ROOM_NIGHT_PRICE }],
     stats: srd('commoner', 9, { attack_name: 'jarra' }),
@@ -36,6 +38,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'Ha visto luces en el Granero Quemado dos noches seguidas y, una de ellas, una figura que iba por la senda del arroyo con un hatillo. No lo ha contado por miedo a que su tío le mande a mirar. Ya contó una vez lo de las luces y Garrán le dio una paliza «por asustar al personal». Si le preguntan por el Soto, se ríe de su chiste un poco tarde y mira al suelo.',
     knows: 'Las luces, la figura de la senda, a qué hora cambia la guardia. Que su tío paga a Garrán por algo que no le cuentan.',
     ties: 'Sobrino de Osric, a quien admira y teme. Bebe por las noches en el Jabalí. Garrán se burla de él.',
+    bonds: [{ npc_id: 'npc_osric', kind: 'kin' }, { npc_id: 'npc_hugo', kind: 'friend', reaction: 'fight' }, { npc_id: 'npc_brenna', kind: 'friend' }],
     buys: [], sells: [],
     stats: srd('guard', 11),
     routine: { day: 'sp_pl_porton', afternoon: 'sp_li_barricada', night: 'sp_tab_barra' },
@@ -47,6 +50,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'Prendió el fuego de Vharn hace veinte años para tapar que se llevaba la plata del sello; con ella compró la casona y el cargo. Sabe que en el Granero Quemado se esconde alguien con el apellido Vharn y manda a deudores a «apagar las luces» por cuenta suya. Si le descubren, no puede huir del valle: tiene una bodega tapiada en la casona. Guarda en el arcón una copa de plata con el sello que no se atrevió a fundir. Es hijo de un jornalero de las minas de plata, con otro apellido; solo Ilse recuerda su nombre de cuna. La noche del incendio el herrero de Vharn le vio salir con la plata, y mandó a Garrán atrancar la puerta de la fragua con él dentro. Tiene apuntado que, si Pol no vuelve, los Corrales de Úrsula pasan al regidor.',
     knows: 'Todo lo del incendio. Que alguien vive arriba. Que Hugo guarda algo de la cadena y quiere que lo funda.',
     ties: 'Tío de Doro. Patrón de Garrán. Presta a Hugo para tenerlo agarrado. Sospecha de Brenna desde hace veinte años.',
+    bonds: [{ npc_id: 'npc_doro', kind: 'kin', reaction: 'fight' }, { npc_id: 'npc_garran', kind: 'patron' }],
     buys: [{ item_id: 'it_copa_vharn', price: 6000 }, { item_id: 'it_libro_cuentas', price: 5000 }],
     sells: [],
     stats: srd('noble', 9),
@@ -59,6 +63,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'Le pagan por cada deudor que va al Granero Quemado y no vuelve. Una noche fue él mismo, vio a una mujer con un fuego en la mano y salió corriendo; desde entonces no duerme sin vela. Se queda una moneda de cada cinco del diezmo. Hace veinte años, de mozo de Osric, atrancó la puerta de la fragua de Vharn con el herrero dentro «para que no saliera el fuego», y le oyó mucho rato. Hal lo sabe por su padre y por eso le rompió la nariz; por eso Garrán nunca le ha denunciado. De noche, junto a la vela, trenza esparto.',
     knows: 'Quién debe qué en Brezal. Que arriba hay alguien. Que el regidor guarda algo en el arcón (lleva la llave).',
     ties: 'Perro de Osric. Se burla de Doro. Ilse le cura la tos y le da miedo. Odia a Hal, que le rompió la nariz la segunda vez.',
+    bonds: [{ npc_id: 'npc_osric', kind: 'patron', reaction: 'fight' }, { npc_id: 'npc_hal', kind: 'rival' }],
     buys: [], sells: [],
     stats: srd('thug', 30),
     routine: { day: 'sp_pl_tablon', afternoon: 'sp_tab_barra', night: 'sp_ca_banco' },
@@ -70,6 +75,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'Fue la última sacerdotisa de la llama de Vharn. Sabe que los señores ataban en la cripta un fuego antiguo, la Brasa, con cadenas de hierro frío, y que la Brasa grande está enterrada bajo el granero. Sabe templar una ascua suelta: sumergirla en el agua fría del manantial, el pozo, con los eslabones que forjó el maestro de Hugo sujetos y diciendo las palabras. Reconoce en la niebla un cerrojo de sus maestros, la Guarda, pero no sabe abrirlo. Sabe que las palabras del rito están repartidas en la rima de corro de los niños, la canción de amasar y una nana, y por eso no deja que se pierdan. La noche del incendio estaba en el Soto atendiendo un parto. Guarda el cuenco del ascua de cuna de la niña de Vharn, frío y sin devolver: sospecha que vive. Recuerda el nombre de cuna de Osric. Su casa es la única con la marca antigua del dintel sin encalar: era un signo de la Guarda.',
     knows: 'Qué es la Brasa y cómo se templa un ascua. Que la tos gris viene de la ceniza del agua. Que Hugo guarda eslabones. Que la niebla es un cerrojo. No sabe quién prendió el fuego.',
     ties: 'Dirige la misa del pozo. Cuida a Garrán aunque le asuste. Tiene a Brenna por buena mujer con un peso dentro.',
+    bonds: [{ npc_id: 'npc_brenna', kind: 'friend' }],
     buys: [{ item_id: 'it_bayas', price: 8 }, { item_id: 'it_agua_pozo', price: 5 }],
     sells: [{ item_id: 'it_tonico', price: 150 }, { item_id: 'it_pocion', price: 2000 }],
     stats: srd('acolyte', 9, { attack_name: 'cayado' }),
@@ -82,6 +88,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'Bajo la losa suelta de la herrería guarda los últimos eslabones de la cadena de hierro frío que su maestro forjó para los señores. Osric le ha ordenado fundirlos a cambio de perdonarle la deuda y Hugo lleva un mes diciendo que mañana. Dice «mañana» porque entre herreros la obra de un maestro muerto no se funde sin tachar antes su marca, y no puede tachar la de su maestro; además, lo que se funde de noche se parte de día. La tercera noche ya no queda mañana. No sabe quién atrancó la puerta de la fragua.',
     knows: 'Para qué servía la cadena. Que su maestro hablaba de «un cinturón de hierro que cerraba el valle». Que su maestro dijo, antes de morir, que «no fue el fuego lo que lo mató»: lo encerraron. Que Garrán viene a cobrar los jueves.',
     ties: 'Debe dinero a Osric. Bebe con Doro. Hizo la lanza de Doro. Su maestro tenía un hijo que se fue del valle.',
+    bonds: [{ npc_id: 'npc_doro', kind: 'friend', reaction: 'fight' }],
     buys: [{ item_id: 'it_madera', price: 25 }],
     sells: [{ item_id: 'it_daga', price: 200 }, { item_id: 'it_hacha', price: 500 }, { item_id: 'it_hacha_mano', price: 500 }, { item_id: 'it_espada_corta', price: 1000 }, { item_id: 'it_escudo', price: 1000 }],
     stats: srd('thug', 28, { attack_name: 'martillo' }),
@@ -94,6 +101,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'Sabe que Tobías sale de noche hacia el bosque y lo ha encubierto ante Garrán dos veces. Teme que ande con «los de arriba» y prefiere no saberlo. Un año de hambre amenazó con la horca a un arriero por grano para Tobías niño, y lo pagó con tres años de harina. Ve a su hijo volver con las manos grises y no lo mira de frente. Guarda un tonel de grano de siembra sellado con cera que es tabú moler.',
     knows: 'A qué hora sale y vuelve Tobías. Que el agua viene caliente desde hace un mes. Quién compra harina en Brezal. Que desde que bajó la niebla el grano no llega ni sale.',
     ties: 'Padre de Tobías. Debe el diezmo. Vende harina a Brenna.',
+    bonds: [{ npc_id: 'npc_tobias', kind: 'kin' }],
     buys: [{ item_id: 'it_pescado', price: 20 }, { item_id: 'it_madera', price: 15 }],
     sells: [{ item_id: 'it_harina', price: 20 }, { item_id: 'it_racion', price: 40 }],
     stats: srd('commoner', 5),
@@ -106,6 +114,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'Cada noche va por la senda del arroyo con comida para Ysolde al Granero Quemado y vuelve con una bolsa de ceniza de las grietas del altar que echa al pozo, para que el pueblo enferme y entregue al regidor. Guarda sus cartas en el desván del molino. El hacha con hollín del Soto es suya. Ysolde es la primera que lo llama «señor Tobías», y eso le ata más que la promesa: quien le trate con el mismo respeto puede soltarle. Lleva cosido en el forro del jubón un botón con el sello de Vharn que le dio ella.',
     knows: 'Quién se esconde en el granero y qué quiere. Que la loba de la madriguera no ataca a quien lleva ceniza encima.',
     ties: 'Hijo de Mateo. Admira a Ysolde. Desprecia a Doro. Hal le ha visto subir y no ha dicho nada.',
+    bonds: [{ npc_id: 'npc_mateo', kind: 'kin' }, { npc_id: 'npc_ysolde', kind: 'friend' }],
     buys: [], sells: [],
     stats: srd('commoner', 6, { attack_name: 'cuchillo' }),
     routine: { day: 'sp_mo_sacos', afternoon: 'sp_cl_roble', night: 'sp_mo_desvan' },
@@ -117,6 +126,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'Es la heredera de Vharn, sacada del fuego de niña. Recuerda a una mujer con una antorcha llevándosela y cree que esa mujer, Brenna, prendió el incendio. No sabe que fue Osric ni que Brenna la salvó. Usa a Tobías para echar ceniza al pozo y debilitar al pueblo. Volvió hace tres semanas con el ascua y esa misma noche bajó la niebla: no sabe que fue ella quien despertó la Guarda. La criaron los carboneros del sur, que la llamaban Tizne (solo Hal la llama así). Los modales se los dio una carbonera vieja que sirvió en Vharn, dueña del guante, muerta el invierno pasado; el odio, un carbonero viudo que le hacía repetir quién tuvo la culpa. De aquella noche solo recuerda una mano que le tapó la boca con un paño húmedo y a una mujer con antorcha: la mano la protegía del humo. Quiere que el valle confiese también que nadie subió a ayudar. Sabe la rima de corro, y con ella, sin saberlo, las palabras del rito.',
     knows: 'La historia de su casa. Cómo se despierta la Brasa. Que el mayordomo de su padre vive en la casona. No sabe leer el rito ni que el ascua se puede templar.',
     ties: 'Manipula a Tobías. Hal le lleva caza. Odia a Brenna por error. Quiere ver muerto a Osric.',
+    bonds: [{ npc_id: 'npc_hal', kind: 'friend' }, { npc_id: 'npc_tobias', kind: 'friend' }, { npc_id: 'npc_osric', kind: 'rival' }],
     buys: [{ item_id: 'it_racion', price: 60 }, { item_id: 'it_libro_cuentas', price: 3000 }],
     sells: [],
     stats: { ac: 12, hp_max: 22, hp: 22, attack_bonus: 5, damage: '2d6', damage_type: 'fire', attack_name: 'llama de la Brasa', xp: 450 },
@@ -129,6 +139,7 @@ export const NPCS: AuthoredNpc[] = [
     secret: 'Le lleva caza a la mujer del granero a cambio de plata vieja con el sello de Vharn, y no se lo ha dicho a nadie. Ha visto pasar a Tobías de noche y lo deja. Nunca gasta la plata con el sello. Con Ysolde todo es trato y no acepta sus regalos; es el único que la llama Tizne. Su padre le contó que Garrán atrancó la fragua de Vharn con el herrero dentro: por eso le rompió la nariz.',
     knows: 'La madriguera del roble. Que la caza no puede salir del valle: vio un ciervo entrar en la niebla y volver a salir. Que la loba no es un lobo normal: lleva ceniza en el pelo y no se cansa.',
     ties: 'Le rompió la nariz a Garrán. Doro le tiene miedo. Vende pieles a Brenna. Es lo más parecido a un amigo que tiene Ysolde.',
+    bonds: [{ npc_id: 'npc_ysolde', kind: 'friend', reaction: 'fight' }, { npc_id: 'npc_garran', kind: 'rival' }],
     buys: [{ item_id: 'it_piel', price: 150 }, { item_id: 'it_flechas', price: 4 }, { item_id: 'it_cerveza', price: 20 }],
     sells: [{ item_id: 'it_pescado', price: 30 }, { item_id: 'it_flechas', price: 5 }, { item_id: 'it_antorcha', price: 8 }],
     stats: srd('scout', 16, { attack_name: 'arco' }),

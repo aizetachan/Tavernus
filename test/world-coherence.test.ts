@@ -353,8 +353,11 @@ describe('la muerte de un NPC: aviso, cuerpo y reacción del sitio', () => {
     expect(textFor(leo)).toMatch(/^☠ La guardia cae al suelo|^☠ la guardia cae al suelo/i);
     expect(textFor(leo)).toMatch(/ha muerto por el golpe de Miau\. El cuerpo queda en la barra\./);
     expect(textFor(miau)).toMatch(/ha muerto por tu golpe/);
-    // La cena: diez vecinos se apartan… si es la hora; si no, quienes están cerca miran.
-    expect(ev.observable).toMatch(/se apartan del cuerpo|se quedan mirando el cuerpo/);
+    // Doro no era hostil: es un crimen (crime.ts). La reacción de la sala no va en la muerte, sino en el incidente que la sigue.
+    expect(ev.observable).not.toMatch(/se apartan del cuerpo|se quedan mirando el cuerpo/);
+    const inc = since(engine, from).find((e) => e.action_type === 'incident');
+    expect(inc?.observable).toMatch(/^⚖ Lo han visto: Miau mató a Doro\. .*Brenna/);
+    expect(inc!.seq).toBeGreaterThan(ev.seq);
     await engine.tick();
     expect(engine.events.all().filter((e) => e.action_type === 'npc_death')).toHaveLength(1);
 

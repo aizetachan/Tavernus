@@ -440,7 +440,7 @@ export interface NpcDeathReport {
  * neutrales o mejor, pasan a recelar). Sin IA: el máster lo lee después en el
  * contexto.
  */
-export function npcDeathReport(world: World, n: Npc, crowd: string | null, nowG: number): NpcDeathReport {
+export function npcDeathReport(world: World, n: Npc, crowd: string | null, nowG: number, opts: { crime?: boolean } = {}): NpcDeathReport {
   const d = n.death!;
   const spot = world.spot(n.location.id);
   const killer = d.by_id ? world.characters.get(d.by_id) ?? null : null;
@@ -449,13 +449,16 @@ export function npcDeathReport(world: World, n: Npc, crowd: string | null, nowG:
     if (o.id === n.id || o.id === d.by_id || o.status !== 'alive' || world.spot(o.location.id).location_id !== spot.location_id) continue;
     seen.push(o.id);
     if (!killer) continue;
-    o.memory.push({ character_id: killer.id, game_s: nowG, note: `Vio cómo ${killer.name} mataba a ${n.name} en ${spot.name}.`, importance: 3 });
+    // Si ya lo recuerda (crime.ts lo apunta en el acto), no se repite.
+    const note = `Vio cómo ${killer.name} mataba a ${n.name} en ${spot.name}.`;
+    if (!o.memory.some((m) => m.character_id === killer.id && m.note === note)) o.memory.push({ character_id: killer.id, game_s: nowG, note, importance: 3 });
     const a = o.attitude.by_character[killer.id] ?? o.attitude.default;
     if (a === 'neutral' || a === 'friendly' || a === 'allied') o.attitude.by_character[killer.id] = 'unfriendly';
     world.touch('npcs', o.id);
   }
   const by = d.by_name ? ` por el golpe de ${d.by_name}` : '';
-  const around = crowd ? ` ${cap(crowd)} se apartan del cuerpo; alguien grita y otros salen a toda prisa.` : seen.length ? ' Quienes están cerca se quedan mirando el cuerpo, sin moverse.' : '';
+  // Si es un crimen, la reacción de la sala la cuenta el evento del incidente (crime.ts), no esto.
+  const around = opts.crime ? '' : crowd ? ` ${cap(crowd)} se apartan del cuerpo; alguien grita y otros salen a toda prisa.` : seen.length ? ' Quienes están cerca se quedan mirando el cuerpo, sin moverse.' : '';
   return {
     observable: `☠ ${n.name} cae al suelo y ya no se mueve: ha muerto${by}. El cuerpo queda en ${spot.name}.${around}`,
     killer_text: killer ? `☠ ${n.name} cae al suelo y ya no se mueve: ha muerto por tu golpe. El cuerpo queda en ${spot.name}.${around}` : null,

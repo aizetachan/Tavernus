@@ -87,6 +87,32 @@ export interface Campaign {
   situations?: { for_name: string; for_classes?: string[]; keep?: boolean; companion_of?: string; situation: InitialSituation }[];
   /** Muerte y reaparición (SPEC §4.7, death.ts). Sin campo, los valores por defecto. */
   death_rules?: Partial<DeathRules>;
+  /** La ley del sitio (crime.ts): quién la hace cumplir, dónde encierra, multas, dueños de cada local. Sin campo, se deduce de los roles. */
+  law?: LawRules;
+}
+
+/** Tipos de incidente que el motor reconoce (crime.ts), de menos a más grave. */
+export type IncidentKind = 'insult' | 'theft' | 'assault' | 'armed_assault' | 'desecration' | 'murder';
+
+/**
+ * La ley de una campaña (crime.ts). Datos de campaña: el motor no sabe quién
+ * es Garrán; lo lee de aquí. Lo que falte se deduce (autoridad por su rol).
+ */
+export interface LawRules {
+  /** Facción cuya reputación baja con el autor (la del pueblo). null: ninguna. */
+  faction_id?: Id | null;
+  /** NPC que hacen cumplir la ley: dan el alto, detienen y, si te resistes, pelean. */
+  enforcers?: Id[];
+  /** Dónde encierran (un punto). Sin él, solo hay multas. */
+  jail_spot_id?: Id | null;
+  /** Multa en monedas por tipo, para lo que no lleva al calabozo. */
+  fines?: Partial<Record<IncidentKind, number>>;
+  /** Horas de juego de calabozo por tipo. */
+  jail_hours?: Partial<Record<IncidentKind, number>>;
+  /** Dueños de cada local: no sirven ni alojan a quien saben culpable. */
+  owners?: { npc_id: Id; location_ids: Id[] }[];
+  /** Carácter de la gente corriente ante un crimen: brave va a avisar a la autoridad o se mete; timid huye. Sin entrada, grita y se aparta. */
+  temperament?: Record<Id, 'brave' | 'timid'>;
 }
 
 /** Reglas de muerte de la campaña (SPEC §1.2 death_rule, §4.7). Esperas en tiempo real. */
@@ -408,6 +434,27 @@ export interface Character {
   spells?: CharacterSpells;
   /** Elecciones de clase hechas (levels.ts): clave de la elección → lo elegido (estilo, pericia, mejora de característica). */
   picks?: Record<string, string[]>;
+  /** Buscado por la autoridad (crime.ts): por qué, desde cuándo, dónde le vieron por última vez y si le están deteniendo. */
+  wanted?: Wanted | null;
+  /** Encerrado en el calabozo (crime.ts) hasta ese instante de juego (el suyo). */
+  jailed?: { until_game_s: number; spot_id: Id; reason: string } | null;
+  /** Infamia: muertes de quien no era hostil y cadáveres profanados (crime.ts). En lugar de PX. */
+  infamy?: number;
+}
+
+/** Lo que sabe la autoridad de un PJ (crime.ts). */
+export interface Wanted {
+  since_game_s: number;
+  /** Incidentes por los que le buscan. */
+  incident_ids: Id[];
+  /** «mató a Hugo en la Taberna del Jabalí». */
+  reason: string;
+  /** Dónde le vio por última vez alguien que lo sabe; null si nadie. */
+  last_seen: { location_id: Id; spot_id: Id; game_s: number } | null;
+  /** Quien le busca activamente (va a donde le vieron). */
+  hunter_id?: Id | null;
+  /** Le están deteniendo: quién, desde cuándo, si el motor ya dio el alto y si se ha resistido. */
+  arrest: { npc_id: Id; since_game_s: number; announced: boolean; resisted: boolean } | null;
 }
 
 /**
@@ -551,6 +598,15 @@ export interface Npc {
   attitude: { default: Attitude; by_character: Record<Id, Attitude> };
   /** Cómo murió (death.ts, killNpc): su cuerpo sigue en su punto y el motor lo anuncia una vez (`told`). */
   death?: NpcDeath;
+  /** Vínculos con otros NPC (crime.ts): quien hace daño a uno se las ve con los suyos. Datos de campaña. */
+  bonds?: NpcBond[];
+}
+
+/** Un vínculo de un NPC con otro. `reaction`: qué hace si le hacen daño (sin ella, se deduce). */
+export interface NpcBond {
+  npc_id: Id;
+  kind: 'kin' | 'friend' | 'patron' | 'rival';
+  reaction?: 'fight' | 'mourn';
 }
 
 export interface NpcDeath {

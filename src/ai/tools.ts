@@ -18,6 +18,7 @@ import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
 import { finishQuest, giveQuest } from '../engine/quests.js';
 import { attitudeOf, resolveAttack } from '../engine/combat.js';
+import { INCIDENT_KINDS, incidentRejection, npcCrimeLine, pendingIncidents, reactionSentences, readsAsTheft, reportAssault, reportIncident, reportKill, unnarratedReactors, type IncidentKind } from '../engine/crime.js';
 import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, isDying, killNpc, medicineDc, stabilize } from '../engine/death.js';
 import { spendResource } from '../engine/rest.js';
 import { castSpell } from '../engine/levels.js';
@@ -214,6 +215,11 @@ export const MASTER_TOOLS: Tool[] = [
     expires_in_minutes: nnum('Caduca a los N minutos de juego; null = por defecto (1 día, o 1 h después de la hora)'),
   }),
   tool('cancel_hook', 'Anula un gancho sembrado que ya no tiene sentido.', { hook_id: str('ID del gancho (hk_…)') }),
+  tool('report_incident', 'Registra un crimen que el actor comete en la ficción y el servidor no ve por sí solo: un insulto a la cara, un robo, registrar o saquear un cadáver, una agresión sin tirada. Los golpes con attack y las muertes ya los registra el servidor: no los repitas. El servidor decide quién lo ha visto y cómo reacciona cada uno (la autoridad le da el alto, el dueño no le sirve, la gente grita o corre a avisar) y lo aplica; tú lo cuentas.', {
+    kind: enm(['insult', 'theft', 'assault', 'armed_assault', 'desecration'], 'insult (insulto), theft (robo), assault (agresión sin arma), armed_assault (con arma), desecration (profanar o saquear un cadáver)'),
+    victim_id: str('ID del NPC agraviado (o del muerto, si es un cadáver)'),
+    weapon: nstr('Solo armed_assault: con qué; null si no'),
+  }),
   tool('plant_rumor', 'Siembra un rumor cuando el jugador busca, afirma o inventa algo plausible del mundo compartido que no está en los datos (un tesoro, alguien, un sitio, un pasadizo, un encargo). No crea nada real: queda que «se dice» algo, circulando por esta localización, para que la historia pueda retomarlo. Con el mismo nombre que uno que ya corre aquí, lo retoma sin gastar presupuesto. Presupuesto: pocos rumores nuevos por personaje y día de juego; si se agota, devuelve error.', {
     kind: enm([...RUMOR_KINDS], 'rumor (habladuría), place (lugar), person (persona), item (objeto), quest (empresa o encargo)'),
     name: str('Cómo lo llama la gente, corto: «el tesoro de la croqueta dorada»'),
@@ -301,7 +307,7 @@ export const MASTER_TOOLS: Tool[] = [
 export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
-  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order',
+  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident',
 ]);
 
 export const MEMORY_CAP_PER_CHARACTER = 8;
@@ -350,6 +356,8 @@ export interface ToolContext {
   repeat_rejections?: number;
   /** Cierres rechazados por narrar que el actor recibe algo de otro jugador sin oferta (closecheck.ts; uno como mucho). */
   receive_rejections?: number;
+  /** Cierres rechazados por ignorar un incidente con testigos delante (crime.ts; dos como mucho). */
+  incident_rejections?: number;
   /** Es la escena de apertura: el actor no se acerca a quien habla (la apertura ya le pone con él). */
   intro?: boolean;
 }
@@ -580,6 +588,23 @@ function norm(s: string): string {
 
 const NPC_DEATH_NOTE = 'ha muerto: su cuerpo se queda donde ha caído y el servidor lo anuncia a quien esté; narra el golpe y la reacción de los presentes, no que se levante ni que desaparezca';
 
+/** Si hay un incidente con testigos por contar aquí (crime.ts): lo que ya ha decidido el servidor, para que la narración lo cuente. */
+function crimeNote(ctx: ToolContext): { incident?: string } {
+  const p = pendingIncidents(ctx.engine.world, ctx.actor, ctx.nowGameS)[0];
+  return p ? { incident: `Testigos: el servidor ya ha aplicado su reacción. Cuéntala en la narración, sin contradecirla: ${reactionSentences(ctx.engine.world, p, p.perpetrator_id === ctx.actor.id, ctx.actor).join(' ')}` } : {};
+}
+
+/**
+ * ¿Es del actor este daño a un NPC? Sí si lo nombra la fuente («Proyectil
+ * mágico de Leodhin») o si en este turno ha lanzado un conjuro o atacado. Así
+ * la muerte por un conjuro también es suya (y un crimen si no era hostil).
+ */
+function damageByActor(ctx: ToolContext, source: string): boolean {
+  const a = ctx.actor;
+  if (a.status !== 'active' || !ctx.engine.world.characters.has(a.id)) return false;
+  return norm(source).includes(norm(a.name)) || (ctx.ok_tools ?? []).some((t) => t === 'cast_spell' || t === 'attack');
+}
+
 /**
  * Saquear (death.ts): el cuerpo de quien murió en casual solo lo toca su dueño;
  * a un PJ vivo caído no se le quita nada sin su consentimiento (que te lo dé).
@@ -632,7 +657,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     case 'get_npc': {
       const n = world.npc(s('npc_id'));
       return {
-        id: n.id, name: n.name, role: n.role, status: n.status, spot_id: n.location.id, description: n.description, motivation: n.motivation, secret: n.secret,
+        id: n.id, name: n.name, role: n.role, status: n.status, spot_id: n.location.id,
+        // Lo que vio del actor va antes que su carácter (crime.ts).
+        ...(npcCrimeLine(world, n, actor, nowGameS) ? { first_of_all: npcCrimeLine(world, n, actor, nowGameS) } : {}),
+        description: n.description, motivation: n.motivation, secret: n.secret,
         attitude_to_actor: attitudeOf(n, actor.id), combat: n.stats ? { ac: n.stats.ac, hp: `${n.stats.hp}/${n.stats.hp_max}`, attack: `${n.stats.attack_name} +${n.stats.attack_bonus}, ${n.stats.damage} ${n.stats.damage_type}` } : null,
         remembers_about_actor: n.memory.filter((m) => m.character_id === actor.id).map((m) => `[${engine.clock.format(m.game_s)}] ${m.note}`),
         remembers_about_others: n.memory.filter((m) => m.character_id !== actor.id && m.importance >= 2).slice(-5).map((m) => `[${engine.clock.format(m.game_s)}] ${world.characters.get(m.character_id)?.name ?? '?'}: ${m.note}`),
@@ -854,7 +882,12 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       }
       const guard = lootGuard(ctx, s('instance_id'));
       if (guard) return guard;
+      // Quitarle algo a alguien que lo lleva encima («le robo la bolsa»): un robo, salvo que la tirada lo haya hecho sin que se note.
+      const held = world.itemInstances.get(s('instance_id'))?.location;
+      const victim = held?.type === 'npc' ? world.npcs.get(held.id) : undefined;
+      const stolen = Boolean(victim && victim.status === 'alive' && toType === 'character' && s('to_id') === actor.id && readsAsTheft(ctx.action_text) && !['exito_justo', 'exito_claro', 'critico'].includes(ctx.roll_category ?? ''));
       const r = transferItem(world, s('instance_id'), to, input['quantity'] == null ? undefined : Number(input['quantity']));
+      if (r.ok && stolen) reportIncident(world, { kind: 'theft', perpetrator_id: actor.id, victim_id: victim!.id }, nowGameS);
       if (!r.ok && r.error.code === 'not_reachable' && r.error.reason === 'no está a tu alcance') {
         // Lo que no está en el punto del actor: dónde está y adónde ir.
         const inst = world.itemInstances.get(s('instance_id'));
@@ -867,7 +900,18 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         }
       }
       if (!r.ok) return { error: r.error.code, detail: r.error };
-      return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity };
+      return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity, ...(stolen ? crimeNote(ctx) : {}) };
+    }
+    case 'report_incident': {
+      const kind = s('kind') as IncidentKind;
+      if (!INCIDENT_KINDS.includes(kind) || kind === 'murder') return { error: 'kind debe ser insult, theft, assault, armed_assault o desecration (las muertes las registra el servidor)' };
+      const v = world.npcs.get(s('victim_id'));
+      if (!v) return { error: `no existe el NPC ${s('victim_id')}` };
+      if (world.spot(v.location.id).location_id !== here()) return { error: `${v.name} no está aquí` };
+      if (kind === 'desecration' ? v.status !== 'dead' : v.status !== 'alive') return { error: kind === 'desecration' ? `${v.name} no está muerto` : `${v.name} no está vivo` };
+      const i = reportIncident(world, { kind, perpetrator_id: actor.id, victim_id: v.id, spot_id: v.location.id, weapon: input['weapon'] == null ? null : s('weapon') }, nowGameS);
+      if (!i) return { ok: true, note: 'ya constaba algo igual o más grave de este actor contra esa persona: nada nuevo' };
+      return { ok: true, incident: i.id, kind: i.kind, witnesses: i.knowers.map((k) => world.npcs.get(k.npc_id)?.name).filter(Boolean), ...crimeNote(ctx) };
     }
     case 'spawn_item': {
       if (world.campaign.master.improvisation < 3) return { error: 'improvisation_too_low', hint: 'En esta campaña no se crean objetos: lo que hay está en el mundo (en el suelo, en un contenedor o lo lleva alguien: «Lleva» de cada NPC, get_npc, get_inventory). Usa transfer_item con ese ejemplar o narra que no lo hay.' };
@@ -1021,17 +1065,22 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       ctx.rolls.push({ expr: 'attack', total: r.attack_total, breakdown: r.attack_breakdown, rolls: [] });
       // Las tiradas de los enemigos son ocultas (SPEC §9.3); la del PJ que ataca, a la vista.
       if (world.characters.has(s('attacker_id'))) (ctx.shown_rolls ??= []).push(attackRoll(s('attacker_id'), s('target_id'), r));
-      return r.target_dead && world.npcs.has(s('target_id')) ? { ...r, note: NPC_DEATH_NOTE } : r;
+      const crime = crimeNote(ctx);
+      return r.target_dead && world.npcs.has(s('target_id')) ? { ...r, note: NPC_DEATH_NOTE, ...crime } : { ...r, ...crime };
     }
     case 'apply_damage': {
       const npcT = world.npcs.get(s('target_id'));
       if (npcT) {
         if (!npcT.stats) return { error: 'ese NPC no tiene puntos de golpe' };
         if (npcT.status === 'dead') return { error: `${npcT.name} ya está muerto` };
+        // Daño que hace el actor (un conjuro suyo, su golpe narrado): es suyo, con sus testigos y su muerte (crime.ts).
+        const by = damageByActor(ctx, s('source'));
+        if (by) { reportAssault(world, actor, npcT, s('source') || s('damage_type') || 'un arma', nowGameS); npcT.attitude.by_character[actor.id] = 'hostile'; }
         npcT.stats.hp = Math.max(0, npcT.stats.hp - Math.max(0, Math.floor(Number(input['amount']) || 0)));
-        const killed = npcT.stats.hp === 0 && killNpc(world, npcT, nowGameS, null, s('source') || s('damage_type') || 'daño');
+        const killed = npcT.stats.hp === 0 && killNpc(world, npcT, nowGameS, by ? { id: actor.id, name: actor.name } : null, s('source') || s('damage_type') || 'daño');
+        const murder = killed && by ? reportKill(world, actor, npcT, nowGameS).murder : false;
         world.touch('npcs', npcT.id);
-        return { ok: true, hp: `${npcT.stats.hp}/${npcT.stats.hp_max}`, status: npcT.status, ...(killed ? { died: true, note: NPC_DEATH_NOTE } : {}) };
+        return { ok: true, hp: `${npcT.stats.hp}/${npcT.stats.hp_max}`, status: npcT.status, ...(killed ? { died: true, note: NPC_DEATH_NOTE } : {}), ...(murder ? { murder: true } : {}), ...crimeNote(ctx) };
       }
       const c = world.character(s('target_id'));
       if (c.veiled) return { error: `${c.name} está bajo el velo: no puede recibir daño` };
@@ -1271,6 +1320,16 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: promisedMoveRejection(actor.knows.includes(npc.id) ? npc.name : descriptorOf(world, npc.id), phrase) };
         }
       }
+      // Un incidente con testigos delante (crime.ts) no se ignora: la narración nombra a quien reacciona. Dos veces; luego pasa (el motor lo cuenta igual).
+      const pendingCrime = req ? [] : pendingIncidents(world, actor, nowGameS);
+      if (pendingCrime.length && (ctx.incident_rejections ?? 0) < 2) {
+        const texts = [s('narration_private'), input['observable'] == null ? '' : s('observable'), ...parseLines(input['lines'], null, (id) => world.npcs.has(id)).map((l) => l.text)];
+        const bad = pendingCrime.map((i) => ({ i, missing: unnarratedReactors(world, i, texts, actor) })).find((x) => x.missing.length);
+        if (bad) {
+          ctx.incident_rejections = (ctx.incident_rejections ?? 0) + 1;
+          return { error: incidentRejection(world, bad.i, bad.missing, actor) };
+        }
+      }
       // Sin nada que leer: después de los de arriba (en conversación, el suyo lo explica mejor), pero sin límite.
       if (empty) return { error: EMPTY_REJECTION };
       if (input['npc_id']) {
@@ -1336,6 +1395,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Arranques en falso que el modelo corrige sobre la marcha («MIAU Lenzo... no. MIAU se queda…»): se quitan.
       const tidy = (t: string) => withoutSelfCorrection(cleanText(t));
       const targetPc = input['target_character_id'] && world.characters.has(s('target_character_id')) && s('target_character_id') !== actor.id ? s('target_character_id') : null;
+      // Contado: el control de cierre ya no lo exige a este jugador (crime.ts).
+      for (const i of pendingCrime) { i.narrated_to.push(actor.id); world.touch('campaign', world.campaign.id); }
       ctx.closed = {
         // Lo dicho que no va citado en la narración (en conversación puede ir vacía) se guarda como citas.
         narration_private: approached + narrationWithLines(withoutDeathPhrases(unsay(tidy(s('narration_private'))), deathHits), closingLines),

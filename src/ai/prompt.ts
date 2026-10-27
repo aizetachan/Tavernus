@@ -34,6 +34,7 @@ import { offersOf, pcName } from '../engine/party.js';
 import { pendingFrom } from '../engine/reactions.js';
 import { RULES_CHEATSHEET } from './rules-cheatsheet.js';
 import { bodiesAt, bodyStateOf, deadNpcsAt, isDying, isStable } from '../engine/death.js';
+import { crimeContext, npcCrimeLine, recentIncidents } from '../engine/crime.js';
 import { recentNpcLines } from '../engine/closecheck.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { abilitiesForMaster } from '../engine/levels.js';
@@ -296,8 +297,10 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const others = n.memory.filter((m) => m.character_id !== actor.id && m.importance >= 3).slice(-3).map((m) => `${world.characters.get(m.character_id)?.name ?? 'alguien'}: ${m.note}`);
     const busy = n.talking_to && n.talking_to.character_id !== actor.id ? ` OCUPADO hablando con ${world.characters.get(n.talking_to.character_id)?.name ?? 'alguien'}: atiende al actor solo si hay motivo, si no le pide que espere. No sugieras esperar ni unirse: eso lo ofrece el servidor.` : '';
     const knownNpc = actor.knows.includes(n.id);
+    // Lo que vio o sabe del actor (crime.ts) va antes que su carácter: manda sobre cómo le trata.
+    const crime = npcCrimeLine(world, n, actor, nowG);
     present.push([
-      `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}. ${n.description}`,
+      `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}.${crime ? `\n  ${crime}\n ` : ''} ${n.description}`,
       `  Quiere: ${dot(n.motivation)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage}).` : ' No combate.'}`,
       n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${b.price}`).join(', ')}` : '',
       n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${b.price}`).join(', ')}` : '',
@@ -313,6 +316,9 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   // Testigos: otros PJs que percibirían al actor aunque gritara. Sin ninguno, observable no le llega a nadie y es salida tirada.
   if (!witnesses(world, engine.clock, pos, nowG, WITNESS_LOUDNESS, actor.id).length) present.push(NO_WITNESSES);
   L.push('## Presentes que el actor percibe\n' + (present.length ? present.join('\n') : 'Nadie.'));
+  // Crimen y ley (crime.ts): el incidente que hay que contar, y si el actor está buscado, detenido o preso.
+  const law = crimeContext(world, actor, nowG);
+  if (law) L.push(law);
   // Quién oye lo que dice el actor (otros jugadores): el NPC puede notarlo (bajar la voz, callarse, mirarlos), sin narrar lo que hacen ellos.
   const ears = witnesses(world, engine.clock, positionOf(world, actor, nowG), nowG, 1, actor.id)
     .filter((w) => w.perceived.sound !== 'none' && w.perceived.sound !== 'hint')
@@ -416,7 +422,9 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
 
   // Ganchos e imprevisto que el motor pone delante en esta llamada (hooks.ts, fastpath.ts).
   const hints = engine.sceneHints(actor.id);
-  if (hints?.hooks.length) L.push(`## Gancho que salta ahora\n${hints.hooks.map((h) => `- ${h.what}`).join('\n')}\nHazlo ocurrir ahora, encajado con lo que hace el actor (puedes interrumpir su movimiento o dejar la acción a medias). Ya está consumido: no lo repitas.`);
+  // Un gancho escrito de antemano no sabe lo que acaba de pasar aquí: si hay un incidente reciente, manda el incidente (crime.ts).
+  const crimeHere = hints?.hooks.length ? recentIncidents(world, loc.id, nowG) : [];
+  if (hints?.hooks.length) L.push(`## Gancho que salta ahora\n${hints.hooks.map((h) => `- ${h.what}`).join('\n')}\nHazlo ocurrir ahora, encajado con lo que hace el actor (puedes interrumpir su movimiento o dejar la acción a medias). Ya está consumido: no lo repitas.${crimeHere.length ? `\nOJO: aquí acaba de pasar algo (ver «Incidente» y «LO PRIMERO» de cada NPC). El gancho se adapta a eso: quien llega ve lo que ha pasado (el cuerpo, la sangre, la gente alterada) y reacciona según quién es; la autoridad pregunta y detiene, no pide una cerveza como si nada. Si el gancho ya no encaja, cuéntalo cambiado o déjalo para otro momento.` : ''}`);
   if (hints?.encounter) L.push('## Imprevisto\nHa salido la tirada de imprevisto del servidor: mientras el actor hace esto pasa algo que no buscaba (alguien llega o se va, un ruido, un animal, un cambio de luz o de tiempo), acorde al lugar y la hora. Pequeño y concreto; combate solo si encaja. Resuelve también la acción.');
   if (hints?.travel) L.push(travelBlock(world, engine.clock, hints.travel));
   if (hints?.errand) {

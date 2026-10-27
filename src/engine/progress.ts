@@ -6,6 +6,7 @@
 
 import { GAME_DAY } from '../clock/clock.js';
 import { consumeItem, spawnItem, transferItem } from './inventory.js';
+import { refusesService } from './crime.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
 import type { World } from './world.js';
 
@@ -137,6 +138,9 @@ export function activeJobs(world: World): Job[] {
 export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id, quantity?: number): { ok: true; item: string; quantity: number; total: number } | { ok: false; reason: string } {
   const npc = world.npc(npcId);
   if (world.characterSpot(c)?.id !== npc.location.id) return { ok: false, reason: `${npc.name} no está aquí` };
+  // Quien sabe lo que ha hecho no trata con él (crime.ts).
+  const no = refusesService(world, npc, c);
+  if (no) return { ok: false, reason: no };
   const inst = world.itemInstances.get(instanceId);
   if (!inst) return { ok: false, reason: 'ese objeto no existe' };
   const offer = npc.buys.find((b) => b.item_id === inst.item_id);
@@ -155,6 +159,9 @@ export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, qu
   if (world.characterSpot(c)?.id !== npc.location.id) return { ok: false, reason: `${npc.name} no está aquí` };
   const offer = npc.sells.find((s) => s.item_id === itemId);
   if (!offer) return { ok: false, reason: `${npc.name} no vende eso` };
+  // Ni le vende ni le aloja quien sabe lo que ha hecho (crime.ts).
+  const no = refusesService(world, npc, c);
+  if (no) return { ok: false, reason: no };
   const q = Math.max(1, Math.floor(quantity));
   const total = offer.price * q;
   if (c.coins < total) return { ok: false, reason: `faltan ${total - c.coins} monedas` };
