@@ -266,11 +266,11 @@ export function buildSkeleton(input: SkeletonInput): Skeleton {
 
   // Encargos: entregar algo que da el campo (si da algo), ir a mirar un punto de fuera y, a veces, uno narrativo.
   const jobs: SkJob[] = [];
-  if (resources.length) { const r = pick(resources); jobs.push({ id: 'job_1', kind: 'deliver', deliver: { item_id: r.item_id, quantity: int(4, 10) }, reward_coins: int(5, 10) * 100, reward_reputation: 1 }); }
+  if (resources.length) { const r = pick(resources); jobs.push({ id: 'job_1', kind: 'deliver', deliver: { item_id: r.item_id, quantity: int(4, 10) }, reward_coins: int(2, 6) * 10, reward_reputation: 1 }); }
   const far = [...w1.spots, ...w2.spots].filter((s) => !s.hidden && !s.leads_to && !exits.some((e) => e.from_spot_id === s.id || e.to_spot_id === s.id));
-  jobs.push({ id: `job_${jobs.length + 1}`, kind: 'visit', visit_spot_id: (far.length ? pick(far) : w2.spots[0]!).id, reward_coins: int(5, 9) * 100, reward_reputation: 1 });
+  jobs.push({ id: `job_${jobs.length + 1}`, kind: 'visit', visit_spot_id: (far.length ? pick(far) : w2.spots[0]!).id, reward_coins: int(2, 5) * 10, reward_reputation: 1 });
   const nJobs = int(2, 3);
-  while (jobs.length < nJobs) jobs.push({ id: `job_${jobs.length + 1}`, kind: 'narrative', reward_coins: int(6, 12) * 100, reward_reputation: int(1, 2) });
+  while (jobs.length < nJobs) jobs.push({ id: `job_${jobs.length + 1}`, kind: 'narrative', reward_coins: int(3, 8) * 10, reward_reputation: int(1, 2) });
 
   // Lo que se gana con el logro: un punto oculto del asentamiento (la trampilla de la posada…) o un escondrijo nuevo en el centro.
   // El cuarto de la posada no: está a la vista, cerrado, y se alquila.

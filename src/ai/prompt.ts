@@ -5,7 +5,8 @@
 
 import type { Engine } from '../engine/engine.js';
 import type { CheckResult } from '../engine/dice.js';
-import type { Campaign, Character, Clue, GameEvent, Id } from '../engine/model.js';
+import type { Campaign, Character, Clue, GameEvent, Id, Npc } from '../engine/model.js';
+import type { World } from '../engine/world.js';
 import { readerText } from '../engine/events.js';
 import { namedNpc, namedPc } from '../engine/scene.js';
 import { positionOf } from '../engine/movement.js';
@@ -17,7 +18,7 @@ import { activeJobs } from '../engine/progress.js';
 import { descriptorOf } from '../engine/narrate.js';
 import { attitudeOf } from '../engine/combat.js';
 import { describeHook } from '../engine/hooks.js';
-import { travelBlock } from '../engine/travel.js';
+import { AHEAD_NOTICE_S, aheadBy, travelBlock } from '../engine/travel.js';
 import { scheduleContext } from '../engine/schedule.js';
 import { orderLine } from '../engine/npcorders.js';
 import { storyContext } from '../engine/story.js';
@@ -39,6 +40,7 @@ import { recentNpcLines } from '../engine/closecheck.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { abilitiesForMaster } from '../engine/levels.js';
 import { hhmm } from '../engine/schedule.js';
+import { currencyOf, money } from '../engine/money.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
 const LENGTH_ES = { short: 'uno o dos párrafos cortos, unas 60-90 palabras; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
@@ -211,6 +213,27 @@ function rollLine(r: CheckResult): string {
   return cat ? `\nCategoría: ${ROLL_CATEGORY[cat].label.toUpperCase()}${r.dc !== null ? ` (margen ${r.total - r.dc >= 0 ? '+' : ''}${r.total - r.dc})` : ''}: ${ROLL_CATEGORY[cat].rule}` : '';
 }
 
+/**
+ * Dónde vive un NPC (`home_spot_id`, de los datos) si no es aquí, y por dónde se va desde aquí. Sin esto el
+ * máster se inventa la casa: «la casa de Ilse en el Soto», cuando está al fondo del callejón (partida del 27-10, seq 27–30).
+ */
+export function homeLine(world: World, n: Npc, hereLocId: Id): string {
+  const home = n.home_spot_id ? world.spots.get(n.home_spot_id) : undefined;
+  if (!home || home.location_id === hereLocId) return '';
+  const via = world.spotsOf(hereLocId).find((s) => world.exitsFrom(s.id).some((x) => world.spot(x.to_spot_id).location_id === home.location_id));
+  return ` Vive en ${world.location(home.location_id).name}${via ? ` (desde aquí, por ${via.name})` : ''}.`;
+}
+
+/**
+ * El actor va por delante del mundo (ha dormido o viajado: travel.ts): la gente, los horarios y los ruidos son de la
+ * hora del mundo. Sin esto el máster contaba «ocho horas después» con la cena aún en marcha (partida del 27-10, seq 98–106).
+ */
+function aheadText(engine: Engine, actor: Character): string {
+  const g = engine.gameNow();
+  if (aheadBy(actor, g) < AHEAD_NOTICE_S) return '';
+  return `\nVA POR DELANTE DEL MUNDO: esa es su hora, pero para todos los demás son las ${hhmm(g)}. Los NPC, los horarios y los ruidos son de las ${hhmm(g)}: la gente sigue en lo que hacía a esa hora (para ellos no ha pasado la noche). No narres que el pueblo duerme ni que han pasado horas para nadie más que el actor; si lo nota, es que va adelantado, y el mundo le alcanza solo.`;
+}
+
 function boardLine(jobs: string[]): string {
   return jobs.length ? `Tablón: ${jobs.join(' · ')}.` : 'Tablón: vacío.';
 }
@@ -223,7 +246,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   const spot = world.spot(pos.spot_id);
   const L: string[] = [];
 
-  L.push(`## Tiempo\n${engine.clock.format(nowG)}. Luz: ${lightAt(engine.clock, loc, nowG)}. 1 h real = 3 h de juego.`);
+  L.push(`## Tiempo\n${engine.clock.format(nowG)}. Luz: ${lightAt(engine.clock, loc, nowG)}. 1 h real = 3 h de juego.${aheadText(engine, actor)}`);
 
   // La luz real ya va en Tiempo; el estado solo si hay algo.
   L.push(`## Localización: ${loc.name} (${loc.id})\n${loc.description_base}\nAmbiente: ruido ${loc.ambience.noise}${loc.ambience.smell ? `, olor a ${loc.ambience.smell}` : ''}.${Object.keys(loc.state).length ? ` Estado: ${JSON.stringify(loc.state)}` : ''}`);
@@ -300,10 +323,10 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     // Lo que vio o sabe del actor (crime.ts) va antes que su carácter: manda sobre cómo le trata.
     const crime = npcCrimeLine(world, n, actor, nowG);
     present.push([
-      `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}.${crime ? `\n  ${crime}\n ` : ''} ${n.description}`,
-      `  Quiere: ${dot(n.motivation)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage}).` : ' No combate.'}`,
-      n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${b.price}`).join(', ')}` : '',
-      n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${b.price}`).join(', ')}` : '',
+      `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}. ${n.description}`,
+      `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage}).` : ' No combate.'}`,
+      n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${money(world, b.price)}`).join(', ')}` : '',
+      n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, b.price)}`).join(', ')}` : '',
       carriedBy(world, n.id),
       saidBy(engine.events.recentInLocation(loc.id, 60), n.id),
       n.secret ? `  Solo tú sabes (NUNCA lo reveles ni lo insinúes por tu cuenta): ${dot(n.secret)} Sale solo a medias y si se lo gana: confianza en varias charlas, presión creíble o tirada social contra CD alta.` : '',
@@ -336,7 +359,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     actor.appearance ? `Aspecto: ${actor.appearance}` : '',
     actor.backstory ? `Historia: ${actor.backstory}` : '',
     characterFacts(actor).length ? `Ha contado de sí (verdad para su personaje, no para el mundo; record_character_fact): ${characterFacts(actor).slice(-FACTS_IN_CONTEXT).map((f) => dot(f.text)).join(' ')}` : '',
-    `Manos: ${inv.hands.main ?? '—'} / ${inv.hands.off ?? '—'}. Monedas: ${inv.coins}. Carga: ${inv.encumbrance.level}.`,
+    `Manos: ${inv.hands.main ?? '—'} / ${inv.hands.off ?? '—'}. Monedas: ${money(world, inv.coins)} (= ${inv.coins} de ${currencyOf(world.campaign).at(-1)!.name}; los amount de los tools van en esa moneda). Carga: ${inv.encumbrance.level}.`,
     openDebts(actor).length ? `Deudas (set_debt, pawn_item, settle_debt; lo que no esté aquí no se debe):\n${openDebts(actor).map((d) => `- ${debtLine(world, d, nowG, (n) => n.name, true)}. Motivo: ${d.reason}.`).join('\n')}` : '',
     'Inventario (IDs para transfer_item):\n' + (inventoryDetailed(world, actor.id).map((i) => `- ${i.name}${i.quantity > 1 ? ` ×${i.quantity}` : ''} [${i.instance_id}] (${i.where})`).join('\n') || '- nada'),
     actor.transit ? `En camino hacia ${world.spot(actor.transit.destination_spot_id).name}.` : '',

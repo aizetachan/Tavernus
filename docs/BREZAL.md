@@ -249,7 +249,9 @@ Tres días desde las 18:00 del día 1 (72 h de juego, 24 h reales al ritmo 3×).
 
 - **Ganchos sembrados**: la corriente fría bajo la alfombra de la mesa del fondo, la voz de Ysolde al llegar al granero, la loba que se levanta al acercarse a la madriguera, **la niebla quieta al llegar al Lindero** **[nuevo]**, Garrán que entra en el Jabalí a la hora y media de empezar.
 - **Encuentros de camino** (solo aldea): un vecino con tos, la ronda de Garrán, ceniza que cae y la niebla devuelve, un lobo entre las cercas, un buhonero atrapado, huellas de Tobías y de lobo. **[cambia]**
-- **Tablón**: leña y bayas para Brenna, la ronda de Doro al Soto, carbón para Hugo, truchas, la toma del arroyo para Mateo, **huevos para la cena** (Brenna) y **la cerca del redil** (Úrsula) **[nuevo]**.
+- **Tablón**: leña y bayas para Brenna, la ronda de Doro al Soto, carbón para Hugo, truchas, la toma del arroyo para Mateo, **huevos para la cena** (Brenna) y **la cerca del redil** (Úrsula) **[nuevo]**. Pagan en plata (27-10-2026): 6 de plata los diez leños; 4 o 5 el carbón, las truchas y las rondas; 1 o 2 las bayas, los huevos o la cerca.
+- **Dinero (27-10-2026)**: oro, plata y cobre (`currency` en `index.ts`). El PJ llega con 1 de oro y 5 de plata (`starting_coins`). En el Jabalí, una cerveza vale 4 de cobre, una ración 1 de plata y la noche 2 de plata; Hugo vende a precio SRD (daga 2 de oro, espada corta 10). Las partidas guardadas cogen los precios nuevos al abrirse (`migrate`); el dinero de cada PJ no cambia, solo se enseña en monedas.
+- **Casas (27-10-2026)**: cada vecino con casa lleva `home_spot_id` y el máster ve «Vive en Casa de las hierbas (desde aquí, por el callejón de las hierbas)» cuando no está en ella (`homeLine`, `prompt.ts`). Así no se la inventa en otro sitio: en la partida del 27-10 llevó a «la casa de Ilse en el Soto». Su secreto aclara que el parto de la noche del incendio fue en el Soto, lejos de su casa, y la descripción del Soto dice que hoy solo vive allí Hal.
 
 ### 2.12 Trasfondo y costumbres **[nuevo]**
 

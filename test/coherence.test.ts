@@ -218,17 +218,17 @@ describe('deudas y prendas', () => {
     const ctx = ctxFor(engine);
     const kael = ctx.actor;
     kael.coins = 300;
-    expect(run(ctx, 'set_debt', { npc_id: 'npc_brenna', amount: 1000, reason: 'la cuenta de la taberna', due_in_hours: 24 })).toMatchObject({ ok: true, owes: '1.000' });
-    expect(run(ctx, 'pawn_item', { npc_id: 'npc_brenna', instance_id: 'ii_kael_daga', for_item_id: null, amount: null, reason: 'fianza', due_in_hours: null })).toMatchObject({ ok: true, pawned: 'daga', owes: '1.000' });
+    expect(run(ctx, 'set_debt', { npc_id: 'npc_brenna', amount: 1000, reason: 'la cuenta de la taberna', due_in_hours: 24 })).toMatchObject({ ok: true, owes: '10 de oro' });
+    expect(run(ctx, 'pawn_item', { npc_id: 'npc_brenna', instance_id: 'ii_kael_daga', for_item_id: null, amount: null, reason: 'fianza', due_in_hours: null })).toMatchObject({ ok: true, pawned: 'daga', owes: '10 de oro' });
     expect(engine.world.itemInstance('ii_kael_daga').location).toEqual({ type: 'npc', id: 'npc_brenna' });
     const d = openDebts(kael)[0]!;
     expect(d).toMatchObject({ npc_id: 'npc_brenna', amount: 1000, collateral_instance_id: 'ii_kael_daga' });
-    expect(debtLine(engine.world, d, ctx.nowGameS, (n) => n.name)).toBe('Debes 1.000 a Brenna, vence mañana, prenda: daga');
+    expect(debtLine(engine.world, d, ctx.nowGameS, (n) => n.name)).toBe('Debes 10 de oro a Brenna, vence mañana, prenda: daga');
     // El contexto lo muestra.
-    expect(actionContext(engine, kael, 'pagar')).toContain('- Debes 1.000 a Brenna [npc_brenna], vence mañana, prenda: daga [ii_kael_daga]. Motivo: la cuenta de la taberna; fianza.');
+    expect(actionContext(engine, kael, 'pagar')).toContain('- Debes 10 de oro a Brenna [npc_brenna], vence mañana, prenda: daga [ii_kael_daga]. Motivo: la cuenta de la taberna; fianza.');
     // Paga parte: sigue abierta y la prenda no vuelve; sin monedas suficientes, error.
     expect(run(ctx, 'settle_debt', { npc_id: 'npc_brenna', how: 'coins', amount: 200 })).toMatchObject({ ok: true, paid: 200, remaining: 800, settled: false, returned: null });
-    expect(run(ctx, 'settle_debt', { npc_id: 'npc_brenna', how: 'coins', amount: null }).error).toContain('hacen falta 800');
+    expect(run(ctx, 'settle_debt', { npc_id: 'npc_brenna', how: 'coins', amount: null }).error).toContain('hacen falta 8 de oro');
     // Trabajada: saldada y la daga vuelve a la mano.
     expect(run(ctx, 'settle_debt', { npc_id: 'npc_brenna', how: 'work', amount: null })).toMatchObject({ ok: true, settled: true, returned: 'daga' });
     expect(engine.world.itemInstance('ii_kael_daga').location).toMatchObject({ type: 'character', id: 'ch_kael' });
@@ -256,8 +256,8 @@ describe('deudas y prendas', () => {
     run(ctx, 'pawn_item', { npc_id: 'npc_brenna', instance_id: 'ii_kael_daga', for_item_id: null, amount: null, reason: 'fianza', due_in_hours: null });
     let q = journalOf(engine, 'ch_kael').quests.active.find((x) => x.kind === 'debt')!;
     expect(q.title).toBe('Deuda con Brenna');
-    expect(q.text).toContain('Debes 1.000 a Brenna, vence mañana, prenda: daga');
-    expect(q.steps.map((s) => s.text)).toEqual(['Pagar 1.000 monedas a Brenna (o saldarla de otro modo)', 'Recuperar la prenda: daga']);
+    expect(q.text).toContain('Debes 10 de oro a Brenna, vence mañana, prenda: daga');
+    expect(q.steps.map((s) => s.text)).toEqual(['Pagar 10 de oro a Brenna (o saldarla de otro modo)', 'Recuperar la prenda: daga']);
     expect(q.clock).toMatchObject({ days_left: 1, runs_out: 'Brenna puede quedarse la prenda (daga).' });
     run(ctx, 'settle_debt', { npc_id: 'npc_brenna', how: 'work', amount: null });
     const j = journalOf(engine, 'ch_kael');
@@ -290,7 +290,7 @@ describe('cuarto alquilable en mundos generados', () => {
     const room = w.spot('sp_inn_habitacion');
     expect(room.hidden).toBe(false);
     expect(room.state).toMatchObject({ locked: true, key_item_id: ROOM_KEY_ITEM_ID });
-    expect(w.npc('npc_innkeeper').sells).toContainEqual({ item_id: ROOM_NIGHT_ITEM_ID, price: 100 });
+    expect(w.npc('npc_innkeeper').sells).toContainEqual({ item_id: ROOM_NIGHT_ITEM_ID, price: 20 });
     expect(snap.campaign.achievement.reward_spot_id).not.toBe('sp_inn_habitacion');
     const c = [...w.characters.values()][0]!;
     const ctx = ctxFor(engine, c.id);
@@ -300,8 +300,8 @@ describe('cuarto alquilable en mundos generados', () => {
     expect(locked.hint).toContain('llave del cuarto');
     // Compra desde la puerta: el motor la acerca a la barra.
     const b = run(ctx, 'buy_item', { character_id: c.id, npc_id: 'npc_innkeeper', item_id: ROOM_NIGHT_ITEM_ID, quantity: 1 });
-    expect(b).toMatchObject({ ok: true, bought: 'noche de posada (llave del cuarto) ×1', total: 100 });
-    expect(c.coins).toBe(1400);
+    expect(b).toMatchObject({ ok: true, bought: 'noche de posada (llave del cuarto) ×1', total: 20 });
+    expect(c.coins).toBe(1480);
     expect(w.itemsCarriedBy(c.id).some((i) => i.item_id === ROOM_KEY_ITEM_ID)).toBe(true);
     expect(w.itemsCarriedBy(c.id).some((i) => i.item_id === ROOM_NIGHT_ITEM_ID)).toBe(false);
     expect(room.state['unlocked_for']).toEqual([c.id]);
@@ -321,10 +321,10 @@ describe('cuarto alquilable en mundos generados', () => {
     const weapon = w.itemsCarriedBy(c.id).find((i) => w.itemDef(i.item_id).weapon)!;
     const ctx = ctxFor(engine, c.id);
     const r = run(ctx, 'pawn_item', { npc_id: 'npc_innkeeper', instance_id: weapon.id, for_item_id: ROOM_NIGHT_ITEM_ID, amount: null, reason: 'fianza por una noche', due_in_hours: 10 });
-    expect(r).toMatchObject({ ok: true, received: 'noche de posada (llave del cuarto)', owes: '100' });
+    expect(r).toMatchObject({ ok: true, received: 'noche de posada (llave del cuarto)', owes: '2 de plata' });
     expect(w.itemInstance(weapon.id).location).toEqual({ type: 'npc', id: 'npc_innkeeper' });
     expect(moveTo(w, c.id, 'sp_inn_habitacion', 'walk', ctx.nowGameS).ok).toBe(true);
-    expect(openDebts(c)[0]).toMatchObject({ npc_id: 'npc_innkeeper', amount: 100, collateral_instance_id: weapon.id });
+    expect(openDebts(c)[0]).toMatchObject({ npc_id: 'npc_innkeeper', amount: 20, collateral_instance_id: weapon.id });
   });
 
   it('migra un mundo generado antiguo: la habitación premio pasa a visible y cerrada, el premio a la trampilla', async () => {

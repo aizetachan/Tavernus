@@ -31,7 +31,8 @@
 import { GAME_DAY } from '../clock/clock.js';
 import type { Engine } from './engine.js';
 import { characterFacts } from './facts.js';
-import { debtLine, fmtCoins } from './debts.js';
+import { debtLine } from './debts.js';
+import { money } from './money.js';
 import type { Character, GameEvent, Id, Npc } from './model.js';
 import type { DialogueLine } from './moments.js';
 import { maskUnknownNames } from './narrate.js';
@@ -328,7 +329,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
       id: j.id, kind: 'job', title: j.title, text: masked(j.text), status, droppable: status === 'active',
       origin: fromBoard ? { kind: 'board', text: 'Aviso del tablón', where: null } : { kind: 'giver', text: `Te lo pide ${who}`, where: null }, history,
       giver: giver ? npcTag(c, giver) : null, giver_npc_id: giver?.id ?? null,
-      reward: `${j.reward_coins} monedas${j.reward_reputation ? ` · +${j.reward_reputation} de reputación` : ''}`,
+      reward: `${money(w, j.reward_coins)}${j.reward_reputation ? ` · +${j.reward_reputation} de reputación` : ''}`,
       seen_game_s: seen, seen: seen === null ? null : fmt(seen),
       completed_game_s: completed, completed: completed === null ? null : fmt(completed),
       updated_game_s: updated, updated: fmt(updated),
@@ -391,7 +392,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     const settled = d.settled ?? null;
     const steps: JournalStep[] = settled
       ? [{ text: settled.how === 'coins' ? 'Pagada' : settled.how === 'work' ? 'Saldada con trabajo' : `Perdida: ${who} se quedó ${pawnName ?? 'la prenda'}`, done: true }]
-      : [{ text: `Pagar ${fmtCoins(d.amount)} monedas a ${who} (o saldarla de otro modo)`, done: false }, ...(pawnName ? [{ text: `Recuperar la prenda: ${pawnName}`, done: false }] : [])];
+      : [{ text: `Pagar ${money(w, d.amount)} a ${who} (o saldarla de otro modo)`, done: false }, ...(pawnName ? [{ text: `Recuperar la prenda: ${pawnName}`, done: false }] : [])];
     const updated = Math.max(d.created_game_s, settled?.game_s ?? 0);
     const left = d.due_game_s === null ? null : Math.ceil((d.due_game_s - nowS) / DAY_S);
     const debtHistory: JournalChange[] = [{ key: `${d.id}:added`, ...at(d.created_game_s), kind: 'added', text: 'Contraes la deuda', why: cap(d.reason) }];
@@ -457,7 +458,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
       // De oídas: nadie se la ha pedido aún; no se pone «lo pide X».
       giver: giver && o?.kind !== 'heard' ? npcTag(c, giver) : null, giver_npc_id: giver?.id ?? null,
       origin: o ? { kind: o.kind, text: masked(o.text), where: locName(o.location_id) } : giver ? { kind: 'giver', text: `Te lo pide ${npcLabel(c, giver)}`, where: null } : null, history,
-      reward: [r.coins ? `${r.coins} monedas` : '', r.reputation ? `+${r.reputation} de reputación` : '', r.xp ? `${r.xp} PX` : ''].filter(Boolean).join(' · ') || null,
+      reward: [r.coins ? money(w, r.coins) : '', r.reputation ? `+${r.reputation} de reputación` : '', r.xp ? `${r.xp} PX` : ''].filter(Boolean).join(' · ') || null,
       seen_game_s: seen, seen: fmt(seen), completed_game_s: completed, completed: completed === null ? null : fmt(completed),
       updated_game_s: updated, updated: fmt(updated),
       steps: v.steps.map((s) => ({ text: masked(s.step.text), done: s.done })),
@@ -632,7 +633,7 @@ function chronicleOf(engine: Engine, c: Character, mine: readonly GameEvent[], f
       case e.action_type === 'death' && own: {
         const d = e.payload['death'] as { spot_id?: Id; left?: string[]; coins_left?: number; mode?: string } | undefined;
         const sp = d?.spot_id ? w.spots.get(d.spot_id) : undefined;
-        const left = [...(d?.left ?? []), ...(d?.coins_left ? [`${d.coins_left} monedas`] : [])];
+        const left = [...(d?.left ?? []), ...(d?.coins_left ? [money(w, d.coins_left)] : [])];
         add(t, 'combat', `Mueres en ${locName(e.location_id)}${sp ? `, ${sp.name}` : ''}. Tu cuerpo queda allí${left.length ? ` con ${left.join(', ')}` : ''}.`);
         break;
       }

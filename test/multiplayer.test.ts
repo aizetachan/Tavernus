@@ -407,7 +407,7 @@ describe('entre jugadores en la web', () => {
     await readSse(liaStream, (t) => t.includes('event: history'));
     expect((await post('/api/act', { character: tor, text: 'dar 25 monedas a Lia' })).ok).toBe(true);
     const got = await readSse(liaStream, (t) => t.includes('"offer"'));
-    const id = /"offer":\{"id":"([^"]+)","label":"25 monedas","open":true\}/.exec(got)?.[1];
+    const id = /"offer":\{"id":"([^"]+)","label":"2 de plata y 5 de cobre","open":true\}/.exec(got)?.[1];
     expect(id).toBeTruthy();
     const engine = await games.open(game.slug);
     const before = engine.world.character(lia).coins;

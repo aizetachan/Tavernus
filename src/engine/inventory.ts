@@ -5,6 +5,7 @@
 
 import type { CarrySlot, Character, EquipSlot, Id, ItemDef, ItemInstance, ItemSize, Placement, Spot } from './model.js';
 import { EQUIP_SLOTS } from './model.js';
+import { coinPieces, currencyOf } from './money.js';
 import { samePlacement, slotKey, type World } from './world.js';
 
 const SIZE_RANK: Record<ItemSize, number> = { tiny: 0, small: 1, medium: 2, large: 3, bulky: 4 };
@@ -42,7 +43,8 @@ export interface Encumbrance {
 
 export function encumbrance(world: World, c: Character): Encumbrance {
   const rules = world.campaign.capacity_rules;
-  let weight = c.coins / rules.coins_per_lb;
+  // Pesan las piezas (15 de oro), no el valor en cobre (1500).
+  let weight = coinPieces(c.coins, currencyOf(world.campaign)) / rules.coins_per_lb;
   for (const i of directlyCarried(world, c.id)) weight += instanceWeight(world, i);
   const str = c.abilities.str;
   const max = str * rules.carry_per_str;

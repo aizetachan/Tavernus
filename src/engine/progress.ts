@@ -8,6 +8,7 @@ import { GAME_DAY } from '../clock/clock.js';
 import { consumeItem, spawnItem, transferItem } from './inventory.js';
 import { refusesService } from './crime.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
+import { money } from './money.js';
 import type { World } from './world.js';
 
 export interface ProgressEvent {
@@ -65,7 +66,7 @@ export function completeJob(world: World, c: Character, jobId: Id, npcId: Id | n
   c.completed_jobs.push(jobId);
   c.coins += job.reward_coins;
   const rep = addReputation(world, c, world.campaign.achievement.faction_id, job.reward_reputation);
-  const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${job.reward_coins} monedas. Reputación en Brezal: ${rep}.`, quest: { id: job.id, title: job.title, event: 'done', why: `se lo ${job.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${giver.name} · +${job.reward_coins} monedas` } }];
+  const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${money(world, job.reward_coins)}. Reputación en Brezal: ${rep}.`, quest: { id: job.id, title: job.title, event: 'done', why: `se lo ${job.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${giver.name} · +${money(world, job.reward_coins)}` } }];
   const ach = checkAchievement(world, c);
   if (ach) events.push(ach);
   return { ok: true, events };
@@ -164,7 +165,7 @@ export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, qu
   if (no) return { ok: false, reason: no };
   const q = Math.max(1, Math.floor(quantity));
   const total = offer.price * q;
-  if (c.coins < total) return { ok: false, reason: `faltan ${total - c.coins} monedas` };
+  if (c.coins < total) return { ok: false, reason: `faltan ${money(world, total - c.coins)}` };
   const r = deliverGoods(world, c, npc, itemId, q);
   if (!r.ok) return r;
   c.coins -= total; world.touch('characters', c.id);

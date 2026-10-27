@@ -1422,7 +1422,7 @@ ${FIGHT_SCRIPT}
     $('view-place').textContent = placeName;
     $('place-sub').textContent = [s.footer, comma >= 0 ? where.slice(comma + 2) : '', state !== 'despierto' ? state : '', s.description.split('\n')[1] || ''].filter(Boolean).join(' · ');
     var coins = field(s, 'Monedas');
-    $('pack-sub').textContent = [loadShort(s) !== '—' ? 'Carga ' + loadShort(s) + ' lb' : '', coins ? coins + ' monedas' : ''].filter(Boolean).join(' · ') || 'Lo que llevas encima';
+    $('pack-sub').textContent = [loadShort(s) !== '—' ? 'Carga ' + loadShort(s) + ' lb' : '', coins ? coins : ''].filter(Boolean).join(' · ') || 'Lo que llevas encima';
   }
 
   var ABILS = ['FUE', 'DES', 'CON', 'INT', 'SAB', 'CAR'];
@@ -1661,7 +1661,7 @@ ${FIGHT_SCRIPT}
         '<i style="width:' + pct(c.weight_lb) + '%"></i><span class="mk" style="left:' + pct(c.encumbered_lb) + '%" title="Cargado desde ' + c.encumbered_lb + ' lb"></span>' +
         '<span class="mk" style="left:' + pct(c.heavily_lb) + '%" title="Muy cargado desde ' + c.heavily_lb + ' lb"></span></div>';
     } else h += '<div class="pk-w"><b>' + escapeHtml(p.load) + '</b></div>';
-    h += '<div class="pk-coins"><svg class="i"><use href="#i-coin"/></svg><b>' + escapeHtml(String(p.coins).replace(/\B(?=(\d{3})+(?!\d))/g, '.')) + '</b><small>monedas</small></div>';
+    h += '<div class="pk-coins"><svg class="i"><use href="#i-coin"/></svg><b>' + (p.money ? escapeHtml(p.money) + '</b>' : escapeHtml(String(p.coins).replace(/\B(?=(\d{3})+(?!\d))/g, '.')) + '</b><small>monedas</small>') + '</div>';
     if (c) h += pkBar;
     h += '</div>';
     h += '<p class="pack-msg" id="pack-msg" hidden></p>';
@@ -2680,7 +2680,8 @@ ${FIGHT_SCRIPT}
     stream.addEventListener('history', function (e) {
       log.innerHTML = '';
       var h = JSON.parse(e.data);
-      h.forEach(function (m, i) { renderMessage(m, i === h.length - 1); });
+      // Vivo: el último mensaje y la tirada que el servidor aún tiene pendiente, aunque haya avisos detrás.
+      h.forEach(function (m, i) { renderMessage(m, i === h.length - 1 || Boolean(m.roll_pending)); });
       if (!opening && !h.some(function (m) { return !m.scene; })) command('look');
       enterGame();
     });

@@ -19,6 +19,10 @@
  *     reloj lo alcance antes de actuar (aviso corto con cuánto falta; sí puede
  *     marcharse). El que va por detrás nunca espera ni salta tiempo.
  *   - Con el sitio vacío de otros PJs (el bosque, el camino), no espera nadie.
+ *   - Desde AHEAD_NOTICE_S de adelanto (dormir, descansar) se dice claro: al
+ *     jugador, en el texto del descanso y en «dónde estoy» (aheadNotice); al
+ *     máster, en el contexto (prompt.ts). La gente sigue a la hora del mundo:
+ *     la cena no se acaba porque él haya dormido (partida del 27-10, seq 98–106).
  *
  * Encuentros: por trayecto entre localizaciones, una tirada con el rng del
  * motor contra una probabilidad por tipo de zona, distancia, luz y ritmo. Si
@@ -85,6 +89,8 @@ type Traveller = Character & { ahead_until_game_s?: number; journey?: PausedJour
 
 /** Margen para considerar que dos PJs viven la misma hora (s de juego). */
 export const SAME_TIME_TOLERANCE_S = 60;
+/** Desde este adelanto (s de juego) se avisa: un trayecto corto no choca; una hora de descanso o una noche, sí. */
+export const AHEAD_NOTICE_S = 30 * 60;
 
 // ---------------------------------------------------------------------------
 // Reloj propio del PJ
@@ -98,6 +104,27 @@ export function aheadUntil(c: Character): number | null {
 /** Ahora del PJ: el del mundo, o la hora a la que llegó si va por delante. */
 export function nowFor(c: Character, worldNowS: number): number {
   return Math.max(worldNowS, aheadUntil(c) ?? -Infinity);
+}
+
+/** Cuánto va el PJ por delante del mundo (s de juego), o 0. */
+export function aheadBy(c: Character, worldNowS: number): number {
+  const a = aheadUntil(c);
+  return a === null ? 0 : Math.max(0, a - worldNowS);
+}
+
+/**
+ * Aviso al jugador que va por delante del mundo desde AHEAD_NOTICE_S: su hora,
+ * la del mundo, lo que está pasando en el mundo y cuándo le alcanza. null si no
+ * va por delante o es poco. `happening`: lo que hay en marcha a la hora del
+ * mundo, con artículo («la cena del Jabalí»).
+ */
+export function aheadNotice(c: Character, worldNowS: number, clock: GameClock, happening: readonly string[] = []): string | null {
+  const ahead = aheadBy(c, worldNowS);
+  if (ahead < AHEAD_NOTICE_S) return null;
+  const hhmm = (s: number) => clock.format(s).slice(-5);
+  const now = happening.length ? ` (${happening.slice(0, 2).join(' y ')} ${happening.length > 1 ? 'siguen' : 'sigue'} en marcha)` : '';
+  return `⏳ Vas por delante del mundo: para ti son las ${hhmm(worldNowS + ahead)}, pero los demás aún van por las ${hhmm(worldNowS)}${now}. `
+    + `Lo que veas y oigas es de esa hora: la gente sigue en lo suyo y el reloj te alcanza en ${fmtDuration(clock.gameToReal(ahead))} reales.`;
 }
 
 /** Adelanta el reloj del PJ hasta `gameS` (si queda por delante del mundo). */

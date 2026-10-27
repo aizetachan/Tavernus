@@ -30,8 +30,9 @@ import { addScheduledEvent, listSchedule, RECURRENCES } from '../engine/schedule
 import { NPC_TASK_KINDS, orderLine, orderOf, promisedMove, promisedMoveRejection, setNpcOrder, type NpcTaskKind } from '../engine/npcorders.js';
 import { characterFacts, recordFact } from '../engine/facts.js';
 import type { DialogueLine } from '../engine/moments.js';
-import { fmtCoins, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
+import { openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
 import { inventedPlaces } from '../engine/places.js';
+import { money } from '../engine/money.js';
 import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, isPlaceholder, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
@@ -140,7 +141,7 @@ export const MASTER_TOOLS: Tool[] = [
     npc_id: nstr('ID del NPC que se lo pide en persona (tiene que estar con el actor), o null'),
     heard: nstr('Si no se lo pide nadie en persona: de dónde le llega, en una frase («En el Jabalí se comenta que…»), o null'),
     objective: nstr('Qué hay que hacer exactamente, o null'),
-    reward: nstr('Recompensa si la dijo («20 monedas», «un favor»), o null'),
+    reward: nstr('Recompensa si la dijo («3 de plata», «un favor»), o null'),
   }),
   tool('finish_quest', 'Cierra una misión dada con give_quest: cumplida o fallida (ya no se puede).', {
     quest_id: str('ID de la misión (gq_…)'), outcome: enm(['completed', 'failed'], 'Cómo acaba'),
@@ -153,16 +154,16 @@ export const MASTER_TOOLS: Tool[] = [
     character_id: str('ID del personaje'), npc_id: str('ID del NPC'), item_id: str('ID del catálogo'), quantity: num('Cantidad'),
   }),
   tool('set_debt', 'Anota lo que el actor debe a un NPC (una cuenta, un préstamo, un precio fiado) o corrige la deuda abierta con él. Lo que se debe es estado del mundo, no solo narración: sin esto no se puede pagar ni reclamar.', {
-    npc_id: str('ID del NPC al que debe'), amount: num('Monedas que debe en total'), reason: str('Por qué, corto: «la cuenta de la posada»'),
+    npc_id: str('ID del NPC al que debe'), amount: num('Lo que debe en total, en la moneda más pequeña (cobre: 1 de plata = 10, 1 de oro = 100)'), reason: str('Por qué, corto: «la cuenta de la posada»'),
     due_in_hours: nnum('Horas de juego hasta que vence (de la noche a mañana por la mañana ≈ 10); null = sin plazo'),
   }),
   tool('pawn_item', 'El actor deja un objeto suyo en prenda a un NPC: el objeto pasa al NPC y queda ligado a la deuda; vuelve al saldarla. Con for_item_id, a cambio de algo que el NPC vende (una noche de posada): se lo entrega fiado y la deuda es su precio. Sin for_item_id, la prenda garantiza la deuda anotada o una nueva de amount.', {
     npc_id: str('ID del NPC que guarda la prenda'), instance_id: str('ID del ejemplar que deja (inventario del actor)'),
-    for_item_id: nstr('ID del catálogo de lo que recibe fiado (de su lista «Vende»), o null'), amount: nnum('Sin for_item_id: monedas que garantiza; null si ya hay deuda anotada'),
+    for_item_id: nstr('ID del catálogo de lo que recibe fiado (de su lista «Vende»), o null'), amount: nnum('Sin for_item_id: lo que garantiza, en la moneda más pequeña (cobre); null si ya hay deuda anotada'),
     reason: str('Por qué, corto: «fianza por una noche»'), due_in_hours: nnum('Horas de juego hasta que vence; null = sin plazo'),
   }),
   tool('settle_debt', 'Salda (o rebaja) la deuda del actor con un NPC: coins paga con sus monedas (amount o todo), work la da por pagada con un trabajo ya hecho, forfeit la da por perdida y el NPC se queda la prenda. Al saldarla, la prenda vuelve al actor.', {
-    npc_id: str('ID del NPC'), how: enm([...SETTLE_HOW], 'coins (paga), work (trabajo hecho), forfeit (pierde la prenda)'), amount: nnum('Solo coins: monedas que paga; null = todo'),
+    npc_id: str('ID del NPC'), how: enm([...SETTLE_HOW], 'coins (paga), work (trabajo hecho), forfeit (pierde la prenda)'), amount: nnum('Solo coins: lo que paga, en la moneda más pequeña (cobre); null = todo'),
   }),
   tool('attack', 'Ataque de un NPC (o de un PJ fuera del flujo de tirada del jugador). El servidor tira contra la CA, calcula y aplica el daño. Para el ataque del propio jugador usa requires_roll con kind=attack y requires_roll_target.', {
     attacker_id: str('ID del que ataca (NPC o personaje)'), target_id: str('ID del objetivo'), advantage: enm(ADV, 'Ventaja o desventaja'),
@@ -1001,7 +1002,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     case 'set_debt': {
       const due = input['due_in_hours'] == null ? null : nowGameS + Math.max(0, Number(input['due_in_hours'])) * 3600;
       const r = setDebt(world, actor, { npc_id: s('npc_id'), amount: input['amount'], reason: s('reason'), due_game_s: due }, nowGameS);
-      return r.ok ? { ok: true, debt_id: r.debt.id, existing: r.existing, owes: fmtCoins(r.debt.amount) } : { error: r.error };
+      return r.ok ? { ok: true, debt_id: r.debt.id, existing: r.existing, owes: money(world, r.debt.amount) } : { error: r.error };
     }
     case 'pawn_item': {
       const npc = world.npc(s('npc_id'));
@@ -1010,7 +1011,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const due = input['due_in_hours'] == null ? null : nowGameS + Math.max(0, Number(input['due_in_hours'])) * 3600;
       const r = pawnItem(world, actor, { npc_id: npc.id, instance_id: s('instance_id'), for_item_id: input['for_item_id'] ? s('for_item_id') : null, amount: input['amount'], reason: s('reason'), due_game_s: due }, nowGameS);
       if (!r.ok) return { error: r.error };
-      return { ok: true, pawned: r.item, held_by: npc.name, received: r.received, ...(r.unlocked.length ? { unlocked: r.unlocked } : {}), owes: fmtCoins(r.debt.amount), debt_id: r.debt.id };
+      return { ok: true, pawned: r.item, held_by: npc.name, received: r.received, ...(r.unlocked.length ? { unlocked: r.unlocked } : {}), owes: money(world, r.debt.amount), debt_id: r.debt.id };
     }
     case 'settle_debt': {
       const npc = world.npc(s('npc_id'));
@@ -1283,7 +1284,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         const conv = conversationOf(engine.events.all(), actor.id, positionOf(world, actor, nowGameS));
         const npcId = input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null;
         const lines = parseLines(input['lines'], npcId, (id) => world.npcs.has(id));
-        const p = conversationCheck({ conversation: conv, narration: s('narration_private'), lines, npcId, okTools: ctx.ok_tools ?? [], attack: req?.kind === 'attack', rollOutcome: Boolean(ctx.roll_category) });
+        const others = conv ? [...world.npcs.values()].filter((n) => n.id !== conv.npc_id && world.spot(n.location.id).location_id === here()).map((n) => n.name) : [];
+        const p = conversationCheck({ conversation: conv, narration: s('narration_private'), lines, npcId, okTools: ctx.ok_tools ?? [], attack: req?.kind === 'attack', rollOutcome: Boolean(ctx.roll_category), others });
         if (p && conv) {
           ctx.conversation_rejections = (ctx.conversation_rejections ?? 0) + 1;
           const npc = world.npcs.get(conv.npc_id);

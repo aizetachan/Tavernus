@@ -456,12 +456,13 @@ Todo lo consumible se consume de verdad, con **ritmos ajustados para que sea dis
 ### 5.6 Economía — DECIDIDO como punto de partida del MVP (se analiza con datos reales)
 El valor y el esfuerzo tienen que sentirse como en el mundo real: ni hacerse rico en una tarde, ni que 20 € parezcan calderilla.
 
-- **Ancla**: `1 € ≈ 10 monedas`. 20 € = 200 monedas. Se puede comprar algo más que en la realidad (el factor `purchasing_power`, inicial 1.3), pero el esfuerzo es equivalente.
-- **Moneda**: una sola unidad de cuenta ("monedas") con tres denominaciones para flavor y peso: cobre = 1, plata = 10, oro = 100. Los precios se muestran en la denominación natural ("3 de oro y 40 de plata"). Peso: 50 monedas = 1 lb en cualquier denominación → llevar 20.000 monedas en cobre es un problema, en oro no.
-- **Precios**: tabla propia anclada a equivalentes reales × `region_multiplier`, **no** la del SRD. Referencias iniciales: cerveza 30 · comida en taberna 120 · noche en posada 500 · mochila 400 · antorcha ×10 = 80 · poción de curación 2.500 · espada corta 3.000 · cota de malla 15.000 · caballo 25.000.
-- **Ingresos**: un encargo de un día paga como un jornal real (800–1.000). Quests secundarias: 1–5 jornales. Hilos de trama: más, pero pocos. Botín de combate: lo que llevaban, no bolsas de oro mágicas.
+> **Cambiado el 27-10-2026** (revisión de la partida «La noche del Brezal»): un mago empezaba «cargado» con 1.500 monedas que pesaban 30 lb, y el tablón pagaba 900 por diez leños. Ahora se paga como en el SRD: una cerveza son unas monedas de cobre y un arma legendaria, unas 100 de oro. Código en `src/engine/money.ts`.
+
+- **Moneda**: oro, plata y cobre (1 de oro = 10 de plata = 100 de cobre; cada campaña puede traer las suyas en `campaign.currency`). El valor se guarda en cobre (`Character.coins`, precios, recompensas, deudas) y se **enseña, se lee y se pesa en monedas**: 1.500 son «15 de oro», 125 son «1 de oro, 2 de plata y 5 de cobre». Se lleva siempre el menor número de piezas (el cambio se da solo); pesan esas piezas, 50 por libra (`coins_per_lb`). El jugador puede escribir «dar 3 de oro a Mira» o «20 monedas» (cobre).
+- **Precios**: los del catálogo SRD en cobre para el equipo (daga 2 de oro, espada corta 10, espada larga 15, cota de malla 150); lo de cada día, barato: cerveza 4 de cobre · ración 1 de plata · noche de posada 2 de plata (`ROOM_NIGHT_PRICE`) · antorcha 1–2 de cobre. Lo que compran los NPC, por debajo de lo que venden (un leño, 3 de cobre).
+- **Ingresos**: un encargo del tablón paga unas monedas de plata (15–60 de cobre en Brezal; 20–80 en los mundos generados): de una a tres noches de posada, no nueve. Misiones: de unas monedas de plata (acto I) a unas 10 de oro (el final). Botín de combate: lo que llevaban, no bolsas de oro mágicas.
 - **Sumideros**: alojamiento, comida, reparaciones, entrenamiento, monturas, alijos alquilados, impuestos/peajes de facción.
-- **Oro inicial**: como un adulto joven con ahorros modestos: 1.500 (150 €) tras el equipo de clase.
+- **Dinero inicial**: unas pocas monedas tras el equipo de clase: 1 de oro y 5 de plata (`campaign.starting_coins`, por defecto `DEFAULT_STARTING_COINS` = 150).
 - **Tiendas**: son NPCs con `stock[]` (`item_id, qty, price_override?`), horario, `buys[]` (qué compran y a qué % del precio, inicial 40%). Reposición por línea secundaria recurrente. Regateo: una tirada de Persuasión por compra, ±10% máx.
 - **Comercio entre jugadores**: `transfer_item` en el mismo punto con **confirmación de ambos** (botones en cada `#pov`); intercambio de monedas igual. Sin mercado global ni buzón en el MVP: si no está, no puedes.
 - **Botín**: quien coge el ítem lo tiene (mismo punto, orden de la cola). Sin sistema de reparto.

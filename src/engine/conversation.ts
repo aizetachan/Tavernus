@@ -28,6 +28,13 @@ export interface Conversation {
 export const CONVERSATION_MAX_WORDS = 40;
 /** El desenlace de una tirada es relevante por definición: algo más de margen. */
 export const CONVERSATION_MAX_WORDS_ROLL = 60;
+/**
+ * Un gesto repetido junto a una acción concreta no es un turno de relleno: si
+ * el resto de la prosa (las frases sin gesto repetido) llega a estas palabras,
+ * pasa. Partida del 27-10, seq 96: «Brenna no levanta la vista de la jarra.
+ * Cuenta cien monedas…, deja una llave de hierro…» se rechazaba entero.
+ */
+export const CONVERSATION_FILLER_REST_WORDS = 8;
 
 /** Desplazamientos: llegar, pasar por un sitio, entrar en la partida. */
 const MOVES = new Set(['arrived', 'passed', 'move', 'master_arrival', 'master_intro', 'character_joined', 'travel_encounter']);
@@ -62,6 +69,11 @@ export function narratorProse(narration: string): string {
 
 export function wordCount(text: string): number {
   return (text.match(/[\p{L}\p{N}]+/gu) ?? []).length;
+}
+
+/** Frases de la prosa, por su puntuación final. */
+function sentences(prose: string): string[] {
+  return prose.split(/(?<=[.;!?…])\s+/).map((x) => x.trim()).filter(Boolean);
 }
 
 /** Claves de GESTURES que aparecen en el texto. */
@@ -149,6 +161,8 @@ export type ConversationProblem =
  * CONVERSATION_MAX_WORDS sin contar las citas; CONVERSATION_MAX_WORDS_ROLL si
  * narra el desenlace de una tirada) o con gestos ya narrados, no. Afinado con
  * fdd, los-kiwis y el piloto 20261022-0929: ningún turno fuera de conversación.
+ * Desde la partida del 27-10: el tope solo cuenta si alguien habla, el gesto de
+ * otro NPC no es relleno y un gesto repetido junto a una acción concreta pasa.
  */
 export function conversationCheck(input: {
   conversation: Conversation | null;
@@ -158,6 +172,8 @@ export function conversationCheck(input: {
   okTools: readonly string[];
   attack?: boolean;
   rollOutcome?: boolean;
+  /** Nombres de los demás NPC del sitio (no el interlocutor): su gesto es una reacción nueva, no relleno (seq 95: Garrán te mira de reojo). */
+  others?: readonly string[];
 }): ConversationProblem | null {
   const c = input.conversation;
   if (!c || input.attack || input.okTools.some((t) => t === 'move_to' || COMBAT_TOOLS.has(t))) return null;
@@ -167,9 +183,21 @@ export function conversationCheck(input: {
   if (!prose) return input.lines.length ? null : { kind: 'empty' };
   const words = wordCount(prose);
   const max = input.rollOutcome ? CONVERSATION_MAX_WORDS_ROLL : CONVERSATION_MAX_WORDS;
-  if (words > max) return { kind: 'long', words, max };
-  const repeated = gesturesIn(prose).filter((g) => c.gestures.includes(g));
-  return repeated.length ? { kind: 'filler', gestures: repeated } : null;
+  // Sin nadie que hable (ni lines ni citas) el turno no es charla, es una acción narrada («esperar a que se acueste
+  // el pueblo», seq 39): el tope de palabras no aplica. El relleno de gestos, sí.
+  const talk = input.lines.length > 0 || prose !== input.narration.replace(/\s+/g, ' ').trim();
+  if (talk && words > max) return { kind: 'long', words, max };
+  const spaced = (t: string) => ` ${norm(t).replace(/[^a-zñ0-9]+/g, ' ').trim()} `;
+  const others = (input.others ?? []).map(spaced).filter((o) => o.trim().length > 2);
+  const repeated = new Set<string>();
+  let rest = 0;
+  for (const sentence of sentences(prose)) {
+    const g = gesturesIn(sentence).filter((x) => c.gestures.includes(x));
+    const n = spaced(sentence);
+    if (g.length && !others.some((o) => n.includes(o))) g.forEach((x) => repeated.add(x));
+    else rest += wordCount(sentence);
+  }
+  return repeated.size && rest < CONVERSATION_FILLER_REST_WORDS ? { kind: 'filler', gestures: [...repeated] } : null;
 }
 
 export function conversationRejection(p: ConversationProblem, name: string): string {

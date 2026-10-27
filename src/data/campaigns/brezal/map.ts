@@ -84,7 +84,7 @@ export const LOCATIONS: AuthoredLocation[] = [
       S('sp_pl_porton', 'el portón norte', ['porton', 'portón', 'puerta norte', 'salida norte', 'north gate'], ['gate'], 30, 20, 'El portón del norte. El camino se parte enseguida: a un lado la arboleda del Soto, al otro el Lindero, donde empieza la niebla.'),
       S('sp_pl_herreria', 'la puerta de la herrería', ['fragua', 'martilleo'], ['door'], 24, -4, 'La puerta de la herrería de Hugo, con el hollín de veinte años en el dintel y el martilleo detrás.'),
       S('sp_pl_casona', 'la puerta de la casona', ['casa del regidor', 'aldaba'], ['door'], 6, 22, 'La puerta de roble de la casona del regidor, con aldaba de hierro y un escalón de piedra nueva. Encima, la torre del reloj; en la fachada, a la luz de la tarde, se ve la sombra de un escudo picado.'),
-      S('sp_pl_callejon', 'el callejón de las hierbas', ['callejón', 'callejon'], ['road'], -6, 14, 'Un callejón estrecho que huele a hierbas cocidas y lleva a la casa de la curandera.'),
+      S('sp_pl_callejon', 'el callejón de las hierbas', ['callejón', 'callejon'], ['road'], -6, 14, 'Un callejón estrecho que huele a hierbas cocidas; al fondo, a veinte pasos de la plaza, la Casa de las hierbas, donde vive y cura Ilse.'),
       S('sp_pl_camino_molino', 'el camino del molino', ['camino del molino', 'huertos'], ['road'], 36, 6, 'Un camino de carro que baja entre huertos hacia el ruido del agua y la rueda del molino.'),
       S('sp_pl_corrales', 'el camino de los corrales', ['camino de los corrales', 'cercas'], ['road'], -10, -6, 'Un camino de tierra entre cercas de piedra que huele a gallinero y lleva a la granja de la viuda Úrsula.'),
     ],
@@ -128,7 +128,7 @@ export const LOCATIONS: AuthoredLocation[] = [
   },
   {
     id: 'loc_curandera', zone_id: 'zn_brezal', name: 'Casa de las hierbas', indoor: true,
-    description_base: 'Una casa de una sola pieza llena de manojos de hierbas secándose del techo; huele a corteza cocida y a vela de sebo.',
+    description_base: 'La casa de Ilse, al fondo del callejón de las hierbas, junto a la plaza: una sola pieza llena de manojos de hierbas secándose del techo; huele a corteza cocida y a vela de sebo.',
     ambience: { light: 'twilight', noise: 0.05, smell: 'hierbas cocidas' },
     secret: 'Ilse fue la última sacerdotisa de la llama de Vharn: sabe las palabras que templan una ascua de la Brasa y reconoce en la niebla el cerrojo de sus antiguos maestros.',
     spots: [
@@ -169,7 +169,7 @@ export const LOCATIONS: AuthoredLocation[] = [
   },
   {
     id: 'loc_claro', zone_id: 'zn_brezal', name: 'El Soto', indoor: false,
-    description_base: 'Una arboleda de fresnos y alisos en el borde del pueblo, a un tiro de piedra de las últimas casas. Un roble enorme domina el centro; el arroyo baja tibio entre las raíces.',
+    description_base: 'Una arboleda de fresnos y alisos en el borde del pueblo, a un tiro de piedra de las últimas casas, fuera del portón norte; hoy solo vive aquí Hal, el cazador, en su choza. Un roble enorme domina el centro; el arroyo baja tibio entre las raíces.',
     ambience: { light: 'natural', noise: 0.1 },
     secret: 'De noche Tobías cruza el Soto por el arroyo hacia el Granero Quemado; el hacha del sendero es suya. Al pie del roble, en una madriguera, la loba de ceniza tiene acorralado al perro de Brenna: tampoco ella puede salir del valle.',
     spots: [

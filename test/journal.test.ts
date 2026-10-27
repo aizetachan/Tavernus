@@ -34,7 +34,7 @@ describe('diario: misiones', () => {
     expect(jobs.every((q) => q.origin?.kind === 'board' && q.history[0]!.kind === 'added')).toBe(true);
     expect(jobs.map((q) => q.id).sort()).toEqual([...first].sort());
     expect(jobs.every((q) => q.status === 'available' && q.seen !== null && q.giver === 'Brenna')).toBe(true);
-    expect(jobs.find((q) => q.id === 'job_lena')).toMatchObject({ reward: '900 monedas · +1 de reputación', steps: [{ text: 'Conseguir 10 × leña', done: false }, { text: 'Entregarlo a Brenna', done: false }] });
+    expect(jobs.find((q) => q.id === 'job_lena')).toMatchObject({ reward: '6 de plata · +1 de reputación', steps: [{ text: 'Conseguir 10 × leña', done: false }, { text: 'Entregarlo a Brenna', done: false }] });
     // El logro, con sus pistas como objetivos, sin desvelar las que faltan.
     const ach = j.quests.active.find((q) => q.kind === 'achievement')!;
     expect(ach.title).toBe('Quien ha mirado la ceniza');
