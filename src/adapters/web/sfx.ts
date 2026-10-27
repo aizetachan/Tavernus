@@ -433,9 +433,10 @@ export const SFX_SCRIPT = String.raw`<script>
   function num(v, d) { var n = Number(v); return v === null || v === undefined || v === '' || !isFinite(n) ? d : Math.max(0, Math.min(1, n)); }
   function isAmb(k) { return /^ambiente-/.test(k); }
   var AC = window.AudioContext || window.webkitAudioContext;
-  var muted = store('tavernus.sfx.muted') === '1', vol = num(store('tavernus.sfx.volume'), 0.7), ambVol = num(store('tavernus.sfx.ambience'), 0.5);
+  var muted = store('tavernus.sfx.muted') === '1', vol = num(store('tavernus.sfx.volume'), 0.7), ambVol = 0.5;
   // Tres canales: la canción (música de entrada, en bucle), los efectos y el ambiente; cada uno con volumen e interruptor.
-  var musicOn = store('tavernus.music.game') !== '0', musicVol = num(store('tavernus.music.volume'), 0.6), ambOn = store('tavernus.sfx.ambOn') !== '0';
+  var musicOn = store('tavernus.music.game') !== '0', musicVol = num(store('tavernus.music.volume'), 0.6);
+  // El ambiente suena a la mitad del volumen de «Efectos y ambiente», que lo enciende y apaga con los efectos.
   var ctx = null, master = null, ambBus = null, fxBus = null, unlocked = false, fresh = false, ducked = false, external = false;
   var cache = {}, files = {}, credits = [], ai = false, amb = null, wantAmb = null, seqEnd = 0, character = null;
 
@@ -448,9 +449,7 @@ export const SFX_SCRIPT = String.raw`<script>
     '<button type="button" class="sfx-more" title="Volumen del sonido" aria-label="Volumen del sonido" aria-expanded="false">' + '${CARET}' + '</button>' +
     '<div class="sfx-pop" hidden>' +
       '<div class="mix"><input type="checkbox" data-k="musicOn" aria-label="Música"><label>Música<input type="range" min="0" max="1" step="0.05" data-k="music"></label></div>' +
-      '<div class="mix"><input type="checkbox" data-k="on" aria-label="Efectos"><label>Efectos<input type="range" min="0" max="1" step="0.05" data-k="volume"></label></div>' +
-      '<div class="mix"><input type="checkbox" data-k="ambOn" aria-label="Ambiente"><label>Ambiente<input type="range" min="0" max="1" step="0.05" data-k="ambience"></label></div>' +
-      '<p class="note"></p>' +
+      '<div class="mix"><input type="checkbox" data-k="on" aria-label="Efectos y ambiente"><label>Efectos y ambiente<input type="range" min="0" max="1" step="0.05" data-k="volume"></label></div>' +
       '<p class="note credits" hidden></p>' +
     '</div>';
   if (head) head.insertBefore(box, head.querySelector('.tts')); else return;
@@ -468,13 +467,8 @@ export const SFX_SCRIPT = String.raw`<script>
     musicBtn.setAttribute('aria-label', musicBtn.title);
     pop.querySelector('[data-k=on]').checked = !muted;
     pop.querySelector('[data-k=musicOn]').checked = musicOn;
-    pop.querySelector('[data-k=ambOn]').checked = ambOn;
     pop.querySelector('[data-k=music]').value = String(musicVol);
     pop.querySelector('[data-k=volume]').value = String(vol);
-    pop.querySelector('[data-k=ambience]').value = String(ambVol);
-    pop.querySelector('.note').textContent = (ai ? 'Efectos generados por IA y cacheados por partida; lo que falta se sintetiza aquí.'
-      : credits.length ? 'Ambientes grabados con licencia libre; los efectos se sintetizan en el navegador.' : 'Efectos y ambientes sintetizados en el navegador, sin coste.') +
-      (unlocked ? '' : ' Empieza a sonar al tocar la página.');
     // Créditos de las pistas de ambiente (obligatorios en las CC BY; las CC0 se citan igual).
     var cr = pop.querySelector('.credits');
     cr.hidden = !credits.length;
@@ -498,7 +492,7 @@ export const SFX_SCRIPT = String.raw`<script>
   function levels(s) {
     if (!ctx) return;
     ramp(master.gain, muted ? 0 : vol, s);
-    ramp(ambBus.gain, ambOn ? ambVol * (ducked || external ? 0.35 : 1) : 0, s);
+    ramp(ambBus.gain, ambVol * (ducked || external ? 0.35 : 1), s);
     introLevel(s);
   }
   /** Primer gesto: crea o reanuda el contexto; en iOS, además, un búfer mudo dentro del gesto. */
@@ -612,13 +606,11 @@ export const SFX_SCRIPT = String.raw`<script>
     var k = ev.target.getAttribute('data-k');
     if (k === 'music') { musicVol = num(ev.target.value, musicVol); store('tavernus.music.volume', String(musicVol)); introLevel(0.1); }
     if (k === 'volume') { vol = num(ev.target.value, vol); store('tavernus.sfx.volume', String(vol)); levels(0.1); }
-    if (k === 'ambience') { ambVol = num(ev.target.value, ambVol); store('tavernus.sfx.ambience', String(ambVol)); levels(0.1); }
   });
   pop.addEventListener('change', function (ev) {
     var k = ev.target.getAttribute('data-k');
     if (k === 'on') setMuted(!ev.target.checked);
     if (k === 'musicOn') setMusic(ev.target.checked);
-    if (k === 'ambOn') { ambOn = ev.target.checked; store('tavernus.sfx.ambOn', ambOn ? '1' : '0'); levels(0.3); ui(); }
   });
 
   /** Estado del PJ: su ambiente actual, qué claves hay en fichero y si la IA está activa. */

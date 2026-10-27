@@ -610,7 +610,7 @@ export const PAGE = String.raw`<!doctype html>
     #cube-menu .lbl { display: inline-flex; align-items: center; height: auto; padding: 0; background: none; box-shadow: none; font-size: 13px; font-weight: 500; }
     #cube-menu small { display: none; }
     #cube-menu button { position: relative; }
-    #cube-menu .dotnew { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; margin: 0; box-shadow: 0 0 0 2px var(--panel); }
+    #cube-menu .dotnew { position: absolute; top: 1px; right: 4px; width: 10px; height: 10px; margin: 0; box-shadow: 0 0 0 2px var(--panel); }
     #drawer-scrim { position: absolute; inset: 0; z-index: 4; display: block; border: 0; background: rgba(5,6,6,.6); }
     #drawer-scrim[hidden] { display: none; }
     /* Modal, no hoja que sube: con margen alrededor; el cuadro de texto y el botón de cerrar siguen debajo. */
@@ -1062,9 +1062,9 @@ ${FIGHT_STYLE}
         <div class="slash-list"></div>
       </div>
       <div id="gear-menu" role="dialog" aria-label="Ajustes" hidden>
-        <h3>Generar imagen, sonido y música</h3>
+        <h3>Imagen</h3>
         <button type="button" class="gm-paint" hidden><span class="bub"></span><span><b>Generar imagen</b><small>Ilustra este momento de la partida</small></span></button>
-        <section data-slot="sfx"></section>
+        <section data-slot="sfx"><h3>Audio</h3></section>
         <section data-slot="tts"><h3>Narrador</h3></section>
         <section data-slot="voice"><h3>Dictar con la voz</h3></section>
       </div>
@@ -2353,9 +2353,14 @@ ${FIGHT_SCRIPT}
   /** Novedades en el diario: punto en el cubo, en «Diario» del menú y en su pestaña. */
   function setJournalNew(on) {
     document.querySelectorAll('[data-dr="journal"]').forEach(function (b) { b.classList.toggle('new', on); });
-    $('cube').classList.toggle('new', on);
-    var dot = document.querySelector('#cube-menu .dotnew');
+    var dot = document.querySelector('#cube-menu [data-open="journal"] .dotnew');
     if (dot) dot.hidden = !on;
+    cubeNew();
+  }
+  /** El punto del cofre: hay novedades en alguna de sus opciones (el Diario o, en el móvil, el tablero). */
+  function cubeNew() {
+    var journal = document.querySelector('#cube-menu [data-open="journal"] .dotnew'), side = document.querySelector('#cube-menu [data-side] .dotnew');
+    $('cube').classList.toggle('new', !journal.hidden || (!side.hidden && window.matchMedia('(max-width: 820px)').matches));
   }
   function markJournalSeen() {
     if (!journalData) return;
@@ -2739,6 +2744,7 @@ ${FIGHT_SCRIPT}
     var chip = on ? '<button type="button" class="qchip" data-qnew title="Ver qué ha cambiado en el Diario">' + badge.html + '</button>' : '';
     $('to-side').classList.toggle('new', on);
     var sideDot = document.querySelector('#cube-menu [data-side] .dotnew'); if (sideDot) sideDot.hidden = !on;
+    cubeNew();
     var h = '<div class="sec-row"><button type="button" class="sec-t" data-col="quest" aria-expanded="' + !document.body.classList.contains('col-quest') + '"><svg class="i chev"><use href="#i-chev"/></svg>' +
       '<span class="qflag' + (on ? ' on' : '') + '" data-qnew title="Misiones: abre el Diario"><svg class="i"><use href="#i-q-active"/></svg></span>Misión' + (live.length > 1 ? '<span>' + live.length + ' en curso</span>' : '') + '</button>' + chip + '</div><div class="sec-b">';
     if (!q) { $('quest').innerHTML = h + '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button></div>'; return; }
