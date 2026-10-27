@@ -296,14 +296,15 @@ export function recapTemplate(engine: Engine, c: Character, since: GameEvent, ho
   for (const q of j.quests.active) {
     if (q.kind === 'main') {
       const left = q.clock ? (q.clock.days_left > 0 ? `; quedan ${q.clock.days_left} día${q.clock.days_left === 1 ? '' : 's'} (vence el ${lowerFirst(q.clock.deadline)})` : '; el plazo ya ha vencido') : '';
-      doing.push(`${q.title}: ${lowerFirst(noDot(q.steps[0]?.text ?? q.text))}${left}.`);
+      // La de la historia escrita va por actos: el primero sin dar.
+      doing.push(`${q.title}: ${lowerFirst(noDot(q.steps.find((s) => !s.done)?.text ?? q.steps[0]?.text ?? q.text))}${left}.`);
     } else if (q.kind === 'debt') {
       doing.push(`${dot(q.text.split('. ')[0]!)}`);
     } else if (q.kind === 'job' && q.status === 'active') {
       doing.push(`Encargo: ${q.title}${q.giver ? ` (lo pide ${q.giver})` : ''}.`);
     } else if (q.kind === 'achievement' && q.status === 'active') {
       doing.push(`${q.title}: ${lowerFirst(q.steps.filter((s) => !s.done).map((s) => s.text).join('; ') || 'en marcha')}.`);
-    } else if ((q.kind === 'story' || q.kind === 'given') && q.status === 'active') {
+    } else if ((q.kind === 'story' || q.kind === 'given') && (q.status === 'active' || q.status === 'ready')) {
       // La historia escrita y lo que le han pedido: con lo que toca ahora (el título entre comillas no se enmascara).
       const now = q.summary.next ?? q.steps.find((s) => !s.done)?.text;
       doing.push(`«${q.title.replace(/^[IV]+ · /, '')}»${now ? `: ${lowerFirst(noDot(now))}` : ''}.`);

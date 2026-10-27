@@ -524,7 +524,19 @@ export const PAGE = String.raw`<!doctype html>
   .qi svg.i { width: 16px; height: 16px; }
   .qi.active { background: var(--accent-tint); color: var(--accent); }
   .qi.completed { background: rgba(79,191,122,.14); color: var(--ok); }
-  .qi.expired { color: var(--faint); opacity: .7; }
+  .qi.expired, .qi.failed { color: var(--faint); opacity: .7; }
+  .qi.offered { background: rgba(240,200,80,.16); color: #f0c850; }
+  .qi.ready { background: rgba(240,200,80,.22); color: #f0c850; }
+  /* Nivel de la misión con el color de su dificultad para el PJ, como en los MMO. */
+  .lv { display: inline-block; margin-right: 4px; padding: 0 5px; border-radius: 6px; font-size: 10.5px; font-weight: 700; line-height: 16px; vertical-align: 1px; background: rgba(255,255,255,.06); }
+  .lv.d-trivial { color: #9a9a9a; } .lv.d-easy { color: #5fcf6f; } .lv.d-normal { color: #f0d050; } .lv.d-hard { color: #f09040; } .lv.d-deadly { color: #ff5a4a; }
+  #journal .qans, .msg.notice .qans { display: flex; gap: 8px; margin: 8px 0 4px; }
+  #journal .qans button, .msg.notice .qans button { height: 30px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(240,200,80,.45); background: rgba(240,200,80,.14); color: #f0c850; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  #journal .qans button.no, .msg.notice .qans button.no { border-color: var(--line); background: none; color: var(--muted); }
+  #journal .qans button:disabled, .msg.notice .qans button:disabled { opacity: .5; cursor: default; }
+  /* Punto discreto en quien está al final de una pista activa (sin «!» flotantes). */
+  .qlead { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--accent); opacity: .85; vertical-align: 2px; }
+  #board .qlead circle { fill: var(--accent, #e6b75a); stroke: #17181d; stroke-width: 1.2; opacity: .9; }
   #journal .qdrop { margin-top: 8px; background: none; border: 1px solid var(--line); color: var(--faint); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
   #journal .qdrop:hover { color: var(--text); }
   .qi.main { background: var(--accent); color: var(--accent-ink); }
@@ -617,7 +629,13 @@ export const PAGE = String.raw`<!doctype html>
   .msg.notice.q-step > span:first-child::before, .msg.notice.q-done > span:first-child::before { content: '✔ '; color: var(--ok); }
   .msg.notice.q-done { border-color: rgba(79,191,122,.5); background: #142019; }
   .msg.notice.q-failed > span:first-child::before, .msg.notice.q-expired > span:first-child::before, .msg.notice.q-dropped > span:first-child::before { content: '✕ '; color: var(--faint); }
-  .msg.notice.q-failed, .msg.notice.q-expired, .msg.notice.q-dropped { border-color: var(--sep); background: #161a1b; }
+  .msg.notice.q-failed, .msg.notice.q-expired, .msg.notice.q-dropped, .msg.notice.q-declined { border-color: var(--sep); background: #161a1b; }
+  .qi.declined { color: var(--faint); opacity: .7; }
+  .qi.lead { background: rgba(255,255,255,.05); color: var(--accent); }
+  .msg.notice.q-warned > span:first-child::before { content: '⏳ '; }
+  .msg.notice.q-warned { border-color: rgba(255,157,148,.5); }
+  .msg.notice.q-rumor { border-style: dashed; background: #1a1813; }
+  .msg.notice.q-rumor > span:first-child::before { content: '“ '; color: var(--accent); }
   .msg.notice .why { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
   .msg.notice.q-level { max-width: min(94%, 560px); padding: 9px 16px 10px; border-color: rgba(230,183,90,.7); background: linear-gradient(180deg, #2a2210, #1f1b12); box-shadow: 0 0 18px rgba(230,183,90,.12); }
   .msg.notice.q-level > span:first-child { font: 700 14.5px/1.3 var(--display); color: #f1d9a4; }
@@ -921,6 +939,10 @@ ${FIGHT_STYLE}
   <symbol id="i-q-available" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" stroke-dasharray="3 3"/><path d="M12 8.5v4M12 15.5v.01"/></symbol>
   <symbol id="i-q-active" viewBox="0 0 24 24"><path d="M6 21V4M6 4h10l-2 4 2 4H6"/></symbol>
   <symbol id="i-q-completed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9.5"/></symbol>
+  <symbol id="i-q-declined" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M6 18L18 6"/></symbol>
+  <symbol id="i-q-lead" viewBox="0 0 24 24"><path d="M4 12h12M12 6l6 6-6 6"/></symbol>
+  <symbol id="i-q-ready" viewBox="0 0 24 24"><path d="M8.5 8.5a3.5 3.5 0 1 1 5 3.2c-1 .5-1.5 1.2-1.5 2.3v.5M12 18.5v.01"/></symbol>
+  <symbol id="i-q-failed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></symbol>
   <symbol id="i-q-expired" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9"/></symbol>
   <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></symbol>
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></symbol>
@@ -2160,7 +2182,7 @@ ${FIGHT_SCRIPT}
       return '<g class="token ' + t.kind + ' ' + t.level + (face ? ' has-face' : '') + '"' + (t.id ? ' data-id="' + escapeHtml(t.id) + '"' : '') + '><circle class="disc" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr) + '"/>' +
         '<text x="' + r1(x) + '" y="' + r1(y) + '" fill="' + ring + '" font-size="' + r1(rr * 0.95) + '">' + escapeHtml(letter) + '</text>' + face +
         '<circle class="ring" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(ringR) + '" fill="none" stroke="' + ring + '" stroke-width="' + r1(Math.max(2, rr * 0.26)) + '"/>' +
-        (t.kind === 'actor' ? '<circle cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr + 2.5) + '" fill="none" stroke="' + ring + '" stroke-opacity=".45" stroke-width="2"/>' : '') + '</g>';
+        (t.kind === 'actor' ? '<circle cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr + 2.5) + '" fill="none" stroke="' + ring + '" stroke-opacity=".45" stroke-width="2"/>' : '') + leadDot(t, x, y, rr) + '</g>';
     };
 
     b.spots.forEach(function (sp) {
@@ -2493,7 +2515,9 @@ ${FIGHT_SCRIPT}
   var journalEl = $('journal'), journalData = null, journalSeq = 0;
   var JSECTIONS = [['quests', 'Misiones'], ['talks', 'Charlas'], ['chronicle', 'Crónica'], ['places', 'Lugares']];
   var journalSection = JSECTIONS.some(function (s) { return s[0] === store('tavernus.journal.section'); }) ? store('tavernus.journal.section') : 'quests';
-  var JSTATUS = { available: 'disponible', active: 'en curso', completed: 'completada', expired: 'caducada' };
+  var JSTATUS = { available: 'disponible', active: 'en curso', ready: 'lista para entregar', completed: 'completada', expired: 'caducada', failed: 'perdida', declined: 'dijimos que no' };
+  var JDIFF = { trivial: 'muy fácil para ti', easy: 'fácil para ti', normal: 'a tu nivel', hard: 'difícil para ti', deadly: 'muy peligrosa para ti' };
+  var LIVE = { active: 1, ready: 1 };
 
   function journalKey() { return 'tavernus.journal.seen.' + game + '.' + current; }
   function journalVisible() { return drawerKey === 'journal'; }
@@ -2520,6 +2544,7 @@ ${FIGHT_SCRIPT}
       journalData = j;
       renderJournal(j);
       renderQuest(j);
+      syncAnswers(j);
       if (journalVisible()) markJournalSeen();
       else setJournalNew(store(journalKey()) !== j.version);
     }).catch(function () {});
@@ -2535,7 +2560,7 @@ ${FIGHT_SCRIPT}
   function newQuests(j) {
     var all = j.quests.active.concat(j.quests.completed), seen = qseen();
     if (!seen) { store(qseenKey(), JSON.stringify(all.map(function (q) { return q.id + ':' + q.status; }))); return []; }
-    return all.filter(function (q) { return q.status !== 'expired' && seen.indexOf(q.id + ':' + q.status) < 0; });
+    return all.filter(function (q) { return q.status !== 'expired' && q.status !== 'failed' && q.status !== 'declined' && seen.indexOf(q.id + ':' + q.status) < 0; });
   }
   function markQuestsSeen(j) { store(qseenKey(), JSON.stringify(j.quests.active.concat(j.quests.completed).map(function (q) { return q.id + ':' + q.status; }))); }
   // Cambios en las misiones (altas, pasos, cierres) que el jugador aún no ha visto en el Diario. Se dan por vistos al abrirlo.
@@ -2552,41 +2577,46 @@ ${FIGHT_SCRIPT}
   /** Punto con el número de misiones nuevas y check con el de pasos o cierres, para el icono de misiones del panel. */
   function questBadge(unseen) {
     var added = unseen.filter(function (c) { return c.kind === 'added'; }).length;
-    var steps = unseen.filter(function (c) { return c.kind === 'step' || c.kind === 'completed' || c.kind === 'accepted'; }).length;
+    var steps = unseen.filter(function (c) { return c.kind === 'step' || c.kind === 'completed' || c.kind === 'accepted' || c.kind === 'ready'; }).length;
     var tip = [added ? added + (added === 1 ? ' misión nueva' : ' misiones nuevas') : '', steps ? steps + (steps === 1 ? ' paso cumplido' : ' pasos cumplidos') : ''].filter(Boolean).join(' y ');
     return { added: added, steps: steps, html: (added || steps) ? '<span class="qbadge" title="' + escapeHtml(tip) + ' (abre el Diario)">' + (added ? '<i class="dot">' + added + '</i>' : '') + (steps ? '<i class="chk">✓' + steps + '</i>' : '') + '</span>' : '' };
   }
   /** La seguida: la que eligió el jugador si sigue abierta; si no, la principal o la primera en curso. */
   function trackedQuest(j) {
     var qs = j.quests.active, id = store(trackKey());
-    var live = qs.filter(function (x) { return x.status === 'active'; });
-    return qs.filter(function (x) { return x.id === id && x.status !== 'expired'; })[0] || live.filter(function (x) { return x.kind === 'main'; })[0] || live[0] || qs.filter(function (x) { return x.status !== 'expired'; })[0] || null;
+    var live = qs.filter(function (x) { return (x.status === 'active' || x.status === 'ready') && x.kind !== 'lead'; });
+    var open = function (x) { return x.status !== 'expired' && x.status !== 'failed' && x.status !== 'declined' && x.kind !== 'lead'; };
+    return qs.filter(function (x) { return x.id === id && open(x); })[0] || live.filter(function (x) { return x.kind === 'main'; })[0] || live[0] || qs.filter(open)[0] || null;
   }
   function questIcon(q, isNew) {
-    return '<span class="qi ' + q.status + (q.kind === 'main' && q.status === 'active' ? ' main' : '') + '" title="' + escapeHtml(JSTATUS[q.status] || q.status) + '"><svg class="i"><use href="#i-q-' + q.status + '"/></svg>' +
+    var st = q.kind === 'lead' ? 'lead' : q.status;
+    return '<span class="qi ' + st + (q.kind === 'main' && q.status === 'active' ? ' main' : '') + '" title="' + escapeHtml(q.kind === 'lead' ? 'pista' : JSTATUS[q.status] || q.status) + '"><svg class="i"><use href="#i-q-' + st + '"/></svg>' +
       (isNew ? '<span class="nw"><svg class="i"><use href="#i-spark"/></svg></span>' : '') + '</span>';
   }
   function questHtml(q, ctx) {
     var isNew = ctx && ctx.fresh.indexOf(q.id) >= 0, tracked = ctx && ctx.tracked === q.id;
     var o = q.origin, changed = ctx ? ctx.unseen.filter(function (c) { return (q.history || []).some(function (x) { return x.key === c.key; }); }) : [];
-    var whence = q.kind === 'main' ? 'misión principal' : q.kind === 'achievement' ? 'logro' : q.kind === 'debt' ? 'deuda'
-      : o && o.kind === 'heard' ? 'de oídas' : o && o.kind === 'board' ? 'tablón' + (q.giver ? ' · lo pide ' + q.giver : '') : q.giver ? 'lo pide ' + q.giver : o && o.kind === 'self' ? 'por tu cuenta' : '';
-    var sub = [JSTATUS[q.status] || q.status, whence].filter(Boolean).join(' · ');
+    var whence = q.kind === 'main' ? 'misión principal' : q.kind === 'achievement' ? 'logro' : q.kind === 'debt' ? 'deuda' : q.kind === 'lead' ? 'lo hemos oído'
+      : o && o.kind === 'heard' ? 'de oídas' : o && o.kind === 'board' ? 'tablón' + (q.giver ? ' · lo pide ' + q.giver : '') : q.giver ? 'nos lo pidió ' + q.giver : o && o.kind === 'self' ? 'por tu cuenta' : '';
+    var sub = q.kind === 'lead' ? 'pista · ' + whence : [JSTATUS[q.status] || q.status, whence].filter(Boolean).join(' · ');
+    var lv = q.level ? '<span class="lv d-' + q.difficulty + '" title="Nivel ' + q.level + ': ' + escapeHtml(JDIFF[q.difficulty] || '') + '">Nv ' + q.level + '</span>' : '';
     var open = tracked || isNew || changed.length > 0;
     var h = '<details class="q ' + q.status + (q.kind === 'main' ? ' main' : '') + (isNew ? ' isnew' : '') + '"' + (open ? ' open' : '') + '><summary>' + questIcon(q, isNew) +
-      '<span class="tt"><b>' + escapeHtml(q.title) + (isNew ? '<span class="pill-new">Nueva</span>' : '') + '</b><small>' + escapeHtml(sub) + '</small></span>' +
-      (q.status === 'completed' || q.status === 'expired' ? '' : '<button type="button" class="trk' + (tracked ? ' on' : '') + '" data-track="' + escapeHtml(q.id) + '" title="' + (tracked ? 'La sigues en el panel' : 'Seguir en el panel') + '" aria-pressed="' + tracked + '"><svg class="i"><use href="#i-star"/></svg></button>') +
+      '<span class="tt"><b>' + escapeHtml(q.title) + (isNew ? '<span class="pill-new">Nueva</span>' : '') + '</b><small>' + lv + escapeHtml(sub) + '</small></span>' +
+      (!LIVE[q.status] || q.kind === 'lead' ? '' : '<button type="button" class="trk' + (tracked ? ' on' : '') + '" data-track="' + escapeHtml(q.id) + '" title="' + (tracked ? 'La sigues en el panel' : 'Seguir en el panel') + '" aria-pressed="' + tracked + '"><svg class="i"><use href="#i-star"/></svg></button>') +
       CHEV + '</summary><div class="qb">';
     var s = q.summary || { text: q.text, next: null, told: [] };
-    if (s.text) h += '<p class="sum">' + escapeHtml(s.text) + '</p>';
-    if (s.next) h += '<div class="now">' + escapeHtml(s.next) + '</div>';
+    if (q.kind === 'lead') h += '<p class="sum">' + escapeHtml(q.text) + '</p>';
+    else if (s.text) h += '<p class="sum">' + escapeHtml(s.text) + '</p>';
+    if (s.next || q.kind === 'lead') h += '<div class="now">' + escapeHtml(s.next || q.steps[0].text) + '</div>';
+    if (q.declinable) h += answerHtml(q.id);
     if (q.clock && q.status !== 'completed') {
       var late = q.clock.days_left <= 0;
       h += '<div class="clock' + (late ? ' late' : '') + '"><svg class="i" style="width:13px;height:13px"><use href="#i-clock"/></svg>' + (late ? 'Plazo vencido' : 'Quedan ' + q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) + '</div>';
     }
     (s.told || []).forEach(function (t) { h += '<div class="told"><b>' + escapeHtml(t.who) + ':</b> «' + escapeHtml(t.said) + '»<small>' + escapeHtml(t.when) + '</small></div>'; });
     if (q.steps.length > 1) h += '<ul class="steps">' + q.steps.map(function (st) { return '<li class="' + (st.done ? 'done' : '') + '">' + escapeHtml(st.text) + '</li>'; }).join('') + '</ul>';
-    if (o && o.text) h += '<div class="orig"><b>Cómo te llegó:</b> ' + escapeHtml(o.text) + (o.where ? ' <span>(' + escapeHtml(o.where) + ')</span>' : '') + '</div>';
+    if (o && o.text && q.kind !== 'lead') h += '<div class="orig"><b>Cómo nos llegó:</b> ' + escapeHtml(o.text) + (o.where ? ' <span>(' + escapeHtml(o.where) + ')</span>' : '') + '</div>';
     var hist = (q.history || []).slice(-6).reverse();
     if (hist.length) {
       var unseenKeys = changed.map(function (c) { return c.key; });
@@ -2597,6 +2627,20 @@ ${FIGHT_SCRIPT}
     var foot = [q.reward ? 'Recompensa: ' + q.reward : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean).join(' · ');
     if (foot) h += '<div class="rw">' + escapeHtml(foot) + '</div>';
     return h + '</div></details>';
+  }
+  /** «No queremos hacerlo»: aceptar una misión que nos piden es implícito, pero se puede decir que no mientras no hayamos empezado (POST /api/quest/answer). */
+  function answerHtml(id) {
+    return '<div class="qans"><button type="button" class="no" data-answer="' + escapeHtml(id) + '" data-accept="0">No queremos hacerlo</button></div>';
+  }
+  /** Los avisos del hilo pierden «No queremos hacerlo» cuando ya no se puede (empezada, rechazada o cerrada). */
+  function syncAnswers(j) {
+    var can = {};
+    j.quests.active.forEach(function (q) { if (q.declinable) can[q.id] = 1; });
+    log.querySelectorAll('.qans').forEach(function (row) { var b = row.querySelector('[data-answer]'); if (b && !can[b.getAttribute('data-answer')]) row.remove(); });
+  }
+  function answerQuest(id, accept, btns) {
+    btns.forEach(function (b) { b.disabled = true; });
+    return post('/api/quest/answer', { quest: id, accept: accept }).then(function (r) { if (r && !r.ok) { handleReply(r); btns.forEach(function (b) { b.disabled = false; }); } loadJournal(); });
   }
   function rumorHtml(r) {
     return '<div class="rumor"><b>' + (r.said_by ? 'Lo dice ' + escapeHtml(r.said_by) + ':' : 'Se dice:') + '</b> «' + escapeHtml(r.name) + '». ' + escapeHtml(r.hint) +
@@ -2658,6 +2702,12 @@ ${FIGHT_SCRIPT}
     journalEl.innerHTML = h;
   }
   journalEl.addEventListener('click', function (ev) {
+    var ans = ev.target.closest('[data-answer]');
+    if (ans) {
+      ev.preventDefault();
+      answerQuest(ans.getAttribute('data-answer'), ans.getAttribute('data-accept') === '1', Array.prototype.slice.call(ans.parentNode.querySelectorAll('button')));
+      return;
+    }
     var d = ev.target.closest('[data-drop]');
     if (d) {
       ev.preventDefault(); d.disabled = true;
@@ -2800,6 +2850,13 @@ ${FIGHT_SCRIPT}
   $('card').addEventListener('click', function (ev) { if (!ev.target.closest('.av')) { showSide(false); openDrawer('sheet'); } });
   setView(view);
 
+  /** Punto discreto en quien está al final de una pista activa (story.ts, questLeads): sin «!» flotantes, como en Baldur's Gate 3. */
+  function leadDot(t, x, y, rr) {
+    if (!t.lead) return '';
+    return '<g class="qlead"><circle cx="' + r1(x + rr * 0.72) + '" cy="' + r1(y - rr * 0.72) + '" r="' + r1(Math.max(3, rr * 0.24)) + '"/></g>';
+  }
+  function leadDotHtml(on) { return on ? '<span class="qlead" title="Una pista nos lleva a esta persona"></span>' : ''; }
+
   // --- «Cerca de ti» y la misión, en el panel ----------------------------------------
   /** Quién está a la vista y los rincones del sitio, del más cercano al más lejano (datos del tablero). */
   function renderNear(b) {
@@ -2807,7 +2864,7 @@ ${FIGHT_SCRIPT}
     b.presences.filter(function (p) { return !p.moving && p.level !== 'hint'; }).forEach(function (p) {
       var sp = spotById(p.spot_id), d = sp ? dist(sp) : 0;
       rows.push({ d: d - 0.01, html: '<button type="button" class="prow" data-talk="' + escapeHtml(p.label) + '"><span class="ico npc" style="--npc:' + (p.kind === 'character' ? '#9cb08a' : '#e6a587') + '">' + escapeHtml(p.level === 'full' ? initial(p.label) : '?') + '</span>' +
-        '<span class="tt"><b>' + escapeHtml(p.label) + '</b><small>' + escapeHtml(sp ? sp.name : '') + '</small></span><span class="m">' + (d < 1.6 ? 'Aquí' : fmtM(d)) + '</span></button>' });
+        '<span class="tt"><b>' + escapeHtml(p.label) + leadDotHtml(p.lead) + '</b><small>' + escapeHtml(sp ? sp.name : '') + '</small></span><span class="m">' + (d < 1.6 ? 'Aquí' : fmtM(d)) + '</span></button>' });
     });
     b.spots.forEach(function (sp) {
       var here = isHere(sp), d = dist(sp);
@@ -2833,7 +2890,7 @@ ${FIGHT_SCRIPT}
    * Con el estado como icono, lo que toca ahora y el plazo; si hay misiones nuevas, una pastilla para verlas.
    */
   function renderQuest(j) {
-    var live = j.quests.active.filter(function (x) { return x.status === 'active'; }), q = trackedQuest(j);
+    var live = j.quests.active.filter(function (x) { return (x.status === 'active' || x.status === 'ready') && x.kind !== 'lead'; }), q = trackedQuest(j);
     // Indicador en el icono de misiones: altas (punto) y pasos o cierres (check) sin ver; se quita al abrir el Diario.
     var badge = questBadge(unseenChanges(j)), on = badge.added + badge.steps > 0;
     var chip = on ? '<button type="button" class="qchip" data-qnew title="Ver qué ha cambiado en el Diario">' + badge.html + '</button>' : '';

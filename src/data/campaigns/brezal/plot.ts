@@ -69,7 +69,7 @@ export const LAW: LawRules = {
   faction_id: 'fac_brezal',
   enforcers: ['npc_garran', 'npc_doro'],
   jail_spot_id: 'sp_ca_calabozo',
-  fines: { insult: 0, theft: 150, assault: 100, armed_assault: 300, desecration: 300 },
+  fines: { insult: 0, theft: 50, assault: 30, armed_assault: 100, desecration: 100 },
   jail_hours: { armed_assault: 8, desecration: 8, murder: 24 },
   owners: [
     { npc_id: 'npc_brenna', location_ids: ['loc_taberna', 'loc_sotano'] },
@@ -89,7 +89,7 @@ export const FACTIONS: Faction[] = [
 ];
 
 export const CLUES: Clue[] = [
-  { id: 'clue_pozo', title: 'Ceniza en el agua del pozo', reputation: 2, location_ids: ['loc_plaza'],
+  { id: 'clue_pozo', title: 'El agua turbia del pozo', reputation: 2, location_ids: ['loc_plaza'],
     image: 'un cubo de madera con agua turbia y un poso de ceniza gris fina en el fondo, sobre el brocal de piedra de un pozo',
     how: 'Al sacar agua del pozo o mirar el cubo con atención: el agua trae ceniza fina, está tibia y huele a azufre. El pozo lo alimenta un manantial que pasa por debajo del granero de Vharn. Tirada de Percepción CD 11 o Naturaleza CD 10.' },
   { id: 'clue_hacha', title: 'El hacha con hollín', reputation: 2, location_ids: ['loc_claro'],
@@ -130,8 +130,9 @@ export const JOBS: Job[] = [
 
 export const ACHIEVEMENT: Achievement = {
   id: 'ach_ceniza', title: 'Quien ha mirado la ceniza', faction_id: 'fac_brezal', clues_required: 3, reputation_required: 5,
-  reward_item_id: 'it_llave_vharn', reward_spot_id: 'sp_tab_trampilla',
-  announcement: 'En Brezal empiezan a decir que {name} ha mirado la ceniza de frente. Brenna le ha enseñado la trampilla de la mesa del fondo y le ha dado una llave vieja con el sello de Vharn: abre el pasadizo bajo el altar del Granero Quemado.',
+  // Solo reputación y lo que se dice: la llave de los Vharn y la trampilla salen de «Bajo el Jabalí», con su escena.
+  reward_item_id: null, reward_spot_id: null, reward_reputation: 2,
+  announcement: 'Se corre la voz por Brezal: {name} ha mirado la ceniza de frente.',
 };
 
 /**

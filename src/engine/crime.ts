@@ -53,7 +53,7 @@ export const SEVERITY: Record<IncidentKind, number> = { insult: 1, theft: 2, ass
 export const KIND_ES: Record<IncidentKind, string> = { insult: 'insulto', theft: 'robo', assault: 'agresión', armed_assault: 'agresión con arma', desecration: 'profanar un cadáver', murder: 'muerte' };
 
 /** Multas por defecto (monedas) y horas de calabozo por defecto, si la campaña no dice otra cosa. */
-export const DEFAULT_FINES: Record<IncidentKind, number> = { insult: 0, theft: 150, assault: 100, armed_assault: 300, desecration: 300, murder: 0 };
+export const DEFAULT_FINES: Record<IncidentKind, number> = { insult: 0, theft: 50, assault: 30, armed_assault: 100, desecration: 100, murder: 0 };
 export const DEFAULT_JAIL_HOURS: Record<IncidentKind, number> = { insult: 0, theft: 0, assault: 0, armed_assault: 8, desecration: 8, murder: 24 };
 
 /** Lo violento, que sube de gravedad dentro del mismo incidente. */

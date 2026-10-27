@@ -228,8 +228,12 @@ export interface Achievement {
   faction_id: Id;
   clues_required: number;
   reputation_required: number;
+  /** Lo que da al conseguirlo. En las campañas escritas, mejor nada que se salte la historia (llaves y pasadizos salen de misiones). */
   reward_item_id: Id | null;
   reward_spot_id: Id | null;
+  /** Reputación extra con la facción al conseguirlo. */
+  reward_reputation?: number;
+  /** Lo que se cuenta en público: solo hechos ciertos (que se habla de él), nunca lo que no ha pasado. */
   announcement: string;
 }
 

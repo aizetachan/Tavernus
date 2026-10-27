@@ -25,6 +25,7 @@ import { descriptorOf } from '../../engine/narrate.js';
 import { lightAt, perceive } from '../../engine/perception.js';
 import { describeNode } from '../../engine/resources.js';
 import { talkersOf } from '../../engine/scene.js';
+import { questLeads } from '../../engine/story.js';
 import { pcName } from '../../engine/party.js';
 
 /** «Aren» o «tú y Aren»: quién habla con ese NPC, visto por el lector. */
@@ -82,6 +83,8 @@ export interface BoardPresence {
   away?: boolean;
   /** Retrato ya hecho (el elegido, si es un PJ). Solo si lo ve bien: una figura o un movimiento no tienen cara. */
   avatar?: string;
+  /** NPC: una pista activa del lector lleva a él (story.ts, `questLeads`): la web le pone un punto discreto. */
+  lead?: boolean;
 }
 
 export interface BoardState {
@@ -184,6 +187,7 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
       ...avatar(other.id, p.level),
     });
   }
+  const leads = questLeads(world, c);
   for (const n of world.npcs.values()) {
     if (n.status !== 'alive') continue;
     const ns = world.spot(n.location.id);
@@ -196,6 +200,7 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
       asleep: false, moving: false,
       ...(p.level === 'full' ? talkingLabel(engine, c.id, n.id) : {}),
       ...avatar(n.id, p.level),
+      ...(leads.has(n.id) && p.level !== 'hint' ? { lead: true } : {}),
     });
   }
 

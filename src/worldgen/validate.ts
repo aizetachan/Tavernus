@@ -217,6 +217,8 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
     errs.push(...validateStory(c.story, {
       spot: (id) => spots.has(id), location: (id) => locs.has(id), npc: (id) => npcs.has(id), item: (id) => defs.has(id),
       clue: (id) => clues.has(id), job: (id) => jobs.has(id), exit: (id) => exits.has(id),
+      // Una pista que no está en ningún sitio solo la da su gente: si muere, hace falta otro camino.
+      clueNpcs: (id) => { const x = c.clues.find((k) => k.id === id); return x && !x.location_ids?.length ? x.npc_ids ?? [] : []; },
     }));
   }
   return errs;

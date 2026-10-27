@@ -66,7 +66,7 @@ describe('descubrimientos: lo hallado, no el sitio', () => {
     const clue = engine.world.campaign.clues.find((c) => c.id === 'clue_pozo')!;
     delete clue.image;
     const e = ev(leodhin, { calls: [call('grant_clue', { character_id: leodhin.id, clue_id: 'clue_pozo' })] });
-    expect(moments(engine, e)[0]!.prompt!.startsWith('Close-up of Ceniza en el agua del pozo.')).toBe(true);
+    expect(moments(engine, e)[0]!.prompt!.startsWith('Close-up of El agua turbia del pozo.')).toBe(true);
   });
 
   it('un punto oculto: el punto de cerca, aunque te lo enseñe alguien hablando', async () => {

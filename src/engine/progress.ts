@@ -19,8 +19,17 @@ export interface ProgressEvent {
   quest?: QuestChange;
 }
 
-/** Cambio en una misión: alta, paso dado, cumplida, fallida, caducada o dejada, con el porqué en palabras del jugador. */
-export interface QuestChange { id: Id; title: string; event: 'open' | 'available' | 'step' | 'done' | 'failed' | 'expired' | 'dropped'; step?: string; why: string }
+/**
+ * Cambio en una misión, con el porqué en palabras del jugador: un rumor que apunta a quien la da, rechazada,
+ * alta (se la piden en escena), paso dado, lista para entregar, cambio de camino (alguien ha muerto), aviso de
+ * plazo, cumplida, fallida, caducada o dejada. En `rumor`, `title` va vacío: el rumor no dice de qué va.
+ * (`offered` solo sale en partidas de antes.)
+ */
+export interface QuestChange {
+  id: Id; title: string; event: 'rumor' | 'offered' | 'declined' | 'open' | 'available' | 'step' | 'ready' | 'changed' | 'warned' | 'done' | 'failed' | 'expired' | 'dropped'; step?: string; why: string;
+  /** Se la acaban de pedir en escena: aún puede decir que no (la web lo ofrece en el aviso). */
+  declinable?: boolean;
+}
 
 export function addReputation(world: World, c: Character, factionId: Id, delta: number): number {
   c.reputation[factionId] = (c.reputation[factionId] ?? 0) + delta;
@@ -112,8 +121,10 @@ export function checkAchievement(world: World, c: Character): ProgressEvent | nu
     const sp = world.spot(a.reward_spot_id);
     if (!sp.discovered_by.includes(c.id)) { sp.discovered_by.push(c.id); world.touch('spots', sp.id); }
   }
+  const rep = a.reward_reputation ? addReputation(world, c, a.faction_id, a.reward_reputation) : null;
   world.touch('characters', c.id);
-  return { kind: 'achievement', text: `Logro: ${a.title}.`, public: a.announcement.replaceAll('{name}', c.name) };
+  const faction = world.campaign.factions.find((f) => f.id === a.faction_id)?.name ?? a.faction_id;
+  return { kind: 'achievement', text: `Logro: ${a.title}.${rep !== null ? ` +${a.reward_reputation} de reputación en ${faction} (${rep}).` : ''}`, public: a.announcement.replaceAll('{name}', c.name) };
 }
 
 /** Rotación diaria del tablón: 3 encargos, en orden, sin repetir el día anterior. */
