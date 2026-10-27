@@ -20,7 +20,8 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { GameManager } from '../../games/manager.js';
-import { narratorFromEnv, type NarratorProvider, type SpeechRequest, type SpeechRole } from '../../ai/narrator.js';
+import { NarratorOutOfCredits, narratorFromEnv, type NarratorProvider, type SpeechRequest, type SpeechRole } from '../../ai/narrator.js';
+import { audioTaggerFromEnv, type AudioTagger } from '../../ai/audiotags.js';
 import { speechChunks, speechMarkup, speechParts, speechText } from '../../ai/speech.js';
 
 /** Las funciones de speech.ts como fuente JS para la página. `__name` lo añade tsx (keepNames) y aquí no existe. */
@@ -34,6 +35,12 @@ const MAX_TEXT = 3000;
 let provider: NarratorProvider | null | undefined;
 let providerError: string | null = null;
 let sentChars = 0;
+let tagger: AudioTagger | null | undefined;
+/** El proveedor con cada modelo que el jugador ha elegido en la página. */
+const variants = new Map<string, NarratorProvider>();
+/** Sin créditos en el proveedor: hasta entonces (ms) ni se le pide audio y la página usa la voz del navegador. */
+let noCreditsUntil = 0;
+const NO_CREDITS_RETRY_MS = 30 * 60_000;
 
 function current(): NarratorProvider | null {
   if (provider !== undefined) return provider;
@@ -45,8 +52,28 @@ function current(): NarratorProvider | null {
   return provider;
 }
 
-/** Para los tests: otro proveedor (o ninguno) sin tocar el entorno. */
-export function setNarratorForTests(p: NarratorProvider | null | undefined): void { provider = p; providerError = null; sentChars = 0; }
+/** El proveedor con el modelo pedido, si es uno de los que ofrece; si no, el de la partida. */
+function withModel(p: NarratorProvider, model: unknown): NarratorProvider {
+  if (typeof model !== 'string' || !p.withModel || !p.models?.some((m) => m.id === model) || p.models[0]!.id === model) return p;
+  let v = variants.get(model);
+  if (!v) { v = p.withModel(model); variants.set(model, v); }
+  return v;
+}
+
+/** Acotaciones de voz solo si el proveedor las entiende (Eleven v3). */
+function currentTagger(p: NarratorProvider): AudioTagger | null {
+  if (!p.audioTags) return null;
+  if (tagger === undefined) {
+    tagger = audioTaggerFromEnv(process.env);
+    if (tagger) console.log(`[tts] acotaciones de voz con ${tagger.model}`);
+  }
+  return tagger;
+}
+
+/** Para los tests: otro proveedor (o ninguno) y otro etiquetador sin tocar el entorno. */
+export function setNarratorForTests(p: NarratorProvider | null | undefined, t: AudioTagger | null = null): void {
+  provider = p; providerError = null; sentChars = 0; tagger = p === undefined ? undefined : t; noCreditsUntil = 0; variants.clear();
+}
 
 /**
  *   GET  /api/tts/config               {provider, label}: 'browser' si la voz la pone el navegador
@@ -54,35 +81,47 @@ export function setNarratorForTests(p: NarratorProvider | null | undefined): voi
  */
 export async function handleTtsRequest(req: IncomingMessage, res: ServerResponse, url: URL, games: GameManager): Promise<void> {
   const p = current();
+  const broke = !!p && Date.now() < noCreditsUntil;
   if (req.method === 'GET' && url.pathname === '/api/tts/config') {
-    json(res, 200, { provider: p ? p.id : 'browser', label: p ? p.label : 'Voz del navegador', ...(providerError ? { error: providerError } : {}) });
+    if (p && broke) { json(res, 200, { provider: 'browser', label: 'Voz del navegador', error: `${p.label} sin créditos: de momento, voz del navegador.` }); return; }
+    json(res, 200, { provider: p ? p.id : 'browser', label: p ? p.label : 'Voz del navegador', ...(p?.models ? { models: p.models } : {}), ...(providerError ? { error: providerError } : {}) });
     return;
   }
   if (req.method !== 'POST' || url.pathname !== '/api/tts') { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
   if (!p) { json(res, 409, { ok: false, text: 'TTS_PROVIDER=browser: la voz la pone el navegador.' }); return; }
+  if (broke) { json(res, 402, { ok: false, code: 'no_credits', text: `${p.label} sin créditos.` }); return; }
   const slug = url.searchParams.get('game');
   const m = slug ? await games.get(slug) : null;
   if (!m) { json(res, 404, { ok: false, text: 'No existe esa partida.' }); return; }
-  const parts = partsOf(await readJson(req));
+  const body = await readJson(req);
+  const parts = partsOf(body);
   const chars = parts.reduce((n, x) => n + x.text.length, 0);
   if (!parts.length || chars > MAX_TEXT) { json(res, 400, { ok: false, text: `Texto vacío o de más de ${MAX_TEXT} caracteres.` }); return; }
-  const key = createHash('sha256').update(p.id + parts.map((x) => `\n${p.voiceFor(x)}\n${x.text}`).join('')).digest('hex').slice(0, 32);
+  const v = withModel(p, body['model']);
+  const tags = currentTagger(v);
+  // La clave sale del texto original: lo ya generado se sirve sin volver a etiquetar.
+  const key = createHash('sha256').update(v.id + (tags ? `\ntags:${tags.model}` : '') + parts.map((x) => `\n${v.voiceFor(x)}\n${x.text}`).join('')).digest('hex').slice(0, 32);
   const dir = join(games.paths(m).dir, 'audio');
-  const file = join(dir, `${key}.${p.ext}`);
+  const file = join(dir, `${key}.${v.ext}`);
   let bytes: Buffer | null = await readFile(file).catch(() => null);
   if (!bytes) {
     const limit = Number(process.env['TTS_MAX_CHARS'] ?? 200_000);
     if (sentChars + chars > limit) { json(res, 429, { ok: false, text: `Límite TTS_MAX_CHARS (${limit}) alcanzado en este arranque.` }); return; }
     sentChars += chars;
-    try { bytes = await p.synthesize(parts); } catch (e) {
+    try { bytes = await v.synthesize(tags ? await tags.tag(parts) : parts); } catch (e) {
       console.error('[tts]', (e as Error).message);
+      if (e instanceof NarratorOutOfCredits) {
+        noCreditsUntil = Date.now() + NO_CREDITS_RETRY_MS;
+        json(res, 402, { ok: false, code: 'no_credits', text: `${p.label} sin créditos.` });
+        return;
+      }
       json(res, 502, { ok: false, text: 'El proveedor de voz no responde.' });
       return;
     }
     await mkdir(dir, { recursive: true });
     await writeFile(file, bytes);
   }
-  res.writeHead(200, { 'content-type': p.contentType, 'content-length': bytes.length, 'cache-control': 'private, max-age=86400' });
+  res.writeHead(200, { 'content-type': v.contentType, 'content-length': bytes.length, 'cache-control': 'private, max-age=86400' });
   res.end(bytes);
 }
 
@@ -202,6 +241,10 @@ export const TTS_SCRIPT = String.raw`<script>
   var SPEAKER = '${SPEAKER_ICON}', BARS = '${BARS}';
 
   var provider = 'browser', providerLabel = 'Voz del navegador';
+  // Modelos de la nube que se pueden elegir (ElevenLabs v3 / v2); el primero es el de la partida.
+  var models = [];
+  function cloudModel() { var m = store('tavernus.tts.model'); return models.some(function (x) { return x.id === m; }) ? m : (models[0] ? models[0].id : ''); }
+  function cloudLabel() { var id = cloudModel(), m = models.filter(function (x) { return x.id === id; })[0]; return m ? m.label : providerLabel; }
   /** Lee la voz de la nube (ElevenLabs…) si el servidor la tiene y no se ha elegido una del navegador en el selector. */
   function cloud() { return provider !== 'browser' && store('tavernus.tts.engine') !== 'browser'; }
   var auto = store('tavernus.tts.auto') === '1';
@@ -363,7 +406,7 @@ export const TTS_SCRIPT = String.raw`<script>
   function audioFor(div) {
     if (prefetch && prefetch.div === div) return prefetch.blob;
     var parts = stepsOf(div)[0].cloud;
-    var blob = fetch('/api/tts?game=' + encodeURIComponent(game), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ parts: parts }) })
+    var blob = fetch('/api/tts?game=' + encodeURIComponent(game), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ parts: parts, model: cloudModel() || undefined }) })
       .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.blob(); });
     blob.catch(function () {});
     prefetch = { div: div, blob: blob };
@@ -388,8 +431,8 @@ export const TTS_SCRIPT = String.raw`<script>
     }).catch(function (e) {
       if (playing !== p) return;
       if (e && e.name === 'NotAllowedError') { hint('Toca la página una vez para que el navegador deje reproducir audio.'); stop(); return; }
-      // La nube falla: esta narración y las siguientes, con la voz del navegador.
-      hint('El narrador de voz no responde; sigo con la voz del navegador.');
+      // La nube falla (o se queda sin créditos): esta narración y las siguientes, con la voz del navegador.
+      hint(e && e.message === '402' ? 'El narrador de voz se ha quedado sin créditos; sigo con la voz del navegador.' : 'El narrador de voz no responde; sigo con la voz del navegador.');
       provider = 'browser'; fillVoices();
       p.steps = stepsOf(p.div); p.i = 0;
       step();
@@ -451,10 +494,11 @@ export const TTS_SCRIPT = String.raw`<script>
     var opt = function (v) { return '<option value="' + v.voiceURI.replace(/"/g, '&quot;') + '">' + v.name.replace(/</g, '&lt;') + ' · ' + v.lang + '</option>'; };
     var sv = pop.querySelector('[data-k=voice]'), sn = pop.querySelector('[data-k=npcvoice]');
     // Con voz en la nube, es la primera opción (y la marcada mientras se use); las del navegador quedan como alternativa.
-    sv.innerHTML = (provider !== 'browser' ? '<option value="cloud">' + providerLabel.replace(/</g, '&lt;') + ' · voz de la partida</option>' : '') +
+    var clouds = provider === 'browser' ? [] : models.length ? models : [{ id: '', label: providerLabel }];
+    sv.innerHTML = clouds.map(function (m, i) { return '<option value="cloud' + (m.id ? ':' + m.id : '') + '">' + m.label.replace(/</g, '&lt;') + (i === 0 ? ' · voz de la partida' : '') + '</option>'; }).join('') +
       (list.map(opt).join('') || (provider === 'browser' ? '<option value="">Sin voces en castellano</option>' : ''));
     sn.innerHTML = '<option value="">Automática (otra voz u otro tono)</option>' + list.map(opt).join('');
-    if (!browser) sv.value = 'cloud'; else if (nv) sv.value = nv.voiceURI;
+    if (!browser) sv.value = 'cloud' + (cloudModel() ? ':' + cloudModel() : ''); else if (nv) sv.value = nv.voiceURI;
     sn.value = byURI(store('tavernus.tts.npcvoice')) ? store('tavernus.tts.npcvoice') : '';
     sn.closest('label').hidden = !browser;
     pop.querySelector('.rate').textContent = rate.toFixed(2).replace(/0$/, '') + '×';
@@ -462,7 +506,7 @@ export const TTS_SCRIPT = String.raw`<script>
     pop.querySelector('[data-k=awake]').checked = awake;
     pop.querySelector('.note').textContent = browser
       ? (list.length ? list.length + ' voces en castellano en este navegador. Las «Natural» de Edge (escritorio) son las que mejor suenan.' : 'Este navegador no ofrece voces en castellano; leerá con la voz por defecto.')
-      : 'Voz: ' + providerLabel + ' (audio cacheado por partida).';
+      : 'Voz: ' + cloudLabel() + ' (audio cacheado por partida).';
   }
   /** Desplegable de la aplicación sobre un select (que sigue con el valor y avisa con «change»). */
   function niceSelect(sel) {
@@ -526,7 +570,7 @@ export const TTS_SCRIPT = String.raw`<script>
   document.addEventListener('click', function (ev) { if (!pop.hidden && !box.contains(ev.target) && !pop.contains(ev.target) && !moreBtn.contains(ev.target)) { pop.hidden = true; moreBtn.setAttribute('aria-expanded', 'false'); } });
   pop.addEventListener('change', function (ev) {
     var k = ev.target.getAttribute('data-k');
-    if (k === 'voice') { if (ev.target.value === 'cloud') store('tavernus.tts.engine', 'cloud'); else { store('tavernus.tts.engine', 'browser'); store('tavernus.tts.voice', ev.target.value); } stop(); }
+    if (k === 'voice') { if (ev.target.value.indexOf('cloud') === 0) { store('tavernus.tts.engine', 'cloud'); if (ev.target.value.length > 6) store('tavernus.tts.model', ev.target.value.slice(6)); } else { store('tavernus.tts.engine', 'browser'); store('tavernus.tts.voice', ev.target.value); } stop(); }
     if (k === 'npcvoice') store('tavernus.tts.npcvoice', ev.target.value);
     if (k === 'rate') { rate = Number(ev.target.value) || 1; store('tavernus.tts.rate', String(rate)); }
     if (k === 'auto') setAuto(ev.target.checked);
@@ -539,7 +583,7 @@ export const TTS_SCRIPT = String.raw`<script>
   new MutationObserver(function () { if (playing && !document.body.contains(playing.div)) stop(); }).observe(log, { childList: true });
 
   fetch('/api/tts/config').then(function (r) { return r.json(); }).then(function (c) {
-    provider = c.provider || 'browser'; providerLabel = c.label || providerLabel;
+    provider = c.provider || 'browser'; providerLabel = c.label || providerLabel; models = Array.isArray(c.models) ? c.models : [];
     if (provider === 'browser' && !synth) { box.hidden = true; return; }
     fillVoices();
   }).catch(function () {});

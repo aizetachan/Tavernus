@@ -5,12 +5,15 @@
  *   TTS_PROVIDER=browser   (por defecto) no hay voz en el servidor: la pone el navegador (speechSynthesis).
  *   TTS_PROVIDER=azure     Azure AI Speech (voces neuronales) por REST con AZURE_SPEECH_KEY y AZURE_SPEECH_REGION.
  *   TTS_PROVIDER=elevenlabs ElevenLabs por REST con ELEVENLABS_API_KEY; las voces son ids de ElevenLabs y el modelo
- *                          ELEVENLABS_MODEL (por defecto eleven_multilingual_v2).
+ *                          ELEVENLABS_MODEL (por defecto eleven_multilingual_v2). Con eleven_v3, la narración se
+ *                          etiqueta antes con acotaciones de voz (src/ai/audiotags.ts).
  *
  * Voces (opcionales): TTS_VOICE_NARRATOR y TTS_VOICES_NPC (lista separada por comas; cada hablante
  * toma siempre la misma). TTS_MAX_CHARS limita los caracteres que se mandan a la nube por arranque
  * del servidor (lo cacheado no cuenta). El análisis de opciones y costes está en docs/NARRADOR-VOZ.md.
  */
+
+import { supportsAudioTags } from './audiotags.js';
 
 export type SpeechRole = 'narrator' | 'dialogue';
 
@@ -31,7 +34,16 @@ export interface NarratorProvider {
   voiceFor(req: SpeechRequest): string;
   /** Todos los trozos de una narración, en orden, en un solo audio. */
   synthesize(parts: SpeechRequest[]): Promise<Buffer>;
+  /** Entiende acotaciones [whispers], [sighs]… dentro del texto (Eleven v3). */
+  audioTags?: boolean;
+  /** Modelos entre los que el jugador puede elegir en la página (el primero, el de la partida). */
+  models?: { id: string; label: string }[];
+  /** El mismo proveedor con otro modelo de `models`. */
+  withModel?(model: string): NarratorProvider;
 }
+
+/** El proveedor no tiene saldo: hasta que se recargue, la voz la pone el navegador. */
+export class NarratorOutOfCredits extends Error {}
 
 export const TTS_PROVIDERS = ['browser', 'azure', 'elevenlabs'] as const;
 
@@ -110,6 +122,12 @@ export function azureNarrator(o: AzureNarratorOptions, fetchImpl: typeof fetch =
  * prefabricadas de ElevenLabs que hablan castellano con los modelos multilingües; lo normal es poner las tuyas en
  * TTS_VOICE_NARRATOR y TTS_VOICES_NPC.
  */
+/** Los que se ofrecen en el selector de voz, además del de ELEVENLABS_MODEL. */
+export const ELEVENLABS_MODELS = [
+  { id: 'eleven_v3', label: 'ElevenLabs v3' },
+  { id: 'eleven_multilingual_v2', label: 'ElevenLabs v2' },
+];
+
 export const ELEVENLABS_DEFAULTS = {
   model: 'eleven_multilingual_v2',
   narrator: 'JBFqnCBsd6RMkjVDRZzb',
@@ -136,8 +154,11 @@ export function elevenLabsNarrator(o: ElevenLabsNarratorOptions, fetchImpl: type
     return o.npcs[hashIndex(req.speaker ?? '', o.npcs.length)]!;
   };
   const speed = Math.min(1.2, Math.max(0.7, o.rate));
+  const own = ELEVENLABS_MODELS.find((m) => m.id === o.model) ?? { id: o.model, label: `ElevenLabs ${o.model.replace(/^eleven_/, '')}` };
   return {
-    id: 'elevenlabs', label: 'ElevenLabs', contentType: 'audio/mpeg', ext: 'mp3',
+    id: 'elevenlabs', label: 'ElevenLabs', contentType: 'audio/mpeg', ext: 'mp3', audioTags: supportsAudioTags(o.model),
+    models: [own, ...ELEVENLABS_MODELS.filter((m) => m.id !== o.model)],
+    withModel: (model) => elevenLabsNarrator({ ...o, model }, fetchImpl),
     voiceFor: (req) => `${voiceFor(req)}@${o.model}@${speed}`,
     async synthesize(parts) {
       const groups: { voice: string; text: string }[] = [];
@@ -154,7 +175,12 @@ export function elevenLabsNarrator(o: ElevenLabsNarratorOptions, fetchImpl: type
           body: JSON.stringify({ text: g.text, model_id: o.model, ...(speed !== 1 ? { voice_settings: { speed } } : {}) }),
           signal: AbortSignal.timeout(45_000),
         });
-        if (!r.ok) throw new Error(`ElevenLabs ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200) || r.statusText}`);
+        if (!r.ok) {
+          const body = (await r.text().catch(() => '')).slice(0, 300);
+          // Sin créditos: 402 insufficient_credits (o el 401 quota_exceeded de antes).
+          if (r.status === 402 || /insufficient_credits|quota_exceeded/.test(body)) throw new NarratorOutOfCredits(`ElevenLabs ${r.status}: sin créditos`);
+          throw new Error(`ElevenLabs ${r.status}: ${body.slice(0, 200) || r.statusText}`);
+        }
         const buf = Buffer.from(await r.arrayBuffer());
         // Cada mp3 trae su etiqueta ID3 delante: solo se deja la del primero, para que el audio unido no se corte.
         chunks.push(chunks.length ? stripId3(buf) : buf);
