@@ -273,7 +273,9 @@ export async function handleBoardBackgroundRequest(engine: Engine, res: ServerRe
   const id = url.searchParams.get('character');
   const world = engine.world;
   const c = id ? world.characters.get(id) : undefined;
-  const loc = c ? positionOf(world, c, engine.gameNow()).location_id : null;
+  // ?location=ID: el de un sitio que el PJ ya ha visitado (portadas del diario); si no, el de donde está.
+  const asked = url.searchParams.get('location');
+  const loc = !c ? null : asked ? (world.locations.get(asked)?.discovery[c.id] === 'visited' ? asked : null) : positionOf(world, c, engine.gameNow()).location_id;
   const file = loc ? writtenMapBackground(assetsFor(world.campaign.id), world.campaign.id, loc) : null;
   let bytes: Buffer | null = null;
   if (file) { try { bytes = await readFile(file); } catch { /* sin fichero */ } }

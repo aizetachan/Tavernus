@@ -11,7 +11,8 @@ import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, transferItem, type InventoryView, type TransferError } from './inventory.js';
-import type { Character, GameEvent, Id, Npc, Offer, Pace, Placement, WorldSnapshot } from './model.js';
+import type { Character, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, WorldSnapshot } from './model.js';
+import { EQUIP_SLOTS } from './model.js';
 import { approachSpot, interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
 import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, parseGive, parseParty, parseSay, pcName, SAY_LOUDNESS, type SayMode } from './party.js';
 import { witnesses } from './perception.js';
@@ -1356,6 +1357,42 @@ export class Engine {
    * Quien la oye bien aprende el nombre del que habla si lo dice, y el del
    * destinatario si lo nombra.
    */
+  /**
+   * Recolocar un objeto propio desde la mochila de la web (arrastrar): a una mano, a un bolsillo, a un contenedor
+   * que lleve o a un hueco de equipo. Mismas reglas que guardar o sacar (tamaño, peso, huecos); no gasta acción ni
+   * va al hilo: es ordenar lo que uno lleva encima.
+   */
+  async moveItem(characterId: Id, instanceId: Id, to: { kind: 'hand'; which: 'main' | 'off' } | { kind: 'pocket' } | { kind: 'container'; id: Id } | { kind: 'equipped'; slot: string }): Promise<ActionResult> {
+    const c = this.world.character(characterId);
+    if (c.status !== 'active') return { ok: false, text: c.status === 'asleep' ? 'Estás dormido.' : 'Ahora no puedes ordenar tus cosas.' };
+    const mine = this.world.itemsCarriedBy(c.id);
+    const inst = mine.find((i) => i.id === instanceId);
+    if (!inst) return { ok: false, text: 'Eso no lo llevas encima.' };
+    const def = this.world.itemDef(inst.item_id);
+    let place: Placement;
+    let done: string;
+    if (to.kind === 'container') {
+      const cont = mine.find((i) => i.id === to.id);
+      if (!cont || !this.world.itemDef(cont.item_id).container) return { ok: false, text: 'Ese contenedor no lo llevas.' };
+      place = { type: 'container', id: cont.id };
+      done = `Guardas ${def.name} en ${this.world.itemDef(cont.item_id).name}.`;
+    } else if (to.kind === 'pocket') {
+      place = { type: 'character', id: c.id, slot: { kind: 'pocket' } };
+      done = `Te guardas ${def.name} en un bolsillo.`;
+    } else if (to.kind === 'hand') {
+      place = { type: 'character', id: c.id, slot: { kind: 'hand', which: def.size === 'bulky' ? 'both' : to.which } };
+      done = def.size === 'bulky' ? `Coges ${def.name} con las dos manos.` : `Llevas ${def.name} en la ${to.which === 'main' ? 'mano principal' : 'otra mano'}.`;
+    } else {
+      if (!(EQUIP_SLOTS as readonly string[]).includes(to.slot)) return { ok: false, text: 'Ese hueco no existe.' };
+      place = { type: 'character', id: c.id, slot: { kind: 'equipped', slot: to.slot as EquipSlot } };
+      done = `Te pones ${def.name}.`;
+    }
+    const res = transferItem(this.world, inst.id, place);
+    if (!res.ok) return { ok: false, text: transferErrorText(res.error) };
+    await this.flush();
+    return { ok: true, text: done };
+  }
+
   async say(characterId: Id, text: string, opts: { to?: Id | null; mode?: SayMode } = {}): Promise<ActionResult> {
     const c = this.world.character(characterId);
     this.lastAction.set(c.id, this.now());

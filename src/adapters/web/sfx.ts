@@ -483,6 +483,7 @@ export const SFX_SCRIPT = String.raw`<script>
     if (!ctx) return;
     ramp(master.gain, muted ? 0 : vol, s);
     ramp(ambBus.gain, ambVol * (ducked || external ? 0.35 : 1), s);
+    introLevel(s);
   }
   /** Primer gesto: crea o reanuda el contexto; en iOS, además, un búfer mudo dentro del gesto. */
   function unlock() {
@@ -575,6 +576,7 @@ export const SFX_SCRIPT = String.raw`<script>
   }
   function setMuted(m) {
     muted = m; store('tavernus.sfx.muted', m ? '1' : '0');
+    introOff = m;
     if (!m) unlock();
     if (ctx) { levels(0.3); if (m) setTimeout(function () { if (muted) ctx.suspend(); }, 400); else ctx.resume(); }
     ui();
@@ -611,6 +613,42 @@ export const SFX_SCRIPT = String.raw`<script>
   }
   ui();
 
+  // Música de entrada (public/music/intro-partida.mp3): si se llega desde el menú con su música sonando, empieza
+  // suave de fondo mientras aquella se desvanece. Suena una vez, por debajo del ambiente, y respeta silencio y volumen.
+  // Va con la música del menú, no con el silencio de los efectos; solo lo para silenciar aquí mientras suena.
+  var intro = null, introFade = null, introOff = false;
+  function introTarget() { return introOff ? 0 : vol * 0.13 * (ducked || external ? 0.5 : 1); }
+  function introTo(v, ms, then) {
+    if (!intro) return;
+    clearInterval(introFade);
+    var from = intro.volume, t0 = Date.now();
+    introFade = setInterval(function () {
+      var k = Math.min(1, (Date.now() - t0) / Math.max(1, ms));
+      intro.volume = Math.max(0, Math.min(1, from + (v - from) * k));
+      if (k >= 1) { clearInterval(introFade); if (then) then(); }
+    }, 50);
+  }
+  function introLevel(s) {
+    if (!intro || intro.ended) return;
+    if (introOff) introTo(0, 300, function () { intro.pause(); });
+    else if (intro.paused) introStart(); else introTo(introTarget(), s * 1000);
+  }
+  function introStart() {
+    if (!intro || intro.ended || introOff) return;
+    var p = intro.play();
+    if (p && p.then) p.then(function () { introTo(introTarget(), 5000); }, function () {}); else introTo(introTarget(), 5000);
+  }
+  (function () {
+    var want = false;
+    try { want = sessionStorage.getItem('tavernus.introMusic') === '1'; sessionStorage.removeItem('tavernus.introMusic'); } catch (e) {}
+    if (!want) return;
+    intro = new Audio('/music/intro-partida.mp3'); intro.preload = 'auto'; intro.volume = 0;
+    introStart();
+    // Si el navegador no deja sonar sin un gesto, empieza al primer toque o tecla.
+    function first() { ['pointerdown', 'keydown', 'touchend'].forEach(function (ev) { document.removeEventListener(ev, first, true); }); if (intro.paused) introStart(); }
+    ['pointerdown', 'keydown', 'touchend'].forEach(function (ev) { document.addEventListener(ev, first, true); });
+  })();
+
   window.TavernusAudio = {
     /** El AudioContext compartido (null hasta el primer gesto si el navegador no deja crearlo antes). */
     context: function () { return ensure(); },
@@ -626,7 +664,7 @@ export const SFX_SCRIPT = String.raw`<script>
     cue: cue,
     setAmbience: function (k) { setAmbience(k, 2.5); },
     /** Para pruebas y depuración. */
-    state: function () { return { unlocked: unlocked, muted: muted, volume: vol, ambienceVolume: ambVol, ambience: amb && amb.key, wanted: wantAmb, context: ctx && ctx.state, files: Object.keys(files), ai: ai, format: fmt }; },
+    state: function () { return { unlocked: unlocked, muted: muted, volume: vol, ambienceVolume: ambVol, ambience: amb && amb.key, wanted: wantAmb, context: ctx && ctx.state, files: Object.keys(files), ai: ai, format: fmt, intro: intro && { playing: !intro.paused, volume: Math.round(intro.volume * 100) / 100, ended: intro.ended } }; },
   };
 })();
 </script>`;
