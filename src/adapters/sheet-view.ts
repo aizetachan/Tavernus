@@ -4,7 +4,7 @@
  */
 
 import type { Engine } from '../engine/engine.js';
-import { inventoryView } from '../engine/inventory.js';
+import { inventoryView, packView, type PackView } from '../engine/inventory.js';
 import type { Id } from '../engine/model.js';
 import { positionOf } from '../engine/movement.js';
 import { ABILITY_ES, SKILLS, armorClass, saveModifier, skillModifier, type Ability } from '../engine/rules.js';
@@ -22,6 +22,8 @@ export interface SheetView {
   death: { mode: 'casual' | 'hardcore'; state: 'alive' | 'dying' | 'stable' | 'dead'; success?: number; fail?: number; stable_until?: string; respawn_real_ms?: number; respawn_place?: string };
   /** Clase y nivel (levels.ts): PX, rasgos con usos, elecciones y conjuros. La web lo pinta como sección; Discord, con los campos de texto. */
   class: ClassSheet;
+  /** Lo que lleva, con sus huecos (la web pinta los libres): manos, cada hueco de equipo, bolsillos y contenedores. */
+  pack: PackView & { coins: number; load: string };
 }
 
 const fmt = (n: number) => (n >= 0 ? `+${n}` : String(n));
@@ -73,5 +75,6 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
     footer: engine.clock.format(nowG),
     death,
     class: cls,
+    pack: { ...packView(engine.world, c.id), coins: inv.coins, load },
   };
 }

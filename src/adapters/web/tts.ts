@@ -155,9 +155,31 @@ export const TTS_STYLE = String.raw`
   .tts-pop[hidden] { display: none; }
   .tts-pop label { display: block; margin: 0 0 10px; color: var(--muted); font-size: 12px; font-weight: 500; }
   .tts-pop label.row { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
-  .tts-pop select, .tts-pop input[type=range] { display: block; width: 100%; margin-top: 4px; }
-  .tts-pop select { height: 32px; padding: 0 8px; border: 0; border-radius: 10px; background: var(--control); color: var(--text); }
-  .tts-pop select option { background: #1b1c22; }
+  .tts-pop [hidden], .sfx-pop [hidden] { display: none !important; }
+  /* Controles con la piel de la aplicación (también en el panel de sonido): desplegable propio, interruptores y
+     deslizador dorado con lo recorrido relleno (--p lo pone el script). */
+  .tts-pop select { display: none; }
+  .tts-sel { position: relative; margin-top: 6px; }
+  .tts-sel > button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--control); color: var(--text); font-size: 13px; text-align: left; }
+  .tts-sel > button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tts-sel > button svg { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .15s ease; }
+  .tts-sel > button[aria-expanded=true] { border-color: rgba(230,183,90,.55); }
+  .tts-sel > button[aria-expanded=true] svg { transform: rotate(180deg); }
+  .tts-sel > div { position: absolute; top: 42px; left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow-y: auto; padding: 6px; border-radius: 12px; background: rgba(20,21,24,.97); box-shadow: 0 12px 28px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.08); }
+  .tts-sel > div[hidden] { display: none; }
+  .tts-sel > div button { min-height: 34px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font-size: 13px; text-align: left; }
+  .tts-sel > div button:hover, .tts-sel > div button:focus-visible { outline: none; background: rgba(255,255,255,.07); }
+  .tts-sel > div button.on { background: var(--accent-tint); color: var(--accent); }
+  .tts-pop input[type=checkbox], .sfx-pop input[type=checkbox] { -webkit-appearance: none; appearance: none; position: relative; flex: none; width: 34px; height: 20px; margin: 0; border-radius: 999px; background: rgba(255,255,255,.14); cursor: pointer; transition: background .15s ease; }
+  .tts-pop input[type=checkbox]::before, .sfx-pop input[type=checkbox]::before { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #e9e4dc; box-shadow: 0 1px 3px rgba(0,0,0,.4); transition: transform .15s ease; }
+  .tts-pop input[type=checkbox]:checked, .sfx-pop input[type=checkbox]:checked { background: var(--accent); }
+  .tts-pop input[type=checkbox]:checked::before, .sfx-pop input[type=checkbox]:checked::before { transform: translateX(14px); background: #fff8ea; }
+  .tts-pop input[type=checkbox]:focus-visible, .sfx-pop input[type=checkbox]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tts-pop label.row, .sfx-pop label.row { gap: 10px; line-height: 1.35; }
+  .tts-pop input[type=range], .sfx-pop input[type=range] { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 4px; margin: 12px 0 6px; border-radius: 999px; cursor: pointer;
+    background: linear-gradient(var(--accent), var(--accent)) 0 0 / var(--p, 50%) 100% no-repeat, rgba(255,255,255,.14); }
+  .tts-pop input[type=range]::-webkit-slider-thumb, .sfx-pop input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff8ea; box-shadow: 0 0 0 3px rgba(230,183,90,.35), 0 1px 3px rgba(0,0,0,.5); }
+  .tts-pop input[type=range]::-moz-range-thumb, .sfx-pop input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff8ea; box-shadow: 0 0 0 3px rgba(230,183,90,.35), 0 1px 3px rgba(0,0,0,.5); }
   .tts-pop .note { margin: 6px 0 0; color: var(--faint); font-size: 11.5px; line-height: 1.4; }
   .tts-hint { align-self: center; padding: 6px 12px; border-radius: 12px; background: var(--platter); color: var(--muted); font-size: 12.5px; }
   @media (max-width: 820px) {
@@ -180,6 +202,8 @@ export const TTS_SCRIPT = String.raw`<script>
   var SPEAKER = '${SPEAKER_ICON}', BARS = '${BARS}';
 
   var provider = 'browser', providerLabel = 'Voz del navegador';
+  /** Lee la voz de la nube (ElevenLabs…) si el servidor la tiene y no se ha elegido una del navegador en el selector. */
+  function cloud() { return provider !== 'browser' && store('tavernus.tts.engine') !== 'browser'; }
   var auto = store('tavernus.tts.auto') === '1';
   var rate = Number(store('tavernus.tts.rate')) || 1;
   var awake = store('tavernus.tts.awake') === '1';
@@ -276,14 +300,14 @@ export const TTS_SCRIPT = String.raw`<script>
   function stepsOf(div) {
     // m.speech: el turno tal como se pinta en el hilo (bloques de novel.ts, en orden); si no, la narración.
     var m = div.ttsMsg, parts = speechParts(m.speech || m.text, m.lines), steps = [];
-    if (provider !== 'browser') return [{ cloud: parts.map(function (p) { return { text: p.text, role: p.kind, speaker: p.speaker }; }) }];
+    if (cloud()) return [{ cloud: parts.map(function (p) { return { text: p.text, role: p.kind, speaker: p.speaker }; }) }];
     parts.forEach(function (p) { speechChunks(p.text, 200).forEach(function (c) { steps.push({ kind: p.kind, speaker: p.speaker, text: c }); }); });
     return steps;
   }
   function speak(div) { stop(); queue = [div]; next(); }
   function enqueue(div) {
     if (queue.indexOf(div) < 0 && (!playing || playing.div !== div)) queue.push(div);
-    if (!playing) next(); else if (provider !== 'browser') audioFor(div);
+    if (!playing) next(); else if (cloud()) audioFor(div);
   }
   function next() {
     if (playing) playing.div.classList.remove('tts-on');
@@ -304,7 +328,7 @@ export const TTS_SCRIPT = String.raw`<script>
     if (!p) return;
     if (p.i >= p.steps.length) { next(); return; }
     var s = p.steps[p.i++];
-    if (provider === 'browser') sayBrowser(s, p); else sayCloud(s, p);
+    if (cloud()) sayCloud(s, p); else sayBrowser(s, p);
   }
   function stop() {
     queue = [];
@@ -366,7 +390,7 @@ export const TTS_SCRIPT = String.raw`<script>
       if (e && e.name === 'NotAllowedError') { hint('Toca la página una vez para que el navegador deje reproducir audio.'); stop(); return; }
       // La nube falla: esta narración y las siguientes, con la voz del navegador.
       hint('El narrador de voz no responde; sigo con la voz del navegador.');
-      provider = 'browser';
+      provider = 'browser'; fillVoices();
       p.steps = stepsOf(p.div); p.i = 0;
       step();
     });
@@ -423,14 +447,16 @@ export const TTS_SCRIPT = String.raw`<script>
     pop.querySelector('[data-k=auto]').checked = auto;
   }
   function fillVoices() {
-    var browser = provider === 'browser', list = ranked(), nv = narratorVoice();
+    var browser = !cloud(), list = ranked(), nv = narratorVoice();
     var opt = function (v) { return '<option value="' + v.voiceURI.replace(/"/g, '&quot;') + '">' + v.name.replace(/</g, '&lt;') + ' · ' + v.lang + '</option>'; };
     var sv = pop.querySelector('[data-k=voice]'), sn = pop.querySelector('[data-k=npcvoice]');
-    sv.innerHTML = list.map(opt).join('') || '<option value="">Sin voces en castellano</option>';
+    // Con voz en la nube, es la primera opción (y la marcada mientras se use); las del navegador quedan como alternativa.
+    sv.innerHTML = (provider !== 'browser' ? '<option value="cloud">' + providerLabel.replace(/</g, '&lt;') + ' · voz de la partida</option>' : '') +
+      (list.map(opt).join('') || (provider === 'browser' ? '<option value="">Sin voces en castellano</option>' : ''));
     sn.innerHTML = '<option value="">Automática (otra voz u otro tono)</option>' + list.map(opt).join('');
-    if (nv) sv.value = nv.voiceURI;
+    if (!browser) sv.value = 'cloud'; else if (nv) sv.value = nv.voiceURI;
     sn.value = byURI(store('tavernus.tts.npcvoice')) ? store('tavernus.tts.npcvoice') : '';
-    sv.parentNode.hidden = sn.parentNode.hidden = !browser;
+    sn.closest('label').hidden = !browser;
     pop.querySelector('.rate').textContent = rate.toFixed(2).replace(/0$/, '') + '×';
     pop.querySelector('[data-k=rate]').value = String(rate);
     pop.querySelector('[data-k=awake]').checked = awake;
@@ -438,12 +464,53 @@ export const TTS_SCRIPT = String.raw`<script>
       ? (list.length ? list.length + ' voces en castellano en este navegador. Las «Natural» de Edge (escritorio) son las que mejor suenan.' : 'Este navegador no ofrece voces en castellano; leerá con la voz por defecto.')
       : 'Voz: ' + providerLabel + ' (audio cacheado por partida).';
   }
+  /** Desplegable de la aplicación sobre un select (que sigue con el valor y avisa con «change»). */
+  function niceSelect(sel) {
+    var wrap = document.createElement('div'); wrap.className = 'tts-sel'; sel.parentNode.insertBefore(wrap, sel); wrap.appendChild(sel);
+    var btn = document.createElement('button'); btn.type = 'button'; btn.setAttribute('aria-haspopup', 'listbox'); btn.setAttribute('aria-expanded', 'false');
+    btn.innerHTML = '<span></span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>';
+    var menu = document.createElement('div'); menu.setAttribute('role', 'listbox'); menu.hidden = true;
+    wrap.appendChild(btn); wrap.appendChild(menu);
+    function show(open) {
+      if (open) {
+        menu.innerHTML = '';
+        Array.prototype.forEach.call(sel.options, function (o, i) {
+          var b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'option'); b.textContent = o.text;
+          if (i === sel.selectedIndex) { b.className = 'on'; b.setAttribute('aria-selected', 'true'); }
+          b.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); sel.selectedIndex = i; sel.dispatchEvent(new Event('change', { bubbles: true })); show(false); btn.focus(); });
+          menu.appendChild(b);
+        });
+      }
+      menu.hidden = !open; btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) { var on = menu.querySelector('.on') || menu.firstChild; if (on) { on.focus(); on.scrollIntoView({ block: 'nearest' }); } }
+    }
+    btn.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); show(menu.hidden); });
+    menu.addEventListener('keydown', function (ev) {
+      var items = Array.prototype.slice.call(menu.children), i = items.indexOf(document.activeElement);
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); if (items.length) items[(i + (ev.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+      if (ev.key === 'Escape') { ev.stopPropagation(); show(false); btn.focus(); }
+    });
+    pop.addEventListener('click', function (ev) { if (!wrap.contains(ev.target)) show(false); });
+    return function paint() { var o = sel.options[sel.selectedIndex]; btn.firstChild.textContent = o ? o.text : ''; };
+  }
+  var paintSelects = ['voice', 'npcvoice'].map(function (k) { return niceSelect(pop.querySelector('[data-k=' + k + ']')); });
+  var baseFill = fillVoices;
+  fillVoices = function () { baseFill(); paintSelects.forEach(function (f) { f(); }); paintRanges(); };
+  /** Lo recorrido de cada deslizador, en dorado (aquí y en el panel de sonido). */
+  function paintRanges() {
+    document.querySelectorAll('.tts-pop input[type=range], .sfx-pop input[type=range]').forEach(function (r) {
+      var min = Number(r.min) || 0, max = Number(r.max) || 1;
+      r.style.setProperty('--p', Math.max(0, Math.min(100, (Number(r.value) - min) / (max - min) * 100)) + '%');
+    });
+  }
+  document.addEventListener('input', function (ev) { if (ev.target.matches && ev.target.matches('input[type=range]')) paintRanges(); });
+  document.addEventListener('click', function () { requestAnimationFrame(paintRanges); });
   if (synth) { fillVoices(); if (synth.addEventListener) synth.addEventListener('voiceschanged', fillVoices); else synth.onvoiceschanged = fillVoices; }
 
   /** iOS y Chrome solo dejan hablar tras un gesto: una locución vacía dentro del clic «desbloquea» la voz. */
   function unlock() {
-    if (synth && provider === 'browser' && !playing) { var u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); }
-    if (provider !== 'browser' && !audio) { audio = new Audio(); audio.addEventListener('ended', function () { if (playing) step(); }); }
+    if (synth && !cloud() && !playing) { var u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); }
+    if (cloud() && !audio) { audio = new Audio(); audio.addEventListener('ended', function () { if (playing) step(); }); }
   }
   function lastMaster() { var l = log.querySelectorAll('.msg.master'); return l.length ? l[l.length - 1] : null; }
   function setAuto(on) {
@@ -459,7 +526,8 @@ export const TTS_SCRIPT = String.raw`<script>
   document.addEventListener('click', function (ev) { if (!pop.hidden && !box.contains(ev.target) && !pop.contains(ev.target) && !moreBtn.contains(ev.target)) { pop.hidden = true; moreBtn.setAttribute('aria-expanded', 'false'); } });
   pop.addEventListener('change', function (ev) {
     var k = ev.target.getAttribute('data-k');
-    if (k === 'voice' || k === 'npcvoice') store('tavernus.tts.' + k, ev.target.value);
+    if (k === 'voice') { if (ev.target.value === 'cloud') store('tavernus.tts.engine', 'cloud'); else { store('tavernus.tts.engine', 'browser'); store('tavernus.tts.voice', ev.target.value); } stop(); }
+    if (k === 'npcvoice') store('tavernus.tts.npcvoice', ev.target.value);
     if (k === 'rate') { rate = Number(ev.target.value) || 1; store('tavernus.tts.rate', String(rate)); }
     if (k === 'auto') setAuto(ev.target.checked);
     if (k === 'awake') { awake = ev.target.checked; store('tavernus.tts.awake', awake ? '1' : '0'); if (awake && (playing || auto)) keepAwake(); else if (lock) { lock.release().catch(function () {}); lock = null; } }

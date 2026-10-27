@@ -3,7 +3,7 @@
  * decide si algo cabe; el master solo narra el resultado.
  */
 
-import type { CarrySlot, Character, Id, ItemDef, ItemInstance, ItemSize, Placement, Spot } from './model.js';
+import type { CarrySlot, Character, EquipSlot, Id, ItemDef, ItemInstance, ItemSize, Placement, Spot } from './model.js';
 import { EQUIP_SLOTS } from './model.js';
 import { samePlacement, slotKey, type World } from './world.js';
 
@@ -84,6 +84,9 @@ function handsUsed(world: World, characterId: Id): Set<'main' | 'off'> {
  * Comprueba si `def × quantity` cabe en el destino. No muta nada.
  * Devuelve null si cabe, o el error explicando por qué no.
  */
+/** Huecos de equipo en castellano, para los avisos. */
+const SLOT_ES: Record<string, string> = { head: 'la cabeza', body: 'el cuerpo', hands: 'las manos (guantes)', feet: 'los pies', neck: 'el cuello', ring1: 'un dedo', ring2: 'un dedo', back: 'la espalda', belt: 'el cinturón' };
+
 export function checkFits(world: World, def: ItemDef, quantity: number, to: Placement, exclude?: Id): TransferError | null {
   const rules = world.campaign.capacity_rules;
   switch (to.type) {
@@ -139,10 +142,10 @@ export function checkFits(world: World, def: ItemDef, quantity: number, to: Plac
         }
         case 'equipped': {
           if (!EQUIP_SLOTS.includes(slot.slot)) return { code: 'invalid_slot', reason: `slot ${slot.slot} no existe` };
-          if (def.equip_slot !== slot.slot) return { code: 'invalid_slot', reason: `${def.name} no se puede llevar en ${slot.slot}` };
+          if (def.equip_slot !== slot.slot) return { code: 'invalid_slot', reason: `${def.name} no se puede llevar en ${SLOT_ES[slot.slot] ?? slot.slot}` };
           if (quantity !== 1) return { code: 'invalid_slot', reason: 'solo puedes equipar uno' };
           const busy = carried.some((i) => i.location.type === 'character' && slotKey(i.location.slot) === slotKey(slot));
-          if (busy) return { code: 'no_space', reason: `ya llevas algo en ${slot.slot}`, options: ['quitártelo primero'] };
+          if (busy) return { code: 'no_space', reason: `ya llevas algo en ${SLOT_ES[slot.slot] ?? slot.slot}`, options: ['quitártelo primero'] };
           return null;
         }
       }
@@ -279,9 +282,36 @@ export interface InventoryView {
   hands: { main: string | null; off: string | null };
   equipped: Partial<Record<string, string>>;
   pockets: string[];
-  containers: { name: string; id: Id; items: string[] }[];
+  /** `slots`: cuántos objetos caben (pilas incluidas). */
+  containers: { name: string; id: Id; items: string[]; slots: number }[];
   coins: number;
   encumbrance: Encumbrance;
+}
+
+/** Un objeto de la mochila tal como lo ve la web: su ejemplar (para moverlo) y su rótulo («antorcha ×3»). */
+export interface PackItem { id: Id; label: string }
+export interface PackView {
+  hands: { main: PackItem | null; off: PackItem | null; both: boolean };
+  equipped: { slot: EquipSlot; item: PackItem | null }[];
+  pockets: { items: PackItem[]; slots: number };
+  containers: { id: Id; name: string; items: PackItem[]; slots: number }[];
+}
+
+/** La mochila con cada hueco (libres incluidos) y el ejemplar de cada objeto: la web la pinta y la reordena arrastrando. */
+export function packView(world: World, characterId: Id): PackView {
+  const c = world.character(characterId);
+  const item = (i: ItemInstance): PackItem => { const d = world.itemDef(i.item_id); return { id: i.id, label: i.quantity > 1 ? `${d.name} ×${i.quantity}` : d.name }; };
+  const view: PackView = { hands: { main: null, off: null, both: false }, equipped: EQUIP_SLOTS.map((slot) => ({ slot, item: null })), pockets: { items: [], slots: world.campaign.capacity_rules.pockets_slots }, containers: [] };
+  for (const i of directlyCarried(world, c.id)) {
+    if (i.location.type !== 'character') continue;
+    const s = i.location.slot;
+    if (s.kind === 'hand') { if (s.which === 'both') { view.hands.main = item(i); view.hands.both = true; } else view.hands[s.which] = item(i); }
+    else if (s.kind === 'pocket') view.pockets.items.push(item(i));
+    else { const e = view.equipped.find((x) => x.slot === s.slot); if (e) e.item = item(i); }
+    const def = world.itemDef(i.item_id);
+    if (def.container) view.containers.push({ id: i.id, name: def.name, items: world.itemsIn({ type: 'container', id: i.id }).map(item), slots: def.container.slots });
+  }
+  return view;
 }
 
 export function inventoryView(world: World, characterId: Id): InventoryView {
@@ -296,7 +326,7 @@ export function inventoryView(world: World, characterId: Id): InventoryView {
       if (s.which === 'both') { view.hands.main = label(i); view.hands.off = label(i); } else view.hands[s.which] = label(i);
     } else if (s.kind === 'pocket') view.pockets.push(label(i));
     else view.equipped[s.slot] = label(i);
-    if (def.container) view.containers.push({ name: def.name, id: i.id, items: world.itemsIn({ type: 'container', id: i.id }).map(label) });
+    if (def.container) view.containers.push({ name: def.name, id: i.id, items: world.itemsIn({ type: 'container', id: i.id }).map(label), slots: def.container.slots });
   }
   return view;
 }

@@ -26,6 +26,7 @@
  *   POST /api/offer    {character, offer, accept}      aceptar o rechazar lo que otro PJ le ofrece
  *   POST /api/presence {character, tab, state}         latido de la pestaña: visible | hidden | gone (presence.ts)
  *   POST /api/reaction {character, reaction, answer, text}  dejarse o resistirse a lo que otro PJ intenta hacerle (answer: accept, resist o null con text)
+ *   POST /api/inventory {character, instance, to}      mochila: mover un objeto propio arrastrando (mano, bolsillo, contenedor, equipo)
  *   POST /api/typing   {character}                     «está escribiendo…» a los demás PJ del sitio (SSE «typing»)
  * SSE «round»: ronda abierta en escena tensa (scene.ts): número, quién falta y cuándo vence.
  *   POST /api/roll     {character}
@@ -814,6 +815,19 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           json(res, 200, await engine.choose(id, key, picks));
           return;
         }
+        case '/api/inventory': {
+          // Arrastrar en la mochila: {instance, to: {kind: 'hand'|'pocket'|'container'|'equipped', which?, id?, slot?}}.
+          const inst = typeof body['instance'] === 'string' ? body['instance'] : '';
+          const to = (body['to'] ?? {}) as Record<string, unknown>;
+          const dest = to['kind'] === 'hand' && (to['which'] === 'main' || to['which'] === 'off') ? { kind: 'hand' as const, which: to['which'] as 'main' | 'off' }
+            : to['kind'] === 'pocket' ? { kind: 'pocket' as const }
+            : to['kind'] === 'container' && typeof to['id'] === 'string' ? { kind: 'container' as const, id: to['id'] }
+            : to['kind'] === 'equipped' && typeof to['slot'] === 'string' ? { kind: 'equipped' as const, slot: to['slot'] } : null;
+          if (!inst || !dest) { json(res, 400, { ok: false, text: '¿Adónde lo llevas?' }); return; }
+          const r = await engine.moveItem(id, inst, dest);
+          json(res, 200, { ok: r.ok, text: r.text });
+          return;
+        }
         case '/api/command': {
           const name = typeof body['name'] === 'string' ? body['name'] : '';
           json(res, 200, { ok: true, text: await rt.actions.track(id, 'command', () => engine.command(id, name)) });
@@ -897,10 +911,10 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
 
   /** Imágenes fijas de la interfaz: public/ en la raíz del proyecto (vale igual desde src/ que desde dist/). */
   async function serveAsset(res: ServerResponse, name: string): Promise<void> {
-    if (!/^[A-Za-z0-9_-]+\.jpg$/.test(name)) { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
+    if (!/^[A-Za-z0-9_-]+\.(jpg|png)$/.test(name)) { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
     let bytes: Buffer;
     try { bytes = await readFile(new URL('../../../public/' + name, import.meta.url)); } catch { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
-    res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' });
+    res.writeHead(200, { 'content-type': name.endsWith('.png') ? 'image/png' : 'image/jpeg', 'cache-control': 'public, max-age=86400' });
     res.end(bytes);
   }
 

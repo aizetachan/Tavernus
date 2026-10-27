@@ -5,3 +5,7 @@ menu-instrumental.mp3
   aportada por su autor (no procede de bancos de sonido ni lleva licencia de terceros).
   Sustituye a menu-theme.mp3; el nombre cambia para que los navegadores no sigan con la
   pista anterior en caché (/music/ se sirve con max-age de una semana).
+
+intro-partida.mp3
+  «Tavernus intro (partida)», suena suave de fondo al entrar en una partida desde el menú. Pista propia del
+  proyecto, aportada por su autor (no procede de bancos de sonido ni lleva licencia de terceros).
