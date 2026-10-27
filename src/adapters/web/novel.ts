@@ -282,8 +282,23 @@ export const NOVEL_STYLE = String.raw`
   .place-shot img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
   .place-shot.ready img { opacity: 1; }
   @keyframes nv-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  /* Retrato de un personaje al aparecer: cuadrado y pequeño, encima de su primera frase; la cara al centro. */
   .moment .shot { position: relative; display: block; width: 220px; aspect-ratio: 4 / 5; padding: 0; border: 0; border-radius: 18px; overflow: hidden; background: var(--platter); cursor: zoom-in; box-shadow: var(--control-shadow); }
   .moment.item .shot { width: 200px; aspect-ratio: 1; }
+  .moment.portrait { margin-top: 10px; }
+  /* Tirada en directo: el dado y una raya que corre hasta que acaba su sonido; luego, el resultado. */
+  .msg.notice .roll-load { display: inline-flex; align-items: center; gap: 8px; vertical-align: middle; }
+  .msg.notice .roll-load b { font-weight: inherit; display: inline-block; animation: roll-spin .5s linear infinite; }
+  .msg.notice .roll-load i { display: block; width: 120px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, rgba(198,191,180,.12) 0%, rgba(198,191,180,.12) 30%, rgba(233,169,78,.75) 50%, rgba(198,191,180,.12) 70%, rgba(198,191,180,.12) 100%); background-size: 250% 100%; animation: roll-load .7s linear infinite; }
+  @keyframes roll-load { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+  @keyframes roll-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .msg.notice .roll-load b, .msg.notice .roll-load i { animation: none; } }
+  .moment.portrait .shot { width: 110px; aspect-ratio: 1; border-radius: 14px; }
+  .moment.portrait img { object-position: 50% 50%; }
+  .moment.portrait figcaption { left: 8px; right: 8px; bottom: 7px; }
+  .moment.portrait figcaption b { font-size: 11.5px; line-height: 1.25; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .moment.portrait figcaption span { display: block; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .moment.portrait .shot::after { inset: 35% 0 0; }
   .moment.combat, .moment.discovery { width: min(560px, calc(100% - 42px)); }
   .moment.combat .shot, .moment.discovery .shot { width: 100%; aspect-ratio: 16 / 9; }
   .moment img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .7s; }
@@ -311,7 +326,7 @@ export const NOVEL_STYLE = String.raw`
     .msg.row { max-width: 100%; }
     .nv-av { width: 30px; height: 30px; }
     .msg.scene, .msg.moment, #log > .actions { margin-left: 38px; }
-    .moment .shot { width: 180px; } .moment.item .shot { width: 160px; }
+    .moment .shot { width: 180px; } .moment.item .shot { width: 160px; } .moment.portrait .shot { width: 96px; }
   }
 `;
 
@@ -490,7 +505,7 @@ export const NOVEL_JS = String.raw`
    * Si lleva enlace, abre su pestaña (el Diario); si es una tirada, el dado del botón cae en lo que ha salido.
    * Los de misiones (alta, paso, cierre) van destacados, con el porqué debajo; la subida de nivel, con lo que gana.
    */
-  function addNotice(n, other) {
+  function addNotice(n, other, hold) {
     var div = document.createElement('div');
     div.className = 'msg notice' + (n.tone ? ' tone-' + n.tone : '') + (n.quest ? ' quest q-' + n.quest.event : '') + (n.level ? ' quest q-level' : '');
     div.setAttribute('role', 'status');
@@ -528,9 +543,30 @@ export const NOVEL_JS = String.raw`
       div.appendChild(li);
     });
     log.appendChild(div);
-    if (!other) diceShown(n.text);
+    if (hold) {
+      // Tirada en directo: se ve el dado y, en vez del texto, una raya de carga hasta que acaba su sonido.
+      div.classList.add('rolling');
+      s.hidden = true;
+      var ld = document.createElement('span');
+      ld.className = 'roll-load'; ld.setAttribute('aria-label', 'Tirando el dado');
+      ld.innerHTML = '<b aria-hidden="true">🎲</b><i></i>';
+      div.insertBefore(ld, s);
+    } else if (!other) diceShown(n.text);
     scroll();
     return div;
+  }
+  /** Muestra el resultado de una tirada retenida: cuando acaba el sonido del dado (entre 0,9 y 4 s). */
+  function revealRoll(div, n, other) {
+    var sound = window.TavernusSfx && TavernusSfx.ended ? TavernusSfx.ended('dado') : Promise.resolve();
+    var cap = new Promise(function (ok) { setTimeout(ok, 4000); });
+    return Promise.all([wait(900), Promise.race([sound, cap])]).then(function () {
+      var ld = div.querySelector('.roll-load');
+      if (ld) ld.remove();
+      div.classList.remove('rolling');
+      div.querySelector('span').hidden = false;
+      if (!other) diceShown(n.text);
+      scroll();
+    });
   }
 
   /** Un mensaje del stream en el hilo: lo del PJ a la derecha, la narración y los NPCs a la izquierda. */
@@ -567,13 +603,15 @@ export const NOVEL_JS = String.raw`
     typing(false);
     // Lo que ya había (el mensaje pendiente del jugador se quita al pintar el turno: no vale como marca).
     var old = new Set(log.children);
+    chatTurn.held = null;
     try { chatTurn(m, live); } catch (e) { console.error(e); }
-    var shown;
+    var shown, held = chatTurn.held;
     if (animate) {
       // Los puntos del narrador que ya se veían siguen (y cuentan) hasta la primera burbuja.
       if (since) { typing(true); typingSince = since; }
       shown = revealTurn(old);
     } else shown = Promise.resolve();
+    if (held) shown = Promise.all([shown, held]);
     return shown.then(function () {
       // Si el turno sigue (otra respuesta en camino), los puntos vuelven al rato: sin parpadeo cuando era la última.
       // La siguiente respuesta cuenta su espera desde ahora.
@@ -605,23 +643,28 @@ export const NOVEL_JS = String.raw`
     if (m.chapter) { addChapter(m); return; }
     if (m.input) { clearPending(); markChosen(m.input); }
     var before = log.lastElementChild;
-    var lines = m.lines || [], main = null;
+    var lines = m.lines || [], main = null, held = null;
     var say = function (l, lead) {
       // A quién se lo dice (modo Decir dirigido): una línea pequeña encima de la frase.
       if (l.to && !lead) lead = 'a ' + l.to;
       if (l.speaker === 'actor') return chatRow('mine', meWho(), (l.to ? '<div class="lead">a ' + escapeHtml(l.to) + '</div>' : '') + escapeHtml(l.text));
       if (l.avatar) portraits[l.id] = l.avatar;
-      return chatRow('npc', { id: l.id, name: l.name, avatar: l.avatar }, (lead ? '<div class="lead">' + escapeHtml(lead) + '</div>' : '') + escapeHtml(l.text));
+      var r = chatRow('npc', { id: l.id, name: l.name, avatar: l.avatar }, (lead ? '<div class="lead">' + escapeHtml(lead) + '</div>' : '') + escapeHtml(l.text));
+      // Lo que lee su avatar (tts.ts): solo su frase.
+      r.ttsOwn = '«' + l.text + '»';
+      return r;
     };
     var narrate = function (text) {
-      if (m.narrator || m.kind === 'master') return chatRow('master', cast.master, format(text));
+      if (m.narrator || m.kind === 'master') { var r = chatRow('master', cast.master, format(text)); r.ttsOwn = text; return r; }
       return add('system', text, m.dice === 'other' ? { other: true } : undefined);
     };
     // Si el jugador no habla en este turno, su mensaje es lo que ha hecho (en cursiva).
     if (m.input && !lines.some(function (l) { return l.speaker === 'actor'; })) chatRow('mine', meWho(), format(m.input), { act: true });
     if (m.notice) {
       // Un aviso no es narración: su línea y, debajo, lo que traiga (momentos, opciones, oferta).
-      main = addNotice(m.notice, m.dice === 'other');
+      var hold = !!(live && /🎲/.test(m.notice.text) && (m.sfx || []).indexOf('dado') >= 0);
+      main = addNotice(m.notice, m.dice === 'other', hold);
+      if (hold) held = revealRoll(main, m.notice, m.dice === 'other');
     } else if (m.blocks && m.blocks.length) {
       // El turno en su orden real: narrador, personaje, narrador… cada trozo en su burbuja.
       // La frase que presenta a quien habla (lead) va dentro de la burbuja de ese personaje.
@@ -682,6 +725,8 @@ export const NOVEL_JS = String.raw`
       if (!live) jb.disabled = true;
     }
     if (m.reply_to) replyable(m.reply_to, before, main);
+    // El turno no se da por pintado hasta que se ve el resultado del dado: lo siguiente espera detrás.
+    if (held) chatTurn.held = held;
     if (m.offer) partyButtons(m, host, live);
     if (m.reaction) reactionButtons(m.reaction, host);
     if (m.reaction_wait) reactionWait(m.reaction_wait, main);
@@ -959,8 +1004,10 @@ export const NOVEL_JS = String.raw`
     fig.innerHTML = '<button type="button" class="shot" title="Ver en grande"><img alt=""><figcaption><b></b><span></span></figcaption></button>';
     var img = fig.querySelector('img'), name = x.name || '';
     fig.querySelector('figcaption b').textContent = name;
-    fig.querySelector('figcaption span').textContent = MOMENT_LABEL[x.kind] || 'Ilustración';
-    img.alt = (MOMENT_LABEL[x.kind] || 'Ilustración') + ': ' + name;
+    // Un retrato lleva el oficio de quien sale («tabernera»); el resto, qué clase de momento es.
+    var label = (x.kind === 'portrait' && x.role) || MOMENT_LABEL[x.kind] || 'Ilustración';
+    fig.querySelector('figcaption span').textContent = label;
+    img.alt = (x.kind === 'portrait' ? 'Retrato' : label) + ': ' + name + (x.kind === 'portrait' && x.role ? ', ' + x.role : '');
     var atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
     img.addEventListener('load', function () { fig.classList.add('ready'); if (atEnd) scroll(); });
     img.addEventListener('error', function () { fig.remove(); });
@@ -969,6 +1016,15 @@ export const NOVEL_JS = String.raw`
     var host = null;
     log.querySelectorAll('.msg[data-seq]').forEach(function (d) { if (d.getAttribute('data-seq') === String(seq)) host = d; });
     if (!host) { log.appendChild(fig); return; }
+    // El retrato de quien aparece va encima de su primera frase de ese turno: primero la cara, luego lo que dice.
+    if (x.kind === 'portrait') {
+      var first = null;
+      for (var e = host; e; e = e.previousElementSibling) {
+        if (e !== host && e.hasAttribute('data-seq')) break;
+        if (e.getAttribute('data-who') === 'npc:' + x.entity_id) first = e;
+      }
+      if (first) { first.parentNode.insertBefore(fig, first); first.classList.remove('cont'); return; }
+    }
     var ref = host;
     while (ref.nextElementSibling && ref.nextElementSibling.getAttribute('data-for') === String(seq)) ref = ref.nextElementSibling;
     ref.parentNode.insertBefore(fig, ref.nextSibling);

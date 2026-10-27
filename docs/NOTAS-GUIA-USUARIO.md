@@ -308,3 +308,13 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 - En el engranaje del menú principal, «Aspecto»: **Penumbra** (por defecto, plano, con el estilo de la pantalla de partida) o **Taberna** (ilustrado: tablones, marco dorado y la madera que se vuelve tecnología al entrar). Se recuerda en ese navegador.
 - En Penumbra las imágenes van en duotono (negro y dorado) y la de cada partida es la última vista de un sitio pintada en ella; si no tiene, la taberna. Al entrar en una partida, un fundido a negro corto.
 - En Taberna, la partida lleva los tablones oscuros del menú (sin el marco dorado) en el panel lateral, la cabecera y la barra del cuadro de texto; en Penumbra sigue plana.
+
+## Sonido, voz y retratos en la partida (27-10-2026)
+
+- **Volúmenes de partida:** el ambiente suena al 50 %, la música al 25 % y el narrador al 75 %, por encima de los dos. Cada uno tiene su deslizador: Música y «Ambiente y efectos» en el panel de sonido; Volumen en el del narrador. Se recuerdan en cada navegador.
+- **La música suena al entrar en la partida**, aunque no vengas del menú: empieza al primer toque si su botón (la nota) está encendido. Apagar efectos y ambiente ya no la corta.
+- **En iPhone los deslizadores funcionan:** la música y la voz en la nube pasan por el mezclador de audio del navegador, porque Safari en iOS no deja cambiar el volumen de un audio normal.
+- **Escuchar por avatar:** al pulsar el avatar de una burbuja se lee solo lo que dice esa burbuja (y las suyas seguidas), no la de otros personajes. El narrador lee solo su parte.
+- **Retrato al aparecer un personaje:** sale encima de su primera frase, en un cuadrado pequeño (la mitad que antes), centrado, con su nombre (y apellidos, si los tiene) y su oficio («tabernera») en vez de «Retrato».
+- **Tirada de dados:** al llegar el resultado se ve el dado girando y una raya de carga; el texto aparece cuando acaba el sonido del dado (con el sonido apagado, en menos de un segundo). Lo que viene detrás espera a que se vea.
+- **Voz que tarda en cargar:** al pulsar un avatar, si la voz viene de la nube, su borde se va llenando en ámbar como una barra de carga, según lo que se calcula que falta (por lo largo del texto y lo que han tardado las lecturas anteriores en ese navegador). Si tarda más de lo previsto, avanza despacio sin llegar al final; al empezar la voz se completa y el borde vuelve a latir.

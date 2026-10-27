@@ -107,7 +107,7 @@ const PUBLIC_GAMES_PER_DAY = 20;
  */
 export interface WebLine { speaker: 'npc' | 'actor' | 'pc'; id: Id; name: string; text: string; avatar?: string | null; to?: string }
 /** Momento ilustrado junto al evento (retrato, objeto, combate, descubrimiento); `src` cuando ya está en disco. */
-interface WebMoment { kind: Moment['kind']; key: string; entity_id: Id; name?: string; src?: string }
+interface WebMoment { kind: Moment['kind']; key: string; entity_id: Id; name?: string; src?: string; /** Retrato de un NPC: su oficio («tabernera»), bajo el nombre. */ role?: string }
 
 export interface WebMessage {
   seq: number;
@@ -300,7 +300,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       h.push(m);
       if (h.length > HISTORY) h.splice(0, h.length - HISTORY);
       history.set(characterId, h);
-      send(characterId, 'message', withImages(m, illustratorOf(engine), slug));
+      send(characterId, 'message', withImages(m, illustratorOf(engine), slug, engine));
       if (m.chapter?.kind === 'prologue') releaseHeld(characterId);
     };
     // El diario cambia con lo que el PJ vive: se avisa (agrupado) y la página lo vuelve a pedir.
@@ -714,7 +714,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       // Si se está presentando, la página no pide la descripción del sitio: el hilo empieza en el prólogo, que está al llegar.
       res.write(`event: cast\ndata: ${JSON.stringify(castOf(engine, id, ill, slug))}\n\n`
         + (rt.isOpening(id) ? 'event: opening\ndata: {}\n\n' : '')
-        + `event: history\ndata: ${JSON.stringify(historyFor(engine, id, rt.history.get(id) ?? []).map((m) => withImages(m, ill, slug)))}\n\n`);
+        + `event: history\ndata: ${JSON.stringify(historyFor(engine, id, rt.history.get(id) ?? []).map((m) => withImages(m, ill, slug, engine)))}\n\n`);
       const set = rt.streams.get(id) ?? new Set();
       set.add(res);
       rt.streams.set(id, set);
@@ -1333,7 +1333,7 @@ function castOf(engine: Engine, characterId: Id, ill: Illustrator | null, slug: 
 }
 
 /** El mensaje con lo que ya esté ilustrado: retratos de quien habla y las imágenes de sus momentos. */
-function withImages(m: WebMessage, ill: Illustrator | null, slug: string): WebMessage {
+function withImages(m: WebMessage, ill: Illustrator | null, slug: string, engine?: Engine): WebMessage {
   if (!ill || (!m.lines && !m.moments && !m.place)) return m;
   const out: WebMessage = { ...m };
   if (m.place) { const img = ill.imageFor(m.place.location_id); if (img) out.place = { ...sceneView(img, slug) }; }
@@ -1341,7 +1341,12 @@ function withImages(m: WebMessage, ill: Illustrator | null, slug: string): WebMe
   if (m.moments) {
     out.moments = m.moments.map((x) => {
       const img = x.kind === 'scene' ? null : ill.entityImage(x.kind, x.entity_id);
-      return img ? { ...x, name: img.name, src: imageSrc(img, slug) } : x;
+      if (!img) return x;
+      // Retrato de un NPC: el nombre con que habla en el turno (nombre y apellidos, si los tiene) y su oficio.
+      const npc = x.kind === 'portrait' ? engine?.world.npcs.get(x.entity_id) : undefined;
+      if (!npc) return { ...x, name: img.name, src: imageSrc(img, slug) };
+      const said = m.lines?.find((l) => l.id === x.entity_id)?.name;
+      return { ...x, name: said || npc.name, role: npc.role_short?.replace(/^(el|la|los|las)\s+/i, '') || npc.role, src: imageSrc(img, slug) };
     });
   }
   return out;
