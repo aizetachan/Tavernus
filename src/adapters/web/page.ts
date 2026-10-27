@@ -16,6 +16,10 @@ export const PAGE = String.raw`<!doctype html>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
 <meta name="theme-color" content="#141617">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/assets/icon-512.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
 <style>
   /* Estilo B5 (lienzo de diseño «Tavernus · Pantalla de partida»): como WhatsApp, un panel con la partida
      a la izquierda y el chat a la derecha. Fondos planos, burbujas con sombra, Manrope en los títulos.
@@ -59,6 +63,15 @@ export const PAGE = String.raw`<!doctype html>
   .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .badge.offline { color: var(--info); } .badge.live { color: var(--ok); } .badge.record { color: var(--rec); } .badge.replay { color: var(--accent); }
   .badge[hidden] { display: none; }
+  /* Solo la bolita (el tipo de máster va en el title): algo mayor y con un halo de su color. */
+  .badge.dot { position: relative; gap: 0; font-size: 0; padding: 4px; margin: -4px; cursor: default; }
+  .badge.dot::before { width: 8px; height: 8px; }
+  /* El tipo de máster, en un globo al pasar el ratón (o al enfocarla con el teclado). */
+  .badge.dot[data-tip]:hover::after, .badge.dot[data-tip]:focus-visible::after { content: attr(data-tip); position: absolute; top: 50%; right: calc(100% + 8px); transform: translateY(-50%); z-index: 40;
+    padding: 5px 9px; border-radius: 8px; background: rgba(14,15,16,.96); box-shadow: 0 6px 18px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.08);
+    color: var(--text); font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; white-space: nowrap; pointer-events: none; }
+  .side-head .tline { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .side-head .tline #game-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #side-close { display: none; }
   .side-scroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.12) transparent; }
 
@@ -71,13 +84,15 @@ export const PAGE = String.raw`<!doctype html>
   .card .who { min-width: 0; flex: 1; }
   .card .name { font: 700 16px/1.3 var(--display); letter-spacing: -.02em; }
   .card .sub { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .card .hpbox { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 13px; font-weight: 600; }
-  .card .bar { width: 96px; height: 4px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+  /* A la derecha del nombre, la figura que abre la Hoja con todas las estadísticas; debajo, la vida a todo lo ancho. */
+  .card .stats-btn { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--platter); box-shadow: inset 0 0 0 1px var(--line); color: var(--text); }
+  .card .stats-btn:hover { background: rgba(255,255,255,.08); }
+  .card .stats-btn svg.i { width: 20px; height: 20px; }
+  .card .hpline { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  .card .hpv { flex: none; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .card .bar { flex: 1; height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
   .card .bar i { display: block; height: 100%; border-radius: 999px; background: var(--ok); }
   .card .bar i.low { background: var(--accent); } .card .bar i.crit { background: var(--error); }
-  .card .stats { display: flex; gap: 6px; margin-top: 10px; }
-  .card .stats div { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6px 0; border-radius: 10px; background: var(--platter); border: 1px solid var(--sep); font-size: 15px; font-weight: 600; white-space: nowrap; }
-  .card .stats small { font-size: 10.5px; font-weight: 400; color: var(--muted); }
 
   /* Tablero y mapa del sitio. */
   .views { display: flex; align-items: center; gap: 4px; padding: 12px 12px 8px 16px; }
@@ -307,7 +322,12 @@ export const PAGE = String.raw`<!doctype html>
   .sh-head .av img { width: 100%; height: 100%; object-fit: cover; }
   .sh-head h2 { margin: 0; font: 700 20px/1.2 var(--display); letter-spacing: -.02em; }
   .sh-head p { margin: 3px 0 0; font-size: 13px; color: var(--muted); white-space: pre-line; }
+  .sh-head .sh-who { min-width: 0; flex: 1; }
+  .sh-head .sh-state { flex: none; display: flex; flex-direction: column; gap: 6px; max-width: 45%; text-align: left; }
+  .sh-head .sh-state small { display: block; font-size: 13px; color: var(--muted); }
+  .sh-head .sh-state b { display: block; font: 700 20px/1.2 var(--display); letter-spacing: -.02em; white-space: pre-line; }
   .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .tiles.t5 { grid-template-columns: repeat(5, minmax(0, 1fr)); margin-top: 8px; }
   .tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 10px 4px; border-radius: 12px; background: var(--platter); border: 1px solid var(--sep); text-align: center; }
   .tile b { font-size: 17px; font-weight: 600; }
   .tile small { font-size: 11px; color: var(--muted); }
@@ -330,6 +350,30 @@ export const PAGE = String.raw`<!doctype html>
 
   /* Mochila. */
   .items > div { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid rgba(255,255,255,.05); }
+  /* Mochila en tarjetas, con los huecos libres punteados. */
+  .icards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+  .ic { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 9px 10px; border-radius: 12px; background: var(--platter); border: 1px solid var(--sep); }
+  .ic .tag { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 10px; background: var(--control); border: 1px solid var(--line); color: #b8b1a6; }
+  .ic.eq .tag { background: var(--accent-tint); border-color: rgba(230,183,90,.28); color: var(--accent); }
+  .ic .tt { min-width: 0; flex: 1; font-size: 14px; }
+  .ic .tt small { display: block; font-size: 12px; color: var(--muted); }
+  .ic.free { background: transparent; border-style: dashed; border-color: rgba(255,255,255,.1); }
+  .ic.free .tag { background: transparent; border-style: dashed; border-color: rgba(255,255,255,.1); }
+  .ic.free .tt { color: var(--faint); font-size: 13px; }
+  .ic[draggable] { cursor: grab; }
+  .pack-msg { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; background: rgba(255,107,94,.12); color: #ffb3aa; font-size: 13px; }
+  .pack-msg[hidden] { display: none; }
+  .ic.dragging { opacity: .4; }
+  .ic.drop { border-color: var(--accent); border-style: solid; background: var(--accent-tint); }
+  .kv-t span { margin-left: 4px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  /* Carga a la izquierda y monedas a la derecha: las dos cifras grandes y su rótulo debajo. */
+  .tile.wide.money { flex-direction: row; align-items: center; justify-content: space-between; }
+  .tile.wide.money .l { display: block; font-size: 13px; }
+  .tile.wide.money .l b { display: block; margin-left: 0; font-size: 34px; line-height: 1.05; font-weight: 600; }
+  .tile.wide.money .l small { display: block; font-size: 11px; color: var(--muted); }
+  .tile.wide.money .coins { display: flex; flex-direction: column; align-items: flex-end; }
+  .tile.wide.money .coins b { font-size: 34px; line-height: 1.05; font-weight: 600; }
+  .tile.wide.money .coins small { font-size: 11px; color: var(--muted); }
   .items .tag { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 10px; background: var(--control); border: 1px solid var(--line); color: #b8b1a6; }
   .items .tag.eq { background: var(--accent-tint); border-color: rgba(230,183,90,.28); color: var(--accent); }
   .items .tt { min-width: 0; flex: 1; font-size: 14.5px; }
@@ -427,7 +471,13 @@ export const PAGE = String.raw`<!doctype html>
   #journal .en:last-child { padding-bottom: 12px; }
   #journal .en .t { flex: none; width: 38px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); letter-spacing: 0; padding-top: 2px; }
   #journal .en.progress { color: var(--accent); } #journal .en.combat { color: #ff9d94; } #journal .en.roll { color: var(--muted); } #journal .en.rumor, #journal .en.note { color: var(--muted); font-style: italic; }
-  #journal .pl { display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin-bottom: 6px; border-radius: 12px; background: var(--platter); border: 1px solid var(--sep); }
+  #journal .pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  #journal .pl { display: flex; flex-direction: column; overflow: hidden; border-radius: 14px; background: var(--platter); border: 1px solid var(--sep); }
+  #journal .pl .cover { display: grid; place-items: center; aspect-ratio: 16 / 9; background: #1b1d20 center / cover no-repeat; color: var(--faint); }
+  #journal .pl .cover.none { background: repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0 10px, transparent 10px 20px), #17191b; }
+  #journal .pl.heard_of .cover { filter: grayscale(1) brightness(.6); }
+  #journal .pl.here { border-color: rgba(230,183,90,.45); }
+  #journal .pl-b { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
   #journal .pl i { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--muted); background: #17181d; }
   #journal .pl.visited i { border-color: var(--ok); } #journal .pl.heard_of i { border-style: dashed; }
   #journal .pl.here i { border-color: var(--accent); box-shadow: 0 0 8px var(--glow); }
@@ -565,6 +615,7 @@ ${PAINT_STYLE}
   body.entered .side-head, body.entered .side-scroll > * { animation: enter-pop .62s cubic-bezier(.2,.8,.25,1) both; }
   body.entered .side-head { animation-delay: .15s; }
   body.entered #card { animation-delay: .25s; }
+  body.entered #card .stats-btn, body.entered #card .hpline { animation: enter-pop .55s cubic-bezier(.2,.8,.25,1) .4s both; }
   body.entered .views { animation-delay: .35s; }
   body.entered .pane { animation-delay: .43s; }
   body.entered #near { animation-delay: .53s; }
@@ -578,12 +629,6 @@ ${PAINT_STYLE}
   body.entered form > button:nth-of-type(3) { animation-delay: 0.88s; }
   body.entered form > button:nth-of-type(4) { animation-delay: 0.98s; }
   body.entered form > button:nth-of-type(5) { animation-delay: 1.08s; }
-  body.entered #card .stats > div { animation: enter-pop .55s cubic-bezier(.2,.8,.25,1) both; }
-  body.entered #card .stats > div:nth-child(1) { animation-delay: 0.38s; }
-  body.entered #card .stats > div:nth-child(2) { animation-delay: 0.45s; }
-  body.entered #card .stats > div:nth-child(3) { animation-delay: 0.52s; }
-  body.entered #card .stats > div:nth-child(4) { animation-delay: 0.59s; }
-  body.entered #card .stats > div:nth-child(5) { animation-delay: 0.66s; }
   body.entered #near, body.entered #quest { animation: none; }
   body.entered .sec-t, body.entered .sec-b > .prow { animation: enter-pop .55s cubic-bezier(.2,.8,.25,1) both; }
   body.entered #near .sec-t { animation-delay: .58s; }
@@ -614,7 +659,7 @@ ${PAINT_STYLE}
     .inwrap, .chat-body, #log { transition: none; }
     body.boot form input { animation: none; }
     body::before { animation-duration: .01s; }
-    body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chips, body.entered .chips button, body.entered form > button, body.entered #card .stats > div, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
+    body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chips, body.entered .chips button, body.entered form > button, body.entered #card .stats-btn, body.entered #card .hpline, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
   }
   /* Avisos del sistema (tiradas, consultas): una pastilla centrada de color muy suave; verde si sale bien, azul si
      es neutro y rojo si sale mal. */
@@ -675,7 +720,7 @@ ${PAINT_STYLE}
   #side-gear .tts-more { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #b8b1a6; }
   #side-gear .tts-more:hover { background: var(--hover); color: var(--text); }
   #side-gear .tts-pop { top: 46px; right: 0; z-index: 40; }
-  /* Narrador y sonido: un grupo ámbar, redondeado sin ser redondo. */
+  /* Narrador y sonido: un grupo ámbar, redondeado sin ser redondo y sin rayas entre botones. */
   .chat-head .tts { order: 3; margin-left: 0; gap: 0; }
   .chat-head .sfx { order: 4; margin-left: -12px; }
   .chat-head .tts > button, .chat-head .sfx > button { height: 32px; border-radius: 0; background: var(--accent-tint); color: var(--accent); }
@@ -683,9 +728,9 @@ ${PAINT_STYLE}
   .chat-head .tts > button:first-child:not([hidden]), .chat-head .tts > .tts-stop[hidden] + .tts-auto { border-radius: 12px 0 0 12px; }
   .chat-head .tts > .tts-auto { width: 32px; padding: 0; justify-content: center; }
   .chat-head .tts > .tts-auto:not(.on) { color: var(--muted); background: rgba(230,183,90,.07); }
-  .chat-head .sfx > .sfx-toggle { width: 32px; padding: 0; justify-content: center; border-left: 1px solid rgba(230,183,90,.18); }
+  .chat-head .sfx > .sfx-toggle { width: 32px; padding: 0; justify-content: center; }
   .chat-head .sfx:not(.on) > .sfx-toggle { color: var(--muted); background: rgba(230,183,90,.07); }
-  .chat-head .sfx > .sfx-more { width: 26px; padding: 0; border-radius: 0 12px 12px 0; border-left: 1px solid rgba(230,183,90,.18); }
+  .chat-head .sfx > .sfx-more { width: 26px; padding: 0; border-radius: 0 12px 12px 0; }
   .chat-head .sfx, .chat-head .sfx.on { height: 32px; background: transparent; border-radius: 12px; }
   #party { order: 2; margin-right: 6px; }
   @media (max-width: 820px) {
@@ -714,6 +759,7 @@ ${PAINT_STYLE}
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6-5.3-6-11a6 6 0 0 1 12 0c0 5.7-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></symbol>
   <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></symbol>
   <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4l-5 2v14l5-2 6 2 5-2V4l-5 2z"/><path d="M9 4v14M15 6v14"/></symbol>
+  <symbol id="i-body" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2.3"/><path d="M7 9.5h10M12 8.5v6.5M12 15l-3 6.5M12 15l3 6.5M8.5 9.5l-2 5M15.5 9.5l2 5"/></symbol>
   <symbol id="i-sheet" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></symbol>
   <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></symbol>
   <symbol id="i-pack" viewBox="0 0 24 24"><path d="M6 7h12l1 14H5z"/><path d="M9 7a3 3 0 0 1 6 0"/></symbol>
@@ -729,8 +775,7 @@ ${PAINT_STYLE}
   <div class="side-head">
     <a class="mark" href="/" title="Volver al menú de partidas" aria-label="Tavernus: volver al menú de partidas"><img src="/assets/icono.jpg" alt=""></a>
     <div class="t">
-      <span id="game-name">Tavernus</span>
-      <div class="sub"><span id="game-mode" class="badge" hidden></span><span id="game-when"></span></div>
+      <div class="tline"><span id="game-name">Tavernus</span><span id="game-mode" class="badge dot" hidden></span></div>
     </div>
     <a class="ib" id="side-invites" href="#" hidden title="Invitaciones: enlaces para tus amigos" aria-label="Invitaciones"><svg class="i"><use href="#i-invite"/></svg></a>
     <span id="side-gear"></span>
@@ -824,7 +869,8 @@ ${PAINT_STYLE}
     if (!g) return;
     $('game-name').textContent = g.name;
     var badge = $('game-mode');
-    badge.textContent = MODE_LABEL[g.mode] || g.mode; badge.className = 'badge ' + g.mode; badge.hidden = false;
+    // Solo la bolita del color del máster; el tipo, al pasar el ratón (y para lectores de pantalla).
+    badge.setAttribute('data-tip', MODE_LABEL[g.mode] || g.mode); badge.setAttribute('aria-label', 'Máster: ' + (MODE_LABEL[g.mode] || g.mode)); badge.className = 'badge dot ' + g.mode; badge.hidden = false;
     document.title = g.name + ' — Tavernus';
     // El anfitrión reparte los enlaces de invitación desde la propia partida (page-access.ts).
     if (d.role === 'admin') {
@@ -1113,12 +1159,10 @@ ${PAINT_JS}
   /** Ficha de arriba del panel (pulsarla abre la Hoja), la hora y la cabecera del chat, sacadas de la hoja viva. */
   function renderCard(s) {
     var t = s.title.split(' · '), c = combatOf(s);
-    var lvl = (t[2] || '').replace(/[^0-9]/g, '');
-    var stat = function (v, k) { return '<div>' + escapeHtml(v) + '<small>' + k + '</small></div>'; };
     $('card').innerHTML = '<div class="top"><span class="av">' + escapeHtml(initial(t[0] || '?')) + '</span><div class="who"><div class="name">' + escapeHtml(t[0] || '') + '</div>' +
       '<div class="sub">' + escapeHtml(t.slice(1).join(' · ')) + '</div></div>' +
-      (c.hp ? '<div class="hpbox"><span>' + c.hp[1] + ' / ' + c.hp[2] + '</span><span class="bar"><i class="' + c.cls + '" style="width:' + c.pct + '%"></i></span></div>' : '') + '</div>' +
-      '<div class="stats">' + stat(c.ca, 'CA') + stat(c.speed, 'Vel.') + stat(c.pp, 'Perc.') + stat(lvl || '—', 'Nivel') + stat(loadShort(s), 'Carga') + '</div>' +
+      '<button type="button" class="ib stats-btn" title="Todas tus estadísticas" aria-label="Ver todas tus estadísticas"><svg class="i"><use href="#i-body"/></svg></button></div>' +
+      (c.hp ? '<div class="hpline"><span class="bar"><i class="' + c.cls + '" style="width:' + c.pct + '%"></i></span><span class="hpv">' + c.hp[1] + ' / ' + c.hp[2] + ' PG</span></div>' : '') +
       (s.death && s.death.state === 'dead' ? '<div class="respawn">☠ Muerto · vuelves en <b data-respawn="' + Number(s.death.respawn_real_ms || 0) + '">—</b></div>'
         : s.death && s.death.state === 'dying' ? '<div class="respawn">A 0 PG · salvaciones ' + s.death.success + ' ✔ · ' + s.death.fail + ' ✖</div>' : '');
     // «despierto · Taberna, La barra»: el lugar a la cabecera del chat; debajo, la hora, el rincón y el estado.
@@ -1139,11 +1183,17 @@ ${PAINT_JS}
   function renderSheet(s) {
     var t = s.title.split(' · '), c = combatOf(s), abl = field(s, 'Características'), sk = field(s, 'Habilidades');
     var av = $('card').querySelector('.av img');
-    var h = '<div class="sh-head"><span class="av">' + (av ? '<img alt="" src="' + escapeHtml(av.getAttribute('src')) + '">' : escapeHtml(initial(t[0] || '?'))) + '</span><div><h2>' + escapeHtml(t[0] || '') + '</h2>' +
-      '<p>' + escapeHtml(t.slice(1).join(' · ')) + '\n' + escapeHtml(s.description) + '</p></div></div>';
+    // A la derecha, en columna, estado y ubicación: rótulo pequeño y valor del tamaño del nombre.
+    var dl = s.description.split('\n'), d0 = dl[0], cut = d0.indexOf(' · ');
+    var state = cut >= 0 ? d0.slice(0, cut) : '', where = (cut >= 0 ? d0.slice(cut + 3) : d0) + (dl[1] ? '\n' + dl[1] : '');
+    var h = '<div class="sh-head"><span class="av">' + (av ? '<img alt="" src="' + escapeHtml(av.getAttribute('src')) + '">' : escapeHtml(initial(t[0] || '?'))) + '</span><div class="sh-who"><h2>' + escapeHtml(t[0] || '') + '</h2>' +
+      '<p>' + escapeHtml(t.slice(1).join(' · ')) + '</p></div>' +
+      '<div class="sh-state">' + (state ? '<div><small>Estado</small><b>' + escapeHtml(state) + '</b></div>' : '') + '<div><small>Ubicación</small><b>' + escapeHtml(where) + '</b></div></div></div>';
     h += '<div class="tiles">';
     if (c.hp) h += '<div class="tile wide"><span class="l">Puntos de golpe<b>' + c.hp[1] + ' / ' + c.hp[2] + '</b></span><span class="bar"><i class="' + c.cls + '" style="width:' + c.pct + '%"></i></span>' + (c.cond ? '<small>Condiciones: ' + escapeHtml(c.cond) + '</small>' : '') + '</div>';
-    h += '<div class="tile"><b>' + escapeHtml(c.ca) + '</b><small>CA</small></div><div class="tile"><b>' + escapeHtml(c.speed) + '</b><small>Velocidad</small></div><div class="tile"><b>' + escapeHtml(c.pp) + '</b><small>Percepción pasiva</small></div></div>';
+    // Las cinco cifras de combate en una fila.
+    h += '</div><div class="tiles t5"><div class="tile"><b>' + escapeHtml(c.ca) + '</b><small>CA</small></div><div class="tile"><b>' + escapeHtml(c.speed) + '</b><small>Velocidad</small></div><div class="tile" title="Percepción pasiva"><b>' + escapeHtml(c.pp) + '</b><small>Percepción</small></div>' +
+      '<div class="tile"><b>' + escapeHtml((t[2] || '').replace(/[^0-9]/g, '') || '—') + '</b><small>Nivel</small></div><div class="tile"><b>' + escapeHtml(loadShort(s)) + '</b><small>Carga (lb)</small></div></div>';
     var dz = deathBlock(s);
     if (dz) h += dz.indexOf('<div') === 0 ? '<div class="tiles">' + dz + '</div>' : dz;
     var rest = field(s, 'Descanso');
@@ -1172,32 +1222,111 @@ ${PAINT_JS}
     $('sheet').innerHTML = h;
   }
 
-  var PACK_FIELDS = { Manos: 1, Bolsillos: 1, Equipado: 1, Monedas: 1, Carga: 1 };
   var SLOT_ES = { back: 'a la espalda', body: 'puesto', armor: 'armadura', head: 'cabeza', belt: 'cinturón', waist: 'cintura', feet: 'pies', hands: 'manos', neck: 'cuello', ring: 'anillo', shield: 'escudo', cloak: 'capa', shoulder: 'al hombro' };
-  /** Mochila: carga y monedas arriba; lo que tienes en las manos, equipado, en los bolsillos y en cada contenedor. */
+  var EQUIP_ES = { head: 'cabeza', body: 'cuerpo', hands: 'guantes', feet: 'pies', neck: 'cuello', ring1: 'anillo', ring2: 'anillo', back: 'espalda', belt: 'cinturón' };
+  /**
+   * Mochila: carga y monedas arriba; debajo, en tarjetas, lo que tienes en las manos, equipado, en los bolsillos y
+   * en cada contenedor, con los huecos libres de cada sitio también a la vista. Todo se arrastra: entre sitios, el
+   * objeto se mueve de verdad (POST /api/inventory, con las reglas del motor); dentro de los bolsillos o de un
+   * contenedor, además, se intercambian posiciones (ese orden se recuerda en este navegador).
+   */
   function renderPack(s) {
-    var known = { Combate: 1, 'Características': 1, Habilidades: 1, Descanso: 1, Muerte: 1 };
-    var list = function (v) { return v && v !== '—' && v !== 'vacía' ? v.split(', ') : []; };
-    var rows = function (items, eq) {
-      if (!items.length) return '<div class="empty">Nada.</div>';
-      return items.map(function (x) {
-        var k = x.indexOf(': '), name = k > 0 && eq ? x.slice(k + 2) : x, where = k > 0 && eq ? (SLOT_ES[x.slice(0, k)] || x.slice(0, k)) : '';
-        return '<div><span class="tag' + (eq ? ' eq' : '') + '"><svg class="i"><use href="#' + (eq ? 'i-hand' : 'i-pack') + '"/></svg></span><span class="tt">' + escapeHtml(name) + (where ? '<small>' + escapeHtml(where) + '</small>' : '') + '</span></div>';
-      }).join('');
+    var p = s.pack;
+    if (!p) { $('pack').innerHTML = '<p class="none">Sin datos de la mochila.</p>'; return; }
+    // Una tarjeta: «dest» dice adónde iría lo que se suelte en ella; «g», su grupo de orden libre (si lo tiene).
+    var card = function (it, sub, kind, dest, g, i) {
+      var attrs = ' data-dest="' + escapeHtml(dest) + '"' + (g ? ' data-g="' + escapeHtml(g) + '" data-i="' + i + '"' : '') + (it ? ' data-id="' + escapeHtml(it.id) + '" draggable="true"' : '');
+      if (!it) return '<div class="ic free"' + attrs + '><span class="tag"></span><span class="tt">' + escapeHtml(sub) + '</span></div>';
+      return '<div class="ic' + (kind ? ' ' + kind : '') + '"' + attrs + '><span class="tag"><svg class="i"><use href="#' + (kind === 'eq' ? 'i-hand' : 'i-pack') + '"/></svg></span>' +
+        '<span class="tt">' + escapeHtml(it.label) + (sub ? '<small>' + escapeHtml(sub) + '</small>' : '') + '</span></div>';
     };
-    var carga = field(s, 'Carga'), coins = field(s, 'Monedas');
-    var h = '<div class="tiles"><div class="tile wide"><span class="l">Carga<b>' + escapeHtml(carga || '—') + '</b></span></div>' +
-      '<div class="tile" style="grid-column: span 3"><b>' + escapeHtml(coins || '0') + '</b><small>Monedas</small></div></div>';
-    var hands = field(s, 'Manos').split(' / ').filter(function (x) { return x && x !== '—'; });
-    h += '<div class="kv-t">En las manos</div><div class="items">' + rows(hands, false) + '</div>';
-    h += '<div class="kv-t">Equipado</div><div class="items">' + rows(field(s, 'Equipado').split('\n').filter(function (x) { return x && x !== '—'; }), true) + '</div>';
-    h += '<div class="kv-t">Bolsillos</div><div class="items">' + rows(list(field(s, 'Bolsillos')), false) + '</div>';
-    s.fields.forEach(function (f) {
-      if (known[f.name] || PACK_FIELDS[f.name]) return;
-      h += '<div class="kv-t">' + escapeHtml(f.name) + '</div><div class="items">' + rows(list(f.value), false) + '</div>';
-    });
+    var group = function (title, cards, used, slots) {
+      return '<div class="kv-t">' + escapeHtml(title) + (slots ? ' <span>' + used + ' / ' + slots + '</span>' : '') + '</div><div class="icards">' + cards.join('') + '</div>';
+    };
+    var sortable = function (g, dest, items, slots) {
+      var at = arrange(g, items, slots), byId = {};
+      items.forEach(function (x) { byId[x.id] = x; });
+      return at.map(function (id, i) { return card(id ? byId[id] : null, id ? '' : 'Libre', '', dest, g, i); });
+    };
+    var load = p.load.split(' · ');
+    var h = '<div class="tile wide money"><span class="l"><b>' + escapeHtml(load[0]) + '</b><small>Carga' + (load[1] ? ' · ' + escapeHtml(load[1]) : '') + '</small></span>' +
+      '<span class="coins"><b>' + escapeHtml(String(p.coins)) + '</b><small>Monedas</small></span></div><p class="pack-msg" id="pack-msg" hidden></p>';
+    var hands = p.hands.both ? [card(p.hands.main, 'a dos manos', '', 'hand:main')]
+      : [card(p.hands.main, p.hands.main ? 'mano principal' : 'Mano principal libre', '', 'hand:main'), card(p.hands.off, p.hands.off ? 'otra mano' : 'Otra mano libre', '', 'hand:off')];
+    h += group('En las manos', hands, p.hands.both ? 2 : (p.hands.main ? 1 : 0) + (p.hands.off ? 1 : 0), 2);
+    h += group('Equipado', p.equipped.map(function (e) { var n = EQUIP_ES[e.slot] || e.slot; return card(e.item, e.item ? n : n + ' · libre', 'eq', 'equip:' + e.slot); }),
+      p.equipped.filter(function (e) { return e.item; }).length, p.equipped.length);
+    h += group('Bolsillos', sortable('Bolsillos', 'pocket', p.pockets.items, p.pockets.slots), p.pockets.items.length, p.pockets.slots);
+    p.containers.forEach(function (k) { h += group(k.name, sortable(k.id, 'cont:' + k.id, k.items, k.slots), k.items.length, k.slots); });
     $('pack').innerHTML = h;
   }
+  /** Orden guardado de un grupo de la mochila (por partida y PJ): cada objeto en su hueco; lo nuevo, en los primeros libres. */
+  function packKey(g) { return 'tavernus.pack.' + (params.get('game') || '') + '.' + current + '.' + g; }
+  function arrange(g, items, slots) {
+    var saved = [];
+    try { saved = JSON.parse(localStorage.getItem(packKey(g)) || '[]'); } catch (e) {}
+    var left = items.map(function (x) { return x.id; }), at = [];
+    for (var i = 0; i < slots; i++) at.push(null);
+    saved.forEach(function (id, i) { var k = left.indexOf(id); if (id && k >= 0 && i < slots) { at[i] = id; left.splice(k, 1); } });
+    left.forEach(function (id) { var k = at.indexOf(null); if (k >= 0) at[k] = id; else at.push(id); });
+    return at;
+  }
+  function packMsg(text) {
+    var m = $('pack-msg'); if (!m) return;
+    m.textContent = text; m.hidden = !text;
+    clearTimeout(packMsg.t); if (text) packMsg.t = setTimeout(function () { m.hidden = true; }, 5000);
+  }
+  var dragFrom = null;
+  function cardAt(ev) { return ev.target.closest && ev.target.closest('#pack [data-dest]'); }
+  $('pack').addEventListener('dragstart', function (ev) {
+    var c = ev.target.closest && ev.target.closest('#pack [data-id]');
+    if (!c) return;
+    dragFrom = { id: c.getAttribute('data-id'), dest: c.getAttribute('data-dest'), g: c.getAttribute('data-g'), i: Number(c.getAttribute('data-i')) };
+    ev.dataTransfer.effectAllowed = 'move'; try { ev.dataTransfer.setData('text/plain', ''); } catch (e) {}
+    c.classList.add('dragging');
+  });
+  $('pack').addEventListener('dragend', function () {
+    dragFrom = null;
+    document.querySelectorAll('#pack .dragging, #pack .drop').forEach(function (x) { x.classList.remove('dragging', 'drop'); });
+  });
+  $('pack').addEventListener('dragover', function (ev) {
+    var c = cardAt(ev);
+    document.querySelectorAll('#pack .drop').forEach(function (x) { if (x !== c) x.classList.remove('drop'); });
+    if (!dragFrom || !c || c.getAttribute('data-id') === dragFrom.id) return;
+    ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; c.classList.add('drop');
+  });
+  $('pack').addEventListener('drop', function (ev) {
+    var c = cardAt(ev), from = dragFrom;
+    if (!from || !c || !sheetData) return;
+    ev.preventDefault();
+    var dest = c.getAttribute('data-dest'), g = c.getAttribute('data-g');
+    // Mismo grupo de orden libre: se intercambian (o se pasa a ese hueco libre), solo en este navegador.
+    if (g && g === from.g) {
+      var p = sheetData.pack, src = g === 'Bolsillos' ? p.pockets : p.containers.filter(function (k) { return k.id === g; })[0];
+      if (!src) return;
+      var at = arrange(g, src.items, src.slots), to = Number(c.getAttribute('data-i')), tmp = at[to];
+      at[to] = at[from.i]; at[from.i] = tmp;
+      try { localStorage.setItem(packKey(g), JSON.stringify(at)); } catch (e) {}
+      renderPack(sheetData);
+      return;
+    }
+    if (dest === from.dest) return;
+    // Otro sitio: el objeto se mueve de verdad; si no cabe, el motor dice por qué.
+    var to = dest === 'pocket' ? { kind: 'pocket' } : dest.indexOf('hand:') === 0 ? { kind: 'hand', which: dest.slice(5) }
+      : dest.indexOf('cont:') === 0 ? { kind: 'container', id: dest.slice(5) } : { kind: 'equipped', slot: dest.slice(6) };
+    // Si cae en un hueco concreto de un grupo de orden libre, que quede ahí al volver a pintarse.
+    var slotI = g ? Number(c.getAttribute('data-i')) : -1;
+    fetch(api('/api/inventory'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ character: current, instance: from.id, to: to }) })
+      .then(function (r) { return r.json(); }).then(function (r) {
+        if (!r.ok) { packMsg(r.text || 'No se puede.'); return; }
+        if (g && slotI >= 0) {
+          var saved = []; try { saved = JSON.parse(localStorage.getItem(packKey(g)) || '[]'); } catch (e) {}
+          while (saved.length <= slotI) saved.push(null);
+          if (!saved[slotI]) { saved[slotI] = from.id; try { localStorage.setItem(packKey(g), JSON.stringify(saved)); } catch (e) {} }
+        }
+        loadSheet();
+      }).catch(function () { packMsg('No hay conexión con el servidor.'); });
+  });
 
   // --- Tablero de la localización ------------------------------------------
   // Plano tipo mesa de juego: casillas de 1,5 m, suelos, paredes, puertas,
@@ -1883,9 +2012,11 @@ ${PAINT_JS}
     return '<details class="day"' + (i === 0 ? ' open' : '') + '><summary><span class="tt"><b>' + escapeHtml(d.label) + '</b>' + (d.summary ? '<small>' + escapeHtml(d.summary) + '</small>' : '') + '</span>' + CHEV + '</summary>' +
       d.entries.map(function (e) { return '<div class="en ' + e.kind + '"><span class="t">' + escapeHtml(e.time) + '</span><span>' + escapeHtml(e.text) + '</span></div>'; }).join('') + '</details>';
   }
+  /** Tarjeta de un lugar: portada (su ilustración o su plano; los de oídas, velada) y debajo nombre y estado. */
   function placeHtml(p) {
     var sub = [p.zone, p.here ? 'estás aquí' : p.status === 'visited' ? 'visitado' : 'de oídas', p.first_visit ? 'desde ' + p.first_visit : ''].filter(Boolean).join(' · ');
-    return '<div class="pl ' + p.status + (p.here ? ' here' : '') + '"><i></i><span><b>' + escapeHtml(p.name) + '</b><small>' + escapeHtml(sub) + '</small></span></div>';
+    var cover = p.cover ? '<span class="cover" style="background-image:url(&quot;' + escapeHtml(p.cover) + '&quot;)"></span>' : '<span class="cover none"><svg class="i"><use href="#i-map"/></svg></span>';
+    return '<div class="pl ' + p.status + (p.here ? ' here' : '') + '">' + cover + '<span class="pl-b"><i></i><span><b>' + escapeHtml(p.name) + '</b><small>' + escapeHtml(sub) + '</small></span></span></div>';
   }
 
   /** «Dejar esta misión» al pie de las que se pueden dejar (encargos y misiones dadas en curso). */
@@ -1913,7 +2044,7 @@ ${PAINT_JS}
       h += j.chronicle.length ? j.chronicle.map(dayHtml).join('') : '<p class="empty">Todavía no ha pasado nada.</p>';
     } else {
       h += '<h3>Lugares <span>' + j.places.length + '</span></h3>';
-      h += j.places.length ? j.places.map(placeHtml).join('') : '<p class="empty">No conoces ningún sitio.</p>';
+      h += j.places.length ? '<div class="pl-grid">' + j.places.map(placeHtml).join('') + '</div>' : '<p class="empty">No conoces ningún sitio.</p>';
     }
     journalEl.innerHTML = h;
   }
@@ -2168,7 +2299,7 @@ ${PAINT_JS}
   function renderParty() {
     var party = $('party');
     party.innerHTML = '';
-    if (document.body.classList.contains('bound')) { $('game-when').textContent = ''; return; }
+    if (document.body.classList.contains('bound')) return;
     [].forEach.call(select.options, function (o) {
       var b = document.createElement('button');
       b.type = 'button'; b.textContent = initial(o.textContent); b.title = o.textContent;
@@ -2177,8 +2308,6 @@ ${PAINT_JS}
       b.addEventListener('click', function () { if (o.value !== current) { select.value = o.value; connect(o.value); } });
       party.appendChild(b);
     });
-    var n = select.options.length;
-    $('game-when').textContent = n > 1 ? '· ' + n + ' en el grupo' : '';
   }
 
   Promise.all([session, fetch(api('/api/characters')).then(function (r) { return r.json(); })]).then(function (both) {

@@ -33,7 +33,8 @@ async function main(): Promise<void> {
     await games.init();
     console.log(`[boot] partidas en ${games.root}`);
     await startWeb(games, Number(env['WEB_PORT'] ?? 3000));
-    return;
+    // Ya cerrada y guardada: salir aunque quede algún temporizador vivo (si no, node --watch y systemd esperan).
+    process.exit(0);
   }
 
   const repo: Repository = env['GOOGLE_CLOUD_PROJECT']

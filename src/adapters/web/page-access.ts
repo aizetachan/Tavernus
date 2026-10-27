@@ -13,6 +13,10 @@ const HEAD = (title: string) => String.raw`<!doctype html>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
 <meta name="theme-color" content="#141617">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/assets/icon-512.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
 <style>
   :root {
     --bg: #0e0f10; --panel: #141617; --bubble: #1f2426; --text: #ece7df; --muted: #9a948a;

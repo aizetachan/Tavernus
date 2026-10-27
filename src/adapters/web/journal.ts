@@ -12,12 +12,15 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Engine } from '../../engine/engine.js';
-import { journalOf, type Journal, type JournalConversation, type JournalQuest } from '../../engine/journal.js';
+import { journalOf, type Journal, type JournalConversation, type JournalPlace, type JournalQuest } from '../../engine/journal.js';
+import { assetsFor, writtenMapBackground } from '../../ai/assets.js';
 import type { GameEvent, Id } from '../../engine/model.js';
 import { illustratorOf } from '../../ai/illustrate.js';
 
 export interface WebJournal extends Journal {
   conversations: (JournalConversation & { portrait: string | null })[];
+  /** `cover`: portada del lugar en el diario: su ilustración o, si no, su plano pintado; null en los de oídas. */
+  places: (JournalPlace & { cover: string | null })[];
 }
 
 /** Aviso discreto en el hilo en lugar de una burbuja; `tab` es la pestaña a la que lleva. */
@@ -35,6 +38,13 @@ export function journalView(engine: Engine, characterId: Id, slug: string): WebJ
     conversations: j.conversations.map((c) => {
       const img = ill?.entityImage('portrait', c.npc_id) ?? null;
       return { ...c, portrait: img ? `/images/${img.file}?game=${encodeURIComponent(slug)}` : null };
+    }),
+    places: j.places.map((p) => {
+      if (p.status !== 'visited') return { ...p, cover: null };
+      const img = ill?.imageFor(p.id) ?? null;
+      if (img) return { ...p, cover: `/images/${img.file}?game=${encodeURIComponent(slug)}` };
+      const plan = writtenMapBackground(assetsFor(engine.world.campaign.id), engine.world.campaign.id, p.id);
+      return { ...p, cover: plan ? `/api/board/background?game=${encodeURIComponent(slug)}&character=${encodeURIComponent(characterId)}&location=${encodeURIComponent(p.id)}` : null };
     }),
   };
 }
