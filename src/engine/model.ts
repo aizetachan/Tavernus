@@ -98,6 +98,8 @@ export interface Campaign {
   death_rules?: Partial<DeathRules>;
   /** La ley del sitio (crime.ts): quién la hace cumplir, dónde encierra, multas, dueños de cada local. Sin campo, se deduce de los roles. */
   law?: LawRules;
+  /** Los rincones se descubren (spots.ts): ya migrada la partida que daba por conocidos todos los puntos no ocultos. */
+  spot_sight?: boolean;
 }
 
 /** Tipos de incidente que el motor reconoce (crime.ts), de menos a más grave. */
@@ -346,7 +348,13 @@ export interface Spot {
   capacity: number | null;
   hidden: boolean;
   dc_to_find?: number;
+  /** Quién lo conoce (spots.ts): lo ha visto, lo ha encontrado o se lo han nombrado. */
   discovered_by: Id[];
+  /**
+   * Desde qué puntos se ve de un vistazo al llegar (spots.ts). Sin el campo, desde
+   * los de su misma estancia: los que no tienen un enlace que tape la vista.
+   */
+  visible_from?: Id[];
   state: Record<string, unknown>;
   tags: string[];
   terrain_multiplier: number;
@@ -629,6 +637,12 @@ export interface Npc {
   id: Id;
   name: string;
   role: string;
+  /**
+   * Forma corta del oficio para el texto corrido cuando el PJ no sabe su nombre
+   * (narrate.ts, `descriptorOf`), con artículo si no es el que toca: «el alguacil»
+   * para «alguacil y recaudador», «el guardia». Sin campo, el oficio entero.
+   */
+  role_short?: string;
   location: Extract<Placement, { type: 'spot' }>;
   /** `unconscious`: a 0 PG sin morir (golpe no letal, combat.ts); vuelve en sí solo (`down`). */
   status: 'alive' | 'unconscious' | 'dead' | 'missing';

@@ -56,7 +56,7 @@ export const NPCS: AuthoredNpc[] = [
     home_spot_id: 'sp_tab_barra',
   },
   {
-    id: 'npc_doro', name: 'Doro', role: 'guardia', spot_id: 'sp_pl_porton', passive_perception: 15, attitude: 'neutral',
+    id: 'npc_doro', name: 'Doro', role: 'guardia', role_short: 'el guardia', spot_id: 'sp_pl_porton', passive_perception: 15, attitude: 'neutral',
     description: 'Joven, alto, lanza apoyada en el hombro y botas demasiado nuevas. Habla más de la cuenta, se corrige a media frase y se ríe de sus propios chistes antes de acabarlos. Las botas se las regaló su tío, con el sello del zapatero de la casona en la suela; rodea los charcos para no mancharlas. Lleva la capa recortada desde que perdió el duelo de la feria contra una niña de doce años.',
     motivation: 'Que lo tomen en serio. Cobra de su tío, el regidor, por vigilar el portón y hacer la ronda del Lindero, por si algo sale de la niebla.',
     knowledge: [
@@ -95,7 +95,7 @@ export const NPCS: AuthoredNpc[] = [
     home_spot_id: 'sp_ca_alcoba',
   },
   {
-    id: 'npc_garran', name: 'Garrán', role: 'alguacil y recaudador', spot_id: 'sp_pl_tablon', passive_perception: 12, attitude: 'unfriendly',
+    id: 'npc_garran', name: 'Garrán', role: 'alguacil y recaudador', role_short: 'el alguacil', spot_id: 'sp_pl_tablon', passive_perception: 12, attitude: 'unfriendly',
     description: 'Ancho como una puerta, la nariz rota dos veces y una maza corta al cinto. Cuenta con los dedos al hablar, como si todo fuera una deuda. Huele a cebolla y a cuero mojado. No sabe escribir: lleva las deudas en una cantinela con rima, una estrofa por familia, y si le interrumpen pierde el hilo y se pone violento. Se sienta siempre lejos del fuego.',
     motivation: 'Cobrar el diezmo de la ceniza, quedarse su parte y que nadie le haga ir a él al Granero Quemado.',
     knowledge: [

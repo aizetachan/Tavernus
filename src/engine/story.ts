@@ -51,6 +51,7 @@ import { attitudeOf } from './combat.js';
 import type { Hook } from './hooks.js';
 import { spawnItem } from './inventory.js';
 import type { Attitude, Character, Clue, ClueSource, Id, Npc, TrustTier } from './model.js';
+import { roleLabel } from './narrate.js';
 import { addReputation, checkAchievement, grantClue, type ProgressEvent, type QuestChange } from './progress.js';
 import { RUMOR_KINDS, type Rumor, type RumorKind } from './rumors.js';
 import type { NpcRoutine, ScheduledEvent } from './schedule.js';
@@ -363,7 +364,7 @@ export function nameFor(world: World, c: Character | null, npcId: Id): string {
   const n = world.npcs.get(npcId);
   if (!n) return npcId;
   if (!c || c.knows.includes(n.id)) return n.name;
-  return /^(el|la|los|las) /.test(n.role) ? n.role : /a$/.test(n.role) ? `la ${n.role}` : `el ${n.role}`;
+  return roleLabel(n);
 }
 
 /** ¿Está ese NPC hablando ahora con el PJ (o el PJ unido a su charla)? */

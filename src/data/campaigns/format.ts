@@ -26,7 +26,7 @@ import type { EncounterTable } from '../../engine/travel.js';
 
 /** Un punto tal como se escribe: la localización la pone la que lo contiene; lo demás tiene valor por defecto. */
 export type AuthoredSpot = Pick<Spot, 'id' | 'name' | 'aliases' | 'description' | 'x' | 'y' | 'tags'>
-  & Partial<Pick<Spot, 'capacity' | 'hidden' | 'dc_to_find' | 'state' | 'terrain_multiplier' | 'entry_cost_s' | 'links'>>
+  & Partial<Pick<Spot, 'capacity' | 'hidden' | 'dc_to_find' | 'state' | 'terrain_multiplier' | 'entry_cost_s' | 'links' | 'visible_from'>>
   & { /** Para el máster y el análisis: lo que esconde o lo que pasa aquí. No va al motor. */ secret?: string };
 
 /** Una localización con sus puntos dentro; el primero es la entrada. */

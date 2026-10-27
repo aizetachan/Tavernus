@@ -35,6 +35,7 @@ import { attitudeOf } from '../../engine/combat.js';
 import { positionOf } from '../../engine/movement.js';
 import { descriptorOf } from '../../engine/narrate.js';
 import { perceive } from '../../engine/perception.js';
+import { knownSpots } from '../../engine/spots.js';
 import { classifyPlace, rng, type PlaceKind } from './mapgen.js';
 
 export type Known = 'visited' | 'heard_of';
@@ -348,7 +349,7 @@ export function regionMapState(engine: Engine, characterId: Id): RegionMapState 
     id: c.id, kind: 'character', relation: 'self', label: c.name, location_id: hereLoc.id, zone_id: hereZone.id,
     seen: true, level: 'full', moving: c.transit !== null, transit: actorTransit,
   }];
-  const visibleSpotIds = new Set(world.spotsOf(hereLoc.id).filter((s) => !s.hidden || s.discovered_by.includes(c.id)).map((s) => s.id));
+  const visibleSpotIds = new Set(knownSpots(world, c, hereLoc.id).map((s) => s.id));
   for (const o of others) {
     const op = otherPos.get(o.id)!;
     const p = op.location_id === hereLoc.id && visibleSpotIds.has(op.spot_id) ? perceive(world, engine.clock, c, op, nowG) : null;

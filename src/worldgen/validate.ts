@@ -81,6 +81,9 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
       const to = spots.get(k.to_spot_id);
       if (!to || to.location_id !== s.location_id) errs.push(`${s.id}: el enlace a ${k.to_spot_id} no es de su localización.`);
     }
+    for (const id of s.visible_from ?? []) {
+      if (spots.get(id)?.location_id !== s.location_id) errs.push(`${s.id}: visible_from cita ${id}, que no es de su localización.`);
+    }
     const key = s.state['key_item_id'];
     if (s.state['locked'] === true && (typeof key !== 'string' || !defs.has(key))) errs.push(`${s.id}: cerrado con una llave que no existe.`);
   }

@@ -26,6 +26,7 @@ import { lightAt, perceive } from '../../engine/perception.js';
 import { describeNode } from '../../engine/resources.js';
 import { talkersOf } from '../../engine/scene.js';
 import { questLeads } from '../../engine/story.js';
+import { knownSpots } from '../../engine/spots.js';
 import { pcName } from '../../engine/party.js';
 
 /** «Aren» o «tú y Aren»: quién habla con ese NPC, visto por el lector. */
@@ -135,7 +136,8 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
     return img ? { avatar: `/images/${img.file}${opts.slug ? `?game=${encodeURIComponent(opts.slug)}` : ''}` } : {};
   };
 
-  const visible = world.spotsOf(loc.id).filter((s) => !s.hidden || s.discovered_by.includes(c.id));
+  // Solo los rincones que conoce (spots.ts): lo que ha visto, encontrado o le han nombrado.
+  const visible = knownSpots(world, c, loc.id);
   const visibleIds = new Set(visible.map((s) => s.id));
 
   const spots: BoardSpot[] = visible.map((s) => ({

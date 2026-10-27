@@ -10,6 +10,7 @@ import { refusesService } from './crime.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
 import { money } from './money.js';
 import { priceFor } from './standing.js';
+import { discoverSpot } from './spots.js';
 import type { World } from './world.js';
 
 export interface ProgressEvent {
@@ -220,6 +221,7 @@ export function deliverGoods(world: World, c: Character, npc: Npc, itemId: Id, q
       if (sp.state['key_item_id'] !== give.id) continue;
       const open = Array.isArray(sp.state['unlocked_for']) ? (sp.state['unlocked_for'] as Id[]) : [];
       if (!open.includes(c.id)) { sp.state['unlocked_for'] = [...open, c.id]; world.touch('spots', sp.id); }
+      discoverSpot(world, c, sp); // le dicen cuál es su cuarto (spots.ts)
       unlocked.push(sp.name);
     }
   }

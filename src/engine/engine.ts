@@ -19,7 +19,7 @@ import { witnesses } from './perception.js';
 import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, readsAsAccept } from './reactions.js';
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { bounceOff, parseCrossing } from './barrier.js';
-import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, maskUnknownNames, whereAmI, whoIsHere } from './narrate.js';
+import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, listEs, maskUnknownNames, whereAmI, whoIsHere } from './narrate.js';
 import { encounterChance, parseInfo, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
 import { answerInfo, infoText, type InfoAnswer } from './info.js';
 import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type RouteCut } from './goto.js';
@@ -54,6 +54,7 @@ import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, i
 import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
+import { discoverSpot, lookAround, migrateSpotSight, noteSight, searchableSpots, seeFrom } from './spots.js';
 import { absence, absenceRule, acceptPrologue, acceptRecap, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
 
 export interface ActionResult {
@@ -462,6 +463,7 @@ export class Engine {
       for (const reached of r.reached) {
         const spot = this.world.spot(reached.spot_id);
         const loc = this.world.location(spot.location_id);
+        seeFrom(this.world, c, spot); // lo que se ve desde cada punto por donde pasa
         const last = r.arrived && reached === r.reached[r.reached.length - 1];
         // Hora de la llegada: la del trayecto, o la de los PJ que ya estaban allí si su reloj se igualó (joinClock).
         const when = last ? Math.min(reached.at_game_s, nowFor(c, nowGameS)) : reached.at_game_s;
@@ -520,6 +522,8 @@ export class Engine {
     }
     // Órdenes de NPC (npcorders.ts): quien acompaña a un PJ llega con él (antes de que el máster narre la llegada), quien va a un sitio llega, y los encargos.
     tickOrders(this.world, nowGameS, (i, s, after) => { this.events.emit(i, Math.max(this.clock.realAt(s), after ? this.lastStamp(after) : 0)); }, (c) => nowFor(c, nowGameS), this.rng);
+    // Rincones (spots.ts): cada PJ conoce lo que tiene delante.
+    for (const c of this.world.characters.values()) noteSight(this.world, c);
   }
 
   /**
@@ -1181,7 +1185,8 @@ export class Engine {
     if (!pc || !spot) return null;
     const group = [...this.sharing.values()].filter((s) => s.ids.includes(pc.id) || (r.target_id && s.ids.includes(r.target_id))).flatMap((s) => s.ids);
     return this.events.emit({
-      actor_id: pc.id, action_type, input_text: null, narration_private: rollTextForRoller(r), observable: rollTextForOthers(this.world, r),
+      // «Ataque con bastón a la tabernera» si no sabe cómo se llama (a los demás se lo tapa la lectura, events.ts).
+      actor_id: pc.id, action_type, input_text: null, narration_private: maskUnknownNames(this.world, pc.id, rollTextForRoller(r)), observable: rollTextForOthers(this.world, r),
       visibility: 'private', also_to: rollAudience(this.world, spot.location_id, pc.id, group, r.target_id), tags, payload: { master: null, shown_roll: r, ...payload },
     }, this.stampFor(pc));
   }
@@ -3220,7 +3225,20 @@ export class Engine {
 
     let m: RegExpMatchArray | null;
     if (/^(mirar|miro|mira|look|observar)\b/.test(lower)) {
-      return this.emitPrivate(c, text, 'look', describeSurroundings(this.world, this.clock, c, nowG), `${c.name} mira alrededor.`);
+      // Mirar alrededor descubre lo de la estancia que el vistazo no alcanzaba (spots.ts).
+      const found = lookAround(this.world, c);
+      const seen = found.length ? `\nAhora ves ${listEs(found.map((s) => s.name))}.` : '';
+      return this.emitPrivate(c, text, 'look', describeSurroundings(this.world, this.clock, c, nowG) + seen, `${c.name} mira alrededor.`);
+    }
+    // Buscar algo escondido sin máster: Percepción (o Investigación si registra) contra la CD de cada punto oculto de la estancia.
+    if (/^(buscar|busco|registrar|registro|rebuscar|rebusco|search)\b/.test(lower)) {
+      const skill = /^(registr|rebusc)/.test(lower) ? 'investigation' : 'perception';
+      const hidden = searchableSpots(this.world, c);
+      const dc = hidden.length ? Math.min(...hidden.map((s) => s.dc_to_find ?? 10)) : 15;
+      const check = characterCheck(c, 'skill', skill, dc, 'none', this.rng);
+      const found = hidden.filter((s) => check.total >= (s.dc_to_find ?? 10) && discoverSpot(this.world, c, s));
+      const priv = `${check.breakdown}\n${found.length ? `Encuentras ${listEs(found.map((s) => s.name))}.` : 'Buscas a conciencia, pero no encuentras nada fuera de lo normal.'}`;
+      return this.emitPrivate(c, text, 'search', priv, `${c.name} busca algo por los rincones.`);
     }
     if ((m = lower.match(/^(?:ir|voy|vamos|ve|camino|corro|corre|me acerco|acercarme|salir|salgo|move|go)\s+(?:(?:a la|al|a|hacia|hasta|to)\s+)?(.+?)(?:\s+(sigilosamente|corriendo|andando))?$/))) {
       const pace: Pace = /^corr/.test(lower) || m[2] === 'corriendo' ? 'run' : m[2] === 'sigilosamente' ? 'stealth' : 'walk';
@@ -3522,6 +3540,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   }
   // Mundos generados antes de los cuartos de alquiler: la habitación deja de ser el premio oculto.
   if (migrateRentableRooms(snapshot)) changed = true;
+  // Partidas de antes de que los rincones se descubrieran: cada PJ conserva los de los sitios donde ha estado.
+  if (migrateSpotSight(snapshot)) changed = true;
   return changed;
 }
 

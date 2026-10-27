@@ -12,10 +12,11 @@ import { namedNpc, namedPc } from '../engine/scene.js';
 import { positionOf } from '../engine/movement.js';
 import { lightAt, perceive, witnesses } from '../engine/perception.js';
 import { regenState } from '../engine/resources.js';
+import { hiddenSpots, knownSpots, unseenSpots } from '../engine/spots.js';
 import { inventoryDetailed, inventoryView } from '../engine/inventory.js';
 import { SKILLS, armorClass } from '../engine/rules.js';
 import { activeJobs } from '../engine/progress.js';
-import { descriptorOf } from '../engine/narrate.js';
+import { contractArticles, descriptorOf } from '../engine/narrate.js';
 import { attitudeOf, dueNpcTurns } from '../engine/combat.js';
 import { encounterAt } from '../engine/encounter.js';
 import { describeHook } from '../engine/hooks.js';
@@ -67,7 +68,7 @@ export function systemPrompt(c: Campaign, opts: { actor?: boolean } = {}): strin
     'Se lee en el móvil: párrafos de dos o tres líneas, sin listas ni encabezados. La narración, corta y fluida: lo que no haga falta ahora se cuenta cuando el jugador lo busque. Lo que se dice no se recorta: si alguien habla, habla como habla la gente.',
     `Dificultad: ${m.difficulty}. CD orientativas: fácil 10, media 13, difícil 16, muy difícil 20.`,
     '',
-    'PRINCIPIO RECTOR: la base de datos es la verdad. Solo existe lo que los tools devuelven. Nunca describas puntos, salidas, objetos, NPCs o personajes que no estén en los datos. Si el jugador menciona algo que no existe, dilo en ficción ("no ves nada así") en vez de inventarlo. Solo existen los puntos de la lista «Puntos» y las salidas: no hay cocinas, escaleras ni cuartos que no estén ahí.',
+    'PRINCIPIO RECTOR: la base de datos es la verdad. Solo existe lo que los tools devuelven. Nunca describas puntos, salidas, objetos, NPCs o personajes que no estén en los datos. Si el jugador menciona algo que no existe, dilo en ficción ("no ves nada así") en vez de inventarlo. Solo existen los puntos de las listas de puntos (los que el actor conoce, los que aún no ha visto y los ocultos) y las salidas: no hay cocinas, escaleras ni cuartos que no estén ahí. El actor solo conoce los de «Puntos que el actor conoce»: no le sugieras ir a los demás ni los des por vistos.',
     `LEYES DEL MUNDO: ${worldLaws(c).join(' ')}`,
     c.customs?.length ? `COSTUMBRES DEL LUGAR (detalle de fondo: úsalas cuando vengan a cuento, sin explicarlas ni meter una en cada mensaje; no son pistas): ${c.customs.join(' ')}` : '',
     'LO IMPOSIBLE Y LO QUE AÚN NO EXISTE: lo que las leyes del mundo no permiten no ocurre, pero nunca lo despaches con un «no puedes» ni con una negativa seca: recházalo en ficción, con ingenio y con tu voz, dejando que el personaje lo intente y que el mundo responda como es (el cuerpo, la física, quien mira, el ridículo, el precio). Lo que es posible pero no está en los datos no se niega con desgana: se trata con curiosidad. Aquí no está, y eso no cambia; pero quizá alguien haya oído algo. Un rumor (plant_rumor) es algo que se dice, nunca algo que está: no lo describas como presente ni lo des por cierto.',
@@ -283,8 +284,9 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
 
   // La luz real ya va en Tiempo; el estado solo si hay algo.
   L.push(`## Localización: ${loc.name} (${loc.id})\n${loc.description_base}\nAmbiente: ruido ${loc.ambience.noise}${loc.ambience.smell ? `, olor a ${loc.ambience.smell}` : ''}.${Object.keys(loc.state).length ? ` Estado: ${JSON.stringify(loc.state)}` : ''}`);
-  const spots = world.spotsOf(loc.id).filter((s) => !s.hidden || s.discovered_by.includes(actor.id));
-  L.push('Puntos:\n' + spots.map((s) => {
+  // Solo los rincones que el actor conoce (spots.ts); los demás van aparte, sin descripción.
+  const spots = knownSpots(world, actor, loc.id);
+  L.push('Puntos que el actor conoce:\n' + spots.map((s) => {
     const items = world.itemsIn({ type: 'spot', id: s.id }).map((i) => `${world.itemDef(i.item_id).name}${i.quantity > 1 ? ` ×${i.quantity}` : ''} [${i.id}]`);
     const nodes = [...world.resourceNodes.values()].filter((n) => n.spot_id === s.id).map((n) => `${n.name} ${Math.round(regenState(n, nowG) * 100)}% [${n.id}]`);
     const d = Math.round(Math.hypot(s.x - pos.x, s.y - pos.y));
@@ -296,8 +298,13 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const st = (Object.keys(rest).length ? ` estado ${JSON.stringify(rest)}` : '') + lock;
     return `- ${s.name} [${s.id}]${s.id === spot.id ? ' ← actor aquí' : ` a ${d} m`}: ${s.description}${st}${items.length ? ` Objetos: ${items.join(', ')}.` : ''}${nodes.length ? ` Recursos: ${nodes.join(', ')}.` : ''}`;
   }).join('\n'));
+  const unseen = unseenSpots(world, actor, loc.id);
+  if (unseen.length) L.push(`Puntos que el actor aún no ha visto (no los des por vistos; los ve si mira alrededor o va hacia allí, o los conoce si alguien se los nombra; entonces discover_spot): ${unseen.map((s) => `${s.name} [${s.id}]`).join(', ')}.`);
+  const hidden = hiddenSpots(world, actor, loc.id);
+  if (hidden.length) L.push(`Ocultos (el actor no sabe que existen: ni los nombres ni los insinúes. Solo si busca y saca la tirada —requires_roll de Percepción o Investigación contra su CD— o si alguien se los enseña; entonces discover_spot): ${hidden.map((s) => `${s.name} [${s.id}] CD ${s.dc_to_find ?? 10}`).join(', ')}.`);
   const exits: string[] = [];
-  for (const s of world.spotsOf(loc.id)) for (const { exit, to_spot_id } of world.exitsFrom(s.id)) {
+  // Las de un punto oculto que no ha encontrado, no (la trampilla al sótano).
+  for (const s of world.spotsOf(loc.id).filter((x) => !hidden.includes(x))) for (const { exit, to_spot_id } of world.exitsFrom(s.id)) {
     exits.push(`- desde ${s.name} a ${world.locationOfSpot(to_spot_id).name} [${to_spot_id}], ${exit.distance_m} m${exit.state.blocked_by ? `, bloqueada (${exit.state.blocked_by})${reboundOf(exit) ? ': no se cruza; si el actor lo intenta, move_to hacia allí y el motor le hace volver por donde entró' : ''}` : ''}`);
   }
   if (exits.length) L.push('Salidas:\n' + exits.join('\n'));
@@ -346,7 +353,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     for (const n of deadNpcsAt(world, sp.id)) {
       const d = n.death;
       const label = actor.knows.includes(n.id) ? n.name : descriptorOf(world, n.id);
-      present.push(`- El cuerpo de ${label} [${n.id}] en ${sp.name}: MUERTO${d ? ` desde las ${hhmm(d.died_game_s)}${d.by_name ? `, a manos de ${d.by_name}` : ''}` : ''}. No se levanta, no habla y no desaparece; quien esté y lo vea reacciona (miedo, rabia, avisar a alguien). Lo que llevaba está en el suelo.`);
+      present.push(`- ${contractArticles(`El cuerpo de ${label}`)} [${n.id}] en ${sp.name}: MUERTO${d ? ` desde las ${hhmm(d.died_game_s)}${d.by_name ? `, a manos de ${d.by_name}` : ''}` : ''}. No se levanta, no habla y no desaparece; quien esté y lo vea reacciona (miedo, rabia, avisar a alguien). Lo que llevaba está en el suelo.`);
     }
   }
   for (const n of world.npcs.values()) {
