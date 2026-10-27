@@ -28,7 +28,8 @@ import { atBoard, dropQuest, readBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, plantBeat, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { crowdHere, tickSchedule } from './schedule.js';
 import { tickOrders } from './npcorders.js';
-import { storyQuestAction, tickStory, type StoryOutput } from './story.js';
+import { nameFor, storyQuestAction, tickStory, type StoryOutput } from './story.js';
+import { trustFromRoll, trustNotice } from './trust.js';
 import { aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
 import { seededRng, type Rng } from './dice.js';
 import { harvest } from './resources.js';
@@ -1116,6 +1117,12 @@ export class Engine {
       if (pending.roll.kind === 'skill' && (pending.roll.dc ?? 0) >= this.world.campaign.progression.practice_min_dc) {
         const pe = addPractice(this.world, c, pending.roll.key);
         if (pe) this.emitProgress(c, [pe]);
+      }
+      // Tirada social en una charla: la confianza del NPC se mueve antes de que el máster narre (trust.ts), con tope por charla.
+      if (pending.roll.kind === 'skill') {
+        const t = trustFromRoll(this.world, c, pending.roll.key, result.success, this.nowFor(c));
+        const told = t && trustNotice(nameFor(this.world, c, t.npc_id), t);
+        if (told) this.emitProgress(c, [{ kind: 'trust', text: told }]);
       }
       let r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result });
       if (!r.ok && r.text === '') r = { ok: false, text: `${shown}\nEl narrador no responde; inténtalo de nuevo.` };
@@ -3216,6 +3223,9 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     n.memory ??= []; n.talking_to ??= null;
     const seedNpc = seed?.npcs.find((x) => x.id === n.id);
     n.description ??= seedNpc?.description ?? ''; n.motivation ??= seedNpc?.motivation ?? ''; n.secret ??= seedNpc?.secret ?? '';
+    // Partidas de antes del saber por niveles (trust.ts): lo toman de la semilla.
+    if (!n.knowledge && seedNpc?.knowledge) { n.knowledge = structuredClone(seedNpc.knowledge); changed = true; }
+    if (n.dislikes_flattery === undefined && seedNpc?.dislikes_flattery) { n.dislikes_flattery = true; changed = true; }
     if (n.buys === undefined || n.stats === undefined) changed = true;
     n.buys ??= seedNpc?.buys ?? []; n.sells ??= seedNpc?.sells ?? [];
     n.stats ??= seedNpc?.stats ?? null; n.attitude ??= seedNpc?.attitude ?? { default: 'neutral', by_character: {} };
@@ -3233,6 +3243,14 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
       if (!sc || cl.location_ids || cl.npc_ids || (!sc.location_ids && !sc.npc_ids)) continue;
       if (sc.location_ids) cl.location_ids = [...sc.location_ids];
       if (sc.npc_ids) cl.npc_ids = [...sc.npc_ids];
+      changed = true;
+    }
+    // Fuentes con requisitos y pistas clave (trust.ts): de la semilla si la partida es de antes; con ellas, el «cómo» nuevo.
+    for (const cl of c2.clues) {
+      const sc = seed.campaign.clues.find((x) => x.id === cl.id);
+      if (!sc?.sources || cl.sources) continue;
+      cl.sources = structuredClone(sc.sources); cl.how = sc.how;
+      if (sc.key) cl.key = true;
       changed = true;
     }
     for (const d of seed.item_defs) {

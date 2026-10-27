@@ -128,6 +128,8 @@ Tensiones que mueven la historia: Brenna calla por miedo a Osric; Ysolde odia a 
 
 Bloques SRD de los arquetipos del generador (`ARCHETYPES`, mismos rangos que valida `fill.ts`).
 
+**Lo que cuenta cada uno depende de cuánto se fíe del PJ** **[cambia, 2026-10-27]**. La columna «Secreto» ya no va entera al máster: en `people.ts` cada persona lleva `knowledge`, el secreto repartido en cuatro niveles de confianza (extraño, conocido, amigo, aliado), y el máster solo recibe lo del nivel que ese PJ ha alcanzado con ella (§3, «Confianza»). A un extraño le cuentan lo que sabe todo el pueblo: Ilse habla de la tos y de sus tónicos; la Brasa, la cripta y las cadenas son de amigo. Nadie cuenta a un extraño nada que abra la historia, ni con una buena tirada. La loba no habla: lo de la ceniza va en su motivación.
+
 | NPC | Papel | Cómo es | Quiere | Secreto | Sabe | Vende / compra | SRD | Horario (día / tarde / noche) |
 |---|---|---|---|---|---|---|---|---|
 | **Brenna** | tabernera | 50 años, brazos de amasar, quemadura en la mano; frases cortas, cambia de tema al precio de la cerveza | la taberna en pie, su perro de vuelta, que nadie remueva el granero | vio a Osric prender el fuego, salvó a Ysolde, guarda el libro | quién fue, dónde está el libro, que la niebla bajó cuando volvió «la niña» | cerveza, ración, antorcha, poción, **noche de posada**; compra leña, bayas, truchas, harina, huevos | plebeyo, 9 PG | barra / barra / mesa del fondo; misa a las 20 |
@@ -168,9 +170,24 @@ Al otro lado de la niebla está el **Camino de Valcruz** (`loc_valcruz`, zona «
 
 Salidas: taberna-plaza (3 m), trampilla-sótano (3 m), plaza-herrería, plaza-casona, plaza-curandera (25 m), plaza-molino (150 m), plaza-corrales (180 m), portón-Soto (250 m), portón-Lindero (450 m), molino-Soto por el arroyo (220 m), corrales-Soto (200 m), Soto-granero (180 m) y **el Cerco**: borde de la niebla → camino de Valcruz, `blocked_by: 'El Cerco de Ceniza'` con `rebound` (§2.13).
 
-### 2.7 Pistas (11)
+### 2.7 Pistas (11) **[cambia, 2026-10-27: pistas con requisitos]**
 
 `clue_pozo` el agua turbia del pozo · `clue_hacha` el hacha con hollín y las letras T. M. · `clue_doro` luces en el granero y la figura de la senda · `clue_brenna` «no fue un accidente» · `clue_trampilla` el sótano · `clue_libro` la plata entregada a O. Malvez · `clue_ilse` qué es la Brasa y cómo se templa un ascua; «es un cerrojo» · `clue_hugo` la cadena de hierro frío · `clue_tobias` las cartas del desván · `clue_hal` la plata vieja de Hal · `clue_ysolde` la heredera.
+
+Cada pista dice qué revela (`how`) y por dónde se consigue (`sources`), con lo que pide cada camino. `grant_clue` solo la da si el PJ tiene uno abierto; si no, devuelve el motivo para que el máster lo cuente en la ficción. Las **clave** (`key`) tienen al menos dos caminos, y el validador lo exige:
+
+| Pista clave | Caminos (y lo que piden) |
+|---|---|
+| `clue_ilse` | Ilse, si es amiga · *El agua turbia* (al darle el agua) · Ysolde, si ya le conoce |
+| `clue_doro` | Doro, si es amigo o, tras *La cena del portón*, conocido · verlo uno mismo en el arroyo cuando pasa Tobías |
+| `clue_brenna` | Brenna, si es amiga (devolverle el perro) · Hugo, si es amigo («lo encerraron») |
+| `clue_hugo` | Hugo, si es amigo o conocido sabiendo lo de la Brasa (de parte de Ilse llega como conocido) · la losa suelta, descubierta |
+| `clue_libro` | el sótano · *Bajo el Jabalí* |
+| `clue_tobias` | el desván, descubierto · Tobías, si es amigo o con las cartas o la bolsa delante |
+| `clue_hal` | Hal, si es amigo · lo que hay colgado en el Granero |
+| `clue_ysolde` | Ysolde, si ya le conoce o llegas sabiendo algo (Doro, Hal, las cartas, el libro) · Tobías o Hal, si son aliados |
+
+Las de sitio (`clue_pozo`, `clue_hacha`, `clue_trampilla`) se encuentran mirando, con su tirada. `test/confianza.test.ts` comprueba que ninguna clave sale en la primera charla con un extraño, ni tras una tirada buena.
 
 Logro «Quien ha mirado la ceniza» (3 pistas y 5 de reputación en la aldea): **+2 de reputación** y un anuncio público que solo cuenta lo cierto («Se corre la voz por Brezal: {name} ha mirado la ceniza de frente»). No regala contenido: **la trampilla y la llave de los Vharn**, que abre **el pasadizo bajo el altar del Granero**, salen de *Bajo el Jabalí*, con su escena (Brenna enseña la trampilla al dártela y te da la llave al entregarla). **[cambia, 2026-10-27]**
 
@@ -329,6 +346,13 @@ generateSeed: esqueleto + relleno ── buildSnapshot ─────┘ (el mi
   - **Avance por lo que hace el PJ.** Las condiciones del mundo de un paso (`npc_has`, `npc_status`, `npc_at`, `spot_state`) solo cuentan si el PJ está en ese lugar: lo ha hecho él o su grupo delante. `talk` pide estar con ese NPC en persona (hablando o en su punto); en un `all` con un `narrative`, el máster solo puede marcarlo si se cumple lo demás. Otras condiciones: `level`, `reputation`, `debt_paid`, y `npc_has` con `quantity`.
   - **Visibilidad.** Cada alta, paso, cierre o caducidad va al registro del PJ (`character.story.log`) con el porqué en palabras del jugador; sale como aviso de misión en el chat (privado al PJ) y en el Diario, en «Qué ha pasado». El panel marca lo no leído en el icono de misiones (punto con las altas, check con los pasos) hasta que se abre el Diario.
   - **Tablón.** Un encargo entra en el Diario cuando el PJ lo lee (de pie ante un punto con la etiqueta `notice` o con /tablon), no por estar clavado.
+- **Confianza y saber por niveles** (`src/engine/trust.ts`, 2026-10-27). Cada NPC lleva `knowledge: [{ tier, text }]` con `tier` = `stranger` | `acquaintance` | `friend` | `ally` (extraño, conocido, amigo, aliado); en campañas escritas sustituye a `secret`, que el formato rellena con la suma de los niveles para el análisis. Sin `knowledge` (mundos generados, partidas de antes), el secreto cuenta como de amigo.
+  - **El nivel** sale de `trustTier(npc, pj)`: puntos en `npc.trust[pj]` (conocido 2, amigo 5, aliado 9), con la actitud por encima (hostil o recelosa con ese PJ, extraño; amistosa, al menos amigo; aliada, aliado). Cuando llegue la opinión numérica con umbrales (bloque I), basta con que esta función la lea.
+  - **Sube** con misiones cumplidas (+3 a quien la encargó y a quien la recibe), encargos del tablón (+2), recados que le llegan en mano (efecto `trust` con `change: 'errand'`, +2) y, en la charla, regalos (`transfer_item` a un NPC), favores y adulación (`npc_trust`) y Persuasión, Interpretación o Perspicacia con éxito: todo esto, con tope de 1 por conversación (dos charlas a menos de una hora son la misma). El efecto `trust` con `at_least` sube hasta un nivel: en Brezal, ir de parte de Ilse hace a Hugo conocido.
+  - **Baja** con amenazas (Intimidación, salga o no, o `npc_trust`), mentiras pilladas (Engaño fallido), insultos, hostigar (`harass`: insistir cuando ya dijo que no, −1 cada vez), ver un crimen (−3) y que le ataquen (−5).
+  - **Adular** (`flattery`) depende del carácter: suma con tope a quien lo agradece y resta a quien lleva `dislikes_flattery` (en Brezal, Brenna, Ilse, Hugo, Hal, Ysolde y Úrsula). Su línea en el contexto lo dice («No soporta la adulación»).
+  - **Al máster** le llega en «Presentes» el nivel y lo que contaría a ese nivel; si calla algo más, que lo calla y a qué nivel lo contaría, sin el texto. `get_npc` igual; `get_campaign_notes` solo trae las pistas que el PJ ya puede conseguir. Condición nueva `{ kind: 'trust', npc_id, at_least }` (y `{ kind: 'step', quest_id, step_id }`) para pistas y misiones.
+  - **Pistas con requisitos**: `clue.sources: [{ via, npc_id?, location_id?, requires?, refusal? }]` y `clue.key`. `clueBlocked` (story.ts) decide `grant_clue`; las que da la historia (un paso, una misión) no pasan por ahí. `validateStory` (con `clues`) exige dos caminos distintos a cada clave: otra persona, otro sitio o una misión que la dé.
 
 ## 4. Qué queda de `demo.ts`
 
@@ -338,6 +362,7 @@ generateSeed: esqueleto + relleno ── buildSnapshot ─────┘ (el mi
 
 - Menú web → Nueva partida → «Brezal (demo)». El personaje recibe su situación según la clase.
 - `npm test`: `test/brezal.test.ts` valida la campaña (una zona, diez lugares, el Cerco), comprueba los planos, reparte situaciones a 3 días, recorre a pie los diez lugares, completa el acto I, el acto II y el final A por tools (andar, coger, dar, hablar, `story_quest`, `grant_clue`, `discover_spot`, `advance_story`) subiendo de nivel por el camino, prueba los finales B (Osric escondido y encontrado) y C, la escalada hora a hora en tres días, el epílogo de cada final, el choque con la niebla (por texto y por `move_to`) y que el menú carga la campaña.
+- `test/confianza.test.ts`: el caso de Ilse (seq 21–24) por el motor, con una Persuasión con éxito: sigue siendo extraño, el máster no recibe la Brasa y `grant_clue` la rechaza con motivo; el tope por charla; Ilse amiga tras *El agua turbia*; el recado de Doro y la llegada de parte de Ilse; las bajadas; que ninguna pista clave salga en la primera charla con un extraño; el validador de dos caminos y las partidas guardadas.
 - `test/misiones-progresivas.test.ts`: *La cena del portón* de principio a fin (lo oído como pista, pedida en escena, dar en mano, cobrar), decir que no, el bloqueo por nivel, la principal como problema con pistas, los plazos por descansos y por hito, y los casos de la partida del 2026-10-27 (con el estado real de Leodhin en `test/fixtures/partida-2026-10-27-leodhin.json`: Hugo muerto con *La cadena* abierta).
 - Offline (`MASTER_MODE=offline`): se ven lo oído como pista, el punto discreto, la misión que te piden al hablar con quien la da y decir que no (aviso o Diario), igual que ir al Lindero y meterse en la niebla; dar objetos a un NPC y los pasos narrativos necesitan un máster real.
 

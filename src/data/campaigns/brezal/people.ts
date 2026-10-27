@@ -1,11 +1,17 @@
 /**
  * Brezal sellada: la gente. Once personas y tres animales, todos dentro del
  * Cerco de Ceniza. Cada persona con su
- * aspecto y manera de hablar, lo que quiere, su secreto, lo que sabe, lo que
+ * aspecto y manera de hablar, lo que quiere, lo que sabe y cuenta según
+ * cuánto se fíe del PJ, lo que
  * compra y vende, un bloque de combate SRD de nivel bajo (los mismos
  * arquetipos y rangos que el generador, skeleton.ts) y su horario por franjas.
  * `knows` y `ties` son para el análisis (docs/BREZAL.md); al motor llegan
- * descripción, motivación y secreto.
+ * descripción, motivación y `knowledge`.
+ *
+ * `knowledge` reparte el secreto en niveles de confianza (src/engine/trust.ts):
+ * extraño (lo que cuenta a cualquiera), conocido, amigo y aliado. El máster
+ * solo recibe lo del nivel que el PJ ha alcanzado con esa persona: a un extraño
+ * nadie le cuenta nada que abra la historia, ni con una buena tirada.
  */
 
 import type { NpcStats } from '../../../engine/model.js';
@@ -21,7 +27,13 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_brenna', name: 'Brenna', role: 'tabernera', spot_id: 'sp_tab_barra', passive_perception: 12, attitude: 'neutral',
     description: 'Cincuenta años, brazos de amasar, una quemadura vieja en el dorso de la mano izquierda. Seca la misma jarra cuando piensa. Habla poco, en frases cortas, y mira mucho; cuando algo le duele, cambia de tema hacia el precio de la cerveza. La jarra es de barro, con una muesca en el asa; cuanto más se acerca alguien a lo que le duele, más deprisa la seca. Cada noche deja una cerveza que nadie bebe en el último taburete de la barra. Nunca ha salido del valle.',
     motivation: 'Que la taberna siga en pie, que su perro Ceniza vuelva a casa y que nadie remueva el granero de Vharn ni lo que ella enterró.',
-    secret: 'La noche del incendio servía en las cocinas de Vharn. Vio a Osric Malvez, entonces mayordomo, sacar la plata por la poterna y prender el granero para taparlo; el fuego llegó a la cripta. Ella sacó en brazos a la niña de los señores, Ysolde, y la dejó con unos carboneros del sur. Osric le dio la taberna a cambio de callar. Guarda en el sótano el libro de cuentas de Vharn, la prueba, por si algún día tiene valor para usarla. La jarra era de su hermano, que trabajaba con ella en la cocina de Vharn y llevaba sus cuentas; el pueblo culpa del incendio al candil de esa cocina, y ella deja que culpen a su hermano antes que decir quién fue. La quemadura es de una viga que le cayó en la mano izquierda mientras llevaba a la niña contra el pecho; la antorcha iba en la derecha. Su culpa no es el fuego: es haberse dejado comprar con la taberna y haber cerrado los ojos. Del libro solo ha leído la última página, porque las demás llevan la letra de su hermano. Tararea sin darse cuenta la nana que cantaba al sacar a la niña. Durante años mandó a los carboneros del sur, sin firmar, una olla de manteca cada invierno.',
+    dislikes_flattery: true,
+    knowledge: [
+      { tier: 'stranger', text: 'Del incendio de Vharn dice lo que dice todo el pueblo: que fue el candil de una cocina, hace veinte años, y que con el caldo en la mesa no se cuentan muertos. De su perro Ceniza sí habla: se le ha perdido por el Soto y lleva días mirando a la puerta.' },
+      { tier: 'acquaintance', text: 'Servía en las cocinas de Vharn, y su hermano murió allí: la jarra que seca era de él. Tararea sin darse cuenta una nana vieja. Si le preguntan quién tuvo la culpa, cambia de tema hacia el precio de la cerveza.' },
+      { tier: 'friend', text: 'Estuvo en Vharn la noche del incendio y sabe que no fue un accidente; el pueblo culpa a su hermano y ella lo deja. No dice quién fue: «está escrito, ahí abajo». Bajo la alfombra de la mesa del fondo hay una trampilla al sótano, y a un amigo se la enseña. La quemadura de la mano es de una viga que le cayó mientras sacaba a alguien del fuego. Su culpa es haberse dejado comprar y haber cerrado los ojos.' },
+      { tier: 'ally', text: 'Vio a Osric Malvez, entonces mayordomo, sacar la plata por la poterna y prender el granero para taparlo; el fuego llegó a la cripta. Sacó en brazos a la niña de los señores, Ysolde, y la dejó con unos carboneros del sur, a los que mandó sin firmar una olla de manteca cada invierno. Osric le dio la taberna a cambio de callar. El libro de cuentas de Vharn, la prueba, está en el sótano, tras el último barril; solo ha leído la última página, porque las demás llevan la letra de su hermano.' },
+    ],
     knows: 'Quién prendió el fuego; dónde está el libro; que la niña de Vharn salió viva. Que la niebla bajó el día que volvió «una niña que ella sacó del fuego», aunque no sabe quién es.',
     ties: 'Teme a Osric y desprecia a Garrán. Quiere a Doro como a un sobrino tonto. Respeta a Ilse. Ceniza es su perro.',
     buys: [{ item_id: 'it_madera', price: 20 }, { item_id: 'it_bayas', price: 5 }, { item_id: 'it_pescado', price: 25 }, { item_id: 'it_harina', price: 25 }, { item_id: 'it_huevo', price: 6 }],
@@ -33,7 +45,11 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_doro', name: 'Doro', role: 'guardia', spot_id: 'sp_pl_porton', passive_perception: 15, attitude: 'neutral',
     description: 'Joven, alto, lanza apoyada en el hombro y botas demasiado nuevas. Habla más de la cuenta, se corrige a media frase y se ríe de sus propios chistes antes de acabarlos. Las botas se las regaló su tío, con el sello del zapatero de la casona en la suela; rodea los charcos para no mancharlas. Lleva la capa recortada desde que perdió el duelo de la feria contra una niña de doce años.',
     motivation: 'Que lo tomen en serio. Cobra de su tío, el regidor, por vigilar el portón y hacer la ronda del Lindero, por si algo sale de la niebla.',
-    secret: 'Ha visto luces en el Granero Quemado dos noches seguidas y, una de ellas, una figura que iba por la senda del arroyo con un hatillo. No lo ha contado por miedo a que su tío le mande a mirar. Ya contó una vez lo de las luces y Garrán le dio una paliza «por asustar al personal». Si le preguntan por el Soto, se ríe de su chiste un poco tarde y mira al suelo.',
+    knowledge: [
+      { tier: 'stranger', text: 'Vigila el portón y hace la ronda del Lindero por si algo sale de la niebla; cobra de su tío, el regidor. Si le preguntan por el Soto o por el granero, se ríe de su chiste un poco tarde y mira al suelo.' },
+      { tier: 'acquaintance', text: 'A qué hora cambia la guardia. Que su tío paga a Garrán por algo que no le cuentan. Que una vez contó algo «de unas luces» y Garrán le dio una paliza «por asustar al personal»: no piensa repetirlo delante de cualquiera.' },
+      { tier: 'friend', text: 'Ha visto luces en el Granero Quemado dos noches seguidas y, una de ellas, una figura que iba por la senda del arroyo con un hatillo, pasadas las once. No lo ha contado por miedo a que su tío le mande a mirar.' },
+    ],
     knows: 'Las luces, la figura de la senda, a qué hora cambia la guardia. Que su tío paga a Garrán por algo que no le cuentan.',
     ties: 'Sobrino de Osric, a quien admira y teme. Bebe por las noches en el Jabalí. Garrán se burla de él.',
     buys: [], sells: [],
@@ -44,7 +60,12 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_osric', name: 'Osric Malvez', role: 'regidor', spot_id: 'sp_ca_despacho', passive_perception: 13, attitude: 'neutral',
     description: 'Sesenta años, bien afeitado, capa de buen paño y anillos en tres dedos. Sonríe con la boca cerrada y llama a todo el mundo «vecino». Nunca levanta la voz: la levanta Garrán por él. Fue mayordomo de Vharn y se le nota: lleva el llavero al cinto, no se sienta en la cabecera de su mesa y duerme encima de la colcha. Llamar a alguien por su nombre de pila es darlo por perdido. Es padrino de bautizo de medio valle y presta sin papeles; ante una mala noticia, pide vino y dice que le duele la cabeza.',
     motivation: 'Que nadie remueva el granero de Vharn, que la aldea siga pagando el diezmo y que lo que vive en las ruinas desaparezca sin ruido. Con la niebla, que todos se queden quietos y callados.',
-    secret: 'Prendió el fuego de Vharn hace veinte años para tapar que se llevaba la plata del sello; con ella compró la casona y el cargo. Sabe que en el Granero Quemado se esconde alguien con el apellido Vharn y manda a deudores a «apagar las luces» por cuenta suya. Si le descubren, no puede huir del valle: tiene una bodega tapiada en la casona. Guarda en el arcón una copa de plata con el sello que no se atrevió a fundir. Es hijo de un jornalero de las minas de plata, con otro apellido; solo Ilse recuerda su nombre de cuna. La noche del incendio el herrero de Vharn le vio salir con la plata, y mandó a Garrán atrancar la puerta de la fragua con él dentro. Tiene apuntado que, si Pol no vuelve, los Corrales de Úrsula pasan al regidor.',
+    knowledge: [
+      { tier: 'stranger', text: 'Llama al incendio «el accidente de Vharn» y a la niebla, «la maldición de Vharn». Del granero dice que es ruina y que no conviene subir. Cobra el diezmo como «ofrenda de vecindad» y llama a todos «vecino».' },
+      { tier: 'acquaintance', text: 'Fue mayordomo de Vharn y lo cuenta con orgullo: sirvió a los señores hasta el final. Presta sin papeles, recuerda quién debe qué y lo usa.' },
+      { tier: 'friend', text: 'Sabe que en el Granero Quemado se esconde alguien con el apellido Vharn y quiere que «se apaguen las luces» sin ruido: manda a deudores por cuenta suya, a través de Garrán. Ha ordenado a Hugo fundir unos eslabones viejos. Tiene apuntado que, si Pol no vuelve, los Corrales de Úrsula pasan al regidor.' },
+      { tier: 'ally', text: 'Prendió el fuego de Vharn hace veinte años para tapar que se llevaba la plata del sello; con ella compró la casona y el cargo. La noche del incendio el herrero de Vharn le vio salir con la plata, y mandó a Garrán atrancar la puerta de la fragua con él dentro. Guarda en el arcón una copa de plata con el sello que no se atrevió a fundir, y en la casona una bodega tapiada por si le buscan. Es hijo de un jornalero de las minas de plata, con otro apellido; solo Ilse recuerda su nombre de cuna.' },
+    ],
     knows: 'Todo lo del incendio. Que alguien vive arriba. Que Hugo guarda algo de la cadena y quiere que lo funda.',
     ties: 'Tío de Doro. Patrón de Garrán. Presta a Hugo para tenerlo agarrado. Sospecha de Brenna desde hace veinte años.',
     buys: [{ item_id: 'it_copa_vharn', price: 6000 }, { item_id: 'it_libro_cuentas', price: 5000 }],
@@ -56,7 +77,12 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_garran', name: 'Garrán', role: 'alguacil y recaudador', spot_id: 'sp_pl_tablon', passive_perception: 12, attitude: 'unfriendly',
     description: 'Ancho como una puerta, la nariz rota dos veces y una maza corta al cinto. Cuenta con los dedos al hablar, como si todo fuera una deuda. Huele a cebolla y a cuero mojado. No sabe escribir: lleva las deudas en una cantinela con rima, una estrofa por familia, y si le interrumpen pierde el hilo y se pone violento. Se sienta siempre lejos del fuego.',
     motivation: 'Cobrar el diezmo de la ceniza, quedarse su parte y que nadie le haga ir a él al Granero Quemado.',
-    secret: 'Le pagan por cada deudor que va al Granero Quemado y no vuelve. Una noche fue él mismo, vio a una mujer con un fuego en la mano y salió corriendo; desde entonces no duerme sin vela. Se queda una moneda de cada cinco del diezmo. Hace veinte años, de mozo de Osric, atrancó la puerta de la fragua de Vharn con el herrero dentro «para que no saliera el fuego», y le oyó mucho rato. Hal lo sabe por su padre y por eso le rompió la nariz; por eso Garrán nunca le ha denunciado. De noche, junto a la vela, trenza esparto.',
+    knowledge: [
+      { tier: 'stranger', text: 'Cobra el diezmo de la ceniza para el regidor y lleva las deudas en una cantinela con rima. Al Granero Quemado no sube «ni loco», y no dice por qué.' },
+      { tier: 'acquaintance', text: 'Que arriba, en el granero, hay alguien. Que el regidor guarda algo en el arcón y él lleva la llave. Que Hal le rompió la nariz la segunda vez.' },
+      { tier: 'friend', text: 'Le pagan por cada deudor que va al Granero Quemado y no vuelve. Una noche fue él mismo, vio a una mujer con un fuego en la mano y salió corriendo; desde entonces no duerme sin vela y trenza esparto junto a ella. Se queda una moneda de cada cinco del diezmo.' },
+      { tier: 'ally', text: 'Hace veinte años, de mozo de Osric, atrancó la puerta de la fragua de Vharn con el herrero dentro «para que no saliera el fuego», y le oyó mucho rato. Hal lo sabe por su padre; por eso Garrán nunca le ha denunciado.' },
+    ],
     knows: 'Quién debe qué en Brezal. Que arriba hay alguien. Que el regidor guarda algo en el arcón (lleva la llave).',
     ties: 'Perro de Osric. Se burla de Doro. Ilse le cura la tos y le da miedo. Odia a Hal, que le rompió la nariz la segunda vez.',
     buys: [], sells: [],
@@ -67,7 +93,13 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_ilse', name: 'Ilse', role: 'curandera', spot_id: 'sp_cu_hierbas', passive_perception: 14, attitude: 'neutral',
     description: 'Muy vieja, encorvada, los ojos claros como agua. Habla bajito y despacio, con palabras de rezo mezcladas con las de la cocina. Siempre tiene las manos manchadas de corteza. Nunca cura sin cobrar algo pequeño, un huevo o un hilo: «lo que no cuesta no sana». Antes del tónico pregunta «¿con quién estás reñido?», y a los moribundos, «¿ya has dejado de debérselo?».',
     motivation: 'Curar la tos gris, que el pueblo no vuelva a arder y morirse habiendo dejado el rito en buenas manos. Entender el cerrojo de niebla que ha cerrado el valle.',
-    secret: 'Fue la última sacerdotisa de la llama de Vharn. Sabe que los señores ataban en la cripta un fuego antiguo, la Brasa, con cadenas de hierro frío, y que la Brasa grande está enterrada bajo el granero. Sabe templar una ascua suelta: sumergirla en el agua fría del manantial, el pozo, con los eslabones que forjó el maestro de Hugo sujetos y diciendo las palabras. Reconoce en la niebla un cerrojo de sus maestros, la Guarda, pero no sabe abrirlo. Sabe que las palabras del rito están repartidas en la rima de corro de los niños, la canción de amasar y una nana, y por eso no deja que se pierdan. La noche del incendio estaba en el Soto atendiendo un parto. Guarda el cuenco del ascua de cuna de la niña de Vharn, frío y sin devolver: sospecha que vive. Recuerda el nombre de cuna de Osric. Su casa es la única con la marca antigua del dintel sin encalar: era un signo de la Guarda.',
+    dislikes_flattery: true,
+    knowledge: [
+      { tier: 'stranger', text: 'Cura la tos gris con tónicos y cobra algo pequeño, un huevo o un hilo. De la tos dice que viene «del agua, o de lo que trae el agua», sin más. Dirige la misa del pozo y nombra cada noche a un muerto de Vharn. Antes de curar pregunta «¿con quién estás reñido?».' },
+      { tier: 'acquaintance', text: 'El agua del pozo baja tibia y huele raro desde que bajó la niebla, y quiere una muestra para mirarla con calma. La niebla no le parece una maldición: «es demasiado ordenada para eso». Tiene a Brenna por buena mujer con un peso dentro. La noche del incendio estaba en el Soto atendiendo un parto.' },
+      { tier: 'friend', text: 'Fue la última sacerdotisa de la llama de Vharn. Los señores ataban en la cripta un fuego antiguo, la Brasa, con cadenas de hierro frío; la Brasa grande está enterrada bajo el granero y la tos gris es su ceniza. Una ascua suelta se templa en el agua fría del pozo, con los eslabones que forjó el maestro de Hugo sujetos y diciendo unas palabras que ella enseña. De la niebla: «Es un cerrojo. Y los cerrojos tienen llave»; es la Guarda de sus maestros, pero no sabe abrirla. Su casa es la única con la marca del dintel sin encalar: un signo de la Guarda.' },
+      { tier: 'ally', text: 'Las palabras del rito están repartidas en la rima de corro de los niños, la canción de amasar y una nana, y por eso no deja que se pierdan. Guarda el cuenco del ascua de cuna de la niña de Vharn, frío y sin devolver: sospecha que vive. Recuerda el nombre de cuna de Osric.' },
+    ],
     knows: 'Qué es la Brasa y cómo se templa un ascua. Que la tos gris viene de la ceniza del agua. Que Hugo guarda eslabones. Que la niebla es un cerrojo. No sabe quién prendió el fuego.',
     ties: 'Dirige la misa del pozo. Cuida a Garrán aunque le asuste. Tiene a Brenna por buena mujer con un peso dentro.',
     buys: [{ item_id: 'it_bayas', price: 8 }, { item_id: 'it_agua_pozo', price: 5 }],
@@ -79,7 +111,13 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_hugo', name: 'Hugo', role: 'herrero', spot_id: 'sp_he_fragua', passive_perception: 11, attitude: 'neutral',
     description: 'Cuarenta años, calvo, brazos marcados de quemaduras pequeñas. Habla a golpes, como martillea: dos palabras, silencio, otras dos. Se limpia las manos en el mandil antes de dar la mano y casi nunca la da. Fue el aprendiz que ocupó el sitio del hijo del maestro, y el pueblo le llama «el de la fragua». Cada invierno engrasa el martillo de aquel hijo, por si vuelve. Le cuesta cerrar la fragua; cuando la cierra, va a hablar de algo serio.',
     motivation: 'Pagar al regidor la deuda de la fragua sin traicionar a su maestro, el herrero de Vharn que murió en el incendio.',
-    secret: 'Bajo la losa suelta de la herrería guarda los últimos eslabones de la cadena de hierro frío que su maestro forjó para los señores. Osric le ha ordenado fundirlos a cambio de perdonarle la deuda y Hugo lleva un mes diciendo que mañana. Dice «mañana» porque entre herreros la obra de un maestro muerto no se funde sin tachar antes su marca, y no puede tachar la de su maestro; además, lo que se funde de noche se parte de día. La tercera noche ya no queda mañana. No sabe quién atrancó la puerta de la fragua.',
+    dislikes_flattery: true,
+    knowledge: [
+      { tier: 'stranger', text: 'Debe dinero al regidor y Garrán viene a cobrar los jueves. Fue aprendiz del herrero de Vharn, que murió en el incendio. A lo que no quiere hacer le dice «mañana».' },
+      { tier: 'acquaintance', text: 'Su maestro hablaba de «un cinturón de hierro que cerraba el valle». Cada invierno engrasa el martillo del hijo del maestro, que se fue del valle. El regidor le pide un trabajo que no quiere hacer, y no dice cuál.' },
+      { tier: 'friend', text: 'Bajo la losa suelta, junto al yunque, guarda los últimos eslabones de la cadena de hierro frío que su maestro forjó para los señores. Osric le ha ordenado fundirlos a cambio de perdonarle la deuda y lleva un mes diciendo que mañana: entre herreros, la obra de un maestro muerto no se funde sin tachar antes su marca, y no puede tachar la de su maestro. Su maestro dijo antes de morir que «no fue el fuego lo que lo mató»: lo encerraron. No sabe quién atrancó la puerta.' },
+      { tier: 'ally', text: 'Lo que se funde de noche se parte de día, y la tercera noche ya no queda mañana. A quien vaya a usar los eslabones para lo que se forjaron se los da.' },
+    ],
     knows: 'Para qué servía la cadena. Que su maestro hablaba de «un cinturón de hierro que cerraba el valle». Que su maestro dijo, antes de morir, que «no fue el fuego lo que lo mató»: lo encerraron. Que Garrán viene a cobrar los jueves.',
     ties: 'Debe dinero a Osric. Bebe con Doro. Hizo la lanza de Doro. Su maestro tenía un hijo que se fue del valle.',
     buys: [{ item_id: 'it_madera', price: 25 }],
@@ -91,7 +129,12 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_mateo', name: 'Mateo', role: 'molinero', spot_id: 'sp_mo_muelas', passive_perception: 10, attitude: 'friendly',
     description: 'Cincuentón redondo, enharinado hasta las cejas, con una tos gris que le corta las frases. Cuenta chistes malos para no hablar de su hijo. Tiene siete chistes y no cambia de repertorio; uno, «un molinero tenía un hijo que…», no lo termina nunca. Usa su propio ataúd de arcón para la harina: «así no me lo quitan».',
     motivation: 'Que el molino no se pare: el agua baja tibia y con ceniza, la rueda se atasca y la harina sale gris. Y que su hijo no se meta en líos.',
-    secret: 'Sabe que Tobías sale de noche hacia el bosque y lo ha encubierto ante Garrán dos veces. Teme que ande con «los de arriba» y prefiere no saberlo. Un año de hambre amenazó con la horca a un arriero por grano para Tobías niño, y lo pagó con tres años de harina. Ve a su hijo volver con las manos grises y no lo mira de frente. Guarda un tonel de grano de siembra sellado con cera que es tabú moler.',
+    knowledge: [
+      { tier: 'stranger', text: 'Cuenta chistes malos para no hablar de su hijo. El agua baja tibia y con ceniza desde hace un mes, la rueda se atasca y la harina sale gris. Desde que bajó la niebla el grano no llega ni sale.' },
+      { tier: 'acquaintance', text: 'Quién compra harina en Brezal y quién debe el diezmo. Que su hijo Tobías «anda raro» y vuelve tarde.' },
+      { tier: 'friend', text: 'Tobías sale de noche hacia el bosque; sabe a qué hora sale y vuelve, y lo ha encubierto ante Garrán dos veces. Teme que ande con «los de arriba» y prefiere no saberlo. Le ve volver con las manos grises y no le mira de frente.' },
+      { tier: 'ally', text: 'Un año de hambre amenazó con la horca a un arriero por grano para Tobías niño, y lo pagó con tres años de harina. Guarda un tonel de grano de siembra sellado con cera que es tabú moler.' },
+    ],
     knows: 'A qué hora sale y vuelve Tobías. Que el agua viene caliente desde hace un mes. Quién compra harina en Brezal. Que desde que bajó la niebla el grano no llega ni sale.',
     ties: 'Padre de Tobías. Debe el diezmo. Vende harina a Brenna.',
     buys: [{ item_id: 'it_pescado', price: 20 }, { item_id: 'it_madera', price: 15 }],
@@ -103,7 +146,12 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_tobias', name: 'Tobías', role: 'hijo del molinero', spot_id: 'sp_mo_sacos', passive_perception: 13, attitude: 'unfriendly',
     description: 'Diecisiete años, delgado, el pelo lleno de harina y las uñas negras de otra cosa. Contesta con preguntas y se le escapa una sonrisa cuando alguien habla mal del regidor. Es el único joven del valle que sabe leer: le enseñó su madre, ya muerta.',
     motivation: 'Ser alguien. La mujer del granero le ha prometido que será señor de Vharn cuando caiga el mayordomo.',
-    secret: 'Cada noche va por la senda del arroyo con comida para Ysolde al Granero Quemado y vuelve con una bolsa de ceniza de las grietas del altar que echa al pozo, para que el pueblo enferme y entregue al regidor. Guarda sus cartas en el desván del molino. El hacha con hollín del Soto es suya. Ysolde es la primera que lo llama «señor Tobías», y eso le ata más que la promesa: quien le trate con el mismo respeto puede soltarle. Lleva cosido en el forro del jubón un botón con el sello de Vharn que le dio ella.',
+    knowledge: [
+      { tier: 'stranger', text: 'Contesta con preguntas y se le escapa una sonrisa cuando alguien habla mal del regidor. Es el único joven del valle que sabe leer: le enseñó su madre, ya muerta.' },
+      { tier: 'acquaintance', text: 'Que el regidor «no es quien dice ser» y que algún día pagará. Que la loba de la madriguera no ataca a quien lleva ceniza encima.' },
+      { tier: 'friend', text: 'Cada noche va por la senda del arroyo con comida al Granero Quemado, para una mujer que le llama «señor Tobías» y le ha prometido que será señor de Vharn, y vuelve con una bolsa de ceniza de las grietas del altar que echa al pozo, para que el pueblo enferme y entregue al regidor. Guarda sus cartas en el desván del molino. El hacha con hollín del Soto es suya.' },
+      { tier: 'ally', text: 'La mujer es Ysolde, la heredera de Vharn, y quiere que el valle confiese quién prendió el fuego. Lleva cosido en el forro del jubón un botón con el sello de Vharn que le dio ella.' },
+    ],
     knows: 'Quién se esconde en el granero y qué quiere. Que la loba de la madriguera no ataca a quien lleva ceniza encima.',
     ties: 'Hijo de Mateo. Admira a Ysolde. Desprecia a Doro. Hal le ha visto subir y no ha dicho nada.',
     buys: [], sells: [],
@@ -114,7 +162,13 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_ysolde', name: 'Ysolde', role: 'mujer del ascua', spot_id: 'sp_ru_torre', passive_perception: 15, attitude: 'unfriendly',
     description: 'Veinticinco años, alta, la cara medio cubierta por una cicatriz de quemadura que no esconde. Lleva en la mano izquierda, envuelta en un guante de cuero, una ascua que no se apaga. Habla con educación antigua, como en los libros, y nunca parpadea al escuchar. Escucha como los carboneros miran una brasa, sin parpadear, y juzga a la gente por su brasa: «ese ya es ceniza». El guante es de trabajo, remendado y demasiado grande para ella.',
     motivation: 'Justicia para su casa: que el valle confiese quién prendió el fuego y lo pague. Si no la escuchan, soltar el ascua en la plaza la noche de la Brasa y que arda Brezal como ardió Vharn.',
-    secret: 'Es la heredera de Vharn, sacada del fuego de niña. Recuerda a una mujer con una antorcha llevándosela y cree que esa mujer, Brenna, prendió el incendio. No sabe que fue Osric ni que Brenna la salvó. Usa a Tobías para echar ceniza al pozo y debilitar al pueblo. Volvió hace tres semanas con el ascua y esa misma noche bajó la niebla: no sabe que fue ella quien despertó la Guarda. La criaron los carboneros del sur, que la llamaban Tizne (solo Hal la llama así). Los modales se los dio una carbonera vieja que sirvió en Vharn, dueña del guante, muerta el invierno pasado; el odio, un carbonero viudo que le hacía repetir quién tuvo la culpa. De aquella noche solo recuerda una mano que le tapó la boca con un paño húmedo y a una mujer con antorcha: la mano la protegía del humo. Quiere que el valle confiese también que nadie subió a ayudar. Sabe la rima de corro, y con ella, sin saberlo, las palabras del rito.',
+    dislikes_flattery: true,
+    knowledge: [
+      { tier: 'stranger', text: 'Habla con educación antigua y pregunta quién te manda. Juzga a la gente por su brasa: «ese ya es ceniza». A quien la escucha no le ataca.' },
+      { tier: 'acquaintance', text: 'Es la heredera de Vharn, sacada del fuego de niña, y ha vuelto con una ascua de la Brasa en el guante. Recuerda a una mujer con una antorcha llevándosela y cree que esa mujer, la tabernera Brenna, prendió el incendio. Quiere que el valle confiese y lo pague; si no, la noche de la Brasa soltará el ascua en la plaza. Sabe que el mayordomo de su padre vive en la casona.' },
+      { tier: 'friend', text: 'Usa a Tobías para echar ceniza al pozo y debilitar al pueblo. Volvió hace tres semanas con el ascua y esa noche bajó la niebla. La criaron los carboneros del sur, que la llamaban Tizne (solo Hal la llama así). Quiere que el valle confiese también que nadie subió a ayudar.' },
+      { tier: 'ally', text: 'De aquella noche solo recuerda una mano que le tapó la boca con un paño húmedo y a una mujer con antorcha. Los modales se los dio una carbonera vieja que sirvió en Vharn, dueña del guante, muerta el invierno pasado; el odio, un carbonero viudo que le hacía repetir quién tuvo la culpa. Sabe la rima de corro de los niños.' },
+    ],
     knows: 'La historia de su casa. Cómo se despierta la Brasa. Que el mayordomo de su padre vive en la casona. No sabe leer el rito ni que el ascua se puede templar.',
     ties: 'Manipula a Tobías. Hal le lleva caza. Odia a Brenna por error. Quiere ver muerto a Osric.',
     buys: [{ item_id: 'it_racion', price: 60 }, { item_id: 'it_libro_cuentas', price: 3000 }],
@@ -126,7 +180,13 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_hal', name: 'Hal', role: 'cazador', spot_id: 'sp_cl_piedra', passive_perception: 16, attitude: 'neutral',
     description: 'Flaco, barba de semanas, ropa de pieles mal cosidas. Mira antes los pies que la cara. Habla en voz baja, como si hubiera presa cerca, y suelta las palabras de una en una. Es hijo del perrero de Vharn. Marca el Soto con cortes en la corteza y nudos de pelo, avisa con silbidos y es el único que tose antes de llegar a una puerta.',
     motivation: 'Que lo dejen en paz en su Soto, que vuelva la caza y que nadie le cobre el diezmo por vivir en el borde de la aldea.',
-    secret: 'Le lleva caza a la mujer del granero a cambio de plata vieja con el sello de Vharn, y no se lo ha dicho a nadie. Ha visto pasar a Tobías de noche y lo deja. Nunca gasta la plata con el sello. Con Ysolde todo es trato y no acepta sus regalos; es el único que la llama Tizne. Su padre le contó que Garrán atrancó la fragua de Vharn con el herrero dentro: por eso le rompió la nariz.',
+    dislikes_flattery: true,
+    knowledge: [
+      { tier: 'stranger', text: 'La caza no puede salir del valle: vio un ciervo entrar en la niebla y volver a salir. La loba de la madriguera del roble no es un lobo normal: lleva ceniza en el pelo y no se cansa.' },
+      { tier: 'acquaintance', text: 'El granero «no está tan vacío como dicen». Ha visto pasar a alguien de noche por la senda del arroyo y lo deja estar.' },
+      { tier: 'friend', text: 'Le lleva caza a «la mujer del granero» a cambio de plata vieja con el sello de Vharn, y no se lo ha dicho a nadie; esa plata no la gasta nunca. Con ella todo es trato y no acepta sus regalos. Quien pasa de noche por la senda es Tobías, el del molino.' },
+      { tier: 'ally', text: 'Es el único que la llama Tizne: la conoció de cría, con los carboneros, y sabe que es una Vharn. Su padre, el perrero de Vharn, le contó que Garrán atrancó la fragua con el herrero dentro: por eso le rompió la nariz.' },
+    ],
     knows: 'La madriguera del roble. Que la caza no puede salir del valle: vio un ciervo entrar en la niebla y volver a salir. Que la loba no es un lobo normal: lleva ceniza en el pelo y no se cansa.',
     ties: 'Le rompió la nariz a Garrán. Doro le tiene miedo. Vende pieles a Brenna. Es lo más parecido a un amigo que tiene Ysolde.',
     buys: [{ item_id: 'it_piel', price: 150 }, { item_id: 'it_flechas', price: 4 }, { item_id: 'it_cerveza', price: 20 }],
@@ -138,7 +198,12 @@ export const NPCS: AuthoredNpc[] = [
     id: 'npc_ursula', name: 'Úrsula', role: 'granjera', spot_id: 'sp_co_gallinero', passive_perception: 12, attitude: 'neutral',
     description: 'Viuda de cuarenta y tantos, recia, el pañuelo atado a la nuca y las manos agrietadas de agua fría. Habla con las gallinas igual que con la gente, a medias riñendo. Cada poco mira hacia la cerca de atrás, hacia la niebla. Su marido murió en el incendio, velando el fuego de la noche de prestar la lumbre: es la única que mira a Brenna a los ojos. Se ata a la niebla con una cuerda que trenzó él.',
     motivation: 'Que su hijo Pol vuelva del otro lado. Mientras tanto, que no le falte pienso a las gallinas ni le maten las ovejas.',
-    secret: 'Pol salió al mercado de Valcruz la víspera de que bajara la niebla y está al otro lado. Úrsula ha entrado en la niebla tres veces a buscarlo y las tres ha salido por donde entró. Cada noche deja un farol encendido en la cerca de atrás. Fue ella quien mandó a Pol a vender al mercado. En la cerca hay tres piedras, una por cada vez que entró, y cada noche echa una alubia en un tarro. No sabe que, si Pol no vuelve, los Corrales pasan al regidor.',
+    dislikes_flattery: true,
+    knowledge: [
+      { tier: 'stranger', text: 'La niebla devuelve a quien entra: sales por donde entraste. Los lobos rondan el redil desde que bajó. Sabe quién compra huevos y quién no paga.' },
+      { tier: 'acquaintance', text: 'Su hijo Pol salió al mercado de Valcruz la víspera de que bajara la niebla y está al otro lado. Cada noche deja un farol encendido en la cerca de atrás, por si vuelve.' },
+      { tier: 'friend', text: 'Ha entrado en la niebla tres veces a buscarlo y las tres ha salido por donde entró: en la cerca hay tres piedras, una por cada vez. Fue ella quien mandó a Pol a vender, y cada noche echa una alubia en un tarro.' },
+    ],
     knows: 'Que la niebla devuelve a quien entra. Que los lobos rondan el redil desde que bajó. Quién compra huevos y quién no paga.',
     ties: 'Vende huevos a Brenna y en el mercado. Ilse le cura las ovejas. Garrán le cobra el diezmo en gallinas. Doro le hace la ronda por la cerca de atrás.',
     buys: [{ item_id: 'it_madera', price: 20 }, { item_id: 'it_bayas', price: 4 }],
@@ -156,8 +221,8 @@ export const NPCS: AuthoredNpc[] = [
   {
     id: 'npc_loba', name: 'la loba de ceniza', role: 'loba', spot_id: 'sp_cs_cueva', passive_perception: 15, attitude: 'hostile',
     description: 'Una loba enorme, del tamaño de un poni, con el pelo apelmazado de ceniza caliente que humea cuando se mueve. Tiene los ojos rojos como brasas y no gruñe: espera.',
-    motivation: 'Defender la madriguera. Bajó de la montaña cuando empezó a arder por dentro y la niebla la encerró en el Soto.',
-    secret: 'No ataca a quien lleva encima ceniza del Granero Quemado: la huele como suya.',
+    motivation: 'Defender la madriguera. Bajó de la montaña cuando empezó a arder por dentro y la niebla la encerró en el Soto. No ataca a quien lleva encima ceniza del Granero Quemado: la huele como suya.',
+    secret: '',
     buys: [], sells: [],
     stats: { ac: 14, hp_max: 37, hp: 37, attack_bonus: 5, damage: '2d6+3', damage_type: 'piercing', attack_name: 'mordisco', xp: 200 },
   },

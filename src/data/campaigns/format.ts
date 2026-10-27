@@ -35,7 +35,12 @@ export type AuthoredLocation = Omit<Location, 'default_spot_id' | 'state' | 'dis
 };
 
 /** Un NPC tal como se escribe: en un punto, con su actitud por defecto, su horario y lo que lleva encima. */
-export type AuthoredNpc = Omit<Npc, 'location' | 'status' | 'memory' | 'talking_to' | 'attitude'> & {
+export type AuthoredNpc = Omit<Npc, 'location' | 'status' | 'memory' | 'talking_to' | 'attitude' | 'secret'> & {
+  /**
+   * Lo que esconde, si no va por niveles. Con `knowledge` (lo que cuenta según la confianza, trust.ts), sobra: el
+   * secreto del motor es la unión de los niveles, para el análisis, y al máster solo le llega lo desbloqueado.
+   */
+  secret?: string;
   spot_id: Id;
   attitude: Attitude;
   routine?: NpcRoutine;
@@ -126,8 +131,9 @@ export function expandAuthored(a: AuthoredCampaign, now: Date): WorldSnapshot {
   const locations: Location[] = a.locations.map(({ spots: ss, secret: _s, state, ...l }) => ({
     ...structuredClone(l), default_spot_id: ss[0]!.id, state: structuredClone(state ?? {}), discovery: {},
   }));
-  const npcs: Npc[] = a.npcs.map(({ spot_id, attitude, routine, knows: _k, ties: _t, ...n }) => ({
-    ...structuredClone(n), location: { type: 'spot', id: spot_id }, status: 'alive', memory: [], talking_to: null,
+  const npcs: Npc[] = a.npcs.map(({ spot_id, attitude, routine, knows: _k, ties: _t, secret, ...n }) => ({
+    ...structuredClone(n), secret: secret ?? (n.knowledge ?? []).map((k) => k.text).join(' '),
+    location: { type: 'spot', id: spot_id }, status: 'alive', memory: [], talking_to: null,
     attitude: { default: attitude, by_character: {} },
     ...(routine ? { routine: { ...routine } } : {}),
   }));

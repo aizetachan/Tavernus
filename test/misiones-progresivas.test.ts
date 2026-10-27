@@ -271,6 +271,8 @@ describe('la misión principal: un problema con varias pistas', () => {
     const { engine } = await boot();
     const c = await newPc(engine, 'Leodhin', 'wizard');
     const ctx = ctxFor(engine, c);
+    // Aquí se mira el logro, no lo que pide cada pista (eso, en confianza.test.ts).
+    for (const cl of engine.world.campaign.clues) delete cl.sources;
     for (const id of ['clue_pozo', 'clue_ilse', 'clue_hugo']) expect(tool(engine, c, 'grant_clue', { character_id: c.id, clue_id: id }, ctx).ok).toBe(true);
     expect(c.achievements.map((a) => a.id)).toContain('ach_ceniza');
     expect(c.reputation['fac_brezal']).toBe(6 + 2);

@@ -8,6 +8,7 @@ import type { Character, Id, Npc } from './model.js';
 import { damageCharacter, killNpc, worldNow } from './death.js';
 import { armorClass } from './rules.js';
 import { rangedStyleBonus } from './levels.js';
+import { adjustTrust } from './trust.js';
 import type { World } from './world.js';
 
 export type Combatant = { kind: 'character'; c: Character } | { kind: 'npc'; n: Npc };
@@ -116,8 +117,11 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
     }
     targetHp = `${s.hp}/${s.hp_max}`;
   }
-  // Un NPC atacado pasa a hostil con quien le ataca.
-  if (t.kind === 'npc' && a.kind === 'character') { t.n.attitude.by_character[a.c.id] = 'hostile'; world.touch('npcs', t.n.id); }
+  // Un NPC atacado pasa a hostil con quien le ataca, y la primera vez pierde buena parte de su confianza (trust.ts).
+  if (t.kind === 'npc' && a.kind === 'character') {
+    if (t.n.attitude.by_character[a.c.id] !== 'hostile') adjustTrust(world, t.n, a.c, 'attacked', worldNow(world));
+    t.n.attitude.by_character[a.c.id] = 'hostile'; world.touch('npcs', t.n.id);
+  }
 
   return {
     attacker: nameOfCombatant(a), target: nameOfCombatant(t), weapon: weaponName,

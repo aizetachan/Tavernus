@@ -6,7 +6,8 @@
  * clase de personaje y vencen a la vez que la amenaza: a los tres días.
  */
 
-import type { Achievement, Campaign, Clue, Faction, Job } from '../../../engine/model.js';
+import type { Achievement, Campaign, Clue, Faction, Job, TrustTier } from '../../../engine/model.js';
+import type { StoryCondition } from '../../../engine/story.js';
 
 export const PREMISE = 'Hace veinte años el fuego arrasó a los señores de Vharn y nadie ha vuelto a remover sus ruinas. Hace tres semanas una niebla gris bajó del monte y cerró el valle: quien entra en ella sale por donde entró. Dentro, la aldea de Brezal tose ceniza, los lobos rondan los corrales y de noche hay luz en el granero quemado.';
 
@@ -64,29 +65,97 @@ export const FACTIONS: Faction[] = [
   { id: 'fac_vharn', name: 'la casa de Vharn', description: 'Lo que queda de los señores: Ysolde en el Granero Quemado, Tobías que le sirve, y Hal que le lleva caza.' },
 ];
 
+/**
+ * Pistas: qué revela cada una (`how`) y por dónde se consigue (`sources`), con lo que pide cada camino. grant_clue
+ * solo la da si el PJ tiene abierto alguno; si no, devuelve el motivo para que el máster lo narre. Las que salen de
+ * una persona piden su confianza (src/engine/trust.ts): ninguna pista clave sale en la primera charla con un
+ * extraño. Las clave (`key`) tienen al menos dos caminos (otra persona, otro sitio o la misión que la da), por si
+ * muere quien la sabe o no se fía nunca.
+ */
+const trust = (npc_id: string, at_least: TrustTier): StoryCondition => ({ kind: 'trust', npc_id, at_least });
+const clue = (clue_id: string): StoryCondition => ({ kind: 'clue', clue_id });
+const carry = (item_id: string): StoryCondition => ({ kind: 'carry', item_id });
+
 export const CLUES: Clue[] = [
   { id: 'clue_pozo', title: 'El agua turbia del pozo', reputation: 2, location_ids: ['loc_plaza'],
-    how: 'Al sacar agua del pozo o mirar el cubo con atención: el agua trae ceniza fina, está tibia y huele a azufre. El pozo lo alimenta un manantial que pasa por debajo del granero de Vharn. Tirada de Percepción CD 11 o Naturaleza CD 10.' },
+    how: 'El agua trae ceniza fina, está tibia y huele a azufre. El pozo lo alimenta un manantial que pasa por debajo del granero de Vharn.',
+    sources: [{ via: 'Sacar agua del pozo o mirar el cubo con atención: Percepción CD 11 o Naturaleza CD 10.', location_id: 'loc_plaza' }] },
   { id: 'clue_hacha', title: 'El hacha con hollín', reputation: 2, location_ids: ['loc_claro'],
-    how: 'Examinar de cerca el hacha de leñador del sendero del Soto: el hollín del mango es reciente y huele a resina quemada, no a leña de hogar; en el mango, grabadas a punta de cuchillo, las letras T. M. (Tobías, del molino). Alguien vuelve del Granero Quemado de noche. Investigación CD 10 o Supervivencia CD 10 al examinarla con intención.' },
-  { id: 'clue_doro', title: 'Luces en el granero', reputation: 2, npc_ids: ['npc_doro'],
-    how: 'Doro confiesa que ha visto luces en el Granero Quemado dos noches seguidas y, una de ellas, una figura por la senda del arroyo con un hatillo, pasadas las once. Sale si el PJ le trata como a un igual, le invita a algo o supera Persuasión CD 13; con Intimidación se cierra.' },
-  { id: 'clue_brenna', title: 'La noche del incendio', reputation: 2, npc_ids: ['npc_brenna'],
-    how: 'Brenna admite, a medias, que estuvo en Vharn la noche del incendio y que «no fue un accidente». Solo tras confianza ganada (devolverle a Ceniza, varias conversaciones) o Persuasión/Perspicacia CD 16. No da el nombre del culpable: dice que «está escrito, ahí abajo».' },
+    how: 'El hollín del mango del hacha del sendero es reciente y huele a resina quemada, no a leña de hogar; en el mango, grabadas a punta de cuchillo, las letras T. M. (Tobías, del molino). Alguien vuelve del Granero Quemado de noche.',
+    sources: [{ via: 'Examinar de cerca el hacha de leñador del sendero del Soto: Investigación CD 10 o Supervivencia CD 10, mirándola con intención.', location_id: 'loc_claro' }] },
+  { id: 'clue_doro', title: 'Luces en el granero', reputation: 2, key: true, npc_ids: ['npc_doro'], location_ids: ['loc_claro'],
+    how: 'Doro ha visto luces en el Granero Quemado dos noches seguidas y, una de ellas, una figura por la senda del arroyo con un hatillo, pasadas las once.',
+    sources: [
+      { via: 'Que Doro lo confiese: hace falta que se fíe (amigo), o que ya le conozca (conocido) después de la cena del portón. Con Intimidación se cierra.', npc_id: 'npc_doro',
+        requires: { kind: 'any', of: [trust('npc_doro', 'friend'), { kind: 'all', of: [trust('npc_doro', 'acquaintance'), { kind: 'quest', quest_id: 'q_cena_doro' }] }] },
+        refusal: 'Doro se ríe de su propio chiste un poco tarde y mira al suelo: a un desconocido no le cuenta lo que vio' },
+      { via: 'Verlo con sus propios ojos: esperar de noche en el arroyo del Soto cuando pasa la figura del hatillo, con las luces del granero al fondo.', location_id: 'loc_claro',
+        requires: { kind: 'npc_at', npc_id: 'npc_tobias', spot_id: 'sp_cl_arroyo' },
+        refusal: 'por la senda del arroyo no pasa nadie ahora; quizá de noche, más tarde' },
+    ] },
+  { id: 'clue_brenna', title: 'La noche del incendio', reputation: 2, key: true, npc_ids: ['npc_brenna', 'npc_hugo'],
+    how: 'El incendio de Vharn no fue un accidente. Brenna estuvo allí esa noche y dice que «está escrito, ahí abajo»; el maestro de Hugo murió encerrado en la fragua. Ninguno da el nombre del culpable.',
+    sources: [
+      { via: 'Brenna lo admite a medias si se fía de ti (amigo: devolverle a Ceniza, varias charlas).', npc_id: 'npc_brenna', requires: trust('npc_brenna', 'friend'),
+        refusal: 'Brenna seca la jarra más deprisa y cambia de tema hacia el precio de la cerveza: aún no se fía de ti' },
+      { via: 'Hugo cuenta, si se fía de ti (amigo), que su maestro dijo antes de morir que no fue el fuego lo que lo mató: lo encerraron.', npc_id: 'npc_hugo', requires: trust('npc_hugo', 'friend'),
+        refusal: 'Hugo vuelve al yunque: dos golpes, silencio, otros dos. De su maestro no habla con cualquiera' },
+    ] },
   { id: 'clue_trampilla', title: 'Lo que hay bajo la taberna', reputation: 2, location_ids: ['loc_taberna'],
-    how: 'Descubrir la trampilla oculta bajo la alfombra de la mesa del fondo (Percepción/Investigación CD 14, o que Brenna la enseñe si es amiga) y bajar: un sótano con cajas marcadas con el sello de Vharn, tapadas con sacos. Brenna no quiere que se vea.' },
-  { id: 'clue_libro', title: 'El libro de cuentas de Vharn', reputation: 2, location_ids: ['loc_sotano'],
-    how: 'Leer el libro de cuentas escondido tras el último barril del sótano: la última página, del día del incendio, con la letra del señor de Vharn, apunta «plata del sello, cuarenta piezas, entregadas a O. Malvez, mayordomo, para su custodia». Al cogerlo lo concede el servidor.' },
-  { id: 'clue_ilse', title: 'La Brasa de Vharn', reputation: 2, npc_ids: ['npc_ilse'], location_ids: ['loc_curandera'],
-    how: 'Ilse explica, al ver la muestra de agua del pozo (lo concede el servidor) o con Persuasión/Religión CD 13, que los señores ataban en su cripta un fuego antiguo, la Brasa, enterrada ahora bajo el granero; que la tos gris es su ceniza; y que una ascua suelta se templa en el agua fría del pozo con los eslabones de hierro frío y unas palabras que ella enseña. De la niebla dice: «Es un cerrojo. Y los cerrojos tienen llave».' },
-  { id: 'clue_hugo', title: 'La cadena de hierro frío', reputation: 2, npc_ids: ['npc_hugo'], location_ids: ['loc_herreria'],
-    how: 'Hugo admite que guarda los últimos eslabones de la cadena que su maestro forjó para Vharn y que el regidor le ha ordenado fundirlos. Sale si el PJ le habla de su maestro o de la Brasa (sabiendo lo que contó Ilse), le ayuda con la deuda o supera Persuasión CD 14.' },
-  { id: 'clue_tobias', title: 'Las cartas del desván', reputation: 2, location_ids: ['loc_molino'], npc_ids: ['npc_tobias'],
-    how: 'Encontrar en el desván del molino (oculto, Investigación CD 12) las cartas firmadas con una brasa: «Echa la ceniza al pozo cada noche. Cuando entreguen al mayordomo, serás señor de Vharn». O que Tobías lo confiese (Intimidación/Persuasión CD 15, o CD 12 con las cartas delante).' },
-  { id: 'clue_hal', title: 'Plata vieja en la choza', reputation: 2, npc_ids: ['npc_hal'], location_ids: ['loc_claro'],
-    how: 'Hal cuenta que la caza no puede salir del valle, que la loba de la madriguera no es un lobo normal y que el granero «no está tan vacío como dicen». Si se le gana (le ayudan con la loba, le traen cerveza, Persuasión CD 13), admite que le lleva caza a «la mujer del granero» y que le paga con plata del sello.' },
-  { id: 'clue_ysolde', title: 'La heredera de Vharn', reputation: 2, npc_ids: ['npc_ysolde'], location_ids: ['loc_ruinas'],
-    how: 'Hablar con Ysolde en el Granero Quemado sin atacarla: dice quién es, que vio a «la mujer de la antorcha» llevársela y que la noche de la Brasa soltará el ascua en la plaza si el valle no le entrega al culpable. Si el PJ le enseña el libro de cuentas, duda por primera vez.' },
+    how: 'Bajo la alfombra de la mesa del fondo, una trampilla al sótano: cajas marcadas con el sello de Vharn, tapadas con sacos. Brenna no quiere que se vea.',
+    sources: [
+      { via: 'Descubrir la trampilla oculta (Percepción o Investigación CD 14) y bajar.', location_id: 'loc_taberna' },
+      { via: 'Que Brenna la enseñe, si es amiga.', npc_id: 'npc_brenna', requires: trust('npc_brenna', 'friend'), refusal: 'Brenna no enseña su casa a quien no conoce' },
+    ] },
+  { id: 'clue_libro', title: 'El libro de cuentas de Vharn', reputation: 2, key: true, location_ids: ['loc_sotano'],
+    how: 'La última página del libro de cuentas, del día del incendio, con la letra del señor de Vharn: «plata del sello, cuarenta piezas, entregadas a O. Malvez, mayordomo, para su custodia».',
+    sources: [{ via: 'Leer el libro escondido tras el último barril del sótano (al cogerlo lo concede el servidor; también en «Bajo el Jabalí»).', location_id: 'loc_sotano' }] },
+  { id: 'clue_ilse', title: 'La Brasa de Vharn', reputation: 2, key: true, npc_ids: ['npc_ilse', 'npc_ysolde'], location_ids: ['loc_curandera'],
+    how: 'Los señores ataban en su cripta un fuego antiguo, la Brasa, enterrada ahora bajo el granero; la tos gris es su ceniza; una ascua suelta se templa en el agua fría del pozo con los eslabones de hierro frío y unas palabras que Ilse enseña. De la niebla: «Es un cerrojo. Y los cerrojos tienen llave».',
+    sources: [
+      { via: 'Ilse lo explica al ver la muestra de agua del pozo (lo concede el servidor en «El agua turbia») o si se fía de ti (amigo).', npc_id: 'npc_ilse', requires: trust('npc_ilse', 'friend'),
+        refusal: 'Ilse te mira con sus ojos de agua y habla de hierbas y de la tos: de lo de Vharn no habla con quien acaba de conocer' },
+      { via: 'Ysolde cuenta qué es la Brasa que lleva en el guante y que la grande duerme bajo el granero, si ya te conoce (no sabe templarla).', npc_id: 'npc_ysolde', requires: trust('npc_ysolde', 'acquaintance'),
+        refusal: 'Ysolde aprieta el guante y te pregunta otra vez quién te manda' },
+    ] },
+  { id: 'clue_hugo', title: 'La cadena de hierro frío', reputation: 2, key: true, npc_ids: ['npc_hugo'], location_ids: ['loc_herreria'],
+    how: 'Hugo guarda bajo la losa suelta, junto al yunque, los últimos eslabones de la cadena de hierro frío que su maestro forjó para Vharn, y el regidor le ha ordenado fundirlos.',
+    sources: [
+      { via: 'Hugo lo admite si se fía de ti (amigo), o si ya te conoce y le hablas de su maestro o de la Brasa sabiendo lo que contó Ilse.', npc_id: 'npc_hugo',
+        requires: { kind: 'any', of: [trust('npc_hugo', 'friend'), { kind: 'all', of: [trust('npc_hugo', 'acquaintance'), clue('clue_ilse')] }] },
+        refusal: 'Hugo dice «mañana» y vuelve al yunque: con un desconocido no habla de la obra de su maestro' },
+      { via: 'Encontrar la losa suelta junto al yunque (oculta) y ver los eslabones con la marca del maestro de Vharn.', location_id: 'loc_herreria',
+        requires: { kind: 'any', of: [{ kind: 'discovered', spot_id: 'sp_he_losa' }, carry('it_cadena_fria')] },
+        refusal: 'en la herrería no hay nada a la vista que no sea hierro corriente' },
+    ] },
+  { id: 'clue_tobias', title: 'Las cartas del desván', reputation: 2, key: true, location_ids: ['loc_molino'], npc_ids: ['npc_tobias'],
+    how: 'Las cartas firmadas con una brasa: «Echa la ceniza al pozo cada noche. Cuando entreguen al mayordomo, serás señor de Vharn». Tobías es quien envenena el pozo.',
+    sources: [
+      { via: 'Encontrar las cartas en el desván del molino (oculto, Investigación CD 12).', location_id: 'loc_molino',
+        requires: { kind: 'any', of: [{ kind: 'discovered', spot_id: 'sp_mo_desvan' }, carry('it_cartas_tobias')] },
+        refusal: 'en el molino solo hay harina y sacos a la vista' },
+      { via: 'Que Tobías lo confiese: si se fía de ti (amigo) o con las cartas o la bolsa de ceniza delante (Intimidación o Persuasión CD 12).', npc_id: 'npc_tobias',
+        requires: { kind: 'any', of: [trust('npc_tobias', 'friend'), carry('it_cartas_tobias'), carry('it_bolsa_ceniza')] },
+        refusal: 'Tobías contesta con otra pregunta y se le escapa una sonrisa: no tienes nada contra él' },
+    ] },
+  { id: 'clue_hal', title: 'Plata vieja en la choza', reputation: 2, key: true, npc_ids: ['npc_hal'], location_ids: ['loc_claro', 'loc_ruinas'],
+    how: 'Hal le lleva caza a «la mujer del granero» y ella le paga con plata vieja con el sello de Vharn.',
+    sources: [
+      { via: 'Hal lo admite si se fía de ti (amigo: le ayudan con la loba, le traen su jarra, varias charlas).', npc_id: 'npc_hal', requires: trust('npc_hal', 'friend'),
+        refusal: 'Hal te mira los pies y no suelta prenda: aún no se fía de ti' },
+      { via: 'En el Granero Quemado, piezas de caza recién colgadas, atravesadas con las flechas de Hal, y un puñado de plata vieja con el sello.', location_id: 'loc_ruinas' },
+    ] },
+  { id: 'clue_ysolde', title: 'La heredera de Vharn', reputation: 2, key: true, npc_ids: ['npc_ysolde', 'npc_tobias', 'npc_hal'], location_ids: ['loc_ruinas'],
+    how: 'La mujer del granero es Ysolde, la heredera de Vharn: vio a «la mujer de la antorcha» llevársela y la noche de la Brasa soltará el ascua en la plaza si el valle no le entrega al culpable. Si el PJ le enseña el libro de cuentas, duda por primera vez.',
+    sources: [
+      { via: 'Hablar con Ysolde en el Granero Quemado sin atacarla: dice quién es si ya te conoce o si llegas sabiendo algo (lo que vio Doro, la plata de Hal, las cartas de Tobías, el libro).', npc_id: 'npc_ysolde',
+        requires: { kind: 'any', of: [trust('npc_ysolde', 'acquaintance'), clue('clue_doro'), clue('clue_hal'), clue('clue_tobias'), carry('it_libro_cuentas')] },
+        refusal: 'Ysolde no parpadea: «¿Quién te manda?». A quien llega sin saber nada no le cuenta su nombre' },
+      { via: 'Tobías dice quién es la mujer del granero, si es su aliado.', npc_id: 'npc_tobias', requires: trust('npc_tobias', 'ally'),
+        refusal: 'Tobías se calla: a ella no la vende' },
+      { via: 'Hal dice que es una Vharn, la cría de los carboneros, si es su aliado.', npc_id: 'npc_hal', requires: trust('npc_hal', 'ally'),
+        refusal: 'Hal no habla de sus tratos' },
+    ] },
 ];
 
 export const JOBS: Job[] = [

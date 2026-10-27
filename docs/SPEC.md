@@ -275,6 +275,8 @@ Un árbol, una veta, un arbusto de bayas o un banco de peces son **nodos de recu
 ### 3.6 Secretos (`secrets`)
 Tabla aparte, con `unlocked_by[]` (eventos concretos, tiradas, ítems) y `revealed_to[]`. Es la única forma de que el master no filtre la trama. El prompt solo incluye secretos cuyo `revealed_to` contiene al jugador activo.
 
+> **Implementado así (2026-10-27):** no hay tabla aparte. El secreto de cada NPC va por niveles de confianza en el propio NPC (`npc.knowledge`, `src/engine/trust.ts`) y el prompt solo lleva lo del nivel que el jugador activo tiene con él. Las pistas declaran sus caminos con requisitos (`clue.sources`) y `grant_clue` rechaza la que no se ha ganado. Detalle en `docs/BREZAL.md`, §3.
+
 ### 3.7 Lore (`lore`)
 Entradas cortas: historia, religión, geografía, lenguas. Tag `common` (cualquiera lo sabe) o `rare` (requiere tirada/fuente). Se inyecta al contexto por búsqueda semántica cuando aparece un término relacionado.
 

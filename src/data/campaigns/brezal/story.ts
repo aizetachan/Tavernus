@@ -80,7 +80,7 @@ const QUESTS: StoryQuest[] = [
     rumor: { text: 'en la barra dicen que {giver} busca a alguien de fiar para un recado', where: at('loc_taberna') },
     steps: [
       { id: 'llevar', text: 'Darle la cena al guardia del portón', done_when: { kind: 'npc_has', npc_id: 'npc_doro', item_id: 'it_racion' },
-        on_done: [{ kind: 'know_npc', npc_id: 'npc_doro' }, { kind: 'tell', text: 'Doro destapa el plato, se quema los dedos y te da las gracias hablando más de la cuenta; dice su nombre dos veces y te pide que se lo agradezcas a Brenna.' }] },
+        on_done: [{ kind: 'know_npc', npc_id: 'npc_doro' }, { kind: 'trust', npc_id: 'npc_doro', change: 'errand' }, { kind: 'tell', text: 'Doro destapa el plato, se quema los dedos y te da las gracias hablando más de la cuenta; dice su nombre dos veces y te pide que se lo agradezcas a Brenna.' }] },
     ],
     reward: { coins: 20, xp: 75 },
     on_accept: [{ kind: 'give_item', item_id: 'it_racion' }],
@@ -127,7 +127,7 @@ const QUESTS: StoryQuest[] = [
     rumor: { text: 'en la plaza dicen que {giver} anda buscando a alguien con buenas piernas', where: at('loc_plaza') },
     steps: [
       { id: 'llevar', text: 'Darle el tónico al molinero', done_when: { kind: 'npc_has', npc_id: 'npc_mateo', item_id: 'it_tonico' },
-        on_done: [{ kind: 'know_npc', npc_id: 'npc_mateo' }, { kind: 'tell', text: 'Mateo destapa el frasco, lo huele, tose y se lo bebe de un trago. Se presenta con la mano llena de harina y empieza un chiste que no termina.' }] },
+        on_done: [{ kind: 'know_npc', npc_id: 'npc_mateo' }, { kind: 'trust', npc_id: 'npc_mateo', change: 'errand' }, { kind: 'tell', text: 'Mateo destapa el frasco, lo huele, tose y se lo bebe de un trago. Se presenta con la mano llena de harina y empieza un chiste que no termina.' }] },
     ],
     reward: { coins: 20, xp: 75 },
     on_accept: [{ kind: 'give_item', item_id: 'it_tonico' }],
@@ -144,7 +144,7 @@ const QUESTS: StoryQuest[] = [
     notes: 'Recado para conocer a Hugo: basta con ir a verle (estar con él). Hugo contesta a golpes, como martillea: la reja, el jueves; y que Mateo le debe dos. Luego, de vuelta con Mateo.',
     steps: [
       { id: 'preguntar', text: 'Preguntarle al herrero para cuándo estará la reja', done_when: { kind: 'talk', npc_id: 'npc_hugo' },
-        on_done: [{ kind: 'know_npc', npc_id: 'npc_hugo' }, { kind: 'tell', text: 'El herrero deja el martillo, se limpia la mano en el mandil y dice su nombre como quien escupe una chispa: «Hugo. La reja, el jueves. Y que me debe dos».' }] },
+        on_done: [{ kind: 'know_npc', npc_id: 'npc_hugo' }, { kind: 'trust', npc_id: 'npc_hugo', change: 'errand' }, { kind: 'tell', text: 'El herrero deja el martillo, se limpia la mano en el mandil y dice su nombre como quien escupe una chispa: «Hugo. La reja, el jueves. Y que me debe dos».' }] },
     ],
     reward: { coins: 30, xp: 75 },
     on_complete: [],
@@ -162,7 +162,7 @@ const QUESTS: StoryQuest[] = [
       { id: 'cerca', text: 'Mirar la cerca del redil de los Corrales', done_when: { kind: 'visit', spot_id: 'sp_co_redil' },
         on_done: [{ kind: 'tell', text: 'En la cerca del redil falta un palo y el barro está lleno de huellas grandes, de lobo, que vienen de la parte de la niebla.' }] },
       { id: 'ver', text: 'Ir a ver a Úrsula, la granjera de los Corrales', done_when: { kind: 'talk', npc_id: 'npc_ursula' },
-        on_done: [{ kind: 'know_npc', npc_id: 'npc_ursula' }, { kind: 'tell', text: 'Úrsula sale del gallinero con una horca en la mano y te mira de arriba abajo antes de bajarla. Dice su nombre como quien da un aviso: está bien, pero no duerme desde lo de la cerca.' }] },
+        on_done: [{ kind: 'know_npc', npc_id: 'npc_ursula' }, { kind: 'trust', npc_id: 'npc_ursula', change: 'errand' }, { kind: 'tell', text: 'Úrsula sale del gallinero con una horca en la mano y te mira de arriba abajo antes de bajarla. Dice su nombre como quien da un aviso: está bien, pero no duerme desde lo de la cerca.' }] },
     ],
     reward: { coins: 20, xp: 75 },
     on_complete: [],
@@ -179,7 +179,7 @@ const QUESTS: StoryQuest[] = [
     steps: [
       { id: 'recoger', text: 'Coger dos huevos del ponedero de los Corrales', done_when: { kind: 'carry', item_id: 'it_huevo', quantity: 2 } },
       { id: 'llevar', text: 'Darle los dos huevos a Ilse, la curandera', done_when: { kind: 'npc_has', npc_id: 'npc_ilse', item_id: 'it_huevo', quantity: 2 },
-        on_done: [{ kind: 'know_npc', npc_id: 'npc_ilse' }, { kind: 'tell', text: 'Ilse coge los huevos con las manos manchadas de corteza, los mira al trasluz y asiente: «Lo que no cuesta no sana. Dile a Úrsula que estamos en paz. Yo soy Ilse».' }] },
+        on_done: [{ kind: 'know_npc', npc_id: 'npc_ilse' }, { kind: 'trust', npc_id: 'npc_ilse', change: 'errand' }, { kind: 'tell', text: 'Ilse coge los huevos con las manos manchadas de corteza, los mira al trasluz y asiente: «Lo que no cuesta no sana. Dile a Úrsula que estamos en paz. Yo soy Ilse».' }] },
     ],
     reward: { coins: 15, xp: 75 },
     on_complete: [],
@@ -250,6 +250,8 @@ const QUESTS: StoryQuest[] = [
         on_done: [{ kind: 'tell', text: 'Ilse pasa los dedos por los eslabones fríos y te hace repetir, tres veces, unas palabras en una lengua vieja. «Se dicen con el hierro frío en la mano y el ascua bajo el agua del pozo. Sin soltarlo, aunque queme».' }] },
     ],
     reward: { coins: 150, xp: 300 },
+    // Va de parte de Ilse: Hugo le recibe como a un conocido (con lo que sabe de la Brasa, le habla de la cadena).
+    on_accept: [{ kind: 'trust', npc_id: 'npc_hugo', at_least: 'acquaintance' }],
     on_complete: [{ kind: 'attitude', npc_id: 'npc_hugo', attitude: 'friendly' }],
     on_npc_dead: [
       // Caso de la partida del 2026-10-27: Hugo muerto con la misión abierta. Los eslabones siguen bajo su losa.

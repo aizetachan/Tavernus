@@ -343,9 +343,12 @@ describe('Brezal sellada: la campaña escrita', () => {
     await talkTo(engine, time, c, 'npc_ilse');
     accept('q_cadena');
     engine.world.npc('npc_ilse').talking_to = null;
-    expect(tool(engine, c, 'grant_clue', { character_id: c.id, clue_id: 'clue_hugo' }).ok).toBe(true);
-    expect(stepOf(engine, c, 'q_cadena')!.current!.id).toBe('hugo'); // sin Hugo delante, no cuenta
+    // Sin Hugo delante, la pista no sale (trust.ts); de parte de Ilse, Hugo le recibe como a un conocido y le habla de la cadena.
+    expect(tool(engine, c, 'grant_clue', { character_id: c.id, clue_id: 'clue_hugo' }).error).toBe('clue_locked');
+    expect(stepOf(engine, c, 'q_cadena')!.current!.id).toBe('hugo');
     await talkTo(engine, time, c, 'npc_hugo');
+    expect(tool(engine, c, 'grant_clue', { character_id: c.id, clue_id: 'clue_hugo' }).ok).toBe(true);
+    await engine.tick();
     expect(stepOf(engine, c, 'q_cadena')!.current!.id).toBe('eslabones');
     engine.world.npc('npc_hugo').talking_to = null;
     expect(tool(engine, c, 'discover_spot', { character_id: c.id, spot_id: 'sp_he_losa' }).error).toBeUndefined();
