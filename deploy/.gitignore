@@ -1,5 +1,2 @@
 # Dónde está tu servidor (TAVERNUS_HOST…): de cada uno, no del repo.
 local.env
-TAVERNUS_HOST=root@2.31.75.203
-TAVERNUS_SSH_PORT=22
-TAVERNUS_SSH_KEY=/Users/santferal/Tavernus-deploy/tavernus_deploy
