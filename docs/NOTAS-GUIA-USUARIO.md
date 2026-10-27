@@ -294,3 +294,4 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 - Móvil: a la izquierda del cuadro, el engranaje de ajustes (generar imagen, sonido y música, narrador); a la derecha, Enviar y, pegada al borde, la mochila.
 - Móvil: arriba a la izquierda, una flecha vuelve al menú principal; la mochila incluye «Tablero y mapa» (ficha, sitio, gente y misión). El sonido tampoco va ya en la cabecera, solo el botón de parar la voz mientras lee.
 - Móvil: la letra de las burbujas es la misma que la del prólogo (13,5 px), y ninguna burbuja llega al borde contrario: las del narrador y las tuyas dejan el mismo hueco.
+- Con el cuadro vacío, en el sitio de Enviar está el micrófono (mismo botón ámbar): púlsalo para dictar. En cuanto hay texto, vuelve Enviar; mientras dictas, el micrófono se queda en rojo.

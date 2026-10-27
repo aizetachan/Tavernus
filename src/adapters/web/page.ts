@@ -850,6 +850,14 @@ ${FIGHT_STYLE}
     .msg.scene, .msg.moment, #log > .actions { margin-left: 36px; }
     form .mic, form .brush { width: 38px; }
   }
+  /* Micrófono y Enviar en el mismo sitio y con la misma piel: sin texto, dictar; con texto (o al dictar), Enviar. */
+  .inwrap input { padding-right: 16px; }
+  form .mic { order: 2; width: 32px !important; height: 32px !important; margin: 0; background: var(--accent); color: var(--accent-ink); }
+  form .mic:hover:not(:disabled) { background: var(--glow); color: var(--accent-ink); }
+  form .mic svg.i { width: 17px; height: 17px; }
+  form .mic.on { background: var(--rec); color: #fff; }
+  form:has(.mic):not(.has-text) button[type=submit], form:has(.mic.on) button[type=submit] { display: none; }
+  form.has-text .mic:not(.on) { display: none; }
   /* Comandos: escribir «/» en el cuadro abre este menú, con un buscador; ↑ ↓ eligen, Intro lo lanza, Esc lo cierra. */
   form { position: relative; }
   #slash { position: absolute; left: max(24px, calc((100% - 980px) / 2)); bottom: calc(100% + 6px); z-index: 26; width: min(420px, calc(100% - 24px));
@@ -2622,6 +2630,11 @@ ${FIGHT_SCRIPT}
     } else if (ev.key === 'Enter' && slashShown.length) { ev.preventDefault(); runSlash(slashShown[slashOn][0]); }
     else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); openSlash(false); input.focus(); }
   }
+  /** Con texto en el cuadro se ve Enviar; vacío, el micrófono en su sitio. El texto también llega por el dictado
+   *  o por código (sugerencias, «Hablo con…»): se revisa a menudo además de con cada tecla. */
+  function syncSend() { $('form').classList.toggle('has-text', !!input.value.trim()); }
+  input.addEventListener('input', syncSend);
+  setInterval(syncSend, 250);
   // Con argumento («/time +2h», los de depuración) el menú se aparta y el texto va tal cual al enviar.
   input.addEventListener('input', function () { var v = input.value; openSlash(v.charAt(0) === '/' && !/\s/.test(v)); });
   input.addEventListener('keydown', slashKeys);
@@ -2781,8 +2794,9 @@ ${FIGHT_SCRIPT}
   document.addEventListener('DOMContentLoaded', function () {
     var f = $('form');
     f.insertBefore(cube, f.querySelector('button[type=submit]'));
+    // El micrófono ocupa el sitio de Enviar mientras el cuadro está vacío (syncSend).
     var mic = f.querySelector('.mic');
-    if (mic) document.querySelector('.inwrap').appendChild(mic);
+    if (mic) f.insertBefore(mic, f.querySelector('button[type=submit]'));
     // Ajustes de la voz (tts.ts): el engranaje va en la cabecera del panel, donde estaba la casa.
     var more = document.querySelector('.chat-head .tts-more'), pop = document.querySelector('.chat-head .tts-pop'), gear = $('side-gear');
     if (more && pop) {
