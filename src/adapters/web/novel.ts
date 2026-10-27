@@ -522,11 +522,16 @@ export const NOVEL_JS = String.raw`
   /** Un mensaje del stream en el hilo: lo del PJ a la derecha, la narración y los NPCs a la izquierda. */
   /** Prólogo o «Donde lo dejamos» (docs/PROLOGO.md): una página de libro a todo el ancho, sin avatar, con su título. */
   var CHAPTER_KICKER = { prologue: 'Prólogo', recap: 'Recapitulación' };
+  /** Remate de libro tras el capítulo: filetes, volutas y un rombo, en el dorado de la casa. */
+  var CHAPTER_ORNAMENT = '<div class="orn" aria-hidden="true"><svg viewBox="0 0 200 30">' +
+    '<path d="M14 15h50M136 15h50"/><circle cx="9" cy="15" r="1.6" fill="currentColor" stroke="none"/><circle cx="191" cy="15" r="1.6" fill="currentColor" stroke="none"/>' +
+    '<path d="M64 15c5-7 13-7 16-1-2 6-9 6-10 1M136 15c-5-7-13-7-16-1 2 6 9 6 10 1"/>' +
+    '<path d="M82 15h8M110 15h8"/><path d="M100 6l7 9-7 9-7-9z" fill="currentColor" fill-opacity=".9"/><path d="M100 1v3M100 26v3"/></svg></div>';
   function addChapter(m) {
     var div = document.createElement('article');
     div.className = 'msg chapter ' + m.chapter.kind;
     div.setAttribute('data-seq', String(m.seq));
-    div.innerHTML = '<div class="who"><span class="kicker"></span></div><h2></h2><div class="body">' + format(m.text) + '</div>';
+    div.innerHTML = '<div class="who"><span class="kicker"></span></div><h2></h2><div class="body">' + format(m.text) + '</div>' + CHAPTER_ORNAMENT;
     div.querySelector('.kicker').textContent = CHAPTER_KICKER[m.chapter.kind] || '';
     div.querySelector('h2').textContent = m.chapter.title;
     log.appendChild(div);

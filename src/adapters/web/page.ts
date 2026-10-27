@@ -16,7 +16,7 @@ export const PAGE = String.raw`<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Tavernus</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
@@ -313,10 +313,14 @@ export const PAGE = String.raw`<!doctype html>
   .dr-back { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 8px; border: 0; border-radius: 999px; background: rgba(255,255,255,.06); color: var(--text); font-size: 13px; font-weight: 500; }
   .dr-back:hover { background: rgba(255,255,255,.1); }
   #dr-title { margin: 0 0 0 4px; font: 700 16px/1.2 var(--display); letter-spacing: -.02em; }
-  .dr-head .seg { margin-left: auto; }
   .dr-head { padding-left: 20px; }
-  .dr-head .seg button { position: relative; }
-  .dr-head .seg button.new::after { content: ''; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  /* Hoja, Diario, Mochila (y en el móvil, Tablero): abajo del modal, cada una con su parte del ancho. */
+  .dr-tabs { display: flex; gap: 4px; flex: none; padding: 8px; border-top: 1px solid var(--sep); }
+  .dr-tabs button { position: relative; flex: 1; min-width: 0; height: 40px; padding: 0 8px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-size: 13.5px; font-weight: 600; }
+  .dr-tabs button:hover { background: var(--hover); color: var(--text); }
+  .dr-tabs button.on { background: var(--accent-tint); color: var(--accent); }
+  .dr-tabs .m-only { display: none; }
+  .dr-tabs button.new::after { content: ''; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
   .dr-x { display: none; }
   .dr-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.12) transparent; }
   .dr-pane { max-width: 720px; margin: 0 auto; padding: 16px 16px 28px; }
@@ -603,11 +607,11 @@ export const PAGE = String.raw`<!doctype html>
     #cube-menu small { display: none; }
     #drawer-scrim { position: absolute; inset: 0; z-index: 4; display: block; border: 0; background: rgba(5,6,6,.6); }
     #drawer-scrim[hidden] { display: none; }
-    #drawer { top: 24px; bottom: 0; left: 0; width: 100%; transform: none; z-index: 5; border: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 24px rgba(0,0,0,.5); }
-    .dr-grab { display: block; align-self: center; width: 40px; height: 4px; margin: 8px 0 0; border-radius: 999px; background: rgba(255,255,255,.2); }
-    #dr-title { display: none; }
-    .dr-head { padding-left: 16px; }
-    .dr-head .seg { margin-left: 0; }
+    /* Modal, no hoja que sube: con margen alrededor; el cuadro de texto y el botón de cerrar siguen debajo. */
+    #drawer { top: 10px; bottom: 10px; left: 10px; width: calc(100% - 20px); transform: none; z-index: 5; border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--window-shadow); }
+    .dr-head { min-height: 48px; padding-left: 16px; }
+    .dr-tabs .m-only { display: block; }
+    .dr-pane[data-drpane="side"] { padding: 10px 6px 16px; }
     body.map-big #map, body.board-big #board { inset: 12px; bottom: 42vh; border-radius: 20px 20px 0 0; }
     body.board-big #near, body.map-big #near { top: auto; left: 12px; right: 12px; bottom: 12px; width: auto; height: calc(42vh - 12px); border-radius: 0 0 20px 20px; box-shadow: inset 0 1px 0 var(--sep); }
   }
@@ -632,7 +636,10 @@ ${FIGHT_STYLE}
   .msg.row.master .nv-av { background: #22262a; }
   .msg.row.mine .nv-av { background: #2a1d05; }
   .moment .shot, .scene .shot { border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
-  .msg.chapter { border-radius: 12px; background: var(--bubble); box-shadow: 0 1px 1px rgba(0,0,0,.45), inset 0 0 0 1px rgba(230,183,90,.18); }
+  /* El prólogo, como la página de un libro: sin caja; al final, un ornamento dorado separa el libro del narrador. */
+  .msg.chapter { border-radius: 0; background: none; box-shadow: none; }
+  .msg.chapter .orn { display: flex; justify-content: center; margin: 14px 0 0; color: var(--accent); }
+  .msg.chapter .orn svg { width: 200px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .msg.chapter h2 { font: 800 22px/1.25 var(--display); letter-spacing: -.02em; }
   .msg.chapter .body { font: 16px/1.65 var(--sans); background: none; box-shadow: none; text-align: left; hyphens: manual; }
   #journal .en.chapter > span:last-child { font-family: var(--sans); }
@@ -919,6 +926,15 @@ ${FIGHT_STYLE}
     .msg.chapter .body p { margin-bottom: .7em; text-indent: 1.2em; }
     .msg.chapter.prologue .body p:first-child::first-letter { font-size: 2.9em; padding: 4px 6px 0 0; }
     #slash { left: 8px; width: calc(100% - 16px); }
+    /* Sin zoom ni desplazamiento lateral: iOS amplía al enfocar un campo de menos de 16 px. */
+    html, body { overflow-x: hidden; }
+    input:not([type]), input[type=text], input[type=search], textarea, select { font-size: 16px !important; }
+    /* Tablero o mapa en grande: debajo de la cabecera de la partida, que no se tapa. */
+    body.map-big::after, body.board-big::after { top: 60px; }
+    body.map-big #map, body.board-big #board { top: 70px; }
+    /* El tablero en grande vive dentro del modal: el chat sube por encima del velo para que se vea entero. */
+    body.map-big .chat-body, body.board-big .chat-body { position: relative; z-index: 20; }
+    body.map-big #drawer, body.board-big #drawer { z-index: 20; }
   }
 </style>
 </head>
@@ -997,16 +1013,18 @@ ${FIGHT_STYLE}
       <span class="dr-grab" aria-hidden="true"></span>
       <div class="dr-head">
         <h2 id="dr-title">Hoja</h2>
-        <div class="seg" role="tablist" aria-label="Contenido de la partida">
-          <button type="button" role="tab" data-dr="sheet">Hoja</button>
-          <button type="button" role="tab" data-dr="journal">Diario</button>
-          <button type="button" role="tab" data-dr="pack">Mochila</button>
-        </div>
       </div>
       <div class="dr-body">
         <div class="dr-pane" data-drpane="sheet"><div id="group" aria-live="polite"></div><div id="sheet"></div><p class="none">Cargando la hoja…</p></div>
         <div class="dr-pane" data-drpane="journal"><div id="journal"></div><p class="none">El diario está en blanco.</p></div>
         <div class="dr-pane" data-drpane="pack"><div id="pack"></div><p class="none">Cargando la mochila…</p></div>
+        <div class="dr-pane" data-drpane="side"></div>
+      </div>
+      <div class="dr-tabs" role="tablist" aria-label="Contenido de la partida">
+        <button type="button" role="tab" data-dr="sheet">Hoja</button>
+        <button type="button" role="tab" data-dr="journal">Diario</button>
+        <button type="button" role="tab" data-dr="pack">Mochila</button>
+        <button type="button" role="tab" data-dr="side" class="m-only">Tablero</button>
       </div>
     </section>
   </div>
@@ -2655,8 +2673,7 @@ ${FIGHT_SCRIPT}
   }
   function showSide(on) {
     if (!window.matchMedia('(max-width: 820px)').matches) return;
-    document.body.classList.toggle('show-side', on);
-    if (on) { if (view === 'board' && boardData) renderBoard(boardData); if (view === 'map' && mapData) renderMap(mapData); }
+    if (on) openDrawer('side'); else if (drawerKey === 'side') closeDrawer();
   }
   document.querySelectorAll('[data-view-tab]').forEach(function (b) { b.addEventListener('click', function () { setView(b.getAttribute('data-view-tab')); }); });
   $('to-side').addEventListener('click', function () { showSide(true); });
@@ -2739,7 +2756,13 @@ ${FIGHT_SCRIPT}
 
   // --- El cubo: Hoja, Diario y Mochila en la misma columna del chat ---------------------
   var cube = $('cube'), cubeMenu = $('cube-menu'), drawer = $('drawer'), drawerKey = null;
-  var DR_TITLE = { sheet: 'Hoja', journal: 'Diario', pack: 'Mochila' };
+  var DR_TITLE = { sheet: 'Hoja', journal: 'Diario', pack: 'Mochila', side: 'Tablero y mapa' };
+  /** En el móvil, «Tablero» del modal se lleva del panel el tablero, el mapa, la gente cerca y la misión, y al cerrar los devuelve. */
+  var SIDE_PARTS = ['.views', '.pane[data-pane="board"]', '.pane[data-pane="map"]', '#near', '#quest'];
+  function moveSide(toDrawer) {
+    var dest = toDrawer ? document.querySelector('[data-drpane="side"]') : document.querySelector('#side .side-scroll');
+    SIDE_PARTS.forEach(function (sel) { var el = document.querySelector(sel); if (el && el.parentNode !== dest) dest.appendChild(el); });
+  }
   function setMenu(on) {
     cubeMenu.hidden = !on; $('cube-scrim').hidden = !on;
     cube.setAttribute('aria-expanded', on ? 'true' : 'false');
@@ -2748,6 +2771,8 @@ ${FIGHT_SCRIPT}
   }
   function openDrawer(k) {
     drawerKey = k; setMenu(false);
+    moveSide(k === 'side');
+    if (k === 'side') { if (view === 'board' && boardData) renderBoard(boardData); if (view === 'map' && mapData) renderMap(mapData); }
     drawer.hidden = false; $('drawer-scrim').hidden = false;
     document.body.classList.add('drawer-open');
     $('dr-title').textContent = k === 'sheet' && sheetData ? 'Hoja de ' + sheetData.title.split(' · ')[0] : DR_TITLE[k];
@@ -2765,11 +2790,13 @@ ${FIGHT_SCRIPT}
   }
   function closeDrawer() {
     drawerKey = null;
+    moveSide(false);
     drawer.hidden = true; $('drawer-scrim').hidden = true;
     document.body.classList.remove('drawer-open');
     cube.classList.remove('on');
     cube.setAttribute('aria-label', 'Menú de la partida: hoja, diario y mochila'); cube.title = 'Hoja, diario y mochila';
-    input.focus();
+    // En el móvil, cerrar no abre el teclado.
+    if (!mobileQ.matches) input.focus();
   }
   cube.addEventListener('click', function () {
     if (drawerKey) { closeDrawer(); return; }
