@@ -207,6 +207,9 @@ export class Engine {
   /** Verbos mecánicos que no pasan por el master aunque esté configurado. */
   private static readonly MECHANICAL = /^(inventario|inventory|qui[eé]n|who|d[oó]nde|where|dormir|duermo|me duermo|descansar|descanso|sleep|despierto|despertar|me despierto|wake|parar|me paro|me detengo|stop)\b/i;
 
+  /** La cuenta de la IA sin saldo (master.ts, noCredit): no es esperar y reintentar, lo tiene que recargar el anfitrión. */
+  static readonly NO_CREDIT = 'El narrador se ha quedado sin crédito: la cuenta de la IA no tiene saldo. El anfitrión tiene que recargarla; en cuanto lo haga, podréis seguir donde lo dejasteis.';
+
   attachMaster(m: MasterLike | null): void { this.master = m; }
 
   private masterListeners: MasterCallListener[] = [];
@@ -1254,6 +1257,7 @@ export class Engine {
       // Sin oyentes (REPL, Discord), el aviso de siempre; la web lo apunta con la partida y el PJ.
       if (!this.masterListeners.length) console.warn(`[master] ${out.reason}: ${out.message}`);
       if (out.reason === 'refusal') return { ok: false, text: 'El narrador prefiere no seguir por ahí. Prueba otra cosa.' };
+      if (out.reason === 'no_credit') return { ok: false, text: Engine.NO_CREDIT };
       return { ok: false, text: '' };
     }
     const k = out.closed;

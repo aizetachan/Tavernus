@@ -799,7 +799,9 @@ ${FIGHT_STYLE}
   @media (prefers-reduced-motion: reduce) { .actions button.roll svg.d20 { animation: none !important; } }
   /* Opciones usadas: desaparecen las que no se eligieron; la elegida queda, desactivada y marcada. */
   .actions button:disabled:not(.chosen) { display: none; }
-  .actions:not(:has(button:enabled)):not(:has(button.chosen)) { display: none; }
+  /* La sugerencia elegida no se queda en el hilo: ya la dice el mensaje del PJ. Sí quedan la tirada y lo contestado a otro jugador. */
+  .actions:not(.party) button.chosen:disabled:not(.roll) { display: none; }
+  .actions:not(:has(button:enabled)):not(.party:has(button.chosen)):not(:has(button.roll.chosen)) { display: none; }
   .actions button.chosen:disabled { opacity: .75; border-color: rgba(230,183,90,.45); color: #e6c98a; }
   .actions button.chosen:disabled:not(.roll)::before { content: '✓'; margin-right: 6px; color: var(--accent); }
   .actions button.roll.chosen:disabled { background: var(--accent-tint); color: #e6c98a; }

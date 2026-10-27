@@ -24,7 +24,7 @@ import { authoredSeed, isAuthoredCampaign } from '../data/campaigns/index.js';
 import { CLASSES, RACES } from '../data/srd/index.js';
 import { JsonFileRepository } from '../persistence/jsonfile.js';
 import { claimSituation, generateSeed, TONES, type GenerateOptions, type Tone } from '../worldgen/index.js';
-import { Master } from '../ai/master.js';
+import { Master, noCredit } from '../ai/master.js';
 import { isMasterMode, masterCacheDir, masterModeFromEnv, masterOptionsFor, type MasterMode } from '../ai/mode.js';
 import { attachIllustrator, cloudflareFromEnv, imagesEnabled, Illustrator, type IllustratorOptions } from '../ai/illustrate.js';
 import { attachAvatars, avatarsOf, cleanLook } from '../ai/avatar.js';
@@ -572,6 +572,7 @@ export function worldgenCause(e: unknown): string {
   const err = e as { status?: number; message?: string; errors?: string[] };
   const msg = String(err?.message ?? e);
   if (/grammar is too large/i.test(msg)) return 'el esquema es demasiado grande para la API.';
+  if (noCredit(msg)) return 'la cuenta de la API no tiene crédito; hay que recargarla.';
   if (err?.status === 401 || err?.status === 403) return 'la clave de API no vale o no tiene permiso.';
   if (err?.status === 429) return 'la API está saturada o sin saldo; prueba en un rato.';
   if (err?.status !== undefined && err.status >= 500) return 'la API no responde ahora mismo; prueba en un rato.';

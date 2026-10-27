@@ -51,6 +51,7 @@
  * Registro (servicelog.ts): una línea por acción con su máster, otra por llamada suelta al máster y la presencia.
  */
 
+import { CreditAlarm, webhookAlert, type AlertSender } from './alert.js';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -215,6 +216,8 @@ export interface WebServerOptions {
   engineOfflineMs?: number;
   /** Registro del servicio (servicelog.ts); por defecto, la salida estándar (journald en el VPS). */
   log?: (line: string) => void;
+  /** Avisos al anfitrión (alert.ts); por defecto, ALERT_WEBHOOK del entorno. */
+  alert?: AlertSender;
 }
 
 export function createWebServer(games: GameManager, opts: WebServerOptions = {}): WebServer {
@@ -225,6 +228,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
   const timing: PresenceTiming = { graceMs: opts.leaveNoticeMs ?? PRESENCE_TIMING.graceMs, staleMs: opts.staleMs ?? PRESENCE_TIMING.staleMs, hiddenMs: opts.hiddenMs ?? PRESENCE_TIMING.hiddenMs };
   const engineOfflineMs = opts.engineOfflineMs ?? ENGINE_OFFLINE_MS;
   const log = opts.log ?? ((line: string) => console.log(line));
+  const credit = new CreditAlarm(opts.alert ?? webhookAlert(process.env, log));
 
   const timer = setInterval(() => {
     void games.openEngines().then((list) => { for (const [, e] of list) void e.tick(); });
@@ -331,7 +335,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     // Registro: cada llamada al máster va a la acción en curso de su PJ o sale sola (servicelog.ts).
     const charName = (id: Id) => engine.world.characters.get(id)?.name ?? null;
     const actions = new ActionLog(slug, charName, log);
-    const offMaster = engine.onMaster((c) => actions.master(c));
+    const offMaster = engine.onMaster((c) => { actions.master(c); credit.master(slug, c); });
     // Presencia: pestañas que cuentan por PJ (presence.ts). La web avisa al entrar y al irse; el motor (§9.1) duerme y vela al ausente.
     const presence = new PresenceTracker(timing, (id, online) => {
       log(presenceLine(slug, id, charName(id), online ? 'en_línea' : 'fuera_de_línea'));

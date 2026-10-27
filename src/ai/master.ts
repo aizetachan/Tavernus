@@ -39,9 +39,14 @@ export function failureNotice(f: { name: string; error: string }): string {
   return `El tool ${f.name} falló: ${failureReason(f.error)}. Narra que NO ha ocurrido o pide lo que falta; no narres el efecto.`;
 }
 
+/** La API rechaza por falta de saldo en la cuenta (400 «credit balance is too low»): esperar no lo arregla. */
+export function noCredit(message: string): boolean {
+  return /credit balance is too low|purchase credits/i.test(message);
+}
+
 export type MasterOutcome =
   | { ok: true; closed: LogEventInput; usage: MasterUsage; calls: ToolCallRecord[]; rolls: RollResult[]; context: string; model: string; progress: ProgressEvent[]; shown_rolls: ShownRoll[]; tool_errors?: ToolFailure[]; approach?: Approach }
-  | { ok: false; reason: 'refusal' | 'no_log_event' | 'api_error' | 'max_iterations' | 'not_configured'; message: string; usage?: MasterUsage; calls?: ToolCallRecord[] };
+  | { ok: false; reason: 'refusal' | 'no_log_event' | 'api_error' | 'no_credit' | 'max_iterations' | 'not_configured'; message: string; usage?: MasterUsage; calls?: ToolCallRecord[] };
 
 export interface MasterOptions {
   client?: MasterClient;
@@ -217,7 +222,7 @@ export class Master {
     } catch (e) {
       usage.ms = Date.now() - t0;
       const msg = e instanceof Anthropic.APIError ? `${e.status} ${e.message}` : (e as Error).message;
-      return { ok: false, reason: 'api_error', message: msg, usage, calls };
+      return { ok: false, reason: noCredit(msg) ? 'no_credit' : 'api_error', message: msg, usage, calls };
     }
   }
 }
