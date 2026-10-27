@@ -30,12 +30,14 @@ import { debtLine, openDebts } from '../engine/debts.js';
 import { spotLockedFor } from '../engine/movement.js';
 import { reboundOf } from '../engine/barrier.js';
 import { ROLL_CATEGORY, rollCategory } from '../engine/closecheck.js';
-import { conversationBlock, conversationOf } from '../engine/conversation.js';
+import { conversationBlock, conversationOf, transcriptOf, transcriptText, TRANSCRIPT_LINES } from '../engine/conversation.js';
 import { offersOf, pcName } from '../engine/party.js';
 import { pendingFrom } from '../engine/reactions.js';
 import { RULES_CHEATSHEET } from './rules-cheatsheet.js';
 import { bodiesAt, bodyStateOf, deadNpcsAt, isDying, isStable } from '../engine/death.js';
 import { crimeContext, npcCrimeLine, recentIncidents } from '../engine/crime.js';
+import { TALK_RULES } from './actor.js';
+import { concernsLine } from '../engine/concerns.js';
 import { recentNpcLines } from '../engine/closecheck.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { abilitiesForMaster } from '../engine/levels.js';
@@ -45,11 +47,11 @@ import { priceFor } from '../engine/standing.js';
 import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
-const LENGTH_ES = { short: 'uno o dos párrafos cortos, unas 60-90 palabras; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
+const LENGTH_ES = { short: 'uno o dos párrafos cortos de narración, unas 60-90 palabras sin contar lo que se dice; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
 const RATING_ES = ['sin violencia explícita ni temas adultos', 'violencia leve, sin gore', 'violencia y gore moderados, temas adultos sugeridos', 'sin restricciones más allá de la ley'];
 
 /** Estable por campaña: no interpolar nada que cambie por acción. */
-export function systemPrompt(c: Campaign): string {
+export function systemPrompt(c: Campaign, opts: { actor?: boolean } = {}): string {
   const m = c.master;
   const persp = m.perspective === 'second' ? 'Habla al jugador en segunda persona ("ves", "oyes").' : 'Narra en tercera persona usando el nombre del personaje.';
   return [
@@ -60,7 +62,7 @@ export function systemPrompt(c: Campaign): string {
     c.house_rules ? `Reglas de la casa: ${c.house_rules}` : '',
     '',
     `Voz: ${m.voice.join('; ')}. Longitud: ${LENGTH_ES[m.narration_length]}. ${persp}`,
-    'Se lee en el móvil: párrafos de dos o tres líneas, sin listas ni encabezados. Mejor un mensaje corto y fluido que uno largo; lo que no haga falta ahora, se cuenta cuando el jugador lo busque.',
+    'Se lee en el móvil: párrafos de dos o tres líneas, sin listas ni encabezados. La narración, corta y fluida: lo que no haga falta ahora se cuenta cuando el jugador lo busque. Lo que se dice no se recorta: si alguien habla, habla como habla la gente.',
     `Dificultad: ${m.difficulty}. CD orientativas: fácil 10, media 13, difícil 16, muy difícil 20.`,
     '',
     'PRINCIPIO RECTOR: la base de datos es la verdad. Solo existe lo que los tools devuelven. Nunca describas puntos, salidas, objetos, NPCs o personajes que no estén en los datos. Si el jugador menciona algo que no existe, dilo en ficción ("no ves nada así") en vez de inventarlo. Solo existen los puntos de la lista «Puntos» y las salidas: no hay cocinas, escaleras ni cuartos que no estén ahí.',
@@ -88,6 +90,11 @@ export function systemPrompt(c: Campaign): string {
     'PROGRESO: recolectar (harvest) tira solo y cuenta práctica. Las misiones de la historia escrita (q_…, ver «Historia escrita») las pide alguien en escena: quien la da la cuenta con su voz y entra en el Diario (story_quest ask), sin preguntar si acepta; si el jugador dice que no, story_quest decline; la recompensa la da quien la recibe al entregarla (story_quest turn_in); nunca abras ni insinúes una que no esté disponible. Los demás encargos no se aceptan: si un NPC le da uno al actor o le pide algo concreto que hacer, ya es suyo; no le preguntes si acepta ni esperes un «acepto», y hacerlo o no es cosa suya. Uno del tablón queda en su Diario con que lo hablen; cualquier otro, regístralo con give_quest en ese mismo turno (título corto, de qué va, quién lo da, objetivo y recompensa si se dijo), y cuando lo cumpla o ya no se pueda, finish_quest. Los encargos del tablón se cierran con complete_job al entregarlos al NPC que los pidió; los de entrega los valida el servidor. Las pistas se conceden con grant_clue únicamente cuando el jugador las ha obtenido con sus actos. Vender y comprar: sell_item y buy_item con los precios del NPC; el master no negocia fuera de esa lista salvo una tirada de Persuasión que como mucho mueve un 10 %. El contexto solo trae las pistas de este lugar o de quien está delante y los títulos del tablón: si el jugador busca otra pista, pregunta por un encargo o va a entregarlo, consulta get_campaign_notes antes de responder.',
     'NOMBRES: los jugadores de la partida se conocen siempre por su nombre: llámalos por él. De los NPC, el actor solo conoce los nombres marcados como conocidos; a los demás los nombras por lo que se ve (la tabernera, el guardia del portón), también en suggested_actions. El nombre de un NPC se aprende cuando se presenta o alguien lo nombra: entonces va en names_learned.',
     'NPCs: interprétalos según su descripción, lo que quieren y lo que recuerdan. Si el actor habla con uno, pon su ID en npc_id; y solo si esa persona recordaría algo de la conversación, escríbelo en npc_memory_note con su importancia. Un NPC atiende a una persona a la vez: si está ocupado con otro, responde en ficción que espere, salvo motivo de peso.',
+    `NPC QUE CONVERSAN: cuando un NPC habla, no es un mostrador ni lee el tablón en voz alta: tiene su día, su carácter y sus intereses, y lleva su parte de la charla. Su «Trato» con el actor (en el contexto) marca el tono y lo que suelta: si el jugador insiste en algo delicado que el trato aún no permite, el NPC se cierra, duda o pide algo a cambio; una tirada social (requires_roll) o un favor pueden abrirlo, a medias.
+${TALK_RULES}`,
+    opts.actor
+      ? 'VOZ DE LOS NPC: las palabras exactas de un NPC las escribe después su actor, con su ficha, lo que le ronda y lo que se han dicho. Tú decides la sustancia del turno: en lines, lo que dice el NPC (hechos, precios, negativas, lo que cuenta y lo que calla, lo que pregunta o pide, el tema suyo que saca), en una o dos frases llanas por réplica; el actor lo dirá con su voz. Lo que no deba soltar no va en lines. En conversación, la narración es una línea de gesto como mucho, o nada.'
+      : '',
     'NPC QUE DECIDEN: lo que un NPC acepta o decide hacer tiene que pasar de verdad. Si acepta acompañar al actor («te sigo», «ve delante»), set_npc_order follow en ese turno; si se va él a otro sitio, set_npc_order go; si además va a hacer algo allí (curar al herido, atenderle, darle algo), ponlo como encargo y lo hace al llegar. Sin eso el servidor lo deja donde está y sigue su horario. Para que deje de acompañar (le despiden, se niega a seguir), set_npc_order stop. Su llegada y su marcha las cuenta el servidor: no las narres.',
     'En log_event: narration_private para el actor; observable para testigos con detalle completo (tercera persona, con nombre); observable_vague para quien solo ve una figura. suggested_actions: 2-4 cosas que ESTE personaje querría hacer AHORA MISMO, en esta situación concreta y desde donde está: reacciones inmediatas a lo que acaba de pasar, no planes ni siguientes pasos de la historia. En infinitivo y breves ("Registrar el cofre", "Preguntar a Brenna por el incendio", "Guardar las bayas").',
     'HABLAR CON OTRO JUGADOR: «hablar con X» sin frase es una intención, no algo dicho: no inventes lo que dice ni lo pongas en lines; acércalo si hace falta y pregunta qué le dice. Lo que los jugadores se dicen entre ellos llega sin ti (modo Decir).',
@@ -281,6 +288,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
 
   const present: string[] = [];
   const presentNpcIds: Id[] = [];
+  // Conversación en curso (conversation.ts): su NPC lleva la transcripción entera y lo que le ronda.
+  const conv = intro || scene ? null : conversationOf(engine.events.all(), actor.id, pos);
   for (const o of world.characters.values()) {
     if (o.id === actor.id || o.status === 'dead' || o.status === 'retired') continue;
     const op = positionOf(world, o, nowG);
@@ -322,6 +331,10 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const others = n.memory.filter((m) => m.character_id !== actor.id && m.importance >= 3).slice(-3).map((m) => `${world.characters.get(m.character_id)?.name ?? 'alguien'}: ${m.note}`);
     const busy = n.talking_to && n.talking_to.character_id !== actor.id ? ` OCUPADO hablando con ${world.characters.get(n.talking_to.character_id)?.name ?? 'alguien'}: atiende al actor solo si hay motivo, si no le pide que espere. No sugieras esperar ni unirse: eso lo ofrece el servidor.` : '';
     const knownNpc = actor.knows.includes(n.id);
+    // Lo último que se han dicho, literal (la memoria es el resumen de lo de antes) y, si lo tiene delante, lo que le ronda.
+    const talking = conv?.npc_id === n.id;
+    const said = transcriptText(transcriptOf(engine.events.all(), actor.id, n.id, talking ? TRANSCRIPT_LINES : 4), 'Actor', 'NPC');
+    const close = talking || ns.id === spot.id;
     // Lo que vio o sabe del actor (crime.ts) va antes que su carácter: manda sobre cómo le trata.
     const crime = npcCrimeLine(world, n, actor, nowG);
     present.push([
@@ -335,6 +348,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       saidBy(engine.events.recentInLocation(loc.id, 60), n.id),
       n.secret ? `  Solo tú sabes (NUNCA lo reveles ni lo insinúes por tu cuenta): ${dot(n.secret)} Sale solo a medias y si se lo gana: confianza en varias charlas, presión creíble o tirada social contra CD alta.` : '',
       `  Recuerda de ${actor.name}: ${mine.length ? mine.join(' · ') : 'nada, es la primera vez que hablan'}`,
+      said.length ? `  Lo último que se han dicho, literal (sigue el hilo; no repitas):\n${said.map((l) => `    ${l}`).join('\n')}` : '',
+      close ? concernsLine(world, n, actor, nowG, '  ') : '',
       others.length ? `  Recuerda de otros: ${others.join(' · ')}` : '',
       busy,
       orderLine(world, n, nowG) ? `  Ahora: ${orderLine(world, n, nowG)}.` : '',
@@ -397,8 +412,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   const others = intro ? null : othersBlock(engine, actor, loc.id);
   if (others) L.push(others);
 
-  // Conversación en curso (conversation.ts): el narrador solo entra cuando aporta.
-  const conv = intro || scene ? null : conversationOf(engine.events.all(), actor.id, pos);
+  // Conversación en curso: el narrador solo entra cuando aporta.
   const convNpc = conv ? world.npcs.get(conv.npc_id) : undefined;
   if (conv && convNpc) L.push(conversationBlock(conv, actor.knows.includes(convNpc.id) ? convNpc.name : descriptorOf(world, convNpc.id)));
 

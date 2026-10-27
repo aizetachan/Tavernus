@@ -131,7 +131,8 @@ export class BudgetedMaster implements MasterLike {
       return this.fallback.resolve(actor, ...rest);
     }
     const out = await this.live.resolve(actor, ...rest);
-    this.book.spend(actor.id, tokensOf(out.usage));
+    // El actor de los NPC (actor.ts) también cuenta.
+    this.book.spend(actor.id, tokensOf(out.usage) + (out.ok ? tokensOf(out.actor) : 0));
     return out;
   }
 }
