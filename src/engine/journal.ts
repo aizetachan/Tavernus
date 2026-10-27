@@ -34,7 +34,7 @@ import { characterFacts } from './facts.js';
 import { debtLine, fmtCoins } from './debts.js';
 import type { Character, GameEvent, Id, Npc } from './model.js';
 import type { DialogueLine } from './moments.js';
-import { maskUnknownNames } from './narrate.js';
+import { maskUnknownNames, roleLabel } from './narrate.js';
 import { activeJobs } from './progress.js';
 import { rumorsHeardBy, rumorsIn, type Rumor } from './rumors.js';
 import { characterStory, questsOf } from './story.js';
@@ -207,7 +207,7 @@ function firstSentence(s: string): string {
  */
 export function npcLabel(c: Character, npc: Npc): string {
   if (c.knows.includes(npc.id)) return npc.name;
-  return /^(el|la|los|las) /i.test(npc.role) ? npc.role : /a$/.test(npc.role) ? `la ${npc.role}` : `el ${npc.role}`;
+  return roleLabel(npc);
 }
 
 /** Etiqueta suelta (lista de conversaciones, «lo pide»): el nombre o el oficio con mayúscula, sin artículo. */

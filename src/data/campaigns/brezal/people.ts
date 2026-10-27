@@ -30,7 +30,7 @@ export const NPCS: AuthoredNpc[] = [
     routine: { day: 'sp_tab_barra', night: 'sp_tab_mesa' },
   },
   {
-    id: 'npc_doro', name: 'Doro', role: 'guardia', spot_id: 'sp_pl_porton', passive_perception: 15, attitude: 'neutral',
+    id: 'npc_doro', name: 'Doro', role: 'guardia', role_short: 'el guardia', spot_id: 'sp_pl_porton', passive_perception: 15, attitude: 'neutral',
     description: 'Joven, alto, lanza apoyada en el hombro y botas demasiado nuevas. Habla más de la cuenta, se corrige a media frase y se ríe de sus propios chistes antes de acabarlos. Las botas se las regaló su tío, con el sello del zapatero de la casona en la suela; rodea los charcos para no mancharlas. Lleva la capa recortada desde que perdió el duelo de la feria contra una niña de doce años.',
     motivation: 'Que lo tomen en serio. Cobra de su tío, el regidor, por vigilar el portón y hacer la ronda del Lindero, por si algo sale de la niebla.',
     secret: 'Ha visto luces en el Granero Quemado dos noches seguidas y, una de ellas, una figura que iba por la senda del arroyo con un hatillo. No lo ha contado por miedo a que su tío le mande a mirar. Ya contó una vez lo de las luces y Garrán le dio una paliza «por asustar al personal». Si le preguntan por el Soto, se ríe de su chiste un poco tarde y mira al suelo.',
@@ -53,7 +53,7 @@ export const NPCS: AuthoredNpc[] = [
     routine: { day: 'sp_ca_despacho', afternoon: 'sp_pl_tablon', night: 'sp_ca_alcoba' },
   },
   {
-    id: 'npc_garran', name: 'Garrán', role: 'alguacil y recaudador', spot_id: 'sp_pl_tablon', passive_perception: 12, attitude: 'unfriendly',
+    id: 'npc_garran', name: 'Garrán', role: 'alguacil y recaudador', role_short: 'el alguacil', spot_id: 'sp_pl_tablon', passive_perception: 12, attitude: 'unfriendly',
     description: 'Ancho como una puerta, la nariz rota dos veces y una maza corta al cinto. Cuenta con los dedos al hablar, como si todo fuera una deuda. Huele a cebolla y a cuero mojado. No sabe escribir: lleva las deudas en una cantinela con rima, una estrofa por familia, y si le interrumpen pierde el hilo y se pone violento. Se sienta siempre lejos del fuego.',
     motivation: 'Cobrar el diezmo de la ceniza, quedarse su parte y que nadie le haga ir a él al Granero Quemado.',
     secret: 'Le pagan por cada deudor que va al Granero Quemado y no vuelve. Una noche fue él mismo, vio a una mujer con un fuego en la mano y salió corriendo; desde entonces no duerme sin vela. Se queda una moneda de cada cinco del diezmo. Hace veinte años, de mozo de Osric, atrancó la puerta de la fragua de Vharn con el herrero dentro «para que no saliera el fuego», y le oyó mucho rato. Hal lo sabe por su padre y por eso le rompió la nariz; por eso Garrán nunca le ha denunciado. De noche, junto a la vela, trenza esparto.',

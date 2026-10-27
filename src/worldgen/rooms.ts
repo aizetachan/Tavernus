@@ -60,6 +60,8 @@ export function migrateRentableRooms(snap: WorldSnapshot): boolean {
     }
     room.hidden = false;
     room.state = { ...room.state, ...lockedRoomState() };
+    // Su puerta se ve desde la sala (spots.ts).
+    room.visible_from ??= snap.spots.filter((s) => s.location_id === room.location_id && s.id !== room.id && !s.hidden).map((s) => s.id);
     if (!seller.sells.some((x) => x.item_id === ROOM_NIGHT_ITEM_ID)) seller.sells.push({ item_id: ROOM_NIGHT_ITEM_ID, price: ROOM_NIGHT_PRICE });
     changed = true;
   }

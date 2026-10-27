@@ -50,13 +50,16 @@ export const LOCATIONS: AuthoredLocation[] = [
     spots: [
       S('sp_tab_puerta', 'la puerta', ['puerta', 'entrada', 'door'], ['door'], 0, 0, 'La puerta de la taberna, siempre entornada; el umbral está gastado en el centro y el tercer escalón cojea. Al lado, un barril de agua con un cazo atado a una cadena: el agua no se cobra.'),
       S('sp_tab_barra', 'la barra', ['barra', 'mostrador', 'bar'], ['counter'], 6, 2, 'Una barra de roble gastado, con jarras de barro colgando de clavos, cada una con un nombre grabado a fuego y alguna boca abajo, y una tablilla de deudas escrita con tiza. El último taburete, al extremo, siempre está vacío.'),
-      S('sp_tab_mesa', 'la mesa del fondo', ['mesa', 'mesa del fondo', 'rincón', 'fondo'], ['table', 'rug'], 10, 6, 'Una mesa en penumbra, lejos de la puerta, sobre una alfombra raída que nadie levanta nunca.'),
+      // En penumbra: desde la puerta no se ve; desde dentro, sí (spots.ts).
+      S('sp_tab_mesa', 'la mesa del fondo', ['mesa', 'mesa del fondo', 'rincón', 'fondo'], ['table', 'rug'], 10, 6, 'Una mesa en penumbra, lejos de la puerta, sobre una alfombra raída que nadie levanta nunca.',
+        { visible_from: ['sp_tab_barra', 'sp_tab_chimenea'] }),
       S('sp_tab_chimenea', 'la chimenea', ['chimenea', 'fuego', 'hogar'], ['fireplace'], 3, 7, 'Un hogar de piedra con brasas y una manta vieja de perro delante, vacía.'),
       S('sp_tab_trampilla', 'la trampilla', ['trampilla', 'sótano', 'trapdoor'], ['trapdoor'], 10, 8, 'Una trampilla bajo la alfombra, con una argolla oxidada y escalones que bajan a lo oscuro.',
         { hidden: true, dc_to_find: 14, capacity: 1 }),
       S('sp_tab_habitacion', 'la habitación de arriba', ['habitacion', 'habitación', 'mi habitación', 'arriba', 'cuarto'], ['bed', 'stairs'], 4, 12,
         'Un cuarto pequeño bajo el tejado, con un jergón, un arcón y una puerta que cierra con llave.',
-        { capacity: 2, entry_cost_s: 20, state: { locked: true, key_item_id: ROOM_KEY_ITEM_ID }, ...apart('sp_tab_barra', 'sp_tab_mesa', 'sp_tab_chimenea', 'sp_tab_puerta') }),
+        // La escalera se ve desde la sala; lo de dentro del cuarto, no (apart), ni la sala desde él.
+        { capacity: 2, entry_cost_s: 20, state: { locked: true, key_item_id: ROOM_KEY_ITEM_ID }, ...apart('sp_tab_barra', 'sp_tab_mesa', 'sp_tab_chimenea', 'sp_tab_puerta', 'sp_tab_trampilla'), visible_from: ['sp_tab_puerta', 'sp_tab_barra', 'sp_tab_chimenea', 'sp_tab_mesa'] }),
     ],
   },
   {

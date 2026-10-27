@@ -168,6 +168,13 @@ Reglas del servidor:
 2. **El master no crea espacio de la nada.** Solo referencia puntos existentes. Con `improvisation` suficiente puede llamar a `create_spot`, que persiste al instante y queda para todos.
 3. **Descripción = plantilla + estado.** `description_base` fija; el master la adapta con `state`, `contents`, ocupantes por punto y hora. Distinta en estilo, idéntica en hechos.
 4. **Puntos ocultos.** `hidden: bool`, `dc_to_find`, `discovered_by[]`. Existen para todos; solo los ve quien los descubrió o a quien se lo enseñan (`share_discovery`).
+4b. **Rincones que se descubren** (`src/engine/spots.ts`). `discovered_by[]` es quién conoce el punto, oculto o no. Al llegar, el PJ conoce solo lo que ve de un vistazo desde donde está: los puntos cuyo `visible_from` incluye el suyo y, sin ese campo, los de su misma estancia (sin un enlace `links[].blocks_sight` entre los dos). Lo oculto, nunca. El resto se descubre:
+   - **Andando:** cada punto por el que pasa o al que llega suma lo que se ve desde él. Puede ir a un punto no oculto que aún no conoce («subo», «voy a la barra»); al llegar, lo ve.
+   - **Mirando alrededor:** «miro alrededor», «echo un vistazo» (con máster lo aplica el cierre; sin máster, el parser). Suma lo de la estancia que el vistazo no alcanza (`visible_from` deja fuera la mesa en penumbra) y lo oculto que su Percepción pasiva iguala.
+   - **Si se lo nombran:** un punto que nombra un NPC en sus `lines` queda sabido, aunque sea oculto («la trampilla de la mesa del fondo»). Uno no oculto que nombra la narración queda visto.
+   - **Buscando:** Percepción o Investigación contra la CD (con máster, `requires_roll` y `discover_spot`; sin máster, «busco» o «registro»). Pagar el cuarto lo descubre.
+
+   Las sugerencias del motor y del máster, el tablero (`/api/board`), el mapa (`/api/map`), la descripción del sitio y el contexto del máster solo usan lo conocido. El máster recibe aparte los puntos que el actor aún no ha visto y los ocultos con su CD, para resolver una búsqueda; si la narración muestra un oculto sin tirada ni NPC que lo cuente, el cierre la rechaza una vez. Partidas de antes (`campaign.spot_sight` ausente): cada PJ conserva los puntos no ocultos de los sitios donde ha estado.
 5. **Capacidad.** `spots.capacity` (una cornisa: 2). Lleno = no cabes, lo decide el servidor.
 6. **Proximidad = mismo punto.** Sigilo, escuchar, alcance cuerpo a cuerpo. Distintos puntos de la misma localización se ven salvo `hidden` o `state.line_of_sight_blocked[]`.
 7. **`/map`** renderiza el grafo de la zona con lo descubierto por ese jugador, desde la DB, nunca desde el LLM.
@@ -180,7 +187,8 @@ Sin cuadrícula en el MVP. Si algún día hay combate táctico, cada localizaci�
 | `id`, `location_id`, `name`, `aliases[]` | |
 | `description` | Una o dos frases |
 | `capacity` | null = ilimitado |
-| `hidden`, `dc_to_find`, `discovered_by[]` | |
+| `hidden`, `dc_to_find`, `discovered_by[]` | `discovered_by`: quién lo conoce (regla 4b) |
+| `visible_from[]` | Desde qué puntos se ve de un vistazo (regla 4b). Sin campo, desde los de su estancia |
 | `contents[]` | Ítems sueltos y contenedores fijos (cofre, altar) con su propio inventario |
 | `state` (JSON) | `broken`, `lit`, `locked`, `bloodstained`… |
 | `tags[]` | `cover`, `high_ground`, `climbable`, `water`, `dark` — el master los usa para conceder ventajas mecánicas |

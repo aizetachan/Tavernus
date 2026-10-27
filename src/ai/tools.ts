@@ -31,7 +31,8 @@ import { characterFacts, recordFact } from '../engine/facts.js';
 import type { DialogueLine } from '../engine/moments.js';
 import { fmtCoins, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
 import { inventedPlaces } from '../engine/places.js';
-import { actedForOthers, actedForRejection, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, isPlaceholder, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type RollCategory } from '../engine/closecheck.js';
+import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
+import { actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
@@ -117,8 +118,8 @@ export const MASTER_TOOLS: Tool[] = [
     location_id: str('ID de la localización o "here"'),
     patch_json: str('JSON con las claves a cambiar'),
   }),
-  tool('discover_spot', 'Marca un punto oculto como descubierto por un personaje (tras una tirada con éxito).', {
-    character_id: str('ID del personaje'), spot_id: str('ID del punto oculto'),
+  tool('discover_spot', 'El personaje conoce ya ese punto: lo ha visto (mira alrededor, va hacia allí), alguien se lo ha nombrado o enseñado, o lo ha encontrado buscando (si es oculto, tras una tirada con éxito contra su CD). Sin esto, el punto no sale en su mapa ni en sus sugerencias.', {
+    character_id: str('ID del personaje'), spot_id: str('ID del punto'),
   }),
   tool('harvest', 'Extrae de un nodo de recurso (talar, recolectar, pescar). El servidor tira la skill del nodo contra su CD, calcula rendimiento y regeneración y cuenta la práctica. No pidas requires_roll para esto.', {
     character_id: str('ID del personaje'), node_id: str('ID del nodo'),
@@ -279,7 +280,7 @@ export const MASTER_TOOLS: Tool[] = [
     npc_id: nstr('Si en esta acción el actor ha hablado con un NPC: su ID. Si no, null.'),
     npc_memory_note: nstr('Solo si ha hablado con ese NPC y hay algo que esa persona recordaría del actor (su nombre, qué le preguntó, un favor, una ofensa, una promesa, dinero). Una frase en tercera persona. null si no hay nada que recordar o si no ha habido conversación.'),
     npc_memory_importance: nnum('1 = se olvida en días (una charla, una pregunta); 2 = dura semanas (un favor, un pago, una amenaza); 3 = no se olvida nunca (le salvó la vida, le robó, le humilló). null si no hay nota.'),
-    names_learned: nstr('IDs (separados por comas) de NPCs o personajes cuyo NOMBRE el actor ha aprendido en esta acción porque se presentaron o alguien los nombró. null si ninguno.'),
+    names_learned: nstr('IDs (separados por comas) de NPCs cuyo NOMBRE el actor ha aprendido en esta acción porque se presentaron, alguien los presentó o se lo dijeron al preguntar. Solo cuenta si el nombre se dice en la narración o en lines. Quien dice su propio nombre en lines lo apunta el servidor solo. Mientras el actor no lo sepa, nómbralo por su oficio: el servidor tapa en la narración los nombres que no conoce. null si ninguno.'),
     places_learned: nstr('IDs (separados por comas) de localizaciones de las que el actor ha oído hablar en esta acción porque alguien nombró el sitio o lo leyó en un cartel o mapa. null si ninguna.'),
     introduces_self: bool('true si el actor ha dicho su propio nombre en voz alta en esta acción (los presentes lo aprenden).'),
     target_character_id: nstr('Si la acción se dirige a otro JUGADOR presente (le habla, le mira, se le acerca, le tiende algo): su ID. Recibirá observable_target y opciones para responder. null si no.'),
@@ -350,6 +351,8 @@ export interface ToolContext {
   repeat_rejections?: number;
   /** Cierres rechazados por narrar que el actor recibe algo de otro jugador sin oferta (closecheck.ts; uno como mucho). */
   receive_rejections?: number;
+  /** Cierres rechazados por mostrar un punto oculto que el actor no ha encontrado (spots.ts; uno como mucho). */
+  spot_rejections?: number;
   /** Es la escena de apertura: el actor no se acerca a quien habla (la apertura ya le pone con él). */
   intro?: boolean;
 }
@@ -493,12 +496,20 @@ export function executeTool(ctx: ToolContext, name: string, raw: Record<string, 
   }
 }
 
+/** NPC que el cierre busca nombrados (closecheck.ts): todos, y si están en el sitio del actor. */
+function namedNpcs(w: ToolContext['engine']['world'], locationId: Id): NamedNpc[] {
+  return [...w.npcs.values()].map((n) => ({ id: n.id, name: n.name, present: n.status === 'alive' && w.spots.get(n.location.id)?.location_id === locationId }));
+}
+
+/** «Miro alrededor», «echo un vistazo», «exploro la sala»: el actor recorre con la vista la estancia (spots.ts, lookAround). */
+const LOOK_AROUND = /\b(alrededor|vistazo|explor\w*|recorr\w* (?:la|el) (?:sala|lugar|sitio|cuarto|estancia|habitaci[oó]n)|mir\w* (?:la|el|por la|por el) (?:sala|lugar|sitio|cuarto|estancia|habitaci[oó]n))\b/i;
+
 /** Lo que hay aquí, para los errores de «eso no existe»: el máster lo lee y no inventa. */
 function hereList(ctx: ToolContext): string {
   const w = ctx.engine.world;
   const loc = positionOf(w, ctx.actor, ctx.nowGameS).location_id;
-  const spots = w.spotsOf(loc).filter((sp) => !sp.hidden || sp.discovered_by.includes(ctx.actor.id)).map((sp) => `${sp.name} [${sp.id}]`);
-  const exits = w.spotsOf(loc).flatMap((sp) => w.exitsFrom(sp.id).map(({ to_spot_id }) => `${w.locationOfSpot(to_spot_id).name} [${to_spot_id}]`));
+  const spots = knownSpots(w, ctx.actor, loc).map((sp) => `${sp.name} [${sp.id}]`);
+  const exits = w.spotsOf(loc).filter((sp) => !sp.hidden || sp.discovered_by.includes(ctx.actor.id)).flatMap((sp) => w.exitsFrom(sp.id).map(({ to_spot_id }) => `${w.locationOfSpot(to_spot_id).name} [${to_spot_id}]`));
   return `Puntos de aquí: ${spots.join(', ')}.${exits.length ? ` Salidas: ${exits.join(', ')}.` : ''}`;
 }
 
@@ -609,14 +620,14 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Un ID de punto en vez de localización: la suya (el modelo los confunde).
       const id = s('location_id') === 'here' ? here() : world.spots.get(s('location_id'))?.location_id ?? s('location_id');
       const loc = world.location(id);
-      const spots = world.spotsOf(id).filter((sp) => !sp.hidden || sp.discovered_by.includes(actor.id)).map((sp) => ({
+      const spots = knownSpots(world, actor, id).map((sp) => ({
         id: sp.id, name: sp.name, description: sp.description, x: sp.x, y: sp.y, tags: sp.tags, state: sp.state,
         items: world.itemsIn({ type: 'spot', id: sp.id }).map((i) => `${i.id}: ${world.itemDef(i.item_id).name}${i.quantity > 1 ? ` ×${i.quantity}` : ''}`),
         resources: [...world.resourceNodes.values()].filter((n) => n.spot_id === sp.id).map((n) => `${n.id}: ${n.name} (${Math.round(regenState(n, nowGameS) * 100)}%)`),
         npcs: world.npcsAt(sp.id).map((n) => `${n.id}: ${n.name}, ${n.role}`),
       }));
       const exits: string[] = [];
-      for (const sp of world.spotsOf(id)) for (const { exit, to_spot_id } of world.exitsFrom(sp.id)) {
+      for (const sp of world.spotsOf(id).filter((x) => !x.hidden || x.discovered_by.includes(actor.id))) for (const { exit, to_spot_id } of world.exitsFrom(sp.id)) {
         exits.push(`${sp.name} → ${world.locationOfSpot(to_spot_id).name} (${world.spot(to_spot_id).id}), ${exit.distance_m} m${exit.state.blocked_by ? `, bloqueada: ${exit.state.blocked_by}` : ''}`);
       }
       return { id: loc.id, name: loc.name, description_base: loc.description_base, indoor: loc.indoor, ambience: loc.ambience, state: loc.state, spots, exits };
@@ -889,8 +900,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     }
     case 'discover_spot': {
       const sp = world.spot(s('spot_id'));
-      const cid = s('character_id');
-      if (!sp.discovered_by.includes(cid)) { sp.discovered_by.push(cid); world.touch('spots', sp.id); }
+      const who = world.characters.get(s('character_id')) ?? actor;
+      discoverSpot(world, who, sp);
       return { ok: true, spot: sp.name };
     }
     case 'harvest': {
@@ -1229,6 +1240,18 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: `La narración cita ${invented.map((w) => `«${w}»`).join(', ')}, que no existe en ${world.location(here()).name}. ${hereList(ctx)} Reescribe log_event sin ese lugar: si el jugador lo busca, di en ficción que no lo hay (o lo que sí hay).` };
         }
       }
+      // Un punto oculto que el actor no ha encontrado no se narra como visto: solo tras buscar con tirada o si alguien se lo enseña (discover_spot). Se reescribe una vez.
+      if ((ctx.spot_rejections ?? 0) < 1 && !ctx.roll_category) {
+        const unfound = hiddenSpots(world, actor, here());
+        const spoken = parseLines(input['lines'], null, (id) => world.npcs.has(id)).filter((l) => l.speaker === 'npc').map((l) => l.text).join('\n');
+        // Lo que le dice un NPC o lo que nombró el propio jugador («fuerzo la trampilla») sí puede salir.
+        const told = new Set(spotsNamedIn(world, here(), `${spoken}\n${ctx.action_text ?? ''}`).map((sp) => sp.id));
+        const shown = spotsNamedIn(world, here(), s('narration_private').replace(/«[^»]*»/g, ' ')).filter((sp) => unfound.includes(sp) && !told.has(sp.id));
+        if (shown.length) {
+          ctx.spot_rejections = (ctx.spot_rejections ?? 0) + 1;
+          return { error: `La narración muestra ${shown.map((sp) => `«${sp.name}»`).join(', ')}, que está oculto y el actor no ha encontrado. Reescribe log_event sin eso: si busca, pide requires_roll de Percepción o Investigación (CD ${shown.map((sp) => sp.dc_to_find ?? 10).join('/')}); si alguien se lo enseña, llama antes a discover_spot.` };
+        }
+      }
       // En conversación el narrador solo entra cuando aporta: relleno o narración larga se reescriben una vez; vacía con lines vale.
       if ((ctx.conversation_rejections ?? 0) < 1) {
         const conv = conversationOf(engine.events.all(), actor.id, positionOf(world, actor, nowGameS));
@@ -1300,12 +1323,6 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           world.touch('npcs', npc.id);
         }
       }
-      if (input['names_learned']) {
-        for (const id of s('names_learned').split(',').map((x) => x.trim()).filter(Boolean)) {
-          if ((world.npcs.has(id) || world.characters.has(id)) && id !== actor.id && !actor.knows.includes(id)) actor.knows.push(id);
-        }
-        world.touch('characters', actor.id);
-      }
       if (input['places_learned']) {
         for (const id of s('places_learned').split(',').map((x) => x.trim()).filter(Boolean)) {
           const loc = world.locations.get(id);
@@ -1336,15 +1353,41 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Arranques en falso que el modelo corrige sobre la marcha («MIAU Lenzo... no. MIAU se queda…»): se quitan.
       const tidy = (t: string) => withoutSelfCorrection(cleanText(t));
       const targetPc = input['target_character_id'] && world.characters.has(s('target_character_id')) && s('target_character_id') !== actor.id ? s('target_character_id') : null;
+      // Conocidos (closecheck.ts): quien dice su nombre o es presentado delante del actor, y names_learned del máster si ese nombre ha sonado.
+      // Lo aprenden el actor y los de su turno compartido, que oyen lo mismo.
+      const named = namedNpcs(world, here());
+      const narration = s('narration_private');
+      const learned = [...new Set([
+        ...introducedIn({ npcs: named, lines: closingLines, narration, playerText: ctx.action_text }),
+        ...confirmedNames(input['names_learned'] ? s('names_learned').split(',').map((x) => x.trim()) : [], named, [narration, ...closingLines.map((l) => l.text)]),
+      ])];
+      for (const who of [actor, ...sharedIds.map((id) => world.characters.get(id)).filter((x): x is Character => !!x)]) {
+        const fresh = learned.filter((id) => !who.knows.includes(id));
+        if (fresh.length) { who.knows.push(...fresh); world.touch('characters', who.id); }
+      }
+      // Rincones (spots.ts): mirar alrededor descubre la estancia; lo que nombra la narración queda visto (lo oculto, no: «no ves ninguna trampilla»)
+      // y lo que le dice un NPC, sabido, aunque esté oculto («la trampilla de la mesa del fondo»).
+      if (LOOK_AROUND.test(ctx.action_text ?? '')) lookAround(world, actor);
+      for (const sp of spotsNamedIn(world, here(), narration.replace(/«[^»]*»/g, ' '))) if (!sp.hidden) discoverSpot(world, actor, sp);
+      for (const sp of spotsNamedIn(world, here(), closingLines.filter((l) => l.speaker === 'npc').map((l) => l.text).join('\n'))) discoverSpot(world, actor, sp);
+      // Un nombre que el actor no sabe no sale en su narración: el oficio («el herrero»), salvo lo que dicen otros y lo que nombró el jugador.
+      // Tampoco en su boca: «¿Qué le pasó a Hugo?» que el máster le pone sin saberlo él pasa a «¿Qué le pasó al herrero?» (en lines y en la cita).
+      const keep = namedByPlayer(named, ctx.action_text);
+      const masked = (t: string) => maskUnknownNames(world, actor.id, t, keep);
+      const ownLines = closingLines.filter((l) => l.speaker === 'actor').map((l) => [l.text, masked(l.text)] as const).filter(([a, b]) => a !== b);
+      const unname = (t: string) => ownLines.reduce((acc, [a, b]) => acc.split(a).join(b), t);
+      for (const l of closingLines) if (l.speaker === 'actor') l.text = unname(l.text);
       ctx.closed = {
         // Lo dicho que no va citado en la narración (en conversación puede ir vacía) se guarda como citas.
-        narration_private: approached + narrationWithLines(withoutDeathPhrases(unsay(tidy(s('narration_private'))), deathHits), closingLines),
+        narration_private: approached + masked(narrationWithLines(withoutDeathPhrases(unsay(tidy(unname(s('narration_private')))), deathHits), closingLines)),
         observable: input['observable'] == null ? null : withoutDeathPhrases(unsay(tidy(s('observable'))), deathHits) || null,
         observable_vague: input['observable_vague'] == null ? null : tidy(s('observable_vague')) || null,
         loudness: Number(input['loudness']) || 1,
         tags: s('tags').split(',').map((t) => t.trim()).filter((t) => t && !isPlaceholder(t)),
         // Esperar o unirse a un NPC ocupado con otro jugador lo ofrecen los botones del motor (scene.ts), no el máster.
-        suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter((t) => t && !isPlaceholder(t)).filter((t) => !(busyHere(engine, actor, nowGameS) && /^(esperar|aguardar|unirme|unirse|sumarme)\b/i.test(t))).slice(0, 4)
+        suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter((t) => t && !isPlaceholder(t)).filter((t) => !(busyHere(engine, actor, nowGameS) && /^(esperar|aguardar|unirme|unirse|sumarme)\b/i.test(t)))
+          // Ni un rincón que no conoce («Ir a la trampilla» sin haberla encontrado: spots.ts).
+          .filter((t) => spotsNamedIn(world, here(), t).every((sp) => knowsSpot(actor, sp))).slice(0, 4)
           // Un nombre que el actor no sabe no se le escapa en los botones: «Preguntar a la tabernera», no «a Brenna».
           .map((t) => capFirst(maskUnknownNames(world, actor.id, t))),
         requires_roll: req,

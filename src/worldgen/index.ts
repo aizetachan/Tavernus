@@ -108,6 +108,8 @@ export function buildSnapshot(sk: Skeleton, f: WorldFill, generation: Generation
       discovered_by: [], state: s.locked ? lockedRoomState() : {}, tags: [...s.tags], terrain_multiplier: s.terrain_multiplier ?? 1, entry_cost_s: s.entry_cost_s ?? 0,
       // La habitación (de alquiler o del logro): arriba, sin vista ni apenas sonido del resto de la posada.
       links: s.id === sk.reward_spot_id || s.locked ? l.spots.filter((o) => o.id !== s.id && !o.hidden).map((o) => ({ to_spot_id: o.id, blocks_sight: true, muffles: 0.8 })) : [],
+      // Su puerta sí se ve desde la sala (spots.ts): se sabe que hay un cuarto, aunque no lo que pasa dentro.
+      ...(s.locked ? { visible_from: l.spots.filter((o) => o.id !== s.id && !o.hidden).map((o) => o.id) } : {}),
     };
   }));
   const spotName = (id: Id) => spots.find((s) => s.id === id)!;

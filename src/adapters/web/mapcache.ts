@@ -12,7 +12,7 @@
  */
 
 import type { Engine } from '../../engine/engine.js';
-import type { Id } from '../../engine/model.js';
+import type { Id, Spot } from '../../engine/model.js';
 import { positionOf } from '../../engine/movement.js';
 import type { LocationMap } from '../../data/seed/maps.js';
 import { generateMap, mapInputOf } from './mapgen.js';
@@ -25,6 +25,11 @@ export interface CachedMap {
 
 type EngineLike = Pick<Engine, 'world' | 'gameNow'>;
 
+/** Los datos de un punto que entran en su plano (mapgen.ts, MapGenSpot). */
+function shapeOf(s: Spot): string {
+  return JSON.stringify([s.location_id, s.name, s.aliases, s.tags, s.x, s.y, s.hidden]);
+}
+
 export class MapCache {
   private readonly maps = new Map<Id, CachedMap>();
   /** Punto, salida o localización → localizaciones cuyo plano depende de ello. */
@@ -33,12 +38,18 @@ export class MapCache {
   private readonly off: () => void;
   /** Planos generados desde que existe la caché (para tests y diagnóstico). */
   generatedCount = 0;
+  /** Lo que el plano toma de cada punto: si un cambio no lo toca (quién lo conoce, su estado), el plano sigue valiendo. */
+  private readonly shapes = new Map<Id, string>();
 
   constructor(private readonly engine: EngineLike) {
     const world = engine.world;
+    for (const s of world.spots.values()) this.shapes.set(s.id, shapeOf(s));
     this.off = world.onChange(({ collection, id, doc }) => {
       switch (collection) {
         case 'spots': {
+          const shape = doc ? shapeOf(doc as Spot) : '';
+          if (this.shapes.get(id) === shape) return;
+          this.shapes.set(id, shape);
           const locs = new Set(this.deps.get(id));
           const s = doc as { location_id?: Id } | null;
           if (s?.location_id) locs.add(s.location_id);
