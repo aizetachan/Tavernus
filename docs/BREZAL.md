@@ -66,7 +66,7 @@ La demo de `src/data/seed/demo.ts` era un mundo de pruebas con alma de aventura:
 | Rumores iniciales | no | 15 **[cambia]** |
 | Cuarto alquilable | no (la habitación era el premio oculto) | sí: visible, cerrado, Brenna vende la noche |
 | Encuentros de camino | tabla por defecto | tabla propia de aldea (toda la demo es aldea) **[cambia]** |
-| Momentos ilustrables | solo los que salen solos | 10 lugares descritos para la escena de llegada, 11 retratos, el ascua y la niebla |
+| Momentos ilustrables | solo los que salen solos | 10 lugares descritos para la escena de llegada, 11 retratos, el ascua y la niebla; 4 pistas que dicen qué se ve al encontrarlas (`image`: el cubo del pozo, el hacha, la trampilla, el libro). Las demás se oyen y dan el retrato de quien habla (`docs/ARTE.md`) |
 | Misiones encadenadas | no (pistas y tablón sueltos) | 10 misiones en 3 actos, con 3 finales y un epílogo |
 | Amenaza que avanza sola | no | 5 escalones en 3 días **[cambia]** |
 

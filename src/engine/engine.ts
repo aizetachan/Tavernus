@@ -33,7 +33,7 @@ import { aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions,
 import { seededRng, type Rng } from './dice.js';
 import { harvest } from './resources.js';
 import { spawnItem } from './inventory.js';
-import { classifyMoments, seenFromEvents, type DialogueLine, type Moment } from './moments.js';
+import { classifyMoments, momentLookupOf, seenFromEvents, type DialogueLine, type Moment } from './moments.js';
 import { characterCheck, type CheckKind } from './rules.js';
 import { activeJobs, addPractice, rotateBoard, type ProgressEvent } from './progress.js';
 import { resolveAttack } from './combat.js';
@@ -263,7 +263,7 @@ export class Engine {
   private noteMoments(e: GameEvent): void {
     let moments: Moment[];
     try {
-      moments = classifyMoments(e, this.seenMoments, { itemOfInstance: (id) => this.world.itemInstances.get(id)?.item_id ?? null });
+      moments = classifyMoments(e, this.seenMoments, momentLookupOf(this.world));
     } catch (err) { console.error('[engine] momentos:', err); return; }
     if (!moments.length) return;
     e.payload['moments'] = moments;
