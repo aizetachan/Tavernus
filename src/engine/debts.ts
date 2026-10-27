@@ -21,6 +21,7 @@ import type { Character, Debt, Id, Npc, Placement } from './model.js';
 import { deliverGoods } from './progress.js';
 import type { World } from './world.js';
 import { refusesService } from './crime.js';
+import { priceFor } from './standing.js';
 
 const DAY_S = 24 * 3600;
 /** Saldadas que se conservan para el Diario. */
@@ -113,7 +114,7 @@ export function pawnItem(world: World, c: Character, input: { npc_id: Id; instan
   // Quien sabe lo que ha hecho no le fía ni le guarda nada (crime.ts).
   const no = refusesService(world, npc, c);
   if (no) return { ok: false, error: no };
-  const amount = offer ? offer.price : validAmount(input.amount) ?? (cur ? 0 : null);
+  const amount = offer ? priceFor(npc, c.id, offer.price, 'buy') : validAmount(input.amount) ?? (cur ? 0 : null);
   if (amount === null) return { ok: false, error: 'sin for_item_id hace falta amount (lo que garantiza la prenda) o una deuda ya anotada con set_debt' };
 
   const from = inst.location;

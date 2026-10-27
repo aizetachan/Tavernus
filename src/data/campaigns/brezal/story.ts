@@ -106,7 +106,8 @@ const QUESTS: StoryQuest[] = [
         on_done: [{ kind: 'npc_move', npc_id: 'npc_ceniza', spot_id: 'sp_tab_chimenea' }, { kind: 'tell', text: 'Ceniza sale disparado de entre las raíces, cojeando, hacia el pueblo. Sabe el camino a casa mejor que tú.' }] },
     ],
     reward: { coins: 100, reputation: 2, xp: 150 },
-    on_complete: [{ kind: 'attitude', npc_id: 'npc_brenna', attitude: 'friendly' },
+    // Brenna se ablanda por la opinión (+10, regla `ceniza_vuelve` en reactions.ts), no a mano.
+    on_complete: [
       { kind: 'tell', text: 'Brenna se arrodilla junto a la chimenea con el perro entre los brazos y no dice nada durante un rato. Luego te sirve sin cobrar y, al dejar la jarra, murmura: «Hay cosas que te debo contar. Ahora no».' }],
     on_npc_dead: [
       { npc_id: 'npc_ceniza', outcome: 'fail', why: 'Ceniza murió antes de que pudiéramos sacarlo de la madriguera' },

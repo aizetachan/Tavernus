@@ -576,7 +576,24 @@ export const NOVEL_JS = String.raw`
       setTimeout(function () { if (busy && !log.querySelector('.msg.row.typing')) { var t = typingSince; typing(true); typingSince = t; } }, 600);
     });
   }
+  /**
+   * Comentario del mundo al pasar (chatter.ts): ambiente, no narración. Una línea al margen, en cursiva, con quien
+   * lo dice (su retrato pequeño si ya lo tenemos) y sin voz del narrador.
+   */
+  function addAmbient(a, seq) {
+    var div = document.createElement('div');
+    div.className = 'msg ambient k-' + (a.kind || 'daily');
+    div.setAttribute('role', 'note');
+    div.setAttribute('data-seq', String(seq));
+    var src = a.npc_id && portraits[a.npc_id];
+    div.innerHTML = (src ? '<img class="amb-face" alt="" src="' + escapeHtml(src) + '">' : '') +
+      '<span><b>' + escapeHtml(a.name) + '</b>, al pasar: «' + escapeHtml(a.text) + '»</span>';
+    log.appendChild(div);
+    scroll();
+    return div;
+  }
   function chatTurn(m, live) {
+    if (m.ambient) { addAmbient(m.ambient, m.seq); return; }
     if (m.combat) { fightMark(m.combat); return; }
     if (m.scene) { showScene(m.scene); return; }
     if (m.chapter) { addChapter(m); return; }

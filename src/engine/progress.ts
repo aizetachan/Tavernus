@@ -9,6 +9,7 @@ import { consumeItem, spawnItem, transferItem } from './inventory.js';
 import { refusesService } from './crime.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
 import { money } from './money.js';
+import { priceFor } from './standing.js';
 import type { World } from './world.js';
 
 export interface ProgressEvent {
@@ -160,7 +161,8 @@ export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id,
   const q = quantity ?? inst.quantity;
   const r = transferItem(world, inst.id, { type: 'npc', id: npc.id }, q);
   if (!r.ok) return { ok: false, reason: r.error.code };
-  const total = offer.price * q;
+  // Lo que piensa de él cambia el precio (standing.ts).
+  const total = priceFor(npc, c.id, offer.price, 'sell') * q;
   c.coins += total;
   world.touch('characters', c.id);
   return { ok: true, item: world.itemDef(inst.item_id).name, quantity: q, total };
@@ -175,7 +177,7 @@ export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, qu
   const no = refusesService(world, npc, c);
   if (no) return { ok: false, reason: no };
   const q = Math.max(1, Math.floor(quantity));
-  const total = offer.price * q;
+  const total = priceFor(npc, c.id, offer.price, 'buy') * q;
   if (c.coins < total) return { ok: false, reason: `faltan ${money(world, total - c.coins)}` };
   const r = deliverGoods(world, c, npc, itemId, q);
   if (!r.ok) return r;

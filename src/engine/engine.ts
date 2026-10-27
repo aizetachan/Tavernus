@@ -31,6 +31,8 @@ import { allIncidents, incidentText, lawTick, parseDesecration, parseInsult, par
 import { currencyOf, DEFAULT_STARTING_COINS, money } from './money.js';
 import { tickOrders } from './npcorders.js';
 import { storyQuestAction, tickStory, type StoryOutput } from './story.js';
+import { fillSet, setsWanting, speakerLabel, tickChatter, type ChatterWriter } from './chatter.js';
+import { tickWorld } from './worldrules.js';
 import { aheadNotice, aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
 import { seededRng, type Rng } from './dice.js';
 import { harvest } from './resources.js';
@@ -213,6 +215,9 @@ export class Engine {
   static readonly NO_CREDIT = 'El narrador se ha quedado sin crédito: la cuenta de la IA no tiene saldo. El anfitrión tiene que recargarla; en cuanto lo haga, podréis seguir donde lo dejasteis.';
 
   attachMaster(m: MasterLike | null): void { this.master = m; }
+  /** Modelo barato para los comentarios del mundo que los datos no traen escritos (chatter.ts). Sin él, esos callan. */
+  private chatterWriter: ChatterWriter | null = null;
+  attachChatterWriter(w: ChatterWriter | null): void { this.chatterWriter = w; }
 
   private masterListeners: MasterCallListener[] = [];
   /** Cada llamada al máster (la web la apunta en el registro con la partida). */
@@ -629,6 +634,8 @@ export class Engine {
       this.advanceStory(nowG);
       // La agenda ha movido a la gente: corre la noticia de lo que haya pasado y la ley actúa (crime.ts).
       this.announceIncidents();
+      // Lo que la gente comenta al pasar (chatter.ts), sin máster.
+      this.emitChatter(nowG);
       for (const id of this.presence.keys()) this.refreshConnection(id);
       this.expireOffers();
       this.expireReactions();
@@ -1230,6 +1237,8 @@ export class Engine {
   private advanceStory(nowG: number): void {
     const out = tickStory(this.world, nowG);
     this.emitStory(out);
+    // Hechos y reglas del mundo (worldrules.ts): lo que acaba de cambiar dispara las reacciones de los datos.
+    this.emitStory(tickWorld(this.world, nowG).story);
     for (const c of this.world.characters.values()) {
       if (c.status === 'active' && atBoard(this.world, c)) this.noteBoard(c, this.nowFor(c));
     }
@@ -1271,6 +1280,30 @@ export class Engine {
         actor_id: null, at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
         action_type: 'story', narration_private: '', observable: a.text, visibility: a.public ? 'public' : 'location', loudness: 5, tags: ['story'], payload: {},
       }, this.now());
+    }
+  }
+
+  /**
+   * Comentarios del mundo (chatter.ts): una línea de ambiente, no narración. La oye quien esté cerca (el evento va
+   * por el sonido); la web la pinta al margen con quien la dice. Las tandas sin plantillas se las pide, una vez,
+   * al escritor barato si lo hay.
+   */
+  private emitChatter(nowG: number): void {
+    for (const line of tickChatter(this.world, nowG)) {
+      const spot = this.world.spot(line.spot_id);
+      this.events.emit({
+        actor_id: null, at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
+        action_type: 'chatter', narration_private: '', observable: `${speakerLabel(this.world, line.npc_id, null)}, al pasar: «${line.text}»`,
+        visibility: 'location', loudness: 2, channel: 'sound', tags: ['chatter', line.kind],
+        payload: { master: null, chatter: { npc_id: line.npc_id, text: line.text, kind: line.kind } },
+      }, this.now());
+    }
+    const writer = this.chatterWriter;
+    if (!writer) return;
+    for (const set of setsWanting(this.world)) {
+      const prompt = set.prompt!;
+      delete set.prompt; // una vez, salga o no
+      this.background(writer({ kind: set.kind, prompt, vars: set.vars, language: this.world.campaign.language }).then((texts) => { fillSet(this.world, set.id, texts ?? []); }));
     }
   }
 

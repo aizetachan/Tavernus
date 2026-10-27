@@ -55,6 +55,8 @@ import { addReputation, checkAchievement, grantClue, type ProgressEvent, type Qu
 import { RUMOR_KINDS, type Rumor, type RumorKind } from './rumors.js';
 import type { NpcRoutine, ScheduledEvent } from './schedule.js';
 import { money } from './money.js';
+import { hasTag, opinionOf } from './standing.js';
+import { hasFact } from './worldfacts.js';
 import type { World } from './world.js';
 
 // ---------------------------------------------------------------------------
@@ -96,6 +98,12 @@ export type StoryCondition =
   | { kind: 'job'; job_id: Id }
   /** Misión cumplida (por el PJ; en la amenaza, por cualquiera). */
   | { kind: 'quest'; quest_id: Id }
+  /** Ha pasado ese hecho del mundo (worldfacts.ts): «ceniza_salvado», «npc_dead:npc_hugo». */
+  | { kind: 'fact'; id: Id }
+  /** El PJ tiene esa etiqueta (standing.ts): de origen (`clase:bard`) o ganada (`asesino`). */
+  | { kind: 'tag'; tag: Id }
+  /** Opinión de ese NPC con el PJ dentro de estos límites (standing.ts). */
+  | { kind: 'opinion'; npc_id: Id; at_least?: number; at_most?: number }
   /** Lo decide el máster con advance_story; `how` le dice cuándo. */
   | { kind: 'narrative'; how: string }
   | { kind: 'any'; of: StoryCondition[] }
@@ -278,6 +286,8 @@ export interface CharacterStory {
   origins?: Record<Id, QuestOrigin>;
   /** Cambios con el porqué (los últimos MAX_LOG). */
   log?: QuestLogEntry[];
+  /** Pistas (`quest/paso`) que una regla del mundo ha abierto o cerrado (worldrules.ts, efecto `lead`). Cerrada: ni se ve ni cuenta. */
+  leads?: Record<Id, 'open' | 'closed'>;
 }
 
 /** De dónde le viene una misión al PJ. `heard` solo queda en partidas de antes de los rumores. */
@@ -408,6 +418,13 @@ export function holds(world: World, c: Character | null, cond: StoryCondition): 
     case 'world_hours': { const s = stateOf(world); return (s.last_game_s ?? s.started_game_s) - s.started_game_s >= cond.at_least * GAME_HOUR; }
     case 'job': return c!.completed_jobs.includes(cond.job_id);
     case 'quest': return characterStory(c!).done.includes(cond.quest_id);
+    case 'fact': return hasFact(world, cond.id);
+    case 'tag': return hasTag(world, c!, cond.tag);
+    case 'opinion': {
+      const n = world.npcs.get(cond.npc_id);
+      const v = n ? opinionOf(n, c!.id) : 0;
+      return !!n && (cond.at_least === undefined || v >= cond.at_least) && (cond.at_most === undefined || v <= cond.at_most);
+    }
     case 'narrative': return false;
     case 'any': return cond.of.some((x) => holds(world, c, x));
     case 'all': return cond.of.every((x) => holds(world, c, x));
@@ -462,6 +479,9 @@ export function explain(world: World, c: Character, cond: StoryCondition): strin
     case 'world_hours': return 'se ha hecho tarde';
     case 'job': return `cumpliste el encargo «${world.campaign.jobs.find((j) => j.id === cond.job_id)?.title ?? cond.job_id}»`;
     case 'quest': return `cumpliste «${quest(world, cond.quest_id)?.title ?? cond.quest_id}»`;
+    case 'fact': return 'ha pasado lo que tenía que pasar';
+    case 'tag': return 'por lo que se sabe de ti';
+    case 'opinion': return `por lo que ${npc(cond.npc_id)} piensa de ti`;
     case 'narrative': return 'lo has hecho en la escena';
     case 'any': {
       const hit = cond.of.find((x) => credited(world, c, x)) ?? cond.of.find((x) => holds(world, c, x)) ?? cond.of[0];
@@ -473,7 +493,7 @@ export function explain(world: World, c: Character, cond: StoryCondition): strin
 }
 
 function isPersonal(cond: StoryCondition): boolean {
-  return !['npc_has', 'npc_status', 'npc_at', 'spot_state', 'escalated', 'world_hours', 'any', 'all', 'not'].includes(cond.kind);
+  return !['npc_has', 'npc_status', 'npc_at', 'spot_state', 'escalated', 'world_hours', 'fact', 'any', 'all', 'not'].includes(cond.kind);
 }
 
 // ---------------------------------------------------------------------------
@@ -493,6 +513,21 @@ export interface StoryOutput {
 }
 
 function out(): StoryOutput { return { personal: [], announcements: [], beats: [] }; }
+
+export function emptyStoryOutput(): StoryOutput { return out(); }
+
+/**
+ * Aplica efectos de la historia desde fuera (las reglas del mundo, worldrules.ts): los del PJ a `c` (si lo hay),
+ * los del mundo una sola vez por `key`. Lo que haya que contar sale en la salida, como el de un paso.
+ */
+export function applyStoryEffects(world: World, c: Character | null, effects: readonly StoryEffect[], key: string, nowS: number): StoryOutput {
+  const o = out();
+  applyEffects(world, c, effects, key, nowS, o);
+  return o;
+}
+
+/** Efectos que se aplican a cada PJ (los demás, al mundo, una vez). */
+export function isPersonalEffect(e: StoryEffect): boolean { return PERSONAL.has(e.kind); }
 
 function tellTo(o: StoryOutput, c: Character, events: ProgressEvent[]): void {
   if (!events.length) return;
@@ -680,10 +715,15 @@ export function turnInOf(c: Character, q: StoryQuest): Id | null {
   return q.turn_in_npc_id !== undefined ? q.turn_in_npc_id : q.giver_npc_id;
 }
 
-/** Paso en curso de una misión abierta: el primero sin dar de los que hacen falta (las pistas opcionales, no). */
+/** Si una regla del mundo ha abierto o cerrado esta pista para el PJ (worldrules.ts, efecto `lead`). */
+export function leadOf(c: Character, q: StoryQuest, s: StoryStep): 'open' | 'closed' | null {
+  return characterStory(c).leads?.[stepKey(q, s)] ?? null;
+}
+
+/** Paso en curso de una misión abierta: el primero sin dar de los que hacen falta (las pistas opcionales y las cerradas, no). */
 export function currentStep(c: Character, q: StoryQuest): StoryStep | null {
   const st = characterStory(c);
-  return stepsOf(c, q).find((s) => !s.optional && !st.steps.includes(stepKey(q, s))) ?? null;
+  return stepsOf(c, q).find((s) => !s.optional && leadOf(c, q, s) !== 'closed' && !st.steps.includes(stepKey(q, s))) ?? null;
 }
 
 /** ¿Alguien cumplió ya una misión de este grupo excluyente? */
@@ -742,6 +782,8 @@ function stepNpcs(world: World, cond: StoryCondition): Id[] {
 /** ¿Se ve ya este paso en el Diario? Los dados, sí; una pista, cuando alguien la ha mencionado; si no, el actual. */
 export function stepVisible(world: World, c: Character, q: StoryQuest, s: StoryStep): boolean {
   if (characterStory(c).steps.includes(stepKey(q, s))) return true;
+  const lead = leadOf(c, q, s);
+  if (lead) return lead === 'open';
   if (s.revealed_by) return holds(world, c, s.revealed_by);
   if (!q.any_order) return currentStep(c, q)?.id === s.id;
   return stepsOf(c, q).find((x) => !x.revealed_by && !characterStory(c).steps.includes(stepKey(q, x)))?.id === s.id;
@@ -876,7 +918,7 @@ function npcDeaths(world: World, c: Character, q: StoryQuest, nowS: number, o: S
 function progress(world: World, c: Character, q: StoryQuest, nowS: number, o: StoryOutput): void {
   const st = characterStory(c);
   if (q.any_order) {
-    for (const s of stepsOf(c, q)) if (!st.steps.includes(stepKey(q, s)) && credited(world, c, s.done_when)) markStep(world, c, q, s, nowS, o, explain(world, c, s.done_when));
+    for (const s of stepsOf(c, q)) if (!st.steps.includes(stepKey(q, s)) && leadOf(c, q, s) !== 'closed' && credited(world, c, s.done_when)) markStep(world, c, q, s, nowS, o, explain(world, c, s.done_when));
   } else {
     for (let s = currentStep(c, q); s && credited(world, c, s.done_when); s = currentStep(c, q)) markStep(world, c, q, s, nowS, o, explain(world, c, s.done_when));
   }
@@ -1182,6 +1224,9 @@ export function describeCondition(world: World, cond: StoryCondition): string {
     case 'world_hours': return `${cond.at_least} h de juego desde el principio`;
     case 'job': return `encargo ${cond.job_id} cumplido`;
     case 'quest': return `misión «${quest(world, cond.quest_id)?.title ?? cond.quest_id}» cumplida`;
+    case 'fact': return `que haya pasado «${cond.id}» (hecho del mundo)`;
+    case 'tag': return `que el actor tenga la etiqueta «${cond.tag}»`;
+    case 'opinion': return `opinión de ${npc(cond.npc_id)} con el actor${cond.at_least !== undefined ? ` de ${cond.at_least} o más` : ''}${cond.at_most !== undefined ? ` de ${cond.at_most} o menos` : ''}`;
     case 'narrative': return `lo decides tú con advance_story: ${cond.how}`;
     case 'any': return cond.of.map((x) => describeCondition(world, x)).join(' O ');
     case 'all': return cond.of.map((x) => describeCondition(world, x)).join(' Y ');
@@ -1300,7 +1345,7 @@ export function storyContext(world: World, c: Character, nowS: number): string |
  */
 function npcsNeeded(c: StoryCondition, clueNpcs: (id: Id) => Id[]): Set<Id> {
   switch (c.kind) {
-    case 'talk': case 'npc_has': case 'npc_at': case 'attitude': case 'debt_paid': return new Set([c.npc_id]);
+    case 'talk': case 'npc_has': case 'npc_at': case 'attitude': case 'opinion': case 'debt_paid': return new Set([c.npc_id]);
     case 'clue': return new Set(clueNpcs(c.clue_id));
     case 'all': return new Set(c.of.flatMap((x) => [...npcsNeeded(x, clueNpcs)]));
     case 'any': {
@@ -1311,56 +1356,70 @@ function npcsNeeded(c: StoryCondition, clueNpcs: (id: Id) => Id[]): Set<Id> {
   }
 }
 
+/** Lo que existe en el mundo, para validar referencias de la historia y de las reglas del mundo. */
+export interface StoryRefs { spot: (id: Id) => boolean; location: (id: Id) => boolean; npc: (id: Id) => boolean; item: (id: Id) => boolean; clue: (id: Id) => boolean; job: (id: Id) => boolean; exit: (id: Id) => boolean; clueNpcs?: (id: Id) => Id[] }
+
+/** Errores de referencias de una condición (también la usan las reglas del mundo). */
+export function conditionErrors(where: string, c: StoryCondition, has: StoryRefs, ids: { quests: ReadonlySet<Id>; escalations: ReadonlySet<Id> }, errs: string[]): void {
+  const cond = (w: string, x: StoryCondition) => conditionErrors(w, x, has, ids, errs);
+  switch (c.kind) {
+    case 'clue': if (!has.clue(c.clue_id)) errs.push(`${where}: la pista ${c.clue_id} no existe.`); break;
+    case 'visit': case 'discovered': if (!has.spot(c.spot_id)) errs.push(`${where}: el punto ${c.spot_id} no existe.`); break;
+    case 'spot_state': if (!has.spot(c.spot_id)) errs.push(`${where}: el punto ${c.spot_id} no existe.`); break;
+    case 'visit_location': case 'at_location': if (!has.location(c.location_id)) errs.push(`${where}: la localización ${c.location_id} no existe.`); break;
+    case 'npc_at': if (!has.npc(c.npc_id) || !has.spot(c.spot_id)) errs.push(`${where}: ${c.npc_id} o ${c.spot_id} no existe.`); break;
+    case 'carry': if (!has.item(c.item_id)) errs.push(`${where}: el objeto ${c.item_id} no existe.`); break;
+    case 'npc_has': if (!has.npc(c.npc_id) || !has.item(c.item_id)) errs.push(`${where}: ${c.npc_id} o ${c.item_id} no existe.`); break;
+    case 'npc_status': case 'attitude': case 'knows': case 'talk': case 'debt_paid': if (!has.npc(c.npc_id)) errs.push(`${where}: el NPC ${c.npc_id} no existe.`); break;
+    case 'level': if (!(c.at_least >= 1)) errs.push(`${where}: nivel no válido.`); break;
+    case 'escalated': if (!ids.escalations.has(c.id)) errs.push(`${where}: el escalón ${c.id} no existe.`); break;
+    case 'world_hours': if (!(c.at_least > 0)) errs.push(`${where}: horas no válidas.`); break;
+    case 'reputation': break;
+    case 'job': if (!has.job(c.job_id)) errs.push(`${where}: el encargo ${c.job_id} no existe.`); break;
+    case 'quest': if (!ids.quests.has(c.quest_id)) errs.push(`${where}: la misión ${c.quest_id} no existe.`); break;
+    case 'fact': if (!c.id.trim()) errs.push(`${where}: hecho sin id.`); break;
+    case 'tag': if (!c.tag.trim()) errs.push(`${where}: etiqueta sin id.`); break;
+    case 'opinion': if (!has.npc(c.npc_id)) errs.push(`${where}: el NPC ${c.npc_id} no existe.`); if (c.at_least === undefined && c.at_most === undefined) errs.push(`${where}: opinión sin límites.`); break;
+    case 'narrative': if (!c.how.trim()) errs.push(`${where}: paso narrativo sin «how».`); break;
+    case 'any': case 'all': if (!c.of.length) errs.push(`${where}: ${c.kind} vacío.`); c.of.forEach((x) => cond(where, x)); break;
+    case 'not': cond(where, c.of); break;
+  }
+}
+
+/** Errores de referencias de un efecto (también la usan las reglas del mundo). */
+export function effectErrors(where: string, e: StoryEffect, has: StoryRefs, errs: string[]): void {
+  const npcIds = 'npc_id' in e ? [e.npc_id] : [];
+  for (const id of npcIds) if (!has.npc(id)) errs.push(`${where}: el NPC ${id} no existe.`);
+  if ('spot_id' in e && e.spot_id !== undefined && !has.spot(e.spot_id)) errs.push(`${where}: el punto ${e.spot_id} no existe.`);
+  if ('location_id' in e && !has.location(e.location_id)) errs.push(`${where}: la localización ${e.location_id} no existe.`);
+  if (e.kind === 'clue' && !has.clue(e.clue_id)) errs.push(`${where}: la pista ${e.clue_id} no existe.`);
+  if (e.kind === 'give_item' && !has.item(e.item_id)) errs.push(`${where}: el objeto ${e.item_id} no existe.`);
+  if (e.kind === 'exit_state' && !has.exit(e.exit_id)) errs.push(`${where}: la salida ${e.exit_id} no existe.`);
+  if (e.kind === 'rumor' && !RUMOR_KINDS.includes(e.rumor_kind)) errs.push(`${where}: tipo de rumor no válido ${e.rumor_kind}.`);
+  if (e.kind === 'hook' && e.trigger === 'spot' && !e.spot_id) errs.push(`${where}: gancho de punto sin spot_id.`);
+  if (e.kind === 'schedule') {
+    if (!has.location(e.event.location_id) || !has.spot(e.event.spot_id)) errs.push(`${where}: el evento ${e.event.id} apunta a un sitio que no existe.`);
+    for (const id of e.event.npc_ids) if (!has.npc(id)) errs.push(`${where}: el evento ${e.event.id} trae a ${id}, que no existe.`);
+  }
+  if (e.kind === 'npc_status' && e.hideout_spot_id && !has.spot(e.hideout_spot_id)) errs.push(`${where}: el escondite ${e.hideout_spot_id} no existe.`);
+  if (e.kind === 'npc_routine' && e.routine) for (const id of Object.values(e.routine)) if (id && !has.spot(id)) errs.push(`${where}: horario con el punto ${id}, que no existe.`);
+}
+
 /**
  * Errores de referencias y forma de la historia. Vacío = válida. Con `clueNpcs` (quién da cada pista que solo sale
  * de una persona), además, la lista de casos límite: cada NPC del que depende una misión (un paso, la entrega, una
  * pista que solo da él) tiene su `on_npc_dead`, y el otro camino no vuelve a depender de él.
  */
-export function validateStory(story: Story, has: { spot: (id: Id) => boolean; location: (id: Id) => boolean; npc: (id: Id) => boolean; item: (id: Id) => boolean; clue: (id: Id) => boolean; job: (id: Id) => boolean; exit: (id: Id) => boolean; clueNpcs?: (id: Id) => Id[] }): string[] {
+export function validateStory(story: Story, has: StoryRefs): string[] {
   const errs: string[] = [];
   const qids = new Set<Id>();
   for (const q of story.quests) {
     if (qids.has(q.id)) errs.push(`historia: la misión ${q.id} está repetida.`);
     qids.add(q.id);
   }
-  const cond = (where: string, c: StoryCondition): void => {
-    switch (c.kind) {
-      case 'clue': if (!has.clue(c.clue_id)) errs.push(`${where}: la pista ${c.clue_id} no existe.`); break;
-      case 'visit': case 'discovered': if (!has.spot(c.spot_id)) errs.push(`${where}: el punto ${c.spot_id} no existe.`); break;
-      case 'spot_state': if (!has.spot(c.spot_id)) errs.push(`${where}: el punto ${c.spot_id} no existe.`); break;
-      case 'visit_location': case 'at_location': if (!has.location(c.location_id)) errs.push(`${where}: la localización ${c.location_id} no existe.`); break;
-      case 'npc_at': if (!has.npc(c.npc_id) || !has.spot(c.spot_id)) errs.push(`${where}: ${c.npc_id} o ${c.spot_id} no existe.`); break;
-      case 'carry': if (!has.item(c.item_id)) errs.push(`${where}: el objeto ${c.item_id} no existe.`); break;
-      case 'npc_has': if (!has.npc(c.npc_id) || !has.item(c.item_id)) errs.push(`${where}: ${c.npc_id} o ${c.item_id} no existe.`); break;
-      case 'npc_status': case 'attitude': case 'knows': case 'talk': case 'debt_paid': if (!has.npc(c.npc_id)) errs.push(`${where}: el NPC ${c.npc_id} no existe.`); break;
-      case 'level': if (!(c.at_least >= 1)) errs.push(`${where}: nivel no válido.`); break;
-      case 'escalated': if (!story.escalation.some((e) => e.id === c.id)) errs.push(`${where}: el escalón ${c.id} no existe.`); break;
-      case 'world_hours': if (!(c.at_least > 0)) errs.push(`${where}: horas no válidas.`); break;
-      case 'reputation': break;
-      case 'job': if (!has.job(c.job_id)) errs.push(`${where}: el encargo ${c.job_id} no existe.`); break;
-      case 'quest': if (!qids.has(c.quest_id)) errs.push(`${where}: la misión ${c.quest_id} no existe.`); break;
-      case 'narrative': if (!c.how.trim()) errs.push(`${where}: paso narrativo sin «how».`); break;
-      case 'any': case 'all': if (!c.of.length) errs.push(`${where}: ${c.kind} vacío.`); c.of.forEach((x) => cond(where, x)); break;
-      case 'not': cond(where, c.of); break;
-    }
-  };
-  const eff = (where: string, e: StoryEffect): void => {
-    const npcIds = 'npc_id' in e ? [e.npc_id] : [];
-    for (const id of npcIds) if (!has.npc(id)) errs.push(`${where}: el NPC ${id} no existe.`);
-    if ('spot_id' in e && e.spot_id !== undefined && !has.spot(e.spot_id)) errs.push(`${where}: el punto ${e.spot_id} no existe.`);
-    if ('location_id' in e && !has.location(e.location_id)) errs.push(`${where}: la localización ${e.location_id} no existe.`);
-    if (e.kind === 'clue' && !has.clue(e.clue_id)) errs.push(`${where}: la pista ${e.clue_id} no existe.`);
-    if (e.kind === 'give_item' && !has.item(e.item_id)) errs.push(`${where}: el objeto ${e.item_id} no existe.`);
-    if (e.kind === 'exit_state' && !has.exit(e.exit_id)) errs.push(`${where}: la salida ${e.exit_id} no existe.`);
-    if (e.kind === 'rumor' && !RUMOR_KINDS.includes(e.rumor_kind)) errs.push(`${where}: tipo de rumor no válido ${e.rumor_kind}.`);
-    if (e.kind === 'hook' && e.trigger === 'spot' && !e.spot_id) errs.push(`${where}: gancho de punto sin spot_id.`);
-    if (e.kind === 'schedule') {
-      if (!has.location(e.event.location_id) || !has.spot(e.event.spot_id)) errs.push(`${where}: el evento ${e.event.id} apunta a un sitio que no existe.`);
-      for (const id of e.event.npc_ids) if (!has.npc(id)) errs.push(`${where}: el evento ${e.event.id} trae a ${id}, que no existe.`);
-    }
-    if (e.kind === 'npc_status' && e.hideout_spot_id && !has.spot(e.hideout_spot_id)) errs.push(`${where}: el escondite ${e.hideout_spot_id} no existe.`);
-    if (e.kind === 'npc_routine' && e.routine) for (const id of Object.values(e.routine)) if (id && !has.spot(id)) errs.push(`${where}: horario con el punto ${id}, que no existe.`);
-  };
+  const ids = { quests: qids, escalations: new Set(story.escalation.map((e) => e.id)) };
+  const cond = (where: string, c: StoryCondition): void => conditionErrors(where, c, has, ids, errs);
+  const eff = (where: string, e: StoryEffect): void => effectErrors(where, e, has, errs);
   const steps = (w: string, list: StoryStep[], sids: Set<Id>, same: StoryStep[] = []): void => {
     for (const s of list) {
       // En un camino alternativo, repetir un paso del principal tal cual vale: lo ya hecho cuenta.
