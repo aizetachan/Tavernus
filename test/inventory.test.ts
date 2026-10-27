@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { encumbrance, inventoryView, spawnItem, transferItem } from '../src/engine/inventory.js';
-import { freshWorld } from './helpers.js';
+import { sheetView } from '../src/adapters/sheet-view.js';
+import { encumbrance, inventoryView, packView, spawnItem, transferItem } from '../src/engine/inventory.js';
+import { bootEngine, freshWorld } from './helpers.js';
 
 const hand = (id: string, which: 'main' | 'off' | 'both') => ({ type: 'character' as const, id, slot: { kind: 'hand' as const, which } });
 const pocket = (id: string) => ({ type: 'character' as const, id, slot: { kind: 'pocket' as const } });
@@ -129,5 +130,27 @@ describe('inventario y capacidad', () => {
     const bad = spawnItem(world, 'it_daga', 1, { type: 'character', id: 'ch_kael', slot: { kind: 'equipped', slot: 'head' } });
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.error.code).toBe('invalid_slot');
+  });
+
+  it('mochila de la web: cada objeto trae su icono, su peso y su ficha, sacados de sus datos', () => {
+    const { world } = freshWorld();
+    const p = packView(world, 'ch_kael');
+    expect(p.hands.main).toMatchObject({ id: 'ii_kael_daga', name: 'daga', icon: 'weapon', weight_lb: 1, stat: 'Daño 1d4 perforante' });
+    expect(p.hands.main!.props).toContain('sutil: con FUE o DES');
+    // La mochila pesa con lo que lleva dentro y se dice dónde se lleva.
+    const back = p.equipped.find((e) => e.slot === 'back')!.item!;
+    expect(back).toMatchObject({ icon: 'container', equip_slot: 'back', weight_lb: 18 });
+    expect(back.props).toContain('se lleva en la espalda');
+    const torches = p.containers[0]!.items.find((i) => i.name === 'antorcha')!;
+    expect(torches).toMatchObject({ label: 'antorcha ×3', quantity: 3, icon: 'light', weight_lb: 3, about: 'Da luz donde está oscuro.' });
+  });
+
+  it('hoja: la carga trae los umbrales de «cargado» y «muy cargado» para la barra de peso', async () => {
+    const { engine } = await bootEngine();
+    const s = sheetView(engine, 'ch_kael');
+    const e = encumbrance(engine.world, engine.world.character('ch_kael'));
+    expect(s.pack.carry).toMatchObject({ max_lb: e.max_lb, level: e.level });
+    expect(s.pack.carry.encumbered_lb).toBeLessThan(s.pack.carry.heavily_lb);
+    expect(s.pack.carry.heavily_lb).toBeLessThanOrEqual(s.pack.carry.max_lb);
   });
 });

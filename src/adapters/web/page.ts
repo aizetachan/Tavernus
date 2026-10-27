@@ -399,30 +399,79 @@ export const PAGE = String.raw`<!doctype html>
 
   /* Mochila. */
   .items > div { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid rgba(255,255,255,.05); }
-  /* Mochila en tarjetas, con los huecos libres punteados. */
-  .icards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
-  .ic { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 9px 10px; border-radius: 12px; background: var(--platter); border: 1px solid var(--sep); }
-  .ic .tag { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 10px; background: var(--control); border: 1px solid var(--line); color: #b8b1a6; }
-  .ic.eq .tag { background: var(--accent-tint); border-color: rgba(230,183,90,.28); color: var(--accent); }
-  .ic .tt { min-width: 0; flex: 1; font-size: 14px; }
-  .ic .tt small { display: block; font-size: 12px; color: var(--muted); }
-  .ic.free { background: transparent; border-style: dashed; border-color: rgba(255,255,255,.1); }
-  .ic.free .tag { background: transparent; border-style: dashed; border-color: rgba(255,255,255,.1); }
-  .ic.free .tt { color: var(--faint); font-size: 13px; }
-  .ic[draggable] { cursor: grab; }
-  .pack-msg { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; background: rgba(255,107,94,.12); color: #ffb3aa; font-size: 13px; }
+  /* Mochila al estilo de un juego de rol: carga y monedas arriba, el muñeco sobre madera con marco dorado (como el
+     menú) y, debajo, la rejilla de casillas de cada contenedor. */
+  #pack { position: relative; }
+  .pk-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px 16px; padding: 12px 14px; border-radius: 14px; background: var(--platter); border: 1px solid var(--sep); }
+  .pk-w b { display: block; font-size: 26px; line-height: 1.05; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pk-w b small { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .pk-lvl { display: block; margin-top: 3px; font-size: 12px; color: var(--ok); }
+  .pk-lvl.encumbered { color: #f0a640; } .pk-lvl.heavily, .pk-lvl.immobile { color: var(--error); }
+  .pk-coins { display: flex; align-items: center; gap: 6px; color: var(--accent); }
+  .pk-coins b { font-size: 26px; line-height: 1.05; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
+  .pk-coins small { align-self: flex-end; font-size: 12px; color: var(--muted); }
+  .pk-coins svg.i { width: 22px; height: 22px; }
+  .pk-bar { grid-column: 1 / -1; position: relative; height: 8px; border-radius: 999px; background: rgba(255,255,255,.08); }
+  .pk-bar i { display: block; height: 100%; max-width: 100%; border-radius: 999px; background: var(--ok); transition: width .3s ease; }
+  .pk-bar.encumbered i { background: #f0a640; } .pk-bar.heavily i, .pk-bar.immobile i { background: var(--error); }
+  .pk-bar .mk { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: rgba(236,231,223,.35); }
+  /* El «no cabe» del motor se queda a la vista aunque la mochila esté desplazada. */
+  .pack-msg { position: sticky; top: 0; z-index: 4; margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,107,94,.3); background: #2e1c1a; color: #ffb3aa; font-size: 13px; box-shadow: 0 8px 20px rgba(0,0,0,.45); }
   .pack-msg[hidden] { display: none; }
-  .ic.dragging { opacity: .4; }
-  .ic.drop { border-color: var(--accent); border-style: solid; background: var(--accent-tint); }
   .kv-t span { margin-left: 4px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
-  /* Carga a la izquierda y monedas a la derecha: las dos cifras grandes y su rótulo debajo. */
-  .tile.wide.money { flex-direction: row; align-items: center; justify-content: space-between; }
-  .tile.wide.money .l { display: block; font-size: 13px; }
-  .tile.wide.money .l b { display: block; margin-left: 0; font-size: 34px; line-height: 1.05; font-weight: 600; }
-  .tile.wide.money .l small { display: block; font-size: 11px; color: var(--muted); }
-  .tile.wide.money .coins { display: flex; flex-direction: column; align-items: flex-end; }
-  .tile.wide.money .coins b { font-size: 34px; line-height: 1.05; font-weight: 600; }
-  .tile.wide.money .coins small { font-size: 11px; color: var(--muted); }
+  /* El tablero del muñeco: proporción fija 4:5, la silueta detrás y cada hueco en su sitio (left/top en %). */
+  .pk-doll { position: relative; width: 100%; max-width: 420px; margin: 0 auto; aspect-ratio: 4 / 5; border-radius: 16px;
+    border: 1px solid rgba(230,183,90,.38); box-shadow: inset 0 0 0 3px rgba(20,13,7,.8), inset 0 0 0 4px rgba(230,183,90,.16), inset 0 0 48px rgba(0,0,0,.6), 0 8px 24px rgba(0,0,0,.35);
+    background: radial-gradient(ellipse at 50% 42%, rgba(14,10,6,.5), rgba(14,10,6,.86) 75%), url(/assets/menu-madera.jpg?v=2) center top / 520px auto repeat #24190f; }
+  .pk-fig { position: absolute; inset: 0; width: 100%; height: 100%; fill: url(#pk-fig-g); stroke: rgba(230,183,90,.3); stroke-width: 2; }
+  .pk-s { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; padding: 4px; border-radius: 10px;
+    border: 1px solid rgba(230,183,90,.24); background: rgba(10,8,6,.62); color: #c9bda8; font: inherit; text-align: center; cursor: default;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  .pk-doll .pk-s { position: absolute; width: 18%; aspect-ratio: 1; box-shadow: inset 0 0 12px rgba(0,0,0,.7); }
+  .pk-doll .pk-s.tall-hand { aspect-ratio: 1 / 2; }
+  .pk-doll .pk-s.tall-body { aspect-ratio: 1 / 1.4; }
+  .pk-s svg.i { width: 26px; height: 26px; stroke-width: 1.6; }
+  .pk-s .nm { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; font-size: 11px; line-height: 1.2; overflow-wrap: anywhere; }
+  .pk-s .qt { position: absolute; top: 3px; right: 5px; font-size: 10.5px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .pk-s.free { color: rgba(230,183,90,.28); border-style: dashed; border-color: rgba(230,183,90,.2); background: rgba(10,8,6,.4); }
+  .pk-s.free .nm { color: rgba(201,189,168,.5); font-size: 10.5px; }
+  .pk-s.full { color: var(--text); border-color: rgba(230,183,90,.5); background: linear-gradient(180deg, rgba(58,40,20,.82), rgba(24,17,10,.9)); cursor: grab; }
+  .pk-s.full svg.i { color: var(--accent); }
+  .pk-s.ghost { border-style: solid; color: rgba(236,231,223,.42); }
+  .pk-s.ghost svg.i { color: rgba(230,183,90,.4); }
+  .pk-s:hover { border-color: rgba(240,197,107,.75); }
+  .pk-s:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+  .pk-s.sel { border-color: var(--glow); box-shadow: 0 0 0 2px rgba(240,197,107,.55), 0 0 18px rgba(240,197,107,.35); }
+  .pk-s.dragging { opacity: .35; }
+  .pk-s.fit { border: 1px dashed var(--glow); color: var(--glow); background: rgba(230,183,90,.12); }
+  .pk-s.drop { border: 1px solid var(--glow); background: rgba(230,183,90,.24); box-shadow: 0 0 16px rgba(240,197,107,.4); }
+  /* La rejilla: casillas cuadradas fijas, tantas por fila como quepan (cinco en un móvil). */
+  .pk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 6px; padding: 8px; border-radius: 12px; border: 1px solid rgba(230,183,90,.2);
+    background: linear-gradient(180deg, rgba(14,10,6,.78), rgba(14,10,6,.9)), url(/assets/menu-madera.jpg?v=2) center / 520px auto repeat #24190f; }
+  .pk-grid .pk-s { aspect-ratio: 1; }
+  .pk-grid .pk-s svg.i { width: 22px; height: 22px; }
+  .pk-grid .pk-s .nm { font-size: 10.5px; }
+  /* La ficha del objeto: junto a su hueco, como un pergamino oscuro con filo dorado. */
+  .pk-tip { position: absolute; z-index: 3; width: min(260px, 100%); padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(230,183,90,.45);
+    background: rgba(22,16,10,.97); box-shadow: 0 12px 32px rgba(0,0,0,.6); font-size: 12.5px; line-height: 1.4; color: #d9cfbf; pointer-events: none; }
+  .pk-tip[hidden] { display: none; }
+  .pk-tip b { display: block; font: 700 14px/1.25 var(--display); color: var(--glow); }
+  .pk-tip .st { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--text); }
+  .pk-tip .wt { display: block; margin-top: 2px; color: var(--muted); }
+  .pk-tip .pr { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .pk-tip .pr i { padding: 1px 7px; border-radius: 999px; background: rgba(230,183,90,.12); color: #e9d6ad; font-style: normal; font-size: 11.5px; }
+  .pk-tip .ab { display: block; margin-top: 6px; color: #b8ad9b; font-style: italic; }
+  /* Lo que se arrastra sigue al puntero. */
+  .pk-ghost { position: fixed; z-index: 60; display: flex; align-items: center; gap: 6px; max-width: 200px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--glow);
+    background: rgba(40,28,14,.95); color: var(--text); font-size: 12.5px; box-shadow: 0 10px 24px rgba(0,0,0,.55); pointer-events: none; transform: translate(-50%, -130%); white-space: nowrap; }
+  .pk-ghost span { overflow: hidden; text-overflow: ellipsis; }
+  .pk-ghost svg.i { color: var(--accent); }
+  @media (max-width: 480px) {
+    .pk-w b, .pk-coins b { font-size: 22px; }
+    .pk-s svg.i { width: 22px; height: 22px; }
+    .pk-s .nm { font-size: 10px; }
+    .pk-doll .pk-s { padding: 2px; border-radius: 8px; }
+  }
   .items .tag { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 10px; background: var(--control); border: 1px solid var(--line); color: #b8b1a6; }
   .items .tag.eq { background: var(--accent-tint); border-color: rgba(230,183,90,.28); color: var(--accent); }
   .items .tt { min-width: 0; flex: 1; font-size: 14.5px; }
@@ -887,6 +936,26 @@ ${FIGHT_STYLE}
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
   <symbol id="i-invite" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <!-- Mochila: icono de cada clase de objeto y silueta de cada hueco vacío del muñeco. -->
+  <symbol id="p-weapon" viewBox="0 0 24 24"><path d="M20 4v5l-9 9-5-5 9-9z"/><path d="M4.5 13.5l6 6M7 17l-3.5 3.5"/></symbol>
+  <symbol id="p-bow" viewBox="0 0 24 24"><path d="M5 3c9 2 14 7 16 16"/><path d="M5 3l16 16" stroke-dasharray="2 2"/><path d="M3 21l8-8M3 21h4M3 21v-4"/></symbol>
+  <symbol id="p-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 6.5v11"/></symbol>
+  <symbol id="p-armor" viewBox="0 0 24 24"><path d="M8 3l4 2 4-2 4 3-2 4v10H6V10L4 6z"/><path d="M12 5v15M9 13h6"/></symbol>
+  <symbol id="p-head" viewBox="0 0 24 24"><path d="M4 16a8 8 0 0 1 16 0v3h-6v-4h-4v4H4z"/><path d="M12 8V4"/></symbol>
+  <symbol id="p-neck" viewBox="0 0 24 24"><path d="M6 3c0 5 2.5 8 6 9 3.5-1 6-4 6-9"/><path d="M12 12l3 4-3 5-3-5z"/></symbol>
+  <symbol id="p-back" viewBox="0 0 24 24"><path d="M9 3h6l1 3c2 4 3 9 4 15H4c1-6 2-11 4-15z"/><path d="M9 3c1 2 5 2 6 0M12 8v13"/></symbol>
+  <symbol id="p-hands" viewBox="0 0 24 24"><path d="M7 11V6a2 2 0 0 1 4 0v5M11 10V4a2 2 0 0 1 4 0v6M15 10V6a2 2 0 0 1 4 0v7a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-3l-2.5-4a1.8 1.8 0 0 1 3-2L7 13"/></symbol>
+  <symbol id="p-feet" viewBox="0 0 24 24"><path d="M7 3h7v9l5.5 2.5A2.5 2.5 0 0 1 21 17v3H7z"/><path d="M7 16h14M7 7h7"/></symbol>
+  <symbol id="p-ring" viewBox="0 0 24 24"><circle cx="12" cy="15" r="6"/><path d="M9.5 6.5L12 3l2.5 3.5L12 9z"/></symbol>
+  <symbol id="p-belt" viewBox="0 0 24 24"><path d="M2 10h20v4H2z"/><path d="M9 8h6v8H9z"/><path d="M12 12h3"/></symbol>
+  <symbol id="p-light" viewBox="0 0 24 24"><path d="M10 11h4l-1 10h-2z"/><path d="M12 3c2 2 3 3.5 3 5a3 3 0 0 1-6 0c0-1.5 1-3 3-5z"/></symbol>
+  <symbol id="p-potion" viewBox="0 0 24 24"><path d="M10 3h4M10 3v5L5.5 16A3.5 3.5 0 0 0 8.6 21h6.8a3.5 3.5 0 0 0 3.1-5L14 8V3"/><path d="M7.5 14h9"/></symbol>
+  <symbol id="p-food" viewBox="0 0 24 24"><path d="M12 7c-4-2-8 0-8 5s3 9 5 9c1 0 2-.5 3-.5s2 .5 3 .5c2 0 5-4 5-9s-4-7-8-5z"/><path d="M12 7c0-2 1-3.5 3-4"/></symbol>
+  <symbol id="p-pack" viewBox="0 0 24 24"><path d="M5 9a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v11H5z"/><path d="M9 6V4.5a3 3 0 0 1 6 0V6M5 13h14M10 13v2h4v-2"/></symbol>
+  <symbol id="p-tool" viewBox="0 0 24 24"><path d="M14 4l6 6-2 2-6-6z"/><path d="M13 9l-9 9 2 2 9-9"/></symbol>
+  <symbol id="p-quest" viewBox="0 0 24 24"><path d="M8 4h10a2 2 0 0 1 2 2v1h-4"/><path d="M16 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1h10"/><path d="M8 4a2 2 0 0 0-2 2v11M9 9h4M9 13h4"/></symbol>
+  <symbol id="p-treasure" viewBox="0 0 24 24"><path d="M6 4h12l3 5-9 11L3 9z"/><path d="M3 9h18M9 4l3 5 3-5M12 9v11"/></symbol>
+  <symbol id="p-misc" viewBox="0 0 24 24"><path d="M8 6h8l-1.5 2.5C18 10 20 13 20 16a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5c0-3 2-6 5.5-7.5z"/><path d="M8 6l1-3h6l1 3"/></symbol>
 </svg>
 <aside id="side" aria-label="La partida">
   <div class="side-head">
@@ -940,7 +1009,7 @@ ${FIGHT_STYLE}
       <div class="dr-body">
         <div class="dr-pane" data-drpane="sheet"><div id="group" aria-live="polite"></div><div id="sheet"></div><p class="none">Cargando la hoja…</p></div>
         <div class="dr-pane" data-drpane="journal"><div id="journal"></div><p class="none">El diario está en blanco.</p></div>
-        <div class="dr-pane" data-drpane="pack"><div id="pack"></div><p class="none">Cargando la mochila…</p></div>
+        <div class="dr-pane" data-drpane="pack"><div id="pack"></div><p class="none">Cargando la mochila…</p><p class="vh" id="pk-live" aria-live="polite"></p></div>
       </div>
     </section>
   </div>
@@ -1534,43 +1603,144 @@ ${FIGHT_SCRIPT}
     if (foot) foot.textContent = foot.textContent.replace(/^\d+/, String(classEdit.picks.length));
   });
 
-  var SLOT_ES = { back: 'a la espalda', body: 'puesto', armor: 'armadura', head: 'cabeza', belt: 'cinturón', waist: 'cintura', feet: 'pies', hands: 'manos', neck: 'cuello', ring: 'anillo', shield: 'escudo', cloak: 'capa', shoulder: 'al hombro' };
-  var EQUIP_ES = { head: 'cabeza', body: 'cuerpo', hands: 'guantes', feet: 'pies', neck: 'cuello', ring1: 'anillo', ring2: 'anillo', back: 'espalda', belt: 'cinturón' };
   /**
-   * Mochila: carga y monedas arriba; debajo, en tarjetas, lo que tienes en las manos, equipado, en los bolsillos y
-   * en cada contenedor, con los huecos libres de cada sitio también a la vista. Todo se arrastra: entre sitios, el
-   * objeto se mueve de verdad (POST /api/inventory, con las reglas del motor); dentro de los bolsillos o de un
-   * contenedor, además, se intercambian posiciones (ese orden se recuerda en este navegador).
+   * Mochila al estilo de un juego de rol: arriba, la carga (con su barra) y las monedas; en medio, el muñeco con
+   * cada hueco de equipo en su sitio del cuerpo y las dos manos a los lados; debajo, una rejilla de casillas fijas
+   * por contenedor (bolsillos, mochila…), con las libres a la vista. Todo se mueve arrastrando (ratón, o dedo
+   * manteniendo pulsado) o cogiendo y dejando (clic, toque o Enter en el objeto y luego en su destino; Escape lo
+   * suelta). Entre sitios, el objeto se mueve de verdad (POST /api/inventory, con las reglas del motor); dentro de
+   * los bolsillos o de un contenedor, se intercambian casillas (ese orden se recuerda en este navegador). Al pasar
+   * por encima, al enfocarlo o al cogerlo, la ficha del objeto: peso, daño o CA, propiedades y para qué sirve.
    */
+  var EQUIP_ES = { head: 'Cabeza', body: 'Cuerpo', hands: 'Guantes', feet: 'Pies', neck: 'Cuello', ring1: 'Anillo', ring2: 'Anillo', back: 'Espalda o capa', belt: 'Cinturón' };
+  // Dónde va cada hueco en el muñeco (en % del tablero, que mantiene la proporción 4:5) y su silueta vacía.
+  var DOLL = [
+    { dest: 'equip:head', slot: 'head', x: 41, y: 2, icon: 'head' },
+    { dest: 'equip:neck', slot: 'neck', x: 61, y: 5, icon: 'neck' },
+    { dest: 'equip:body', slot: 'body', x: 41, y: 19, icon: 'armor', tall: 'body' },
+    { dest: 'equip:back', slot: 'back', x: 41, y: 42, icon: 'back' },
+    { dest: 'hand:main', hand: 'main', x: 2, y: 18, icon: 'weapon', tall: 'hand', name: 'Mano principal' },
+    { dest: 'equip:hands', slot: 'hands', x: 2, y: 51, icon: 'hands' },
+    { dest: 'equip:ring1', slot: 'ring1', x: 2, y: 68, icon: 'ring' },
+    { dest: 'hand:off', hand: 'off', x: 80, y: 18, icon: 'shield', tall: 'hand', name: 'Otra mano' },
+    { dest: 'equip:belt', slot: 'belt', x: 80, y: 51, icon: 'belt' },
+    { dest: 'equip:ring2', slot: 'ring2', x: 80, y: 68, icon: 'ring' },
+    { dest: 'equip:feet', slot: 'feet', x: 41, y: 83, icon: 'feet' },
+  ];
+  var DOLL_FIG = '<svg class="pk-fig" viewBox="0 0 400 500" aria-hidden="true" focusable="false"><defs><linearGradient id="pk-fig-g" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0" stop-color="#e6b75a" stop-opacity=".16"/><stop offset="1" stop-color="#e6b75a" stop-opacity=".05"/></linearGradient></defs>' +
+    '<ellipse cx="200" cy="50" rx="32" ry="38"/><path d="M186 84h28v18h-28z"/>' +
+    '<path d="M200 96c36 0 66 4 82 16 16 12 24 48 30 88l18 100c3 16-12 22-18 8l-24-94-14-46-12 82c0 16 2 30-2 46l-12 176h-36l-8-160-4-6-4 6-8 160h-36l-12-176c-4-16-2-30-2-46l-12-82-14 46-24 94c-6 14-21 8-18-8l18-100c6-40 14-76 30-88 16-12 46-16 82-16z"/></svg>';
+  var pk = { items: {}, held: null, drag: null, press: null, noClick: false };
+  function pkIcon(icon) { return '#p-' + ({ ring1: 'ring', ring2: 'ring', body: 'armor', container: 'pack' }[icon] || icon); }
+  function pkLb(n) { return (Math.round(n * 100) / 100).toLocaleString('es-ES') + ' lb'; }
   function renderPack(s) {
     var p = s.pack;
     if (!p) { $('pack').innerHTML = '<p class="none">Sin datos de la mochila.</p>'; return; }
-    // Una tarjeta: «dest» dice adónde iría lo que se suelte en ella; «g», su grupo de orden libre (si lo tiene).
-    var card = function (it, sub, kind, dest, g, i) {
-      var attrs = ' data-dest="' + escapeHtml(dest) + '"' + (g ? ' data-g="' + escapeHtml(g) + '" data-i="' + i + '"' : '') + (it ? ' data-id="' + escapeHtml(it.id) + '" draggable="true"' : '');
-      if (!it) return '<div class="ic free"' + attrs + '><span class="tag"></span><span class="tt">' + escapeHtml(sub) + '</span></div>';
-      return '<div class="ic' + (kind ? ' ' + kind : '') + '"' + attrs + '><span class="tag"><svg class="i"><use href="#' + (kind === 'eq' ? 'i-hand' : 'i-pack') + '"/></svg></span>' +
-        '<span class="tt">' + escapeHtml(it.label) + (sub ? '<small>' + escapeHtml(sub) + '</small>' : '') + '</span></div>';
+    pk.items = {};
+    var note = function (it) { if (it) pk.items[it.id] = it; return it; };
+    // Un hueco: «dest» dice adónde iría lo que se suelte en él; «g», su grupo de orden libre (si lo tiene).
+    var slot = function (it, o) {
+      var cls = 'pk-s' + (o.cls ? ' ' + o.cls : '') + (it ? ' full' : ' free');
+      var attrs = ' data-dest="' + escapeHtml(o.dest) + '"' + (o.g ? ' data-g="' + escapeHtml(o.g) + '" data-i="' + o.i + '"' : '') + (it ? ' data-id="' + escapeHtml(note(it).id) + '"' : '') +
+        (o.style ? ' style="' + o.style + '"' : '');
+      var label = o.where + ': ' + (it ? it.label : o.ghost ? o.ghost.label + ', a dos manos' : 'libre');
+      var body = it ? '<svg class="i"><use href="' + pkIcon(it.icon) + '"/></svg><span class="nm">' + escapeHtml(it.name) + '</span>' + (it.quantity > 1 ? '<span class="qt">×' + it.quantity + '</span>' : '')
+        : o.ghost ? '<svg class="i"><use href="' + pkIcon(o.ghost.icon) + '"/></svg><span class="nm">a dos manos</span>'
+        : (o.icon ? '<svg class="i"><use href="' + pkIcon(o.icon) + '"/></svg>' : '') + (o.empty ? '<span class="nm">' + escapeHtml(o.empty) + '</span>' : '');
+      return '<button type="button" class="' + cls + (o.ghost ? ' ghost' : '') + '"' + attrs + ' aria-label="' + escapeHtml(label) + '">' + body + '</button>';
     };
-    var group = function (title, cards, used, slots) {
-      return '<div class="kv-t">' + escapeHtml(title) + (slots ? ' <span>' + used + ' / ' + slots + '</span>' : '') + '</div><div class="icards">' + cards.join('') + '</div>';
+    var c = p.carry || null, pkBar = '';
+    var h = '<div class="pk-top">';
+    if (c) {
+      var pct = function (n) { return Math.max(0, Math.min(100, n / c.max_lb * 100)); };
+      var lvl = { ok: 'Ligero', encumbered: 'Cargado', heavily: 'Muy cargado', immobile: 'No puedes moverte' }[c.level] || '';
+      h += '<div class="pk-w"><b>' + escapeHtml(pkLb(c.weight_lb).replace(' lb', '')) + '<small> / ' + escapeHtml(String(c.max_lb)) + ' lb</small></b>' +
+        '<span class="pk-lvl ' + c.level + '">' + escapeHtml(lvl) + (c.speed_penalty_ft && c.level !== 'immobile' ? ' · −' + c.speed_penalty_ft + ' pies de velocidad' : '') + '</span></div>';
+      pkBar = '<div class="pk-bar ' + c.level + '" role="meter" aria-label="Carga" aria-valuemin="0" aria-valuemax="' + c.max_lb + '" aria-valuenow="' + c.weight_lb + '" aria-valuetext="' + escapeHtml(p.load) + '">' +
+        '<i style="width:' + pct(c.weight_lb) + '%"></i><span class="mk" style="left:' + pct(c.encumbered_lb) + '%" title="Cargado desde ' + c.encumbered_lb + ' lb"></span>' +
+        '<span class="mk" style="left:' + pct(c.heavily_lb) + '%" title="Muy cargado desde ' + c.heavily_lb + ' lb"></span></div>';
+    } else h += '<div class="pk-w"><b>' + escapeHtml(p.load) + '</b></div>';
+    h += '<div class="pk-coins"><svg class="i"><use href="#i-coin"/></svg><b>' + escapeHtml(String(p.coins).replace(/\B(?=(\d{3})+(?!\d))/g, '.')) + '</b><small>monedas</small></div>';
+    if (c) h += pkBar;
+    h += '</div>';
+    h += '<p class="pack-msg" id="pack-msg" hidden></p>';
+    // El muñeco: la silueta detrás y cada hueco encima, en su sitio del cuerpo.
+    var eq = {};
+    p.equipped.forEach(function (e) { eq[e.slot] = e.item; });
+    h += '<div class="kv-t">Equipo</div><div class="pk-doll" role="group" aria-label="Lo que llevas puesto y en las manos">' + DOLL_FIG;
+    DOLL.forEach(function (d) {
+      var where = d.name || EQUIP_ES[d.slot], st = 'left:' + d.x + '%;top:' + d.y + '%';
+      var cls = d.tall ? 'tall-' + d.tall : '';
+      if (d.hand === 'off' && p.hands.both) h += slot(null, { dest: d.dest, where: where, style: st, cls: cls, ghost: p.hands.main });
+      else h += slot(d.hand ? p.hands[d.hand] : eq[d.slot], { dest: d.dest, where: where, style: st, cls: cls, icon: d.icon, empty: where });
+    });
+    h += '</div>';
+    // La rejilla: una fila de casillas por contenedor, en el orden guardado.
+    var grid = function (title, g, dest, items, slots) {
+      var at = arrange(g, items, slots), byId = {}, w = 0;
+      items.forEach(function (x) { byId[x.id] = x; w += x.weight_lb || 0; });
+      return '<div class="kv-t">' + escapeHtml(title) + ' <span>' + items.length + ' / ' + slots + (w ? ' · ' + escapeHtml(pkLb(w)) : '') + '</span></div>' +
+        '<div class="pk-grid" role="group" aria-label="' + escapeHtml(title) + '">' + at.map(function (id, i) {
+          return slot(id ? byId[id] : null, { dest: dest, g: g, i: i, where: title + ', casilla ' + (i + 1), icon: null });
+        }).join('') + '</div>';
     };
-    var sortable = function (g, dest, items, slots) {
-      var at = arrange(g, items, slots), byId = {};
-      items.forEach(function (x) { byId[x.id] = x; });
-      return at.map(function (id, i) { return card(id ? byId[id] : null, id ? '' : 'Libre', '', dest, g, i); });
-    };
-    var load = p.load.split(' · ');
-    var h = '<div class="tile wide money"><span class="l"><b>' + escapeHtml(load[0]) + '</b><small>Carga' + (load[1] ? ' · ' + escapeHtml(load[1]) : '') + '</small></span>' +
-      '<span class="coins"><b>' + escapeHtml(String(p.coins)) + '</b><small>Monedas</small></span></div><p class="pack-msg" id="pack-msg" hidden></p>';
-    var hands = p.hands.both ? [card(p.hands.main, 'a dos manos', '', 'hand:main')]
-      : [card(p.hands.main, p.hands.main ? 'mano principal' : 'Mano principal libre', '', 'hand:main'), card(p.hands.off, p.hands.off ? 'otra mano' : 'Otra mano libre', '', 'hand:off')];
-    h += group('En las manos', hands, p.hands.both ? 2 : (p.hands.main ? 1 : 0) + (p.hands.off ? 1 : 0), 2);
-    h += group('Equipado', p.equipped.map(function (e) { var n = EQUIP_ES[e.slot] || e.slot; return card(e.item, e.item ? n : n + ' · libre', 'eq', 'equip:' + e.slot); }),
-      p.equipped.filter(function (e) { return e.item; }).length, p.equipped.length);
-    h += group('Bolsillos', sortable('Bolsillos', 'pocket', p.pockets.items, p.pockets.slots), p.pockets.items.length, p.pockets.slots);
-    p.containers.forEach(function (k) { h += group(k.name, sortable(k.id, 'cont:' + k.id, k.items, k.slots), k.items.length, k.slots); });
+    h += grid('Bolsillos', 'Bolsillos', 'pocket', p.pockets.items, p.pockets.slots);
+    p.containers.forEach(function (k) { h += grid(k.name.charAt(0).toUpperCase() + k.name.slice(1), k.id, 'cont:' + k.id, k.items, k.slots); });
+    h += '<div class="pk-tip" id="pk-tip" role="tooltip" hidden></div>';
+    var focused = document.activeElement && $('pack').contains(document.activeElement) ? pkRef(document.activeElement) : null;
     $('pack').innerHTML = h;
+    // Lo que tenías cogido o enfocado sigue así tras repintar (llega un cambio del servidor a media jugada).
+    if (pk.held && !pk.items[pk.held.id]) pk.held = null;
+    pkMark();
+    if (pk.held) pkTip(document.querySelector('#pack .pk-s[data-id="' + CSS.escape(pk.held.id) + '"]'));
+    if (focused) { var f = pkFind(focused); if (f) f.focus({ preventScroll: true }); }
+  }
+  /** Para volver a encontrar un hueco tras repintar: por su objeto o, si está libre, por su destino y casilla. */
+  function pkRef(el) { return el.classList && el.classList.contains('pk-s') ? { id: el.getAttribute('data-id'), dest: el.getAttribute('data-dest'), i: el.getAttribute('data-i') } : null; }
+  function pkFind(r) {
+    if (r.id) return document.querySelector('#pack .pk-s[data-id="' + CSS.escape(r.id) + '"]');
+    return document.querySelector('#pack .pk-s[data-dest="' + CSS.escape(r.dest) + '"]' + (r.i !== null ? '[data-i="' + r.i + '"]' : ''));
+  }
+  function pkFrom(el) { return { id: el.getAttribute('data-id'), dest: el.getAttribute('data-dest'), g: el.getAttribute('data-g'), i: Number(el.getAttribute('data-i')) }; }
+  /** Marca lo cogido (o arrastrado) y los huecos del muñeco donde encaja. */
+  function pkMark() {
+    var from = pk.drag ? pk.drag.from : pk.held;
+    document.querySelectorAll('#pack .pk-s.sel, #pack .pk-s.fit, #pack .pk-s.dragging').forEach(function (x) { x.classList.remove('sel', 'fit', 'dragging'); x.removeAttribute('aria-pressed'); });
+    if (!from) return;
+    var el = document.querySelector('#pack .pk-s[data-id="' + CSS.escape(from.id) + '"]');
+    if (el) { el.classList.add(pk.drag ? 'dragging' : 'sel'); el.setAttribute('aria-pressed', 'true'); }
+    var it = pk.items[from.id], fits = [];
+    if (it && it.equip_slot) fits.push('equip:' + it.equip_slot);
+    if (it && (it.icon === 'weapon' || it.icon === 'bow')) fits.push('hand:main');
+    if (it && it.icon === 'shield') fits.push('hand:off');
+    fits.forEach(function (d) { if (d !== from.dest) { var t = document.querySelector('#pack .pk-doll [data-dest="' + d + '"]'); if (t) t.classList.add('fit'); } });
+  }
+  /** La ficha de un objeto, junto a su hueco (debajo o, si no cabe, encima), sin salirse de la mochila. */
+  function pkTip(el) {
+    var tip = $('pk-tip'), it = el && pk.items[el.getAttribute('data-id')];
+    if (!tip) return;
+    if (!it) { tip.hidden = true; return; }
+    var each = it.quantity > 1 ? ' (' + pkLb(it.weight_lb / it.quantity) + ' cada uno)' : '';
+    tip.innerHTML = '<b>' + escapeHtml(it.label) + '</b>' + (it.stat ? '<span class="st">' + escapeHtml(it.stat) + '</span>' : '') +
+      '<span class="wt">Pesa ' + escapeHtml(pkLb(it.weight_lb) + each) + '</span>' +
+      (it.props && it.props.length ? '<span class="pr">' + it.props.map(function (x) { return '<i>' + escapeHtml(x) + '</i>'; }).join('') + '</span>' : '') +
+      '<span class="ab">' + escapeHtml(it.about || '') + '</span>';
+    tip.hidden = false;
+    var box = $('pack').getBoundingClientRect(), r = el.getBoundingClientRect(), view = document.querySelector('.dr-body').getBoundingClientRect();
+    var w = tip.offsetWidth, hh = tip.offsetHeight;
+    var left = Math.max(0, Math.min(box.width - w, r.left - box.left + r.width / 2 - w / 2));
+    var top = r.bottom - box.top + 6;
+    if (r.bottom + 6 + hh > view.bottom && r.top - hh - 6 > view.top) top = r.top - box.top - hh - 6;
+    tip.style.left = left + 'px'; tip.style.top = top + 'px';
+  }
+  function pkHideTip() { var t = $('pk-tip'); if (t && !pk.held) t.hidden = true; }
+  function pkSay(text) { var l = $('pk-live'); if (l) l.textContent = text; }
+  function pkHold(el) {
+    pk.held = el ? pkFrom(el) : null;
+    pkMark();
+    if (el) { pkTip(el); var it = pk.items[pk.held.id]; pkSay('Has cogido ' + (it ? it.label : 'el objeto') + '. Elige dónde dejarlo; Escape para soltarlo.'); }
+    else { var t = $('pk-tip'); if (t) t.hidden = true; }
   }
   /** Orden guardado de un grupo de la mochila (por partida y PJ): cada objeto en su hueco; lo nuevo, en los primeros libres. */
   function packKey(g) { return 'tavernus.pack.' + (params.get('game') || '') + '.' + current + '.' + g; }
@@ -1588,29 +1758,9 @@ ${FIGHT_SCRIPT}
     m.textContent = text; m.hidden = !text;
     clearTimeout(packMsg.t); if (text) packMsg.t = setTimeout(function () { m.hidden = true; }, 5000);
   }
-  var dragFrom = null;
-  function cardAt(ev) { return ev.target.closest && ev.target.closest('#pack [data-dest]'); }
-  $('pack').addEventListener('dragstart', function (ev) {
-    var c = ev.target.closest && ev.target.closest('#pack [data-id]');
-    if (!c) return;
-    dragFrom = { id: c.getAttribute('data-id'), dest: c.getAttribute('data-dest'), g: c.getAttribute('data-g'), i: Number(c.getAttribute('data-i')) };
-    ev.dataTransfer.effectAllowed = 'move'; try { ev.dataTransfer.setData('text/plain', ''); } catch (e) {}
-    c.classList.add('dragging');
-  });
-  $('pack').addEventListener('dragend', function () {
-    dragFrom = null;
-    document.querySelectorAll('#pack .dragging, #pack .drop').forEach(function (x) { x.classList.remove('dragging', 'drop'); });
-  });
-  $('pack').addEventListener('dragover', function (ev) {
-    var c = cardAt(ev);
-    document.querySelectorAll('#pack .drop').forEach(function (x) { if (x !== c) x.classList.remove('drop'); });
-    if (!dragFrom || !c || c.getAttribute('data-id') === dragFrom.id) return;
-    ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; c.classList.add('drop');
-  });
-  $('pack').addEventListener('drop', function (ev) {
-    var c = cardAt(ev), from = dragFrom;
-    if (!from || !c || !sheetData) return;
-    ev.preventDefault();
+  /** Deja lo que se trae («from») en el hueco «c»: mismo contenedor, se cambian casillas; otro sitio, lo mueve el motor. */
+  function packMove(from, c) {
+    if (!from || !c || !sheetData || c.getAttribute('data-id') === from.id) return;
     var dest = c.getAttribute('data-dest'), g = c.getAttribute('data-g');
     // Mismo grupo de orden libre: se intercambian (o se pasa a ese hueco libre), solo en este navegador.
     if (g && g === from.g) {
@@ -1620,6 +1770,7 @@ ${FIGHT_SCRIPT}
       at[to] = at[from.i]; at[from.i] = tmp;
       try { localStorage.setItem(packKey(g), JSON.stringify(at)); } catch (e) {}
       renderPack(sheetData);
+      pkSay('Cambiado de casilla.');
       return;
     }
     if (dest === from.dest) return;
@@ -1627,18 +1778,107 @@ ${FIGHT_SCRIPT}
     var to = dest === 'pocket' ? { kind: 'pocket' } : dest.indexOf('hand:') === 0 ? { kind: 'hand', which: dest.slice(5) }
       : dest.indexOf('cont:') === 0 ? { kind: 'container', id: dest.slice(5) } : { kind: 'equipped', slot: dest.slice(6) };
     // Si cae en un hueco concreto de un grupo de orden libre, que quede ahí al volver a pintarse.
-    var slotI = g ? Number(c.getAttribute('data-i')) : -1;
+    var slotI = g ? Number(c.getAttribute('data-i')) : -1, freeCell = !c.getAttribute('data-id');
     fetch(api('/api/inventory'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ character: current, instance: from.id, to: to }) })
       .then(function (r) { return r.json(); }).then(function (r) {
-        if (!r.ok) { packMsg(r.text || 'No se puede.'); return; }
+        if (!r.ok) { packMsg(r.text || 'No se puede.'); pkSay(r.text || 'No se puede.'); return; }
         if (g && slotI >= 0) {
           var saved = []; try { saved = JSON.parse(localStorage.getItem(packKey(g)) || '[]'); } catch (e) {}
+          // Un objeto que vuelve a este grupo olvida la casilla que tenía antes en él.
+          saved = saved.map(function (x) { return x === from.id ? null : x; });
           while (saved.length <= slotI) saved.push(null);
-          if (!saved[slotI]) { saved[slotI] = from.id; try { localStorage.setItem(packKey(g), JSON.stringify(saved)); } catch (e) {} }
+          // La casilla se veía libre: si guardaba algo, ya no está en este grupo.
+          if (!saved[slotI] || freeCell) saved[slotI] = from.id;
+          try { localStorage.setItem(packKey(g), JSON.stringify(saved)); } catch (e) {}
         }
+        pkSay(r.text || 'Hecho.');
         loadSheet();
       }).catch(function () { packMsg('No hay conexión con el servidor.'); });
+  }
+  // Coger y dejar: clic, toque, Enter o espacio en un objeto lo coge; en otro hueco, lo deja; en el mismo, lo suelta.
+  $('pack').addEventListener('click', function (ev) {
+    if (pk.noClick) { pk.noClick = false; return; }
+    var c = ev.target.closest && ev.target.closest('#pack .pk-s');
+    if (!c) { if (pk.held && !ev.target.closest('#pk-tip')) pkHold(null); return; }
+    if (pk.held) {
+      var from = pk.held;
+      if (c.getAttribute('data-id') === from.id) { pkHold(null); pkSay('Lo sueltas donde estaba.'); return; }
+      pkHold(null);
+      packMove(from, c);
+      return;
+    }
+    if (c.getAttribute('data-id')) pkHold(c);
   });
+  $('pack').addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && pk.held) { ev.stopPropagation(); pkHold(null); pkSay('Lo sueltas donde estaba.'); }
+  });
+  // La ficha al pasar por encima o al enfocar (mientras no haya nada cogido: entonces se queda la de lo cogido).
+  $('pack').addEventListener('mouseover', function (ev) {
+    if (pk.held || pk.drag) return;
+    var c = ev.target.closest && ev.target.closest('#pack .pk-s.full');
+    if (c) pkTip(c); else if (!ev.target.closest('#pk-tip')) pkHideTip();
+  });
+  $('pack').addEventListener('mouseleave', pkHideTip);
+  $('pack').addEventListener('focusin', function (ev) {
+    var c = ev.target.closest && ev.target.closest('#pack .pk-s');
+    if (pk.held || pk.drag || !c) return;
+    if (c.classList.contains('full')) { pkTip(c); c.setAttribute('aria-describedby', 'pk-tip'); } else pkHideTip();
+  });
+  $('pack').addEventListener('focusout', function (ev) { if (ev.target.removeAttribute) ev.target.removeAttribute('aria-describedby'); if (!$('pack').contains(ev.relatedTarget)) pkHideTip(); });
+  $('pack').addEventListener('contextmenu', function (ev) { if (ev.target.closest && ev.target.closest('#pack .pk-s.full')) ev.preventDefault(); });
+  // Arrastrar con el puntero: el ratón, al moverse unos píxeles; el dedo, tras mantenerlo pulsado (si no, desplaza).
+  $('pack').addEventListener('pointerdown', function (ev) {
+    var c = ev.target.closest && ev.target.closest('#pack .pk-s.full');
+    if (!c || ev.button !== 0 || pk.drag) return;
+    pk.press = { el: c, x: ev.clientX, y: ev.clientY, id: ev.pointerId, touch: ev.pointerType !== 'mouse', timer: null };
+    if (pk.press.touch) pk.press.timer = setTimeout(function () { if (pk.press && pk.press.el === c) pkStart(pk.press.x, pk.press.y); }, 320);
+  });
+  function pkStart(x, y) {
+    var pr = pk.press; if (!pr) return;
+    var it = pk.items[pr.el.getAttribute('data-id')];
+    pk.held = null;
+    pk.drag = { from: pkFrom(pr.el), ghost: document.createElement('div') };
+    pk.drag.ghost.className = 'pk-ghost';
+    pk.drag.ghost.innerHTML = '<svg class="i"><use href="' + pkIcon(it ? it.icon : 'misc') + '"/></svg><span>' + escapeHtml(it ? it.label : '') + '</span>';
+    document.body.appendChild(pk.drag.ghost);
+    try { pr.el.setPointerCapture(pr.id); } catch (e) {}
+    var t = $('pk-tip'); if (t) t.hidden = true;
+    if (pr.touch && navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+    pkMark(); pkOver(x, y);
+  }
+  function pkOver(x, y) {
+    var g = pk.drag.ghost; g.style.left = x + 'px'; g.style.top = y + 'px';
+    var at = document.elementFromPoint(x, y), c = at && at.closest && at.closest('#pack .pk-s');
+    document.querySelectorAll('#pack .pk-s.drop').forEach(function (x) { if (x !== c) x.classList.remove('drop'); });
+    if (c && c.getAttribute('data-id') !== pk.drag.from.id) c.classList.add('drop');
+    pk.drag.over = c;
+  }
+  document.addEventListener('pointermove', function (ev) {
+    var pr = pk.press;
+    if (!pr || ev.pointerId !== pr.id) return;
+    if (pk.drag) { ev.preventDefault(); pkOver(ev.clientX, ev.clientY); return; }
+    var far = Math.abs(ev.clientX - pr.x) + Math.abs(ev.clientY - pr.y);
+    if (!pr.touch && far > 5) pkStart(ev.clientX, ev.clientY);
+    else if (pr.touch && far > 10) { clearTimeout(pr.timer); pk.press = null; }
+    else { pr.x = ev.clientX; pr.y = ev.clientY; }
+  });
+  // Con el dedo, mientras se arrastra, la página no se desplaza.
+  document.addEventListener('touchmove', function (ev) { if (pk.drag) ev.preventDefault(); }, { passive: false });
+  function pkEnd(ev, drop) {
+    var pr = pk.press;
+    if (!pr || ev.pointerId !== pr.id) return;
+    clearTimeout(pr.timer); pk.press = null;
+    if (!pk.drag) return;
+    var d = pk.drag; pk.drag = null;
+    d.ghost.remove();
+    document.querySelectorAll('#pack .pk-s.drop').forEach(function (x) { x.classList.remove('drop'); });
+    pkMark();
+    // Soltar fuera de la mochila no hace nada; el clic que sigue al arrastre no debe coger el objeto.
+    pk.noClick = true; setTimeout(function () { pk.noClick = false; }, 0);
+    if (drop && d.over) packMove(d.from, d.over);
+  }
+  document.addEventListener('pointerup', function (ev) { pkEnd(ev, true); });
+  document.addEventListener('pointercancel', function (ev) { pkEnd(ev, false); });
 
   // --- Tablero de la localización ------------------------------------------
   // Plano tipo mesa de juego: casillas de 1,5 m, suelos, paredes, puertas,

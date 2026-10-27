@@ -622,6 +622,8 @@ export interface ItemDef {
   service?: { gives_item_id: Id };
   /** Consumible que cura (poción): dados de PG que devuelve al gastarlo («2d4+2»). */
   heals?: string;
+  /** Para qué sirve, en una frase (la ficha de la mochila). Sin ella, la ficha sale del tipo y las propiedades. */
+  description?: string;
   origin: 'srd' | 'custom';
 }
 
