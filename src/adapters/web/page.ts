@@ -923,7 +923,7 @@ ${FIGHT_STYLE}
     #to-side, .chat-head .sfx, .chat-head .tts > .tts-auto, .chat-head .tts > .tts-more { display: none; }
     /* Volver al menú: la flecha, a la izquierda del sitio. */
     #to-menu { display: inline-grid; margin-right: -4px; }
-    #place-sub .sub-x, #place .pl { display: none; }
+    #place-sub .sub-x, #place-sub .sub-d, #place .pl { display: none; }
     #place .gn, #place-sub .sub-pl { display: inline; }
     /* Como en WhatsApp: ninguna burbuja llega al borde contrario; las dos dejan el mismo hueco. */
     #log .msg.row { max-width: calc(100% - 64px); }
@@ -1477,7 +1477,9 @@ ${FIGHT_SCRIPT}
     // En el móvil solo la hora (el lugar ya va encima): el rincón y el estado se quedan para el escritorio.
     var extra = [comma >= 0 ? where.slice(comma + 2) : '', state !== 'despierto' ? state : '', s.description.split('\n')[1] || ''].filter(Boolean).join(' · ');
     // En el móvil arriba va el nombre de la partida, y el lugar baja aquí, tras la hora.
-    $('place-sub').innerHTML = escapeHtml(s.footer || '') + '<span class="sub-pl">' + (s.footer ? ' · ' : '') + escapeHtml(placeName) + '</span>' +
+    // La fecha («Miércoles 3 de Brotes, año 1, »), solo en el escritorio: en el móvil, la hora sola.
+    var hm = /^(.*?)(\d{1,2}:\d{2})$/.exec(s.footer || ''), when = hm ? '<span class="sub-d">' + escapeHtml(hm[1]) + '</span>' + hm[2] : escapeHtml(s.footer || '');
+    $('place-sub').innerHTML = when + '<span class="sub-pl">' + (s.footer ? ' · ' : '') + escapeHtml(placeName) + '</span>' +
       (extra ? '<span class="sub-x">' + (s.footer ? ' · ' : '') + escapeHtml(extra) + '</span>' : '');
     var coins = field(s, 'Monedas');
     $('pack-sub').textContent = [loadShort(s) !== '—' ? 'Carga ' + loadShort(s) + ' lb' : '', coins ? coins + ' monedas' : ''].filter(Boolean).join(' · ') || 'Lo que llevas encima';
