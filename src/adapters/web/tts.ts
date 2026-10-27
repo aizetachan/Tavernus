@@ -169,6 +169,12 @@ export const TTS_STYLE = String.raw`
      (voz del navegador) o con el volumen real del audio (voz en la nube). */
   .msg .nv-av.tts-voice, .msg.tts-able > .nv-av.tts-voice:hover { --lvl: 0; box-shadow: 0 0 0 2px var(--accent), 0 0 0 calc(2px + var(--lvl) * 9px) rgba(233,169,78, calc(.12 + var(--lvl) * .38)); transition: none; }
   @media (prefers-reduced-motion: reduce) { .nv-av.tts-voice { box-shadow: 0 0 0 2px var(--accent); } }
+  /* Mientras llega el audio (la voz en la nube tarda): el borde es un arco ámbar que gira; al sonar, vuelve a latir. */
+  .msg .nv-av.tts-wait, .msg.tts-able > .nv-av.tts-wait:hover { box-shadow: 0 0 0 2px rgba(233,169,78,.18); }
+  /* El avatar recorta lo que sobresale (overflow: hidden): el arco va por dentro del borde, encima de la foto. */
+  .msg .nv-av.tts-wait::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: 50%; border: 2.5px solid transparent; border-top-color: var(--accent); border-right-color: var(--accent); animation: tts-wait .8s linear infinite; pointer-events: none; }
+  @keyframes tts-wait { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .msg .nv-av.tts-wait::after { animation-duration: 2.4s; } }
   .msg .who .tts-say { margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; margin-top: -6px; margin-bottom: -6px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); }
   .msg .who .tts-say:hover { background: var(--hover); color: var(--text); }
   .msg.tts-on .who .tts-say { color: var(--accent); background: var(--accent-tint); }
@@ -261,9 +267,11 @@ export const TTS_SCRIPT = String.raw`<script>
     while (n && n.classList.contains('cont')) n = n.previousElementSibling;
     return n && n.classList.contains('row') ? n.querySelector('.nv-av') : null;
   }
+  /** Cargando la voz: el borde del avatar gira hasta que empieza a sonar. */
+  function waiting(on) { if (voiceAv) { voiceAv.classList.toggle('tts-wait', on); voiceAv.classList.toggle('tts-voice', !on); } }
   function setVoiceAv(av) {
     if (voiceAv === av) return;
-    if (voiceAv) { voiceAv.classList.remove('tts-voice'); voiceAv.style.removeProperty('--lvl'); }
+    if (voiceAv) { voiceAv.classList.remove('tts-voice', 'tts-wait'); voiceAv.style.removeProperty('--lvl'); }
     voiceAv = av;
     if (av) av.classList.add('tts-voice');
   }
@@ -430,6 +438,7 @@ export const TTS_SCRIPT = String.raw`<script>
     }
     var got = audioFor(p.div, p.read);
     if (queue[0]) audioFor(queue[0]);
+    waiting(true);
     got.then(function (blob) {
       if (playing !== p) return;
       if (audio.src) URL.revokeObjectURL(audio.src);
@@ -440,8 +449,9 @@ export const TTS_SCRIPT = String.raw`<script>
       hookAnalyser();
       if (actx && actx.state === 'suspended') actx.resume();
       return audio.play();
-    }).catch(function (e) {
+    }).then(function () { if (playing === p) waiting(false); }).catch(function (e) {
       if (playing !== p) return;
+      waiting(false);
       if (e && e.name === 'NotAllowedError') { hint('Toca la página una vez para que el navegador deje reproducir audio.'); stop(); return; }
       // La nube falla (o se queda sin créditos): esta narración y las siguientes, con la voz del navegador.
       hint(e && e.message === '402' ? 'El narrador de voz se ha quedado sin créditos; sigo con la voz del navegador.' : 'El narrador de voz no responde; sigo con la voz del navegador.');

@@ -316,3 +316,5 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 - **En iPhone los deslizadores funcionan:** la música y la voz en la nube pasan por el mezclador de audio del navegador, porque Safari en iOS no deja cambiar el volumen de un audio normal.
 - **Escuchar por avatar:** al pulsar el avatar de una burbuja se lee solo lo que dice esa burbuja (y las suyas seguidas), no la de otros personajes. El narrador lee solo su parte.
 - **Retrato al aparecer un personaje:** sale encima de su primera frase, en un cuadrado pequeño (la mitad que antes), centrado, con su nombre (y apellidos, si los tiene) y su oficio («tabernera») en vez de «Retrato».
+- **Tirada de dados:** al llegar el resultado se ve el dado girando y una raya de carga; el texto aparece cuando acaba el sonido del dado (con el sonido apagado, en menos de un segundo). Lo que viene detrás espera a que se vea.
+- **Voz que tarda en cargar:** al pulsar un avatar, si la voz viene de la nube, su borde gira en ámbar mientras llega el audio; cuando empieza a sonar, vuelve a latir con la voz.

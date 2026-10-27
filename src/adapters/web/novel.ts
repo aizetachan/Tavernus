@@ -286,6 +286,13 @@ export const NOVEL_STYLE = String.raw`
   .moment .shot { position: relative; display: block; width: 220px; aspect-ratio: 4 / 5; padding: 0; border: 0; border-radius: 18px; overflow: hidden; background: var(--platter); cursor: zoom-in; box-shadow: var(--control-shadow); }
   .moment.item .shot { width: 200px; aspect-ratio: 1; }
   .moment.portrait { margin-top: 10px; }
+  /* Tirada en directo: el dado y una raya que corre hasta que acaba su sonido; luego, el resultado. */
+  .msg.notice .roll-load { display: inline-flex; align-items: center; gap: 8px; vertical-align: middle; }
+  .msg.notice .roll-load b { font-weight: inherit; display: inline-block; animation: roll-spin .5s linear infinite; }
+  .msg.notice .roll-load i { display: block; width: 120px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, rgba(198,191,180,.12) 0%, rgba(198,191,180,.12) 30%, rgba(233,169,78,.75) 50%, rgba(198,191,180,.12) 70%, rgba(198,191,180,.12) 100%); background-size: 250% 100%; animation: roll-load .7s linear infinite; }
+  @keyframes roll-load { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+  @keyframes roll-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .msg.notice .roll-load b, .msg.notice .roll-load i { animation: none; } }
   .moment.portrait .shot { width: 110px; aspect-ratio: 1; border-radius: 14px; }
   .moment.portrait img { object-position: 50% 50%; }
   .moment.portrait figcaption { left: 8px; right: 8px; bottom: 7px; }
@@ -498,7 +505,7 @@ export const NOVEL_JS = String.raw`
    * Si lleva enlace, abre su pestaña (el Diario); si es una tirada, el dado del botón cae en lo que ha salido.
    * Los de misiones (alta, paso, cierre) van destacados, con el porqué debajo; la subida de nivel, con lo que gana.
    */
-  function addNotice(n, other) {
+  function addNotice(n, other, hold) {
     var div = document.createElement('div');
     div.className = 'msg notice' + (n.tone ? ' tone-' + n.tone : '') + (n.quest ? ' quest q-' + n.quest.event : '') + (n.level ? ' quest q-level' : '');
     div.setAttribute('role', 'status');
@@ -536,9 +543,30 @@ export const NOVEL_JS = String.raw`
       div.appendChild(li);
     });
     log.appendChild(div);
-    if (!other) diceShown(n.text);
+    if (hold) {
+      // Tirada en directo: se ve el dado y, en vez del texto, una raya de carga hasta que acaba su sonido.
+      div.classList.add('rolling');
+      s.hidden = true;
+      var ld = document.createElement('span');
+      ld.className = 'roll-load'; ld.setAttribute('aria-label', 'Tirando el dado');
+      ld.innerHTML = '<b aria-hidden="true">🎲</b><i></i>';
+      div.insertBefore(ld, s);
+    } else if (!other) diceShown(n.text);
     scroll();
     return div;
+  }
+  /** Muestra el resultado de una tirada retenida: cuando acaba el sonido del dado (entre 0,9 y 4 s). */
+  function revealRoll(div, n, other) {
+    var sound = window.TavernusSfx && TavernusSfx.ended ? TavernusSfx.ended('dado') : Promise.resolve();
+    var cap = new Promise(function (ok) { setTimeout(ok, 4000); });
+    return Promise.all([wait(900), Promise.race([sound, cap])]).then(function () {
+      var ld = div.querySelector('.roll-load');
+      if (ld) ld.remove();
+      div.classList.remove('rolling');
+      div.querySelector('span').hidden = false;
+      if (!other) diceShown(n.text);
+      scroll();
+    });
   }
 
   /** Un mensaje del stream en el hilo: lo del PJ a la derecha, la narración y los NPCs a la izquierda. */
@@ -575,13 +603,15 @@ export const NOVEL_JS = String.raw`
     typing(false);
     // Lo que ya había (el mensaje pendiente del jugador se quita al pintar el turno: no vale como marca).
     var old = new Set(log.children);
+    chatTurn.held = null;
     try { chatTurn(m, live); } catch (e) { console.error(e); }
-    var shown;
+    var shown, held = chatTurn.held;
     if (animate) {
       // Los puntos del narrador que ya se veían siguen (y cuentan) hasta la primera burbuja.
       if (since) { typing(true); typingSince = since; }
       shown = revealTurn(old);
     } else shown = Promise.resolve();
+    if (held) shown = Promise.all([shown, held]);
     return shown.then(function () {
       // Si el turno sigue (otra respuesta en camino), los puntos vuelven al rato: sin parpadeo cuando era la última.
       // La siguiente respuesta cuenta su espera desde ahora.
@@ -613,7 +643,7 @@ export const NOVEL_JS = String.raw`
     if (m.chapter) { addChapter(m); return; }
     if (m.input) { clearPending(); markChosen(m.input); }
     var before = log.lastElementChild;
-    var lines = m.lines || [], main = null;
+    var lines = m.lines || [], main = null, held = null;
     var say = function (l, lead) {
       // A quién se lo dice (modo Decir dirigido): una línea pequeña encima de la frase.
       if (l.to && !lead) lead = 'a ' + l.to;
@@ -632,7 +662,9 @@ export const NOVEL_JS = String.raw`
     if (m.input && !lines.some(function (l) { return l.speaker === 'actor'; })) chatRow('mine', meWho(), format(m.input), { act: true });
     if (m.notice) {
       // Un aviso no es narración: su línea y, debajo, lo que traiga (momentos, opciones, oferta).
-      main = addNotice(m.notice, m.dice === 'other');
+      var hold = !!(live && /🎲/.test(m.notice.text) && (m.sfx || []).indexOf('dado') >= 0);
+      main = addNotice(m.notice, m.dice === 'other', hold);
+      if (hold) held = revealRoll(main, m.notice, m.dice === 'other');
     } else if (m.blocks && m.blocks.length) {
       // El turno en su orden real: narrador, personaje, narrador… cada trozo en su burbuja.
       // La frase que presenta a quien habla (lead) va dentro de la burbuja de ese personaje.
@@ -693,6 +725,8 @@ export const NOVEL_JS = String.raw`
       if (!live) jb.disabled = true;
     }
     if (m.reply_to) replyable(m.reply_to, before, main);
+    // El turno no se da por pintado hasta que se ve el resultado del dado: lo siguiente espera detrás.
+    if (held) chatTurn.held = held;
     if (m.offer) partyButtons(m, host, live);
     if (m.reaction) reactionButtons(m.reaction, host);
     if (m.reaction_wait) reactionWait(m.reaction_wait, main);

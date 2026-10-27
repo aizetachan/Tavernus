@@ -572,23 +572,28 @@ export const SFX_SCRIPT = String.raw`<script>
       mine.src = s; mine.gain = g;
     });
   }
+  /** Cuándo acaba de sonar cada efecto de la última secuencia (page.ts: el resultado del dado espera a su sonido). */
+  var ends = {};
   /** Secuencia: cada efecto empieza cuando el anterior lo permite; los ambientes se funden en su sitio. */
   function cue(keys) {
     keys = (keys || []).filter(function (k) { return typeof k === 'string' && SFX_RECIPES.has(k) || files[k]; });
     if (!keys.length) return;
     if (!ctx || !unlocked || muted) { keys.forEach(function (k) { if (isAmb(k)) setAmbience(k, 2.5); }); return; }
+    var done = {};
+    keys.forEach(function (k) { if (!isAmb(k)) ends[k] = new Promise(function (ok) { done[k] = ok; }); });
     Promise.all(keys.map(buffer)).then(function (bs) {
       var t = Math.max(ctx.currentTime + 0.05, seqEnd);
       keys.forEach(function (k, i) {
         var b = bs[i];
-        if (!b) return;
+        if (!b) { if (done[k]) done[k](); return; }
         if (isAmb(k)) { setAmbience(k, 2.5, t); return; }
         var g = ctx.createGain(), s = ctx.createBufferSource();
         g.gain.value = gainOf(k, b); s.buffer = b; s.connect(g); g.connect(fxBus); s.start(t);
+        setTimeout(done[k], Math.max(0, (t - ctx.currentTime + Math.min(b.duration, 2)) * 1000));
         t += nextOf(k, b) + 0.06;
       });
       seqEnd = t;
-    });
+    }, function () { Object.keys(done).forEach(function (k) { done[k](); }); });
   }
   function setMuted(m) {
     muted = m; store('tavernus.sfx.muted', m ? '1' : '0');
@@ -709,6 +714,8 @@ export const SFX_SCRIPT = String.raw`<script>
     /** page.ts: claves de un mensaje en directo. */
     cue: cue,
     setAmbience: function (k) { setAmbience(k, 2.5); },
+    /** Promesa que se cumple cuando acaba de sonar ese efecto (ya, si no sonaba: silencio o sin gesto aún). */
+    ended: function (k) { var p = ends[k]; delete ends[k]; return p || Promise.resolve(); },
     /** Para pruebas y depuración. */
     state: function () { return { unlocked: unlocked, muted: muted, volume: FX_VOL, ambienceVolume: ambVol, ambience: amb && amb.key, wanted: wantAmb, context: ctx && ctx.state, files: Object.keys(files), ai: ai, format: fmt, music: { on: musicOn, volume: musicVol }, intro: intro && { playing: !intro.paused, volume: Math.round(introGet() * 100) / 100, webAudio: !!introGain, ended: intro.ended } }; },
   };
