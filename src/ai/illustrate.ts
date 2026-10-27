@@ -38,8 +38,9 @@
  *
  * Además de la vista de cada sitio, los momentos significativos (src/engine/moments.ts):
  *   - retrato de un NPC (primer encuentro) y del PJ que le habla: uno por entidad;
- *   - objeto cogido o examinado: uno por tipo de objeto;
- *   - escena de combate o descubrimiento: una por evento.
+ *   - objeto cogido o examinado: uno por tipo de objeto (los servicios no);
+ *   - escena de combate (el PJ contra su rival) o descubrimiento (lo hallado de cerca,
+ *     el sitio solo de fondo): una por evento.
  * El prompt sale de lo guardado (descripción, rol, tipo) y de la biblia de estilo de
  * la campaña; la seed, de la semilla del mundo + el id. Misma caché e índice
  * (<dir>/index.json, con `kind` y `entity_id`). En la cola manda la prioridad:
@@ -50,6 +51,7 @@ import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Engine, FirstVisit, MomentNotice } from '../engine/engine.js';
 import type { Campaign, GameEvent, Id, LightLevel } from '../engine/model.js';
+import { itemIllustrable } from '../engine/moments.js';
 import { lightAt } from '../engine/perception.js';
 import type { MasterMode } from './mode.js';
 import { assetsFor, writtenImage, type AssetManifest } from './assets.js';
@@ -197,10 +199,17 @@ export function itemPrompt(p: { name: string; type: string }, style: string): st
   return [`${p.name} (${ITEM_EN[p.type] ?? 'object'})`, 'a single object held in a hand, close-up still life, dark background', style, 'no text, no watermark'].join('. ');
 }
 
-/** Escena de un momento (combate, descubrimiento): dónde y qué pasó. */
+/**
+ * Escena de un momento. Combate: dónde y quién contra quién. Descubrimiento: lo
+ * hallado de cerca y en primer plano; el sitio, si va, solo de fondo y al final,
+ * para que el modelo no vuelva a pintar la vista del lugar.
+ */
 export function momentPrompt(p: { place: string; what: string; light: LightLevel; kind: 'combat' | 'discovery' }, style: string): string {
-  const mood = p.kind === 'combat' ? 'dramatic fight scene, motion' : 'moment of discovery, focused light on the find';
-  return [p.place, clip(p.what), LIGHT_EN[p.light], mood, style, 'no text, no watermark'].filter(Boolean).join('. ');
+  if (p.kind === 'discovery') {
+    return [`Close-up of ${clip(p.what)}`, 'the find alone in the foreground, in sharp focus, focused light on it', LIGHT_EN[p.light], style,
+      p.place ? `blurred background: ${p.place}` : '', 'no text, no watermark'].filter(Boolean).join('. ');
+  }
+  return [p.place, clip(p.what), LIGHT_EN[p.light], 'dramatic fight scene, motion', style, 'no text, no watermark'].filter(Boolean).join('. ');
 }
 
 /** Clave y fichero de una entidad: `<kind>-<id>-<seed>`. */
@@ -678,6 +687,11 @@ export function masterPortraitOf(engine: Engine, locationId: Id): EntityInput {
   };
 }
 
+/** El sitio para un prompt: nombre y si es interior o exterior. */
+function placeOf(loc: { name: string; indoor: boolean }): string {
+  return `${loc.name} (${loc.indoor ? 'interior' : 'exterior'})`;
+}
+
 /** Qué ilustrar para un momento del motor (la vista del sitio la pone la primera visita, aquí no). */
 export function entityOf(engine: Engine, m: MomentNotice['moment'], e: GameEvent): EntityInput | null {
   const w = engine.world;
@@ -687,25 +701,34 @@ export function entityOf(engine: Engine, m: MomentNotice['moment'], e: GameEvent
     case 'portrait': return portraitOf(engine, m.entity_id, e.location_id);
     case 'item': {
       const def = w.itemDefs.get(m.entity_id);
-      return def ? { kind: 'item', entity_id: def.id, name: def.name, location_id: e.location_id, prompt: itemPrompt({ name: def.name, type: def.type }, style) } : null;
+      return def && itemIllustrable(def) ? { kind: 'item', entity_id: def.id, name: def.name, location_id: e.location_id, prompt: itemPrompt({ name: def.name, type: def.type }, style) } : null;
     }
-    case 'combat':
-    case 'discovery': {
+    case 'combat': {
       const loc = w.locations.get(e.location_id);
-      if (!loc) return null;
-      const spot = m.subject ? w.spots.get(m.subject) : undefined;
-      // Combate: quién lucha contra quién. El texto del evento de la tirada es la línea de dados («🎲 Ataque…: d20 [16] + 5»), no una escena.
-      const npc = m.kind === 'combat' && m.subject ? w.npcs.get(m.subject) : undefined;
-      const pc = m.kind === 'combat' && m.subject && !npc ? w.characters.get(m.subject) : undefined;
-      const foe = npc ? `${npc.name}, ${npc.role}: ${npc.description}` : pc ? `${pc.name}, ${pc.race} ${pc.class_name}: ${pc.appearance}` : null;
-      const attacker = w.characters.get(m.character_id);
-      const what = spot ? `${spot.name}: ${spot.description}`
-        : foe ? `${attacker ? `${attacker.name} (${attacker.race} ${attacker.class_name})` : 'A hero'} fighting ${foe}`
-        : (e.observable ?? e.narration_private);
-      const fallen = npc?.name ?? pc?.name;
+      // Quién lucha contra quién: el PJ contra su rival, nunca contra sí mismo. Sin rival, nada:
+      // el texto del evento de la tirada es la línea de dados («🎲 Ataque…: d20 [16] + 5»), no una escena.
+      const foeId = m.subject && m.subject !== m.character_id ? m.subject : null;
+      const npc = foeId ? w.npcs.get(foeId) : undefined;
+      const pc = foeId && !npc ? w.characters.get(foeId) : undefined;
+      if (!loc || !foeId || (!npc && !pc)) return null;
+      const foe = npc ? `${npc.name}, ${npc.role}: ${npc.description}` : `${pc!.name}, ${pc!.race} ${pc!.class_name}: ${pc!.appearance}`;
+      const hero = w.characters.get(m.character_id);
+      const what = `${hero ? `${hero.name} (${hero.race} ${hero.class_name})` : 'A hero'} fighting ${foe}`;
       return {
-        kind: m.kind, entity_id: e.id, name: fallen ? `${loc.name} · ${fallen}` : spot?.name ?? loc.name, location_id: loc.id, ...(m.subject ? { asset_ids: [m.subject] } : {}),
-        prompt: momentPrompt({ place: `${loc.name} (${loc.indoor ? 'interior' : 'exterior'})`, what, light: lightAt(engine.clock, loc, e.timestamp_game_s), kind: m.kind }, style),
+        kind: 'combat', entity_id: e.id, name: `${loc.name} · ${npc?.name ?? pc!.name}`, location_id: loc.id, asset_ids: [foeId],
+        prompt: momentPrompt({ place: placeOf(loc), what, light: lightAt(engine.clock, loc, e.timestamp_game_s), kind: 'combat' }, style),
+      };
+    }
+    case 'discovery': {
+      // Lo hallado (el punto, o lo que la pista dice que se ve, o su título), no la narración del turno ni el sitio.
+      const loc = w.locations.get(e.location_id);
+      const spot = m.subject ? w.spots.get(m.subject) : undefined;
+      const clue = !spot && m.subject ? w.campaign.clues.find((c) => c.id === m.subject) : undefined;
+      if (!loc || (!spot && !clue)) return null;
+      const what = spot ? `${spot.name}: ${spot.description}` : clue!.image ?? clue!.title;
+      return {
+        kind: 'discovery', entity_id: e.id, name: spot?.name ?? clue!.title, location_id: loc.id, asset_ids: [m.subject!],
+        prompt: momentPrompt({ place: placeOf(loc), what, light: lightAt(engine.clock, loc, e.timestamp_game_s), kind: 'discovery' }, style),
       };
     }
   }

@@ -194,6 +194,13 @@ export interface Clue {
   /** Anclas: el contexto del máster solo trae el "cómo" de la pista si el actor está en una de estas localizaciones o tiene delante a uno de estos NPCs. Sin anclas, va siempre. */
   location_ids?: Id[];
   npc_ids?: Id[];
+  /**
+   * Qué se ve al encontrarla, para la imagen del descubrimiento («un cubo de agua
+   * turbia con un poso de ceniza gris»). Sin él se pinta el título; y si la pista
+   * llega hablando con un NPC, se tiene por oída y no hay imagen de descubrimiento
+   * (src/engine/moments.ts).
+   */
+  image?: string;
 }
 
 export interface Job {
@@ -676,6 +683,11 @@ export interface ItemDef {
    * vendedor cerrados con esa llave (`spot.state.key_item_id`).
    */
   service?: { gives_item_id: Id };
+  /**
+   * Si se pinta como «objeto en la mano» al cogerlo, comprarlo o examinarlo. Por
+   * defecto sí, salvo los servicios; `false` para consumibles abstractos (una ronda).
+   */
+  illustrate?: boolean;
   /** Consumible que cura (poción): dados de PG que devuelve al gastarlo («2d4+2»). */
   heals?: string;
   origin: 'srd' | 'custom';

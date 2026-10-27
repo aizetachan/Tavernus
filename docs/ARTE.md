@@ -19,7 +19,7 @@ assets/campaigns/brezal/
   retrato/<npc_id>.jpg     retrato de cada NPC; master.jpg = el narrador
   retrato/pc-<raza>.jpg    retrato genérico de PJ por raza (opcional: pc-<raza>-<clase>.jpg)
   objeto/<item_id>.jpg     objeto clave en la mano
-  descubrimiento/<id>.jpg  el momento de una pista (clue_…) o un punto oculto (sp_…)
+  descubrimiento/<id>.jpg  una pista encontrada (clue_…) o un punto oculto (sp_…); las pistas oídas no
   combate/<npc_id>.jpg     escena de combate contra ese NPC (opcional)
   mapa/region.jpg          mapa de la región
   plano/<loc_id>.jpg       fondo pintado del plano (opcional)
@@ -77,6 +77,27 @@ Discord lo muestra sin conversiones; WebP queda para cuando el servidor lo admit
 | Descubrimiento (pista) | 1024 × 576 | 350 KB | El detalle que se descubre, de cerca, con la luz sobre el hallazgo. |
 | Mapa de región | 2048 × 1536 (4:3) | 1,5 MB | Vista cenital o de cartógrafo, norte arriba, con la montaña de Vharn al norte. Rótulos a mano permitidos solo aquí. |
 | Fondo de plano (opcional) | 40 px por metro de `bounds`, máx. 2048 px de lado (la medida exacta la da `scripts/plans.ts reference`) | 800 KB | Cenital, ortogonal, sin perspectiva. Suelo, paredes y muebles en el mismo sitio que en el plano escrito; lo oculto no. |
+
+## Qué pinta cada momento generado
+
+Sin activo escrito, el motor decide qué merece imagen (`src/engine/moments.ts`) y el ilustrador escribe el
+prompt desde los datos (`entityOf` en `src/ai/illustrate.ts`), nunca desde la narración del turno:
+
+- **Descubrimiento:** lo hallado de cerca y en primer plano; el sitio va al final, como fondo desenfocado
+  («Close-up of …. blurred background: Plaza del Pozo (exterior)»). Si empezara por el sitio, el modelo
+  volvería a pintar la vista del lugar.
+  - Un punto oculto se pinta con su nombre y su descripción.
+  - Una pista se pinta con lo que dice su campo `image` en los datos («un cubo de madera con agua turbia y un
+    poso de ceniza gris…»). Si no lo tiene, con su título.
+  - **Pistas oídas:** si llega mientras el PJ habla con un NPC (lo que cuenta Ilse o Hugo), no hay
+    descubrimiento, solo el retrato de quien habla si aún no lo tenía. Una pista con `image` es algo que se ve
+    y sigue siendo hallazgo aunque llegue hablando.
+- **Combate:** «el PJ contra su rival», y el rival es siempre el otro. Cuando un NPC golpea al PJ, el rival es
+  quien golpea, y la pareja comparte imagen: el primer golpe entre los dos da una sola, lo dé quien lo dé. Si el
+  PJ recibe daño sin nadie que se lo haga (una trampa), no hay escena de combate.
+- **Objeto en la mano:** los servicios (`service`, la noche de posada) no se pintan. Para apagar un consumible
+  abstracto (una ronda) basta con `illustrate: false` en su `ItemDef`; `illustrate: true` enciende un servicio
+  que sí tenga sentido pintar. No hay listas en el código.
 
 ## Planos: datos, no dibujos
 
