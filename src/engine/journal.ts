@@ -241,7 +241,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
 
   const all = engine.events.all();
   /** Un texto escrito para cualquiera, con los nombres que este PJ no sabe cambiados por cómo los ve (y la mayúscula de cada frase). */
-  const masked = (t: string) => maskUnknownNames(w, c.id, t).replace(/(^|[.!?…]\s+)(\p{Ll})/gu, (_m, a: string, b: string) => a + b.toUpperCase());
+  const masked = (t: string) => maskUnknownNames(w, c.id, t, [], true).replace(/(^|[.!?…]\s+)(\p{Ll})/gu, (_m, a: string, b: string) => a + b.toUpperCase());
   /** Lo que el PJ percibió o hizo, en orden. */
   const mine = all.filter((e) => e.actor_id === c.id || e.delivered_to.some((d) => d.character_id === c.id));
   const born = mine[0]?.timestamp_game_s ?? nowS;

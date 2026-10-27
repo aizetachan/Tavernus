@@ -247,20 +247,22 @@ function isCommonWord(world: World, name: string): boolean {
  * Sustituye en un texto los nombres de quienes el lector no conoce por su
  * descripción, con la contracción que toque («habla al herrero»). Lo citado
  * («…») son palabras de alguien y se deja. `keep`: los que no se tapan aunque
- * no los conozca (los que nombró el propio jugador).
+ * no los conozca (los que nombró el propio jugador). `authored`: texto escrito
+ * por la campaña (el Diario), donde un nombre siempre es un nombre, también
+ * el que es palabra («Ceniza murió…»).
  */
-export function maskUnknownNames(world: World, readerId: Id, text: string, keep: readonly Id[] = []): string {
+export function maskUnknownNames(world: World, readerId: Id, text: string, keep: readonly Id[] = [], authored = false): string {
   const reader = world.characters.get(readerId);
   if (!reader) return text;
   // Lo citado son palabras de alguien: un nombre dicho en voz alta se oye tal cual.
-  if (/«[^»]*»/.test(text)) return text.split(/(«[^»]*»)/).map((part, i) => (i % 2 ? part : maskUnknownNames(world, readerId, part, keep))).join('');
+  if (/«[^»]*»/.test(text)) return text.split(/(«[^»]*»)/).map((part, i) => (i % 2 ? part : maskUnknownNames(world, readerId, part, keep, authored))).join('');
   let out = text;
   // Los PJ de la partida se conocen siempre por su nombre: solo se enmascaran NPC.
   for (const n of world.npcs.values()) {
     if (reader.knows.includes(n.id) || keep.includes(n.id)) continue;
     const desc = descriptorOf(world, n.id);
     const long = roleLabel(n, true);
-    const common = isCommonWord(world, n.name);
+    const common = !authored && isCommonWord(world, n.name);
     // A principio de frase, con mayúscula; «Ceniza cubre la plaza», ahí, es la palabra y no el perro.
     const put = (m: string, at: number, all: string) => {
       const start = /(^\s*|[.!?…]\s+|\n\s*)$/.test(all.slice(0, at));

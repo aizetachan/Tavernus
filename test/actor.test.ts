@@ -11,6 +11,7 @@ import { actionContext, systemPrompt } from '../src/ai/prompt.js';
 import { masterOptionsFor } from '../src/ai/mode.js';
 import { npcConcerns, talkTier } from '../src/engine/concerns.js';
 import { transcriptOf } from '../src/engine/conversation.js';
+import { adjustTrust } from '../src/engine/trust.js';
 import type { GameEvent } from '../src/engine/model.js';
 import { seededRng } from '../src/engine/dice.js';
 import { bootEngine } from './helpers.js';
@@ -233,7 +234,8 @@ describe('transcripción y agenda', () => {
     expect(c).toMatch(/Ha puesto en el tablón .*«/);
     expect(c).toContain('una cerveza fiada');
     expect(talkTier(w.npc('npc_brenna'), kael)).toBe('stranger');
-    w.npc('npc_brenna').memory.push({ character_id: kael.id, game_s: 0, note: 'Pidió cerveza.', importance: 1 });
+    // Los cuatro de en medio son la confianza por niveles (trust.ts): un encargo cumplido la sube a conocido.
+    adjustTrust(w, w.npc('npc_brenna'), kael, 'job', 0);
     expect(talkTier(w.npc('npc_brenna'), kael)).toBe('acquaintance');
     w.npc('npc_brenna').attitude.by_character[kael.id] = 'friendly';
     expect(talkTier(w.npc('npc_brenna'), kael)).toBe('friend');

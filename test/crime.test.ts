@@ -121,7 +121,7 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     expect(kill).toMatchObject({ died: true, murder: true });
     expect(hugo.death).toMatchObject({ by_id: leo.id });
     // Lo que el servidor ya ha decidido, para que la narración lo cuente (sin soltar nombres que Leodhin no sabe).
-    expect(kill.incident).toMatch(/El alguacil y recaudador se planta delante de ti: «¡Alto! Quedas detenido\.»/);
+    expect(kill.incident).toMatch(/El alguacil se planta delante de ti: «¡Alto! Quedas detenido\.»/);
     expect(kill.incident).not.toMatch(/Garrán/);
 
     const [inc] = allIncidents(engine.world);
@@ -145,8 +145,8 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     expect(incident.observable).toMatch(/Brenna retrocede sin quitarle ojo: no piensa atender a Leodhin\./);
     expect(incident.observable).toMatch(/Unos diez vecinos gritan y se apartan/);
     // Para él, con los nombres que sabe: no sabe cómo se llaman el herrero ni el alguacil.
-    expect(incident.payload['observable_target']).toMatch(/^⚖ Te han visto: has matado al herrero\. El alguacil y recaudador se planta delante de ti.*Desde ahora te buscan\./);
-    expect(arrest.narration_private).toMatch(/^El alguacil y recaudador se te planta delante: .*Te acusa de esto: Leodhin mató al herrero en la barra/);
+    expect(incident.payload['observable_target']).toMatch(/^⚖ Te han visto: has matado al herrero\. El alguacil se planta delante de ti.*Desde ahora te buscan\./);
+    expect(arrest.narration_private).toMatch(/^El alguacil se te planta delante: .*Te acusa de esto: Leodhin mató al herrero en la barra/);
     expect(arrest.narration_private).not.toMatch(/Garrán|Hugo/);
     expect(arrest.actor_id).toBe(leo.id);
     expect(arrest.payload['suggested_actions']).toEqual(['Entregarme', 'Resistirme', 'Huir']);
@@ -163,7 +163,7 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     // El contexto pone el incidente pendiente y, en cada testigo, lo que vio antes que su carácter.
     const context = actionContext(engine, leo, 'Preguntar a la tabernera por el herrero');
     expect(context).toMatch(/## Incidente pendiente: cuéntalo en esta narración/);
-    expect(context).toMatch(/Cuéntalo así \(hechos\): .*El alguacil y recaudador se planta delante de ti/);
+    expect(context).toMatch(/Cuéntalo así \(hechos\): .*El alguacil se planta delante de ti/);
     expect(context).toMatch(/- NPC Brenna \[npc_brenna\], tabernera, en la barra, 0 m\.\n {2}LO PRIMERO, antes que su carácter: vio cómo Leodhin mataba al herrero \(la barra, ahora mismo\) y le tiene miedo: no le atiende con normalidad/);
     expect(context).toMatch(/## Ley\nEl actor está BUSCADO: mató a Hugo en la barra \(Taberna del Jabalí\)\./);
     expect(context).toMatch(/le está DETENIENDO: si se entrega/);
@@ -173,7 +173,7 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     // seq 95: Brenna lo niega y nadie reacciona → se rechaza (dos veces como mucho).
     const ctx = ctxFor(engine, leo);
     const bad = tool(ctx, 'log_event', close({ npc_id: 'npc_brenna', narration_private: 'La tabernera sigue secando la jarra. «El corazón se le paró. Pasa con los que cargan hierro.»' }));
-    expect(bad.error).toMatch(/Tu narración lo ignora: falta el alguacil y recaudador/);
+    expect(bad.error).toMatch(/Tu narración lo ignora: falta el alguacil/);
     expect(bad.error).toMatch(/Cuéntalo así|sin contradecirlo/);
     expect(inc!.narrated_to).toEqual([]);
     const good = tool(ctx, 'log_event', close({ narration_private: 'El alguacil se levanta de la banqueta con la mano en la porra: «¡Alto!». La tabernera retrocede tras la barra.' }));
@@ -189,7 +189,7 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     const { engine, leo } = await laBarra();
     tool(ctxFor(engine, leo), 'apply_damage', { target_id: 'npc_hugo', amount: 40, damage_type: 'force', source: 'Proyectil mágico de Leodhin' });
     const out = offlineLogEvent(actionContext(engine, leo, 'mirar alrededor'));
-    expect(out['narration_private']).toMatch(/El alguacil y recaudador se planta delante de ti/);
+    expect(out['narration_private']).toMatch(/El alguacil se planta delante de ti/);
     expect(tool(ctxFor(engine, leo), 'log_event', close({ narration_private: out['narration_private'] })).ok).toBe(true);
   });
 
