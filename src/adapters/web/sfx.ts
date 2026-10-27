@@ -403,19 +403,24 @@ export const SFX_STYLE = String.raw`
   .sfx > button:hover { background: var(--hover); color: var(--text); }
   .sfx.on > .sfx-toggle { color: var(--accent); }
   .sfx.on { background: var(--accent-tint); }
-  .sfx .sfx-toggle .off, .sfx.on .sfx-toggle .onw { display: block; }
-  .sfx .sfx-toggle .onw, .sfx.on .sfx-toggle .off { display: none; }
   .sfx-pop { position: absolute; top: 40px; right: 0; z-index: 30; width: 260px; padding: 14px; border-radius: 22px; background: rgba(28,29,35,.94); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); box-shadow: var(--window-shadow); font-size: 13px; }
   .sfx-pop[hidden] { display: none; }
   .sfx-pop label { display: block; margin: 0 0 10px; color: var(--muted); font-size: 12px; font-weight: 500; }
   .sfx-pop label.row { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
   .sfx-pop input[type=range] { display: block; width: 100%; margin-top: 4px; }
+  /* Cada canal: su volumen y, a la derecha, su interruptor. */
+  .sfx-pop .mix { display: flex; align-items: flex-end; gap: 14px; margin: 0 0 10px; }
+  .sfx-pop .mix label { flex: 1; min-width: 0; margin: 0; }
+  .sfx-pop .mix input[type=checkbox] { flex: none; margin-bottom: 2px; }
+  .sfx > .sfx-toggle .fx { font: 800 11px/1 var(--sans, sans-serif); letter-spacing: .04em; }
+  .sfx .sfx-music .off, .sfx .sfx-music.on .onw { display: block; }
+  .sfx .sfx-music .onw, .sfx .sfx-music.on .off { display: none; }
   .sfx-pop .note { margin: 6px 0 0; color: var(--faint); font-size: 11.5px; line-height: 1.4; }
   .sfx-pop .credits a { color: var(--muted); }
-  @media (max-width: 820px) { .sfx > .sfx-toggle span { display: none; } .sfx > .sfx-toggle { padding: 0 6px 0 10px; } }
+  @media (max-width: 820px) { .sfx > .sfx-toggle span:not(.fx) { display: none; } .sfx > .sfx-toggle { padding: 0 6px 0 10px; } }
 `;
 
-/** Nota musical (sonido de la partida) y la misma nota tachada (silencio). */
+/** Nota musical (la canción de la partida) y la misma nota tachada (sin canción). */
 const NOTE_ICON = '<svg class="i onw" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>';
 const MUTE_ICON = '<svg class="i off" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path d="M3 3l18 18"/></svg>';
 const CARET = '<svg class="i" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M7 10l5 5 5-5"/></svg>';
@@ -429,6 +434,8 @@ export const SFX_SCRIPT = String.raw`<script>
   function isAmb(k) { return /^ambiente-/.test(k); }
   var AC = window.AudioContext || window.webkitAudioContext;
   var muted = store('tavernus.sfx.muted') === '1', vol = num(store('tavernus.sfx.volume'), 0.7), ambVol = num(store('tavernus.sfx.ambience'), 0.5);
+  // Tres canales: la canción (música de entrada, en bucle), los efectos y el ambiente; cada uno con volumen e interruptor.
+  var musicOn = store('tavernus.music.game') !== '0', musicVol = num(store('tavernus.music.volume'), 0.6), ambOn = store('tavernus.sfx.ambOn') !== '0';
   var ctx = null, master = null, ambBus = null, fxBus = null, unlocked = false, fresh = false, ducked = false, external = false;
   var cache = {}, files = {}, credits = [], ai = false, amb = null, wantAmb = null, seqEnd = 0, character = null;
 
@@ -436,24 +443,33 @@ export const SFX_SCRIPT = String.raw`<script>
   var head = document.querySelector('.chat-head'), box = document.createElement('div');
   box.className = 'sfx';
   box.innerHTML =
-    '<button type="button" class="sfx-toggle" aria-pressed="false" title="Sonido de la partida (pasos, puertas, ambiente)">' + '${NOTE_ICON}${MUTE_ICON}' + '<span>Sonido</span></button>' +
+    '<button type="button" class="sfx-music" aria-pressed="false" title="Música de la partida">' + '${NOTE_ICON}${MUTE_ICON}' + '</button>' +
+    '<button type="button" class="sfx-toggle" aria-pressed="false" title="Efectos y ambiente (pasos, puertas, lluvia…)"><span class="fx" aria-hidden="true">FX</span></button>' +
     '<button type="button" class="sfx-more" title="Volumen del sonido" aria-label="Volumen del sonido" aria-expanded="false">' + '${CARET}' + '</button>' +
     '<div class="sfx-pop" hidden>' +
-      '<label class="row"><input type="checkbox" data-k="on">Sonido de la partida</label>' +
-      '<label>Volumen<input type="range" min="0" max="1" step="0.05" data-k="volume"></label>' +
-      '<label>Ambiente<input type="range" min="0" max="1" step="0.05" data-k="ambience"></label>' +
+      '<div class="mix"><label>Música<input type="range" min="0" max="1" step="0.05" data-k="music"></label><input type="checkbox" data-k="musicOn" aria-label="Música"></div>' +
+      '<div class="mix"><label>Efectos<input type="range" min="0" max="1" step="0.05" data-k="volume"></label><input type="checkbox" data-k="on" aria-label="Efectos"></div>' +
+      '<div class="mix"><label>Ambiente<input type="range" min="0" max="1" step="0.05" data-k="ambience"></label><input type="checkbox" data-k="ambOn" aria-label="Ambiente"></div>' +
       '<p class="note"></p>' +
       '<p class="note credits" hidden></p>' +
     '</div>';
   if (head) head.insertBefore(box, head.querySelector('.tts')); else return;
   if (!AC) { box.hidden = true; return; }
-  var toggle = box.querySelector('.sfx-toggle'), more = box.querySelector('.sfx-more'), pop = box.querySelector('.sfx-pop');
+  var toggle = box.querySelector('.sfx-toggle'), musicBtn = box.querySelector('.sfx-music'), more = box.querySelector('.sfx-more'), pop = box.querySelector('.sfx-pop');
 
   function ui() {
     box.classList.toggle('on', !muted);
     toggle.setAttribute('aria-pressed', muted ? 'false' : 'true');
-    toggle.title = muted ? 'Activar el sonido de la partida' : 'Silenciar el sonido de la partida';
+    toggle.title = muted ? 'Activar efectos y ambiente' : 'Silenciar efectos y ambiente';
+    toggle.setAttribute('aria-label', toggle.title);
+    musicBtn.classList.toggle('on', musicOn);
+    musicBtn.setAttribute('aria-pressed', musicOn ? 'true' : 'false');
+    musicBtn.title = musicOn ? 'Parar la música' : 'Poner la música';
+    musicBtn.setAttribute('aria-label', musicBtn.title);
     pop.querySelector('[data-k=on]').checked = !muted;
+    pop.querySelector('[data-k=musicOn]').checked = musicOn;
+    pop.querySelector('[data-k=ambOn]').checked = ambOn;
+    pop.querySelector('[data-k=music]').value = String(musicVol);
     pop.querySelector('[data-k=volume]').value = String(vol);
     pop.querySelector('[data-k=ambience]').value = String(ambVol);
     pop.querySelector('.note').textContent = (ai ? 'Efectos generados por IA y cacheados por partida; lo que falta se sintetiza aquí.'
@@ -482,7 +498,7 @@ export const SFX_SCRIPT = String.raw`<script>
   function levels(s) {
     if (!ctx) return;
     ramp(master.gain, muted ? 0 : vol, s);
-    ramp(ambBus.gain, ambVol * (ducked || external ? 0.35 : 1), s);
+    ramp(ambBus.gain, ambOn ? ambVol * (ducked || external ? 0.35 : 1) : 0, s);
     introLevel(s);
   }
   /** Primer gesto: crea o reanuda el contexto; en iOS, además, un búfer mudo dentro del gesto. */
@@ -576,7 +592,6 @@ export const SFX_SCRIPT = String.raw`<script>
   }
   function setMuted(m) {
     muted = m; store('tavernus.sfx.muted', m ? '1' : '0');
-    introOff = m;
     if (!m) unlock();
     if (ctx) { levels(0.3); if (m) setTimeout(function () { if (muted) ctx.suspend(); }, 400); else ctx.resume(); }
     ui();
@@ -592,12 +607,19 @@ export const SFX_SCRIPT = String.raw`<script>
   toggle.addEventListener('click', function () { if (fresh && !muted) { ui(); return; } setMuted(!muted); });
   more.addEventListener('click', function (ev) { ev.stopPropagation(); pop.hidden = !pop.hidden; more.setAttribute('aria-expanded', String(!pop.hidden)); ui(); });
   document.addEventListener('click', function (ev) { if (!pop.hidden && !box.contains(ev.target)) { pop.hidden = true; more.setAttribute('aria-expanded', 'false'); } });
+  musicBtn.addEventListener('click', function () { setMusic(!musicOn); });
   pop.addEventListener('input', function (ev) {
     var k = ev.target.getAttribute('data-k');
+    if (k === 'music') { musicVol = num(ev.target.value, musicVol); store('tavernus.music.volume', String(musicVol)); introLevel(0.1); }
     if (k === 'volume') { vol = num(ev.target.value, vol); store('tavernus.sfx.volume', String(vol)); levels(0.1); }
     if (k === 'ambience') { ambVol = num(ev.target.value, ambVol); store('tavernus.sfx.ambience', String(ambVol)); levels(0.1); }
   });
-  pop.addEventListener('change', function (ev) { if (ev.target.getAttribute('data-k') === 'on') setMuted(!ev.target.checked); });
+  pop.addEventListener('change', function (ev) {
+    var k = ev.target.getAttribute('data-k');
+    if (k === 'on') setMuted(!ev.target.checked);
+    if (k === 'musicOn') setMusic(ev.target.checked);
+    if (k === 'ambOn') { ambOn = ev.target.checked; store('tavernus.sfx.ambOn', ambOn ? '1' : '0'); levels(0.3); ui(); }
+  });
 
   /** Estado del PJ: su ambiente actual, qué claves hay en fichero y si la IA está activa. */
   function load(id) {
@@ -613,11 +635,11 @@ export const SFX_SCRIPT = String.raw`<script>
   }
   ui();
 
-  // Música de entrada (public/music/intro-partida.mp3): si se llega desde el menú con su música sonando, empieza
-  // suave de fondo mientras aquella se desvanece. Suena una vez, por debajo del ambiente, y respeta silencio y volumen.
-  // Va con la música del menú, no con el silencio de los efectos; solo lo para silenciar aquí mientras suena.
-  var intro = null, introFade = null, introOff = false;
-  function introTarget() { return introOff ? 0 : vol * 0.13 * (ducked || external ? 0.5 : 1); }
+  // Música de la partida (public/music/intro-partida.mp3): si se llega desde el menú con su música sonando, empieza
+  // suave de fondo mientras aquella se desvanece, y sigue en bucle hasta que se apague con su botón (nota musical) o
+  // en los ajustes. Encenderla después la pone aunque no viniera sonando. Va aparte de los efectos y del ambiente.
+  var intro = null, introFade = null, introOff = !musicOn;
+  function introTarget() { return introOff ? 0 : musicVol * 0.2 * (ducked || external ? 0.5 : 1); }
   function introTo(v, ms, then) {
     if (!intro) return;
     clearInterval(introFade);
@@ -629,20 +651,29 @@ export const SFX_SCRIPT = String.raw`<script>
     }, 50);
   }
   function introLevel(s) {
-    if (!intro || intro.ended) return;
+    if (!intro) return;
     if (introOff) introTo(0, 300, function () { intro.pause(); });
     else if (intro.paused) introStart(); else introTo(introTarget(), s * 1000);
   }
   function introStart() {
-    if (!intro || intro.ended || introOff) return;
+    if (!intro || introOff) return;
     var p = intro.play();
     if (p && p.then) p.then(function () { introTo(introTarget(), 5000); }, function () {}); else introTo(introTarget(), 5000);
+  }
+  function introMake() {
+    if (intro) return;
+    intro = new Audio('/music/intro-partida.mp3'); intro.preload = 'auto'; intro.loop = true; intro.volume = 0;
+  }
+  function setMusic(on) {
+    musicOn = on; introOff = !on; store('tavernus.music.game', on ? '1' : '0');
+    if (on) { introMake(); introStart(); } else introLevel(0.3);
+    ui();
   }
   (function () {
     var want = false;
     try { want = sessionStorage.getItem('tavernus.introMusic') === '1'; sessionStorage.removeItem('tavernus.introMusic'); } catch (e) {}
-    if (!want) return;
-    intro = new Audio('/music/intro-partida.mp3'); intro.preload = 'auto'; intro.volume = 0;
+    if (!want || !musicOn) return;
+    introMake();
     introStart();
     // Si el navegador no deja sonar sin un gesto, empieza al primer toque o tecla.
     function first() { ['pointerdown', 'keydown', 'touchend'].forEach(function (ev) { document.removeEventListener(ev, first, true); }); if (intro.paused) introStart(); }
@@ -664,7 +695,7 @@ export const SFX_SCRIPT = String.raw`<script>
     cue: cue,
     setAmbience: function (k) { setAmbience(k, 2.5); },
     /** Para pruebas y depuración. */
-    state: function () { return { unlocked: unlocked, muted: muted, volume: vol, ambienceVolume: ambVol, ambience: amb && amb.key, wanted: wantAmb, context: ctx && ctx.state, files: Object.keys(files), ai: ai, format: fmt, intro: intro && { playing: !intro.paused, volume: Math.round(intro.volume * 100) / 100, ended: intro.ended } }; },
+    state: function () { return { unlocked: unlocked, muted: muted, volume: vol, ambienceVolume: ambVol, ambience: amb && amb.key, wanted: wantAmb, context: ctx && ctx.state, files: Object.keys(files), ai: ai, format: fmt, music: { on: musicOn, volume: musicVol }, intro: intro && { playing: !intro.paused, volume: Math.round(intro.volume * 100) / 100, ended: intro.ended } }; },
   };
 })();
 </script>`;

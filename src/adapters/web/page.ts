@@ -651,7 +651,7 @@ ${FIGHT_STYLE}
   .chat-head .sfx + .tts { margin-left: 0; }
   .chat-head .tts { margin-left: 0; gap: 2px; }
   .sfx > button, .tts > button { height: 32px; background: transparent; }
-  .sfx > .sfx-toggle span, .tts > .tts-auto span { display: none; }
+  .sfx > .sfx-toggle span:not(.fx), .tts > .tts-auto span { display: none; }
   .sfx > .sfx-toggle { width: 32px; padding: 0; justify-content: center; border-radius: 50%; }
   .sfx > .sfx-more { width: 22px; padding: 0; border-radius: 50%; }
   .tts > .tts-auto, .tts > .tts-more { width: 32px; padding: 0; justify-content: center; border-radius: 50%; }
@@ -845,8 +845,8 @@ ${FIGHT_STYLE}
   .chat-head .tts > button:first-child:not([hidden]), .chat-head .tts > .tts-stop[hidden] + .tts-auto { border-radius: 12px 0 0 12px; }
   .chat-head .tts > .tts-auto { width: 32px; padding: 0; justify-content: center; }
   .chat-head .tts > .tts-auto:not(.on) { color: var(--muted); background: rgba(230,183,90,.07); }
-  .chat-head .sfx > .sfx-toggle { width: 32px; padding: 0; justify-content: center; }
-  .chat-head .sfx:not(.on) > .sfx-toggle { color: var(--muted); background: rgba(230,183,90,.07); }
+  .chat-head .sfx > .sfx-toggle, .chat-head .sfx > .sfx-music { width: 32px; padding: 0; justify-content: center; }
+  .chat-head .sfx:not(.on) > .sfx-toggle, .chat-head .sfx > .sfx-music:not(.on) { color: var(--muted); background: rgba(230,183,90,.07); }
   .chat-head .sfx > .sfx-more { width: 26px; padding: 0; border-radius: 0 12px 12px 0; }
   .chat-head .sfx, .chat-head .sfx.on { height: 32px; background: transparent; border-radius: 12px; }
   #party { order: 2; margin-right: 6px; }
@@ -886,7 +886,10 @@ ${FIGHT_STYLE}
   #gear-menu { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 8px); z-index: 26; max-height: min(70vh, 560px); overflow-y: auto; padding: 10px;
     border-radius: 18px; background: var(--bubble); border: 1px solid var(--line); box-shadow: var(--window-shadow); }
   #gear-menu h3 { margin: 12px 6px 4px; font: 600 11px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
-  #gear-menu section:has(> :only-child) { display: none; }
+  #gear-menu section:has(> h3:only-child), #gear-menu section:empty { display: none; }
+  #gear-menu > h3:first-child { margin-top: 2px; }
+  #gear-menu .gm-paint { margin-bottom: 8px; }
+  #gear-menu .note:empty { display: none; }
   #gear-menu .tts-pop, #gear-menu .sfx-pop { display: block !important; position: static; width: auto; margin: 0; padding: 6px; border: 0; border-radius: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
   #gear-menu .gm-paint { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 10px; border: 0; border-radius: 12px; background: var(--control); color: var(--text); text-align: left; }
   #gear-menu .gm-paint[hidden] { display: none; }
@@ -1051,8 +1054,9 @@ ${FIGHT_STYLE}
         <div class="slash-list"></div>
       </div>
       <div id="gear-menu" role="dialog" aria-label="Ajustes" hidden>
+        <h3>Generar imagen, sonido y música</h3>
         <button type="button" class="gm-paint" hidden><span class="bub"></span><span><b>Generar imagen</b><small>Ilustra este momento de la partida</small></span></button>
-        <section data-slot="sfx"><h3>Sonido y música</h3></section>
+        <section data-slot="sfx"></section>
         <section data-slot="tts"><h3>Narrador</h3></section>
         <section data-slot="voice"><h3>Dictar con la voz</h3></section>
       </div>
