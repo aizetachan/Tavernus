@@ -282,8 +282,16 @@ export const NOVEL_STYLE = String.raw`
   .place-shot img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
   .place-shot.ready img { opacity: 1; }
   @keyframes nv-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  /* Retrato de un personaje al aparecer: cuadrado y pequeño, encima de su primera frase; la cara al centro. */
   .moment .shot { position: relative; display: block; width: 220px; aspect-ratio: 4 / 5; padding: 0; border: 0; border-radius: 18px; overflow: hidden; background: var(--platter); cursor: zoom-in; box-shadow: var(--control-shadow); }
   .moment.item .shot { width: 200px; aspect-ratio: 1; }
+  .moment.portrait { margin-top: 10px; }
+  .moment.portrait .shot { width: 110px; aspect-ratio: 1; border-radius: 14px; }
+  .moment.portrait img { object-position: 50% 50%; }
+  .moment.portrait figcaption { left: 8px; right: 8px; bottom: 7px; }
+  .moment.portrait figcaption b { font-size: 11.5px; line-height: 1.25; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .moment.portrait figcaption span { display: block; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .moment.portrait .shot::after { inset: 35% 0 0; }
   .moment.combat, .moment.discovery { width: min(560px, calc(100% - 42px)); }
   .moment.combat .shot, .moment.discovery .shot { width: 100%; aspect-ratio: 16 / 9; }
   .moment img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .7s; }
@@ -311,7 +319,7 @@ export const NOVEL_STYLE = String.raw`
     .msg.row { max-width: 100%; }
     .nv-av { width: 30px; height: 30px; }
     .msg.scene, .msg.moment, #log > .actions { margin-left: 38px; }
-    .moment .shot { width: 180px; } .moment.item .shot { width: 160px; }
+    .moment .shot { width: 180px; } .moment.item .shot { width: 160px; } .moment.portrait .shot { width: 96px; }
   }
 `;
 
@@ -611,10 +619,13 @@ export const NOVEL_JS = String.raw`
       if (l.to && !lead) lead = 'a ' + l.to;
       if (l.speaker === 'actor') return chatRow('mine', meWho(), (l.to ? '<div class="lead">a ' + escapeHtml(l.to) + '</div>' : '') + escapeHtml(l.text));
       if (l.avatar) portraits[l.id] = l.avatar;
-      return chatRow('npc', { id: l.id, name: l.name, avatar: l.avatar }, (lead ? '<div class="lead">' + escapeHtml(lead) + '</div>' : '') + escapeHtml(l.text));
+      var r = chatRow('npc', { id: l.id, name: l.name, avatar: l.avatar }, (lead ? '<div class="lead">' + escapeHtml(lead) + '</div>' : '') + escapeHtml(l.text));
+      // Lo que lee su avatar (tts.ts): solo su frase.
+      r.ttsOwn = '«' + l.text + '»';
+      return r;
     };
     var narrate = function (text) {
-      if (m.narrator || m.kind === 'master') return chatRow('master', cast.master, format(text));
+      if (m.narrator || m.kind === 'master') { var r = chatRow('master', cast.master, format(text)); r.ttsOwn = text; return r; }
       return add('system', text, m.dice === 'other' ? { other: true } : undefined);
     };
     // Si el jugador no habla en este turno, su mensaje es lo que ha hecho (en cursiva).
@@ -959,8 +970,10 @@ export const NOVEL_JS = String.raw`
     fig.innerHTML = '<button type="button" class="shot" title="Ver en grande"><img alt=""><figcaption><b></b><span></span></figcaption></button>';
     var img = fig.querySelector('img'), name = x.name || '';
     fig.querySelector('figcaption b').textContent = name;
-    fig.querySelector('figcaption span').textContent = MOMENT_LABEL[x.kind] || 'Ilustración';
-    img.alt = (MOMENT_LABEL[x.kind] || 'Ilustración') + ': ' + name;
+    // Un retrato lleva el oficio de quien sale («tabernera»); el resto, qué clase de momento es.
+    var label = (x.kind === 'portrait' && x.role) || MOMENT_LABEL[x.kind] || 'Ilustración';
+    fig.querySelector('figcaption span').textContent = label;
+    img.alt = (x.kind === 'portrait' ? 'Retrato' : label) + ': ' + name + (x.kind === 'portrait' && x.role ? ', ' + x.role : '');
     var atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
     img.addEventListener('load', function () { fig.classList.add('ready'); if (atEnd) scroll(); });
     img.addEventListener('error', function () { fig.remove(); });
@@ -969,6 +982,15 @@ export const NOVEL_JS = String.raw`
     var host = null;
     log.querySelectorAll('.msg[data-seq]').forEach(function (d) { if (d.getAttribute('data-seq') === String(seq)) host = d; });
     if (!host) { log.appendChild(fig); return; }
+    // El retrato de quien aparece va encima de su primera frase de ese turno: primero la cara, luego lo que dice.
+    if (x.kind === 'portrait') {
+      var first = null;
+      for (var e = host; e; e = e.previousElementSibling) {
+        if (e !== host && e.hasAttribute('data-seq')) break;
+        if (e.getAttribute('data-who') === 'npc:' + x.entity_id) first = e;
+      }
+      if (first) { first.parentNode.insertBefore(fig, first); first.classList.remove('cont'); return; }
+    }
     var ref = host;
     while (ref.nextElementSibling && ref.nextElementSibling.getAttribute('data-for') === String(seq)) ref = ref.nextElementSibling;
     ref.parentNode.insertBefore(fig, ref.nextSibling);

@@ -433,11 +433,12 @@ export const SFX_SCRIPT = String.raw`<script>
   function num(v, d) { var n = Number(v); return v === null || v === undefined || v === '' || !isFinite(n) ? d : Math.max(0, Math.min(1, n)); }
   function isAmb(k) { return /^ambiente-/.test(k); }
   var AC = window.AudioContext || window.webkitAudioContext;
-  var muted = store('tavernus.sfx.muted') === '1', vol = num(store('tavernus.sfx.volume'), 0.7), ambVol = 0.5;
-  // Tres canales: la canción (música de entrada, en bucle), los efectos y el ambiente; cada uno con volumen e interruptor.
-  var musicOn = store('tavernus.music.game') !== '0', musicVol = num(store('tavernus.music.volume'), 0.6);
-  // El ambiente suena a la mitad del volumen de «Efectos y ambiente», que lo enciende y apaga con los efectos.
-  var ctx = null, master = null, ambBus = null, fxBus = null, unlocked = false, fresh = false, ducked = false, external = false;
+  // Niveles de partida: ambiente al 50 %, música al 25 % y el narrador (tts.ts) al 75 %, por encima de los dos.
+  // Los efectos van a su nivel de siempre (0,7) y se encienden y apagan con el ambiente.
+  var FX_VOL = 0.7;
+  var muted = store('tavernus.sfx.muted') === '1', ambVol = num(store('tavernus.amb.volume'), 0.5);
+  var musicOn = store('tavernus.music.game') !== '0', musicVol = num(store('tavernus.music.level'), 0.25);
+  var ctx = null, master = null, ambBus = null, fxBus = null, musicBus = null, unlocked = false, fresh = false, ducked = false, external = false;
   var cache = {}, files = {}, credits = [], ai = false, amb = null, wantAmb = null, seqEnd = 0, character = null;
 
   // Interfaz: silencio y volúmenes en la cabecera del chat, delante del narrador.
@@ -449,7 +450,7 @@ export const SFX_SCRIPT = String.raw`<script>
     '<button type="button" class="sfx-more" title="Volumen del sonido" aria-label="Volumen del sonido" aria-expanded="false">' + '${CARET}' + '</button>' +
     '<div class="sfx-pop" hidden>' +
       '<div class="mix"><input type="checkbox" data-k="musicOn" aria-label="Música"><label>Música<input type="range" min="0" max="1" step="0.05" data-k="music"></label></div>' +
-      '<div class="mix"><input type="checkbox" data-k="on" aria-label="Efectos y ambiente"><label>Efectos y ambiente<input type="range" min="0" max="1" step="0.05" data-k="volume"></label></div>' +
+      '<div class="mix"><input type="checkbox" data-k="on" aria-label="Efectos y ambiente"><label>Ambiente y efectos<input type="range" min="0" max="1" step="0.05" data-k="ambience"></label></div>' +
       '<p class="note credits" hidden></p>' +
     '</div>';
   if (head) head.insertBefore(box, head.querySelector('.tts')); else return;
@@ -468,7 +469,7 @@ export const SFX_SCRIPT = String.raw`<script>
     pop.querySelector('[data-k=on]').checked = !muted;
     pop.querySelector('[data-k=musicOn]').checked = musicOn;
     pop.querySelector('[data-k=music]').value = String(musicVol);
-    pop.querySelector('[data-k=volume]').value = String(vol);
+    pop.querySelector('[data-k=ambience]').value = String(ambVol);
     // Créditos de las pistas de ambiente (obligatorios en las CC BY; las CC0 se citan igual).
     var cr = pop.querySelector('.credits');
     cr.hidden = !credits.length;
@@ -483,23 +484,28 @@ export const SFX_SCRIPT = String.raw`<script>
   function ensure() {
     if (ctx) return ctx;
     try { ctx = new AC(); } catch (e) { return null; }
-    master = ctx.createGain(); ambBus = ctx.createGain(); fxBus = ctx.createGain();
+    master = ctx.createGain(); ambBus = ctx.createGain(); fxBus = ctx.createGain(); musicBus = ctx.createGain();
     ambBus.connect(master); fxBus.connect(master); master.connect(ctx.destination);
+    // La música va aparte del interruptor de efectos y ambiente: directa a la salida.
+    musicBus.connect(ctx.destination);
     levels(0);
     return ctx;
   }
   function ramp(param, v, s) { var t = ctx.currentTime; param.cancelScheduledValues(t); param.setValueAtTime(param.value, t); param.linearRampToValueAtTime(v, t + Math.max(0.01, s)); }
   function levels(s) {
     if (!ctx) return;
-    ramp(master.gain, muted ? 0 : vol, s);
+    ramp(master.gain, muted ? 0 : 1, s);
+    ramp(fxBus.gain, FX_VOL, s);
     ramp(ambBus.gain, ambVol * (ducked || external ? 0.35 : 1), s);
     introLevel(s);
   }
   /** Primer gesto: crea o reanuda el contexto; en iOS, además, un búfer mudo dentro del gesto. */
   function unlock() {
     if (!ensure()) return;
-    if (!muted && ctx.state !== 'running' && document.visibilityState === 'visible') ctx.resume();
-    if (muted && ctx.state === 'running') ctx.suspend(); // creado dentro del gesto arranca solo: silenciado no gasta
+    if (!idle() && ctx.state !== 'running' && document.visibilityState === 'visible') ctx.resume();
+    if (idle() && ctx.state === 'running') ctx.suspend(); // creado dentro del gesto arranca solo: silenciado no gasta
+    introHook();
+    if (musicOn) { introMake(); introHook(); if (intro.paused) introStart(); }
     if (unlocked) return;
     var s = ctx.createBufferSource(); s.buffer = ctx.createBuffer(1, 1, 22050); s.connect(ctx.destination); s.start(0);
     unlocked = true; fresh = true; setTimeout(function () { fresh = false; }, 0);
@@ -509,7 +515,7 @@ export const SFX_SCRIPT = String.raw`<script>
   ['pointerdown', 'keydown', 'touchend'].forEach(function (ev) { document.addEventListener(ev, unlock, { capture: true, passive: true }); });
   document.addEventListener('visibilitychange', function () {
     if (!ctx || !unlocked) return;
-    if (document.visibilityState === 'hidden') ctx.suspend(); else if (!muted) ctx.resume();
+    if (document.visibilityState === 'hidden') ctx.suspend(); else if (!idle()) ctx.resume();
   });
 
   function api(path) { return path + (path.indexOf('?') < 0 ? '?' : '&') + 'game=' + encodeURIComponent(game); }
@@ -587,7 +593,7 @@ export const SFX_SCRIPT = String.raw`<script>
   function setMuted(m) {
     muted = m; store('tavernus.sfx.muted', m ? '1' : '0');
     if (!m) unlock();
-    if (ctx) { levels(0.3); if (m) setTimeout(function () { if (muted) ctx.suspend(); }, 400); else ctx.resume(); }
+    if (ctx) { levels(0.3); if (m) setTimeout(function () { if (idle()) ctx.suspend(); }, 400); else ctx.resume(); }
     ui();
   }
 
@@ -604,8 +610,8 @@ export const SFX_SCRIPT = String.raw`<script>
   musicBtn.addEventListener('click', function () { setMusic(!musicOn); });
   pop.addEventListener('input', function (ev) {
     var k = ev.target.getAttribute('data-k');
-    if (k === 'music') { musicVol = num(ev.target.value, musicVol); store('tavernus.music.volume', String(musicVol)); introLevel(0.1); }
-    if (k === 'volume') { vol = num(ev.target.value, vol); store('tavernus.sfx.volume', String(vol)); levels(0.1); }
+    if (k === 'music') { musicVol = num(ev.target.value, musicVol); store('tavernus.music.level', String(musicVol)); introLevel(0.1); }
+    if (k === 'ambience') { ambVol = num(ev.target.value, ambVol); store('tavernus.amb.volume', String(ambVol)); levels(0.1); }
   });
   pop.addEventListener('change', function (ev) {
     var k = ev.target.getAttribute('data-k');
@@ -628,17 +634,33 @@ export const SFX_SCRIPT = String.raw`<script>
   ui();
 
   // Música de la partida (public/music/intro-partida.mp3): si se llega desde el menú con su música sonando, empieza
-  // suave de fondo mientras aquella se desvanece, y sigue en bucle hasta que se apague con su botón (nota musical) o
-  // en los ajustes. Encenderla después la pone aunque no viniera sonando. Va aparte de los efectos y del ambiente.
-  var intro = null, introFade = null, introOff = !musicOn;
-  function introTarget() { return introOff ? 0 : musicVol * 0.2 * (ducked || external ? 0.5 : 1); }
+  // suave de fondo mientras aquella se desvanece; si no, al primer toque en la partida. Sigue en bucle hasta que se
+  // apague con su botón (nota musical) o en los ajustes. Va aparte de los efectos y del ambiente.
+  // Tras el primer gesto suena por la Web Audio (musicBus): iOS no deja cambiar el volumen de un <audio>.
+  var intro = null, introFade = null, introOff = !musicOn, introGain = null;
+  /** Sin nada que deba sonar: efectos y ambiente silenciados y la música apagada. */
+  function idle() { return muted && introOff; }
+  // El mp3 viene fuerte: el 25 % del deslizador deja la música de fondo, por debajo del ambiente y de la voz.
+  function introTarget() { return introOff ? 0 : musicVol * 0.5 * (ducked || external ? 0.5 : 1); }
+  function introGet() { return introGain ? introGain.gain.value : intro.volume; }
+  function introSet(v) { v = Math.max(0, Math.min(1, v)); if (introGain) introGain.gain.value = v; else intro.volume = v; }
+  /** Pasa la música a la Web Audio (dentro de un gesto, con el contexto ya creado), conservando su nivel. */
+  function introHook() {
+    if (!intro || introGain || !ctx) return;
+    try {
+      var v = intro.volume, src = ctx.createMediaElementSource(intro);
+      introGain = ctx.createGain(); introGain.gain.value = v;
+      src.connect(introGain); introGain.connect(musicBus);
+      intro.volume = 1;
+    } catch (e) { introGain = null; }
+  }
   function introTo(v, ms, then) {
     if (!intro) return;
     clearInterval(introFade);
-    var from = intro.volume, t0 = Date.now();
+    var from = introGet(), t0 = Date.now();
     introFade = setInterval(function () {
       var k = Math.min(1, (Date.now() - t0) / Math.max(1, ms));
-      intro.volume = Math.max(0, Math.min(1, from + (v - from) * k));
+      introSet(from + (v - from) * k);
       if (k >= 1) { clearInterval(introFade); if (then) then(); }
     }, 50);
   }
@@ -658,7 +680,8 @@ export const SFX_SCRIPT = String.raw`<script>
   }
   function setMusic(on) {
     musicOn = on; introOff = !on; store('tavernus.music.game', on ? '1' : '0');
-    if (on) { introMake(); introStart(); } else introLevel(0.3);
+    if (on) { introMake(); if (ctx) { introHook(); if (unlocked && document.visibilityState === 'visible') ctx.resume(); } introStart(); }
+    else { introLevel(0.3); if (ctx && idle()) setTimeout(function () { if (idle()) ctx.suspend(); }, 400); }
     ui();
   }
   (function () {
@@ -687,7 +710,7 @@ export const SFX_SCRIPT = String.raw`<script>
     cue: cue,
     setAmbience: function (k) { setAmbience(k, 2.5); },
     /** Para pruebas y depuración. */
-    state: function () { return { unlocked: unlocked, muted: muted, volume: vol, ambienceVolume: ambVol, ambience: amb && amb.key, wanted: wantAmb, context: ctx && ctx.state, files: Object.keys(files), ai: ai, format: fmt, music: { on: musicOn, volume: musicVol }, intro: intro && { playing: !intro.paused, volume: Math.round(intro.volume * 100) / 100, ended: intro.ended } }; },
+    state: function () { return { unlocked: unlocked, muted: muted, volume: FX_VOL, ambienceVolume: ambVol, ambience: amb && amb.key, wanted: wantAmb, context: ctx && ctx.state, files: Object.keys(files), ai: ai, format: fmt, music: { on: musicOn, volume: musicVol }, intro: intro && { playing: !intro.paused, volume: Math.round(introGet() * 100) / 100, webAudio: !!introGain, ended: intro.ended } }; },
   };
 })();
 </script>`;

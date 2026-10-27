@@ -249,10 +249,12 @@ export const TTS_SCRIPT = String.raw`<script>
   function cloud() { return provider !== 'browser' && store('tavernus.tts.engine') !== 'browser'; }
   var auto = store('tavernus.tts.auto') === '1';
   var rate = Number(store('tavernus.tts.rate')) || 1;
+  // Volumen de la voz: 75 % de partida, por encima del ambiente (50 %) y de la música (25 %) de sfx.ts.
+  var vol = (function (v) { var n = Number(v); return v === null || v === '' || !isFinite(n) ? 0.75 : Math.max(0, Math.min(1, n)); })(store('tavernus.tts.volume'));
   var awake = store('tavernus.tts.awake') === '1';
   var queue = [];          // divs de narraciones pendientes
   // --- El borde del avatar late con la voz ------------------------------------------------------------
-  var voiceAv = null, clickedAv = null, lvl = 0, lastBeat = 0, raf = null, analyser = null, actx = null, abuf = null;
+  var voiceAv = null, clickedAv = null, lvl = 0, lastBeat = 0, raf = null, analyser = null, actx = null, abuf = null, vgain = null;
   /** El avatar que late: el que se pulsó o, si no, el visible más cercano de esa narración (las agrupadas no lo muestran). */
   function avatarFor(div) {
     var n = div;
@@ -294,8 +296,11 @@ export const TTS_SCRIPT = String.raw`<script>
       var src = actx.createMediaElementSource(audio);
       analyser = actx.createAnalyser(); analyser.fftSize = 512;
       abuf = new Uint8Array(analyser.fftSize);
-      src.connect(analyser); analyser.connect(actx.destination);
-    } catch (e) { analyser = null; }
+      // El analizador mide la voz antes del volumen (el pulso del avatar no cambia); la ganancia sí funciona en iOS.
+      vgain = actx.createGain(); vgain.gain.value = vol;
+      src.connect(analyser); analyser.connect(vgain); vgain.connect(actx.destination);
+      audio.volume = 1;
+    } catch (e) { analyser = null; vgain = null; }
   }
   var playing = null;      // { div, steps, i }
   var justAttached = null; // la que acaba de pintarse (para «leer automáticamente»)
@@ -340,14 +345,17 @@ export const TTS_SCRIPT = String.raw`<script>
 
   /* ---------- Cola de lectura ---------- */
   /** En el navegador, frases cortas (Chrome corta a los ~15 s); en la nube, la narración entera en un solo audio. */
-  function stepsOf(div) {
+  function stepsOf(div, read) {
     // m.speech: el turno tal como se pinta en el hilo (bloques de novel.ts, en orden); si no, la narración.
-    var m = div.ttsMsg, parts = speechParts(m.speech || m.text, m.lines), steps = [];
+    // read: solo la parte de una burbuja (al pulsar su avatar), con las líneas del turno para saber quién habla.
+    var m = read || div.ttsMsg, parts = speechParts(m.speech || m.text, m.lines), steps = [];
     if (cloud()) return [{ cloud: parts.map(function (p) { return { text: p.text, role: p.kind, speaker: p.speaker }; }) }];
     parts.forEach(function (p) { speechChunks(p.text, 200).forEach(function (c) { steps.push({ kind: p.kind, speaker: p.speaker, text: c }); }); });
     return steps;
   }
   function speak(div) { stop(); queue = [div]; next(); }
+  /** Solo lo que dice una burbuja (y las suyas seguidas): se marca en la burbuja y next() lo recoge. */
+  function speakOwn(row, read) { stop(); row.ttsOnce = read; queue = [row]; next(); }
   function enqueue(div) {
     if (queue.indexOf(div) < 0 && (!playing || playing.div !== div)) queue.push(div);
     if (!playing) next(); else if (cloud()) audioFor(div);
@@ -358,7 +366,9 @@ export const TTS_SCRIPT = String.raw`<script>
     while (queue.length && !document.body.contains(queue[0])) queue.shift();
     var div = queue.shift();
     if (!div) { setVoiceAv(null); clickedAv = null; ui(); release(); return; }
-    playing = { div: div, steps: stepsOf(div), i: 0 };
+    var read = div.ttsOnce || null;
+    delete div.ttsOnce;
+    playing = { div: div, read: read, steps: stepsOf(div, read), i: 0 };
     div.classList.add('tts-on');
     setVoiceAv(clickedAv && document.body.contains(clickedAv) ? clickedAv : avatarFor(div));
     lvl = 0; lastBeat = Date.now(); startPulse();
@@ -389,7 +399,7 @@ export const TTS_SCRIPT = String.raw`<script>
     if (!synth) { hint('Este navegador no puede leer en alto.'); stop(); return; }
     var u = new SpeechSynthesisUtterance(s.text), v = voiceFor(s);
     if (v.voice) { u.voice = v.voice; u.lang = v.voice.lang; } else u.lang = 'es-ES';
-    u.pitch = v.pitch; u.rate = rate;
+    u.pitch = v.pitch; u.rate = rate; u.volume = vol;
     u.onend = function () { if (playing === p) step(); };
     u.onboundary = function (e) { if (playing === p && (!e.name || e.name === 'word')) beat(.75 + Math.random() * .25); };
     u.onerror = function (e) {
@@ -403,13 +413,14 @@ export const TTS_SCRIPT = String.raw`<script>
   }
 
   /** Audio de una narración (pedido una vez: la siguiente de la cola se pide mientras suena la actual). */
-  function audioFor(div) {
-    if (prefetch && prefetch.div === div) return prefetch.blob;
-    var parts = stepsOf(div)[0].cloud;
+  function audioFor(div, read) {
+    read = read || null;
+    if (prefetch && prefetch.div === div && prefetch.read === read) return prefetch.blob;
+    var parts = stepsOf(div, read)[0].cloud;
     var blob = fetch('/api/tts?game=' + encodeURIComponent(game), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ parts: parts, model: cloudModel() || undefined }) })
       .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.blob(); });
     blob.catch(function () {});
-    prefetch = { div: div, blob: blob };
+    prefetch = { div: div, read: read, blob: blob };
     return blob;
   }
   function sayCloud(s, p) {
@@ -417,13 +428,14 @@ export const TTS_SCRIPT = String.raw`<script>
       audio = new Audio();
       audio.addEventListener('ended', function () { if (playing) step(); });
     }
-    var got = audioFor(p.div);
+    var got = audioFor(p.div, p.read);
     if (queue[0]) audioFor(queue[0]);
     got.then(function (blob) {
       if (playing !== p) return;
       if (audio.src) URL.revokeObjectURL(audio.src);
       audio.src = URL.createObjectURL(blob);
       audio.playbackRate = rate;
+      applyVolume();
       mediaSession();
       hookAnalyser();
       if (actx && actx.state === 'suspended') actx.resume();
@@ -434,7 +446,7 @@ export const TTS_SCRIPT = String.raw`<script>
       // La nube falla (o se queda sin créditos): esta narración y las siguientes, con la voz del navegador.
       hint(e && e.message === '402' ? 'El narrador de voz se ha quedado sin créditos; sigo con la voz del navegador.' : 'El narrador de voz no responde; sigo con la voz del navegador.');
       provider = 'browser'; fillVoices();
-      p.steps = stepsOf(p.div); p.i = 0;
+      p.steps = stepsOf(p.div, p.read); p.i = 0;
       step();
     });
   }
@@ -475,6 +487,7 @@ export const TTS_SCRIPT = String.raw`<script>
     '<div class="tts-pop" hidden>' +
       '<label><select data-k="voice" aria-label="Voz del narrador"></select></label>' +
       '<label>Personajes<select data-k="npcvoice"></select></label>' +
+      '<label>Volumen<input type="range" min="0" max="1" step="0.05" data-k="volume"></label>' +
       '<label>Velocidad <b class="rate"></b><input type="range" min="0.7" max="1.5" step="0.05" data-k="rate"></label>' +
       '<label class="row"><input type="checkbox" data-k="auto">Leer automáticamente las narraciones nuevas</label>' +
       '<label class="row"><input type="checkbox" data-k="awake">Mantener la pantalla encendida mientras lee</label>' +
@@ -503,6 +516,7 @@ export const TTS_SCRIPT = String.raw`<script>
     sn.closest('label').hidden = !browser;
     pop.querySelector('.rate').textContent = rate.toFixed(2).replace(/0$/, '') + '×';
     pop.querySelector('[data-k=rate]').value = String(rate);
+    pop.querySelector('[data-k=volume]').value = String(vol);
     pop.querySelector('[data-k=awake]').checked = awake;
     pop.querySelector('.note').textContent = browser
       ? (list.length ? list.length + ' voces en castellano en este navegador. Las «Natural» de Edge (escritorio) son las que mejor suenan.' : 'Este navegador no ofrece voces en castellano; leerá con la voz por defecto.')
@@ -577,6 +591,12 @@ export const TTS_SCRIPT = String.raw`<script>
     if (k === 'awake') { awake = ev.target.checked; store('tavernus.tts.awake', awake ? '1' : '0'); if (awake && (playing || auto)) keepAwake(); else if (lock) { lock.release().catch(function () {}); lock = null; } }
     fillVoices();
   });
+  /** Volumen de la voz en la nube: con la ganancia si ya pasa por la Web Audio; si no, el del <audio>. */
+  function applyVolume() { if (vgain) vgain.gain.value = vol; else if (audio) audio.volume = vol; }
+  pop.addEventListener('input', function (ev) {
+    if (ev.target.getAttribute('data-k') !== 'volume') return;
+    vol = Math.max(0, Math.min(1, Number(ev.target.value) || 0)); store('tavernus.tts.volume', String(vol)); applyVolume();
+  });
   pop.addEventListener('input', function (ev) { if (ev.target.getAttribute('data-k') === 'rate') pop.querySelector('.rate').textContent = Number(ev.target.value).toFixed(2).replace(/0$/, '') + '×'; });
 
   // Al cambiar de personaje el chat se vacía: lo que se leía ya no está.
@@ -608,9 +628,9 @@ export const TTS_SCRIPT = String.raw`<script>
       who.appendChild(b);
     },
     /**
-     * novel.ts: los bocadillos de un turno (narrador y personajes). Su avatar es el botón de escuchar: lee el turno
-     * (div, el que lleva la narración) y, a continuación, las narraciones agrupadas que lo siguen sin avatar visible.
-     * Si ya está leyendo ese grupo, para.
+     * novel.ts: los bocadillos de un turno (narrador y personajes). Su avatar es el botón de escuchar: lee solo lo que
+     * dice esa burbuja (row.ttsOwn) y las suyas que la siguen sin avatar, no lo de otros personajes. Si ya la está
+     * leyendo, para.
      */
     bindAvatars: function (rows, div) {
       if (!div || !div.ttsMsg) return;
@@ -622,15 +642,11 @@ export const TTS_SCRIPT = String.raw`<script>
         av.setAttribute('role', 'button'); av.tabIndex = 0;
         av.title = 'Escuchar'; av.setAttribute('aria-label', 'Escuchar este momento');
         var go = function () {
-          var group = [div], n = (rows[rows.length - 1] || row).nextElementSibling;
-          while (n && (n.classList.contains('cont') || !n.classList.contains('row'))) {
-            if (n.ttsMsg && group.indexOf(n) < 0) group.push(n);
-            if (!n.classList.contains('row') && !n.classList.contains('actions') && !n.classList.contains('moment') && !n.classList.contains('scene')) break;
-            n = n.nextElementSibling;
-          }
-          if (playing && group.indexOf(playing.div) >= 0) { stop(); return; }
-          unlock(); speak(div); clickedAv = av; setVoiceAv(av);
-          group.slice(1).forEach(enqueue);
+          if (playing && playing.div === row) { stop(); return; }
+          var said = [], who = row.getAttribute('data-who'), n = row;
+          while (n && n.getAttribute('data-who') === who) { if (n.ttsOwn) said.push(n.ttsOwn); n = n.nextElementSibling; if (n && !n.classList.contains('cont')) break; }
+          if (!said.length) return;
+          unlock(); speakOwn(row, { speech: said.join('\n\n'), lines: div.ttsMsg.lines }); clickedAv = av; setVoiceAv(av);
         };
         av.addEventListener('click', go);
         av.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
