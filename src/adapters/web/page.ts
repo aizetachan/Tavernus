@@ -203,6 +203,7 @@ export const PAGE = String.raw`<!doctype html>
   .chat-head .dot img { width: 100%; height: 100%; object-fit: cover; filter: saturate(.85); }
   .chat-head .t { min-width: 0; flex: 1; }
   #place { font: 700 16px/1.2 var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #place .gn, #place-sub .sub-pl { display: none; }
   #place-sub { margin-top: 1px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #party { display: flex; align-items: center; flex: none; }
   #party:empty { display: none; }
@@ -922,7 +923,8 @@ ${FIGHT_STYLE}
     #to-side, .chat-head .sfx, .chat-head .tts > .tts-auto, .chat-head .tts > .tts-more { display: none; }
     /* Volver al menú: la flecha, a la izquierda del sitio. */
     #to-menu { display: inline-grid; margin-right: -4px; }
-    #place-sub .sub-x { display: none; }
+    #place-sub .sub-x, #place .pl { display: none; }
+    #place .gn, #place-sub .sub-pl { display: inline; }
     /* Como en WhatsApp: ninguna burbuja llega al borde contrario; las dos dejan el mismo hueco. */
     #log .msg.row { max-width: calc(100% - 64px); }
     #log .msg.scene, #log .moment.combat, #log .moment.discovery, #log .moment.manual { width: auto; max-width: calc(100% - 36px - 64px); }
@@ -1017,7 +1019,7 @@ ${FIGHT_STYLE}
     <a class="ib" id="to-menu" href="/" title="Volver al menú principal" aria-label="Volver al menú principal"><svg class="i"><use href="#i-back"/></svg></a>
     <button type="button" class="ib" id="to-side" title="La partida: ficha, tablero y mapa" aria-label="Abrir la partida: ficha, tablero y mapa"><svg class="i"><use href="#i-grid"/></svg></button>
     <span class="dot" id="scene-dot"><svg class="i"><use href="#i-pin"/></svg></span>
-    <div class="t"><div id="place">Tavernus</div><div id="place-sub"></div></div>
+    <div class="t"><div id="place"><span class="pl">Tavernus</span><span class="gn">Tavernus</span></div><div id="place-sub"></div></div>
     <div id="presence" role="status" aria-label="Quién más juega"></div>
     <div id="party" role="group" aria-label="Personaje"></div>
     <select id="character" class="vh" aria-label="Personaje" tabindex="-1"></select>
@@ -1102,6 +1104,7 @@ ${FIGHT_STYLE}
     var g = d && d.game;
     if (!g) return;
     $('game-name').textContent = g.name;
+    document.querySelector('#place .gn').textContent = g.name;
     var badge = $('game-mode');
     // Solo la bolita del color del máster; el tipo, al pasar el ratón (y para lectores de pantalla).
     badge.setAttribute('data-tip', MODE_LABEL[g.mode] || g.mode); badge.setAttribute('aria-label', 'Máster: ' + (MODE_LABEL[g.mode] || g.mode)); badge.className = 'badge dot ' + g.mode; badge.hidden = false;
@@ -1469,11 +1472,13 @@ ${FIGHT_SCRIPT}
     var where = i >= 0 ? d.slice(i + 3) : d, state = i >= 0 ? d.slice(0, i) : '';
     var comma = where.indexOf(', ');
     var placeName = comma >= 0 ? where.slice(0, comma) : where;
-    $('place').textContent = placeName;
+    document.querySelector('#place .pl').textContent = placeName;
     $('view-place').textContent = placeName;
     // En el móvil solo la hora (el lugar ya va encima): el rincón y el estado se quedan para el escritorio.
     var extra = [comma >= 0 ? where.slice(comma + 2) : '', state !== 'despierto' ? state : '', s.description.split('\n')[1] || ''].filter(Boolean).join(' · ');
-    $('place-sub').innerHTML = escapeHtml(s.footer || '') + (extra ? '<span class="sub-x">' + (s.footer ? ' · ' : '') + escapeHtml(extra) + '</span>' : '');
+    // En el móvil arriba va el nombre de la partida, y el lugar baja aquí, tras la hora.
+    $('place-sub').innerHTML = escapeHtml(s.footer || '') + '<span class="sub-pl">' + (s.footer ? ' · ' : '') + escapeHtml(placeName) + '</span>' +
+      (extra ? '<span class="sub-x">' + (s.footer ? ' · ' : '') + escapeHtml(extra) + '</span>' : '');
     var coins = field(s, 'Monedas');
     $('pack-sub').textContent = [loadShort(s) !== '—' ? 'Carga ' + loadShort(s) + ' lb' : '', coins ? coins + ' monedas' : ''].filter(Boolean).join(' · ') || 'Lo que llevas encima';
   }
