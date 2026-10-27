@@ -298,3 +298,4 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 - El prólogo ya no va en una caja: es texto de libro sobre el fondo, con el altavoz para escucharlo, y lo cierra un ornamento dorado antes de que hable el narrador.
 - Hoja, Diario y Mochila se abren en un modal; sus pestañas van abajo, cada una con su parte del ancho. En el móvil hay una cuarta, «Tablero», con el tablero, el mapa, la gente cerca y la misión; el cuadro de texto y el botón de cerrar siguen debajo, y la cabecera de la partida no se tapa ni con el mapa en grande.
 - Móvil: la pantalla no hace zoom ni se desplaza de lado (antes, al cerrar la mochila, se ampliaba al enfocar el cuadro); cerrar la mochila ya no abre el teclado.
+- Móvil: las opciones de la mochila son pastillas como las del chat (texto y su icono dentro, sin círculos de color); la página entera ya no se desplaza al arrastrar dentro del modal o del chat.

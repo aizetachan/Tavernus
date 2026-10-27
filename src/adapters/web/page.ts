@@ -600,10 +600,13 @@ export const PAGE = String.raw`<!doctype html>
     #cube-scrim[hidden] { display: none; }
     #cube-menu { right: 50px; left: auto; bottom: 74px; width: auto; padding: 0; background: transparent; border: 0; box-shadow: none; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
     #cube-menu[hidden] { display: none; }
-    #cube-menu button { flex-direction: row-reverse; width: auto; min-height: 32px; padding: 0; gap: 10px; background: transparent; }
-    #cube-menu button:hover { background: transparent; }
-    #cube-menu .bub { width: 32px; height: 32px; box-shadow: 0 6px 16px rgba(0,0,0,.55); }
-    #cube-menu .lbl { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--bubble); box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+    /* Cada opción, una pastilla como las del chat: el texto y su icono dentro, sin círculos de color. */
+    #cube-menu button { flex-direction: row-reverse; width: auto; min-height: 36px; height: 36px; padding: 0 10px 0 14px; gap: 8px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px;
+      background: rgba(20,22,23,.94); color: #e6c98a; box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+    #cube-menu button:hover, #cube-menu button:focus-visible { background: #22262a; }
+    #cube-menu .bub, #cube-menu .bub.sheet, #cube-menu .bub.journal, #cube-menu .bub.pack, #cube-menu .bub.side { width: 18px; height: 18px; background: transparent !important; color: var(--accent) !important; box-shadow: none; }
+    #cube-menu .bub svg.i { width: 18px; height: 18px; }
+    #cube-menu .lbl { display: inline-flex; align-items: center; height: auto; padding: 0; background: none; box-shadow: none; font-size: 13px; font-weight: 500; }
     #cube-menu small { display: none; }
     #drawer-scrim { position: absolute; inset: 0; z-index: 4; display: block; border: 0; background: rgba(5,6,6,.6); }
     #drawer-scrim[hidden] { display: none; }
@@ -928,6 +931,9 @@ ${FIGHT_STYLE}
     #slash { left: 8px; width: calc(100% - 16px); }
     /* Sin zoom ni desplazamiento lateral: iOS amplía al enfocar un campo de menos de 16 px. */
     html, body { overflow-x: hidden; }
+    /* La página no se mueve nunca (ni el rebote de iOS): solo se desplaza lo que tiene más contenido que sitio. */
+    html, body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; }
+    #log, .dr-body, #gear-menu, #slash, .side-scroll { overscroll-behavior: contain; }
     input:not([type]), input[type=text], input[type=search], textarea, select { font-size: 16px !important; }
     /* Tablero o mapa en grande: debajo de la cabecera de la partida, que no se tapa. */
     body.map-big::after, body.board-big::after { top: 60px; }
