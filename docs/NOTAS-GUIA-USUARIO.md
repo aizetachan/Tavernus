@@ -307,4 +307,4 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 ## Aspecto del menú: Penumbra y Taberna (27 oct 2026)
 - En el engranaje del menú principal, «Aspecto»: **Penumbra** (por defecto, plano, con el estilo de la pantalla de partida) o **Taberna** (ilustrado: tablones, marco dorado y la madera que se vuelve tecnología al entrar). Se recuerda en ese navegador.
 - En Penumbra las imágenes van en duotono (negro y dorado) y la de cada partida es la última vista de un sitio pintada en ella; si no tiene, la taberna. Al entrar en una partida, un fundido a negro corto.
-- La partida aún no cambia con el tema (está marcado para darle estilo Taberna más adelante).
+- En Taberna, la partida lleva los tablones oscuros del menú (sin el marco dorado) en el panel lateral, la cabecera y la barra del cuadro de texto; en Penumbra sigue plana.

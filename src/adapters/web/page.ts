@@ -958,6 +958,13 @@ ${FIGHT_STYLE}
     body.map-big .chat-body, body.board-big .chat-body { position: relative; z-index: 20; }
     body.map-big #drawer, body.board-big #drawer { z-index: 20; }
   }
+  /* Tema Taberna (el ilustrado del menú): el panel lateral, la cabecera y la barra del cuadro de texto, con los mismos
+     tablones oscuros del menú (public/menu-madera.jpg), sin su marco dorado. Penumbra es el resto de la hoja. */
+  :root[data-theme="taberna"] { --wood: linear-gradient(180deg, rgba(14,10,6,.5), rgba(14,10,6,.66)), url(/assets/menu-madera.jpg?v=2) center top / 760px auto repeat #2a1d12; }
+  :root[data-theme="taberna"] aside, :root[data-theme="taberna"] .chat-head, :root[data-theme="taberna"] form, :root[data-theme="taberna"] .quote { background: var(--wood); }
+  :root[data-theme="taberna"] aside { border-right-color: rgba(0,0,0,.5); }
+  :root[data-theme="taberna"] .chat-head { border-bottom-color: rgba(0,0,0,.5); box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  :root[data-theme="taberna"] form, :root[data-theme="taberna"] .quote { border-top-color: rgba(0,0,0,.5); }
 </style>
 </head>
 <body class="boot">
