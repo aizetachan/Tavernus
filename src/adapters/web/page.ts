@@ -136,6 +136,7 @@ export const PAGE = String.raw`<!doctype html>
   #board .token text { font-weight: bold; text-anchor: middle; dominant-baseline: central; stroke-width: 0; }
   #board .token.vague { opacity: .7; } #board .token.hint { opacity: .4; }
   #board .token.vague .ring, #board .token.hint .ring { stroke-dasharray: 3 2; }
+  #board .token .face { opacity: 0; transition: opacity .2s; } #board .token .face.on { opacity: 1; }
   #board .route { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; pointer-events: none; }
   #board .exit { cursor: pointer; }
   #board .exit .path { stroke: #e9e4da; stroke-width: 1.6; stroke-dasharray: 5 3; }
@@ -1929,6 +1930,17 @@ ${FIGHT_SCRIPT}
   }
 
   var board = $('board'), boardData = null, boardSeq = 0, boardTimer = null;
+  /** Retratos de ficha ya cargados una vez: al repintar el tablero salen ya puestos, sin pasar por la inicial. */
+  var tokenFaces = {};
+  /** Retrato nuevo con la partida abierta («portrait» del stream): la ficha de esa persona lo coge sin esperar al siguiente tablero. */
+  function boardPortrait(p) {
+    if (!boardData) return;
+    var hit = false;
+    if (boardData.actor.id === p.id) { boardData.actor.avatar = p.src; hit = true; }
+    // Solo a quien se ve bien: una figura o un movimiento siguen sin cara.
+    boardData.presences.forEach(function (x) { if (x.id === p.id && x.level === 'full') { x.avatar = p.src; hit = true; } });
+    if (hit) renderBoard(boardData);
+  }
   var LIGHT = { day: 'de día', twilight: 'penumbra', night_moon: 'noche con luna', night_dark: 'noche cerrada' };
   var DARK = { day: 0, twilight: 0.16, night_moon: 0.38, night_dark: 0.58 };
   var RING = { actor: '#d9a35b', character: '#9cb08a', npc: '#c97b5a' };
@@ -2130,15 +2142,25 @@ ${FIGHT_SCRIPT}
     var tokR = Math.max(7, Math.min(0.42 * cm * k, 17));
     var tokens = {};
     var push = function (spotId, t) { (tokens[spotId] = tokens[spotId] || []).push(t); };
-    if (!b.actor.transit) push(b.actor.spot_id, { kind: 'actor', level: 'full', label: b.actor.name });
+    var me = { kind: 'actor', level: 'full', label: b.actor.name, id: b.actor.id, avatar: b.actor.avatar };
+    if (!b.actor.transit) push(b.actor.spot_id, me);
     b.presences.forEach(function (p) { if (!p.moving) push(p.spot_id, p); });
+    var clips = 0;
+    // Con retrato, la cara dentro del aro; debajo queda la inicial, que es lo que se ve hasta que carga (o si falla).
     var token = function (t, x, y) {
       var ring = RING[t.kind], letter = t.level === 'full' ? initial(t.label) : '?';
-      var rr = t.level === 'hint' ? tokR * 0.75 : tokR;
-      return '<g class="token ' + t.kind + ' ' + t.level + '"><circle class="disc" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr) + '"/>' +
-        '<circle class="ring" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr - Math.max(1.5, rr * 0.14)) + '" fill="none" stroke="' + ring + '" stroke-width="' + r1(Math.max(2, rr * 0.26)) + '"/>' +
-        (t.kind === 'actor' ? '<circle cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr + 2.5) + '" fill="none" stroke="' + ring + '" stroke-opacity=".45" stroke-width="2"/>' : '') +
-        '<text x="' + r1(x) + '" y="' + r1(y) + '" fill="' + ring + '" font-size="' + r1(rr * 0.95) + '">' + escapeHtml(letter) + '</text></g>';
+      var rr = t.level === 'hint' ? tokR * 0.75 : tokR, ringR = rr - Math.max(1.5, rr * 0.14);
+      var face = '';
+      if (t.avatar && t.level === 'full') {
+        var cid = 'tk-' + (++clips);
+        face = '<clipPath id="' + cid + '"><circle cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(ringR) + '"/></clipPath>' +
+          '<image class="face' + (tokenFaces[t.avatar] ? ' on' : '') + '" href="' + escapeHtml(t.avatar) + '" x="' + r1(x - ringR) + '" y="' + r1(y - ringR) + '" width="' + r1(ringR * 2) + '" height="' + r1(ringR * 2) +
+          '" preserveAspectRatio="xMidYMid slice" clip-path="url(#' + cid + ')"/>';
+      }
+      return '<g class="token ' + t.kind + ' ' + t.level + (face ? ' has-face' : '') + '"' + (t.id ? ' data-id="' + escapeHtml(t.id) + '"' : '') + '><circle class="disc" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr) + '"/>' +
+        '<text x="' + r1(x) + '" y="' + r1(y) + '" fill="' + ring + '" font-size="' + r1(rr * 0.95) + '">' + escapeHtml(letter) + '</text>' + face +
+        '<circle class="ring" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(ringR) + '" fill="none" stroke="' + ring + '" stroke-width="' + r1(Math.max(2, rr * 0.26)) + '"/>' +
+        (t.kind === 'actor' ? '<circle cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr + 2.5) + '" fill="none" stroke="' + ring + '" stroke-opacity=".45" stroke-width="2"/>' : '') + '</g>';
     };
 
     b.spots.forEach(function (sp) {
@@ -2163,7 +2185,7 @@ ${FIGHT_SCRIPT}
     });
     // Quien va de camino, en su posición interpolada.
     b.presences.filter(function (p) { return p.moving; }).forEach(function (p) { o.push(token(p, X(p.x), Y(p.y))); });
-    if (b.actor.transit) o.push(token({ kind: 'actor', level: 'full', label: b.actor.name }, X(b.actor.x), Y(b.actor.y)));
+    if (b.actor.transit) o.push(token(me, X(b.actor.x), Y(b.actor.y)));
     o.push('</svg>');
 
     var where = '<div class="where"><b>' + escapeHtml(b.location.name) + '</b><span>· ' + escapeHtml(LIGHT[b.location.light] || b.location.light) +
@@ -2173,6 +2195,10 @@ ${FIGHT_SCRIPT}
       '<span><i style="border-color:' + RING.npc + '"></i>PNJ</span><span>? lo intuyes</span><span>pasa el ratón para ver qué hay</span>' +
       '<span>casilla ' + String(cm).replace('.', ',') + ' m</span></div>';
     board.innerHTML = where + o.join('') + legend + '<div class="tip"></div>';
+    board.querySelectorAll('.token image.face:not(.on)').forEach(function (img) {
+      img.addEventListener('load', function () { tokenFaces[img.getAttribute('href')] = true; img.classList.add('on'); });
+      img.addEventListener('error', function () { img.remove(); });
+    });
 
     // Ninguna etiqueta se sale del plano (solo si se ve y se puede medir).
     var clamp = function (t) {
@@ -2700,6 +2726,7 @@ ${FIGHT_SCRIPT}
     stream.addEventListener('portrait', function (e) {
       var p = JSON.parse(e.data);
       setPortrait(p);
+      boardPortrait(p);
       if (presenceList.some(function (x) { return x.id === p.id; })) renderPresence(presenceList);
     });
     stream.addEventListener('place', function (e) { var p = JSON.parse(e.data); inChat(function () { placeReady(p); }); });

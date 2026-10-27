@@ -731,7 +731,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       res.on('close', () => { clearInterval(ping); set.delete(res); rt.left(id, tab); });
       return;
     }
-    if (req.method === 'GET' && url.pathname === '/api/board') { handleBoardRequest(engine, req, res, url); return; }
+    if (req.method === 'GET' && url.pathname === '/api/board') { handleBoardRequest(engine, req, res, url, slug); return; }
     if (req.method === 'GET' && url.pathname === '/api/board/background') { await handleBoardBackgroundRequest(engine, res, url); return; }
     if (req.method === 'GET' && url.pathname === '/api/journal') { handleJournalRequest(engine, req, res, url, slug); return; }
     if (url.pathname === '/api/avatar') { await handleAvatarRequest(engine, req, res, url, slug); return; }
