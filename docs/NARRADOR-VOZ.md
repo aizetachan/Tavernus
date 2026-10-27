@@ -213,6 +213,8 @@ Con `ELEVENLABS_MODEL=eleven_v3`, antes de pedir cada audio nuevo el servidor pa
 
 Variables: `TTS_AUDIO_TAGS=off` lo apaga y `TTS_TAGS_MODEL` cambia el modelo. Necesita `ANTHROPIC_API_KEY`.
 
+**Elegir v3 o v2 en la partida.** El selector de voz del narrador ofrece «ElevenLabs v3» y «ElevenLabs v2» (el de `ELEVENLABS_MODEL` primero, marcado como «voz de la partida»), además de las voces del navegador. La elección se recuerda en ese navegador (`tavernus.tts.model`) y viaja en cada petición; el servidor solo acepta los modelos que ofrece. Con v2 no hay acotaciones.
+
 **Sin créditos.** Si ElevenLabs contesta que no queda saldo (402 `insufficient_credits`, o el antiguo 401 `quota_exceeded`), el servidor deja de pedirle audio durante 30 minutos: `/api/tts/config` anuncia la voz del navegador y la página sigue con ella, con el aviso «El narrador de voz se ha quedado sin créditos».
 
 ### Pantalla apagada en el móvil: hasta dónde llega

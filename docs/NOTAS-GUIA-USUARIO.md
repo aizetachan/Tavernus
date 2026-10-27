@@ -286,3 +286,4 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 - tavernus.com no tenía la voz de ElevenLabs porque el despliegue no sube el `.env`: hay que poner `TTS_PROVIDER`, `ELEVENLABS_API_KEY` y la voz en `/etc/tavernus/env` del servidor y reiniciar `tavernus-web`. Se comprueba en `https://tavernus.com/api/tts/config`.
 - Con `ELEVENLABS_MODEL=eleven_v3` el narrador suena más expresivo: antes de leer, Haiku marca susurros, risas o suspiros sin cambiar el texto del chat. Lo ya escuchado con v2 se sigue oyendo con v2.
 - Si ElevenLabs se queda sin créditos, la partida sigue con la voz del navegador y avisa; se vuelve a intentar a la media hora.
+- En el selector del narrador se puede elegir ElevenLabs v3 (con acotaciones) o ElevenLabs v2 (más sobria y algo más rápida); se recuerda en ese navegador.

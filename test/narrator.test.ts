@@ -86,6 +86,16 @@ describe('ElevenLabs', () => {
     }
   });
 
+  it('el selector ofrece v3 y v2, con el de ELEVENLABS_MODEL primero', () => {
+    const v3 = narratorFromEnv({ TTS_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k', ELEVENLABS_MODEL: 'eleven_v3' })!;
+    expect(v3.models!.map((m) => m.label)).toEqual(['ElevenLabs v3', 'ElevenLabs v2']);
+    const v2 = v3.withModel!('eleven_multilingual_v2');
+    expect(v2.audioTags).toBe(false);
+    expect(v2.voiceFor({ text: 'x', role: 'narrator', speaker: null })).toContain('@eleven_multilingual_v2@');
+    const flash = narratorFromEnv({ TTS_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k', ELEVENLABS_MODEL: 'eleven_flash_v2_5' })!;
+    expect(flash.models!.map((m) => m.id)).toEqual(['eleven_flash_v2_5', 'eleven_v3', 'eleven_multilingual_v2']);
+  });
+
   it('solo eleven_v3 entiende acotaciones de voz', () => {
     expect(narratorFromEnv({ TTS_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k' })!.audioTags).toBe(false);
     expect(narratorFromEnv({ TTS_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k', ELEVENLABS_MODEL: 'eleven_v3' })!.audioTags).toBe(true);
@@ -172,6 +182,24 @@ describe('ruta /api/tts', () => {
     setNarratorForTests(fakeProvider, tagger);
     expect((await post(`/api/tts?game=${game.slug}`, body)).status).toBe(200);
     expect(synthesized.map((s) => s[0]!.text)).toEqual(['[whispers] Silencio.', 'Silencio.']);
+  });
+
+  it('ofrece los modelos del proveedor y sintetiza con el que pide la página', async () => {
+    const used: string[] = [];
+    const withModels = (model: string): NarratorProvider => ({
+      ...fakeProvider, voiceFor: (r) => `${fakeProvider.voiceFor(r)}@${model}`,
+      models: [{ id: 'v3', label: 'ElevenLabs v3' }, { id: 'v2', label: 'ElevenLabs v2' }],
+      withModel: withModels,
+      async synthesize(parts) { used.push(model); return fakeProvider.synthesize(parts); },
+    });
+    setNarratorForTests(withModels('v3'));
+    expect(await (await fetch(`${base}/api/tts/config`)).json()).toMatchObject({ models: [{ id: 'v3' }, { id: 'v2' }] });
+    const { game } = await games.create({ name: 'Voz', mode: 'offline' });
+    for (const model of ['v2', 'v3', 'otro', undefined]) {
+      expect((await post(`/api/tts?game=${game.slug}`, { text: `Hola ${model}`, model })).status).toBe(200);
+    }
+    // Un modelo que no ofrece cae en el de la partida.
+    expect(used).toEqual(['v2', 'v3', 'v3', 'v3']);
   });
 
   it('sin créditos responde 402 y la config pasa a la voz del navegador', async () => {

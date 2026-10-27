@@ -36,6 +36,10 @@ export interface NarratorProvider {
   synthesize(parts: SpeechRequest[]): Promise<Buffer>;
   /** Entiende acotaciones [whispers], [sighs]… dentro del texto (Eleven v3). */
   audioTags?: boolean;
+  /** Modelos entre los que el jugador puede elegir en la página (el primero, el de la partida). */
+  models?: { id: string; label: string }[];
+  /** El mismo proveedor con otro modelo de `models`. */
+  withModel?(model: string): NarratorProvider;
 }
 
 /** El proveedor no tiene saldo: hasta que se recargue, la voz la pone el navegador. */
@@ -118,6 +122,12 @@ export function azureNarrator(o: AzureNarratorOptions, fetchImpl: typeof fetch =
  * prefabricadas de ElevenLabs que hablan castellano con los modelos multilingües; lo normal es poner las tuyas en
  * TTS_VOICE_NARRATOR y TTS_VOICES_NPC.
  */
+/** Los que se ofrecen en el selector de voz, además del de ELEVENLABS_MODEL. */
+export const ELEVENLABS_MODELS = [
+  { id: 'eleven_v3', label: 'ElevenLabs v3' },
+  { id: 'eleven_multilingual_v2', label: 'ElevenLabs v2' },
+];
+
 export const ELEVENLABS_DEFAULTS = {
   model: 'eleven_multilingual_v2',
   narrator: 'JBFqnCBsd6RMkjVDRZzb',
@@ -144,8 +154,11 @@ export function elevenLabsNarrator(o: ElevenLabsNarratorOptions, fetchImpl: type
     return o.npcs[hashIndex(req.speaker ?? '', o.npcs.length)]!;
   };
   const speed = Math.min(1.2, Math.max(0.7, o.rate));
+  const own = ELEVENLABS_MODELS.find((m) => m.id === o.model) ?? { id: o.model, label: `ElevenLabs ${o.model.replace(/^eleven_/, '')}` };
   return {
     id: 'elevenlabs', label: 'ElevenLabs', contentType: 'audio/mpeg', ext: 'mp3', audioTags: supportsAudioTags(o.model),
+    models: [own, ...ELEVENLABS_MODELS.filter((m) => m.id !== o.model)],
+    withModel: (model) => elevenLabsNarrator({ ...o, model }, fetchImpl),
     voiceFor: (req) => `${voiceFor(req)}@${o.model}@${speed}`,
     async synthesize(parts) {
       const groups: { voice: string; text: string }[] = [];
