@@ -894,9 +894,8 @@ ${FIGHT_STYLE}
     /* Volver al menú: la flecha, a la izquierda del sitio. */
     #to-menu { display: inline-grid; margin-right: -4px; }
     /* Como en WhatsApp: ninguna burbuja llega al borde contrario; las dos dejan el mismo hueco. */
-    #log .msg.row:not(.mine) { max-width: calc(100% - 44px); }
-    #log .msg.row.mine { max-width: calc(100% - 44px); }
-    #log .msg.scene, #log .moment.combat, #log .moment.discovery, #log .moment.manual { width: auto; max-width: calc(100% - 36px - 44px); }
+    #log .msg.row { max-width: calc(100% - 64px); }
+    #log .msg.scene, #log .moment.combat, #log .moment.discovery, #log .moment.manual { width: auto; max-width: calc(100% - 36px - 64px); }
     /* Letra del hilo en el móvil: la misma que el prólogo (13,5 px). */
     #log .msg.row .body { font-size: 13.5px; line-height: 1.5; }
     #log .msg.row .who { font-size: 12px; }
