@@ -282,10 +282,11 @@ export const PAGE = String.raw`<!doctype html>
   form button[type=submit] { background: var(--accent); color: var(--accent-ink); }
   form button[type=submit]:hover:not(:disabled) { background: var(--glow); color: var(--accent-ink); }
   form button[type=submit] svg.i { width: 16px; height: 16px; }
-  #cube svg.i { width: 18px; height: 18px; }
-  #cube.on { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.5); }
-  #cube { position: relative; }
-  #cube.new::after { content: ''; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
+  /* El cofre: solo el icono, sin fondo ni borde; abierto, en dorado. */
+  #cube { position: relative; width: 36px; height: 36px; color: #c9c1b4; }
+  #cube svg.i { width: 22px; height: 22px; }
+  #cube:hover:not(:disabled), #cube.on { background: transparent; color: var(--accent); }
+  #cube.new::after { content: ''; position: absolute; top: 4px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
 
   /* Menú del cubo: Hoja, Diario y Mochila. */
   #cube-menu { position: absolute; right: 58px; bottom: 66px; z-index: 25; width: 270px; padding: 6px; border-radius: 16px; background: var(--bubble); border: 1px solid var(--line); box-shadow: var(--window-shadow); }
@@ -608,6 +609,8 @@ export const PAGE = String.raw`<!doctype html>
     #cube-menu .bub svg.i { width: 18px; height: 18px; }
     #cube-menu .lbl { display: inline-flex; align-items: center; height: auto; padding: 0; background: none; box-shadow: none; font-size: 13px; font-weight: 500; }
     #cube-menu small { display: none; }
+    #cube-menu button { position: relative; }
+    #cube-menu .dotnew { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; margin: 0; box-shadow: 0 0 0 2px var(--panel); }
     #drawer-scrim { position: absolute; inset: 0; z-index: 4; display: block; border: 0; background: rgba(5,6,6,.6); }
     #drawer-scrim[hidden] { display: none; }
     /* Modal, no hoja que sube: con margen alrededor; el cuadro de texto y el botón de cerrar siguen debajo. */
@@ -898,7 +901,10 @@ ${FIGHT_STYLE}
   #gear-menu .gm-paint .bub { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: var(--accent-tint); color: var(--accent); }
   #gear-menu .gm-paint b { display: block; font-size: 14px; font-weight: 600; }
   #gear-menu .gm-paint small { display: block; font-size: 12px; color: var(--muted); }
-  #gear.on { background: var(--accent-tint); color: var(--accent); }
+  /* Ajustes (móvil): como el cofre, solo el icono y del mismo tamaño. */
+  #gear { width: 36px; height: 36px; color: #c9c1b4; }
+  #gear svg.i { width: 22px; height: 22px; }
+  #gear:hover:not(:disabled), #gear.on { background: transparent; color: var(--accent); }
   #gear .x, #gear.on .g { display: none; }
   #gear.on .x { display: block; }
   #cube-menu .bub.side { background: #9bb8ef; color: #0f1a2e; }
@@ -956,7 +962,7 @@ ${FIGHT_STYLE}
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2l-7 20-4-9-9-4z"/><path d="M22 2L11 13"/></symbol>
-  <symbol id="i-cube" viewBox="0 0 24 24"><path d="M9 6V5a3 3 0 0 1 6 0v1"/><path d="M5 10a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/><path d="M8 13h8v4H8zM12 13v2"/></symbol>
+  <symbol id="i-cube" viewBox="0 0 24 24"><path d="M3 11a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 11h7M14 11h7M7 5.6V20M17 5.6V20"/><rect x="10" y="9.5" width="4" height="4.5" rx="1"/></symbol>
   <symbol id="i-max" viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></symbol>
