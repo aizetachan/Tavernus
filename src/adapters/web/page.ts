@@ -922,6 +922,7 @@ ${FIGHT_STYLE}
     #to-side, .chat-head .sfx, .chat-head .tts > .tts-auto, .chat-head .tts > .tts-more { display: none; }
     /* Volver al menú: la flecha, a la izquierda del sitio. */
     #to-menu { display: inline-grid; margin-right: -4px; }
+    #place-sub .sub-x { display: none; }
     /* Como en WhatsApp: ninguna burbuja llega al borde contrario; las dos dejan el mismo hueco. */
     #log .msg.row { max-width: calc(100% - 64px); }
     #log .msg.scene, #log .moment.combat, #log .moment.discovery, #log .moment.manual { width: auto; max-width: calc(100% - 36px - 64px); }
@@ -1470,7 +1471,9 @@ ${FIGHT_SCRIPT}
     var placeName = comma >= 0 ? where.slice(0, comma) : where;
     $('place').textContent = placeName;
     $('view-place').textContent = placeName;
-    $('place-sub').textContent = [s.footer, comma >= 0 ? where.slice(comma + 2) : '', state !== 'despierto' ? state : '', s.description.split('\n')[1] || ''].filter(Boolean).join(' · ');
+    // En el móvil solo la hora (el lugar ya va encima): el rincón y el estado se quedan para el escritorio.
+    var extra = [comma >= 0 ? where.slice(comma + 2) : '', state !== 'despierto' ? state : '', s.description.split('\n')[1] || ''].filter(Boolean).join(' · ');
+    $('place-sub').innerHTML = escapeHtml(s.footer || '') + (extra ? '<span class="sub-x">' + (s.footer ? ' · ' : '') + escapeHtml(extra) + '</span>' : '');
     var coins = field(s, 'Monedas');
     $('pack-sub').textContent = [loadShort(s) !== '—' ? 'Carga ' + loadShort(s) + ' lb' : '', coins ? coins + ' monedas' : ''].filter(Boolean).join(' · ') || 'Lo que llevas encima';
   }
