@@ -201,6 +201,20 @@ Probar contra la nube **gasta créditos de tu cuenta de ElevenLabs**. El plan gr
 
 Modelos: `eleven_multilingual_v2` (por defecto, la mejor calidad en castellano), `eleven_flash_v2_5` (la mitad de precio y más rápido) o `eleven_v3` (la más expresiva). La velocidad (`TTS_RATE`) se limita al rango de ElevenLabs, de 0,7 a 1,2. ElevenLabs genera una voz por petición: los trozos seguidos de la misma voz van juntos y el servidor encadena los mp3 en uno. Como con Azure, el audio se guarda en `data/games/<slug>/audio/` y no se vuelve a pedir; si la nube falla, la web sigue con la voz del navegador y el error sale en la consola del servidor (`[tts] ElevenLabs 401…`).
 
+### Acotaciones de v3 (ElevenLabs)
+
+Con `ELEVENLABS_MODEL=eleven_v3`, antes de pedir cada audio nuevo el servidor pasa la narración a un modelo barato (`claude-haiku-5-5`, sin pensar y con esfuerzo bajo) que inserta acotaciones de voz entre corchetes: `[whispers] No os giréis.`, `[mischievously] ¡Invita la casa!`. v3 las interpreta y no las lee; el texto del chat no cambia. Lo hace `src/ai/audiotags.ts`, siguiendo la guía de ElevenLabs para v3:
+
+- Etiquetas en inglés y minúscula, de una lista cerrada: forma de decir (`whispers`, `softly`, `slowly`, `mysteriously`, `ominously`, `dramatically`, `excited`, `curious`, `sarcastic`, `mischievously`, `nervous`, `fearful`, `sad`, `angry`, `shouts`, `tired`) delante de la frase, y reacciones (`sighs`, `exhales`, `gasps`, `laughs`, `chuckles`, `gulps`, `clears throat`, `pause`) donde ocurren.
+- Como mucho dos por trozo y muchos trozos sin ninguna: etiquetar todo suena forzado. El narrador es sobrio; los personajes admiten emoción y reacciones. Nada de efectos de sonido del entorno.
+- Si Haiku cambia una palabra, usa una etiqueta fuera de la lista, falla o tarda más de 10 s, ese trozo va tal cual.
+- Solo con modelos que las entienden (`eleven_v3`): con v2, Flash, Azure o la voz del navegador no se etiqueta nada.
+- El audio se guarda como siempre y la clave sale del texto original: cada narración se etiqueta una vez. La primera escucha tarda unos 2–3 s más.
+
+Variables: `TTS_AUDIO_TAGS=off` lo apaga y `TTS_TAGS_MODEL` cambia el modelo. Necesita `ANTHROPIC_API_KEY`.
+
+**Sin créditos.** Si ElevenLabs contesta que no queda saldo (402 `insufficient_credits`, o el antiguo 401 `quota_exceeded`), el servidor deja de pedirle audio durante 30 minutos: `/api/tts/config` anuncia la voz del navegador y la página sigue con ella, con el aviso «El narrador de voz se ha quedado sin créditos».
+
 ### Pantalla apagada en el móvil: hasta dónde llega
 
 Ninguna de estas conductas está documentada de forma oficial. Son el comportamiento habitual y hay que medirlo en cada móvil.

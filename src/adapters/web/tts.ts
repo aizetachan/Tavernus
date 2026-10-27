@@ -20,7 +20,8 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { GameManager } from '../../games/manager.js';
-import { narratorFromEnv, type NarratorProvider, type SpeechRequest, type SpeechRole } from '../../ai/narrator.js';
+import { NarratorOutOfCredits, narratorFromEnv, type NarratorProvider, type SpeechRequest, type SpeechRole } from '../../ai/narrator.js';
+import { audioTaggerFromEnv, type AudioTagger } from '../../ai/audiotags.js';
 import { speechChunks, speechMarkup, speechParts, speechText } from '../../ai/speech.js';
 
 /** Las funciones de speech.ts como fuente JS para la página. `__name` lo añade tsx (keepNames) y aquí no existe. */
@@ -34,6 +35,10 @@ const MAX_TEXT = 3000;
 let provider: NarratorProvider | null | undefined;
 let providerError: string | null = null;
 let sentChars = 0;
+let tagger: AudioTagger | null | undefined;
+/** Sin créditos en el proveedor: hasta entonces (ms) ni se le pide audio y la página usa la voz del navegador. */
+let noCreditsUntil = 0;
+const NO_CREDITS_RETRY_MS = 30 * 60_000;
 
 function current(): NarratorProvider | null {
   if (provider !== undefined) return provider;
@@ -45,8 +50,20 @@ function current(): NarratorProvider | null {
   return provider;
 }
 
-/** Para los tests: otro proveedor (o ninguno) sin tocar el entorno. */
-export function setNarratorForTests(p: NarratorProvider | null | undefined): void { provider = p; providerError = null; sentChars = 0; }
+/** Acotaciones de voz solo si el proveedor las entiende (Eleven v3). */
+function currentTagger(p: NarratorProvider): AudioTagger | null {
+  if (!p.audioTags) return null;
+  if (tagger === undefined) {
+    tagger = audioTaggerFromEnv(process.env);
+    if (tagger) console.log(`[tts] acotaciones de voz con ${tagger.model}`);
+  }
+  return tagger;
+}
+
+/** Para los tests: otro proveedor (o ninguno) y otro etiquetador sin tocar el entorno. */
+export function setNarratorForTests(p: NarratorProvider | null | undefined, t: AudioTagger | null = null): void {
+  provider = p; providerError = null; sentChars = 0; tagger = p === undefined ? undefined : t; noCreditsUntil = 0;
+}
 
 /**
  *   GET  /api/tts/config               {provider, label}: 'browser' si la voz la pone el navegador
@@ -54,19 +71,24 @@ export function setNarratorForTests(p: NarratorProvider | null | undefined): voi
  */
 export async function handleTtsRequest(req: IncomingMessage, res: ServerResponse, url: URL, games: GameManager): Promise<void> {
   const p = current();
+  const broke = !!p && Date.now() < noCreditsUntil;
   if (req.method === 'GET' && url.pathname === '/api/tts/config') {
+    if (p && broke) { json(res, 200, { provider: 'browser', label: 'Voz del navegador', error: `${p.label} sin créditos: de momento, voz del navegador.` }); return; }
     json(res, 200, { provider: p ? p.id : 'browser', label: p ? p.label : 'Voz del navegador', ...(providerError ? { error: providerError } : {}) });
     return;
   }
   if (req.method !== 'POST' || url.pathname !== '/api/tts') { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
   if (!p) { json(res, 409, { ok: false, text: 'TTS_PROVIDER=browser: la voz la pone el navegador.' }); return; }
+  if (broke) { json(res, 402, { ok: false, code: 'no_credits', text: `${p.label} sin créditos.` }); return; }
   const slug = url.searchParams.get('game');
   const m = slug ? await games.get(slug) : null;
   if (!m) { json(res, 404, { ok: false, text: 'No existe esa partida.' }); return; }
   const parts = partsOf(await readJson(req));
   const chars = parts.reduce((n, x) => n + x.text.length, 0);
   if (!parts.length || chars > MAX_TEXT) { json(res, 400, { ok: false, text: `Texto vacío o de más de ${MAX_TEXT} caracteres.` }); return; }
-  const key = createHash('sha256').update(p.id + parts.map((x) => `\n${p.voiceFor(x)}\n${x.text}`).join('')).digest('hex').slice(0, 32);
+  const tags = currentTagger(p);
+  // La clave sale del texto original: lo ya generado se sirve sin volver a etiquetar.
+  const key = createHash('sha256').update(p.id + (tags ? `\ntags:${tags.model}` : '') + parts.map((x) => `\n${p.voiceFor(x)}\n${x.text}`).join('')).digest('hex').slice(0, 32);
   const dir = join(games.paths(m).dir, 'audio');
   const file = join(dir, `${key}.${p.ext}`);
   let bytes: Buffer | null = await readFile(file).catch(() => null);
@@ -74,8 +96,13 @@ export async function handleTtsRequest(req: IncomingMessage, res: ServerResponse
     const limit = Number(process.env['TTS_MAX_CHARS'] ?? 200_000);
     if (sentChars + chars > limit) { json(res, 429, { ok: false, text: `Límite TTS_MAX_CHARS (${limit}) alcanzado en este arranque.` }); return; }
     sentChars += chars;
-    try { bytes = await p.synthesize(parts); } catch (e) {
+    try { bytes = await p.synthesize(tags ? await tags.tag(parts) : parts); } catch (e) {
       console.error('[tts]', (e as Error).message);
+      if (e instanceof NarratorOutOfCredits) {
+        noCreditsUntil = Date.now() + NO_CREDITS_RETRY_MS;
+        json(res, 402, { ok: false, code: 'no_credits', text: `${p.label} sin créditos.` });
+        return;
+      }
       json(res, 502, { ok: false, text: 'El proveedor de voz no responde.' });
       return;
     }
@@ -388,8 +415,8 @@ export const TTS_SCRIPT = String.raw`<script>
     }).catch(function (e) {
       if (playing !== p) return;
       if (e && e.name === 'NotAllowedError') { hint('Toca la página una vez para que el navegador deje reproducir audio.'); stop(); return; }
-      // La nube falla: esta narración y las siguientes, con la voz del navegador.
-      hint('El narrador de voz no responde; sigo con la voz del navegador.');
+      // La nube falla (o se queda sin créditos): esta narración y las siguientes, con la voz del navegador.
+      hint(e && e.message === '402' ? 'El narrador de voz se ha quedado sin créditos; sigo con la voz del navegador.' : 'El narrador de voz no responde; sigo con la voz del navegador.');
       provider = 'browser'; fillVoices();
       p.steps = stepsOf(p.div); p.i = 0;
       step();

@@ -281,3 +281,8 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 - Al entrar en una partida, el panel se vuelve «tecnológico», todo se funde a negro (unos 4 s) y suena suave la música de entrada; si la música del menú estaba silenciada, no suena.
 - Partida: la figura junto al nombre abre la Hoja con todas las estadísticas; la vida va en una barra debajo. Narrador: si hay ElevenLabs, aparece marcado en el selector; se puede cambiar a una voz del navegador.
 - Mochila: arrastrar un objeto a otro sitio (mano, bolsillo, mochila, equipo) lo mueve de verdad, con las reglas de capacidad; dentro de bolsillos o de un contenedor, se intercambian posiciones (el orden se recuerda en ese navegador). Solo con ratón. Diario › Lugares: tarjetas con la ilustración o el plano del sitio.
+
+## Narrador con ElevenLabs v3 (27 oct 2026)
+- tavernus.com no tenía la voz de ElevenLabs porque el despliegue no sube el `.env`: hay que poner `TTS_PROVIDER`, `ELEVENLABS_API_KEY` y la voz en `/etc/tavernus/env` del servidor y reiniciar `tavernus-web`. Se comprueba en `https://tavernus.com/api/tts/config`.
+- Con `ELEVENLABS_MODEL=eleven_v3` el narrador suena más expresivo: antes de leer, Haiku marca susurros, risas o suspiros sin cambiar el texto del chat. Lo ya escuchado con v2 se sigue oyendo con v2.
+- Si ElevenLabs se queda sin créditos, la partida sigue con la voz del navegador y avisa; se vuelve a intentar a la media hora.

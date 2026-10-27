@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
-import { AZURE_DEFAULTS, azureSsml, ELEVENLABS_DEFAULTS, hashIndex, narratorFromEnv, stripId3, type NarratorProvider, type SpeechRequest } from '../src/ai/narrator.js';
+import { AZURE_DEFAULTS, azureSsml, ELEVENLABS_DEFAULTS, hashIndex, NarratorOutOfCredits, narratorFromEnv, stripId3, type NarratorProvider, type SpeechRequest } from '../src/ai/narrator.js';
+import type { AudioTagger } from '../src/ai/audiotags.js';
 import { GameManager, type MasterFactory } from '../src/games/manager.js';
 import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
 import { setNarratorForTests } from '../src/adapters/web/tts.js';
@@ -75,6 +76,20 @@ describe('ElevenLabs', () => {
     await expect(p.synthesize([{ text: 'Hola', role: 'narrator', speaker: null }])).rejects.toThrow(/ElevenLabs 401/);
     // La velocidad se limita al rango que admite ElevenLabs.
     expect(p.voiceFor({ text: 'x', role: 'narrator', speaker: null })).toBe(`${ELEVENLABS_DEFAULTS.narrator}@${ELEVENLABS_DEFAULTS.model}@1.2`);
+  });
+
+  it('sin créditos lanza NarratorOutOfCredits (402 y el antiguo 401 quota_exceeded)', async () => {
+    for (const [status, body] of [[402, '{"detail":{"code":"insufficient_credits"}}'], [401, '{"detail":{"status":"quota_exceeded"}}']] as const) {
+      const fake = (async () => new Response(body, { status })) as unknown as typeof fetch;
+      const p = narratorFromEnv({ TTS_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k' }, fake)!;
+      await expect(p.synthesize([{ text: 'Hola', role: 'narrator', speaker: null }])).rejects.toBeInstanceOf(NarratorOutOfCredits);
+    }
+  });
+
+  it('solo eleven_v3 entiende acotaciones de voz', () => {
+    expect(narratorFromEnv({ TTS_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k' })!.audioTags).toBe(false);
+    expect(narratorFromEnv({ TTS_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'k', ELEVENLABS_MODEL: 'eleven_v3' })!.audioTags).toBe(true);
+    expect(narratorFromEnv({ TTS_PROVIDER: 'azure', AZURE_SPEECH_KEY: 'k', AZURE_SPEECH_REGION: 'r' })!.audioTags).toBeFalsy();
   });
 });
 
@@ -146,6 +161,30 @@ describe('ruta /api/tts', () => {
     const files = await readdir(join(games.paths((await games.get(game.slug))!).dir, 'audio'));
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(/^[0-9a-f]{32}\.mp3$/);
+  });
+
+  it('con un proveedor de acotaciones, sintetiza el texto etiquetado; sin él, el original', async () => {
+    const tagger: AudioTagger = { model: 'falso', tag: async (parts) => parts.map((p) => ({ ...p, text: `[whispers] ${p.text}` })) };
+    const { game } = await games.create({ name: 'Voz', mode: 'offline' });
+    const body = { parts: [{ text: 'Silencio.', role: 'narrator' }] };
+    setNarratorForTests({ ...fakeProvider, audioTags: true }, tagger);
+    expect((await post(`/api/tts?game=${game.slug}`, body)).status).toBe(200);
+    setNarratorForTests(fakeProvider, tagger);
+    expect((await post(`/api/tts?game=${game.slug}`, body)).status).toBe(200);
+    expect(synthesized.map((s) => s[0]!.text)).toEqual(['[whispers] Silencio.', 'Silencio.']);
+  });
+
+  it('sin créditos responde 402 y la config pasa a la voz del navegador', async () => {
+    let calls = 0;
+    setNarratorForTests({ ...fakeProvider, async synthesize() { calls++; throw new NarratorOutOfCredits('sin créditos'); } });
+    const { game } = await games.create({ name: 'Voz', mode: 'offline' });
+    const r = await post(`/api/tts?game=${game.slug}`, { text: 'Hola' });
+    expect(r.status).toBe(402);
+    expect(await r.json()).toMatchObject({ code: 'no_credits' });
+    expect(await (await fetch(`${base}/api/tts/config`)).json()).toMatchObject({ provider: 'browser' });
+    // Mientras dure, ni se le vuelve a pedir.
+    expect((await post(`/api/tts?game=${game.slug}`, { text: 'Otra' })).status).toBe(402);
+    expect(calls).toBe(1);
   });
 
   it('rechaza partidas que no existen y textos vacíos', async () => {
