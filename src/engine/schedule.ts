@@ -284,7 +284,7 @@ export function tickSchedule(world: World, nowS: number, emit: ScheduleEmit): vo
   const slot = slotAt(world, nowS);
   for (const n of world.npcs.values()) {
     // Con orden (sigue a alguien, ha ido a algo: npcorders.ts) el horario espera.
-    if (n.status !== 'alive' || attending.has(n.id) || n.talking_to || orderOf(n)) continue;
+    if (n.status !== 'alive' || n.bound || attending.has(n.id) || n.talking_to || orderOf(n) || engaged(world, n)) continue;
     const want = routineSpot(n, slot);
     if (want && want !== n.location.id && world.spots.has(want)) moveNpc(world, n, want, nowS, emit, null, false);
   }
@@ -344,7 +344,7 @@ function endRun(world: World, e: ScheduledEvent, run: ActiveRun, nowS: number, e
   const slot = slotAt(world, nowS);
   for (const [npcId, home] of Object.entries(run.home)) {
     const n = world.npcs.get(npcId);
-    if (!n || n.status !== 'alive' || orderOf(n)) continue;
+    if (!n || n.status !== 'alive' || n.bound || orderOf(n)) continue;
     const back = routineSpot(n, slot) ?? home;
     if (world.spots.has(back) && back !== n.location.id) moveNpc(world, n, back, at, emit, null, late);
   }
@@ -354,11 +354,25 @@ function bringAttendees(world: World, e: ScheduledEvent, run: ActiveRun, nowS: n
   for (const id of e.npc_ids) {
     if (id in run.home) continue;
     const n = world.npcs.get(id);
-    if (!n || n.status !== 'alive' || n.talking_to || orderOf(n)) continue;
+    if (!n || n.status !== 'alive' || n.bound || n.talking_to || orderOf(n) || engaged(world, n)) continue;
     run.home[id] = n.location.id;
     world.touch('campaign', world.campaign.id);
     if (n.location.id !== e.spot_id) moveNpc(world, n, e.spot_id, Math.max(run.start_s, Math.min(nowS, run.end_s)), emit, e, quiet);
   }
+}
+
+/**
+ * ¿Está peleando? Hostil con un PJ en pie en su misma localización: no deja la
+ * pelea por su horario ni por un evento (combat.ts le hace actuar cada turno).
+ */
+function engaged(world: World, n: Npc): boolean {
+  const loc = world.spots.get(n.location.id)?.location_id;
+  if (!loc || !n.stats) return false;
+  return Object.entries(n.attitude.by_character).some(([id, a]) => {
+    if (a !== 'hostile') return false;
+    const c = world.characters.get(id);
+    return Boolean(c && c.status === 'active' && !c.transit && world.characterSpot(c)?.location_id === loc);
+  });
 }
 
 /** Mueve un NPC al instante y lo cuenta a quien lo vea salir o llegar. */

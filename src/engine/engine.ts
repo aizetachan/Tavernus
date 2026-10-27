@@ -50,7 +50,7 @@ import { spellById } from '../data/srd/spells.js';
 import { ABILITIES, backgroundById, classById, raceById, STANDARD_ARRAY } from '../data/srd/index.js';
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
-import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, type DeathSave } from './death.js';
+import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, NPC_DOWN_HINT, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, wakeNpcs, type DeathSave } from './death.js';
 import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
@@ -1131,15 +1131,16 @@ export class Engine {
       if (helper) pending.roll = { ...pending.roll, advantage: pending.roll.advantage === 'disadvantage' ? 'none' : 'advantage' };
       let result: CheckResult & { label: string };
       let roll: ShownRoll;
-      let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean; damage: number } | undefined;
+      let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean; damage: number; ko?: boolean } | undefined;
       if (pending.roll.kind === 'attack' && pending.roll.target) {
-        const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c));
+        // Lo que escribió el jugador decide si el golpe a 0 PG mata o deja inconsciente (combat.ts, lethalBlow).
+        const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c), { intent: pending.text });
         if ('error' in atk) return { ok: false, text: atk.error };
-        attack = { target_id: pending.roll.target, hit: atk.hit, down: Boolean(atk.target_down), dead: Boolean(atk.target_dead), damage: atk.damage };
+        attack = { target_id: pending.roll.target, hit: atk.hit, down: Boolean(atk.target_down), dead: Boolean(atk.target_dead), damage: atk.damage, ...(atk.knocked_out ? { ko: true } : {}) };
         result = {
           label: `ataque con ${atk.weapon} a ${atk.target}`, expr: 'attack', total: atk.attack_total, rolls: [], d20s: [], modifier: 0, dc: atk.target_ac, advantage: pending.roll.advantage,
           success: atk.hit, ...(atk.natural ? { natural: atk.natural } : {}),
-          breakdown: `${atk.attack_breakdown}${atk.hit ? `. Daño: ${atk.damage_breakdown} (${atk.damage_type}). ${atk.target} queda a ${atk.target_hp} PG${atk.target_dead ? `, MUERTO${this.world.npcs.has(pending.roll.target!) ? ': su cuerpo se queda donde cae (el servidor lo anuncia); narra el golpe y cómo reaccionan los presentes' : ''}` : atk.target_down ? ', CAE' : ''}. El daño ya está aplicado: no lo apliques otra vez.` : '. Falla.'}`,
+          breakdown: `${atk.attack_breakdown}${atk.hit ? `. Daño: ${atk.damage_breakdown} (${atk.damage_type}). ${atk.target} queda a ${atk.target_hp} PG${atk.target_dead ? `, MUERTO${this.world.npcs.has(pending.roll.target!) ? ': su cuerpo se queda donde cae (el servidor lo anuncia); narra el golpe y cómo reaccionan los presentes' : ''}` : atk.knocked_out ? `, INCONSCIENTE (golpe no letal: no está muerto; respira y volverá en sí en unas horas). ${NPC_DOWN_HINT}` : atk.target_down ? ', CAE' : ''}. El daño ya está aplicado: no lo apliques otra vez.` : '. Falla.'}`,
         };
         roll = attackRoll(c.id, pending.roll.target, atk);
       } else {
@@ -2865,6 +2866,8 @@ export class Engine {
         this.comeBack(c);
       }
     }
+    // NPC dejados inconscientes (golpe no letal): vuelven en sí con 1 PG a su hora.
+    for (const n of wakeNpcs(this.world, nowWorldG)) this.announceNpcWake(n);
     this.announceDeathStates();
   }
 
@@ -2942,6 +2945,7 @@ export class Engine {
   private announceDeathStates(): void {
     this.announceLevelUps();
     for (const n of this.world.npcs.values()) if (n.status === 'dead' && n.death && !n.death.told) this.announceNpcDeath(n);
+    for (const n of this.world.npcs.values()) if (n.status === 'unconscious' && n.down && !n.down.told) this.announceNpcDown(n);
     this.announceIncidents();
     for (const c of this.world.characters.values()) {
       if (c.status === 'dead' && c.death && !c.death.told) { this.announceDeath(c); continue; }
@@ -3000,9 +3004,44 @@ export class Engine {
       ...(killer ? { also_to: [killer] } : {}),
       payload: {
         master: null, npc_id: n.id, observable_vague: 'Alguien cae al suelo y no vuelve a levantarse.',
-        death: { cause: d.cause, by_id: d.by_id, spot_id: spot.id, witnesses: r.witnesses },
+        death: { fate: 'dead', cause: d.cause, by_id: d.by_id, spot_id: spot.id, witnesses: r.witnesses },
         ...(killer && r.killer_text ? { target_character_id: killer, observable_target: r.killer_text } : {}),
       },
+    }, this.now());
+  }
+
+  /**
+   * Un NPC cae inconsciente (golpe no letal, combat.ts): lo ve quien esté y
+   * queda en el suelo, vivo, con lo que lleva. El evento lleva la causa y quién
+   * fue (`fate: 'unconscious'`), como el de la muerte, para las misiones.
+   */
+  private announceNpcDown(n: Npc): void {
+    const d = n.down!;
+    d.told = true;
+    this.world.touch('npcs', n.id);
+    const spot = this.world.spot(n.location.id);
+    const by = d.by_id && this.world.characters.has(d.by_id) ? d.by_id : null;
+    const tail = `Respira, pero no se mueve. Se le puede atar o registrar; si nadie le cura, volverá en sí hacia las ${hhmm(d.wakes_game_s)}.`;
+    this.events.emit({
+      actor_id: null, at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
+      action_type: 'npc_down', narration_private: '', observable: `${n.name} se desploma, inconsciente${d.by_name ? `, por el golpe de ${d.by_name}` : ''}. ${tail}`, loudness: 2,
+      tags: ['npc', 'combat', 'deterministic'],
+      ...(by ? { also_to: [by] } : {}),
+      payload: {
+        master: null, npc_id: n.id, observable_vague: 'Alguien cae al suelo con un golpe sordo.',
+        down: { fate: 'unconscious', cause: d.cause, by_id: d.by_id, spot_id: spot.id, wakes_game_s: d.wakes_game_s },
+        ...(by ? { target_character_id: by, observable_target: `${n.name} se desploma, inconsciente, por tu golpe. ${tail}` } : {}),
+      },
+    }, this.now());
+  }
+
+  /** Un NPC que estaba inconsciente vuelve en sí (wakeNpcs o una curación): lo ve quien esté. */
+  private announceNpcWake(n: Npc): void {
+    const spot = this.world.spot(n.location.id);
+    this.events.emit({
+      actor_id: null, at: { spot_id: spot.id, next_spot_id: null, progress: 0, x: spot.x, y: spot.y, location_id: spot.location_id },
+      action_type: 'npc_wake', narration_private: '', observable: `${n.name} abre los ojos y vuelve en sí${n.bound ? ', atado' : ''}.`, loudness: 1,
+      tags: ['npc', 'deterministic'], payload: { master: null, npc_id: n.id, wake: { bound: Boolean(n.bound) } },
     }, this.now());
   }
 

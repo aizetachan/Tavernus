@@ -199,6 +199,8 @@ export class Master {
             ? JSON.stringify({ error: `log_event rechazado: ${failedNow.map((f) => f.name).join(', ')} falló en este mismo mensaje, así que no ha ocurrido. Vuelve a cerrar con log_event narrando que NO ha pasado (o pidiendo lo que falta).` })
             : executeTool(ctx, tu.name, input);
           calls.push({ name: tu.name, input, result });
+          // Lo que el motor resolvió por su cuenta en ese tool (el turno de un NPC que no actuó, combat.ts) va detrás.
+          if (ctx.engine_calls?.length) calls.push(...ctx.engine_calls.splice(0));
           byId.set(tu.id, result);
           if (WRITE_TOOLS.has(tu.name) && result.startsWith('{"error"')) failedNow.push({ name: tu.name, input, error: result });
         }
@@ -216,6 +218,8 @@ export class Master {
         }
       }
       // Tope alcanzado: una última llamada solo con log_event para que cierre narrando lo conseguido y lo que falló.
+      // En el último cierre no se rechaza por los turnos de los NPC: el motor los añade a la narración si faltan.
+      ctx.npc_turn_rejections = 1;
       messages.push({ role: 'user', content: 'Has agotado las llamadas a tools. Cierra AHORA con log_event: narra lo que sí ha ocurrido y, si algo no fue posible, dilo en ficción. No intentes más cambios.' });
       const fin = await this.client.create({
         model, max_tokens: 2048,
@@ -231,6 +235,7 @@ export class Master {
       for (const tu of fin.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use')) {
         const input = (tu.input ?? {}) as Record<string, unknown>;
         calls.push({ name: tu.name, input, result: executeTool(ctx, tu.name, input) });
+        if (ctx.engine_calls?.length) calls.push(...ctx.engine_calls.splice(0));
       }
       usage.ms = Date.now() - t0;
       if (ctx.closed) return done({ ...ctx.closed, tags: [...ctx.closed.tags, 'max_iterations'] }, fin.model);

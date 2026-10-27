@@ -54,6 +54,11 @@ export function describeSurroundings(world: World, clock: GameClock, c: Characte
   // Cuerpos de NPC muertos: siguen donde cayeron.
   const bodies = [...world.npcs.values()].filter((n) => n.status === 'dead' && world.spots.get(n.location.id)?.location_id === loc.id)
     .map((n) => `el cuerpo de ${c.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)}${n.location.id === pos.spot_id ? ' aquí mismo' : ` en ${world.spot(n.location.id).name}`}`);
+  // Y los que un golpe no letal dejó inconscientes: vivos, pero en el suelo.
+  for (const n of world.npcs.values()) {
+    if (n.status !== 'unconscious' || world.spots.get(n.location.id)?.location_id !== loc.id) continue;
+    bodies.push(`${c.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)}, inconsciente${n.bound ? ' y atado' : ''}${n.location.id === pos.spot_id ? ', aquí mismo' : `, en ${world.spot(n.location.id).name}`}`);
+  }
   if (bodies.length) lines.push(`En el suelo: ${bodies.join('; ')}.`);
   // Gente de la agenda (schedule.ts): el mercado, la misa… como presencia del lugar.
   const crowd = presenceLine(world, loc.id, nowGameS);

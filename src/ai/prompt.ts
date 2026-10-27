@@ -16,7 +16,8 @@ import { inventoryDetailed, inventoryView } from '../engine/inventory.js';
 import { SKILLS, armorClass } from '../engine/rules.js';
 import { activeJobs } from '../engine/progress.js';
 import { descriptorOf } from '../engine/narrate.js';
-import { attitudeOf } from '../engine/combat.js';
+import { attitudeOf, dueNpcTurns } from '../engine/combat.js';
+import { encounterAt } from '../engine/encounter.js';
 import { describeHook } from '../engine/hooks.js';
 import { AHEAD_NOTICE_S, aheadBy, travelBlock } from '../engine/travel.js';
 import { scheduleContext } from '../engine/schedule.js';
@@ -35,7 +36,7 @@ import { conversationBlock, conversationOf, transcriptOf, transcriptText, TRANSC
 import { offersOf, pcName } from '../engine/party.js';
 import { pendingFrom } from '../engine/reactions.js';
 import { RULES_CHEATSHEET } from './rules-cheatsheet.js';
-import { bodiesAt, bodyStateOf, deadNpcsAt, isDying, isStable } from '../engine/death.js';
+import { bodiesAt, bodyStateOf, deadNpcsAt, isDying, isStable, NPC_DOWN_HINT } from '../engine/death.js';
 import { crimeContext, npcCrimeLine, recentIncidents } from '../engine/crime.js';
 import { TALK_RULES } from './actor.js';
 import { concernsLine } from '../engine/concerns.js';
@@ -88,7 +89,7 @@ export function systemPrompt(c: Campaign, opts: { actor?: boolean } = {}): strin
     'AGENDA: lo que un NPC anuncia con hora (una misa, un mercado, una reunión, una llegada) prográmalo con schedule_event para que ocurra de verdad: a su hora el servidor trae a la gente y a los NPC, y lo cuenta a quien esté. Para saber qué hay y cuándo, get_schedule. No narres como presente lo que la agenda no tiene en marcha.',
     'IMPARCIALIDAD: sabes cosas que los personajes no saben (secretos, motivaciones). Eres neutral: no guías al jugador hacia ellas, no las insinúas con el ambiente ni con las acciones sugeridas, no premias ni castigas por acercarse. El mundo reacciona a lo que el jugador hace, no a lo que tú sabes.',
     'CONFIANZA: cada NPC cuenta solo lo que su confianza con el actor permite (extraño, conocido, amigo, aliado). Su línea en «Presentes» trae lo que contaría a ese nivel y nada más: lo que calla no te llega, así que no inventes secretos suyos ni le hagas soltar más con una tirada. Una tirada social con éxito le hace hablar mejor de lo que ya contaría, no saltarse niveles. La confianza sube con misiones, encargos, regalos, favores y adulación a quien la agradece (npc_trust) y tiradas sociales con éxito, con tope por charla; baja con amenazas, mentiras pilladas, insultos, hostigar (insistir cuando ya dijo que no) y adular a quien no lo soporta (npc_trust), y con crímenes. Si grant_clue rechaza una pista, el actor no la consigue: narra el motivo que devuelve dentro de la ficción.',
-    'COMBATE: no hay turnos; es conversación. Un NPC hostil en el mismo punto (o que llega hasta el actor) actúa: resuelve su ataque con attack y narra. El ataque del jugador va con requires_roll kind=attack y requires_roll_target; el servidor tira contra la CA y aplica el daño; tú narras el resultado que te devuelve. Huir es move_to (el enemigo puede perseguir). A 0 PG el PJ cae inconsciente y el servidor tira sus salvaciones contra muerte: tú no las tiras ni decides si muere. MUERTE: un PJ solo muere si attack o apply_damage devuelven died (o el contexto dice MUERTO); nunca narres por tu cuenta que un PJ muere, resucita o vuelve de la muerte: su vuelta la cuenta el servidor. Atender a un caído: stabilize; curarle: heal; descanso que pide la ficción: take_rest; recursos de clase: spend_resource; conjuros: cast_spell (solo los de su lista). Ventana decisiva (decisive_threat): solo con una amenaza real e inmediata contra el actor, nunca dos seguidas; si no responde en 60 s, la amenaza se ejecuta.',
+    'COMBATE: no hay turnos fijos; es conversación. Cada NPC hostil del combate actúa en CADA turno: resuelve su ataque con attack (una llamada por NPC; su multiataque lo tira el servidor en esa misma llamada) y narra; si no lo haces, el servidor lo hace al cerrar y tendrás que contarlo. Golpe no letal: a 0 PG un NPC cae INCONSCIENTE si el golpe es contundente (bastón, maza, puños) o el jugador dice pegar, golpear o reducir; muere si dice que quiere matar, si el arma corta o perfora y no dice lo contrario, o si remata a quien ya está en el suelo. Lo decide el servidor: narra lo que devuelve. Al inconsciente se le puede atar (restrain_npc), registrar o rematar. Nadie es inmortal. El ataque del jugador va con requires_roll kind=attack y requires_roll_target; el servidor tira contra la CA y aplica el daño; tú narras el resultado que te devuelve. Huir es move_to (el enemigo puede perseguir). A 0 PG el PJ cae inconsciente y el servidor tira sus salvaciones contra muerte: tú no las tiras ni decides si muere. MUERTE: un PJ solo muere si attack o apply_damage devuelven died (o el contexto dice MUERTO); nunca narres por tu cuenta que un PJ muere, resucita o vuelve de la muerte: su vuelta la cuenta el servidor. Atender a un caído: stabilize; curarle: heal; descanso que pide la ficción: take_rest; recursos de clase: spend_resource; conjuros: cast_spell (solo los de su lista). Ventana decisiva (decisive_threat): solo con una amenaza real e inmediata contra el actor, nunca dos seguidas; si no responde en 60 s, la amenaza se ejecuta.',
     'PROGRESO: recolectar (harvest) tira solo y cuenta práctica. Las misiones de la historia escrita (q_…, ver «Historia escrita») las pide alguien en escena: quien la da la cuenta con su voz y entra en el Diario (story_quest ask), sin preguntar si acepta; si el jugador dice que no, story_quest decline; la recompensa la da quien la recibe al entregarla (story_quest turn_in); nunca abras ni insinúes una que no esté disponible. Los demás encargos no se aceptan: si un NPC le da uno al actor o le pide algo concreto que hacer, ya es suyo; no le preguntes si acepta ni esperes un «acepto», y hacerlo o no es cosa suya. Uno del tablón queda en su Diario con que lo hablen; cualquier otro, regístralo con give_quest en ese mismo turno (título corto, de qué va, quién lo da, objetivo y recompensa si se dijo), y cuando lo cumpla o ya no se pueda, finish_quest. Los encargos del tablón se cierran con complete_job al entregarlos al NPC que los pidió; los de entrega los valida el servidor. Las pistas se conceden con grant_clue únicamente cuando el jugador las ha obtenido con sus actos. Vender y comprar: sell_item y buy_item con los precios del NPC; el master no negocia fuera de esa lista salvo una tirada de Persuasión que como mucho mueve un 10 %. El contexto solo trae las pistas de este lugar o de quien está delante y los títulos del tablón: si el jugador busca otra pista, pregunta por un encargo o va a entregarlo, consulta get_campaign_notes antes de responder.',
     'NOMBRES: los jugadores de la partida se conocen siempre por su nombre: llámalos por él. De los NPC, el actor solo conoce los nombres marcados como conocidos; a los demás los nombras por lo que se ve (la tabernera, el guardia del portón), también en suggested_actions. El nombre de un NPC se aprende cuando se presenta o alguien lo nombra: entonces va en names_learned.',
     'NPCs: interprétalos según su descripción, lo que quieren y lo que recuerdan. Si el actor habla con uno, pon su ID en npc_id; y solo si esa persona recordaría algo de la conversación, escríbelo en npc_memory_note con su importancia. Un NPC atiende a una persona a la vez: si está ocupado con otro, responde en ficción que espere, salvo motivo de peso.',
@@ -335,6 +336,12 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       const dead = owner.status === 'dead';
       present.push(`- ${world.itemDef(b.item_id).name} [${b.id}] en ${sp.name}: ${dead ? `${owner.name} está MUERTO (modo ${st.mode}); vuelve solo, por el servidor; no narres que se levanta ni que resucita.` : `lo que ${owner.name} dejó al morir (ya ha vuelto).`} ${st.mode === 'casual' ? `Solo ${owner.name} puede coger lo que hay dentro.` : 'Cualquiera puede saquearlo.'}`);
     }
+    // NPC inconscientes (golpe no letal): siguen vivos, en el suelo, con lo que llevan.
+    for (const n of world.npcs.values()) {
+      if (n.status !== 'unconscious' || n.location.id !== sp.id) continue;
+      const label = actor.knows.includes(n.id) ? n.name : descriptorOf(world, n.id);
+      present.push(`- ${label} [${n.id}] en ${sp.name}: INCONSCIENTE a 0 PG${n.down?.by_name ? ` (le dejó así ${n.down.by_name})` : ''}${n.bound ? ', ATADO' : ''}. Respira; no habla, no se mueve, no pelea${n.down ? ` y vuelve en sí hacia las ${hhmm(n.down.wakes_game_s)}` : ''}. ${NPC_DOWN_HINT}${carriedBy(world, n.id) ? `\n${carriedBy(world, n.id)}` : ''}`);
+    }
     // NPC muertos: el cuerpo sigue ahí hasta que alguien se lo lleve; los vivos lo ven y reaccionan.
     for (const n of deadNpcsAt(world, sp.id)) {
       const d = n.death;
@@ -362,7 +369,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const crime = npcCrimeLine(world, n, actor, nowG);
     present.push([
       `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}.${crime ? `\n  ${crime}\n ` : ''} ${n.description}`,
-      `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage}).` : ' No combate.'}`,
+      `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage})${(n.stats.multiattack ?? 1) > 1 ? `, multiataque ×${n.stats.multiattack}` : ''}.${n.bound ? ' ATADO: no se mueve ni pelea.' : ''}` : ' No combate.'}`,
       // Opinión con el actor, temas que tiene en la cabeza y reacción a sus etiquetas (standing.ts, worldrules.ts).
       ...npcStandingLines(world, n, actor, nowG),
       n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${money(world, priceFor(n, actor.id, b.price, 'sell'))}`).join(', ')}` : '',
@@ -387,6 +394,15 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   // Hechos del mundo (worldfacts.ts) con quién los sabe: lo que se salvó o se condenó vuelve.
   const facts = factsContext(world, actor);
   if (facts) L.push(facts);
+  // Combate en curso (encounter.ts): quién tiene que actuar en este turno. Si el máster no lo hace, lo hace el servidor.
+  if (encounterAt(world, engine.events.recentInLocation(loc.id, 400), loc.id, nowG)) {
+    const h = engine.sceneHints(actor.id);
+    const pcs = [actor.id, ...[...(h?.round?.members ?? []), ...(h?.group?.members ?? [])].map((m) => m.id).filter((id) => id !== actor.id)];
+    const due = dueNpcTurns(world, pcs, new Set());
+    if (due.length) {
+      L.push(`## Turno de los NPC hostiles\n${due.map((d) => `- ${actor.knows.includes(d.npc.id) ? d.npc.name : descriptorOf(world, d.npc.id)} [${d.npc.id}] ataca a ${d.target.id === actor.id ? 'el actor' : d.target.name} [${d.target.id}]${(d.npc.stats!.multiattack ?? 1) > 1 ? ` (multiataque ×${d.npc.stats!.multiattack}, en una sola llamada)` : ''}.`).join('\n')}\nEn este turno, después de resolver lo del jugador: un attack por cada uno (attacker_id = el NPC) y nárralo. Si cae o se rinde antes, no ataca. Si no lo haces, el servidor lo resuelve al cerrar y tendrás que reescribir.`);
+    }
+  }
   // Quién oye lo que dice el actor (otros jugadores): el NPC puede notarlo (bajar la voz, callarse, mirarlos), sin narrar lo que hacen ellos.
   const ears = witnesses(world, engine.clock, positionOf(world, actor, nowG), nowG, 1, actor.id)
     .filter((w) => w.perceived.sound !== 'none' && w.perceived.sound !== 'hint')

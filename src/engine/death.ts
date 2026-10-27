@@ -418,10 +418,74 @@ export function killNpc(world: World, n: Npc, nowG: number, by: { id: Id; name: 
   n.status = 'dead';
   if (n.stats) n.stats.hp = 0;
   n.talking_to = null;
+  delete n.down;
   n.death = { died_game_s: nowG, by_id: by?.id ?? null, by_name: by?.name ?? null, cause, told: false };
   for (const i of world.itemsIn({ type: 'npc', id: n.id })) { i.location = { type: 'spot', id: n.location.id }; world.touch('item_instances', i.id); }
   world.touch('npcs', n.id);
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// NPC inconsciente (golpe no letal, combat.ts)
+// ---------------------------------------------------------------------------
+
+/** Lo que tarda en volver en sí un NPC dejado a 0 PG sin matarle (SRD: 1d4 h; aquí, la media, para que sea igual en cada partida). */
+export const NPC_WAKE_S = 2 * GAME_HOUR;
+
+/** Lo que el máster puede hacer con un NPC inconsciente (el contexto y los resultados de los tools lo repiten). */
+export const NPC_DOWN_HINT = 'Se le puede atar (restrain_npc), registrar (transfer_item) o curar (heal); rematarle es otro attack y le mata: una muerte grave ante testigos.';
+
+/**
+ * Un NPC cae a 0 PG sin morir: queda inconsciente en su punto, con lo que
+ * lleva encima (se le puede registrar), sin hablar ni moverse ni pelear, y
+ * vuelve en sí con 1 PG a las NPC_WAKE_S (wakeNpcs) o si le curan. El motor lo
+ * anuncia una vez (engine.announceDeathStates). Devuelve false si no estaba en pie.
+ */
+export function knockOutNpc(world: World, n: Npc, nowG: number, by: { id: Id; name: string } | null, cause: string): boolean {
+  if (n.status !== 'alive') return false;
+  n.status = 'unconscious';
+  if (n.stats) n.stats.hp = 0;
+  n.talking_to = null;
+  n.down = { since_game_s: nowG, wakes_game_s: nowG + NPC_WAKE_S, by_id: by?.id ?? null, by_name: by?.name ?? null, cause, told: false };
+  world.touch('npcs', n.id);
+  return true;
+}
+
+/** Vuelve en sí (curado o pasado el rato) con `hp` PG. False si no estaba inconsciente. */
+export function reviveNpc(world: World, n: Npc, hp = 1): boolean {
+  if (n.status !== 'unconscious') return false;
+  n.status = 'alive';
+  if (n.stats) n.stats.hp = Math.min(n.stats.hp_max, Math.max(1, Math.floor(hp)));
+  delete n.down;
+  world.touch('npcs', n.id);
+  return true;
+}
+
+/** Desde el tick: los inconscientes cuya hora ha llegado vuelven en sí con 1 PG (atados, siguen atados). */
+export function wakeNpcs(world: World, nowG: number): Npc[] {
+  const out: Npc[] = [];
+  for (const n of world.npcs.values()) if (n.status === 'unconscious' && n.down && n.down.wakes_game_s <= nowG && reviveNpc(world, n)) out.push(n);
+  return out;
+}
+
+/** ¿Está a merced de quien le ataque (inconsciente o atado)? Entonces el golpe impacta y, a 0 PG, mata (rematar). */
+export function helplessNpc(n: Npc): boolean {
+  return n.status === 'unconscious' || Boolean(n.bound);
+}
+
+/** ¿Puede actuar por su cuenta (moverse, pelear, seguir su rutina)? */
+export function npcCanAct(n: Npc): boolean {
+  return n.status === 'alive' && !n.bound;
+}
+
+/**
+ * Qué ha sido de un NPC que ha caído, con la causa: lo que leen las misiones
+ * (plan B si muere quien sostiene la trama) y el registro. null si sigue en pie.
+ */
+export function npcFate(n: Npc): { fate: 'dead' | 'unconscious'; at_game_s: number; by_id: Id | null; by_name: string | null; cause: string } | null {
+  if (n.status === 'dead') return { fate: 'dead', at_game_s: n.death?.died_game_s ?? 0, by_id: n.death?.by_id ?? null, by_name: n.death?.by_name ?? null, cause: n.death?.cause ?? 'desconocida' };
+  if (n.status === 'unconscious') return { fate: 'unconscious', at_game_s: n.down?.since_game_s ?? 0, by_id: n.down?.by_id ?? null, by_name: n.down?.by_name ?? null, cause: n.down?.cause ?? 'desconocida' };
+  return null;
 }
 
 /** Lo que se cuenta de una muerte de NPC y quién la ha visto (engine.announceNpcDeath). */

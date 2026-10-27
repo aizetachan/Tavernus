@@ -149,7 +149,7 @@ function validTask(world: World, t: NpcTask | null | undefined, order: 'follow' 
 export function setNpcOrder(world: World, input: OrderInput, nowS: number): OrderResult {
   const n = world.npcs.get(input.npc_id);
   if (!n) return { ok: false, error: `no existe el NPC ${input.npc_id}` };
-  if (n.status !== 'alive') return { ok: false, error: `${n.name} no puede (${n.status})` };
+  if (n.status !== 'alive' || n.bound) return { ok: false, error: `${n.name} no puede (${n.bound ? 'está atado' : n.status})` };
   if (input.order === 'stop') {
     const prev = orderOf(n);
     // Despedido: se queda un poco donde está y vuelve a lo suyo.
@@ -220,7 +220,7 @@ export function tickOrders(world: World, nowS: number, emit: OrderEmit, nowFor: 
   for (const n of world.npcs.values()) {
     const o = orderOf(n);
     if (!o) continue;
-    if (n.status !== 'alive') { setOrder(world, n, null); continue; }
+    if (n.status !== 'alive' || n.bound) { setOrder(world, n, null); continue; }
     if (o.kind === 'follow') { follow(world, n, o, nowS, emit, nowFor, rng); continue; }
     if (o.kind === 'go') {
       if (world.spots.has(o.spot_id) && o.spot_id !== n.location.id) moveNpc(world, n, o.spot_id, nowS, emit, null);

@@ -4,7 +4,14 @@
  * aspecto y manera de hablar, lo que quiere, lo que sabe y cuenta según
  * cuánto se fíe del PJ, lo que
  * compra y vende, un bloque de combate SRD de nivel bajo (los mismos
- * arquetipos y rangos que el generador, skeleton.ts) y su horario por franjas.
+ * arquetipos y rangos que el generador, skeleton.ts), ajustado a su oficio, y
+ * su horario por franjas.
+ *
+ * Bloques por rol (docs/SPEC.md §9.3): el motor hace atacar a todo NPC hostil en
+ * cada turno, así que un adulto fuerte pega siempre. El herrero lleva martillo
+ * de fragua y mandil de cuero; el alguacil, jubón de cuero y el apoyo del
+ * guardia (crime.ts, resist). Con un golpe fuerte por turno y no el multiataque
+ * del matón, un PJ de nivel 1 solo tiene riesgo serio sin que sea imposible.
  * `knows` y `ties` son para el análisis (docs/BREZAL.md); al motor llegan
  * descripciÃ³n, motivaciÃ³n, `knowledge` y `bonds`, lo que de `ties` usa el motor
  * (crime.ts: quien hace daÃ±o a uno se las ve con los suyos).
@@ -106,7 +113,8 @@ export const NPCS: AuthoredNpc[] = [
       { tag: 'ladron', note: 'le mira las manos y le cobra el diezmo por adelantado' },
     ],
     buys: [], sells: [],
-    stats: srd('thug', 30),
+    // Alguacil: jubón de cuero mojado (CA 13) y maza corta; si te resistes, Doro acude.
+    stats: srd('thug', 24, { ac: 13, attack_name: 'maza corta', multiattack: 1 }),
     routine: { day: 'sp_pl_tablon', afternoon: 'sp_tab_barra', night: 'sp_ca_banco' },
   },
   {
@@ -149,7 +157,8 @@ export const NPCS: AuthoredNpc[] = [
     bonds: [{ npc_id: 'npc_doro', kind: 'friend', reaction: 'fight' }],
     buys: [{ item_id: 'it_madera', price: 4 }],
     sells: [{ item_id: 'it_daga', price: 200 }, { item_id: 'it_hacha', price: 500 }, { item_id: 'it_hacha_mano', price: 500 }, { item_id: 'it_espada_corta', price: 1000 }, { item_id: 'it_escudo', price: 1000 }],
-    stats: srd('thug', 28, { attack_name: 'martillo' }),
+    // Herrero: mandil de cuero (CA 12) y martillo de fragua, que pega más que una maza; un golpe por turno.
+    stats: srd('thug', 22, { ac: 12, attack_name: 'martillo de fragua', damage: '1d8+2', multiattack: 1 }),
     routine: { day: 'sp_he_fragua', afternoon: 'sp_he_yunque', night: 'sp_tab_mesa' },
     home_spot_id: 'sp_he_fragua',
   },
@@ -229,7 +238,7 @@ export const NPCS: AuthoredNpc[] = [
     ],
     buys: [{ item_id: 'it_piel', price: 150 }, { item_id: 'it_flechas', price: 1 }, { item_id: 'it_cerveza', price: 3 }],
     sells: [{ item_id: 'it_pescado', price: 6 }, { item_id: 'it_flechas', price: 1 }, { item_id: 'it_antorcha', price: 1 }],
-    stats: srd('scout', 16, { attack_name: 'arco' }),
+    stats: srd('scout', 16, { attack_name: 'arco', ranged: true }),
     routine: { day: 'sp_cl_piedra', afternoon: 'sp_cl_choza', night: 'sp_cl_choza' },
     home_spot_id: 'sp_cl_choza',
   },
@@ -247,7 +256,7 @@ export const NPCS: AuthoredNpc[] = [
     ties: 'Vende huevos a Brenna y en el mercado. Ilse le cura las ovejas. Garrán le cobra el diezmo en gallinas. Doro le hace la ronda por la cerca de atrás.',
     buys: [{ item_id: 'it_madera', price: 3 }, { item_id: 'it_bayas', price: 1 }],
     sells: [{ item_id: 'it_huevo', price: 1 }, { item_id: 'it_col', price: 1 }, { item_id: 'it_racion', price: 8 }],
-    stats: srd('commoner', 8, { attack_name: 'horca' }),
+    stats: srd('commoner', 8, { attack_name: 'horca', damage: '1d6', damage_type: 'piercing' }),
     routine: { day: 'sp_co_gallinero', afternoon: 'sp_co_huerto', night: 'sp_co_casa' },
     home_spot_id: 'sp_co_casa',
     tag_reactions: [{ tag: 'trasfondo:folk-hero', opinion: 5, note: 'la gente sencilla le recuerda: le trata como a uno del pueblo' }],
