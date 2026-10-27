@@ -301,3 +301,10 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 - Móvil: las opciones de la mochila son pastillas como las del chat (texto y su icono dentro, sin círculos de color); la página entera ya no se desplaza al arrastrar dentro del modal o del chat.
 - Sonido en tres canales, cada uno con su volumen y, a la derecha, su interruptor: Música (la canción de la partida, que suena en bucle hasta que se apaga), Efectos y Ambiente. En escritorio la cabecera lleva tres iconos: narrador, música (nota) y FX (efectos y ambiente). En el móvil todo está en el engranaje, bajo «Generar imagen, sonido y música».
 - Narrador en los ajustes: ya sin la etiqueta «Narrador» encima del desplegable ni la nota de «audio cacheado».
+- Sonido: ahora son dos canales, Música y «Efectos y ambiente» (un volumen y un interruptor para los dos); los interruptores van a la izquierda. En el móvil el engranaje se vuelve una X mientras los ajustes están abiertos.
+- Móvil: arriba, el nombre de la partida y debajo la hora y el lugar («18:48 · La herrería»).
+
+## Aspecto del menú: Penumbra y Taberna (27 oct 2026)
+- En el engranaje del menú principal, «Aspecto»: **Penumbra** (por defecto, plano, con el estilo de la pantalla de partida) o **Taberna** (ilustrado: tablones, marco dorado y la madera que se vuelve tecnología al entrar). Se recuerda en ese navegador.
+- En Penumbra las imágenes van en duotono (negro y dorado) y la de cada partida es la última vista de un sitio pintada en ella; si no tiene, la taberna. Al entrar en una partida, un fundido a negro corto.
+- La partida aún no cambia con el tema (está marcado para darle estilo Taberna más adelante).

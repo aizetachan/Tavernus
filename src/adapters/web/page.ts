@@ -18,6 +18,7 @@ export const PAGE = String.raw`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Tavernus</title>
+<script>/* El tema elegido en el menú (Penumbra o Taberna); de momento la partida solo lo marca, para darle estilo más adelante. */ (function () { var t = null; try { t = localStorage.getItem('tavernus.theme'); } catch (e) {} document.documentElement.setAttribute('data-theme', t === 'taberna' ? 'taberna' : 'penumbra'); })();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
 <meta name="theme-color" content="#141617">

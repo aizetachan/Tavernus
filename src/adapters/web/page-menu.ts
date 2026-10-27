@@ -6,6 +6,7 @@ export const MENU = String.raw`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tavernus</title>
+<script>(function () { var t = null; try { t = localStorage.getItem('tavernus.theme'); } catch (e) {} document.documentElement.setAttribute('data-theme', t === 'taberna' ? 'taberna' : 'penumbra'); })();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
 <meta name="theme-color" content="#141617">
@@ -280,6 +281,40 @@ export const MENU = String.raw`<!doctype html>
   @keyframes tech { 0% { opacity: 0; } 40% { opacity: 1; } 55% { opacity: 1; } 100% { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { body.leaving .tech { animation: none; } }
 
+  /* Tema Penumbra (el de por defecto): el estilo de la pantalla de partida, plano. Sin tablones ni marco: el panel de
+     la lista es el de la partida, y las imágenes van en duotono (sus luces y sombras teñidas del dorado de la app),
+     para que una ilustración se lea como ambiente y no como un cuadro. Taberna es todo lo de arriba, sin tocar. */
+  :root[data-theme="penumbra"] aside { padding: 0; background: var(--panel); border-right: 1px solid var(--sep);
+    --glass: var(--control); --glass-hover: #23272a; --glass-on: #2a2e31; }
+  :root[data-theme="penumbra"] aside::before, :root[data-theme="penumbra"] aside::after, :root[data-theme="penumbra"] .tech { display: none; }
+  :root[data-theme="penumbra"] aside .head { padding: 16px 16px 12px 20px; }
+  :root[data-theme="penumbra"] .searchrow { margin: 0 16px 12px; }
+  :root[data-theme="penumbra"] aside .search, :root[data-theme="penumbra"] aside .row, :root[data-theme="penumbra"] aside .btn.ghost { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  :root[data-theme="penumbra"] aside .btn.ghost { background: transparent; }
+  :root[data-theme="penumbra"] aside .btn.ghost:hover:not(:disabled), :root[data-theme="penumbra"] aside .btn.ghost[aria-expanded=true] { background: var(--hover); }
+  :root[data-theme="penumbra"] aside .scroll { padding: 2px 10px 8px; }
+  :root[data-theme="penumbra"] aside .row { background: transparent; }
+  :root[data-theme="penumbra"] aside .row:hover { background: var(--hover); }
+  :root[data-theme="penumbra"] aside .row.on { background: var(--accent-tint); box-shadow: inset 0 0 0 1px rgba(230,183,90,.3); text-shadow: none; }
+  :root[data-theme="penumbra"] aside .row.on .l1 b { color: var(--accent); }
+  :root[data-theme="penumbra"] aside .row.on .l2, :root[data-theme="penumbra"] aside .row.on .l1 time { color: #c9c3b9; }
+  :root[data-theme="penumbra"] aside .row.on .badge { color: inherit; }
+  :root[data-theme="penumbra"] h1 .logo { filter: none; }
+  :root[data-theme="penumbra"] .filters.menu, :root[data-theme="penumbra"] .dd-menu { background: rgba(20,22,23,.97); }
+  /* Duotono (filtro #duo del sprite): una copia de la imagen debajo del contenido, de negro a dorado según su luz. */
+  :root[data-theme="penumbra"] .art, :root[data-theme="penumbra"] .opt.cover .pic { position: relative; isolation: isolate; }
+  :root[data-theme="penumbra"] .art::before, :root[data-theme="penumbra"] .opt.cover .pic::before { content: ''; position: absolute; inset: 0; z-index: -1;
+    background: inherit; border-radius: inherit; filter: url(#duo); }
+  :root[data-theme="penumbra"] .opt.cover:not(:has(input:checked)) .pic::before { filter: url(#duo) brightness(.75); }
+  /* Entrar en una partida: un fundido a negro, sin la madera que se vuelve tecnología. */
+  :root[data-theme="penumbra"] body.leaving::after { transition: opacity .5s ease; }
+  :root[data-theme="penumbra"] body.leaving aside > *, :root[data-theme="penumbra"] body.leaving main, :root[data-theme="penumbra"] body.leaving #status { transition: opacity .35s ease; }
+  /* Aspecto, en el menú de Ajustes: los dos temas, debajo de las listas. */
+  .filters.menu .sep { height: 1px; margin: 6px 4px; background: var(--line); }
+  .filters.menu .mh { margin: 4px 12px 2px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  .filters.menu [data-theme-opt] small { color: var(--muted); font-size: 12px; font-weight: 400; }
+  .filters.menu [data-theme-opt].on small { color: var(--accent); }
+
   /* Escritorio: la imagen ocupa toda la pantalla y la tabla de partidas queda encima, con su sombra. */
   @media (min-width: 821px) {
     main { position: fixed; inset: 0; z-index: 0; }
@@ -327,6 +362,15 @@ export const MENU = String.raw`<!doctype html>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <!-- Duotono de Penumbra: la luz de la imagen, de casi negro (#0b0d0c) a dorado (#e6b75a), con los medios oscuros. -->
+  <filter id="duo" color-interpolation-filters="sRGB">
+    <feColorMatrix type="matrix" values=".2126 .7152 .0722 0 0  .2126 .7152 .0722 0 0  .2126 .7152 .0722 0 0  0 0 0 1 0"/>
+    <feComponentTransfer>
+      <feFuncR type="table" tableValues=".043 .22 .62 .95"/>
+      <feFuncG type="table" tableValues=".051 .16 .47 .80"/>
+      <feFuncB type="table" tableValues=".047 .08 .22 .48"/>
+    </feComponentTransfer>
+  </filter>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/></symbol>
@@ -356,6 +400,10 @@ export const MENU = String.raw`<!doctype html>
       <button type="button" role="menuitemradio" data-list="continue" class="on"><span>Partidas</span><span id="n-continue">0</span></button>
       <button type="button" role="menuitemradio" data-list="demos"><span>Demos</span><span id="n-demos">0</span></button>
       <button type="button" role="menuitemradio" data-list="recordings"><span>Grabaciones</span><span id="n-recordings">0</span></button>
+      <div class="sep" role="separator"></div>
+      <div class="mh" id="theme-h">Aspecto</div>
+      <button type="button" role="menuitemradio" data-theme-opt="penumbra" aria-describedby="theme-h"><span>Penumbra</span><small>Plano</small></button>
+      <button type="button" role="menuitemradio" data-theme-opt="taberna" aria-describedby="theme-h"><span>Taberna</span><small>Ilustrado</small></button>
     </div>
   </div>
   <div class="scroll">
@@ -500,8 +548,9 @@ export const MENU = String.raw`<!doctype html>
     var url = '/?game=' + encodeURIComponent(slug) + (character ? '&character=' + encodeURIComponent(character) : '');
     if (document.body.classList.contains('leaving')) return;
     document.body.classList.add('leaving');
-    if (window.menuMusicOut) window.menuMusicOut(3500);
-    setTimeout(function () { location.href = url; }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 3800);
+    var flat = theme() === 'penumbra';
+    if (window.menuMusicOut) window.menuMusicOut(flat ? 500 : 3500);
+    setTimeout(function () { location.href = url; }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : flat ? 550 : 3800);
   }
   // Si se vuelve con «atrás» y el navegador restaura la página, se quita el negro.
   window.addEventListener('pageshow', function () { document.body.classList.remove('leaving'); });
@@ -531,14 +580,18 @@ export const MENU = String.raw`<!doctype html>
    * desplaza en píxeles para llevar el centro de la casa hacia el centro, sin salirse de la imagen.
    */
   var ART = { w: 2560, h: 1440, x: 0.71, y: 0.45 };
-  function art(node) {
-    node.style.backgroundImage = 'url(/assets/taberna.jpg?v=3)';
+  function art(node, g) {
+    var cover = g && g.cover && theme() === 'penumbra' ? g.cover : null;
+    node.style.backgroundImage = (cover ? 'url("' + cover + '"), ' : '') + 'url(/assets/taberna.jpg?v=3)';
     node.style.backgroundRepeat = 'no-repeat';
+    if (cover) node.setAttribute('data-cover', ''); else node.removeAttribute('data-cover');
     fitArt(node);
   }
   function fitArt(node) {
     var W = node.clientWidth, H = node.clientHeight;
     if (!W || !H) return;
+    // Con portada propia (Penumbra): las dos capas cubren el hueco, centradas.
+    if (node.hasAttribute('data-cover')) { node.style.backgroundSize = 'cover'; node.style.backgroundPosition = 'center'; return; }
     var zoom = Number(node.getAttribute('data-zoom')) || 1;
     // data-left: lo que tapa el panel de cristal a la izquierda; la casa se centra en lo que queda a la vista.
     var L = window.matchMedia('(max-width: 820px)').matches ? 0 : Number(node.getAttribute('data-left')) || 0;
@@ -619,7 +672,7 @@ export const MENU = String.raw`<!doctype html>
     var r = el('div', 'row' + (g.slug === selected ? ' on' : ''));
     r.setAttribute('role', 'button'); r.tabIndex = 0;
     r.setAttribute('aria-label', g.name + '. ' + when(g));
-    var pic = el('span', 'pic art'); pic.setAttribute('data-zoom', '2.6'); if (ring) pic.style.setProperty('--ring', ring); r.appendChild(pic); art(pic);
+    var pic = el('span', 'pic art'); pic.setAttribute('data-zoom', '2.6'); if (ring) pic.style.setProperty('--ring', ring); r.appendChild(pic); art(pic, g);
     var tt = el('span', 'tt');
     var l1 = el('span', 'l1'); l1.appendChild(el('b', '', g.name)); l1.appendChild(el('time', '', stamp(g.last_opened_at || g.created_at))); tt.appendChild(l1);
     var l2 = el('span', 'l2'); l2.appendChild(el('span', '', summary(g))); l2.appendChild(badge(g)); tt.appendChild(l2);
@@ -700,7 +753,7 @@ export const MENU = String.raw`<!doctype html>
     meta.appendChild(el('span', 'facts', 'Creada el ' + day(g.created_at)));
     body.appendChild(meta);
     hero2.appendChild(body);
-    art(hero2);
+    art(hero2, g);
   }
 
   function visible() {
@@ -722,7 +775,7 @@ export const MENU = String.raw`<!doctype html>
     var last = tab === 'continue' && !query ? lists.continue[0] : null, resume = $('resume');
     resume.hidden = !last;
     if (last) {
-      art(resume);
+      art(resume, last);
       $('resume-name').textContent = last.name;
       $('resume-meta').textContent = [MODE[last.mode], when(last)].join(' · ');
       resume.onclick = function () { open(last.slug); };
@@ -804,6 +857,19 @@ export const MENU = String.raw`<!doctype html>
   $('lists-btn').addEventListener('click', function (ev) { ev.stopPropagation(); listsMenu($('lists-menu').hidden); });
   document.addEventListener('click', function (ev) { if (!$('lists-menu').hidden && !$('lists-menu').contains(ev.target)) listsMenu(false); });
   document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !$('lists-menu').hidden) { listsMenu(false); $('lists-btn').focus(); } });
+  function theme() { return document.documentElement.getAttribute('data-theme') === 'taberna' ? 'taberna' : 'penumbra'; }
+  function paintTheme() {
+    document.querySelectorAll('[data-theme-opt]').forEach(function (b) { var on = b.getAttribute('data-theme-opt') === theme(); b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+  }
+  document.querySelectorAll('[data-theme-opt]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var t = b.getAttribute('data-theme-opt');
+      document.documentElement.setAttribute('data-theme', t);
+      try { localStorage.setItem('tavernus.theme', t); } catch (e) { /* sin almacenamiento: dura hasta recargar */ }
+      paintTheme(); listsMenu(false); render();
+    });
+  });
+  paintTheme();
   document.querySelectorAll('.filters [data-list]').forEach(function (b) { b.addEventListener('click', function () { tab = b.getAttribute('data-list'); selected = null; listsMenu(false); render(); }); });
   $('q').addEventListener('input', function () { query = $('q').value; render(); });
 
