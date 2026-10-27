@@ -25,9 +25,14 @@ export function freshWorld() {
 /**
  * Por defecto sin atajos deterministas: los tests del master esperan que toda
  * acción pase por él. Los del atajo (deterministic.test.ts) lo activan.
+ *
+ * Los PJ empiezan conectados, como con su pestaña abierta (al cargar, el motor no
+ * da a nadie por conectado: Engine.boot). `offline: true` los deja como al cargar.
  */
-export async function bootEngine(time = fakeTime(), opts: Partial<EngineOptions> = {}) {
+export async function bootEngine(time = fakeTime(), opts: Partial<EngineOptions> & { offline?: boolean } = {}) {
+  const { offline, ...rest } = opts;
   const repo = new MemoryRepository();
-  const engine = await Engine.boot({ repo, campaignId: 'demo', seed: makeSeed(), now: time.now, deterministic: false, ...opts });
+  const engine = await Engine.boot({ repo, campaignId: 'demo', seed: makeSeed(), now: time.now, deterministic: false, ...rest });
+  if (!offline) for (const c of engine.world.characters.values()) c.connected = true;
   return { engine, repo, time };
 }

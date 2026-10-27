@@ -9,8 +9,8 @@
  *     falta tener al menos 1 PG.
  *
  * El tiempo corre en el reloj propio del PJ (travel.ts): descansar es como un
- * viaje rápido, sale al acabar y su reloj queda adelantado. Si comparte sitio
- * con otro PJ despierto que va por detrás, espera a que el reloj le alcance.
+ * viaje rápido, sale al acabar y su reloj queda adelantado. Nunca le hace
+ * esperar, aunque comparta sitio con otro PJ que va por detrás.
  *
  * No se descansa con una amenaza delante (fastpath.ts, `tension`). En un sitio
  * inseguro el descanso puede interrumpirse: por la agenda (algo ruidoso

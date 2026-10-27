@@ -679,7 +679,7 @@ Broadcast: cada evento se entrega **por punto de vista**: el servidor calcula qu
 - **Muerte**: según `death_mode` del personaje (§4.7). Nunca hay muerte permanente; hardcore pierde inventario y características, no el personaje.
 - **PJ solo vs. grupo**: el master adapta dificultad por número de PJs presentes (`difficulty` × factor).
 - **Dos jugadores discuten el mismo objeto**: el orden de la cola decide; `transfer_item` es atómico.
-- **Tiempo de juego divergente**: si A viaja 2 días y B no, el mundo avanza al máximo de los dos y B "esperó" narrativamente. Alternativa más simple: tiempo global único que solo avanza cuando todos los presentes lo aceptan.
+- **Tiempo de juego divergente — DECIDIDO (27-10-2026, como en Baldur's Gate 3).** El reloj del mundo es uno y va con el real; cada PJ lleva el suyo, que viajar o descansar adelanta (`travel.ts`). Nadie espera a nadie: quien llega viajando a donde ya hay otro PJ activo y conectado con una hora anterior iguala su reloj al de él (o al del mundo) y actúa en el acto; los minutos que «pierde» no se notan. Ver docs/MULTIJUGADOR.md.
 - **Contenido que rompe el rating**: el tool devuelve error, el master narra una consecuencia alternativa.
 - **Coste de LLM**: acciones triviales (`/sheet`, mirar inventario) no pasan por el modelo; cachear la parte estática del prompt.
 

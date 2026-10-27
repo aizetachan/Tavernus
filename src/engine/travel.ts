@@ -13,12 +13,12 @@
  *     llegar, el viaje queda hecho y su ahora es la hora de llegada; mientras
  *     el mundo no la alcanza, su reloj está quieto en esa hora (vive en una
  *     burbuja: lo que haga allí no hace correr su reloj salvo otro viaje).
- *   - Multijugador: dos PJs en la misma localización ven la misma hora. Si
- *     uno ha llegado «del futuro» y comparte localización con otro PJ activo
- *     y conectado que va por detrás, el que va por delante espera a que el
- *     reloj lo alcance antes de actuar (aviso corto con cuánto falta; sí puede
- *     marcharse). El que va por detrás nunca espera ni salta tiempo.
- *   - Con el sitio vacío de otros PJs (el bosque, el camino), no espera nadie.
+ *   - Multijugador: nadie espera a nadie. Quien llega viajando a donde ya hay
+ *     otro PJ activo y conectado (no ausente) con una hora anterior iguala su
+ *     reloj al de él, o al del mundo, y actúa en el acto (Engine.joinClock):
+ *     los minutos que «pierde» no se notan. El que estaba nunca salta tiempo.
+ *   - Con el sitio vacío de otros PJs (el bosque, el camino) o si nadie más
+ *     mira, sigue con su hora adelantada; tampoco espera.
  *   - Desde AHEAD_NOTICE_S de adelanto (dormir, descansar) se dice claro: al
  *     jugador, en el texto del descanso y en «dónde estoy» (aheadNotice); al
  *     máster, en el contexto (prompt.ts). La gente sigue a la hora del mundo:
