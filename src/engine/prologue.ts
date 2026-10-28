@@ -1,12 +1,15 @@
 /**
  * Prólogo de cada historia y «Donde lo dejamos» al volver (docs/PROLOGO.md).
  *
- *   - Prólogo: la primera página del libro, antes de la primera escena. El mundo
- *     y su tono (premisa y tono de la campaña, nunca la Biblia), el lugar y el
- *     momento, el porqué del personaje (su situación inicial o, sin ella, el
- *     origen del punto de inicio), la amenaza y el reloj. 120-200 palabras. Lo
- *     escribe el máster una vez con `prologuePrompt`; si no puede (offline, sin
- *     máster, respuesta inválida), `prologueTemplate` con los mismos datos.
+ *   - Prólogo: la primera página del libro, antes de la primera escena. Con
+ *     situación inicial, solo lo suyo: dónde está y cuándo, por qué está aquí,
+ *     qué le amenaza y cuánto tiempo tiene (sin la historia del sitio, que se
+ *     descubre jugando). La gente sale por su oficio; por su nombre, solo el
+ *     antagonista, presentado por lo que es. Sin situación, el mundo y su tono
+ *     (premisa, nunca la Biblia), el lugar y el origen del punto de inicio.
+ *     60-120 palabras. Lo escribe el máster una vez con `prologuePrompt`; si no
+ *     puede (offline, sin máster, respuesta inválida), `prologueTemplate` con
+ *     los mismos datos.
  *   - Recapitulación: tras una ausencia larga, dónde está, qué hora es, qué
  *     estaba haciendo, qué tiene entre manos, a quién conoce y qué ha pasado
  *     entretanto. Plantilla sobre el Diario y el log; sin IA.
@@ -18,10 +21,10 @@ import { GAME_DAY } from '../clock/clock.js';
 import type { Engine } from './engine.js';
 import { journalOf } from './journal.js';
 import type { Campaign, Character, GameEvent } from './model.js';
-import { descriptorOf, maskUnknownNames } from './narrate.js';
+import { descriptorOf, maskNpcNames, maskUnknownNames } from './narrate.js';
 import { characterStory, finalsMissedBy } from './story.js';
 
-export const PROLOGUE_WORDS = { min: 120, max: 200 } as const;
+export const PROLOGUE_WORDS = { min: 60, max: 120 } as const;
 export const RECAP_TITLE = 'Donde lo dejamos';
 /** Horas reales sin jugar a partir de las que se recapitula (RECAP_AFTER_HOURS). */
 export const RECAP_AFTER_HOURS = 72;
@@ -88,6 +91,12 @@ function whenText(engine: Engine, gameS: number): string {
   return `${d.weekday.toLowerCase()} ${d.day_of_month} de ${d.month}, ${dayPart(d.hour)}`;
 }
 
+/** Quién sale por su nombre en el prólogo: el antagonista, si lo conoce. El resto, por su oficio. */
+function prologueNamed(c: Character): string[] {
+  const id = c.situation?.antagonist_npc_id;
+  return id && c.knows.includes(id) ? [id] : [];
+}
+
 /** Los datos del prólogo: solo lo que el personaje puede saber. Nada de la Biblia, secretos ni caminos. */
 export function prologueFacts(engine: Engine, c: Character): PrologueFacts {
   const w = engine.world;
@@ -95,6 +104,8 @@ export function prologueFacts(engine: Engine, c: Character): PrologueFacts {
   const loc = spot ? w.locations.get(spot.location_id) : undefined;
   const s = c.situation;
   const ant = s ? w.npcs.get(s.antagonist_npc_id) : undefined;
+  const named = prologueNamed(c);
+  const m = (x: string) => maskNpcNames(w, x, named, true);
   const origin = w.campaign.starting_points.find((p) => p.spot_id === spot?.id)?.origin ?? w.campaign.starting_points[0]?.origin ?? null;
   return {
     name: c.name,
@@ -104,37 +115,38 @@ export function prologueFacts(engine: Engine, c: Character): PrologueFacts {
     when: whenText(engine, engine.nowFor(c)),
     spot: spot?.name ?? '',
     location: loc?.name ?? '',
-    description: loc?.description_base ?? spot?.description ?? '',
-    why: s?.why_here ?? null,
-    wants: s?.wants ?? null,
-    threat: s?.threat ?? null,
-    clock: s ? { days: s.clock_days, runs_out: s.clock_runs_out } : null,
-    antagonist: ant && c.knows.includes(ant.id) ? { name: ant.name, role: ant.role } : null,
-    origin: s ? null : origin,
+    description: m(loc?.description_base ?? spot?.description ?? ''),
+    why: s ? m(s.why_here) : null,
+    wants: s ? m(s.wants) : null,
+    threat: s ? m(s.threat) : null,
+    clock: s ? { days: s.clock_days, runs_out: m(s.clock_runs_out) } : null,
+    antagonist: ant && named.includes(ant.id) ? { name: ant.name, role: ant.role } : null,
+    origin: s || !origin ? null : m(origin),
     names: [...[...w.npcs.values()].flatMap((n) => [n.name, n.name.split(' ')[0]!]), ...[...w.locations.values()].map((l) => l.name)],
   };
 }
 
-/** El prólogo por plantilla: tres párrafos (mundo; lugar y momento; porqué, amenaza y reloj). */
+/**
+ * El prólogo por plantilla. Con situación, dos párrafos: dónde y cuándo; por qué está aquí, la amenaza y el reloj.
+ * Sin situación, tres: el mundo, el lugar y el momento, y el origen del punto de inicio.
+ */
 export function prologueTemplate(f: PrologueFacts): string {
-  const world = [dot(f.premise), f.tone_line].join(' ');
   const desc = sentences(f.description);
   const placeLine = f.spot && f.location && f.spot !== f.location ? `${f.spot}, en ${f.location}` : f.location || f.spot;
   const third = f.why === null;
   const place = [`Es ${f.when}.`, placeLine ? `${third ? `${f.name} está en` : 'Estás en'} ${placeLine}.` : '', desc[0] ?? ''].filter(Boolean);
-  let why: string[];
+  const paras: string[][] = [];
   if (!third) {
-    why = [dot(f.why!)];
-    if (f.wants) why.push(`Lo que quieres es ${lowerFirst(noDot(f.wants), f.names)}.`);
+    const why = [dot(f.why!)];
     if (f.threat) why.push(`Pero ${lowerFirst(dot(f.threat), f.names)}`);
     if (f.clock) why.push(`Tienes ${f.clock.days} día${f.clock.days === 1 ? '' : 's'}; si se acaban, ${lowerFirst(dot(f.clock.runs_out), f.names)}`);
-    why.push('Lo que pase a partir de aquí lo decides tú.');
+    paras.push(place, why);
   } else {
-    why = [f.origin ? `${f.name} ${lowerFirst(dot(f.origin))}` : `${f.name} acaba de llegar.`, 'Nadie le espera, y eso, aquí, puede ser una suerte o una condena.', 'Lo que pase a partir de aquí lo decides tú.'];
+    paras.push([dot(f.premise), f.tone_line], place, [f.origin ? `${f.name} ${lowerFirst(dot(f.origin))}` : `${f.name} acaba de llegar.`, 'Nadie le espera, y eso, aquí, puede ser una suerte o una condena.']);
   }
   // Por debajo del mínimo, otra frase del sitio (antes que inventar).
-  if (wordCount([world, ...place, ...why].join(' ')) < PROLOGUE_WORDS.min && desc[1]) place.push(desc[1]);
-  return [world, place.join(' '), why.join(' ')].join('\n\n');
+  if (wordCount(paras.flat().join(' ')) < PROLOGUE_WORDS.min && desc[1]) place.push(desc[1]);
+  return paras.map((p) => p.join(' ')).join('\n\n');
 }
 
 /** El bloque de prompt para que el máster escriba el prólogo (una llamada corta, sin tools). */
@@ -143,26 +155,27 @@ export function prologuePrompt(f: PrologueFacts): { system: string; prompt: stri
     'Escribes la primera página de una novela interactiva en español: el prólogo que lee el jugador antes de su primera escena.',
     'Es un texto de libro, no un turno de juego: no preguntas qué hace, no le sugieres acciones, no le haces hablar.',
   ].join(' ');
+  const own = f.why !== null;
   const facts = [
     `Personaje: ${f.name}.`,
-    `Mundo (premisa): ${f.premise}`,
-    `Tono: ${f.tone_line}`,
+    own ? '' : `Mundo (premisa): ${f.premise}`,
+    own ? '' : `Tono: ${f.tone_line}`,
     `Momento: ${f.when}.`,
     `Lugar: ${f.spot}${f.location && f.location !== f.spot ? `, en ${f.location}` : ''}. ${f.description}`,
-    f.why ? `Por qué está aquí: ${f.why}` : `Origen (en tercera persona): ${f.origin ?? 'acaba de llegar.'}`,
-    f.wants ? `Qué quiere: ${f.wants}` : '',
+    own ? `Por qué está aquí: ${f.why}` : `Origen (en tercera persona): ${f.origin ?? 'acaba de llegar.'}`,
     f.threat ? `Qué le amenaza: ${f.threat}` : '',
     f.clock ? `Plazo: ${f.clock.days} días; si vence, ${lowerFirst(f.clock.runs_out, f.names)}` : '',
-    f.antagonist ? `Conoce a su antagonista: ${f.antagonist.name} (${f.antagonist.role}).` : '',
+    f.antagonist ? `Su antagonista: ${f.antagonist.name} (${f.antagonist.role}). Es el único que sale por su nombre, y la primera vez con lo que es.` : '',
   ].filter(Boolean);
   const prompt = [
     '## Prólogo',
     'Datos (son todo lo que el personaje sabe; no añadas hechos, secretos ni nombres que no estén aquí):',
     ...facts.map((x) => `- ${x}`),
     '',
-    `Escribe el prólogo: ${PROLOGUE_WORDS.min}-${PROLOGUE_WORDS.max} palabras, tres párrafos cortos separados por una línea en blanco.`,
-    '1) El mundo y su tono en dos o tres frases. 2) El lugar y el momento, con uno o dos detalles concretos. 3) Por qué está aquí, qué quiere, qué le amenaza y cuánto tiempo tiene.',
-    f.why ? 'En segunda persona y en presente («Estás…», «Quieres…»).' : `En tercera persona y en presente, con el nombre de ${f.name}.`,
+    own
+      ? `Escribe el prólogo: ${PROLOGUE_WORDS.min}-${PROLOGUE_WORDS.max} palabras, dos párrafos cortos separados por una línea en blanco. 1) Dónde está y cuándo, con un detalle concreto del sitio. 2) Por qué está aquí, qué le amenaza y cuánto tiempo tiene. Nada de la historia del lugar ni de su pasado: eso se descubre jugando. A la gente, por su oficio («la posadera», «la curandera»), salvo el antagonista.`
+      : `Escribe el prólogo: ${PROLOGUE_WORDS.min}-${PROLOGUE_WORDS.max} palabras, tres párrafos cortos separados por una línea en blanco. 1) El mundo y su tono en dos frases. 2) El lugar y el momento, con un detalle concreto. 3) Quién es y de dónde viene.`,
+    own ? 'En segunda persona y en presente («Estás…», «Tienes…»).' : `En tercera persona y en presente, con el nombre de ${f.name}.`,
     'Sin título (ya lo pone la página), sin listas ni negritas, sin pregunta final, sin contar lo que pasa en el primer instante: eso lo narra la escena que viene después.',
     'Devuelve solo el texto del prólogo.',
   ].join('\n');
@@ -173,12 +186,17 @@ export function prologuePrompt(f: PrologueFacts): { system: string; prompt: stri
 export function acceptPrologue(text: string | null | undefined): string | null {
   const t = (text ?? '').replace(/^#+\s.*\n+/, '').trim();
   const n = wordCount(t);
-  return n >= PROLOGUE_WORDS.min - 30 && n <= PROLOGUE_WORDS.max + 60 ? t : null;
+  return n >= PROLOGUE_WORDS.min - 20 && n <= PROLOGUE_WORDS.max + 40 ? t : null;
 }
 
 /** Cualquier nombre que el personaje no conoce, por su oficio (como en el resto de la partida). */
 export function forReader(engine: Engine, c: Character, text: string): string {
   return maskUnknownNames(engine.world, c.id, text);
+}
+
+/** El prólogo para el lector: por su nombre solo el antagonista; el resto, por su oficio, aunque lo conozca. */
+export function forPrologue(c: Character, engine: Engine, text: string): string {
+  return maskNpcNames(engine.world, text, prologueNamed(c));
 }
 
 // ---------------------------------------------------------------------------

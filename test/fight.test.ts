@@ -112,6 +112,16 @@ describe('encuentro (encounter.ts)', () => {
     expect(at(engine, loc)).toBeNull();
   });
 
+  it('acaba también cuando caen todos los PJ que pelearon, aunque el NPC siga en pie', async () => {
+    const { engine, time, kael, brenna, loc } = await bar();
+    strike(engine, kael.id, brenna.id);
+    kael.status = 'unconscious'; kael.hp_current = 0;
+    expect(at(engine, loc)).not.toBeNull();
+    time.advanceGame(COMBAT_SETTLE_S);
+    expect(at(engine, loc)).toBeNull();
+    expect(brenna.status).toBe('alive');
+  });
+
   it('con golpes entre PJ sigue aunque no quede ningún NPC en pie', async () => {
     const { engine, kael, mira, brenna, loc } = await bar();
     strike(engine, kael.id, brenna.id);

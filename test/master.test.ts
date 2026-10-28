@@ -161,6 +161,11 @@ describe('Master', () => {
     const inv = await engine.act('ch_kael', 'inventario');
     expect(inv.text).toContain('Manos:');
     expect(requests).toHaveLength(1);
+    // «dónde», sola, es la orden; «¿dónde está el granero?» es una pregunta a quien tiene delante: al master.
+    expect((await engine.act('ch_kael', 'dónde')).text).toContain(' → ');
+    expect(requests).toHaveLength(1);
+    expect((await engine.act('ch_kael', 'Dónde está el granero?')).text).not.toContain(' → ');
+    expect(requests).toHaveLength(2);
   });
 
   it('un rechazo del modelo se comunica en ficción', async () => {

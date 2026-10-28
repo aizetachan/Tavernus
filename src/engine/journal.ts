@@ -38,7 +38,7 @@ import type { DialogueLine } from './moments.js';
 import { maskUnknownNames, roleLabel } from './narrate.js';
 import { activeJobs } from './progress.js';
 import { rumorsHeardBy, rumorsIn, type Rumor } from './rumors.js';
-import { characterStory, difficultyOf, heardLine, mainQuestFor, nameFor, questsOf, storyRumors, type QuestDifficulty, type QuestLogEntry, type StoryQuest } from './story.js';
+import { characterStory, difficultyOf, mainQuestFor, nameFor, questsOf, type QuestDifficulty, type QuestLogEntry, type StoryQuest } from './story.js';
 import { boardSeen, droppedAt, givenQuests } from './quests.js';
 
 /** `ready`: lista para entregar a quien la recibe; `declined`: se la pidieron y dijo que no. */
@@ -82,7 +82,7 @@ export interface JournalRumor {
 export interface JournalQuest {
   id: Id;
   /** `lead`: una pista que lleva a alguien (algo que hemos oído), antes de que nos pidan nada. */
-  kind: 'main' | 'job' | 'achievement' | 'debt' | 'story' | 'given' | 'lead';
+  kind: 'main' | 'job' | 'achievement' | 'debt' | 'story' | 'given';
   /** Se puede dejar desde el Diario (encargos del tablón y misiones dadas, en curso). */
   droppable?: boolean;
   /** Historia escrita: nivel de la misión y su dificultad para el PJ (el color del Diario). */
@@ -503,21 +503,9 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     });
   }
 
-  // Lo que hemos oído y lleva a alguien: una pista en el Diario, hacia quien la da, sin contar de qué va.
-  for (const r of storyRumors(w, c)) {
-    const g = r.quest.giver_npc_id ? w.npc(r.quest.giver_npc_id) : null;
-    const who = g ? npcLabel(c, g) : 'alguien';
-    const heard = masked(heardLine(r.text));
-    quests.push({
-      id: `lead:${r.quest.id}`, kind: 'lead', title: `Buscar ${/^el /.test(who) ? `al ${who.slice(3)}` : `a ${who}`}`, text: `${heard}.`, status: 'active',
-      giver: null, giver_npc_id: g?.id ?? null, reward: null, origin: { kind: 'heard', text: masked(r.text), where: null },
-      history: [{ key: `lead:${r.quest.id}`, ...at(r.game_s), kind: 'added', text: heard, why: null }],
-      seen_game_s: r.game_s, seen: fmt(r.game_s), completed_game_s: null, completed: null, updated_game_s: r.game_s, updated: fmt(r.game_s),
-      steps: [{ text: `Hablar con ${who}`, done: false }], clock: null, antagonist: null, paths: [], rumors: [], pinned: false, summary: EMPTY_SUMMARY(),
-    });
-  }
+  // Lo que se oye por ahí no entra en el Diario: es una línea de ambiente en el hilo y una marca en el mapa.
 
-  // Abiertas primero (en curso, listas, pistas); las rechazadas, caducadas y fallidas, al final.
+  // Abiertas primero (en curso, listas); las rechazadas, caducadas y fallidas, al final.
   const closed = (q: JournalQuest) => Number(q.status === 'expired' || q.status === 'failed' || q.status === 'declined');
   const byRecent = (x: JournalQuest, y: JournalQuest) => Number(y.pinned) - Number(x.pinned) || closed(x) - closed(y) || y.updated_game_s - x.updated_game_s || x.title.localeCompare(y.title);
   const active = quests.filter((q) => q.status !== 'completed').sort(byRecent);

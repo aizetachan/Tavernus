@@ -52,8 +52,8 @@ export function noticeOf(e: NoticeEvent, readerId: Id | null = e.actor_id ?? nul
   if (e.action_type === 'board') return webNotice('Hay avisos nuevos en el tablón de la plaza: pásate a leerlos');
   const q = e.payload?.['quest'] as QuestChange | undefined;
   if (/^progress_/.test(e.action_type) && q && QUEST_HEAD[q.event]) {
-    // Un rumor no dice de qué va la misión: solo a quién buscar.
-    if (q.event === 'rumor') return { text: `${QUEST_HEAD.rumor}: ${q.why}`, link: 'ver en el Diario', tab: 'journal', quest: { id: q.id, event: q.event, why: '' } };
+    // Un rumor es lo que se oye en el sitio: una línea de ambiente, sin enlace ni entrada en el Diario.
+    if (q.event === 'rumor') return webNotice(q.why);
     if (q.event === 'warned' || q.event === 'failed') return { text: `${QUEST_HEAD[q.event]} · «${q.title}»`, link: 'ver en el Diario', tab: 'journal', quest: { id: q.id, event: q.event, why: q.why.charAt(0).toUpperCase() + q.why.slice(1) } };
     const what = q.event === 'step' && q.step ? `${q.title}: ${q.step}` : `«${q.title}»`;
     return { text: `${QUEST_HEAD[q.event]} · ${what}`, link: 'ver en el Diario', tab: 'journal', quest: { id: q.id, event: q.event, why: q.why.charAt(0).toUpperCase() + q.why.slice(1), ...(q.declinable ? { declinable: true } : {}) } };

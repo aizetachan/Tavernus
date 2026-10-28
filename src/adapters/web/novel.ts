@@ -581,7 +581,9 @@ export const NOVEL_JS = String.raw`
     var div = document.createElement('article');
     div.className = 'msg chapter ' + m.chapter.kind;
     div.setAttribute('data-seq', String(m.seq));
-    div.innerHTML = '<div class="who"><span class="kicker"></span></div><h2></h2><div class="body">' + format(m.text) + '</div>' + CHAPTER_ORNAMENT;
+    // El prólogo remata con el arranque de la partida.
+    div.innerHTML = '<div class="who"><span class="kicker"></span></div><h2></h2><div class="body">' + format(m.text) + '</div>' + CHAPTER_ORNAMENT +
+      (m.chapter.kind === 'prologue' ? '<p class="start">Empieza tu aventura</p>' : '');
     div.querySelector('.kicker').textContent = CHAPTER_KICKER[m.chapter.kind] || '';
     div.querySelector('h2').textContent = m.chapter.title;
     log.appendChild(div);

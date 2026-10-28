@@ -24,8 +24,8 @@
  *     jugador puede decir que no (`decline`) y el Diario lo apunta.
  *   - **Activa** → **lista para entregar** → **entregada**: la recompensa la da
  *     quien la recibe (`turn_in_npc_id`, por defecto quien la dio), al hablar.
- *   Lo que se oye por ahí (`rumor`) entra en el Diario como una pista hacia quien
- *   la da, sin contar de qué va. La misión principal (`main_for`) es un problema
+ *   Lo que se oye por ahí (`rumor`) es una línea de ambiente en el hilo que dice
+ *   a quién buscar, sin contar de qué va; no entra en el Diario. La misión principal (`main_for`) es un problema
  *   con varias pistas: cada paso opcional (`optional`) aparece en el Diario
  *   cuando alguien la menciona o algo la abre (`revealed_by`), se siguen en
  *   cualquier orden y llevan al cierre del acto. Los plazos (`deadline`) van por

@@ -8,9 +8,10 @@
  *     resuelto o daño aplicado por el máster) cae dentro de COMBAT_WINDOW_S de
  *     juego, como la escena tensa del motor (scene.ts, Engine.recentTags).
  *   - Empieza en el primero de la cadena de eventos de combate sin huecos
- *     mayores que esa ventana; acaba cuando pasa la ventana sin ninguno o
- *     cuando caen todos los NPC del combate (y no hubo golpes entre PJ), tras
- *     COMBAT_SETTLE_S para que se vea el golpe final.
+ *     mayores que esa ventana; acaba cuando pasa la ventana sin ninguno, cuando
+ *     caen todos los NPC del combate (y no hubo golpes entre PJ) o cuando caen
+ *     todos los PJ que pelearon, tras COMBAT_SETTLE_S para que se vea el golpe
+ *     final.
  *   - Combatientes: los PJ del sitio que juegan (conectados o ausentes, como en
  *     las rondas) o que han golpeado o recibido; los NPC que atacan o reciben
  *     golpes y los NPC vivos con bloque de combate hostiles a alguno de ellos.
@@ -165,6 +166,9 @@ export function encounterAt(world: World, events: readonly GameEvent[], location
   // Caídos todos los NPC del combate (y sin golpes entre PJ): se acabó, aunque la ventana siga abierta.
   const pvp = log.some((x) => x.kind === 'attack' && world.characters.has(x.actor_id) && world.characters.has(x.target_id));
   if (npcs.length && !pvp && npcs.every((n) => n.status !== 'alive') && nowGameS - last.timestamp_game_s >= COMBAT_SETTLE_S) return null;
+  // Caídos todos los PJ que pelearon (en el suelo o muertos): también se acabó; los NPC no rematan a quien está caído.
+  const fought = pcs.filter((c) => involved.has(c.id));
+  if (fought.length && fought.every((c) => c.status === 'unconscious' || c.status === 'dead') && nowGameS - last.timestamp_game_s >= COMBAT_SETTLE_S) return null;
 
   const rng = (id: Id) => seededRng(hash(`${first.id}:${id}`));
   const roll = (id: Id, mod: number) => 1 + Math.floor(rng(id)() * 20) + mod;

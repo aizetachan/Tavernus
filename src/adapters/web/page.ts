@@ -648,11 +648,8 @@ export const PAGE = String.raw`<!doctype html>
   .msg.notice.q-failed > span:first-child::before, .msg.notice.q-expired > span:first-child::before, .msg.notice.q-dropped > span:first-child::before { content: '✕ '; color: var(--faint); }
   .msg.notice.q-failed, .msg.notice.q-expired, .msg.notice.q-dropped, .msg.notice.q-declined { border-color: var(--sep); background: #161a1b; }
   .qi.declined { color: var(--faint); opacity: .7; }
-  .qi.lead { background: rgba(255,255,255,.05); color: var(--accent); }
   .msg.notice.q-warned > span:first-child::before { content: '⏳ '; }
   .msg.notice.q-warned { border-color: rgba(255,157,148,.5); }
-  .msg.notice.q-rumor { border-style: dashed; background: #1a1813; }
-  .msg.notice.q-rumor > span:first-child::before { content: '“ '; color: var(--accent); }
   .msg.notice .why { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--muted); }
   .msg.notice.q-level { max-width: min(94%, 560px); padding: 9px 16px 10px; border-color: rgba(230,183,90,.7); background: linear-gradient(180deg, #2a2210, #1f1b12); box-shadow: 0 0 18px rgba(230,183,90,.12); }
   .msg.notice.q-level > span:first-child { font: 700 14.5px/1.3 var(--display); color: #f1d9a4; }
@@ -722,6 +719,7 @@ ${FIGHT_STYLE}
   /* El prólogo, como la página de un libro: sin caja; al final, un ornamento dorado separa el libro del narrador. */
   .msg.chapter { border-radius: 0; background: none; box-shadow: none; }
   .msg.chapter .orn { display: flex; justify-content: center; margin: 14px 0 0; color: var(--accent); }
+  .msg.chapter .start { margin: 4px 0 0; text-align: center; font: 700 12px/1.4 var(--display); letter-spacing: .22em; text-transform: uppercase; color: var(--accent); }
   .msg.chapter .orn svg { width: 200px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .msg.chapter h2 { font: 800 22px/1.25 var(--display); letter-spacing: -.02em; }
   .msg.chapter .body { font: 16px/1.65 var(--sans); background: none; box-shadow: none; text-align: left; hyphens: manual; }
@@ -1056,7 +1054,6 @@ ${FIGHT_STYLE}
   <symbol id="i-q-active" viewBox="0 0 24 24"><path d="M6 21V4M6 4h10l-2 4 2 4H6"/></symbol>
   <symbol id="i-q-completed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9.5"/></symbol>
   <symbol id="i-q-declined" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M6 18L18 6"/></symbol>
-  <symbol id="i-q-lead" viewBox="0 0 24 24"><path d="M4 12h12M12 6l6 6-6 6"/></symbol>
   <symbol id="i-q-ready" viewBox="0 0 24 24"><path d="M8.5 8.5a3.5 3.5 0 1 1 5 3.2c-1 .5-1.5 1.2-1.5 2.3v.5M12 18.5v.01"/></symbol>
   <symbol id="i-q-failed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></symbol>
   <symbol id="i-q-expired" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9"/></symbol>
@@ -2733,31 +2730,30 @@ ${FIGHT_SCRIPT}
   /** La seguida: la que eligió el jugador si sigue abierta; si no, la principal o la primera en curso. */
   function trackedQuest(j) {
     var qs = j.quests.active, id = store(trackKey());
-    var live = qs.filter(function (x) { return (x.status === 'active' || x.status === 'ready') && x.kind !== 'lead'; });
-    var open = function (x) { return x.status !== 'expired' && x.status !== 'failed' && x.status !== 'declined' && x.kind !== 'lead'; };
+    var live = qs.filter(function (x) { return (x.status === 'active' || x.status === 'ready') ; });
+    var open = function (x) { return x.status !== 'expired' && x.status !== 'failed' && x.status !== 'declined'; };
     return qs.filter(function (x) { return x.id === id && open(x); })[0] || live.filter(function (x) { return x.kind === 'main'; })[0] || live[0] || qs.filter(open)[0] || null;
   }
   function questIcon(q, isNew) {
-    var st = q.kind === 'lead' ? 'lead' : q.status;
-    return '<span class="qi ' + st + (q.kind === 'main' && q.status === 'active' ? ' main' : '') + '" title="' + escapeHtml(q.kind === 'lead' ? 'pista' : JSTATUS[q.status] || q.status) + '"><svg class="i"><use href="#i-q-' + st + '"/></svg>' +
+    var st = q.status;
+    return '<span class="qi ' + st + (q.kind === 'main' && q.status === 'active' ? ' main' : '') + '" title="' + escapeHtml(JSTATUS[q.status] || q.status) + '"><svg class="i"><use href="#i-q-' + st + '"/></svg>' +
       (isNew ? '<span class="nw"><svg class="i"><use href="#i-spark"/></svg></span>' : '') + '</span>';
   }
   function questHtml(q, ctx) {
     var isNew = ctx && ctx.fresh.indexOf(q.id) >= 0, tracked = ctx && ctx.tracked === q.id;
     var o = q.origin, changed = ctx ? ctx.unseen.filter(function (c) { return (q.history || []).some(function (x) { return x.key === c.key; }); }) : [];
-    var whence = q.kind === 'main' ? 'misión principal' : q.kind === 'achievement' ? 'logro' : q.kind === 'debt' ? 'deuda' : q.kind === 'lead' ? 'lo hemos oído'
+    var whence = q.kind === 'main' ? 'misión principal' : q.kind === 'achievement' ? 'logro' : q.kind === 'debt' ? 'deuda'
       : o && o.kind === 'heard' ? 'de oídas' : o && o.kind === 'board' ? 'tablón' + (q.giver ? ' · lo pide ' + q.giver : '') : q.giver ? 'nos lo pidió ' + q.giver : o && o.kind === 'self' ? 'por tu cuenta' : '';
-    var sub = q.kind === 'lead' ? 'pista · ' + whence : [JSTATUS[q.status] || q.status, whence].filter(Boolean).join(' · ');
+    var sub = [JSTATUS[q.status] || q.status, whence].filter(Boolean).join(' · ');
     var lv = q.level ? '<span class="lv d-' + q.difficulty + '" title="Nivel ' + q.level + ': ' + escapeHtml(JDIFF[q.difficulty] || '') + '">Nv ' + q.level + '</span>' : '';
     var open = tracked || isNew || changed.length > 0;
     var h = '<details class="q ' + q.status + (q.kind === 'main' ? ' main' : '') + (isNew ? ' isnew' : '') + '"' + (open ? ' open' : '') + '><summary>' + questIcon(q, isNew) +
       '<span class="tt"><b>' + escapeHtml(q.title) + (isNew ? '<span class="pill-new">Nueva</span>' : '') + '</b><small>' + lv + escapeHtml(sub) + '</small></span>' +
-      (!LIVE[q.status] || q.kind === 'lead' ? '' : '<button type="button" class="trk' + (tracked ? ' on' : '') + '" data-track="' + escapeHtml(q.id) + '" title="' + (tracked ? 'La sigues en el panel' : 'Seguir en el panel') + '" aria-pressed="' + tracked + '"><svg class="i"><use href="#i-star"/></svg></button>') +
+      (!LIVE[q.status] ? '' : '<button type="button" class="trk' + (tracked ? ' on' : '') + '" data-track="' + escapeHtml(q.id) + '" title="' + (tracked ? 'La sigues en el panel' : 'Seguir en el panel') + '" aria-pressed="' + tracked + '"><svg class="i"><use href="#i-star"/></svg></button>') +
       CHEV + '</summary><div class="qb">';
     var s = q.summary || { text: q.text, next: null, told: [] };
-    if (q.kind === 'lead') h += '<p class="sum">' + escapeHtml(q.text) + '</p>';
-    else if (s.text) h += '<p class="sum">' + escapeHtml(s.text) + '</p>';
-    if (s.next || q.kind === 'lead') h += '<div class="now">' + escapeHtml(s.next || q.steps[0].text) + '</div>';
+    if (s.text) h += '<p class="sum">' + escapeHtml(s.text) + '</p>';
+    if (s.next) h += '<div class="now">' + escapeHtml(s.next) + '</div>';
     if (q.declinable) h += answerHtml(q.id);
     if (q.clock && q.status !== 'completed') {
       var late = q.clock.days_left <= 0;

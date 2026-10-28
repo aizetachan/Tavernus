@@ -89,7 +89,7 @@ const quest = (engine: Engine, id: string) => storyOf(engine.world)!.quests.find
 const status = (engine: Engine, c: Character, id: string) => questStatus(engine.world, c, quest(engine, id));
 
 describe('una misión entra en el Diario al enterarse en escena', () => {
-  it('«La cena del portón»: lo oído es una pista hacia Brenna; ella la pide al hablar (entra activa), se da en mano y cobra quien la encargó', async () => {
+  it('«La cena del portón»: lo oído es una línea de ambiente que lleva a Brenna; ella la pide al hablar (entra activa), se da en mano y cobra quien la encargó', async () => {
     const { engine, time } = await boot();
     const c = await newPc(engine, 'Nia');
     // Antes de oír nada, nada flota sobre nadie: tener una misión disponible no se ve.
@@ -97,11 +97,11 @@ describe('una misión entra en el Diario al enterarse en escena', () => {
     await engine.tick();
     expect(characterStory(c).open).toEqual(['q_main_deuda']);
     expect(status(engine, c, 'q_cena_doro')).toBe('available');
-    // Lo que se oye entra en el Diario como una pista que lleva a Brenna, sin contar de qué va.
+    // Lo que se oye es una línea de ambiente en el hilo, sin enlace ni entrada en el Diario, y sin contar de qué va.
     const rumor = lastQuest(engine, c, 'q_cena_doro');
-    expect(noticeOf(rumor)).toMatchObject({ text: 'Hemos oído algo: En la barra dicen que Brenna busca a alguien de fiar para un recado', quest: { event: 'rumor' } });
+    expect(noticeOf(rumor)).toEqual({ text: 'En la barra dicen que Brenna busca a alguien de fiar para un recado' });
     expect(rumor.narration_private).not.toMatch(/Doro|cena/);
-    expect(journalQuest(engine, c, 'lead:q_cena_doro')).toMatchObject({ kind: 'lead', title: 'Buscar a Brenna', text: 'Hemos oído en la barra que Brenna busca a alguien de fiar para un recado.', steps: [{ text: 'Hablar con Brenna', done: false }] });
+    expect(journalQuest(engine, c, 'lead:q_cena_doro')).toBeUndefined();
     // El punto discreto: una pista activa lleva a Brenna.
     expect(boardState(engine, c.id).presences.find((p) => p.id === 'npc_brenna')?.lead).toBe(true);
 

@@ -254,12 +254,17 @@ function isCommonWord(world: World, name: string): boolean {
 export function maskUnknownNames(world: World, readerId: Id, text: string, keep: readonly Id[] = [], authored = false): string {
   const reader = world.characters.get(readerId);
   if (!reader) return text;
+  return maskNpcNames(world, text, [...reader.knows, ...keep], authored);
+}
+
+/** Lo mismo con la lista de quienes salen por su nombre dada: todo otro NPC, por su descripción. */
+export function maskNpcNames(world: World, text: string, named: readonly Id[], authored = false): string {
   // Lo citado son palabras de alguien: un nombre dicho en voz alta se oye tal cual.
-  if (/«[^»]*»/.test(text)) return text.split(/(«[^»]*»)/).map((part, i) => (i % 2 ? part : maskUnknownNames(world, readerId, part, keep, authored))).join('');
+  if (/«[^»]*»/.test(text)) return text.split(/(«[^»]*»)/).map((part, i) => (i % 2 ? part : maskNpcNames(world, part, named, authored))).join('');
   let out = text;
   // Los PJ de la partida se conocen siempre por su nombre: solo se enmascaran NPC.
   for (const n of world.npcs.values()) {
-    if (reader.knows.includes(n.id) || keep.includes(n.id)) continue;
+    if (named.includes(n.id)) continue;
     const desc = descriptorOf(world, n.id);
     const long = roleLabel(n, true);
     const common = !authored && isCommonWord(world, n.name);

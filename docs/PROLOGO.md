@@ -16,9 +16,17 @@ desde el último evento visto, pero no le recuerda su propia historia.
 
 ## Qué cuenta el prólogo
 
-Cuatro cosas, en este orden, y nada más:
+**Desde el 28-10, con situación inicial, solo lo suyo.** La primera versión abría con la historia del sitio
+(la premisa) y nombraba a gente que el jugador aún no ha visto: en Brezal, el incendio de Vharn y «Brenna te
+dio cama» antes de saber quién es Brenna. Ahora, con situación, son dos párrafos: **dónde está y cuándo**, y
+**por qué está aquí, qué le amenaza y cuánto tiempo tiene**. Ni la premisa ni el tono ni lo que quiere
+(`wants`, que ya está en el Diario como su misión principal): la historia del sitio se descubre jugando.
+Debajo del remate, la página dice «Empieza tu aventura». Sin situación (la demo), sigue como abajo: mundo,
+lugar y origen.
 
-1. **El mundo y su tono, en dos o tres frases.** Sale de lo que el mundo enseña a cualquiera: la
+Lo que entra, en este orden:
+
+1. **El mundo y su tono, en dos o tres frases (solo sin situación).** Sale de lo que el mundo enseña a cualquiera: la
    premisa de la campaña (`campaign.premise`) y una frase de tono según `campaign.tone`. **La Biblia
    no entra.** Son las verdades ocultas que explican pistas y secretos (quién enterró a quién, quién
    no es quien dice), y el prólogo las desvelaría el primer minuto. Lo mismo vale para `npc.secret`,
@@ -35,9 +43,11 @@ Cuatro cosas, en este orden, y nada más:
 No cuenta los **caminos** (`paths`). Son decisiones del jugador y nombran a gente que aún no conoce.
 Tampoco cuenta el **primer instante** (`opening`), que es justo lo que abre la primera escena.
 
-**Nombres.** Solo aparecen los que el personaje conoce (`character.knows`). `claimSituation` le hace
-conocer a su antagonista, así que ese sí sale. Cualquier otro nombre de NPC o PJ que se cuele, por
-plantilla o por el máster, pasa por `maskUnknownNames` y queda como su oficio («el portero»).
+**Nombres.** Por su nombre solo sale el **antagonista**, presentado por lo que es («Garrán, el alguacil
+del regidor»). El resto de NPC, por su oficio («la tabernera te dio cama»), aunque la situación diga que
+el personaje los conoce: el jugador todavía no les ha puesto cara. Los datos se pasan ya enmascarados al
+máster y a la plantilla (`maskNpcNames` con el antagonista como única excepción), y el texto final pasa
+otra vez por el mismo filtro (`forPrologue`). Los PJ se nombran siempre.
 
 ## Con qué voz
 
@@ -58,8 +68,9 @@ empieza en el instante siguiente y no repite nada del prólogo.
 
 ## Cuánto mide
 
-**Entre 120 y 200 palabras.** Menos se queda en una frase de bienvenida. Más ya es leer un capítulo
-antes de poder jugar. Son tres párrafos cortos: mundo; lugar y momento; porqué, amenaza y reloj.
+**Entre 60 y 120 palabras** (antes 120-200). Lo justo para situarse y empezar a jugar. Con situación,
+dos párrafos: lugar y momento; porqué, amenaza y reloj. Sin ella, tres: mundo; lugar y momento; origen.
+Se acepta lo del máster entre 40 y 160 palabras; fuera de eso, la plantilla.
 
 ## Cómo se genera
 
