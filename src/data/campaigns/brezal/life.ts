@@ -108,7 +108,7 @@ export const HOOKS: AuthoredHook[] = [
   { id: 'hk_lindero', location_id: 'loc_lindero', trigger: { kind: 'location' },
     what: 'Al llegar al Lindero por primera vez: el viento mueve las ramas pero no la niebla, que no huele a nada y apaga los sonidos. Junto a la barricada hay huellas que entran en la niebla y salen por el mismo sitio. Si el PJ intenta cruzarla, el motor lo resuelve solo (sale por donde entró, una hora después): no lo narres tú.' },
   { id: 'hk_garran_primera', location_id: 'loc_taberna', trigger: { kind: 'time', after_hours: 1.5 }, expires_hours: 4,
-    what: 'Garrán entra en el Jabalí sacudiéndose la ceniza de los hombros, pide cerveza sin pagar y mira uno por uno a los forasteros, como quien cuenta deudas.' },
+    what: 'Garrán se planta en la barra del Jabalí, se sacude la ceniza de los hombros, pide cerveza sin pagar y mira uno por uno a los forasteros, como quien cuenta deudas.' },
 ];
 
 /** Encuentros de camino por tipo de zona: el máster pone el detalle. Toda la demo es aldea. */

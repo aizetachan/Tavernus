@@ -254,9 +254,9 @@ export const SITUATIONS: NonNullable<Campaign['situations']> = [
     for_name: '', keep: true,
     situation: {
       id: 'sit_deuda',
-      why_here: 'Llegaste a Brezal la víspera de que bajara la niebla, con fiebre y una herida de camino. Brenna te dio cama y la curandera te cosió; no tenías con qué pagar, y ahora tampoco tienes por dónde irte.',
-      wants: 'Saldar lo que debes y salir del valle en cuanto la niebla lo permita, antes de que se te pegue su ceniza.',
-      threat: 'Garrán, el alguacil del regidor, ha comprado tu deuda a Brenna. O pagas en tres días, o trabajas para el regidor: ir al Granero Quemado a «apagar las luces».',
+      why_here: 'Llegaste a Brezal la víspera de que bajara la niebla, con fiebre y una herida de camino. Brenna te dio cama y la curandera te cosió; no tenías con qué pagar, y la cuenta se quedó apuntada en el Jabalí.',
+      wants: 'Salir de la aldea: averiguar qué es la niebla y cómo cruzarla, sin que el regidor te cobre antes la deuda a su manera.',
+      threat: 'El regidor le ha comprado tu deuda a Brenna y Garrán, su alguacil, la cobra en su nombre. O pagas en tres días, o trabajas para el regidor: ir al Granero Quemado a «apagar las luces».',
       clock_days: 3, clock_runs_out: 'Garrán te quita lo que llevas de valor y te manda al Granero Quemado con una lanza en la espalda.',
       antagonist_npc_id: 'npc_garran', start_spot_id: 'sp_tab_mesa', start_hour: 18,
       paths: [
@@ -264,8 +264,8 @@ export const SITUATIONS: NonNullable<Campaign['situations']> = [
         'Aceptar el encargo del regidor e ir al Granero Quemado a ver qué hay.',
         'Averiguar por qué el regidor quiere gente en el granero y usarlo contra él.',
       ],
-      opening: 'Garrán deja caer en tu mesa una tablilla con tu nombre y una cifra, 300, y se sienta enfrente a esperar. «Tres días», dice, y te bebe la cerveza. «Y no pienses en la niebla: los deudores no pueden huir. Mejor».',
-      debt: { npc_id: 'npc_garran', amount: 300, reason: 'la cama, la comida y la curandera del Jabalí; la deuda la compró el regidor' },
+      opening: 'Garrán deja caer en tu mesa una tablilla con tu nombre y una cifra, 300, y se sienta enfrente a esperar. «Lo tuyo ahora es del regidor, y lo cobro yo. Tres días», dice, y te bebe la cerveza. «Y no pienses en la niebla: los deudores no pueden huir. Mejor».',
+      debt: { npc_id: 'npc_garran', on_behalf_of: 'npc_osric', amount: 300, reason: 'la cama, la comida y la curandera del Jabalí; el regidor compró la deuda y Garrán la cobra en su nombre' },
       knows: ['npc_brenna', 'npc_garran'],
       with_npc_ids: ['npc_garran'],
     },

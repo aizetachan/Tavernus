@@ -69,7 +69,7 @@ describe('misiones: alta coherente', () => {
     await engine.tick();
     await engine.tick();
     // Empieza en el Jabalí: se oye que Brenna busca a alguien; la misión no se abre.
-    expect(characterStory(c).open).toEqual(['q_main_deuda']);
+    expect(characterStory(c).open).toEqual(['q_main_salir']);
     expect(Object.keys(characterStory(c).rumors ?? {})).toEqual(expect.arrayContaining(['q_cena_doro', 'q_perro']));
     const j = journalOf(engine, c.id);
     expect(j.quests.active.some((q) => q.id === 'q_perro')).toBe(false);
@@ -149,6 +149,8 @@ describe('misiones: avance por lo que hace el PJ', () => {
     expect(ctx.progress.map((e) => e.quest).filter(Boolean)).toEqual([
       { id: 'q_agua', title: 'El agua turbia', event: 'step', step: 'Darle el agua a Ilse, la curandera', why: 'Ilse ya tiene agua del pozo' },
       { id: 'q_agua', title: 'El agua turbia', event: 'ready', why: 'tenemos que volver con Ilse' },
+      // Lo que cuenta Ilse del agua explica la niebla: el primer paso de «Salir de la aldea».
+      { id: 'q_main_salir', title: 'Salir de la aldea', event: 'step', step: 'Averiguar qué es la niebla y cómo salir', why: 'conseguiste la pista «La Brasa de Vharn»' },
     ]);
     expect(c.clues).toContain('clue_ilse');
     await talkTo(engine, time, c, 'npc_ilse');
@@ -204,7 +206,7 @@ describe('misiones: «Donde lo dejamos»', () => {
     // «Ceniza» es también el nombre del perro: dentro del título no se cambia por «el perro».
     expect(text).toContain('«Ceniza se ha perdido»: buscar el rastro del perro en el Soto.');
     // La principal, con el acto en curso.
-    expect(text).toContain('La deuda con el regidor: librarte de la deuda con Garrán; quedan 3 días');
+    expect(text).toContain('Salir de la aldea: averiguar qué es la niebla y cómo salir; quedan 3 días');
   });
 });
 

@@ -35,10 +35,8 @@ describe('diario: misiones', () => {
     expect(jobs.map((q) => q.id).sort()).toEqual([...first].sort());
     expect(jobs.every((q) => q.status === 'available' && q.seen !== null && q.giver === 'Brenna')).toBe(true);
     expect(jobs.find((q) => q.id === 'job_lena')).toMatchObject({ reward: '6 de plata · +1 de reputación', steps: [{ text: 'Conseguir 10 × leña', done: false }, { text: 'Entregarlo a Brenna', done: false }] });
-    // El logro, con sus pistas como objetivos, sin desvelar las que faltan.
-    const ach = j.quests.active.find((q) => q.kind === 'achievement')!;
-    expect(ach.title).toBe('Quien ha mirado la ceniza');
-    expect(ach.steps.map((s) => s.text)).toEqual(['3 pistas más por descubrir', 'Reputación en la aldea de Brezal: 0 de 5']);
+    // El logro no sale hasta la primera pista: antes no dice nada.
+    expect(j.quests.active.some((q) => q.kind === 'achievement')).toBe(false);
 
     // Kael habla con Brenna y acepta el encargo de la leña.
     time.advanceGame(GAME_HOUR);
@@ -103,6 +101,8 @@ describe('diario: misiones', () => {
     const j = journalOf(engine, 'ch_kael');
     const ach = j.quests.active.find((q) => q.kind === 'achievement')!;
     expect(ach.status).toBe('active');
+    expect(ach.title).toBe('Quien ha mirado la ceniza');
+    expect(ach.text).toBe('Descubrir 3 pistas de lo que pasa y ganarte el respeto de la aldea de Brezal (reputación 5).');
     expect(ach.steps[0]).toEqual({ text: 'Pista: Ceniza en el agua del pozo', done: true });
     expect(ach.steps[1]!.text).toBe('2 pistas más por descubrir');
     const perro = j.quests.active.find((q) => q.id === 'job_perro');
@@ -137,7 +137,7 @@ describe('diario: misiones', () => {
 });
 
 describe('diario: resumen de misiones', () => {
-  it('cada misión trae un resumen: de qué va, qué toca ahora y lo relevante que le dijeron; la amenaza ya no es un objetivo', async () => {
+  it('cada misión trae un resumen: de qué va y qué toca ahora, sin citas de lo que le dijeron; la amenaza ya no es un objetivo', async () => {
     const time = fakeTime();
     const { engine } = await bootEngine(time);
     const kael = engine.world.character('ch_kael');
@@ -147,7 +147,7 @@ describe('diario: resumen de misiones', () => {
       paths: ['Plantarte ante Doro.'], opening: 'Te despiertas en la barra.', deadline_game_s: engine.gameNow() + 5 * GAME_DAY,
     };
     const job = activeJobs(engine.world).find((x) => x.giver_npc_id === 'npc_brenna')!;
-    // Hablar con quien pide el encargo: su respuesta entra en el resumen de ese encargo.
+    // Hablar con quien pide el encargo: lo que dice va en Charlas, no en la ficha del encargo.
     talk(engine, 'ch_kael', `Acepto: ${job.title}`, 'Brenna asiente.', [
       { speaker: 'actor', text: `Me encargo de ${job.title.toLowerCase()}.` }, { speaker: 'npc', npc_id: 'npc_brenna', text: 'Trato hecho. Vuelve antes del anochecer.' },
     ], ['master', 'social', 'job']);
@@ -158,7 +158,9 @@ describe('diario: resumen de misiones', () => {
     const mine = j.quests.active.find((q) => q.id === job.id)!;
     expect(mine.summary.text.length).toBeGreaterThan(0);
     expect(mine.summary.next).toBe(mine.steps.find((s) => !s.done)!.text);
-    expect(mine.summary.told).toEqual([expect.objectContaining({ said: 'Trato hecho. Vuelve antes del anochecer.' })]);
+    expect(mine.summary).toEqual({ text: mine.summary.text, next: mine.summary.next });
+    expect(JSON.stringify(mine)).not.toContain('Trato hecho');
+    expect(j.conversations.find((cv) => cv.npc_id === 'npc_brenna')?.exchanges.at(-1)?.replied).toContain('Trato hecho. Vuelve antes del anochecer.');
   });
 
   it('la vista web no manda al navegador los caminos, quién se opone, qué pasa si vence ni los rumores de cada misión', async () => {
@@ -306,7 +308,7 @@ describe('diario: web', () => {
     expect(ok.out.status).toBe(200);
     const j = JSON.parse(ok.out.body);
     expect(j.character).toEqual({ id: 'ch_kael', name: 'Kael' });
-    expect(j.quests.active.length).toBeGreaterThan(0);
+    expect(Array.isArray(j.quests.active)).toBe(true);
     expect(typeof j.version).toBe('string');
     const missing = fake();
     handleJournalRequest(engine, req, missing.res, new URL('http://localhost/api/journal?character=nadie'), 'demo');

@@ -103,7 +103,7 @@ describe('prólogo', () => {
     const f = prologueFacts(engine, c);
     const text = prologueTemplate(f);
     expect(text).toMatch(/^Es lunes 1 de Brotes, al caer la tarde\. Estás en la mesa del fondo/);
-    expect(text).toContain('Garrán, el alguacil del regidor');
+    expect(text).toContain('Garrán, su alguacil, la cobra en su nombre');
     expect(text).toContain('La tabernera te dio cama');
     expect(text).not.toMatch(/Brenna|Vharn|Hace veinte años/);
     const prompt = prologuePrompt(f).prompt;

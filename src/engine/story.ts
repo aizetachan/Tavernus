@@ -848,7 +848,8 @@ export function questLeads(world: World, c: Character): Set<Id> {
     else if (s === 'ready') { const t = turnInOf(c, q); if (t) leads.add(t); }
     else if (s === 'active') {
       for (const x of stepsOf(c, q)) {
-        if (st.steps.includes(stepKey(q, x)) || !stepVisible(world, c, q, x)) continue;
+        // Las pistas de la principal (pasos opcionales) no se señalan: las encuentra el jugador por su cuenta.
+        if (st.steps.includes(stepKey(q, x)) || !stepVisible(world, c, q, x) || (q.main_for && x.optional)) continue;
         for (const id of stepNpcs(world, x.done_when)) leads.add(id);
       }
     }

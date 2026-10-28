@@ -62,7 +62,7 @@ La demo de `src/data/seed/demo.ts` era un mundo de pruebas con alma de aventura:
 | Situación inicial por PJ con reloj y antagonista | no: un origen genérico | 3 situaciones por clase, las tres a 3 días, con antagonista, deuda u objeto **[cambia]** |
 | Horarios de NPC | 2 | los 11 vecinos **[cambia]** |
 | Eventos programados | 2 | 6 (mercado, diezmo, cena, misa, la escapada al granero de Tobías, la prueba de la niebla) **[cambia]** |
-| Deudas | no | la situación del deudor empieza con 300 monedas que debe a Garrán |
+| Deudas | no | la situación del deudor empieza con 300 monedas que debe al regidor y cobra Garrán en su nombre **[cambia, 28-10]** |
 | Rumores iniciales | no | 15 **[cambia]** |
 | Cuarto alquilable | no (la habitación era el premio oculto) | sí: visible, cerrado, Brenna vende la noche |
 | Encuentros de camino | tabla por defecto | tabla propia de aldea (toda la demo es aldea) **[cambia]** |
@@ -189,7 +189,7 @@ Cada pista dice qué revela (`how`) y por dónde se consigue (`sources`), con lo
 
 Las de sitio (`clue_pozo`, `clue_hacha`, `clue_trampilla`) se encuentran mirando, con su tirada. `test/confianza.test.ts` comprueba que ninguna clave sale en la primera charla con un extraño, ni tras una tirada buena.
 
-Logro «Quien ha mirado la ceniza» (3 pistas y 5 de reputación en la aldea): **+2 de reputación** y un anuncio público que solo cuenta lo cierto («Se corre la voz por Brezal: {name} ha mirado la ceniza de frente»). No regala contenido: **la trampilla y la llave de los Vharn**, que abre **el pasadizo bajo el altar del Granero**, salen de *Bajo el Jabalí*, con su escena (Brenna enseña la trampilla al dártela y te da la llave al entregarla). **[cambia, 2026-10-27]**
+Logro «Quien ha mirado la ceniza» (3 pistas y 5 de reputación en la aldea; en el Diario solo desde la primera pista, como «Descubrir 3 pistas de lo que pasa y ganarte el respeto de la aldea»): **+2 de reputación** y un anuncio público que solo cuenta lo cierto («Se corre la voz por Brezal: {name} ha mirado la ceniza de frente»). No regala contenido: **la trampilla y la llave de los Vharn**, que abre **el pasadizo bajo el altar del Granero**, salen de *Bajo el Jabalí*, con su escena (Brenna enseña la trampilla al dártela y te da la llave al entregarla). **[cambia, 2026-10-27]**
 
 ### 2.8 Misiones en tres actos **[cambia, 2026-10-27: misiones al estilo de Baldur's Gate 3]**
 
@@ -211,13 +211,13 @@ Los pasos de **llevar algo** se cumplen al dárselo en mano a esa persona (`npc_
 
 Los pasos se cumplen solos cuando el motor ve la condición; los marcados *(máster)* los marca el máster con `advance_story`. «Se entrega a» es quien da la recompensa. Las monedas van en cobre (1 de oro = 10 de plata = 100 de cobre), con la propuesta del bloque G.
 
-**Misión principal: un problema con varias pistas** (como «Find a Cure»). Una por situación inicial, activa desde el principio. Cada pista (`optional`) aparece en el Diario cuando alguien la menciona o algo la abre (`revealed_by`); se siguen en cualquier orden y todas llevan al cierre del acto (el Granero, o el libro de cuentas para el hijo del herrero) y de ahí al final.
+**Misión principal: un problema con varias pistas** (como «Find a Cure»). Una por situación inicial, activa desde el principio. Cada pista (`optional`) **no se le dice al jugador** (desde el 28-10): ni sale en el Diario hasta que la consigue por su cuenta, ni pone punto en el mapa sobre quien la tiene; el máster tampoco se la sopla. Lo que toca hacer (los pasos no opcionales: el Granero, el libro de cuentas, el final) sí sale cuando algo lo abre (`revealed_by`). Se siguen en cualquier orden y llevan al cierre del acto y de ahí al final.
 
 | Situación | Misión | Pistas (quién o qué la abre) | Cierre del acto | Final |
 |---|---|---|---|---|
 | La carta (y su compañero) | **La carta de Vharn** | el sello (Ilse, desde el principio) · el pozo (estar en la plaza) · Vharn (lo que contó Ilse, o el perro devuelto: Brenna) · las luces (conocer a Doro) · la cadena (lo que contó Ilse: Hugo) | el Granero Quemado (pista de Ysolde) | cualquier final |
 | El hijo del herrero (y su compañero: **Lo prometido**) | **Lo que dejó tu padre** | lo que guarda Hugo · lo que vio Brenna · las luces (Doro) | la prueba de la plata (el libro de cuentas) | cualquier final |
-| La deuda | **La deuda con el regidor** | las luces (Doro) · el cazador del Soto (Hal) | saldar la deuda y el Granero Quemado | cualquier final |
+| La deuda | **Salir de la aldea** **[cambia, 28-10]** | ninguna listada: 1. averiguar qué es la niebla y cómo salir (la pista de la Brasa, de Ilse) · 2. decidir qué pasa con el ascua · 3. cruzar la niebla hacia Valcruz | — (la deuda va aparte, con su plazo) | cualquier final; queda abierta: la niebla no se abre en la demo |
 
 **Acto I · Recados que presentan al pueblo** (nivel 1; cada uno deja presentado a quien lo encarga y a quien lo recibe; se alternan los tipos: llevar, preguntar, mirar, recoger)
 
@@ -265,9 +265,11 @@ Todas empiezan a las **18:00 del primer día**, con la misa del pozo dos horas d
 |---|---|---|---|---|---|---|---|
 | mago, hechicero, brujo, clérigo, druida, bardo | una carta lacrada con el sello de Vharn: «La Brasa despierta. Ven antes de que se cierre el valle»; llegó la víspera de la niebla (la carta la lleva encima) | saber quién la escribió y qué cerrojo ha cerrado el valle | Osric dice que es la maldición de Vharn y vigila a quien pregunta por el granero | 3 días: el ascua se suelta en la plaza | Osric | el pozo | Ilse ve el lacre y le agarra la muñeca |
 | guerrero, bárbaro, paladín, explorador, monje | su padre fue el herrero de Vharn; Hugo le llamó y llegó con el último carro | saber cómo murió su padre | Osric tiene a Hugo agarrado y quiere que funda lo que guarda | 3 días: la herrería cerrada y lo de su padre al crisol | Osric | el banco de la herrería | Hugo cierra la puerta; fuera se paran unas botas |
-| cualquier otra clase (pícaro…) | llegó herido la víspera de la niebla, Brenna le dio cama a crédito | saldar la deuda y salir del valle en cuanto se pueda | Garrán compró la deuda: 300 en 3 días o ir al granero a «apagar las luces» | 3 días | Garrán | la mesa del fondo | Garrán deja la tablilla: «Y no pienses en la niebla: los deudores no pueden huir» |
+| cualquier otra clase (pícaro…) | llegó herido la víspera de la niebla, Brenna le dio cama a crédito | salir de la aldea: averiguar qué es la niebla y cómo cruzarla, sin que el regidor le cobre antes la deuda a su manera | el regidor compró la deuda y Garrán, su alguacil, la cobra: 300 en 3 días o ir al granero a «apagar las luces» | 3 días | Garrán | la mesa del fondo | Garrán deja la tablilla: «Lo tuyo ahora es del regidor, y lo cobro yo» |
 
 El deudor empieza con la deuda anotada (`set_debt`, vence con el reloj), el letrado con la carta en el bolsillo; cada uno conoce ya a quien debe conocer.
+
+**Una sola deuda, una sola historia (28-10).** Antes el Diario tenía a la vez la misión «La deuda con el regidor» y una entrada «Deuda con Garrán», y los textos decían unas veces que la compró Garrán y otras el regidor. Ahora: debías a la posada, **el regidor compró la deuda y Garrán la cobra en su nombre** (`debt.on_behalf_of: npc_osric`, `debt.npc_id: npc_garran`: a él se le paga). En el Diario hay una sola entrada de la deuda, «Deuda con el regidor» («Pagar 3 de oro a Garrán, que la cobra en nombre del regidor»), con su plazo. La misión principal es otra: **«Salir de la aldea»**, cuyo primer paso es averiguar qué es la niebla y cómo salir; el siguiente solo aparece al cumplirlo y las pistas no se listan. Como en la demo la niebla no se abre (epílogo), el último paso, cruzar hacia el camino de Valcruz, la deja abierta. Regla general del Diario: una deuda va dentro de la principal solo si la principal trata de ella (un paso `debt_paid`) o si no hay historia escrita y la principal es la situación misma; si no, sale aparte. Garrán sabe que ese trato es suyo y lo cuenta claro si se le pregunta (`docs/CONVERSACION-REGLAS.md`, v1.1).
 
 ### 2.10 La amenaza que escala si nadie interviene **[cambia]**
 
@@ -299,7 +301,7 @@ Tres días desde las 18:00 del día 1 (72 h de juego, 24 h reales al ritmo 3×).
   | Mateo | molino | «El grano no llega ni sale.» | cierta |
   | Úrsula | los Corrales | «Mi Pol salió al mercado de Valcruz el día antes. Está al otro lado.» | cierta: gancho de la expansión |
 
-- **Ganchos sembrados**: la corriente fría bajo la alfombra de la mesa del fondo, la voz de Ysolde al llegar al granero, la loba que se levanta al acercarse a la madriguera, **la niebla quieta al llegar al Lindero** **[nuevo]**, Garrán que entra en el Jabalí a la hora y media de empezar.
+- **Ganchos sembrados**: la corriente fría bajo la alfombra de la mesa del fondo, la voz de Ysolde al llegar al granero, la loba que se levanta al acercarse a la madriguera, **la niebla quieta al llegar al Lindero** **[nuevo]**, Garrán que se planta en la barra del Jabalí a la hora y media de empezar (esté o no ya en la sala).
 - **Encuentros de camino** (solo aldea): un vecino con tos, la ronda de Garrán, ceniza que cae y la niebla devuelve, un lobo entre las cercas, un buhonero atrapado, huellas de Tobías y de lobo. **[cambia]**
 - **Tablón**: leña y bayas para Brenna, la ronda de Doro al Soto, carbón para Hugo, truchas, la toma del arroyo para Mateo, **huevos para la cena** (Brenna) y **la cerca del redil** (Úrsula) **[nuevo]**. Pagan en plata (27-10-2026): 6 de plata los diez leños; 4 o 5 el carbón, las truchas y las rondas; 1 o 2 las bayas, los huevos o la cerca.
 - **Dinero (27-10-2026)**: oro, plata y cobre (`currency` en `index.ts`). El PJ llega con 1 de oro y 5 de plata (`starting_coins`). En el Jabalí, una cerveza vale 4 de cobre, una ración 1 de plata y la noche 2 de plata; Hugo vende a precio SRD (daga 2 de oro, espada corta 10). Las partidas guardadas cogen los precios nuevos al abrirse (`migrate`); el dinero de cada PJ no cambia, solo se enseña en monedas.
