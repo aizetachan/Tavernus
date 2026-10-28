@@ -63,7 +63,7 @@ const questEvents = (engine: Engine, c: Character): GameEvent[] => engine.events
 const stepOf = (engine: Engine, c: Character, id: string) => questsOf(engine.world, c).find((v) => v.quest.id === id);
 
 describe('misiones: alta coherente', () => {
-  it('lo que se oye entra en el Diario como una pista hacia quien la da, sin contar de qué va', async () => {
+  it('lo que se oye no entra en el Diario ni abre la misión, y no cuenta de qué va', async () => {
     const { engine, time } = await boot();
     const c = await newPc(engine, 'Lia');
     await engine.tick();
@@ -73,13 +73,13 @@ describe('misiones: alta coherente', () => {
     expect(Object.keys(characterStory(c).rumors ?? {})).toEqual(expect.arrayContaining(['q_cena_doro', 'q_perro']));
     const j = journalOf(engine, c.id);
     expect(j.quests.active.some((q) => q.id === 'q_perro')).toBe(false);
-    expect(j.quests.active.find((q) => q.id === 'lead:q_perro')).toMatchObject({ kind: 'lead', title: 'Buscar a Brenna', text: 'Hemos oído en el Jabalí que Brenna lleva días con mala cara, mirando a la puerta.' });
+    expect(j.quests.active.some((q) => q.id.startsWith('lead:'))).toBe(false);
     // El perro no sale en lo oído: es de lo que va la misión.
     expect(questEvents(engine, c).map((e) => e.narration_private).join('\n')).not.toMatch(/perro/);
-    // Cuando Brenna la pide, la pista deja su sitio a la misión.
+    // Cuando Brenna la pide, entra la misión.
     await talkTo(engine, time, c, 'npc_brenna');
     expect(tool(engine, c, 'story_quest', { quest_id: 'q_perro', action: 'ask' }).ok).toBe(true);
-    expect(journalOf(engine, c.id).quests.active.some((q) => q.id === 'lead:q_perro')).toBe(false);
+    expect(journalOf(engine, c.id).quests.active.some((q) => q.id === 'q_perro')).toBe(true);
   });
 
   it('quien la da la pide al hablar con el PJ y entra en el Diario; el máster lo sabe, y el origen dice la verdad', async () => {

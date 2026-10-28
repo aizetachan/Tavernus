@@ -55,7 +55,7 @@ import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPla
 import { hhmm } from './schedule.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
 import { discoverSpot, lookAround, migrateSpotSight, noteSight, searchableSpots, seeFrom } from './spots.js';
-import { absence, absenceRule, acceptPrologue, acceptRecap, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
+import { absence, absenceRule, acceptPrologue, acceptRecap, forPrologue, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
 
 export interface ActionResult {
   ok: boolean;
@@ -210,8 +210,11 @@ export class Engine {
   private momentListeners: MomentListener[] = [];
   /** Claves de momentos ya dados (moments.ts): se recuperan de los eventos pasados al arrancar. */
   private readonly seenMoments = new Set<string>();
-  /** Verbos mecánicos que no pasan por el master aunque esté configurado. */
-  private static readonly MECHANICAL = /^(inventario|inventory|qui[eé]n|who|d[oó]nde|where|dormir|duermo|me duermo|descansar|descanso|sleep|despierto|despertar|me despierto|wake|parar|me paro|me detengo|stop)\b/i;
+  /**
+   * Verbos mecánicos que no pasan por el master aunque esté configurado. Inventario, quién y dónde, solo la palabra
+   * sola y sin interrogación: «¿Dónde está el granero?» o «¿dónde?» en plena charla son preguntas al NPC.
+   */
+  private static readonly MECHANICAL = /^(?:(?:inventario|inventory|qui[eé]n|who|d[oó]nde|where)[\s.!]*$|(?:dormir|duermo|me duermo|descansar|descanso|sleep|despierto|despertar|me despierto|wake|parar|me paro|me detengo|stop)\b)/i;
 
   /** La cuenta de la IA sin saldo (master.ts, noCredit): no es esperar y reintentar, lo tiene que recargar el anfitrión. */
   static readonly NO_CREDIT = 'El narrador se ha quedado sin crédito: la cuenta de la IA no tiene saldo. El anfitrión tiene que recargarla; en cuanto lo haga, podréis seguir donde lo dejasteis.';
@@ -1640,7 +1643,7 @@ export class Engine {
       }
       if (has()) return null;
       return this.events.emit({
-        actor_id: c.id, action_type: 'prologue', narration_private: forReader(this, c, text ?? prologueTemplate(facts)), observable: null,
+        actor_id: c.id, action_type: 'prologue', narration_private: forPrologue(c, this, text ?? prologueTemplate(facts)), observable: null,
         tags: ['prologue'], payload: { title: facts.title, source: text ? 'master' : 'template', ...meta },
       }, this.stampFor(c));
     } finally { this.prologuing.delete(c.id); }
@@ -3271,8 +3274,9 @@ export class Engine {
     if (/^(inventario|inventory)\b/.test(lower)) {
       return { ok: true, text: formatInventory(inventoryView(this.world, c.id)) };
     }
-    if (/^(quien|quién|who)\b/.test(lower)) return { ok: true, text: whoIsHere(this.world, this.clock, c, nowG) };
-    if (/^(donde|dónde|where)\b/.test(lower)) return { ok: true, text: [whereAmI(this.world, this.clock, c, nowG), this.aheadNotice(c)].filter(Boolean).join('\n') };
+    // Solo la orden («quién», «dónde estoy»): «¿dónde está el granero?» no pregunta por el sitio propio.
+    if (/^(quien|quién|who)(?:\s+(?:hay|hay aquí|está aquí))?[\s.!?]*$/.test(lower)) return { ok: true, text: whoIsHere(this.world, this.clock, c, nowG) };
+    if (/^(donde|dónde|where)(?:\s+(?:estoy|me encuentro))?[\s.!?]*$/.test(lower)) return { ok: true, text: [whereAmI(this.world, this.clock, c, nowG), this.aheadNotice(c)].filter(Boolean).join('\n') };
     if (/^(despierto|despertar|me despierto|wake)\b/.test(lower)) {
       if (c.status !== 'asleep') return { ok: false, text: 'Ya estás despierto.' };
       c.status = 'active';

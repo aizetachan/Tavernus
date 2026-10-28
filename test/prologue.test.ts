@@ -9,7 +9,8 @@ import { offlineClient } from '../src/ai/offline.js';
 import { journalOf } from '../src/engine/journal.js';
 import { setDebt } from '../src/engine/debts.js';
 import { GAME_DAY } from '../src/clock/clock.js';
-import { PROLOGUE_WORDS, RECAP_TITLE, wordCount } from '../src/engine/prologue.js';
+import { PROLOGUE_WORDS, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, wordCount } from '../src/engine/prologue.js';
+import { authoredSeed } from '../src/data/campaigns/index.js';
 import type { GameEvent } from '../src/engine/model.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
@@ -42,7 +43,7 @@ function writer(text: string, seen: Anthropic.Beta.MessageCreateParamsNonStreami
 }
 
 describe('prólogo', () => {
-  it('offline: una sola vez por personaje, antes de la primera escena; cuenta lugar, porqué y amenaza sin secretos de la Biblia', async () => {
+  it('offline: una sola vez por personaje, antes de la primera escena; cuenta lugar, porqué y amenaza, sin la historia del sitio ni secretos de la Biblia', async () => {
     const { engine, c, contexts } = await generated();
     const s = c.situation!;
     const intro = await engine.introduce(c.id);
@@ -62,7 +63,8 @@ describe('prólogo', () => {
     expect(text).toContain(s.why_here.split(';')[0]!);
     expect(text.toLowerCase()).toContain(s.threat.toLowerCase().replace(/\.$/, ''));
     expect(text).toContain(`${s.clock_days} días`);
-    expect(text).toContain(engine.world.campaign.premise);
+    // La historia del sitio se descubre jugando: con situación, la premisa no entra.
+    expect(text).not.toContain(engine.world.campaign.premise);
     const n = wordCount(text);
     expect(n).toBeGreaterThanOrEqual(PROLOGUE_WORDS.min);
     expect(n).toBeLessThanOrEqual(PROLOGUE_WORDS.max);
@@ -87,6 +89,27 @@ describe('prólogo', () => {
     // Una segunda primera escena (reconexión, reinicio) no escribe otro.
     await engine.introduce(c.id);
     expect(prologues(engine, c.id)).toHaveLength(1);
+  });
+
+  it('Brezal, la deuda: dónde estás y con quién tienes la cuenta; la gente por su oficio y solo el antagonista por su nombre', async () => {
+    const seed = authoredSeed('brezal', { now: new Date(Date.UTC(2026, 9, 22, 18)) });
+    const engine = await Engine.boot({ repo: new MemoryRepository(), campaignId: seed.campaign.id, seed, now: () => Date.UTC(2026, 9, 22, 18), deterministic: true });
+    const r = await engine.createCharacter('u1', 'Nia', { class_id: 'rogue' });
+    if (!r.ok) throw new Error(r.reason);
+    claimSituation(engine.world, r.character.id, engine.gameNow());
+    const c = engine.world.character(r.character.id);
+    expect(c.situation!.id).toBe('sit_deuda');
+    expect(c.knows).toContain('npc_brenna');
+    const f = prologueFacts(engine, c);
+    const text = prologueTemplate(f);
+    expect(text).toMatch(/^Es lunes 1 de Brotes, al caer la tarde\. Estás en la mesa del fondo/);
+    expect(text).toContain('Garrán, el alguacil del regidor');
+    expect(text).toContain('La tabernera te dio cama');
+    expect(text).not.toMatch(/Brenna|Vharn|Hace veinte años/);
+    const prompt = prologuePrompt(f).prompt;
+    expect(prompt).not.toContain('Brenna');
+    expect(prompt).not.toContain(engine.world.campaign.premise);
+    expect(prompt).toContain('Garrán');
   });
 
   it('en el Diario abre la crónica del primer día', async () => {
