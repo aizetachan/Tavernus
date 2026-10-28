@@ -251,7 +251,7 @@ describe('Brezal sellada: la campaña escrita', () => {
     c.abilities.str = 18; // las recompensas en monedas pesan
     await engine.tick();
     // La deuda es su misión principal; lo demás se lo tienen que ofrecer.
-    expect(characterStory(c).open).toEqual(['q_main_deuda']);
+    expect(characterStory(c).open).toEqual(['q_main_salir']);
     const accept = (id: string) => expect(tool(engine, c, 'story_quest', { quest_id: id, action: 'accept' }), id).toMatchObject({ ok: true });
     const level = async (n: number) => { await engine.tick(); expect(c.level).toBe(n); };
 
@@ -421,15 +421,15 @@ describe('Brezal sellada: la campaña escrita', () => {
     // El Diario cuenta las misiones; la principal avanza por actos.
     const j = journalOf(engine, c.id);
     expect(j.quests.completed.filter((q) => q.kind === 'story').map((q) => q.id)).toEqual(expect.arrayContaining(['q_agua', 'q_perro', 'q_cena_doro', 'q_noche', 'q_sotano', 'q_cadena', 'q_tobias', 'q_subida', 'q_final_templar']));
-    // La principal: las pistas que fue siguiendo, y la deuda sin saldar.
-    const main = [...j.quests.active, ...j.quests.completed].find((q) => q.kind === 'main')!;
+    // La principal: salir de la aldea, sin pistas listadas; tras el final la niebla sigue, y queda abierta.
+    const main = j.quests.active.find((q) => q.kind === 'main')!;
     expect(main.steps.map((s) => [s.text, s.done])).toEqual([
-      ['Librarte de la deuda con Garrán', false],
-      ['Preguntar al guardia del portón por las luces del granero', true],
-      ['Preguntar al cazador del Soto qué hay en el granero', false],
-      ['Ir al Granero Quemado y averiguar quién enciende las luces', true],
-      ['Decidir qué pasa con el ascua antes de la noche de la Brasa', true],
+      ['Averiguar qué es la niebla y cómo salir', true],
+      ['Decidir qué pasa con el ascua antes de la noche de la Brasa: de ella depende el cerco', true],
+      ['Cruzar la niebla hacia el camino de Valcruz', false],
     ]);
+    // La deuda, en su entrada, sin saldar.
+    expect(j.quests.active.find((q) => q.kind === 'debt')).toMatchObject({ title: 'Deuda con el regidor', status: 'active' });
   });
 
   it('«La verdad en el pozo»: Osric no puede huir y se esconde en el pueblo, vivo, hasta que alguien da con él', async () => {

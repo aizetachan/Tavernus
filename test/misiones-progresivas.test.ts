@@ -95,7 +95,7 @@ describe('una misión entra en el Diario al enterarse en escena', () => {
     // Antes de oír nada, nada flota sobre nadie: tener una misión disponible no se ve.
     expect(questLeads(engine.world, c).size).toBe(0);
     await engine.tick();
-    expect(characterStory(c).open).toEqual(['q_main_deuda']);
+    expect(characterStory(c).open).toEqual(['q_main_salir']);
     expect(status(engine, c, 'q_cena_doro')).toBe('available');
     // Lo que se oye es una línea de ambiente en el hilo, sin enlace ni entrada en el Diario, y sin contar de qué va.
     const rumor = lastQuest(engine, c, 'q_cena_doro');
@@ -225,7 +225,7 @@ describe('niveles: el acto II pide nivel 2 y su hilo del acto I; el acto III, ni
 });
 
 describe('la misión principal: un problema con varias pistas', () => {
-  it('(seq 16–18) llegar a la plaza no abre «El agua turbia»; la carta se abre en pistas que aparecen al mencionarlas alguien y llevan al Granero', async () => {
+  it('(seq 16–18) llegar a la plaza no abre «El agua turbia»; las pistas de la carta no se dicen: salen en el Diario al conseguirlas y llevan al Granero', async () => {
     const { engine, time } = await boot();
     const c = await newPc(engine, 'Leodhin', 'wizard');
     await engine.tick();
@@ -233,11 +233,10 @@ describe('la misión principal: un problema con varias pistas', () => {
     expect(status(engine, c, 'q_agua')).toBe('available');
     const main = journalOf(engine, c.id).quests.active[0]!;
     expect(main).toMatchObject({ kind: 'main', title: 'La carta de Vharn', pinned: true });
-    // Ilse ha reaccionado al sello y está en la plaza: esas dos pistas; las demás, cuando alguien las mencione.
-    expect(main.steps).toEqual([
-      { text: 'Preguntar a Ilse por el sello de Vharn', done: false },
-      { text: 'Mirar de cerca el agua del pozo', done: false },
-    ]);
+    // Las pistas (pasos opcionales) no se le dicen al jugador: ni a quién preguntar ni qué mirar.
+    expect(main.steps).toEqual([]);
+    // Ilse lleva punto por lo que se oye en la plaza (el rumor del agua), no por la carta.
+    expect([...questLeads(engine.world, c)]).toEqual(['npc_ilse']);
 
     // (seq 51–59) Ilse la pide al hablar; darle el agua: lo que dice ella va en la misma respuesta del máster.
     expect(tool(engine, c, 'transfer_item', { instance_id: 'ii_agua_pozo', to_type: 'character', to_id: c.id, slot: 'pocket', equip_slot: null, quantity: 1 }).error).toBeUndefined();
@@ -253,17 +252,15 @@ describe('la misión principal: un problema con varias pistas', () => {
     // Ni se abre «La cadena de hierro frío» ni se dice que la pide Ilse: es de nivel 2.
     expect(status(engine, c, 'q_cadena')).toBe('locked');
     expect(Object.values(characterStory(c).origins ?? {}).map((o) => o.text)).not.toContain('Te lo pide Ilse');
-    // Lo que contó Ilse abre otras pistas de la carta, y todas llevan al Granero.
+    // La pista conseguida sale ya cumplida; las que faltan siguen sin decirse. Lo que toca hacer (el Granero), sí.
     const steps = journalOf(engine, c.id).quests.active[0]!.steps;
-    expect(steps).toEqual(expect.arrayContaining([
+    expect(steps).toEqual([
       { text: 'Preguntar a Ilse por el sello de Vharn', done: true },
-      { text: 'Preguntar a la tabernera qué pasó en Vharn la noche del incendio', done: false },
-      { text: 'Preguntar al herrero por la cadena de su maestro', done: false },
       { text: 'Ir al Granero Quemado y averiguar quién enciende las luces', done: false },
-    ]));
+    ]);
     expect(steps.some((s) => /noche de la Brasa/.test(s.text))).toBe(false); // el final, cuando toque
-    // Las pistas activas ponen un punto discreto en a quien llevan.
-    expect([...questLeads(engine.world, c)]).toEqual(expect.arrayContaining(['npc_brenna', 'npc_hugo']));
+    // Ni punto en la tabernera ni en el herrero: esas pistas las busca él.
+    expect([...questLeads(engine.world, c)]).not.toEqual(expect.arrayContaining(['npc_brenna']));
     expect(journalOf(engine, c.id).quests.active[0]!.history.some((h) => h.text === 'Ilse nos contó qué es la Brasa: un fuego antiguo que los Vharn ataban en su cripta.')).toBe(true);
   });
 

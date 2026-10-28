@@ -35,10 +35,10 @@ import { debtLine } from './debts.js';
 import { money } from './money.js';
 import type { Character, GameEvent, Id, Npc } from './model.js';
 import type { DialogueLine } from './moments.js';
-import { maskUnknownNames, roleLabel } from './narrate.js';
+import { contractArticles, maskUnknownNames, roleLabel } from './narrate.js';
 import { activeJobs } from './progress.js';
 import { rumorsHeardBy, rumorsIn, type Rumor } from './rumors.js';
-import { characterStory, difficultyOf, mainQuestFor, nameFor, questsOf, type QuestDifficulty, type QuestLogEntry, type StoryQuest } from './story.js';
+import { characterStory, difficultyOf, mainQuestFor, nameFor, questsOf, type QuestDifficulty, type QuestLogEntry, type StoryCondition, type StoryQuest } from './story.js';
 import { boardSeen, droppedAt, givenQuests } from './quests.js';
 
 /** `ready`: lista para entregar a quien la recibe; `declined`: se la pidieron y dijo que no. */
@@ -122,7 +122,8 @@ export interface JournalQuest {
    * (frases de quien la pide o que hablan de lo mismo). Lo pinta el Diario y el
    * recuadro de seguimiento del panel.
    */
-  summary: { text: string; next: string | null; told: { who: string; said: string; when: string }[] };
+  /** De qué va y qué toca ahora. Lo que dijo cada NPC va en Charlas y en la Crónica, no aquí. */
+  summary: { text: string; next: string | null };
 }
 
 export interface JournalExchange {
@@ -197,7 +198,15 @@ function shares(a: Set<string>, b: Set<string>): boolean {
   return false;
 }
 
-const EMPTY_SUMMARY = (): JournalQuest['summary'] => ({ text: '', next: null, told: [] });
+const EMPTY_SUMMARY = (): JournalQuest['summary'] => ({ text: '', next: null });
+
+/** NPC cuya deuda salda una condición de la historia (`debt_paid`, también dentro de any/all/not). */
+function debtNpcsIn(cond: StoryCondition | undefined): Id[] {
+  if (!cond) return [];
+  if (cond.kind === 'debt_paid') return [cond.npc_id];
+  if (cond.kind === 'any' || cond.kind === 'all') return cond.of.flatMap(debtNpcsIn);
+  return [];
+}
 
 function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
 /** «a» + nombre de sitio, con contracción: «al arroyo», «a la fragua». */
@@ -368,6 +377,12 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
 
   // La situación inicial (mundos generados): la misión principal, con su reloj.
   const s = c.situation;
+  // Deudas que son la misión principal van dentro de ella: la que se salda en uno de sus pasos o, sin historia escrita
+  // (la principal es la situación misma), la de la situación. Si la principal va de otra cosa, la deuda sale aparte.
+  const mainDebtNpcs = new Set<Id>();
+  const mainStory = mainQuestFor(w, c);
+  if (s?.debt && !mainStory) mainDebtNpcs.add(s.debt.npc_id);
+  for (const st of mainStory?.steps ?? []) for (const id of debtNpcsIn(st.done_when)) mainDebtNpcs.add(id);
   if (s) {
     const ant = w.npcs.get(s.antagonist_npc_id);
     const deadline = s.deadline_game_s ?? born + s.clock_days * DAY_S;
@@ -385,16 +400,18 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
       giver: null, giver_npc_id: null, reward: null,
       seen_game_s: born, seen: fmt(born), completed_game_s: mDone, completed: mDone === null ? null : fmt(mDone),
       updated_game_s: mUpdated, updated: fmt(mUpdated),
-      steps: mv?.steps.length ? mv.steps.map((x) => ({ text: masked(x.step.text), done: x.done })) : [{ text: s.wants, done: false }],
+      // Las pistas (pasos opcionales) no se le dicen: solo salen cuando ya las ha conseguido por su cuenta.
+      steps: mv?.steps.length ? mv.steps.filter((x) => !x.step.optional || x.done).map((x) => ({ text: masked(x.step.text), done: x.done }))
+        : [{ text: s.wants, done: false }, ...(c.debts ?? []).filter((d) => mainDebtNpcs.has(d.npc_id)).map((d) => ({ text: d.settled ? 'Deuda saldada' : debtLine(w, d, nowS, (n) => npcLabel(c, n)), done: Boolean(d.settled) }))],
       clock: { days_left: Math.max(0, left), deadline: fmt(deadline), runs_out: s.clock_runs_out },
       antagonist: ant && c.knows.includes(ant.id) ? { id: ant.id, name: ant.name, role: ant.role } : null,
       paths: [...s.paths], rumors: questRumors([s.why_here, s.wants, s.threat, ...s.paths]), pinned: true, summary: EMPTY_SUMMARY(),
     });
   }
 
-  // El logro de la campaña: las pistas obtenidas son sus objetivos.
+  // El logro de la campaña: las pistas obtenidas son sus objetivos. No sale hasta la primera pista: antes no dice nada.
   const a = w.campaign.achievement;
-  if (a && w.campaign.clues.length) {
+  if (a && w.campaign.clues.length && (c.clues.length || c.achievements.some((x) => x.id === a.id))) {
     const got = c.achievements.find((x) => x.id === a.id);
     const faction = w.campaign.factions.find((f) => f.id === a.faction_id)?.name ?? a.faction_id;
     const rep = c.reputation[a.faction_id] ?? 0;
@@ -409,7 +426,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     const achHistory: JournalChange[] = clueEvents.map((e, i) => ({ key: `${a.id}:clue:${e.seq}`, ...at(e.timestamp_game_s), kind: 'step' as const, text: `✔ ${e.narration_private.replace(/\s*\(\d+\/\d+\).*$/, '').replace(/[.]$/, '')}`, why: i === 0 ? 'cada pista cuenta para el logro' : null }));
     if (got) achHistory.push({ key: `${a.id}:completed`, ...at(achTime ?? updated), kind: 'completed', text: 'Logro conseguido', why: `${a.clues_required} pistas y reputación ${a.reputation_required} en ${faction}` });
     quests.push({
-      id: a.id, kind: 'achievement', title: a.title, text: `Lo que se cuenta de quien lo consigue, en ${faction}.`, status: got ? 'completed' : c.clues.length ? 'active' : 'available',
+      id: a.id, kind: 'achievement', title: a.title, text: `Descubrir ${a.clues_required} pistas de lo que pasa y ganarte el respeto de ${faction} (reputación ${a.reputation_required}).`, status: got ? 'completed' : 'active',
       origin: null, history: achHistory,
       giver: null, giver_npc_id: null, reward: null,
       seen_game_s: born, seen: fmt(born), completed_game_s: got ? achTime ?? updated : null, completed: got ? fmt(achTime ?? updated) : null,
@@ -418,22 +435,26 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     });
   }
 
-  // Deudas: abiertas con su plazo y su prenda; las saldadas, como completadas.
+  // Deudas: abiertas con su plazo y su prenda; las saldadas, como completadas. La de la principal no sale aparte.
   for (const d of c.debts ?? []) {
+    if (mainDebtNpcs.has(d.npc_id)) continue;
     const npc = w.npcs.get(d.npc_id);
     const who = npc ? npcLabel(c, npc) : d.npc_id;
+    // Con dueño aparte (quien compró la deuda), la deuda es con él y se le paga a quien la cobra.
+    const holderNpc = d.on_behalf_of ? w.npcs.get(d.on_behalf_of) : undefined;
+    const holder = holderNpc ? npcLabel(c, holderNpc) : who;
     const pawn = d.collateral_instance_id ? w.itemInstances.get(d.collateral_instance_id) : undefined;
     const pawnName = pawn ? w.itemDef(pawn.item_id).name : null;
     const settled = d.settled ?? null;
     const steps: JournalStep[] = settled
       ? [{ text: settled.how === 'coins' ? 'Pagada' : settled.how === 'work' ? 'Saldada con trabajo' : `Perdida: ${who} se quedó ${pawnName ?? 'la prenda'}`, done: true }]
-      : [{ text: `Pagar ${money(w, d.amount)} a ${who} (o saldarla de otro modo)`, done: false }, ...(pawnName ? [{ text: `Recuperar la prenda: ${pawnName}`, done: false }] : [])];
+      : [{ text: contractArticles(holderNpc ? `Pagar ${money(w, d.amount)} a ${who}, que la cobra en nombre de ${holder} (o saldarla de otro modo)` : `Pagar ${money(w, d.amount)} a ${who} (o saldarla de otro modo)`), done: false }, ...(pawnName ? [{ text: `Recuperar la prenda: ${pawnName}`, done: false }] : [])];
     const updated = Math.max(d.created_game_s, settled?.game_s ?? 0);
     const left = d.due_game_s === null ? null : Math.ceil((d.due_game_s - nowS) / DAY_S);
     const debtHistory: JournalChange[] = [{ key: `${d.id}:added`, ...at(d.created_game_s), kind: 'added', text: 'Contraes la deuda', why: cap(d.reason) }];
     if (settled) debtHistory.push({ key: `${d.id}:completed`, ...at(settled.game_s), kind: 'completed', text: steps[0]!.text, why: null });
     quests.push({
-      id: d.id, kind: 'debt', title: `Deuda con ${who}`, origin: { kind: 'giver', text: `Se la debes a ${who}`, where: null }, history: debtHistory, text: settled ? cap(d.reason) : `${debtLine(w, d, nowS, (n) => npcLabel(c, n))}. ${cap(d.reason)}.`,
+      id: d.id, kind: 'debt', title: contractArticles(`Deuda con ${holder}`), origin: { kind: 'giver', text: contractArticles(`Se la debes a ${holder}`), where: null }, history: debtHistory, text: settled ? cap(d.reason) : `${debtLine(w, d, nowS, (n) => npcLabel(c, n))}. ${cap(d.reason)}.`,
       status: settled ? 'completed' : 'active', giver: who, giver_npc_id: npc?.id ?? null, reward: null,
       seen_game_s: d.created_game_s, seen: fmt(d.created_game_s),
       completed_game_s: settled?.game_s ?? null, completed: settled ? fmt(settled.game_s) : null,
@@ -544,22 +565,12 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   }
   const conversations = [...convs.values()].sort((x, y) => y.last_game_s - x.last_game_s);
 
-  // Resumen de cada misión: de qué va, qué toca ahora y lo relevante que le han dicho.
-  const replies = conversations.flatMap((conv) => conv.exchanges.flatMap((x) => x.replied.map((said) => ({ npc_id: conv.npc_id, who: conv.name, said, game_s: x.game_s, when: x.when }))));
+  // Resumen de cada misión: de qué va y qué toca ahora. Sin citas: lo dicho está en Charlas y en la Crónica.
   for (const q of [...active, ...completed]) {
-    const kw = keywords([q.title, q.text, ...q.steps.map((st) => st.text)].join(' '));
-    // Lo que le dijo quien la pide (o, sin quien la pida, frases que hablan de lo mismo). El logro no cita a nadie.
-    const told = q.kind === 'achievement' ? [] : replies
-      .filter((r) => (q.giver_npc_id ? r.npc_id === q.giver_npc_id : shares(keywords(r.said), kw)))
-      .filter((r) => r.game_s >= (q.seen_game_s ?? 0))
-      .sort((x, y) => x.game_s - y.game_s)
-      .slice(-2)
-      .map((r) => ({ who: r.who, said: r.said, when: r.when }));
     const pending = q.steps.find((st) => !st.done)?.text ?? null;
     q.summary = {
       text: q.kind === 'main' ? (c.situation?.wants ? `${cap(c.situation.wants)}` : firstSentence(q.text)) : firstSentence(q.text),
       next: q.status === 'completed' || q.status === 'expired' || (q.kind === 'main' && pending === c.situation?.wants) ? null : pending,
-      told,
     };
   }
 

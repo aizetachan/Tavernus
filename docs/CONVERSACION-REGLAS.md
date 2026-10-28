@@ -176,6 +176,36 @@ Prueba en vivo con Haiku (27-10, Brenna en Brezal, cinco frases): cada turno cay
 misión que da, comercio, despedida con su misión en curso). La respuesta de lore salió larga (unas 100 palabras), el
 control la rechazó y volvió en unas 60.
 
+## v1.1 (28-10): lo público no se niega
+
+Sale de la charla con Garrán en la partida demo-actores: receloso, cada turno preguntaba «¿y tú para qué?», negaba
+dónde para el regidor, no podía contar el trabajo de la deuda (el título de una misión cerrada, «El Granero
+Quemado», es también el nombre del lugar).
+
+- **Lo público no se niega nunca**, ni con trato frío: dónde vive o trabaja alguien del sitio, precios y horarios, y
+  lo suyo con el actor. Lo delicado son los secretos y lo que su trato no da. Lo dice el guion en todas las
+  situaciones; «eso no te lo digo», solo para lo delicado.
+- **El «¿para qué?», solo al empezar la charla** (`new_talk`: sin hablar en los últimos 15 min de juego). Después, el
+  guion lo prohíbe y el control lo rechaza.
+- **Lo suyo con el actor** (`terms`): si el NPC es el antagonista de su situación, o cobra o tiene su deuda, el guion
+  lleva la amenaza, el plazo y la deuda («Debes 3 de oro a Osric Malvez (la cobra Garrán en su nombre)»). Pedirle
+  trabajo es «misión que puede dar» y lo cuenta claro: qué, dónde y para quién. No es un encargo nuevo: `give_quest`
+  del mismo NPC se rechaza en el servidor (ya está en su Diario: su situación, su deuda).
+- **La gente, también por su oficio**: «el regidor» reconoce a Osric (`descriptorOf`), con dónde vive y por dónde
+  anda ahora, que es público.
+- **Títulos que son lugares**: una misión cerrada que se llama como un sitio o una persona no cuenta como fuga; las
+  principales de otras situaciones no se listan como cerradas.
+- **Control al cierre**: negarse a lo público o a su trato cuando se lo preguntan (`REFUSES`) y repetir el «¿para
+  qué?» con la charla empezada (`WHY_AGAIN`) piden una reescritura.
+- **La escalada se mantiene**: insultar, insistir (también volver a preguntar lo que no contestó) y amenazar siguen bajando la confianza hasta que
+  el NPC se pone violento (`npc_trust`, paso a peligro y combate). Con el NPC hostil, insultado o atacado, el control
+  de negativas no actúa: puede cerrarse en banda. Lo pidió el dueño: «peor le trato […] al final él es el que se
+  pondrá violento, eso está correcto».
+
+Prueba en vivo con Haiku (28-10, Garrán y una pícara en la situación de la deuda, cuatro frases): dice qué le debe
+y a quién, el trabajo del granero con su amenaza, dónde vive el regidor y por dónde anda, y que la deuda es del
+regidor y él solo la cobra. Sin encargos duplicados.
+
 Pendiente: al saludar a quien da una misión de la historia, el motor ya la abre solo («La cena del portón» en el
 primer «Buenas noches»), y eso choca con «un primer saludo no suelta encargos». Hay que decidir si esa apertura espera
 a que el PJ pregunte o a un segundo turno.

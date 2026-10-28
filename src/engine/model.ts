@@ -186,8 +186,11 @@ export interface InitialSituation {
   opening: string;
   /** Instante de juego en que vence el plazo (lo fija el alta del PJ). */
   deadline_game_s?: number;
-  /** Campañas escritas: deuda con la que empieza (vence con el plazo), objetos que trae y a quién conoce ya. */
-  debt?: { npc_id: Id; amount: number; reason: string };
+  /**
+   * Campañas escritas: deuda con la que empieza (vence con el plazo), objetos que trae y a quién conoce ya.
+   * `npc_id` la cobra; `on_behalf_of`, si la tiene otro (quien compró la deuda y manda cobrarla).
+   */
+  debt?: { npc_id: Id; amount: number; reason: string; on_behalf_of?: Id };
   items?: { item_id: Id; quantity: number }[];
   knows?: Id[];
   /** NPC que la apertura pone junto al PJ: el alta los lleva a su punto de inicio y los retiene un rato (npcorders.ts). */
@@ -612,7 +615,10 @@ export interface Reaction {
 /** Una deuda con un NPC, con su prenda si dejó algo a cambio (debts.ts). */
 export interface Debt {
   id: Id;
+  /** Quien la cobra: a quien se le paga y quien la reclama. */
   npc_id: Id;
+  /** Si la tiene otro y `npc_id` la cobra en su nombre (un acreedor que manda a su alguacil). */
+  on_behalf_of?: Id;
   amount: number;
   reason: string;
   /** Instante de juego en que vence; null = sin plazo. */

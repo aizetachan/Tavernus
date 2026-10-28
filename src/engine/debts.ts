@@ -17,6 +17,7 @@
 
 import { transferItem } from './inventory.js';
 import { money } from './money.js';
+import { contractArticles } from './narrate.js';
 import type { Character, Debt, Id, Npc, Placement } from './model.js';
 import { deliverGoods } from './progress.js';
 import type { World } from './world.js';
@@ -56,11 +57,12 @@ export function dueText(dueGameS: number | null, nowGameS: number): string | nul
 
 /** «Debes 10 de oro a Marisa Quijano, vence mañana, prenda: espada larga». */
 export function debtLine(world: World, d: Debt, nowGameS: number, npcName: (n: Npc) => string, withIds = false): string {
-  const npc = world.npcs.get(d.npc_id);
-  const who = npc ? `${npcName(npc)}${withIds ? ` [${npc.id}]` : ''}` : d.npc_id;
+  const label = (id: Id) => { const n = world.npcs.get(id); return n ? `${npcName(n)}${withIds ? ` [${n.id}]` : ''}` : id; };
+  // Con dueño aparte: se le debe a él y la cobra quien la reclama.
+  const who = d.on_behalf_of ? `${label(d.on_behalf_of)} (la cobra ${label(d.npc_id)} en su nombre)` : label(d.npc_id);
   const pawn = d.collateral_instance_id ? world.itemInstances.get(d.collateral_instance_id) : undefined;
   const pawnName = pawn ? `${world.itemDef(pawn.item_id).name}${withIds ? ` [${pawn.id}]` : ''}` : null;
-  return [`Debes ${money(world, d.amount)} a ${who}`, dueText(d.due_game_s, nowGameS), pawnName ? `prenda: ${pawnName}` : null].filter(Boolean).join(', ');
+  return contractArticles([`Debes ${money(world, d.amount)} a ${who}`, dueText(d.due_game_s, nowGameS), pawnName ? `prenda: ${pawnName}` : null].filter(Boolean).join(', '));
 }
 
 function store(c: Character): Debt[] {
@@ -80,7 +82,7 @@ function validAmount(n: unknown): number | null {
 }
 
 /** Anota lo que debe a un NPC o corrige la deuda abierta con él (cantidad, motivo, plazo). */
-export function setDebt(world: World, c: Character, input: { npc_id: Id; amount: unknown; reason: string; due_game_s: number | null }, nowGameS: number): { ok: true; debt: Debt; existing: boolean } | { ok: false; error: string } {
+export function setDebt(world: World, c: Character, input: { npc_id: Id; amount: unknown; reason: string; due_game_s: number | null; on_behalf_of?: Id }, nowGameS: number): { ok: true; debt: Debt; existing: boolean } | { ok: false; error: string } {
   const npc = world.npcs.get(input.npc_id);
   if (!npc) return { ok: false, error: `no existe el NPC ${input.npc_id}` };
   const amount = validAmount(input.amount);
@@ -92,6 +94,7 @@ export function setDebt(world: World, c: Character, input: { npc_id: Id; amount:
   d.amount = amount;
   d.reason = reason.slice(0, 160);
   d.due_game_s = input.due_game_s;
+  if (input.on_behalf_of && world.npcs.has(input.on_behalf_of)) d.on_behalf_of = input.on_behalf_of;
   world.touch('characters', c.id);
   return { ok: true, debt: d, existing: Boolean(cur) };
 }

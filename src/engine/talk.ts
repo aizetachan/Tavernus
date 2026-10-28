@@ -21,7 +21,8 @@ import type { DialogueLine } from './moments.js';
 import { talkTier, TALK_TIER_LABEL, type TalkTier } from './concerns.js';
 import { npcCrimeLine } from './crime.js';
 import { opinionOf } from './standing.js';
-import { openDebts } from './debts.js';
+import { debtLine, openDebts } from './debts.js';
+import { descriptorOf } from './narrate.js';
 import { transcriptOf } from './conversation.js';
 import { rumorsIn } from './rumors.js';
 import { activeJobs } from './progress.js';
@@ -92,15 +93,36 @@ function names(t: string, name: string): boolean {
   return n.length >= 4 && new RegExp(`(^|[^\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\p{L}\\p{N}])`, 'u').test(t);
 }
 
-/** Lugares, gente, rumores y facciones de los datos que nombra el texto (sin contar al NPC con quien habla). */
+/** Dónde se le encuentra a alguien (dónde vive y por dónde anda ahora): lo sabe todo el mundo en su pueblo. */
+function whereFound(world: World, n: Npc): string {
+  const at = (id: Id | undefined) => {
+    const spot = id ? world.spots.get(id) : undefined;
+    const loc = spot ? world.locations.get(spot.location_id) : undefined;
+    return spot && loc ? (spot.name === loc.name ? loc.name : `${spot.name}, en ${loc.name}`) : '';
+  };
+  // Su casa, por la localización (la casona, no la alcoba de arriba).
+  const homeSpot = n.home_spot_id ? world.spots.get(n.home_spot_id) : undefined;
+  const home = homeSpot ? world.locations.get(homeSpot.location_id)?.name ?? '' : '';
+  const now = at(n.location.id);
+  const parts = [home ? `vive en ${home}` : '', now && now !== home ? `ahora anda por ${now}` : ''].filter(Boolean);
+  return parts.length ? `; ${parts.join(', ')} (eso es público)` : '';
+}
+
+/**
+ * Lugares, gente, rumores y facciones de los datos que nombra el texto (sin contar al NPC con quien habla). A la
+ * gente se la reconoce por su nombre o por su oficio («el regidor»), con dónde se le encuentra.
+ */
 export function loreTopics(world: World, npc: Npc, text: string, nowG: number): TalkTopic[] {
   const t = norm(text);
   const out: TalkTopic[] = [];
   for (const l of world.locations.values()) if (names(t, l.name)) out.push({ kind: 'place', name: l.name, known: clip(l.description_base, 160) });
   for (const n of world.npcs.values()) {
-    if (n.id === npc.id) continue;
+    if (n.id === npc.id || n.mute) continue;
     const first = n.name.split(/\s+/)[0]!;
-    if (names(t, n.name) || names(t, first)) out.push({ kind: 'person', name: n.name, known: `${n.role}${n.status === 'dead' ? '; ha muerto' : ''}` });
+    const byRole = names(t, descriptorOf(world, n.id));
+    if (names(t, n.name) || names(t, first) || byRole) {
+      out.push({ kind: 'person', name: n.name, known: `${n.role}${n.status === 'dead' ? '; ha muerto' : whereFound(world, n)}` });
+    }
   }
   const loc = world.spots.get(npc.location.id)?.location_id;
   if (loc) for (const r of rumorsIn(world, loc, nowG)) if (names(t, r.name)) out.push({ kind: 'rumor', name: r.name, known: `${r.hint} (habladuría, no hecho)` });
@@ -129,6 +151,13 @@ export interface TalkState {
   locked: string[];
   debt: boolean;
   trades: boolean;
+  /**
+   * Lo suyo con el PJ, que el PJ ya sabe: la amenaza de su situación si es su antagonista, y la deuda que cobra o
+   * que tiene. Es público entre los dos: si se lo pregunta, lo dice claro. null si no hay nada.
+   */
+  terms: string | null;
+  /** La charla empieza ahora: no han hablado en los últimos 15 min de juego. */
+  new_talk: boolean;
 }
 
 interface Call { name: string; input?: Record<string, unknown>; result?: unknown }
@@ -153,6 +182,19 @@ function recentDeed(events: readonly GameEvent[], pc: Character, npc: Npc, nowG:
   return deed;
 }
 
+/** Lo suyo con el PJ (TalkState.terms): de su situación inicial y de sus deudas. */
+function termsWith(world: World, pc: Character, npc: Npc, nowG: number): string | null {
+  const s = pc.situation;
+  const out: string[] = [];
+  if (s && (s.antagonist_npc_id === npc.id || s.debt?.npc_id === npc.id || s.debt?.on_behalf_of === npc.id)) {
+    out.push(`${s.threat.trim().replace(/[.]?$/, '.')} Si se cumple el plazo: ${s.clock_runs_out.trim()}`);
+  }
+  for (const d of openDebts(pc)) {
+    if (d.npc_id === npc.id || d.on_behalf_of === npc.id) out.push(`${debtLine(world, d, nowG, (n) => n.name)}.`);
+  }
+  return out.length ? out.join(' ') : null;
+}
+
 export function talkState(world: World, events: readonly GameEvent[], pc: Character, npc: Npc, nowG: number): TalkState {
   const said = transcriptOf(events, pc.id, npc.id, 1);
   const mem = npc.memory.filter((m) => m.character_id === pc.id);
@@ -162,9 +204,13 @@ export function talkState(world: World, events: readonly GameEvent[], pc: Charac
   const can_offer: string[] = [];
   const pending: string[] = [];
   const locked: string[] = [];
+  // Un título que es también el nombre de un sitio o de alguien («El Granero Quemado»): nombrar el sitio no es nombrar la misión.
+  const named = new Set([...world.locations.values(), ...world.spots.values(), ...world.npcs.values()].map((x) => bare(x.name)));
   for (const q of story?.quests ?? []) {
+    // La principal de otra situación no es suya: ni se le ofrece ni hace falta callarla.
+    if (q.main_for && !q.main_for.includes(pc.situation?.id ?? '')) continue;
     const s = questStatus(world, pc, q);
-    if (s === 'locked') { locked.push(q.title); continue; }
+    if (s === 'locked') { if (!named.has(bare(q.title))) locked.push(q.title); continue; }
     if (s === 'available' && q.giver_npc_id === npc.id) can_offer.push(q.title);
     if ((s === 'active' || s === 'ready') && q.giver_npc_id && close.has(q.giver_npc_id) && !q.main_for) pending.push(q.title);
   }
@@ -180,8 +226,10 @@ export function talkState(world: World, events: readonly GameEvent[], pc: Charac
     recent: recentDeed(events, pc, npc, nowG),
     busy: Boolean(npc.talking_to && npc.talking_to.character_id !== pc.id),
     can_offer, pending, locked,
-    debt: openDebts(pc).some((d) => d.npc_id === npc.id),
+    debt: openDebts(pc).some((d) => d.npc_id === npc.id || d.on_behalf_of === npc.id),
     trades: npc.sells.length > 0 || npc.buys.length > 0,
+    terms: termsWith(world, pc, npc, nowG),
+    new_talk: !said.length || nowG - said.at(-1)!.game_s > RECENT_S,
   };
 }
 
@@ -198,9 +246,10 @@ export function situationsFor(st: TalkState, tx: TextSignals, topics: readonly T
   if (st.tier === 'hostile' || st.tier === 'wary') out.push('cold');
   if (st.pending.length && (tx.delivery || !asks)) out.push('errand');
   if (tx.trade && st.trades) out.push('trade');
-  if (tx.asks_work && st.can_offer.length) out.push('offer');
+  const gives = st.can_offer.length > 0 || Boolean(st.terms);
+  if (tx.asks_work && gives) out.push('offer');
   if (topics.length && (tx.question || tx.lore_word)) out.push('lore');
-  if (tx.question || tx.request || (tx.asks_work && !st.can_offer.length)) out.push('question');
+  if (tx.question || tx.request || (tx.asks_work && !gives)) out.push('question');
   if (tx.greeting) out.push('greeting');
   if (tx.farewell) out.push('farewell');
   if (!out.length) out.push('chat');
@@ -252,7 +301,7 @@ export function situationFits(s: TalkSituation, st: TalkState): string | null {
   if (s === 'cold' && st.tier !== 'hostile' && st.tier !== 'wary') return `su trato con el actor es ${TALK_TIER_LABEL[st.tier]}, no hostil ni receloso`;
   if (s === 'errand' && !st.pending.length) return 'el actor no tiene ninguna misión ni encargo suyo en curso';
   if (s === 'trade' && !st.trades) return 'no compra ni vende nada';
-  if (s === 'offer' && !st.can_offer.length) return 'no tiene ninguna misión ni encargo que dar ahora';
+  if (s === 'offer' && !st.can_offer.length && !st.terms) return 'no tiene ninguna misión ni encargo que dar ahora';
   return null;
 }
 
@@ -280,7 +329,10 @@ function steps(s: TalkSituation, p: TalkPlan, npcName: string): string[] {
     ];
     case 'cold': return tier === 'hostile'
       ? ['Corto, frío o amenazante. No da nada gratis.', 'Puede cortar la charla o echarle.']
-      : ['Lo mínimo, en frases completas.', 'Pregunta qué quiere y por qué.'];
+      : [
+        'Lo mínimo, en frases completas. Lo público (dónde vive o trabaja alguien, precios, lo suyo con el actor) lo contesta, seco, pero lo contesta.',
+        st.new_talk ? 'Pregunta qué quiere y por qué.' : 'No le vuelvas a preguntar para qué lo quiere: eso ya está preguntado.',
+      ];
     case 'errand': return [
       p.text.delivery ? `Si trae lo que pidió (${quote(st.pending)}), lo reconoce y cierra la entrega con su tool (story_quest turn_in, complete_job o finish_quest); si no lo trae, se lo dice.`
         : `Pregunta cómo va ${quote(st.pending)}${friendly ? ', y se nota que le importa' : ''}.`,
@@ -290,7 +342,10 @@ function steps(s: TalkSituation, p: TalkPlan, npcName: string): string[] {
       'Primera frase: el precio exacto de su lista (Vende/Compra en su línea).',
       'Regatear solo con tirada de Persuasión. Un trato no está cerrado sin buy_item o sell_item.',
     ];
-    case 'offer': return [
+    case 'offer': return !st.can_offer.length ? [
+      'Lo que tiene para él es su trato («Lo suyo con el actor»): qué tiene que hacer, dónde y para quién, dicho claro y a su manera. Nada de «no lo cuento» ni «lo decide otro»: es suyo y el actor ya lo sabe.',
+      'Lo que gana si lo hace y lo que pasa si no. No es un encargo nuevo: ya está en su Diario, así que nada de give_quest ni story_quest para esto.',
+    ] : [
       `Lo que puede darle: ${quote(st.can_offer)}. Cuenta el problema como lo cuenta él: qué le pasa y qué se juega.`,
       'Por qué no lo hace él.',
       'La recompensa, si la hay. Regístralo en este mismo turno (story_quest ask o give_quest).',
@@ -301,7 +356,7 @@ function steps(s: TalkSituation, p: TalkPlan, npcName: string): string[] {
       tier === 'stranger' ? 'Lo delicado, no: a un forastero no se le cuenta.' : 'Lo delicado, solo lo que su trato permite (lo que «contaría a este nivel» en su línea).',
     ];
     case 'question': return [
-      'Primera frase: contesta (sí, no, no lo sé, o eso no te lo digo).',
+      'Primera frase: contesta (sí, no o no lo sé; «eso no te lo digo», solo para lo delicado, nunca para lo público).',
       tier === 'stranger' ? 'Si lo sabe y es delicado, lo esquiva («eso no se le cuenta a un forastero»).'
         : tier === 'acquaintance' ? 'Si lo sabe y es delicado, pide un motivo o algo a cambio.'
           : 'Si lo sabe, lo cuenta con su opinión; lo que no le toca contar, a medias.',
@@ -338,7 +393,8 @@ function forbidden(s: TalkSituation, p: TalkPlan): string[] {
   if (s === 'lore') out.push('Recitar como un libro.');
   if (s === 'offer') out.push('Listar condiciones o preguntar «¿aceptas?».');
   if (s === 'trade') out.push('Dar por cerrado un trato sin buy_item o sell_item.');
-  if (s === 'cold') out.push('Lo delicado.');
+  if (s === 'cold') out.push('Lo delicado (secretos, lo que su trato no da). Negar lo público o lo suyo con el actor.');
+  if (!st.new_talk) out.push('Volver a preguntarle para qué lo quiere.');
   return out;
 }
 
@@ -362,13 +418,15 @@ export function talkScript(world: World, pc: Character, p: TalkPlan): string {
   return [
     `## Cómo responde ${name} en este turno (situación: ${p.situation})`,
     `Situación: ${SITUATION_ES[p.situation]}${p.second ? `; además, ${SITUATION_ES[p.second]}` : ''}. ${who[0]!.toUpperCase()}${who.slice(1)}.`,
+    st.terms ? `Lo suyo con el actor (el actor ya lo sabe; si pregunta por ello, lo dice claro; ya está en su Diario, no es un encargo nuevo): ${st.terms}` : '',
+    'Lo público no se niega nunca: dónde vive o trabaja alguien del sitio, precios y horarios, y lo suyo con el actor. Lo delicado son los secretos y lo que su trato no da.',
     'Este guion manda sobre las reglas generales de conversación. Pasos, en orden:',
     ...steps(p.situation, p, name).map((x, i) => `${i + 1}. ${x}`),
     ...(second.length ? [`Después, si cabe (${SITUATION_ES[p.second!]}):`, ...second.map((x) => `- ${x}`)] : []),
     `Prohibido: ${forbidden(p.situation, p).join(' ')}`,
     `Longitud: lo que dice, ${planWords(p)} palabras como mucho, en lines.`,
     p.doubtful ? `Si el jugador busca otra cosa (${TALK_SITUATIONS.filter((x) => x !== 'chat').join(', ')}), pon esa en talk_situation de log_event y responde con su regla; si no, talk_situation null.` : 'talk_situation de log_event: null.',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -376,6 +434,11 @@ export function talkScript(world: World, pc: Character, p: TalkPlan): string {
 // ---------------------------------------------------------------------------
 
 const words = (s: string) => norm(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean).length;
+
+/** Negarse a contar («eso no te lo digo», «no lo cuento en una mesa»). Sobre texto normalizado. */
+const REFUSES = /\b(no te lo (digo|cuento|voy a decir|repito)|eso no (te lo digo|se dice|se cuenta|te importa|es asunto tuyo)|no lo cuento|no es asunto tuyo|no te incumbe)\b/;
+/** Volver a preguntar para qué lo quiere. */
+const WHY_AGAIN = /\b(para que (lo )?(quieres|preguntas)|por que (lo )?(quieres saber|preguntas)|y tu (para|por) que)\b/;
 
 /**
  * Lo que el cierre incumple del plan, o []. `declared`: la situación que pone
@@ -403,6 +466,16 @@ export function talkProblems(p: TalkPlan, input: { lines: readonly DialogueLine[
     const offered = p.state.can_offer.filter((title) => names(norm(said), title));
     if (offered.length) out.push(`Es un primer saludo y ${input.npcName} ya suelta ${quote(offered)}: eso, cuando pregunte o venga a cuento.`);
   }
+  const ns = norm(said);
+  // Lo público y lo suyo con el actor no se niegan: lo que pregunta es dónde está alguien, o su trato con él.
+  const asksTerms = Boolean(p.state.terms) && (p.text.asks_work || p.text.request || p.text.question || plan.situation === 'offer');
+  const asksPublic = p.topics.some((x) => x.kind === 'person' || x.kind === 'place') && (p.text.question || plan.situation === 'lore');
+  // Insultado, atacado o ya hostil, puede cerrarse en banda: la escalada (insulto, hostigar, amenaza, pelea) sigue su curso.
+  const calm = plan.situation !== 'danger' && plan.situation !== 'reaction' && p.state.tier !== 'hostile';
+  if (calm && (asksTerms || asksPublic) && REFUSES.test(ns)) {
+    out.push(`${input.npcName} se niega a contar algo público${asksTerms ? ' o su trato con el actor («Lo suyo con el actor»)' : ''}: eso se dice, aunque sea seco. Contesta.`);
+  }
+  if (!p.state.new_talk && WHY_AGAIN.test(ns)) out.push(`${input.npcName} ya le preguntó para qué lo quiere: no lo repitas, contesta.`);
   const max = planWords(plan);
   const n = words(said);
   if (n > max + 10) out.push(`${input.npcName} dice ${n} palabras y el guion pide ${max} como mucho: recórtalo.`);

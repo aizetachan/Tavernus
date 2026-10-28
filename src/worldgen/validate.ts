@@ -191,7 +191,7 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
     if (s.start_hour !== undefined && (!Number.isInteger(s.start_hour) || s.start_hour < 0 || s.start_hour > 23)) errs.push(`situación de ${who}: start_hour fuera de 0-23.`);
     if (!Array.isArray(s.paths) || s.paths.length !== 3 || s.paths.some(blank)) errs.push(`situación de ${who}: hacen falta exactamente tres caminos.`);
     for (const k of ['why_here', 'wants', 'threat', 'clock_runs_out', 'opening'] as const) if (blank(s[k])) errs.push(`situación de ${who}: ${k} está vacío.`);
-    if (s.debt && (!npcs.has(s.debt.npc_id) || !(s.debt.amount > 0) || blank(s.debt.reason))) errs.push(`situación de ${who}: deuda mal formada.`);
+    if (s.debt && (!npcs.has(s.debt.npc_id) || !(s.debt.amount > 0) || blank(s.debt.reason) || (s.debt.on_behalf_of !== undefined && !npcs.has(s.debt.on_behalf_of)))) errs.push(`situación de ${who}: deuda mal formada.`);
     for (const it of s.items ?? []) if (!defs.has(it.item_id)) errs.push(`situación de ${who}: el objeto ${it.item_id} no existe.`);
     for (const id of s.knows ?? []) if (!npcs.has(id)) errs.push(`situación de ${who}: conoce a ${id}, que no existe.`);
     for (const id of s.with_npc_ids ?? []) if (!isPerson(id)) errs.push(`situación de ${who}: la apertura pone con el PJ a ${id}, que no existe o no es una persona.`);

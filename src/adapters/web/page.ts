@@ -582,9 +582,6 @@ export const PAGE = String.raw`<!doctype html>
   #journal .qb .sum { margin: 0 0 8px; color: var(--text); }
   #journal .qb .now { display: flex; gap: 6px; margin: 0 0 8px; color: var(--accent); font-weight: 600; }
   #journal .qb .now::before { content: '→'; }
-  #journal .told { margin: 0 0 6px; padding: 7px 10px; border-left: 2px solid rgba(230,183,90,.45); border-radius: 0 10px 10px 0; background: rgba(255,255,255,.035); font-size: 12.5px; color: var(--muted); }
-  #journal .told b { color: var(--text); font-weight: 600; }
-  #journal .told small { display: block; margin-top: 2px; color: var(--faint); }
   #journal .qb .rw { margin-top: 6px; font-size: 11.5px; color: var(--faint); }
   #journal details.rumors summary b { font-size: 13px; }
   .sec-row { display: flex; align-items: center; gap: 6px; padding-right: 10px; }
@@ -2751,7 +2748,7 @@ ${FIGHT_SCRIPT}
       '<span class="tt"><b>' + escapeHtml(q.title) + (isNew ? '<span class="pill-new">Nueva</span>' : '') + '</b><small>' + lv + escapeHtml(sub) + '</small></span>' +
       (!LIVE[q.status] ? '' : '<button type="button" class="trk' + (tracked ? ' on' : '') + '" data-track="' + escapeHtml(q.id) + '" title="' + (tracked ? 'La sigues en el panel' : 'Seguir en el panel') + '" aria-pressed="' + tracked + '"><svg class="i"><use href="#i-star"/></svg></button>') +
       CHEV + '</summary><div class="qb">';
-    var s = q.summary || { text: q.text, next: null, told: [] };
+    var s = q.summary || { text: q.text, next: null };
     if (s.text) h += '<p class="sum">' + escapeHtml(s.text) + '</p>';
     if (s.next) h += '<div class="now">' + escapeHtml(s.next) + '</div>';
     if (q.declinable) h += answerHtml(q.id);
@@ -2759,7 +2756,6 @@ ${FIGHT_SCRIPT}
       var late = q.clock.days_left <= 0;
       h += '<div class="clock' + (late ? ' late' : '') + '"><svg class="i" style="width:13px;height:13px"><use href="#i-clock"/></svg>' + (late ? 'Plazo vencido' : 'Quedan ' + q.clock.days_left + (q.clock.days_left === 1 ? ' día' : ' días')) + '</div>';
     }
-    (s.told || []).forEach(function (t) { h += '<div class="told"><b>' + escapeHtml(t.who) + ':</b> «' + escapeHtml(t.said) + '»<small>' + escapeHtml(t.when) + '</small></div>'; });
     if (q.steps.length > 1) h += '<ul class="steps">' + q.steps.map(function (st) { return '<li class="' + (st.done ? 'done' : '') + '">' + escapeHtml(st.text) + '</li>'; }).join('') + '</ul>';
     if (o && o.text && q.kind !== 'lead') h += '<div class="orig"><b>Cómo nos llegó:</b> ' + escapeHtml(o.text) + (o.where ? ' <span>(' + escapeHtml(o.where) + ')</span>' : '') + '</div>';
     var hist = (q.history || []).slice(-6).reverse();

@@ -1095,6 +1095,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return { ok: true, events: r.events.map((e) => e.text), board: activeJobs(world).map((j) => j.title) };
     }
     case 'give_quest': {
+      // Lo que le exige al PJ quien tiene un trato con él (su situación, su deuda) ya está en su Diario: no se duplica.
+      if (ctx.talk?.state.terms && s('npc_id') === ctx.talk.npc_id) {
+        return { error: 'main_quest', hint: 'Eso es lo suyo con el actor, y ya está en su Diario (su situación, su deuda): no abras un encargo nuevo. Díselo en la charla y sigue.' };
+      }
       const r = giveQuest(world, actor, { title: s('title'), text: s('text'), giver_npc_id: s('npc_id') || null, objective: s('objective') || null, reward: s('reward') || null, heard: input['heard'] == null ? null : s('heard') }, nowGameS);
       if (!r.ok) return { error: 'bad_quest', hint: r.error };
       const q = r.quest;
