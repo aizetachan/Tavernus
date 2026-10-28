@@ -8,7 +8,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Engine } from '../engine/engine.js';
 import { defaultRng, type Rng, type RollResult } from '../engine/dice.js';
 import type { Character } from '../engine/model.js';
-import { actionContext, systemPrompt, type DecisiveResponse, type RollContext, type Scene } from './prompt.js';
+import { actionContext, systemPrompt, talkPlanFor, type DecisiveResponse, type RollContext, type Scene } from './prompt.js';
 import { cleanText, executeTool, MASTER_TOOLS, WRITE_TOOLS, type LogEventInput, type ToolContext } from './tools.js';
 import type { Approach } from '../engine/movement.js';
 import { isPlaceholder, rollCategory, withoutSelfCorrection } from '../engine/closecheck.js';
@@ -143,8 +143,10 @@ export class Master {
     const safeguards: Partial<Pick<Anthropic.Beta.MessageCreateParamsNonStreaming, 'betas' | 'fallbacks'>> = modelSupportsFallbacks(model)
       ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }
       : {};
-    const context = actionContext(engine, actor, text, roll, intro, scene, decisive);
-    const ctx: ToolContext = { engine, actor, nowGameS: engine.nowFor(actor), rng: this.rng, closed: null, rolls: [], progress: [], action_text: roll?.original_text ?? (intro || scene ? null : text), roll_category: roll && !/^ataque/i.test(roll.result.label) ? rollCategory(roll.result) : null, ...(intro ? { intro: true } : {}) };
+    // Charla con un NPC (talk.ts): el mismo plan para el contexto y para el control del cierre.
+    const talk = intro || scene || roll ? null : talkPlanFor(engine, actor, text);
+    const context = actionContext(engine, actor, text, roll, intro, scene, decisive, talk);
+    const ctx: ToolContext = { engine, actor, nowGameS: engine.nowFor(actor), rng: this.rng, closed: null, rolls: [], progress: [], action_text: roll?.original_text ?? (intro || scene ? null : text), roll_category: roll && !/^ataque/i.test(roll.result.label) ? rollCategory(roll.result) : null, ...(intro ? { intro: true } : {}), ...(talk ? { talk } : {}) };
     const calls: ToolCallRecord[] = [];
     const failures: ToolFailure[] = [];
     /** Cierre aceptado: con tool_failed y los errores si algo de escritura falló por el camino. */

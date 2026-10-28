@@ -43,6 +43,7 @@ import { actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, deal
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
+import { talkProblems, TALK_SITUATIONS, type TalkPlan } from '../engine/talk.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
@@ -304,6 +305,7 @@ export const MASTER_TOOLS: Tool[] = [
     names_learned: nstr('IDs (separados por comas) de NPCs cuyo NOMBRE el actor ha aprendido en esta acción porque se presentaron, alguien los presentó o se lo dijeron al preguntar. Solo cuenta si el nombre se dice en la narración o en lines. Quien dice su propio nombre en lines lo apunta el servidor solo. Mientras el actor no lo sepa, nómbralo por su oficio: el servidor tapa en la narración los nombres que no conoce. null si ninguno.'),
     places_learned: nstr('IDs (separados por comas) de localizaciones de las que el actor ha oído hablar en esta acción porque alguien nombró el sitio o lo leyó en un cartel o mapa. null si ninguna.'),
     introduces_self: bool('true si el actor ha dicho su propio nombre en voz alta en esta acción (los presentes lo aprenden).'),
+    talk_situation: nstr(`Solo si el contexto trae «Cómo responde…» y el jugador busca otra cosa que la situación que dice: ${TALK_SITUATIONS.join(', ')}. El servidor la comprueba. null en cualquier otro caso.`),
     target_character_id: nstr('Si la acción se dirige a otro JUGADOR presente (le habla, le mira, se le acerca, le tiende algo): su ID. Recibirá observable_target y opciones para responder. null si no.'),
     observable_target: nstr('Solo con target_character_id: lo que percibe ese jugador, en segunda persona («Kael se acerca a ti y te pregunta…»). Solo lo que hace el actor, nunca lo que hace o piensa ese jugador. null si no.'),
     lines: {
@@ -376,6 +378,10 @@ export interface ToolContext {
   incident_rejections?: number;
   /** Cierres rechazados por mostrar un punto oculto que el actor no ha encontrado (spots.ts; uno como mucho). */
   spot_rejections?: number;
+  /** Charla con un NPC: la situación y el guion que decidió el motor (talk.ts). */
+  talk?: TalkPlan;
+  /** Cierres rechazados por no seguir ese guion (talk.ts; uno como mucho). */
+  talk_rejections?: number;
   /** Es la escena de apertura: el actor no se acerca a quien habla (la apertura ya le pone con él). */
   intro?: boolean;
   /** NPC que ya han hecho su turno en esta acción (attack o el motor): uno por NPC (combat.ts). */
@@ -1471,6 +1477,20 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (rep.length) {
           ctx.repeat_rejections = (ctx.repeat_rejections ?? 0) + 1;
           return { error: repeatedRejection(rep.map((r) => ({ who: actor.knows.includes(r.npc_id) ? world.npc(r.npc_id).name : descriptorOf(world, r.npc_id), text: r.text }))) };
+        }
+      }
+      // Charla con un NPC: el guion del motor (talk.ts). Que conteste si le toca, que no nombre misiones cerradas, la longitud. Se reescribe una vez.
+      if (ctx.talk && (ctx.talk_rejections ?? 0) < 1) {
+        const plan = ctx.talk;
+        const npc = world.npcs.get(plan.npc_id);
+        const bad = talkProblems(plan, {
+          lines: parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id)),
+          narration: s('narration_private'), declared: input['talk_situation'] ? s('talk_situation') : null, pendingRoll: req !== null,
+          npcName: !npc ? 'el NPC' : actor.knows.includes(npc.id) ? npc.name : descriptorOf(world, npc.id),
+        });
+        if (bad.length) {
+          ctx.talk_rejections = (ctx.talk_rejections ?? 0) + 1;
+          return { error: `No sigue el guion de «Cómo responde…»: ${bad.join(' ')} Reescribe log_event.` };
         }
       }
       // Recibir algo de otro jugador sin que haya cambiado de manos («aceptas la jarra que te tiende…»): se reescribe una vez.

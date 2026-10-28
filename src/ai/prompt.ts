@@ -48,6 +48,7 @@ import { hhmm } from '../engine/schedule.js';
 import { currencyOf, money } from '../engine/money.js';
 import { priceFor } from '../engine/standing.js';
 import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
+import { talkPlan, talkScript, type TalkPlan } from '../engine/talk.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
 const LENGTH_ES = { short: 'uno o dos párrafos cortos de narración, unas 60-90 palabras sin contar lo que se dice; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
@@ -94,7 +95,7 @@ export function systemPrompt(c: Campaign, opts: { actor?: boolean } = {}): strin
     'PROGRESO: recolectar (harvest) tira solo y cuenta práctica. Las misiones de la historia escrita (q_…, ver «Historia escrita») las pide alguien en escena: quien la da la cuenta con su voz y entra en el Diario (story_quest ask), sin preguntar si acepta; si el jugador dice que no, story_quest decline; la recompensa la da quien la recibe al entregarla (story_quest turn_in); nunca abras ni insinúes una que no esté disponible. Los demás encargos no se aceptan: si un NPC le da uno al actor o le pide algo concreto que hacer, ya es suyo; no le preguntes si acepta ni esperes un «acepto», y hacerlo o no es cosa suya. Uno del tablón queda en su Diario con que lo hablen; cualquier otro, regístralo con give_quest en ese mismo turno (título corto, de qué va, quién lo da, objetivo y recompensa si se dijo), y cuando lo cumpla o ya no se pueda, finish_quest. Los encargos del tablón se cierran con complete_job al entregarlos al NPC que los pidió; los de entrega los valida el servidor. Las pistas se conceden con grant_clue únicamente cuando el jugador las ha obtenido con sus actos. Vender y comprar: sell_item y buy_item con los precios del NPC; el master no negocia fuera de esa lista salvo una tirada de Persuasión que como mucho mueve un 10 %. El contexto solo trae las pistas de este lugar o de quien está delante y los títulos del tablón: si el jugador busca otra pista, pregunta por un encargo o va a entregarlo, consulta get_campaign_notes antes de responder.',
     'NOMBRES: los jugadores de la partida se conocen siempre por su nombre: llámalos por él. De los NPC, el actor solo conoce los nombres marcados como conocidos; a los demás los nombras por lo que se ve (la tabernera, el guardia del portón), también en suggested_actions. El nombre de un NPC se aprende cuando se presenta o alguien lo nombra: entonces va en names_learned.',
     'NPCs: interprétalos según su descripción, lo que quieren y lo que recuerdan. Si el actor habla con uno, pon su ID en npc_id; y solo si esa persona recordaría algo de la conversación, escríbelo en npc_memory_note con su importancia. Un NPC atiende a una persona a la vez: si está ocupado con otro, responde en ficción que espere, salvo motivo de peso.',
-    `NPC QUE CONVERSAN: cuando un NPC habla, no es un mostrador ni lee el tablón en voz alta: tiene su día, su carácter y sus intereses, y lleva su parte de la charla. Su «Trato» con el actor (en el contexto) marca el tono y lo que suelta: si el jugador insiste en algo delicado que el trato aún no permite, el NPC se cierra, duda o pide algo a cambio; una tirada social (requires_roll) o un favor pueden abrirlo, a medias.
+    `NPC QUE CONVERSAN: cuando un NPC habla, no es un mostrador ni lee el tablón en voz alta: tiene su día, su carácter y sus intereses, y lleva su parte de la charla. Su «Trato» con el actor (en el contexto) marca el tono y lo que suelta: si el jugador insiste en algo delicado que el trato aún no permite, el NPC se cierra, duda o pide algo a cambio; una tirada social (requires_roll) o un favor pueden abrirlo, a medias. Si el contexto trae «Cómo responde… en este turno», el motor ya ha decidido la situación (saludo, pregunta, lore, misión, comercio, reacción, despedida…): sigue sus pasos en orden, respeta lo prohibido y la longitud; el servidor lo comprueba.
 ${TALK_RULES}`,
     opts.actor
       ? 'VOZ DE LOS NPC: las palabras exactas de un NPC las escribe después su actor, con su ficha, lo que le ronda y lo que se han dicho. Tú decides la sustancia del turno: en lines, lo que dice el NPC (hechos, precios, negativas, lo que cuenta y lo que calla, lo que pregunta o pide, el tema suyo que saca), en una o dos frases llanas por réplica; el actor lo dirá con su voz. Lo que no deba soltar no va en lines. En conversación, la narración es una línea de gesto como mucho, o nada.'
@@ -272,7 +273,7 @@ function boardLine(jobs: string[]): string {
   return jobs.length ? `Tablón: ${jobs.join(' · ')}.` : 'Tablón: vacío.';
 }
 
-export function actionContext(engine: Engine, actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string; prologue?: string }, scene?: Scene, decisive?: DecisiveResponse): string {
+export function actionContext(engine: Engine, actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string; prologue?: string }, scene?: Scene, decisive?: DecisiveResponse, talk?: TalkPlan | null): string {
   const world = engine.world;
   const nowG = engine.nowFor(actor); // la hora del actor: la del mundo, o la de su llegada si ha viajado (travel.ts)
   const pos = positionOf(world, actor, nowG);
@@ -509,7 +510,10 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const toOther = toPc && !namedNpc(world, actor, text)
       ? `\nVa dirigida a ${pcName(world, actor.id, toPc)} [${toPc.id}], otro JUGADOR presente, no a ningún NPC: el NPC con quien hablaba no contesta por él ni se da por aludido; lo que responda ${pcName(world, actor.id, toPc)} lo escribe su jugador. Narra solo lo que hace o dice el actor y, si toca, cómo reacciona la sala.`
       : '';
+    // Charla con un NPC (talk.ts): la situación y el guion del turno, decididos por el motor.
+    const plan = toOther ? null : talk !== undefined ? talk : talkPlanFor(engine, actor, text);
     L.push(`## Acción del jugador\n«${text}»${toOther}${decisive ? `\nRespondió a la ventana decisiva («${decisive.threat}») en ${decisive.seconds} s: ${decisive.speed === 'fast' ? 'RÁPIDA → actúa antes de que la amenaza se resuelva; si pides tirada, el servidor le dará ventaja' : 'normal → su acción y la amenaza se resuelven a la vez; decide el dado'}.` : ''}`);
+    if (plan) L.push(talkScript(world, actor, plan));
   }
 
   // Ganchos e imprevisto que el motor pone delante en esta llamada (hooks.ts, fastpath.ts).
@@ -561,6 +565,16 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     ...(heard.length ? [`De otros sitios, que ${actor.name} ya conoce:`, ...heard.map((r) => `- ${describeRumor(r)} (en ${world.locations.get(r.location_id)?.name ?? r.location_id})`)] : []),
   ].join('\n'));
   return L.join('\n\n');
+}
+
+/**
+ * El plan de charla de una acción del jugador (talk.ts), o null: no en la
+ * apertura, llegadas, tiradas ni turnos compartidos (ronda o charla de grupo).
+ */
+export function talkPlanFor(engine: Engine, actor: Character, text: string): TalkPlan | null {
+  const h = engine.sceneHints(actor.id);
+  if (h?.round || h?.group || !text.trim()) return null;
+  return talkPlan(engine.world, engine.events.all(), actor, text, engine.nowFor(actor));
 }
 
 /** Lo que lleva encima un NPC (con IDs, para transfer_item): sin esto el máster lo inventa con spawn_item. */

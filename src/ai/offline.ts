@@ -93,7 +93,7 @@ function logEventFor(context: string): Record<string, unknown> {
   const base = {
     observable: null, observable_vague: null, loudness: 1, tags: 'offline',
     requires_roll_kind: null, requires_roll_key: null, requires_roll_dc: null, requires_roll_advantage: null, requires_roll_target: null,
-    decisive_threat: null, decisive_npc_id: null, npc_id: null, npc_memory_note: null, npc_memory_importance: null, names_learned: null, places_learned: null, introduces_self: false,
+    decisive_threat: null, decisive_npc_id: null, npc_id: null, npc_memory_note: null, npc_memory_importance: null, names_learned: null, places_learned: null, introduces_self: false, talk_situation: null,
   };
   const here = p.spots.find((s) => s.here)?.name ?? 'donde estabas';
   const sug = suggestions(p).join(' | ');
@@ -143,7 +143,7 @@ function logEventFor(context: string): Record<string, unknown> {
       if (talkTo) {
         // El contexto corta la acción en el primer «»: la comilla de cierre puede faltar.
         const said = /[«"“]([^«»"“”]+)/.exec(action)?.[1]?.trim();
-        const reply = 'Bienvenido. Aquí no se pregunta de dónde viene nadie: se paga y se bebe. ¿Qué te pongo?';
+        const reply = talkReply(context) ?? 'Bienvenido. Aquí no se pregunta de dónde viene nadie: se paga y se bebe. ¿Qué te pongo?';
         return {
           ...base, tags: 'offline,social', npc_id: talkTo.id,
           narration_private: `${lead}${said ? `«${said}», dices. ` : ''}${talkTo.name} levanta la vista. «${reply}»`,
@@ -155,6 +155,30 @@ function logEventFor(context: string): Record<string, unknown> {
       return { ...base, narration_private: `${lead}Haces ${lower(action)}. Nada cambia.`, suggested_actions: sug };
     }
   }
+}
+
+/**
+ * Respuesta de plantilla según la situación que decidió el motor (talk.ts, el
+ * bloque «Cómo responde…» del contexto). La charla sin más se queda con la de
+ * siempre (null).
+ */
+const TALK_REPLIES: Record<string, string> = {
+  danger: 'Quieto ahí. No te acerques.',
+  reaction: 'Vaya. Eso no me lo esperaba.',
+  cold: '¿Qué quieres?',
+  errand: '¿Cómo va lo mío?',
+  trade: 'Mira lo que tengo y dime qué te interesa.',
+  offer: 'Pues algo hay, sí. Te lo cuento si tienes un rato.',
+  lore: 'De eso se cuentan muchas cosas. Lo que sabe todo el mundo, y poco más.',
+  question: 'Eso no lo sé, la verdad. Pregunta por ahí.',
+  farewell: 'Ve con cuidado.',
+};
+
+export function talkReply(context: string): string | null {
+  const s = /^## Cómo responde .+? en este turno \(situación: (\w+)\)/m.exec(context)?.[1];
+  if (!s) return null;
+  if (s === 'greeting') return /^Situación: .*Primera vez que hablan/m.test(context) ? 'Buenas. No te había visto por aquí. ¿Qué te trae?' : 'Hombre, tú otra vez. ¿Qué tal?';
+  return TALK_REPLIES[s] ?? null;
 }
 
 function orderAsked(action: string): 'follow' | 'stop' | null {
