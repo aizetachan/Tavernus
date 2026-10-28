@@ -1,5 +1,9 @@
 # Conversación con NPC: director y actor
 
+> **27-10:** el actor queda apagado en producción (`ACTOR_MODEL=off`). La charla se guía ahora por reglas por
+> situación que decide el motor: ver [CONVERSACION-REGLAS.md](CONVERSACION-REGLAS.md). Lo de abajo (transcripción,
+> lo que le ronda, el trato y las reglas de conversación) sigue valiendo.
+
 Los NPC hablaban como carteles. Ejemplo real (rama de prueba del 27-10, máster Haiku con esfuerzo bajo): el jugador
 pregunta a Doro «¿De qué va la ronda del claro?» y Doro contesta «La ronda del claro. Cinco de plata por ir hasta el
 roble, mirar si hay alguien y volver a contármelo. Yo no puedo dejar el portón.». Es el aviso del tablón leído en voz

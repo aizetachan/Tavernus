@@ -231,7 +231,7 @@ describe('memoria y cola de conversación de NPC', () => {
     const time = fakeTime();
     const { engine } = await bootEngine(time);
     const { client, requests } = fakeClient([
-      msg([logEvent('Brenna asiente.', 'Kael habla con Brenna.', { npc_id: 'npc_brenna', npc_memory_note: 'Kael preguntó por el incendio de Vharn y dijo venir del sur.', npc_memory_importance: 2 })]),
+      msg([logEvent('Brenna asiente.', 'Kael habla con Brenna.', { npc_id: 'npc_brenna', npc_memory_note: 'Kael preguntó por el incendio de Vharn y dijo venir del sur.', npc_memory_importance: 2, lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'De eso no se habla aquí.' }] })]),
       msg([logEvent('Brenna te sirve.', null, { npc_id: 'npc_brenna', npc_memory_note: 'Pidió una cerveza.', npc_memory_importance: 1 })]),
       msg([logEvent('Brenna te mira.', null)]),
     ]);
