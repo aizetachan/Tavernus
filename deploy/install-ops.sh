@@ -29,13 +29,13 @@ systemctl daemon-reload
 systemctl enable "$SERVICE.service" >/dev/null 2>&1
 systemctl enable --now tavernus-health.timer tavernus-backup.timer >/dev/null 2>&1
 
-# Caddyfile del repo, si el proxy es Caddy y ha cambiado.
-if [ "$(cat /etc/tavernus/proxy 2>/dev/null)" = caddy ] && command -v caddy >/dev/null; then
+# Caddyfile del repo, si el proxy es Caddy y ha cambiado. Con el envoltorio instalado
+# (preparar-usuario-deploy.sh) lo publica release.sh al final, para root y para tavernus.
+if [ "$(cat /etc/tavernus/proxy 2>/dev/null)" = caddy ] && command -v caddy >/dev/null && [ ! -x "$CADDY_PUBLISH" ]; then
   tmp=$(mktemp)
   tr -d '\r' < "$SRC/Caddyfile" > "$tmp"
   if ! cmp -s "$tmp" /etc/caddy/Caddyfile; then
-    # shellcheck disable=SC1091
-    if ( set -a; . /etc/tavernus/caddy.env; set +a; caddy validate --config "$tmp" --adapter caddyfile >/dev/null 2>&1 ); then
+    if ( load_caddy_env; caddy validate --config "$tmp" --adapter caddyfile >/dev/null 2>&1 ); then
       install -m 644 "$tmp" /etc/caddy/Caddyfile
       systemctl reload caddy && log "Caddyfile actualizado y Caddy recargado"
     else

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Lleva las partidas entre tu ordenador (data/ del repo) y el servidor (/var/lib/tavernus/data).
-# Desde la raíz del repo, en Git Bash, macOS o Linux. Usa el mismo TAVERNUS_HOST que push.sh.
+# Desde la raíz del repo, en Git Bash, macOS o Linux. Copias y restauraciones son de root, así que
+# usa el administrador de push.sh: TAVERNUS_ADMIN_HOST (y TAVERNUS_ADMIN_SSH_KEY), o TAVERNUS_HOST.
 #
 #   deploy/data-sync.sh up             sube data/games y data/local (sin los PDF de manuals/) y
 #                                      AÑADE en el servidor las partidas que no estén; no toca las
@@ -16,13 +17,21 @@
 # Antes de cambiar nada, el servidor hace una copia de su estado (tavernus-restore).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# shellcheck disable=SC1091
-[ -f deploy/local.env ] && . deploy/local.env
-HOST=${TAVERNUS_HOST:?pon TAVERNUS_HOST=usuario@servidor (o créalo en deploy/local.env)}
+# Lo que venga en el entorno manda sobre deploy/local.env (TAVERNUS_ADMIN_HOST=… deploy/data-sync.sh).
+if [ -f deploy/local.env ]; then
+  keep=$(declare -p TAVERNUS_HOST TAVERNUS_SSH_PORT TAVERNUS_SSH_KEY TAVERNUS_SSH_OPTS \
+    TAVERNUS_ADMIN_HOST TAVERNUS_ADMIN_SSH_KEY 2>/dev/null || true)
+  # shellcheck disable=SC1091
+  . deploy/local.env
+  eval "$keep"
+fi
+HOST=${TAVERNUS_ADMIN_HOST:-${TAVERNUS_HOST:?pon TAVERNUS_HOST=usuario@servidor (o créalo en deploy/local.env)}}
+KEY=${TAVERNUS_ADMIN_SSH_KEY:-${TAVERNUS_SSH_KEY:-}}
+case ${HOST%%@*} in tavernus) echo "data-sync.sh necesita root o sudo: pon TAVERNUS_ADMIN_HOST en deploy/local.env" >&2; exit 1 ;; esac
 PORT=${TAVERNUS_SSH_PORT:-22}
 SSH_OPTS=(-p "$PORT" -o ServerAliveInterval=30)
 SCP_OPTS=(-P "$PORT")
-if [ -n "${TAVERNUS_SSH_KEY:-}" ]; then SSH_OPTS+=(-i "$TAVERNUS_SSH_KEY"); SCP_OPTS+=(-i "$TAVERNUS_SSH_KEY"); fi
+if [ -n "$KEY" ]; then SSH_OPTS+=(-i "$KEY"); SCP_OPTS+=(-i "$KEY"); fi
 # Opciones extra de ssh/scp, p. ej. TAVERNUS_SSH_OPTS="-o StrictHostKeyChecking=accept-new".
 # shellcheck disable=SC2206
 [ -n "${TAVERNUS_SSH_OPTS:-}" ] && { SSH_OPTS+=($TAVERNUS_SSH_OPTS); SCP_OPTS+=($TAVERNUS_SSH_OPTS); }

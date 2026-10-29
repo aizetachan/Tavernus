@@ -129,6 +129,28 @@ Lo que un personaje hace aparece en el `#pov` de quien lo percibe, con el detall
 
 La web se publica en un VPS Debian o Ubuntu con los scripts de `deploy/`: `deploy/push.sh --setup --domain <dominio>` prepara el servidor una vez (Node 22, usuario de servicio, Caddy con HTTPS automático, cortafuegos, copias diarias y aviso si se cae) y `deploy/push.sh` sube cada versión (en PowerShell, `deploy\push.ps1`). Paso a paso, sin dominio todavía, copias, avisos, coste y seguridad: [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md). Los scripts antiguos de la VM de Google con el bot de Discord quedan en `deploy/gcp/` como legado.
 
+### Desplegar sin root (usuario `tavernus`)
+
+Los despliegues entran como `tavernus`, el mismo usuario sin privilegios con el que corre `tavernus-web`. La clave de root (`~/.ssh/tavernus_deploy`) queda solo para administrar: `--setup`, `--ops`, `--usuario-deploy` y `data-sync.sh`.
+
+- **Configuración del PC** en `deploy/local.env` (git lo ignora; plantilla en [`deploy/local.env.example`](deploy/local.env.example)): `TAVERNUS_HOST=tavernus@<IP>` con `TAVERNUS_SSH_KEY=~/.ssh/tavernus_pc`, y `TAVERNUS_ADMIN_HOST=root@<IP>` con `TAVERNUS_ADMIN_SSH_KEY`. Una variable de entorno manda sobre el fichero: `TAVERNUS_HOST=root@<IP> TAVERNUS_SSH_KEY=… deploy/push.sh` despliega como root, como antes.
+- **Preparar un servidor** (idempotente, como root, después de `--setup`):
+
+  ```bash
+  ssh-keygen -t ed25519 -f ~/.ssh/tavernus_pc -C tavernus_pc
+  deploy/push.sh --usuario-deploy --clave pc "$(cat ~/.ssh/tavernus_pc.pub)"
+  ```
+
+  Lo hace [`deploy/preparar-usuario-deploy.sh`](deploy/preparar-usuario-deploy.sh). Antes de tocar nada, guarda una copia de la cuenta, las unidades, `sudoers`, `authorized_keys`, el Caddyfile y los propietarios en `/root/tavernus-deploy-<fecha>/`. Después deja:
+  - `tavernus` con bash y la contraseña bloqueada, fuera del grupo `docker`, con home `/home/tavernus` y dueño de `/opt/tavernus`. La primera vez para la web unos segundos para cambiar el home.
+  - `/home/tavernus/.ssh/authorized_keys` con `restrict` en cada línea (sin terminal ni túneles). El fichero y su carpeta son de root, así que tavernus no puede añadirse claves ni quitarse el `restrict`.
+  - `/etc/sudoers.d/tavernus`, validado con `visudo -c`, que solo permite `systemctl restart|reset-failed tavernus-web`, `systemctl reload caddy`, `journalctl -u tavernus-web -n 30 --no-pager -o cat` y `/usr/local/sbin/tavernus-publicar-caddy`, sin argumentos.
+  - [`tavernus-publicar-caddy`](deploy/tavernus-publicar-caddy.sh) tiene origen fijo (`/opt/tavernus/current/deploy/Caddyfile`, que lee como tavernus) y destino fijo (`/etc/caddy/Caddyfile`). Solo acepta un sitio para los dominios de `caddy.env` con proxy a 127.0.0.1, sin acceso a disco. Valida `main.caddy` completo, con los sitios del hub y de las demos, como el usuario `caddy`, y si la validación o la recarga fallan, restaura el anterior.
+- **Lo que tavernus no instala:** los scripts de `/usr/local/lib/tavernus` y las unidades de systemd los ejecuta root. Si cambian en el repo, `deploy/push.sh` lo avisa y se aplican con `deploy/push.sh --ops`.
+- **Rotar la clave del PC:** genera otra (`ssh-keygen -t ed25519 -f ~/.ssh/tavernus_pc_nueva`) y ejecuta `deploy/push.sh --usuario-deploy --clave pc "$(cat ~/.ssh/tavernus_pc_nueva.pub)"`. Eso sustituye la línea `pc` y deja las demás. Prueba con `ssh -i ~/.ssh/tavernus_pc_nueva tavernus@<IP> 'systemctl status tavernus-web --no-pager'`, cambia `TAVERNUS_SSH_KEY` y borra la vieja. Si la clave se pierde o se filtra, `--quitar pc` la anula al momento.
+- **GitHub Actions** (si se añade un flujo de despliegue): usa este mismo usuario con una clave propia, nunca la de root. Genera `ssh-keygen -t ed25519 -N '' -f tavernus_actions -C tavernus_actions` y añádela como otra línea con `deploy/push.sh --usuario-deploy --clave actions "$(cat tavernus_actions.pub)"`. Guarda la privada solo en el secreto `SSH_PRIVATE_KEY` del repositorio y bórrala del disco. El flujo exporta `TAVERNUS_HOST=tavernus@<IP>` y `TAVERNUS_SSH_KEY` y ejecuta `deploy/push.sh`. Para revocarla: `--quitar actions`. El script se niega a aceptar como clave de tavernus una que ya esté en el `authorized_keys` de root.
+- **Volver atrás:** pon `TAVERNUS_HOST=root@<IP>` y `TAVERNUS_SSH_KEY=~/.ssh/tavernus_deploy` en `deploy/local.env`, porque `release.sh` sigue funcionando como root. Para quitar también el acceso de tavernus, ejecuta `deploy/push.sh --usuario-deploy --deshacer`: borra el sudoers, el envoltorio y las claves, y devuelve `tavernus` a `nologin` con home `/opt/tavernus`, guardando antes otra copia en `/root/tavernus-deploy-<fecha>/`. A mano, como root: `rm /etc/sudoers.d/tavernus /usr/local/sbin/tavernus-publicar-caddy && visudo -c`, y luego `usermod -s /usr/sbin/nologin -d /opt/tavernus tavernus` con la web parada.
+
 ## Estructura
 
 ```

@@ -72,7 +72,7 @@ if ! id "$SVC_USER" >/dev/null 2>&1; then
   useradd --system --user-group --home-dir "$APP_DIR" --no-create-home --shell /usr/sbin/nologin "$SVC_USER"
 fi
 install -d -o "$SVC_USER" -g "$SVC_USER" -m 755 "$APP_DIR" "$APP_DIR/releases"
-install -d -o "$SVC_USER" -g "$SVC_USER" -m 750 "$STATE_DIR" "$SRV_DATA" "$SRV_DATA/games" "$SRV_DATA/local"
+install -d -o "$SVC_USER" -g "$SVC_USER" -m 750 "$STATE_DIR" "$SRV_DATA" "$SRV_DATA/games" "$SRV_DATA/local" "$DEPLOY_DIR"
 install -d -o root -g root -m 700 "$BACKUP_DIR" "$HEALTH_DIR"
 install -d -o root -g root -m 755 /etc/tavernus "$OPS_DIR"
 
@@ -127,10 +127,7 @@ if [ "$PROXY" = caddy ]; then
   systemctl daemon-reload
   systemctl enable caddy >/dev/null 2>&1
   # validate necesita las variables, que en el servicio pone el drop-in.
-  set -a
-  # shellcheck disable=SC1090
-  . "$caddy_env"
-  set +a
+  load_caddy_env
   caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
   systemctl restart caddy
   log "Caddy sirve $(sed -n 's/^TAVERNUS_DOMAIN=//p' "$caddy_env") -> 127.0.0.1:$WEB_PORT"
