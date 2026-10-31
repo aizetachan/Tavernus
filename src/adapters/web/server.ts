@@ -46,6 +46,7 @@
  *   GET  /api/session?game=SLUG     quién soy: anfitrión o jugador, y mi PJ si estoy ligado
  *   GET|POST /api/seats?game=SLUG · POST /api/seats/regenerate   anfitrión: listar, añadir, renovar
  *   POST /api/seat/claim?game=SLUG  asiento libre: crea el PJ del invitado
+ *   POST /api/character/preview     resumen del asistente de creación: valida y calcula sin crear nada
  * Presencia: SSE «presence» con quién está en línea y dónde respecto a ti; avisos en el hilo al entrar y salir.
  * Una acción a la vez por PJ (409 si ya tiene una en curso) y SSE «queue» si espera a otro PJ del mismo sitio.
  * Registro (servicelog.ts): una línea por acción con su máster, otra por llamada suelta al máster y la presencia.
@@ -55,11 +56,11 @@ import { CreditAlarm, webhookAlert, type AlertSender } from './alert.js';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Engine, ActionResult } from '../../engine/engine.js';
+import type { Engine, ActionResult, CharacterSpec } from '../../engine/engine.js';
 import type { InfoAnswer } from '../../engine/info.js';
 import type { GameEvent, Id } from '../../engine/model.js';
 import type { Delivery } from '../../engine/events.js';
-import { GameError, GameManager, NEW_GAME_MODES, type NewGameMode, type WorldInput } from '../../games/manager.js';
+import { GameError, GameManager, NEW_GAME_MODES, type CreateGameInput, type NewGameMode, type WorldInput } from '../../games/manager.js';
 import { Master } from '../../ai/master.js';
 import { sheetView } from '../sheet-view.js';
 import { PAGE } from './page.js';
@@ -634,6 +635,16 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       html(res, 200, seatsPage(manifest.slug));
       return;
     }
+    if (req.method === 'POST' && url.pathname === '/api/character/preview') {
+      if (!allowed && !pub) { json(res, 403, { ok: false, text: 'Esta partida es por invitación: entra con tu enlace.' }); return; }
+      const input = characterFromBody(await readJson(req), 'name');
+      const r = GameManager.previewCharacter(input);
+      if (!r.ok) { json(res, 400, { ok: false, text: r.reason, field: r.field }); return; }
+      // En una partida ya en marcha (invitación), el nombre no puede estar cogido.
+      if (manifest && allowed && (await runtime(manifest.slug)).engine.characterNameTaken(input.name)) { json(res, 400, { ok: false, text: 'Ese nombre ya está en uso.', field: 'name' }); return; }
+      json(res, 200, { ok: true, preview: r.preview });
+      return;
+    }
     if (url.pathname === '/api/games' || url.pathname.startsWith('/api/games/')) {
       if (!admin && !pub) { json(res, 403, { ok: false, text: 'Solo quien organiza la partida puede ver y crear partidas.' }); return; }
       // Borrar o convertir una partida: solo su anfitrión.
@@ -684,12 +695,8 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const body = await readJson(req);
       claiming.add(seat.id);
       try {
-      const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '');
-      const id = await games.addCharacter(manifest.slug, `web:${manifest.slug}:${seat.id}`, {
-        name: str('name'), ...(str('race') ? { race_id: str('race') } : {}), ...(str('class') ? { class_id: str('class') } : {}),
-        ...(str('hook') ? { hook: str('hook') } : {}), ...(str('appearance') ? { appearance: str('appearance') } : {}),
-        death_mode: str('death_mode') === 'hardcore' ? 'hardcore' : 'casual',
-      }, { near: str('near') || null });
+      const near = body['near'];
+      const id = await games.addCharacter(manifest.slug, `web:${manifest.slug}:${seat.id}`, characterFromBody(body, 'name'), { near: typeof near === 'string' && near ? near : null });
       await seats.update(games.paths(manifest).dir, (list) => { const s = list.find((x) => x.id === seat.id); if (s) s.character_id = id; });
       rt.introduce(id);
       json(res, 200, { ok: true, character_id: id });
@@ -968,7 +975,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         const s = m ? await seatOf(req, m.slug, games.paths(m).dir) : null;
         if (s) list.push({ ...g, host: isHostSeat(s) });
       }
-      json(res, 200, { games: list, options: GameManager.characterOptions(), api_key: Master.configured('live') });
+      json(res, 200, { games: list, options: GameManager.characterOptions(), api_key: Master.configured('live'), character_optional: admin });
       return;
     }
     if (url.pathname === '/api/games' && req.method === 'POST') {
@@ -988,7 +995,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const dice_seed = seedRaw === null || seedRaw === undefined || seedRaw === '' ? null : Number(seedRaw);
       const created = await games.create({
         name: str('name'), mode: mode as NewGameMode, dice_seed,
-        character: str('character') ? { name: str('character'), ...(str('race') ? { race_id: str('race') } : {}), ...(str('class') ? { class_id: str('class') } : {}), ...(str('hook') ? { hook: str('hook') } : {}), ...(str('appearance') ? { appearance: str('appearance') } : {}), death_mode: str('death_mode') === 'hardcore' ? 'hardcore' : 'casual' } : null,
+        character: str('character') ? characterFromBody(body, 'character') : null,
         // Mundo nuevo generado (src/worldgen); lo valida el gestor.
         world: body['world'] && typeof body['world'] === 'object' ? body['world'] as WorldInput : null,
       });
@@ -1369,6 +1376,28 @@ function html(res: ServerResponse, status: number, page: string): void {
 function json(res: ServerResponse, status: number, data: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(data));
+}
+
+/**
+ * El personaje que manda el asistente (page-creation.ts) tal cual: el `as` no promete
+ * nada, los valores los comprueba chargen.ts. Sin un campo, el valor por defecto;
+ * con uno que no sirve (`race: 7`, `abilities: 'x'`), error en vez de un PJ por defecto.
+ */
+function characterFromBody(body: Record<string, unknown>, nameKey: string): NonNullable<CreateGameInput['character']> {
+  const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '');
+  const given = (k: string) => (body[k] === undefined || body[k] === null || body[k] === '' ? undefined : body[k]);
+  const race = given('race'), klass = given('class'), background = given('background'), abilities = given('abilities'), skills = given('skills'), death = given('death_mode');
+  return {
+    name: str(nameKey),
+    ...(race !== undefined ? { race_id: race as string } : {}),
+    ...(klass !== undefined ? { class_id: klass as string } : {}),
+    ...(background !== undefined ? { background_id: background as string } : {}),
+    ...(abilities !== undefined ? { abilities: abilities as CharacterSpec['abilities'] } : {}),
+    ...(skills !== undefined ? { skills: skills as string[] } : {}),
+    ...(str('hook') ? { hook: str('hook') } : {}),
+    ...(str('appearance') ? { appearance: str('appearance') } : {}),
+    ...(death !== undefined ? { death_mode: death as 'casual' | 'hardcore' } : {}),
+  };
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {

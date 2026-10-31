@@ -43,11 +43,10 @@ import { characterCheck, type CheckKind } from './rules.js';
 import { activeJobs, addPractice, rotateBoard, type ProgressEvent } from './progress.js';
 import { resolveAttack } from './combat.js';
 import { attackRoll, checkRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
-import { abilityModifier } from './dice.js';
 import { passivePerception, type Ability } from './rules.js';
 import { casterOf, initClass, levelUp, levelUpText, makeChoice, setSpells } from './levels.js';
 import { spellById } from '../data/srd/spells.js';
-import { ABILITIES, backgroundById, classById, raceById, STANDARD_ARRAY } from '../data/srd/index.js';
+import { characterNameProblem, cleanCharacterName, newCharacter, resolveCharacterSpec } from './chargen.js';
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
 import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, NPC_DOWN_HINT, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, wakeNpcs, type DeathSave } from './death.js';
@@ -1520,52 +1519,18 @@ export class Engine {
    * salen en el sitio donde de verdad empieza, no en el punto de inicio genérico.
    */
   async createCharacter(userId: Id, name: string, spec?: Partial<CharacterSpec>, opts: { place?: (c: Character) => void } = {}): Promise<{ ok: true; character: Character } | { ok: false; reason: string }> {
-    const clean = name.trim().replace(/\s+/g, ' ');
-    if (clean.length < 2 || clean.length > 24) return { ok: false, reason: 'El nombre debe tener entre 2 y 24 caracteres.' };
+    const clean = cleanCharacterName(name);
+    const badName = characterNameProblem(clean);
+    if (badName) return { ok: false, reason: badName.reason };
     if (this.characterByUser(userId)) return { ok: false, reason: 'Ya tienes un personaje.' };
-    if ([...this.world.characters.values()].some((c) => c.name.toLowerCase() === clean.toLowerCase())) return { ok: false, reason: 'Ese nombre ya está en uso.' };
+    if (this.characterNameTaken(clean)) return { ok: false, reason: 'Ese nombre ya está en uso.' };
 
-    const race = raceById(spec?.race_id ?? 'human');
-    const klass = classById(spec?.class_id ?? 'fighter');
-    const bg = backgroundById(spec?.background_id ?? klass?.background ?? 'soldier');
-    if (!race || !klass || !bg) return { ok: false, reason: 'Raza, clase o trasfondo no válidos.' };
+    const check = resolveCharacterSpec(spec);
+    if (!check.ok) return { ok: false, reason: check.reason };
+    const klass = check.resolved.klass;
 
-    // Características: array estándar asignado (validado) o el recomendado de la clase.
-    const base = spec?.abilities ?? Object.fromEntries(ABILITIES.map((a, i) => [a, klass.recommended[i]])) as Record<Ability, number>;
-    const sorted = ABILITIES.map((a) => base[a]).sort((x, y) => y - x);
-    if (sorted.join(',') !== [...STANDARD_ARRAY].join(',')) return { ok: false, reason: 'Las características deben ser el array estándar 15, 14, 13, 12, 10, 8.' };
-    const abilities = Object.fromEntries(ABILITIES.map((a) => [a, base[a] + (race.ability_bonus[a] ?? 0)])) as Record<Ability, number>;
-
-    // Skills: trasfondo + raza fijas; clase elige N de su lista sin repetir.
-    const fixed = [...new Set([...bg.skills, ...race.skills])];
-    const choices = spec?.skills ?? [...new Set([...klass.skill_choices.prefer, ...klass.skill_choices.from])].filter((k) => klass.skill_choices.from.includes(k) && !fixed.includes(k)).slice(0, klass.skill_choices.count);
-    if (choices.length !== klass.skill_choices.count) return { ok: false, reason: `Elige ${klass.skill_choices.count} habilidades de clase.` };
-    for (const k of choices) {
-      if (!klass.skill_choices.from.includes(k)) return { ok: false, reason: `${k} no es una habilidad de ${klass.name}.` };
-      if (fixed.includes(k)) return { ok: false, reason: `${k} ya la tienes por trasfondo o raza.` };
-    }
-    const skills = [...new Set([...fixed, ...choices])];
-
-    const conMod = abilityModifier(abilities.con);
-    const hp = klass.hit_die + conMod;
     const id = `ch_${clean.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_')}_${Date.now().toString(36)}`;
-    const c: Character = {
-      id, user_id: userId, name: clean,
-      race: race.name.toLowerCase(), class_name: klass.name.toLowerCase(), race_id: race.id, class_id: klass.id, background_id: bg.id,
-      hit_die: klass.hit_die, death_mode: spec?.death_mode ?? 'casual',
-      level: 1, appearance: spec?.appearance ?? '', backstory: '',
-      hp_max: hp, hp_current: hp, hp_temp: 0, conditions: [],
-      proficiencies: { skills, expert: [], saves: [...klass.saves] },
-      practice: {}, practice_bonus: {}, reputation: {}, knows: [], clues: [], completed_jobs: [], achievements: [],
-      decisive: null, xp: 0,
-      location: { type: 'spot', id: this.pickStartingPoint().spot_id },
-      transit: null, status: 'active', speed_ft: race.speed_ft,
-      abilities, passive_perception: 10, darkvision: race.darkvision, condition_speed_factor: 1,
-      coins: this.world.campaign.starting_coins ?? DEFAULT_STARTING_COINS, last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
-    };
-    // Lo de su clase (levels.ts): conjuros, pericia, estilo… con sus valores por defecto.
-    initClass(c);
-    c.passive_perception = passivePerception(c);
+    const c = newCharacter(id, userId, clean, check.resolved, { spot_id: this.pickStartingPoint().spot_id, coins: this.world.campaign.starting_coins ?? DEFAULT_STARTING_COINS });
     this.world.characters.set(c.id, c);
     this.world.touch('characters', c.id);
     opts.place?.(c);
@@ -1604,6 +1569,11 @@ export class Engine {
     this.meetAll();
     await this.flush();
     return { ok: true, character: c };
+  }
+
+  characterNameTaken(name: string): boolean {
+    const clean = cleanCharacterName(name).toLowerCase();
+    return [...this.world.characters.values()].some((c) => c.name.toLowerCase() === clean);
   }
 
   /** Punto de inicio en la localización con menos PJs vivos; empate → el primero de la lista. */
