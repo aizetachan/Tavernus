@@ -1,7 +1,7 @@
 /**
  * Adaptador web local: un menú de partidas y, por partida, una página con el
- * #pov de cada personaje, botones de acciones sugeridas y 🎲, y la hoja al lado.
- * Mismo motor que Discord y el REPL; un motor por partida, vía el gestor.
+ * hilo de cada personaje, botones de acciones sugeridas y 🎲, y la hoja al lado.
+ * Mismo motor que el REPL; un motor por partida, vía el gestor.
  *
  *   GET    /                                   menú (sin ?game) o la partida (con ?game=SLUG)
  *   GET    /api/games                          partidas, opciones de personaje y si hay clave de API
@@ -326,7 +326,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         send(r.character_id, 'moment', { seq: r.event_seq, key: r.moment_key, kind: r.image.kind, entity_id: r.image.entity_id, name: r.image.name, src });
       }
     }) ?? (() => {});
-    // La hoja se refresca cuando cambia algo del PJ o de los ítems (como #hoja en Discord).
+    // La hoja se refresca cuando cambia algo del PJ o de los ítems.
     let sheetTimer: NodeJS.Timeout | null = null;
     const offChange = engine.world.onChange((ch) => {
       // Rumores (campaña) y memoria de los NPC: el diario también los recoge.
@@ -992,7 +992,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         // Mundo nuevo generado (src/worldgen); lo valida el gestor.
         world: body['world'] && typeof body['world'] === 'object' ? body['world'] as WorldInput : null,
       });
-      // Con máster, la llegada del PJ nuevo la narra él (como en Discord); llega por el stream.
+      // Con máster, la llegada del PJ nuevo la narra él; llega por el stream.
       const rt = await runtime(created.game.slug);
       if (created.character_id) {
         rt.engine.setPresence(created.character_id, true);

@@ -715,6 +715,8 @@ Broadcast: cada evento se entrega **por punto de vista**: el servidor calcula qu
 
 ## 11. Arquitectura de cliente — DECIDIDO: Discord primero, PWA después
 
+> **Histórico.** Esta sección y lo que dice la spec sobre Discord (§9.1, §11.2, §13, §14) se escribieron con el bot como primer cliente. Desde octubre de 2026 el producto es la web propia (`src/adapters/web`) y el bot está retirado; el despliegue real está en [`DESPLIEGUE.md`](DESPLIEGUE.md). La regla de oro sigue en pie.
+
 Regla de oro: **el motor de juego no sabe qué cliente lo usa.** Discord es un adaptador; la PWA será otro. Nada de lógica de juego vive en el bot.
 
 ```

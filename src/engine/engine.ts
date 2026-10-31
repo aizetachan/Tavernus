@@ -326,7 +326,7 @@ export class Engine {
     const past = await opts.repo.loadEvents(opts.campaignId, 0);
     const lastSeq = past.reduce((m, e) => Math.max(m, e.seq), 0);
     const engine = new Engine(snapshot, opts, lastSeq);
-    // Al cargar no hay nadie conectado (aunque se guardara así): lo dirá su presencia (una pestaña, Discord) o su primera
+    // Al cargar no hay nadie conectado (aunque se guardara así): lo dirá su presencia (una pestaña) o su primera
     // acción. Sin dormir a nadie: si no vuelve, el velo llega con setConnected cuando el adaptador lo dé por ido.
     for (const c of engine.world.characters.values()) c.connected = false;
     // Partidas de antes de la regla: los PJ se conocen por su nombre desde que coinciden en la partida.
@@ -1359,7 +1359,7 @@ export class Engine {
     });
     if (!out.ok) {
       this.announcePending(c.id);
-      // Sin oyentes (REPL, Discord), el aviso de siempre; la web lo apunta con la partida y el PJ.
+      // Sin oyentes (REPL), el aviso de siempre; la web lo apunta con la partida y el PJ.
       if (!this.masterListeners.length) console.warn(`[master] ${out.reason}: ${out.message}`);
       if (out.reason === 'refusal') return { ok: false, text: 'El narrador prefiere no seguir por ahí. Prueba otra cosa.' };
       if (out.reason === 'no_credit') return { ok: false, text: Engine.NO_CREDIT };

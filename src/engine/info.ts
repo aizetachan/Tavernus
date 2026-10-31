@@ -38,7 +38,7 @@ const sign = (n: number) => (n < 0 ? `−${Math.abs(n)}` : `+${n}`);
 const d20 = (mod: number) => (mod === 0 ? '1d20' : `1d20 ${mod < 0 ? '−' : '+'} ${Math.abs(mod)}`);
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** Texto plano de una respuesta, para los clientes sin ficha (Discord, consola). */
+/** Texto plano de una respuesta, para los clientes sin ficha (la consola). */
 export function infoText(a: InfoAnswer): string {
   return [`**${a.title}**`, ...a.lines].join('\n');
 }

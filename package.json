@@ -16,6 +16,8 @@
     "dev": "node --env-file-if-exists=.env --import tsx src/index.ts",
     "web": "node --env-file-if-exists=.env --import tsx src/index.ts --web",
     "web:watch": "node --watch --watch-preserve-output --env-file-if-exists=.env --import tsx src/index.ts --web",
+    "web:offline": "node --import tsx scripts/web.ts offline",
+    "web:haiku": "node --import tsx scripts/web.ts haiku",
     "rules:ingest": "node --import tsx scripts/ingest-rules.ts",
     "bench": "node --env-file-if-exists=.env --import tsx scripts/model-bench.ts",
     "bench:report": "node --import tsx scripts/bench-report.ts",
@@ -33,7 +35,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
-    "@google-cloud/firestore": "^9.0.1",
-    "discord.js": "^14.27.0"
+    "@google-cloud/firestore": "^9.0.1"
   }
 }
