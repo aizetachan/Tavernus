@@ -349,6 +349,9 @@ export async function prepareBrezalAct(engine: Engine, c: Character, act: 2 | 3,
   const saved = { master: raw.master, fastTravel: raw.fastTravel, str: c.abilities.str };
   raw.master = null;
   raw.fastTravel = false;
+  // El gestor arranca la partida con el reloj parado hasta que alguien está presente (docs/MULTIJUGADOR.md, «Reloj y
+  // desconexión»); sin esto el viaje no llega nunca. El jugador automático está: su entrada pone el mundo en marcha.
+  engine.setPresence(c.id, true);
   c.abilities.str = 18; // las recompensas en monedas pesan
   const tool = (name: string, input: Record<string, unknown>, tolerated?: RegExp): Record<string, unknown> => {
     const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [], action_text: '¿Necesitas ayuda?' };
