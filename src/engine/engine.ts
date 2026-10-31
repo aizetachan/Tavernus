@@ -185,7 +185,7 @@ export class Engine {
   readonly clock: GameClock;
   readonly events: EventLog;
   private readonly repo: Repository;
-  private readonly now: () => number;
+  readonly now: () => number;
   private pending = new Map<string, Change>();
   private queues = new Map<Id, Promise<unknown>>();
   /** Acciones de jugadores que esperan en la cola de su localización (el máster las ve como «a la vez»). */
@@ -1341,6 +1341,12 @@ export class Engine {
     }
   }
 
+  /** El jugador abre el Tablón en la web: lo lee, igual que con /tablon. */
+  readTablon(characterId: Id): void {
+    const c = this.world.character(characterId);
+    this.noteBoard(c, this.nowFor(c));
+  }
+
   /** Estado del tablón para /tablon. */
   boardText(): string {
     const jobs = activeJobs(this.world);
@@ -1720,6 +1726,16 @@ export class Engine {
     } else {
       c.veiled = false;
     }
+    this.world.touch('characters', c.id);
+  }
+
+  /** La página dice hasta dónde ha leído el jugador: solo avanza y nunca pasa del último evento. */
+  markRead(characterId: Id, seq: number): void {
+    const c = this.world.characters.get(characterId);
+    if (!c || !Number.isFinite(seq)) return;
+    const read = Math.min(Math.floor(seq), this.events.lastSeq);
+    if (read <= (c.read_seq ?? 0)) return;
+    c.read_seq = read;
     this.world.touch('characters', c.id);
   }
 

@@ -467,6 +467,8 @@ export interface Character {
   last_seen_event_id: Id | null;
   /** Fijado al desconectar: desde dónde contar el /recap al volver. null = sin recap pendiente. */
   recap_from: { event_id: Id | null } | null;
+  /** Hasta qué evento ha leído el jugador su hilo (lo dice la página con el latido): «Hasta aquí habías leído» y «Mientras no estabas». */
+  read_seq?: number;
   connected: boolean;
   veiled: boolean;
   /** Mundo generado: su situación inicial (src/worldgen). */

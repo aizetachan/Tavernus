@@ -296,7 +296,7 @@ describe('diario: crónica y lugares', () => {
 
 describe('diario: web', () => {
   it('el tablón y el progreso no generan burbuja: un aviso de una línea que lleva al Diario', () => {
-    expect(noticeOf({ action_type: 'board', narration_private: '', observable: '📜 Tablón de Brezal: • **Leña** — …' })).toEqual({ text: 'Hay avisos nuevos en el tablón de la plaza: pásate a leerlos' });
+    expect(noticeOf({ action_type: 'board', narration_private: '', observable: '📜 Tablón de Brezal: • **Leña** — …' })).toEqual({ text: 'Hay avisos nuevos en el tablón de la plaza: pásate a leerlos', link: 'ver el Tablón', tab: 'tablon' });
     expect(noticeOf({ action_type: 'progress_job', narration_private: 'Encargo completado: Leña para la posada. +900 monedas. Reputación en Brezal: 1.', observable: null }))
       .toEqual({ text: 'Encargo completado: Leña para la posada', link: 'ver en el Diario', tab: 'journal' });
     expect(noticeOf({ action_type: 'master', narration_private: 'Brenna te mira.', observable: null })).toBeNull();
