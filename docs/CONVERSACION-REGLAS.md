@@ -93,7 +93,8 @@ Cada situación da al máster **pasos en orden** (lo que debe hacer el NPC), **p
 - Longitud: 2–4 frases.
 
 ### Misión que puede dar
-- Solo si está disponible para el PJ y la charla viene a cuento (le pregunta qué pasa, se ofrece, o es amigo).
+- Solo si está disponible para el PJ y la charla viene a cuento: le pregunta qué pasa, se ofrece o llevan un rato
+  hablando (ver v1.2).
 - Pasos: 1) el problema, como lo cuenta él (qué le pasa, qué se juega); 2) por qué no va él; 3) la recompensa si la
   hay. Se registra en el mismo turno.
 - Prohibido: listar condiciones, decir «¿aceptas?», abrir una que no está disponible.
@@ -206,6 +207,25 @@ Prueba en vivo con Haiku (28-10, Garrán y una pícara en la situación de la de
 y a quién, el trabajo del granero con su amenaza, dónde vive el regidor y por dónde anda, y que la deuda es del
 regidor y él solo la cobra. Sin encargos duplicados.
 
-Pendiente: al saludar a quien da una misión de la historia, el motor ya la abre solo («La cena del portón» en el
-primer «Buenas noches»), y eso choca con «un primer saludo no suelta encargos». Hay que decidir si esa apertura espera
-a que el PJ pregunte o a un segundo turno.
+## v1.2 (31-10): las misiones llegan con la charla
+
+Antes, cerrar un turno con un NPC delante le abría sus misiones: bastaba un «Buenas noches», o que el máster pusiera
+`npc_id` de alguien que solo miraba («Ilse te observa sin decir nada»). Ahora:
+
+- **Cuándo le toca sacarla** (`ripe`): si el NPC ya le ha contestado **dos veces** (o hablaron en otro momento, según
+  su memoria), tiene algo que darle, el trato no es hostil ni receloso y no acaba de pedirle otra (15 min de juego).
+- **Si el jugador pregunta** (`asks_work`: trabajo, encargo, recado, «¿qué te pasa?», «¿puedo ayudar?»), no hace falta
+  esperar, y eso abarca el primer turno. Ir a buscar lo que se oye en un rumor («me han dicho que buscas a alguien para
+  un recado») también cuenta.
+- **Quién la abre**: el máster con `story_quest ask` en ese turno. Si no lo hace, el servidor al cerrarlo, solo si la
+  situación del turno era «misión que puede dar» (`talking_to.ripe`, `offersNow`). Fuera de ahí nunca se abre sola.
+- **Una por charla de verdad**: `talking_to.started_game_s` guarda cuándo empezó, porque `since_game_s` se renueva en
+  cada turno y dejaba pedir otra al turno siguiente.
+- **En el primer saludo el servidor lo rechaza**: `story_quest ask` y `give_quest` con `npc_id` devuelven `too_soon` si
+  es la primera vez que hablan y el jugador no ha preguntado. Con la charla empezada, el máster puede sacarla si viene
+  a cuento desde el segundo turno. `accept` (el jugador se ofrece) no tiene esa espera.
+- **Guion**: «misión que puede dar» entra como situación de por sí o como secundaria; si no es el turno, «Prohibido:
+  pedirle…».
+
+Prueba en vivo con Haiku (31-10, Brenna, un monje recién llegado): «Buenas noches» y la segunda frase no abren nada;
+en la tercera Brenna cuenta lo del guardia del portón y «La cena del portón» entra en el Diario.

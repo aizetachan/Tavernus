@@ -15,7 +15,7 @@ export type TransferError =
   | { code: 'bad_quantity' }
   | { code: 'not_reachable'; reason: string }
   | { code: 'fixed' }
-  | { code: 'no_space'; reason: string; options: string[] }
+  | { code: 'no_space'; reason: string; options: string[]; /** Cuántas sí caben, si caben algunas de la pila. */ fits?: number }
   | { code: 'invalid_slot'; reason: string };
 
 export type TransferResult =
@@ -109,8 +109,17 @@ export function checkFits(world: World, def: ItemDef, quantity: number, to: Plac
       const inside = world.itemsIn(to).filter((i) => i.id !== exclude);
       const stacks = inside.length + (inside.some((i) => i.item_id === def.id && !def.unique) ? 0 : 1);
       if (stacks > cdef.container.slots) return { code: 'no_space', reason: `${cdef.name} está lleno`, options: ['sacar algo', 'llevarlo en la mano', 'dejarlo en el suelo'] };
-      const weight = inside.reduce((a, i) => a + instanceWeight(world, i), 0) + def.weight_lb * quantity;
-      if (weight > cdef.container.max_weight_lb) return { code: 'no_space', reason: `${cdef.name} no aguanta tanto peso`, options: ['sacar algo pesado', 'llevarlo en la mano'] };
+      const used = inside.reduce((a, i) => a + instanceWeight(world, i), 0);
+      const max = cdef.container.max_weight_lb;
+      if (used + def.weight_lb * quantity > max) {
+        const fits = Math.floor((max - used) / def.weight_lb);
+        return {
+          code: 'no_space',
+          reason: `${cdef.name} lleva ${used} de ${max} lb y ${def.name}${quantity > 1 ? ` ×${quantity}` : ''} pesa ${def.weight_lb * quantity} lb`,
+          options: [...(fits > 0 ? [`guardar solo ${fits}`] : []), 'sacar algo pesado', 'llevarlo en la mano'],
+          ...(fits > 0 ? { fits } : {}),
+        };
+      }
       return null;
     }
     case 'character': {
@@ -232,6 +241,20 @@ export function transferItem(world: World, instanceId: Id, to: Placement, quanti
   return { ok: true, moved, remaining };
 }
 
+const COUNT_WORDS: Record<string, number> = { dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };
+
+/**
+ * Cuánto coge de una pila quien dice «coger agua»: una. Se lleva más si lo dice: un número o el plural («las
+ * antorchas», «todas»). El agua del pozo no sube entera a la mano por pedir agua.
+ */
+export function takeAmount(what: string, stack: number): number {
+  const t = what.trim().toLowerCase();
+  if (/^(?:tod[oa]s?|los|las)\b/.test(t)) return stack;
+  const first = t.split(/\s+/)[0] ?? '';
+  const n = /^\d+$/.test(first) ? Number(first) : COUNT_WORDS[first] ?? 1;
+  return Math.max(1, Math.min(n, stack));
+}
+
 /** Crea un ejemplar nuevo en un destino (botín, recursos, tiendas). */
 export function spawnItem(world: World, itemId: Id, quantity: number, to: Placement): TransferResult {
   const def = world.itemDef(itemId);
@@ -279,6 +302,16 @@ export function inventoryDetailed(world: World, characterId: Id): { instance_id:
   return out;
 }
 
+/** Lo que llevan los contenedores del PJ frente a lo que aguantan, para que el máster no cuente otra cosa. */
+export function containerLoads(world: World, characterId: Id): string[] {
+  return directlyCarried(world, characterId).flatMap((i) => {
+    const def = world.itemDef(i.item_id);
+    if (!def.container) return [];
+    const inside = world.itemsIn({ type: 'container', id: i.id });
+    return [`${def.name} [${i.id}]: lleva ${inside.reduce((a, x) => a + instanceWeight(world, x), 0)} de ${def.container.max_weight_lb} lb, ${inside.length} de ${def.container.slots} huecos`];
+  });
+}
+
 /** Vista resumida del inventario de un PJ, para /inventory y la hoja viva. */
 export interface InventoryView {
   hands: { main: string | null; off: string | null };
@@ -322,7 +355,7 @@ export interface PackView {
   hands: { main: PackItem | null; off: PackItem | null; both: boolean };
   equipped: { slot: EquipSlot; item: PackItem | null }[];
   pockets: { items: PackItem[]; slots: number };
-  containers: { id: Id; name: string; items: PackItem[]; slots: number }[];
+  containers: { id: Id; name: string; items: PackItem[]; slots: number; max_weight_lb: number }[];
 }
 
 const EQUIP_AT: Record<EquipSlot, string> = { head: 'la cabeza', body: 'el cuerpo', hands: 'las manos', feet: 'los pies', neck: 'el cuello', ring1: 'un dedo', ring2: 'un dedo', back: 'la espalda', belt: 'el cinturón' };
@@ -390,7 +423,7 @@ export function packView(world: World, characterId: Id): PackView {
     else if (s.kind === 'pocket') view.pockets.items.push(item(i));
     else { const e = view.equipped.find((x) => x.slot === s.slot); if (e) e.item = item(i); }
     const def = world.itemDef(i.item_id);
-    if (def.container) view.containers.push({ id: i.id, name: def.name, items: world.itemsIn({ type: 'container', id: i.id }).map(item), slots: def.container.slots });
+    if (def.container) view.containers.push({ id: i.id, name: def.name, items: world.itemsIn({ type: 'container', id: i.id }).map(item), slots: def.container.slots, max_weight_lb: def.container.max_weight_lb });
   }
   return view;
 }

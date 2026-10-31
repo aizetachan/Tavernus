@@ -140,7 +140,7 @@ describe('ir a un sitio es llegar y entrar', () => {
 
   it('el máster puede pedir una localización con move_to', async () => {
     const { engine, c } = await brezal();
-    const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] };
+    const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [], action_text: '¿Necesitas ayuda?' };
     const out = JSON.parse(executeTool(ctx, 'move_to', { character_id: c.id, target_spot_id: null, target_location_id: 'loc_taberna', pace: 'walk' })) as Record<string, unknown>;
     expect(out['ok']).toBe(true);
     // Viaje rápido: llega en el acto, para que lo que haga después en la misma acción ocurra dentro.
@@ -175,7 +175,7 @@ describe('misiones que se aceptan solas', () => {
     const { engine } = await bootEngine(fakeTime());
     const c = engine.world.character('ch_kael');
     c.knows.push('npc_brenna');
-    const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] };
+    const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [], action_text: '¿Necesitas ayuda?' };
     const out = JSON.parse(executeTool(ctx, 'give_quest', { title: 'El perro de Brenna', text: 'Brenna ha perdido a su perro y quiere saber qué fue de él.', npc_id: 'npc_brenna', objective: 'Encontrar al perro', reward: '10 monedas' })) as Record<string, unknown>;
     expect(out['ok']).toBe(true);
     expect(ctx.progress).toEqual([{ kind: 'quest', text: 'Nueva misión: «El perro de Brenna». Te lo pide Brenna.', quest: { id: 'gq_perro_brenna', title: 'El perro de Brenna', event: 'open', why: 'Te lo pide Brenna' } }]);
@@ -194,7 +194,7 @@ describe('misiones que se aceptan solas', () => {
   it('el jugador la deja desde el Diario: vuelve a disponible y sale el aviso', async () => {
     const { engine } = await bootEngine(fakeTime());
     const c = engine.world.character('ch_kael');
-    const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] };
+    const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [], action_text: '¿Necesitas ayuda?' };
     const out = JSON.parse(executeTool(ctx, 'give_quest', { title: 'Recado', text: 'Llevar un recado al molino.', npc_id: null, heard: 'En la barra se comenta que el molinero busca quien le lleve un recado', objective: null, reward: null })) as { quest_id: string };
     const r = await engine.dropQuest(c.id, out.quest_id);
     expect(r).toEqual({ ok: true, text: 'Has dejado la misión «Recado».' });

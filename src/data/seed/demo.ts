@@ -220,7 +220,7 @@ const SEED: WorldSnapshot = {
     { id: 'vh_mula', name: 'la mula de Brenna', kind: 'mount', location: { type: 'spot', id: 'sp_pl_taberna' }, speed_ft: 40, capacity: 1, owner_id: null, terrain_allowed: [] },
   ],
   item_defs: [
-    { id: 'it_mochila', name: 'mochila', aliases: ['backpack', 'bolsa'], type: 'container', size: 'medium', weight_lb: 5, value: 400, unique: false, container: { slots: 20, max_weight_lb: 30, max_size: 'medium' }, equip_slot: 'back', origin: 'srd' },
+    { id: 'it_mochila', name: 'mochila', aliases: ['backpack', 'bolsa'], type: 'container', size: 'medium', weight_lb: 5, value: 400, unique: false, container: { slots: 20, max_weight_lb: 60, max_size: 'medium' }, equip_slot: 'back', origin: 'srd' },
     { id: 'it_antorcha', name: 'antorcha', aliases: ['torch', 'tea'], type: 'misc', size: 'small', weight_lb: 1, value: 1, unique: false, light_source: true, origin: 'srd' },
     { id: 'it_cuerda', name: 'cuerda de cáñamo', aliases: ['cuerda', 'rope'], type: 'tool', size: 'medium', weight_lb: 10, value: 100, unique: false, origin: 'srd' },
     { id: 'it_daga', name: 'daga', aliases: ['dagger', 'cuchillo'], type: 'weapon', size: 'small', weight_lb: 1, value: 200, unique: false, weapon: { damage: '1d4', damage_type: 'piercing', finesse: true }, origin: 'srd' },

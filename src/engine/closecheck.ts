@@ -549,6 +549,24 @@ export function receivedWithoutOffer(input: { texts: readonly string[]; givers: 
   });
 }
 
+/** Lo que pide el jugador con sus cosas, y lo mismo contado como hecho en la narración. */
+const WANTS_ITEM_MOVE = /\b(?:guard|mete|meto|meter|recog|recoj|cog|coj)/;
+const TELLS_ITEM_MOVE = /(?<!\bno )(?<!\bno te )\b(?:te )?(guardas|metes|recoges|coges)\b/;
+
+/**
+ * El actor pide mover algo suyo y la narración lo da por hecho sin ningún tool que lo haga («lo guardas en la
+ * mochila» y el agua sigue en la mano). Devuelve el verbo contado, o null.
+ */
+export function movedWithoutTool(input: { action: string; narration: string; okTools: readonly string[] }): string | null {
+  if (!WANTS_ITEM_MOVE.test(norm(input.action))) return null;
+  if (input.okTools.some((t) => t === 'transfer_item' || t === 'spawn_item' || t === 'harvest' || t === 'use_item' || t === 'buy_item' || t === 'sell_item')) return null;
+  return TELLS_ITEM_MOVE.exec(norm(input.narration))?.[1] ?? null;
+}
+
+export function movedRejection(verb: string): string {
+  return `La narración dice «${verb}» y en este turno no se ha movido nada: lo que no pasa por transfer_item no ha ocurrido, y el objeto sigue donde estaba. Llama a transfer_item con su ID (ver Inventario y lo que hay en el suelo); si no cabe, cuéntalo con lo que devuelve. Después reescribe log_event, sin objetos que no estén en el contexto.`;
+}
+
 export function receivedRejection(names: readonly string[]): string {
   return `La narración dice que el actor recibe algo de ${names.join(' y ')}, y en este turno no ha cambiado nada de manos: entre jugadores, solo pasa cuando el otro lo ofrece y este lo acepta (lo hace el servidor). Reescribe log_event sin darlo por recibido: como mucho, alarga la mano o se lo pide.`;
 }

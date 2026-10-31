@@ -1838,16 +1838,16 @@ ${FIGHT_SCRIPT}
     });
     h += '</div>';
     // La rejilla: una fila de casillas por contenedor, en el orden guardado.
-    var grid = function (title, g, dest, items, slots) {
+    var grid = function (title, g, dest, items, slots, maxLb) {
       var at = arrange(g, items, slots), byId = {}, w = 0;
       items.forEach(function (x) { byId[x.id] = x; w += x.weight_lb || 0; });
-      return '<div class="kv-t">' + escapeHtml(title) + ' <span>' + items.length + ' / ' + slots + (w ? ' · ' + escapeHtml(pkLb(w)) : '') + '</span></div>' +
+      return '<div class="kv-t">' + escapeHtml(title) + ' <span>' + items.length + ' / ' + slots + (maxLb ? ' · ' + escapeHtml(pkLb(w)) + ' de ' + escapeHtml(pkLb(maxLb)) : w ? ' · ' + escapeHtml(pkLb(w)) : '') + '</span></div>' +
         '<div class="pk-grid" role="group" aria-label="' + escapeHtml(title) + '">' + at.map(function (id, i) {
           return slot(id ? byId[id] : null, { dest: dest, g: g, i: i, where: title + ', casilla ' + (i + 1), icon: null });
         }).join('') + '</div>';
     };
     h += grid('Bolsillos', 'Bolsillos', 'pocket', p.pockets.items, p.pockets.slots);
-    p.containers.forEach(function (k) { h += grid(k.name.charAt(0).toUpperCase() + k.name.slice(1), k.id, 'cont:' + k.id, k.items, k.slots); });
+    p.containers.forEach(function (k) { h += grid(k.name.charAt(0).toUpperCase() + k.name.slice(1), k.id, 'cont:' + k.id, k.items, k.slots, k.max_weight_lb); });
     h += '<div class="pk-tip" id="pk-tip" role="tooltip" hidden></div>';
     var focused = document.activeElement && $('pack').contains(document.activeElement) ? pkRef(document.activeElement) : null;
     $('pack').innerHTML = h;
