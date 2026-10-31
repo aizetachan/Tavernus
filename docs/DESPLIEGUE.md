@@ -179,6 +179,7 @@ Con B3 y B4, ufw solo necesita SSH abierto. Puedes cerrar 80 y 443 con `sudo ufw
 |---|---|
 | Subir una versión nueva | `deploy/push.sh` (con `--test` pasa antes los tests) |
 | Ver qué hace la web | `sudo journalctl -u tavernus-web -f` (qué sale, en «Qué apunta el registro») |
+| Ver cómo va y qué han reportado | `https://<tu-dominio>/admin/estado` (ver «Reportes y página de estado») |
 | Estado del servicio y los temporizadores | `systemctl status tavernus-web` · `systemctl list-timers 'tavernus*'` |
 | Cambiar una variable | `sudo nano /etc/tavernus/env` y `sudo systemctl restart tavernus-web` |
 | ¿Responde? | `sudo tavernus-health --probe` |
@@ -198,6 +199,9 @@ Nunca apunta lo que escribe el jugador, la narración ni tokens de acceso.
   motor dijo que no) o `error`, con el `error` al lado.
 - **`[máster]`**: una llamada al máster que no viene de una acción (presentación de un PJ,
   llegada, escena decisiva que vence). Los mismos campos.
+- **`[reporte]`**: un jugador ha reportado algo. Lleva la partida, el PJ, el `seq` y el tipo del
+  evento (`evento`), `tipo=mensaje` o `general`, cuántos `caracteres` escribió y el `fichero` donde
+  está el reporte. Lo que escribió no sale aquí: está en el fichero.
 - **`[presencia]`**: `conecta` y `desconecta` (el stream de una pestaña, con `pestaña` y cuántos
   `streams` quedan), `cierra_pestaña` (la página avisó al cerrarse), y `en_línea` y
   `fuera_de_línea` (cuando la web da al jugador por llegado o por ido, pasada la gracia).
@@ -212,7 +216,39 @@ Ejemplos:
 sudo journalctl -u tavernus-web --since today | grep 'resultado=error'
 sudo journalctl -u tavernus-web --since '1 hour ago' | grep '\[presencia\] partida=brezal'
 sudo journalctl -u tavernus-web --since today | grep -o 'máster_ms=[0-9]*' | sort -t= -k2 -n | tail
+sudo journalctl -u tavernus-web --since today | grep '\[reporte\]'
 ```
+
+### Reportes y página de estado
+
+Un jugador reporta desde la flechita (⌄) de cualquier burbuja del máster, «Reportar», o sin burbuja
+desde los ajustes, «Algo va mal» (el engranaje del panel en escritorio, el del cuadro en el móvil).
+Escribe qué ha pasado y ya está: el resto lo adjunta el servidor.
+
+Cada reporte es un fichero en `<partida>/reports/<fecha>-<seq>.json`
+(`/var/lib/tavernus/data/games/<partida>/reports/` en el VPS). Lleva lo que escribió, la hora del
+servidor y la de su navegador, el navegador, la versión en marcha, lo que leyó ese PJ, los últimos
+eventos que vivió y el evento entero: narración, tools llamados con su resultado, modelo, tokens y el
+contexto que recibió el máster. Un «Algo va mal» adjunta el último evento que vivió el PJ. Entran en la
+copia de cada noche con el resto de la partida y se borran con ella. Cada PJ puede mandar 20 por hora.
+
+**`/admin/estado`** es para quien administra: entra una vez con el enlace `/admin?token=…` y luego
+abre la página, o «Estado del servidor» en los ajustes del menú de partidas. Cualquier otro recibe un
+403, también en modo público quien creó su propia partida. Enseña:
+
+- Desde cuándo está en marcha y la versión: la carpeta de `releases` que está corriendo, o el commit
+  fuera del servidor.
+- Quién está conectado en cada partida.
+- Acciones de los jugadores, llamadas al máster, errores del máster, acciones con error del servidor,
+  tokens y coste, en la última hora y en el día. El día cambia a medianoche en `BUDGET_TZ`.
+- Los 50 reportes más recientes, con el contexto plegado. Lo muy largo se recorta y remite al fichero.
+
+El coste es una estimación con la tarifa de la API escrita en `src/adapters/web/status.ts`, que hay que
+tocar si cambian los precios o el modelo. Cuenta el máster y el actor de los NPC (y el prólogo y la
+recapitulación), no las imágenes ni generar un mundo, y no sustituye a la consola de Anthropic. Si llega un
+modelo sin precio, la página avisa de cuántas llamadas se quedan fuera. Los contadores se guardan en
+`<carpeta de partidas>/.estado.json`, así que un despliegue no los pone a cero; una caída brusca pierde
+como mucho los últimos 30 segundos.
 
 ## 5. Datos y copias (#21)
 

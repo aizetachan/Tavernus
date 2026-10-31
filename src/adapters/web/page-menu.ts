@@ -404,6 +404,8 @@ export const MENU = String.raw`<!doctype html>
       <div class="mh" id="theme-h">Aspecto</div>
       <button type="button" role="menuitemradio" data-theme-opt="penumbra" aria-describedby="theme-h"><span>Penumbra</span><small>Plano</small></button>
       <button type="button" role="menuitemradio" data-theme-opt="taberna" aria-describedby="theme-h"><span>Taberna</span><small>Ilustrado</small></button>
+      <div class="sep status-link" role="separator" hidden></div>
+      <button type="button" role="menuitem" class="status-link" hidden onclick="location.href='/admin/estado'"><span>Estado del servidor</span></button>
     </div>
   </div>
   <div class="scroll">
@@ -876,6 +878,7 @@ export const MENU = String.raw`<!doctype html>
   function load() {
     return fetch('/api/games').then(function (r) { return r.json(); }).then(function (d) {
       apiKey = d.api_key;
+      document.querySelectorAll('.status-link').forEach(function (x) { x.hidden = !d.admin; x.style.display = d.admin ? '' : 'none'; });
       var st = $('status');
       st.hidden = false;
       st.textContent = apiKey ? 'Claude disponible' : 'Solo offline';

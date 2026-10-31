@@ -97,6 +97,15 @@ Mientras un PJ tiene una acción o tirada en curso, su cuadro está deshabilitad
 
 Al pasar del cupo, ese PJ sigue jugando con el máster offline (narración sencilla, sin API) hasta medianoche. Recibe una vez al día, en su hilo, «⏳ Por hoy has gastado tu cupo…». Los demás PJ no se ven afectados. El recuento vive en `<partida>/budget.json`, así que reiniciar no regala cupo. El prólogo y la recapitulación pulida no cuentan, porque no son de un PJ. Con Haiku 5.5 (unos 0,12 céntimos por acción), 200 acciones son unos 0,25 € por PJ y día; con Opus 5.5, unos 6 €.
 
+### (f) Reportar un problema y estado del servidor (#18)
+
+Lo que en Discord eran el ⚠️ y el `/estado`.
+
+- **Jugador:** la flechita (⌄) de una burbuja del máster (narración o NPC) abre «Reportar»; en táctil la flechita se ve siempre, tenue. Sin burbuja, «Algo va mal» en los ajustes. Es un cuadro corto, y se puede reportar también con el máster respondiendo. `POST /api/report?game=` con `{character, seq?, text, at?}`: solo con su PJ y solo de un evento que ese PJ vivió (404 si no). El prólogo y la recapitulación no llevan flechita: se reportan con «Algo va mal», que adjunta lo último que vivió.
+- **Anfitrión:** `/admin/estado` con la cookie de administración, y 403 para cualquier otro (también para quien crea su partida en modo `public`). Dónde se guarda cada reporte y qué enseña la página, en `docs/DESPLIEGUE.md`, «Reportes y página de estado».
+
+Al jugador no se le devuelve nada del evento: el contexto del máster lleva lo que su PJ no sabe.
+
 ## Entre jugadores (25-10-2026)
 
 Una prueba con dos jugadores en la herrería de Brezal (partida `la-noche-del-breazl`) enseñó que la interacción entre PJ no estaba diseñada: el máster narraba lo que hacía el otro («Aren aguarda… Tienes su atención»), lo que decía uno le llegaba al otro en estilo indirecto, cada frase entre ellos pasaba por el máster y gastaba, no se sabían el nombre, dar algo no pedía permiso y los dos empezaron con la misma situación personal. Código nuevo en `src/engine/party.ts`; el resto, en el motor, el cierre del máster y la web. Tests en `test/party.test.ts`, `test/closecheck.test.ts` (el log real como fixture) y `test/multiplayer.test.ts`.
@@ -230,4 +239,4 @@ Código: `src/engine/death.ts` (caer, salvaciones, muerte, cuerpo, vuelta), `src
 2. **Avisos fuera de la web** (#19): una marca de no leídos y, opcionalmente, una notificación push o por correo cuando otro jugador hace algo en tu sitio o te pasa algo dormido.
 3. **Tope global de gasto** por partida o servidor, además del de cada PJ.
 4. **Cola de conversación con NPC** con turno explícito, y dificultad según el número de PJ.
-5. **Reportar un error** desde la web (equivalente al ⚠️ de Discord).
+5. ~~**Reportar un error** desde la web (equivalente al ⚠️ de Discord)~~: hecho, ver (f) en «Lo implementado».

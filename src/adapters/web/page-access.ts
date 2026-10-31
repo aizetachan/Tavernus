@@ -4,7 +4,7 @@
  * con sus enlaces. Pequeñas y sin dependencias, con el mismo aire que el menú.
  */
 
-const HEAD = (title: string) => String.raw`<!doctype html>
+export const HEAD = (title: string) => String.raw`<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">

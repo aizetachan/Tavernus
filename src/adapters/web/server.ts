@@ -32,6 +32,7 @@
  *   POST /api/roll     {character}
  *   POST /api/choice   {character, key, picks}        Hoja: conjuros (cantrips, known, prepared) o elección de clase (levels.ts)
  *   POST /api/command  {character, name}
+ *   POST /api/report   {character, seq?, text, at?}    reportar una burbuja del máster o, sin seq, «Algo va mal» (report.ts)
  *   GET  /api/tts/config  ·  POST /api/tts?game=SLUG   narrador de voz (tts.ts)
  *   GET  /api/sfx?character=ID  ·  GET /api/sfx?key=CLAVE   sonido: estado del PJ y ficheros (sfx.ts)
  *   GET|POST /api/illustrate?character=ID  pincel: ilustrar el momento actual (paint.ts)
@@ -42,6 +43,7 @@
  * (local), cualquiera con la página juega con cualquier PJ, como antes.
  *   GET  /i/<partida>/<token>       entra por ese asiento (cookie firmada) y abre la partida
  *   GET  /admin?token=ADMIN_TOKEN   anfitrión: cookie y al menú
+ *   GET  /admin/estado              administrador: versión, conectados, actividad, coste y reportes (page-status.ts)
  *   GET  /invitaciones?game=SLUG    anfitrión: asientos y enlaces
  *   GET  /api/session?game=SLUG     quién soy: anfitrión o jugador, y mi PJ si estoy ligado
  *   GET|POST /api/seats?game=SLUG · POST /api/seats/regenerate   anfitrión: listar, añadir, renovar
@@ -87,7 +89,10 @@ import { speakerLabel } from '../../engine/chatter.js';
 import type { SceneNotice } from '../../engine/engine.js';
 import { encounterAt, type Encounter } from '../../engine/encounter.js';
 import { combatView, type CombatEnd, type CombatView, type TurnContext } from './fight.js';
-import { ActionLog, presenceLine } from './servicelog.js';
+import { ActionLog, presenceLine, reportLine } from './servicelog.js';
+import { listReports, REPORT_MAX_TEXT, reportOf, ReportQuota, saveReport } from './report.js';
+import { ServiceStats, serverVersion, STATS_FILE, versionLabel, type TokenUsage } from './status.js';
+import { statusPage } from './page-status.js';
 
 const MASTER_TYPES = new Set(['master', 'master_roll_outcome', 'master_intro', 'master_arrival', 'prologue', 'recap']);
 const HISTORY = 200;
@@ -234,6 +239,10 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
   const engineOfflineMs = opts.engineOfflineMs ?? ENGINE_OFFLINE_MS;
   const log = opts.log ?? ((line: string) => console.log(line));
   const credit = new CreditAlarm(opts.alert ?? webhookAlert(process.env, log));
+  const startedAt = Date.now();
+  const statusTz = process.env['BUDGET_TZ']?.trim() || 'Europe/Madrid';
+  const stats = new ServiceStats(join(games.root, STATS_FILE), statusTz);
+  const reportQuota = new ReportQuota();
 
   const timer = setInterval(() => {
     void games.openEngines().then((list) => { for (const [, e] of list) void e.tick(); });
@@ -339,8 +348,14 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     });
     // Registro: cada llamada al máster va a la acción en curso de su PJ o sale sola (servicelog.ts).
     const charName = (id: Id) => engine.world.characters.get(id)?.name ?? null;
-    const actions = new ActionLog(slug, charName, log);
-    const offMaster = engine.onMaster((c) => { actions.master(c); credit.master(slug, c); });
+    const actions = new ActionLog(slug, charName, log, (r) => stats.action(r));
+    const offMaster = engine.onMaster((c) => { actions.master(c); credit.master(slug, c); stats.master(c); });
+    // El prólogo y la recapitulación los escribe el máster fuera de una llamada: solo se ve su gasto en el evento.
+    const offWritten = engine.events.onEvent((e) => {
+      if (e.action_type !== 'prologue' && e.action_type !== 'recap') return;
+      const m = e.payload['master'] as { model: string; usage: TokenUsage } | undefined;
+      if (m) stats.spend(m.model, m.usage);
+    });
     // Presencia: pestañas que cuentan por PJ (presence.ts). La web avisa al entrar y al irse; el motor (§9.1) duerme y vela al ausente.
     const presence = new PresenceTracker(timing, (id, online) => {
       log(presenceLine(slug, id, charName(id), online ? 'en_línea' : 'fuera_de_línea'));
@@ -551,7 +566,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       isOpening: (id) => opening.has(id),
       online: (id) => presence.online(id),
       dispose() {
-        offDelivery(); offChange(); offScene(); offEntity(); offRound(); offMaster();
+        offDelivery(); offChange(); offScene(); offEntity(); offRound(); offMaster(); offWritten();
         presence.dispose();
         clearInterval(fightClock);
         if (fightTimer) clearTimeout(fightTimer);
@@ -606,6 +621,11 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     const allowed = admin || seat !== null;
     const host = admin || (pub && isHostSeat(seat));
 
+    if (req.method === 'GET' && url.pathname === '/admin/estado') {
+      if (!admin) { html(res, 403, invitePage('Esta página es solo para quien administra el servidor.')); return; }
+      html(res, 200, await statusHtml());
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/') {
       if (!slug) {
         if (admin || pub) { html(res, 200, MENU); return; }
@@ -848,9 +868,46 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           json(res, 200, { ok: true, text: await rt.actions.track(id, 'command', () => engine.command(id, name)) });
           return;
         }
+        case '/api/report': {
+          const text = typeof body['text'] === 'string' ? body['text'].trim().slice(0, REPORT_MAX_TEXT) : '';
+          if (!text) { json(res, 400, { ok: false, text: '¿Qué ha pasado?' }); return; }
+          const sent = body['seq'];
+          if (sent !== undefined && sent !== null && !Number.isInteger(sent)) { json(res, 400, { ok: false, text: 'No encuentro ese mensaje.' }); return; }
+          if (!reportQuota.take(`${slug}:${id}`)) { json(res, 429, { ok: false, text: 'Ya has mandado muchos reportes esta hora. Prueba dentro de un rato.' }); return; }
+          const report = reportOf(engine, manifest.slug, id, {
+            seq: typeof sent === 'number' ? sent : null, text,
+            client_at: typeof body['at'] === 'string' ? body['at'].slice(0, 40) : null,
+            user_agent: req.headers['user-agent']?.slice(0, 300) ?? null,
+            server_version: versionLabel(await serverVersion()),
+          });
+          if (!report) { json(res, 404, { ok: false, text: 'No encuentro ese mensaje.' }); return; }
+          const file = await saveReport(games.paths(manifest).dir, report);
+          log(reportLine(manifest.slug, id, report.character.name, { seq: report.seq, general: report.general, event_type: report.event?.action_type ?? null, length: text.length, file }));
+          json(res, 200, { ok: true });
+          return;
+        }
       }
     }
     json(res, 404, { ok: false, text: 'No encontrado.' });
+  }
+
+  /** /admin/estado. Solo mira las partidas abiertas: las cerradas no tienen a nadie y abrirlas gastaría memoria. */
+  async function statusHtml(): Promise<string> {
+    const open = new Map<string, Runtime>();
+    for (const [name, p] of runtimes) { const rt = await p.catch(() => null); if (rt) open.set(name, rt); }
+    const manifests = (await Promise.all((await games.list()).map((g) => games.get(g.slug)))).filter((m) => m !== null);
+    const list = await listReports(manifests.map((m) => ({ slug: m.slug, name: m.name, dir: games.paths(m).dir })));
+    return statusPage({
+      started_at: startedAt, now: Date.now(), tz: statusTz,
+      version: versionLabel(await serverVersion()), access: access.mode,
+      games: manifests.map((m) => {
+        const rt = open.get(m.slug);
+        const players = rt ? [...rt.engine.world.characters.values()].filter((c) => rt.online(c.id)).map((c) => c.name) : [];
+        return { slug: m.slug, name: m.name, mode: m.mode, players };
+      }),
+      hour: stats.lastHour(), today: stats.today(),
+      reports: { total: list.total, items: list.reports },
+    });
   }
 
   /** El asiento de este navegador en la partida, si su cookie es buena (firmada con el token vigente). */
@@ -968,7 +1025,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         const s = m ? await seatOf(req, m.slug, games.paths(m).dir) : null;
         if (s) list.push({ ...g, host: isHostSeat(s) });
       }
-      json(res, 200, { games: list, options: GameManager.characterOptions(), api_key: Master.configured('live') });
+      json(res, 200, { games: list, options: GameManager.characterOptions(), api_key: Master.configured('live'), admin });
       return;
     }
     if (url.pathname === '/api/games' && req.method === 'POST') {
@@ -1039,6 +1096,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       server.closeAllConnections(); // keep-alive y SSE: si no, close espera a que caduquen
       await closed;
       await games.closeAll();
+      stats.flush();
     },
   };
 }
