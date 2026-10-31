@@ -9,7 +9,7 @@ import { moveTo } from '../src/engine/movement.js';
 import { recapTemplate, absence, absenceRule, lastOwnEvent } from '../src/engine/prologue.js';
 import { advanceStory, characterStory, finalsMissedBy, storyQuestAction, tickStory, type Story } from '../src/engine/story.js';
 import { talkersOf } from '../src/engine/scene.js';
-import { bootEngine, fakeTime } from './helpers.js';
+import { bootEngine, fakeTime, waitUntil } from './helpers.js';
 
 function collect(engine: Engine) {
   const by = new Map<string, Delivery[]>();
@@ -64,7 +64,8 @@ describe('2. combate con un ausente', () => {
     expect(actionContext(engine, kael, 'mirar')).toContain('AUSENTE: no ataca ni gasta recursos; si le atacan se defiende solo');
     mira.hp_current = 1;
     let hit = false;
-    for (let i = 0; i < 40 && !hit; i++) { const a = resolveAttack(engine.world, 'npc_brenna', mira.id, 'advantage'); hit = !('error' in a) && a.hit; }
+    const rng = seededRng(1);
+    for (let i = 0; i < 40 && !hit; i++) { const a = resolveAttack(engine.world, 'npc_brenna', mira.id, 'advantage', rng); hit = !('error' in a) && a.hit; }
     expect(mira.status).toBe('unconscious');
     expect(mira.conditions.map((x) => x.name)).toContain('estable');
   });
@@ -76,8 +77,7 @@ describe('2. combate con un ausente', () => {
     engine.setAway(mira.id, true);
     time.advanceReal(61);
     await engine.tick();
-    await new Promise((r) => setTimeout(r, 10));
-    expect(calls[0]!.text).toBe('(ausente: se defiende)');
+    await waitUntil(() => expect(calls[0]?.text).toBe('(ausente: se defiende)'));
     expect(calls[0]!.context).toContain('está AUSENTE');
     expect(calls[0]!.context).toContain('SE DEFIENDE');
   });
@@ -102,37 +102,35 @@ describe('3. rondas', () => {
     await engine.act(kael.id, 'vigilar la puerta');
     await engine.act(kael.id, 'atrancar la puerta');
     expect(calls.map((c) => c.text)).toEqual(['(ronda 1) Kael: vigilar la puerta / dudan: Mira', '(ronda 2) Kael: atrancar la puerta / dudan: Mira']);
-    const t0 = Date.now();
+    // Sin ronda: no abre otra ni espera al temporizador.
+    const notices: unknown[] = [];
+    engine.onScene((n) => notices.push(n));
     await engine.act(kael.id, 'apagar el fuego');
-    expect(Date.now() - t0).toBeLessThan(60); // sin ronda: no espera al temporizador
+    expect(notices).toEqual([]);
     expect(calls.at(-1)!.text).toBe('apagar el fuego');
   });
 
   it('al ausente no se le espera: la ronda se cierra en cuanto actúan los demás, sin temporizador', async () => {
-    const { engine, kael, mira } = await bar({ roundMs: 5000 });
+    // Temporizador de una hora: si la ronda lo esperase, el test no acabaría.
+    const { engine, kael, mira } = await bar({ roundMs: 3_600_000 });
     const calls = fakeMaster(engine);
     engine.world.location('loc_taberna').state['tense'] = true;
     engine.setAway(mira.id, true);
-    const t0 = Date.now();
     await engine.act(kael.id, 'vigilar la puerta');
-    expect(Date.now() - t0).toBeLessThan(1000);
     expect(calls.map((c) => c.text)).toEqual(['(ronda 1) Kael: vigilar la puerta / dudan: Mira']);
     expect(engine.roundIn('loc_taberna')).toBeNull();
   });
 
   it('si se va a mitad de ronda y solo faltaba él, la ronda se cierra ya; el banner deja de esperarle', async () => {
-    const { engine, kael, mira } = await bar({ roundMs: 5000 });
+    const { engine, kael, mira } = await bar({ roundMs: 3_600_000 });
     const calls = fakeMaster(engine);
     const banners: string[][] = [];
     engine.onScene((n) => { if (n.open) banners.push(n.waiting); });
     engine.world.location('loc_taberna').state['tense'] = true;
-    const t0 = Date.now();
     const acted = engine.act(kael.id, 'vigilar la puerta');
-    await new Promise((r) => setTimeout(r, 20));
-    expect(banners.at(-1)).toEqual([mira.id]);
+    await waitUntil(() => expect(banners.at(-1)).toEqual([mira.id]));
     engine.setAway(mira.id, true);
     await acted;
-    expect(Date.now() - t0).toBeLessThan(1000);
     expect(calls.map((c) => c.text)).toEqual(['(ronda 1) Kael: vigilar la puerta / dudan: Mira']);
   });
 

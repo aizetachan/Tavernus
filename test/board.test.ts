@@ -429,9 +429,11 @@ describe('planos generados', () => {
         exits: [{ id: `ex_${i}`, from_spot_id: `sp_${i}_0`, to_location_id: `loc_${i + 1}`, to_location_name: `Sitio ${i + 1}` }],
       });
     }
-    const t0 = performance.now();
+    // Tiempo de CPU, no de reloj: la carga de la máquina no cuenta.
+    const t0 = process.cpuUsage();
     const maps = inputs.map(generateMap);
-    const ms = performance.now() - t0;
+    const cpu = process.cpuUsage(t0);
+    const ms = (cpu.user + cpu.system) / 1000;
     expect(maps.every((m) => m.props.length > 0)).toBe(true);
     // Holgado: en una máquina normal son unos pocos ms en total.
     expect(ms).toBeLessThan(1000);

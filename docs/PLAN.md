@@ -211,6 +211,12 @@ ahora.
 Reglas de trabajo:
 
 - Toda pieza nueva pasa `npm test` y `npm run typecheck` antes de darse por hecha.
+- Los tests no dependen del azar ni del tiempo real. `test/setup.ts` fija `Math.random` en cada test,
+  y el que necesite un resultado concreto pasa su `rng` al motor. El reloj es `fakeTime()`
+  (`test/helpers.ts`), inyectado con `now`. Nada de medir milisegundos ni de dormir un rato: se espera
+  una condición (`waitUntil`, `engine.settle()`, `readSse` hasta ver el estado) o se retiene lo que
+  tarda con una promesa que suelta el test. Para probar que algo no espera a un temporizador, se le
+  pone de una hora. Y cada test deja acabado lo que arrancó antes de que se borre su carpeta.
 - Toda llamada al modelo registra `usage` y coste en el evento; el banco y el panel los agregan.
 - Métricas que importan: tokens y céntimos por acción, porcentaje de acciones deterministas, coste
   por jugador y hora, latencia del máster, errores de tool.
