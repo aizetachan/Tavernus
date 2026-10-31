@@ -65,6 +65,11 @@ TAVERNUS_SSH_PORT=22
 # TAVERNUS_SSH_KEY=~/.ssh/id_ed25519
 ```
 
+Para preparar el servidor hace falta root o un usuario con sudo. Una vez preparado, lo normal es
+desplegar con el usuario `tavernus`, sin root (`TAVERNUS_HOST=tavernus@…`), y dejar root en
+`TAVERNUS_ADMIN_HOST` para `--setup`, `--ops`, `--usuario-deploy` y `data-sync.sh`. Cómo
+prepararlo, rotar la clave y volver atrás está en el README, en «Desplegar sin root».
+
 Los scripts funcionan en **Git Bash** (Windows), en el Terminal de macOS y en Linux. En
 **PowerShell** sin Git Bash, `deploy\push.ps1` hace lo mismo que `deploy/push.sh`, con el ssh,
 scp y tar que trae Windows 10 y 11: `-Setup -SetupArgs '--domain','tu.dominio'`, `-RemoteBuild`
@@ -178,7 +183,8 @@ Con B3 y B4, ufw solo necesita SSH abierto. Puedes cerrar 80 y 443 con `sudo ufw
 | Cambiar una variable | `sudo nano /etc/tavernus/env` y `sudo systemctl restart tavernus-web` |
 | ¿Responde? | `sudo tavernus-health --probe` |
 | Volver a una versión anterior a mano | `ls /opt/tavernus/releases`, luego `sudo ln -sfn /opt/tavernus/releases/<fecha> /opt/tavernus/current && sudo systemctl restart tavernus-web` |
-| Caddy | `sudo journalctl -u caddy -f` · `/etc/caddy/Caddyfile` (lo actualiza `push.sh` desde `deploy/Caddyfile`) |
+| Caddy | `sudo journalctl -u caddy -f` · `/etc/caddy/Caddyfile` (lo actualiza `push.sh` desde `deploy/Caddyfile`, con `tavernus-publicar-caddy` si está instalado) |
+| Cambian los scripts de operación o las unidades | `deploy/push.sh --ops` (como administrador; el usuario `tavernus` no puede instalarlos) |
 
 ### Qué apunta el registro
 
@@ -330,6 +336,9 @@ y `bsd-mailx` con una cuenta SMTP (por ejemplo, una contraseña de aplicación d
 - **El servicio:** corre como `tavernus`, sin privilegios, con el código de solo lectura
   (`ProtectSystem=strict`). Solo puede escribir en `/var/lib/tavernus`, y tiene `MemoryMax=1G`
   para que una fuga no tumbe la máquina.
+- **Quién despliega:** el usuario `tavernus` con su propia clave (`restrict` en
+  `authorized_keys`) y un sudo de cinco órdenes exactas, sin root. La clave de root queda para
+  administrar. Detalle en el README, en «Desplegar sin root».
 - **SSH:** entra con clave y, cuando funcione, desactiva las contraseñas. En
   `/etc/ssh/sshd_config`, pon `PasswordAuthentication no` y ejecuta `sudo systemctl reload ssh`.
   Hazlo con otra sesión abierta, por si acaso.
@@ -365,12 +374,18 @@ la edita): los cambios se hacen a mano y se aplican con `sudo nginx -t && sudo s
 | `/etc/tavernus/caddy.env` | `TAVERNUS_DOMAIN` y `WEB_PORT` para el Caddyfile |
 | `/etc/systemd/system/tavernus-*` | servicio web y temporizadores de salud y copias |
 | `/usr/local/lib/tavernus/` | `healthcheck.sh`, `backup-now.sh`, `restore.sh` (con enlaces `tavernus-health`, `tavernus-backup` y `tavernus-restore` en `/usr/local/bin`) |
+| `/var/lib/tavernus/deploy/` | del usuario `tavernus`: la bandera `en-curso` mientras `release.sh` despliega |
+| `/home/tavernus/.ssh/authorized_keys` | claves de despliegue, una línea por clave (`pc`, `actions`), de root y con `restrict` |
+| `/etc/sudoers.d/tavernus` · `/usr/local/sbin/tavernus-publicar-caddy` | el sudo mínimo de `tavernus` y el envoltorio que publica el Caddyfile |
+| `/var/backups/tavernus-caddy/` | los 5 últimos Caddyfile, antes de cada publicación |
+| `/root/tavernus-deploy-<fecha>/` | copia de lo que tocó `preparar-usuario-deploy.sh` en cada pasada |
 
 En el repo, `deploy/`:
 
 | Fichero | Para qué |
 |---|---|
-| `push.sh` · `push.ps1` | subir una versión, o `--setup` / `-Setup` para preparar el servidor |
+| `push.sh` · `push.ps1` | subir una versión, o `--setup` / `-Setup` para preparar el servidor y `--ops` / `-Ops` para los scripts de operación |
+| `preparar-usuario-deploy.sh` · `tavernus-publicar-caddy.sh` | el usuario `tavernus` para desplegar sin root (lo ejecuta `push.sh --usuario-deploy`) |
 | `data-sync.sh` | llevar partidas entre tu ordenador y el servidor |
 | `setup-vps.sh` | preparación del servidor (lo ejecuta `push.sh --setup`) |
 | `release.sh` · `install-ops.sh` | activación de una versión en el servidor (los llama `push.sh`) |

@@ -5,7 +5,8 @@
 #     HEALTHCHECK_PING_URL, le hace un GET (vigilancia externa por si cae el VPS entero).
 #   - Mal dos veces seguidas: reinicia tavernus-web y avisa por ALERT_WEBHOOK y/o ALERT_EMAIL.
 #     Si sigue mal, reintenta el reinicio cada 10 minutos y repite el aviso cada hora.
-#   - Con /var/lib/tavernus/health/maintenance (restore.sh, data-sync.sh) no hace nada.
+#   - Con /var/lib/tavernus/health/maintenance (restore.sh, data-sync.sh) no hace nada, ni con
+#     /var/lib/tavernus/deploy/en-curso de hace menos de 30 minutos (release.sh).
 #
 #   tavernus-health            una comprobación, como la del temporizador
 #   tavernus-health --probe    solo dice si responde (código 0 = sí); no reinicia ni avisa
@@ -70,6 +71,9 @@ if [ -e "$MAINT_FLAG" ]; then
   # Mantenimiento de más de 2 horas: probablemente alguien olvidó quitarlo.
   if [ -n "$(find "$MAINT_FLAG" -mmin +120 2>/dev/null)" ]; then rm -f "$MAINT_FLAG"; else exit 0; fi
 fi
+# Despliegue en curso (release.sh). La bandera es del usuario tavernus: solo se mira si existe y es
+# de los últimos 30 minutos; ni se lee ni se borra.
+[ -n "$(find "$DEPLOY_FLAG" -maxdepth 0 -mmin -30 2>/dev/null)" ] && exit 0
 # Sin ninguna versión desplegada aún no hay nada que vigilar.
 [ -e "$APP_DIR/current/dist/index.js" ] || exit 0
 
