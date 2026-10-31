@@ -4,6 +4,8 @@
  * Un único reloj ligado al real con ratio fijo. Nadie lo mueve a mano: el
  * tiempo de juego se deriva siempre de (real_epoch_ms, game_epoch_s, ratio).
  * Guardar esos tres valores es suficiente para reconstruirlo tras un reinicio.
+ * Se para si no queda nadie jugando (`clock_paused_real_ms`; lo decide el motor,
+ * Engine.pauseClock): al reanudar, la época real se corre lo que estuvo parado.
  */
 
 import type { Calendar, Campaign, LightLevel } from '../engine/model.js';
@@ -26,15 +28,16 @@ export interface GameDateTime {
 export class GameClock {
   constructor(
     private readonly ratio: number,
-    private readonly realEpochMs: number,
+    private realEpochMs: number,
     private gameEpochS: number,
     private readonly calendar: Calendar,
+    private pausedAtMs: number | null = null,
   ) {
     if (ratio <= 0) throw new Error('time_ratio must be > 0');
   }
 
   static fromCampaign(c: Campaign): GameClock {
-    return new GameClock(c.time_ratio, c.real_epoch_ms, c.game_epoch_s, c.calendar);
+    return new GameClock(c.time_ratio, c.real_epoch_ms, c.game_epoch_s, c.calendar, c.clock_paused_real_ms ?? null);
   }
 
   get timeRatio(): number { return this.ratio; }
@@ -42,9 +45,25 @@ export class GameClock {
   /** Solo depuración (/time +2h en offline): adelanta el reloj de juego. Quien lo llame guarda `game_epoch_s`. */
   shift(gameSeconds: number): void { this.gameEpochS += gameSeconds; }
 
-  /** Segundos de juego en un instante real. */
+  get paused(): boolean { return this.pausedAtMs !== null; }
+  get realEpoch(): number { return this.realEpochMs; }
+
+  /** Para el reloj en ese instante real. Quien lo llame guarda `clock_paused_real_ms`. */
+  pause(realMs: number): void { this.pausedAtMs ??= realMs; }
+
+  /** Lo reanuda sin saltos y devuelve los ms parado. Quien lo llame guarda `real_epoch_ms` y borra `clock_paused_real_ms`. */
+  resume(realMs: number): number {
+    if (this.pausedAtMs === null) return 0;
+    const ms = Math.max(0, realMs - this.pausedAtMs);
+    this.realEpochMs += ms;
+    this.pausedAtMs = null;
+    return ms;
+  }
+
+  /** Segundos de juego en un instante real. Parado, el reloj no pasa de donde se quedó. */
   gameNow(realMs: number = Date.now()): number {
-    return this.gameEpochS + ((realMs - this.realEpochMs) / 1000) * this.ratio;
+    const at = this.pausedAtMs === null ? realMs : Math.min(realMs, this.pausedAtMs);
+    return this.gameEpochS + ((at - this.realEpochMs) / 1000) * this.ratio;
   }
 
   /** Instante real (ms) en que el reloj de juego marcará `gameS`. */

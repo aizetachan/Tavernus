@@ -76,7 +76,7 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
       { name: 'Monedas', value: money(engine.world, inv.coins), inline: true },
       { name: 'Carga', value: load, inline: true },
     ],
-    footer: engine.clock.format(nowG),
+    footer: engine.clock.format(engine.nowFor(c)), // la hora que lleva él (travel.ts), no la del mundo
     death,
     class: cls,
     pack: { ...packView(engine.world, c.id), coins: inv.coins, money: money(engine.world, inv.coins), load, carry: carryOf(engine, c.abilities.str, inv.encumbrance) },

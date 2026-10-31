@@ -420,8 +420,10 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       engine.setAway(id, false);
       announce(id, true, wasAway);
       seen.add(id);
-      // Al final del hilo: tras el despertar y sin máster de por medio.
-      if (welcome) void woken.then(() => record(id, welcome));
+      // Vuelve sin abrir otro stream (la pestaña oculta que se ve otra vez): el resumen le llega por el que tiene abierto.
+      const recap = wasAway ? engine.welcomeBack(id).catch((e) => console.error(`[web] recap partida=${slug} pj=${id}:`, e)) : Promise.resolve(null);
+      // Al final del hilo: tras el despertar y «Donde lo dejamos», sin máster de por medio.
+      if (welcome) void Promise.all([woken, recap]).then(() => record(id, welcome));
     };
     /** «Mientras no estabas», o una línea si no ha pasado nada; null si no vuelve de una ausencia de verdad. */
     const cardFor = (c: Character): WebMessage | null => {

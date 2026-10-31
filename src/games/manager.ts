@@ -354,6 +354,7 @@ export class GameManager {
     const seed = m.world ? JSON.parse(await readFile(join(p.dir, m.world.file), 'utf8')) as WorldSnapshot
       : isAuthoredCampaign(m.campaign_id) ? authoredSeed(m.campaign_id, { now: this.now() }) : makeSeed();
     const engine = await Engine.boot({
+      pauseOnBoot: true,
       ...this.engineOpts,
       repo: new JsonFileRepository(p.data), campaignId: m.campaign_id,
       ...(m.campaign_id === seed.campaign.id ? { seed } : {}),

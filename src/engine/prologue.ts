@@ -21,7 +21,8 @@ import { GAME_DAY } from '../clock/clock.js';
 import type { Engine } from './engine.js';
 import { journalOf } from './journal.js';
 import type { Campaign, Character, GameEvent } from './model.js';
-import { descriptorOf, maskNpcNames, maskUnknownNames } from './narrate.js';
+import { descriptorOf, fmtDuration, maskNpcNames, maskUnknownNames } from './narrate.js';
+import { caughtUp } from './travel.js';
 import { characterStory, finalsMissedBy } from './story.js';
 
 export const PROLOGUE_WORDS = { min: 60, max: 120 } as const;
@@ -30,6 +31,8 @@ export const RECAP_TITLE = 'Donde lo dejamos';
 export const RECAP_AFTER_HOURS = 72;
 /** Días de juego sin jugar a partir de los que también se recapitula. */
 export const RECAP_AFTER_GAME_DAYS = 7;
+/** Segundos de juego que el mundo le ha sacado al volver a partir de los que se recapitula. */
+export const RECAP_CAUGHT_UP_S = 3600;
 
 const TONE_LINE: Record<Campaign['tone'], string> = {
   epic: 'Es un tiempo de juramentos y caminos largos, en el que una sola persona todavía puede inclinar la balanza.',
@@ -259,6 +262,9 @@ export function absence(engine: Engine, c: Character, nowMs: number, rule: Absen
   const hours = (nowMs - since.timestamp_real_ms) / 3_600_000;
   const gameDays = (engine.nowFor(c) - since.timestamp_game_s) / GAME_DAY;
   if (hours >= rule.hours || gameDays >= rule.game_days) return { since, hours, game_days: gameDays };
+  // Su reloj estaba parado y el mundo ha seguido con otros: se le cuenta qué se ha perdido (travel.ts, thawClock).
+  const gap = caughtUp(c);
+  if (gap && !gap.told && gap.to_game_s - gap.from_game_s >= RECAP_CAUGHT_UP_S) return { since, hours, game_days: gameDays };
   // Antes de las 72 h, solo si se fue (multijugador) y entretanto pasó algo que le afecta o se cerró un final sin él.
   const left = engine.events.all().some((e) => e.actor_id === c.id && e.action_type === 'away' && e.seq > since.seq);
   if (!left) return null;
@@ -297,6 +303,8 @@ export function recapTemplate(engine: Engine, c: Character, since: GameEvent, ho
   const fate = fateSince(engine, c, since);
   if (fate) out.push(`**Lo que te pasó.** ${fate}`);
 
+  const gap = caughtUp(c);
+  if (gap && gap.to_game_s - gap.from_game_s >= RECAP_CAUGHT_UP_S) out.push(`**El tiempo.** Para ti no ha pasado: te fuiste a las ${engine.clock.format(gap.from_game_s).slice(-5)} y vuelves igual que estabas. El mundo ha seguido ${fmtDuration(gap.to_game_s - gap.from_game_s)} sin ti.`);
   out.push(`**Dónde estás.** Han pasado ${agoText(hours)} desde la última vez. Es ${d.weekday.toLowerCase()} ${d.day_of_month} de ${d.month}, ${dayPart(d.hour)} (${hhmm}). ${spot ? `Estás en ${spot.name}${loc && loc.name !== spot.name ? `, en ${loc.name}` : ''}.` : ''}`.trim());
 
   // Último turno: lo que dijo o hizo y la primera frase de lo que pasó.

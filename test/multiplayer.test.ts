@@ -254,6 +254,35 @@ describe('presencia y cola en la web', () => {
     await liaStream.body!.cancel();
   });
 
+  it('la pestaña oculta que se ve otra vez: se iguala al mundo y el resumen llega por el stream que ya tenía', async () => {
+    await start(undefined, { leaveNoticeMs: 40, staleMs: 60_000, hiddenMs: 150 });
+    const { game, character_id: lia } = await games.create({ name: 'Oculta', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
+    const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
+    const engine = await games.open(game.slug);
+    const g = `?game=${game.slug}`;
+    const post = (path: string, body: unknown) => fetch(`${base}${path}${g}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const ready = (t: string) => t.includes('event: presence') && (!t.includes('event: opening') || t.includes('"chapter":{"kind":"prologue"'));
+    const liaStream = await fetch(`${base}/api/stream${g}&character=${lia}&tab=lia`);
+    await readSse(liaStream, ready, 10_000);
+    const torStream = await fetch(`${base}/api/stream${g}&character=${tor}&tab=tor`);
+    await readSse(torStream, ready, 10_000);
+    expect((await post('/api/act', { character: tor, text: 'mirar' })).status).toBe(200);
+
+    await post('/api/presence', { character: tor, tab: 'tor', state: 'hidden' });
+    await readSse(liaStream, (t) => t.includes('se ha marchado'));
+    const left = engine.nowFor(tor);
+    expect(engine.clock.paused).toBe(false);
+    engine.clock.shift(2 * 3600);
+    engine.world.campaign.game_epoch_s += 2 * 3600;
+    expect(engine.nowFor(tor)).toBe(left);
+
+    await post('/api/presence', { character: tor, tab: 'tor', state: 'visible' });
+    expect(await readSse(torStream, (t) => t.includes('El mundo ha seguido'))).toContain('El mundo ha seguido 2 h');
+    expect(engine.nowFor(tor)).toBeGreaterThanOrEqual(left + 2 * 3600);
+    await torStream.body!.cancel();
+    await liaStream.body!.cancel();
+  });
+
   it('dos acciones a la vez en el mismo sitio: en orden, la segunda «esperando a» la primera; doble acción del mismo PJ, 409', async () => {
     const first = holding('miro la sala');
     await start(undefined, { masterFor: first.masterFor });
