@@ -258,6 +258,7 @@
         "WEB_PORT": "3207",
         "WEB_ACCESS": "invite",
         "ADMIN_TOKEN": "admin-local-de-pruebas-multijugador",
+        "AWAY_CARD_MIN": "1",
         "GOOGLE_CLOUD_PROJECT": "",
         "DATA_DIR": "./data/local/multi",
         "GAMES_DIR": "./data/local/multi/games",
