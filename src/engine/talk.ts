@@ -27,7 +27,7 @@ import { transcriptOf } from './conversation.js';
 import { rumorsIn } from './rumors.js';
 import { activeJobs } from './progress.js';
 import { givenQuests, droppedAt } from './quests.js';
-import { questStatus, storyOf } from './story.js';
+import { askedSince, questStatus, storyOf } from './story.js';
 import { npcTarget } from './scene.js';
 
 export const TALK_SITUATIONS = ['danger', 'reaction', 'cold', 'errand', 'trade', 'offer', 'lore', 'question', 'greeting', 'farewell', 'chat'] as const;
@@ -49,6 +49,10 @@ const SECOND_WORDS = 15;
 const RETURNING_S = 12 * 3600;
 /** Lo que el NPC acaba de ver hacer al PJ cuenta durante 15 min de juego. */
 const RECENT_S = 15 * 60;
+/** Quien da misiones la saca él solo a partir de que le haya contestado estas veces (antes, solo si se lo preguntan). */
+const RIPE_TURNS = 2;
+/** Líneas de la transcripción que se miran para contar esos turnos. */
+const TALK_MEMORY_LINES = 24;
 
 // ---------------------------------------------------------------------------
 // 1. Señales
@@ -68,7 +72,7 @@ const RE = {
   question: /\b(pregunto|preguntar|preguntarle|le pregunto|sabes|sabe usted|conoces|has visto|has oido)\b/,
   request: /\b(necesito|me das|me dejas|me prestas|ayudame|puedes|podrias|quiero)\b/,
   trade: /\b(compr\w*|vend\w*|precio|cuanto (cuesta|vale|cobras|pides|es)|cuesta|me pones|ponme|pagar)\b/,
-  asks_work: /\b(trabajo|encargo|faena|tarea|necesitas (algo|ayuda)|en que (puedo|te puedo) ayudar|puedo ayudar|algo que hacer)\b/,
+  asks_work: /\b(trabajo|encargo|recado|faena|tarea|necesitas (algo|ayuda)|en que (puedo|te puedo) ayudar|puedo ayudar|te ayudo|ayudarte|ayudarle|algo que hacer|que te (pasa|preocupa|ocurre)|que le (pasa|preocupa|ocurre)|algun problema)\b/,
   delivery: /\b(traigo|aqui tienes|aqui esta|toma|ya esta hecho|lo tengo|la tengo|he encontrado|lo he hecho|cumplido|entrego|vengo a cobrar)\b/,
   hostile: /\b(amenaz\w*|te mato|te voy a matar|cabron\w*|imbecil|idiota|estupid\w*|callate|maldit\w*|escoria|basura|inutil)\b/,
   lore_word: /\b(historia|leyenda|que se cuenta|que se dice|que paso|antiguamente|origen|cuentame|cuentanos)\b/,
@@ -145,6 +149,8 @@ export interface TalkState {
   busy: boolean;
   /** Títulos de lo que puede darle: misiones de la historia disponibles y encargos suyos del tablón. */
   can_offer: string[];
+  /** Tiene algo que darle y la charla ya da para sacarlo él solo: se han dicho algo más que un saludo y no acaba de pedirle otra. */
+  ripe: boolean;
   /** Títulos de lo que el PJ tiene en curso de él o de los suyos. */
   pending: string[];
   /** Títulos de misiones de la historia que el PJ aún no puede coger: no se nombran. */
@@ -216,16 +222,21 @@ export function talkState(world: World, events: readonly GameEvent[], pc: Charac
   }
   for (const j of activeJobs(world)) if (j.giver_npc_id === npc.id && !pc.completed_jobs.includes(j.id)) can_offer.push(j.title);
   for (const g of givenQuests(pc)) if (g.status === 'active' && droppedAt(pc, g.id) === null && g.giver_npc_id && close.has(g.giver_npc_id)) pending.push(g.title);
+  const tier = talkTier(npc, pc);
+  // Turnos en que ya le ha contestado; lo hablado en otro momento (su memoria) también cuenta como charla previa.
+  const answers = new Set(transcriptOf(events, pc.id, npc.id, TALK_MEMORY_LINES).filter((l) => l.who === 'npc').map((l) => l.game_s)).size;
+  const talked = answers >= RIPE_TURNS || mem.some((m) => nowG - m.game_s > RECENT_S);
+  const ripe = can_offer.length > 0 && talked && tier !== 'hostile' && tier !== 'wary' && !askedSince(world, pc, npc, nowG - RECENT_S);
   return {
     first_meeting: !said.length && !mem.length,
     returning: last > -Infinity && nowG - last > RETURNING_S,
     knows_name: pc.knows.includes(npc.id),
-    tier: talkTier(npc, pc),
+    tier,
     opinion: opinionOf(npc, pc.id),
     crime: npcCrimeLine(world, npc, pc, nowG) !== null,
     recent: recentDeed(events, pc, npc, nowG),
     busy: Boolean(npc.talking_to && npc.talking_to.character_id !== pc.id),
-    can_offer, pending, locked,
+    can_offer, ripe, pending, locked,
     debt: openDebts(pc).some((d) => d.npc_id === npc.id || d.on_behalf_of === npc.id),
     trades: npc.sells.length > 0 || npc.buys.length > 0,
     terms: termsWith(world, pc, npc, nowG),
@@ -250,10 +261,17 @@ export function situationsFor(st: TalkState, tx: TextSignals, topics: readonly T
   if (tx.asks_work && gives) out.push('offer');
   if (topics.length && (tx.question || tx.lore_word)) out.push('lore');
   if (tx.question || tx.request || (tx.asks_work && !gives)) out.push('question');
+  // Llevan un rato hablando: lo saca él, si no se está despidiendo ni comprando.
+  if (st.ripe && !tx.farewell && !tx.trade && !out.includes('offer')) out.push('offer');
   if (tx.greeting) out.push('greeting');
   if (tx.farewell) out.push('farewell');
   if (!out.length) out.push('chat');
   return out;
+}
+
+/** ¿Es este turno pedirle ya una misión? Sí, si ha llegado a eso o lo declara el máster con la charla empezada. */
+export function offersNow(p: TalkPlan, declared: unknown): boolean {
+  return p.situation === 'offer' || p.second === 'offer' || (declared === 'offer' && !p.state.first_meeting && p.state.can_offer.length > 0);
 }
 
 /** Lo que el motor ha decidido para el turno. */
@@ -389,6 +407,7 @@ function forbidden(s: TalkSituation, p: TalkPlan): string[] {
   const out = ['Inventar hechos (objetos, lugares, gente, precios, pistas) que no estén en el contexto.'];
   if (st.locked.length) out.push(`Nombrar o insinuar misiones que el actor aún no puede coger: ${quote(st.locked)}.`);
   if (s === 'greeting' && st.first_meeting) out.push('Encargos, historia del lugar, secretos o su vida entera: es un saludo.');
+  if (st.can_offer.length && s !== 'offer' && p.second !== 'offer') out.push(`Pedirle ${quote(st.can_offer)} todavía: la charla aún no da para ello.`);
   if (s === 'question' || s === 'lore') out.push('Dejar la pregunta sin contestar o contestar otra cosa.');
   if (s === 'lore') out.push('Recitar como un libro.');
   if (s === 'offer') out.push('Listar condiciones o preguntar «¿aceptas?».');

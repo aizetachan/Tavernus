@@ -14,6 +14,7 @@ import { normalize } from './aliases.js';
 import { attitudeOf } from './combat.js';
 import type { Character, Id, Location, Pace } from './model.js';
 import { enterDestination, exitDestination, nameScore, npcDestination, resolveDestination } from './goto.js';
+import { takeAmount } from './inventory.js';
 import { positionOf } from './movement.js';
 import { aEs, descriptorOf } from './narrate.js';
 import { perceive } from './perception.js';
@@ -24,8 +25,9 @@ import { RULES_CHEATSHEET } from '../ai/rules-cheatsheet.js';
 
 export type TrivialIntent =
   | { kind: 'move'; spot_id: Id; pace: Pace; exit: boolean }
-  | { kind: 'take'; instance_id: Id }
+  | { kind: 'take'; instance_id: Id; quantity: number }
   | { kind: 'drop'; instance_id: Id }
+  | { kind: 'put'; instance_id: Id; container_id: Id }
   | { kind: 'wait' };
 
 /**
@@ -44,6 +46,8 @@ const TO_NPC = /^(?:ir|voy|vamos|me voy|ve|vete)\s+(?:a ver a|a visitar a|a busc
 const EXIT = /^(?:salir|salgo|sal|me voy|marcharme|me marcho|parto|partir)\s+(?:hacia|a|al|para|rumbo a)\s+(.+)$/;
 const TAKE = /^(?:coger|cojo|coge|recoger|recojo|recoge|tomar|tomo|agarrar|agarro|pillo|pillar)\s+(.+)$/;
 const DROP = /^(?:soltar|suelto|suelta|dejar|dejo|deja)\s+(.+)$/;
+/** «Guardar el agua», «guardo el agua en la mochila». Sin decir dónde, en lo primero que lleve para guardar. */
+const PUT = /^(?:guardar|guardo|guarda|meter|meto|mete)\s+(.+?)(?:\s+(?:en|dentro de)\s+(.+))?$/;
 const WAIT = /^(?:esperar|espero|espera|aguardar|aguardo|me quedo esperando)(?:\s+(?:un rato|un momento|un poco|aqui))?$/;
 const PACE = /\s+(corriendo|andando|despacio|sigilosamente|con sigilo)$/;
 
@@ -131,7 +135,8 @@ export function parseTrivial(world: World, c: Character, text: string, nowGameS 
   const moveM = exitM ? null : body.match(MOVE);
   const takeM = exitM || moveM ? null : body.match(TAKE);
   const dropM = exitM || moveM || takeM ? null : body.match(DROP);
-  m = exitM ?? moveM ?? takeM ?? dropM;
+  const putM = exitM || moveM || takeM || dropM ? null : body.match(PUT);
+  m = exitM ?? moveM ?? takeM ?? dropM ?? putM;
   if (!m) return null;
   const target = m[1]!.trim();
   // «ir a hablar con…», «coger la jarra y beber», «voy a la barra a por…»: nunca.
@@ -150,10 +155,18 @@ export function parseTrivial(world: World, c: Character, text: string, nowGameS 
   if (takeM) {
     const floor = world.itemsIn({ type: 'spot', id: here.id });
     const id = singleItem(world, target, floor.map((i) => i.id));
-    return id ? { kind: 'take', instance_id: id } : null;
+    return id ? { kind: 'take', instance_id: id, quantity: takeAmount(target, world.itemInstance(id).quantity) } : null;
   }
 
   const carried = world.itemsCarriedBy(c.id);
+  if (putM) {
+    // Lo que no esté ya guardado, a lo que lleve encima para guardar: si no se reconoce, sigue al máster.
+    const bags = carried.filter((i) => i.location.type === 'character' && world.itemDef(i.item_id).container);
+    const loose = carried.filter((i) => i.location.type === 'character' && !world.itemDef(i.item_id).container);
+    const item = singleItem(world, target, loose.map((i) => i.id));
+    const into = m[2] ? singleItem(world, m[2].trim(), bags.map((i) => i.id)) : bags[0]?.id;
+    return item && into ? { kind: 'put', instance_id: item, container_id: into } : null;
+  }
   const id = singleItem(world, target, carried.map((i) => i.id));
   return id ? { kind: 'drop', instance_id: id } : null;
 }

@@ -60,11 +60,14 @@ describe('inventario y capacidad', () => {
   it('contenedores: tamaño máximo, slots y peso; bulky nunca cabe', () => {
     const { world } = freshWorld();
     const bag = { type: 'container' as const, id: 'ii_kael_mochila' };
-    // Mochila: 20 slots, 30 lb, hasta medium. Ya lleva cuerda (10) + 3 antorchas (3).
-    expect(spawnItem(world, 'it_madera', 3, bag).ok).toBe(true);        // +15 → 28 lb
-    const heavy = spawnItem(world, 'it_madera', 1, bag);                 // +5 → 33 lb
+    // Mochila: 20 slots, 60 lb, hasta medium. Ya lleva cuerda (10) + 3 antorchas (3).
+    expect(spawnItem(world, 'it_madera', 9, bag).ok).toBe(true);        // +45 → 58 lb
+    const heavy = spawnItem(world, 'it_madera', 1, bag);                 // +5 → 63 lb
     expect(heavy.ok).toBe(false);
-    if (!heavy.ok) expect(heavy.error.code).toBe('no_space');
+    if (!heavy.ok) {
+      expect(heavy.error.code).toBe('no_space');
+      if (heavy.error.code === 'no_space') expect(heavy.error.reason).toBe('mochila lleva 58 de 60 lb y leña pesa 5 lb');
+    }
     world.character('ch_kael').location = { type: 'spot', id: 'sp_tab_chimenea' };
     const bulky = transferItem(world, 'ii_barril', bag);
     expect(bulky.ok).toBe(false);

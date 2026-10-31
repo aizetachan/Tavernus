@@ -10,7 +10,7 @@ import { GameClock, Ticker, GAME_DAY, GAME_MINUTE } from '../clock/clock.js';
 import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
-import { inventoryView, spotOfPlacement, transferItem, type InventoryView, type TransferError } from './inventory.js';
+import { inventoryView, spotOfPlacement, takeAmount, transferItem, type InventoryView, type TransferError } from './inventory.js';
 import type { Character, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
 import { EQUIP_SLOTS } from './model.js';
 import { approachSpot, interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
@@ -1081,7 +1081,7 @@ export class Engine {
       case 'take': {
         const inst = this.world.itemInstance(intent.instance_id);
         const def = this.world.itemDef(inst.item_id);
-        const where = this.takeToHands(c, inst.id);
+        const where = this.takeToHands(c, inst.id, intent.quantity);
         if (!where) return null;
         return this.emitTrivial(c, input, 'take', 'inventory', led(`Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.`),
           `${c.name} coge ${def.name}.`, 'Una figura coge algo.', undefined, { item_id: def.id });
@@ -1092,6 +1092,18 @@ export class Engine {
         if (!res.ok) return null;
         return this.emitTrivial(c, input, 'drop', 'inventory', led(`Dejas ${def.name} en ${here.name}.`),
           `${c.name} deja ${def.name} en ${here.name}.`, 'Una figura deja algo.');
+      }
+      case 'put': {
+        const def = this.world.itemDef(this.world.itemInstance(intent.instance_id).item_id);
+        const bag = this.world.itemDef(this.world.itemInstance(intent.container_id).item_id);
+        const to: Placement = { type: 'container', id: intent.container_id };
+        let res = transferItem(this.world, intent.instance_id, to);
+        const fits = !res.ok && res.error.code === 'no_space' ? res.error.fits : undefined;
+        if (fits) res = transferItem(this.world, intent.instance_id, to, fits);
+        // No cabe: lo dice el servidor, con sus números, sin que nadie lo cuente de otra manera.
+        if (!res.ok) return { ok: false, text: transferErrorText(res.error) };
+        return this.emitTrivial(c, input, 'put', 'inventory', led(`Guardas ${fits ? `${fits} de ` : ''}${def.name} en ${bag.name}${fits ? ': no cabe más' : ''}.`),
+          `${c.name} guarda ${def.name} en ${bag.name}.`, 'Una figura guarda algo.');
       }
       case 'wait':
         return this.emitTrivial(c, input, 'wait', 'wait', led(`Esperas un rato en ${here.name}. No ocurre nada.`), null, null);
@@ -3346,8 +3358,9 @@ export class Engine {
         { type: 'character', id: c.id, slot: { kind: 'pocket' } },
       ];
     let lastErr: TransferError | null = null;
+    const quantity = takeAmount(what, inst.quantity);
     for (const t of targets) {
-      const res = transferItem(this.world, inst.id, t);
+      const res = transferItem(this.world, inst.id, t, quantity);
       if (res.ok) {
         const where = t.type === 'character' && t.slot.kind === 'pocket' ? 'y te lo guardas en un bolsillo' : 'con la mano';
         return this.emit(c, input, 'take', `Coges ${def.name} ${where}.`, `${c.name} coge ${def.name} del suelo de ${here.name}.`, 1, { observable_vague: 'Una figura se agacha a coger algo.', item_id: def.id });
@@ -3381,9 +3394,12 @@ export class Engine {
     const contDef = this.world.itemDef(contInst.item_id);
     if (!contDef.container) return { ok: false, text: `${contDef.name} no es un contenedor.` };
     const def = this.world.itemDef(this.world.itemInstance(item.value).item_id);
-    const res = transferItem(this.world, item.value, { type: 'container', id: contInst.id });
+    let res = transferItem(this.world, item.value, { type: 'container', id: contInst.id });
+    // No cabe toda la pila, pero sí parte: guarda lo que quepa y lo demás sigue donde estaba.
+    const fits = !res.ok && res.error.code === 'no_space' ? res.error.fits : undefined;
+    if (fits) res = transferItem(this.world, item.value, { type: 'container', id: contInst.id }, fits);
     if (!res.ok) return { ok: false, text: transferErrorText(res.error) };
-    return this.emit(c, input, 'put', `Guardas ${def.name} en ${contDef.name}.`, `${c.name} guarda ${def.name} en ${contDef.name}.`);
+    return this.emit(c, input, 'put', `Guardas ${fits ? `${fits} de ` : ''}${def.name} en ${contDef.name}${fits ? ': no cabe más' : ''}.`, `${c.name} guarda ${def.name} en ${contDef.name}.`);
   }
 
   private doTakeOut(c: Character, input: string, what: string, from: string): ActionResult {
@@ -3506,6 +3522,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
       const cur = snapshot.item_defs.find((x) => x.id === d.id);
       if (!cur) { snapshot.item_defs.push(d); changed = true; }
       else if (d.weapon && !cur.weapon) { cur.weapon = d.weapon; changed = true; }
+      // Partidas de cuando la mochila aguantaba 30 lb y el equipo inicial ya pesaba 25: un contenedor no encoge.
+      if (cur && d.container && cur.container && d.container.max_weight_lb > cur.container.max_weight_lb) { cur.container.max_weight_lb = d.container.max_weight_lb; changed = true; }
     }
     for (const n of seed.resource_nodes) if (!snapshot.resource_nodes.some((x) => x.id === n.id)) { snapshot.resource_nodes.push(n); changed = true; }
     for (const s of seed.spots) if (!snapshot.spots.some((x) => x.id === s.id)) { snapshot.spots.push(s); changed = true; }

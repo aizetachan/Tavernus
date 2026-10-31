@@ -45,7 +45,7 @@ async function newPc(engine: Engine, name: string, class_id: string): Promise<Ch
 }
 
 function ctxFor(engine: Engine, c: Character): ToolContext {
-  return { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] };
+  return { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [], action_text: '¿Necesitas ayuda?' };
 }
 function tool(engine: Engine, c: Character, name: string, input: Record<string, unknown>): Record<string, unknown> & { ok?: boolean; error?: string } {
   return JSON.parse(executeTool(ctxFor(engine, c), name, input)) as Record<string, unknown> & { ok?: boolean; error?: string };
@@ -77,7 +77,7 @@ async function drop(engine: Engine, c: Character, itemId: string): Promise<void>
 async function talkTo(engine: Engine, time: ReturnType<typeof fakeTime>, c: Character, npcId: string): Promise<void> {
   const n = engine.world.npc(npcId);
   await walk(engine, time, c, n.location.id);
-  n.talking_to = { character_id: c.id, since_game_s: engine.nowFor(c) };
+  n.talking_to = { character_id: c.id, since_game_s: engine.nowFor(c), ripe: true };
   await engine.tick();
 }
 

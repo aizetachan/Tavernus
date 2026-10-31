@@ -46,7 +46,7 @@ async function newPc(engine: Engine, name: string, class_id = 'rogue'): Promise<
   return r.character;
 }
 
-const ctxFor = (engine: Engine, c: Character): ToolContext => ({ engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] });
+const ctxFor = (engine: Engine, c: Character): ToolContext => ({ engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [], action_text: '¿Necesitas ayuda?' });
 type ToolOut = Record<string, unknown> & { ok?: boolean; error?: string; tell_now?: string; story?: { changes: string[]; tell_now?: string } };
 function tool(engine: Engine, c: Character, name: string, input: Record<string, unknown>, ctx = ctxFor(engine, c)): ToolOut {
   return JSON.parse(executeTool(ctx, name, input)) as ToolOut;
@@ -65,7 +65,7 @@ async function walk(engine: Engine, time: ReturnType<typeof fakeTime>, c: Charac
 async function talkTo(engine: Engine, time: ReturnType<typeof fakeTime>, c: Character, npcId: string): Promise<void> {
   const n = engine.world.npc(npcId);
   await walk(engine, time, c, n.location.id);
-  n.talking_to = { character_id: c.id, since_game_s: engine.nowFor(c) };
+  n.talking_to = { character_id: c.id, since_game_s: engine.nowFor(c), ripe: true };
   await engine.tick();
 }
 /** Se acaba la charla (se despiden o el PJ se va). */

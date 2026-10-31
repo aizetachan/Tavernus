@@ -668,7 +668,7 @@ export interface Npc {
   trust?: Record<Id, NpcTrust>;
   memory: NpcMemory[];
   /** Cola de conversación (SPEC §9.6): con quién habla ahora. */
-  talking_to: { character_id: Id; since_game_s: number; /** Otros PJ unidos a la charla (scene.ts). */ with?: Id[]; /** Turno guardado para quien esperaba: aún no ha hablado. */ reserved?: boolean } | null;
+  talking_to: { character_id: Id; since_game_s: number; /** Otros PJ unidos a la charla (scene.ts). */ with?: Id[]; /** Turno guardado para quien esperaba: aún no ha hablado. */ reserved?: boolean; /** Cuándo empezó esta charla (`since_game_s` se renueva en cada turno). */ started_game_s?: number; /** La charla ya da para pedirle una misión: lo ha preguntado él o llevan un rato (talk.ts). */ ripe?: boolean } | null;
   /** Su casa (datos de campaña): el máster sabe dónde vive y no se la inventa en otro sitio (prompt.ts, homeLine). */
   home_spot_id?: Id;
   /** Comercio (SPEC §5.6): qué compra y a qué precio; qué vende. */

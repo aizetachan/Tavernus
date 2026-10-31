@@ -38,7 +38,7 @@ async function newPc(engine: Engine, name: string): Promise<Character> {
 }
 
 function tool(engine: Engine, c: Character, name: string, input: Record<string, unknown>): Record<string, unknown> & { ok?: boolean; error?: string; hint?: string } {
-  const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] };
+  const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [], action_text: '¿Necesitas ayuda?' };
   return JSON.parse(executeTool(ctx, name, input)) as Record<string, unknown> & { ok?: boolean; error?: string };
 }
 
@@ -55,7 +55,7 @@ async function walk(engine: Engine, time: ReturnType<typeof fakeTime>, c: Charac
 async function talkTo(engine: Engine, time: ReturnType<typeof fakeTime>, c: Character, npcId: string): Promise<void> {
   const n = engine.world.npc(npcId);
   await walk(engine, time, c, n.location.id);
-  n.talking_to = { character_id: c.id, since_game_s: engine.nowFor(c) };
+  n.talking_to = { character_id: c.id, since_game_s: engine.nowFor(c), ripe: true };
   await engine.tick();
 }
 
@@ -142,7 +142,7 @@ describe('misiones: avance por lo que hace el PJ', () => {
     expect(stepOf(engine, c, 'q_agua')!.current!.id).toBe('ilse');
     expect(engine.events.all().some((e) => e.actor_id === c.id && /Ilse huele el agua/.test(e.narration_private))).toBe(false);
     const water = engine.world.itemsCarriedBy(c.id).find((i) => i.item_id === 'it_agua_pozo')!;
-    const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [] };
+    const ctx: ToolContext = { engine, actor: c, nowGameS: engine.nowFor(c), rng: seededRng(7), closed: null, rolls: [], progress: [], action_text: '¿Necesitas ayuda?' };
     const r = JSON.parse(executeTool(ctx, 'transfer_item', { instance_id: water.id, to_type: 'npc', to_id: 'npc_ilse', slot: null, equip_slot: null, quantity: null })) as { story: { tell_now: string } };
     expect(r.story.tell_now).toMatch(/Ilse huele el agua/);
     // Lo ha dado en su casa, pero sin charla abierta: queda lista para entregar a Ilse.

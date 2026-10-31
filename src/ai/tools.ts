@@ -14,7 +14,7 @@ import { perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
-import { advanceNow, advanceStory, clueBlocked, clueReachable, nameFor, openSources, storyOf, storyQuestAction, type StoryOutput } from '../engine/story.js';
+import { advanceNow, advanceStory, clueBlocked, clueReachable, nameFor, openSources, questStatus, storyOf, storyQuestAction, type StoryOutput } from '../engine/story.js';
 import { adjustTrust, knowledgeFor, MASTER_TRUST_CHANGES, TRUST_LABEL, trustNotice, trustTier, type TrustResult } from '../engine/trust.js';
 import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
@@ -39,11 +39,11 @@ import { openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/
 import { inventedPlaces } from '../engine/places.js';
 import { money } from '../engine/money.js';
 import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
-import { actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
+import { movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
-import { talkProblems, TALK_SITUATIONS, type TalkPlan } from '../engine/talk.js';
+import { offersNow, talkProblems, talkState, textSignals, TALK_SITUATIONS, type TalkPlan } from '../engine/talk.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
@@ -111,7 +111,7 @@ export const MASTER_TOOLS: Tool[] = [
     to_id: str('ID del destino'),
     slot: enm(['hand_main', 'hand_off', 'hand_both', 'pocket', 'equipped'], 'Solo si el destino es un personaje'),
     equip_slot: nstr('Si slot es equipped: head/body/hands/feet/neck/ring1/ring2/back/belt; si no, null'),
-    quantity: nnum('Cantidad, o null para todo el stack'),
+    quantity: nnum('Cantidad. Con null: uno solo si lo coge del suelo; si no, toda la pila. Si quiere varios del suelo («las antorchas», «tres»), di cuántos'),
   }),
   tool('spawn_item', 'Crea un objeto del catálogo en el suelo de un punto. Solo para improvisación razonable (algo que lógicamente estaría ahí).', {
     item_id: str('ID del catálogo de objetos'),
@@ -145,10 +145,10 @@ export const MASTER_TOOLS: Tool[] = [
     quest_id: str('ID de la misión (q_…)'), step_id: str('ID del paso en curso'),
     why: nstr('Qué ha hecho el jugador para darlo, en una frase para su Diario («sacaste a Ceniza mientras la loba dormía»), o null'),
   }),
-  tool('story_quest', 'Campañas escritas: el ciclo de una misión (q_…) con quien la da delante. ask: quien la da se la pide al actor en la charla (solo las que «Historia escrita» dice que puede pedir) y entra en su Diario, sin preguntar si acepta. Pídela con su voz y por partes: el gancho, el problema, los detalles solo si los pide, y al final la tarea concreta (qué hacer y a quién); sin más de lo que dice su texto. decline: el jugador ha dicho que no (antes de empezar). accept: el jugador se ofrece o cambia de idea. turn_in: entrega una lista para entregar a quien la recibe, que le da la recompensa en la charla. Nunca abras una misión de otra forma.', {
+  tool('story_quest', 'Campañas escritas: el ciclo de una misión (q_…) con quien la da delante. ask: quien la da se la pide al actor en la charla (solo las que «Historia escrita» dice que puede pedir, y nunca en un primer saludo si el actor no pregunta por ello) y entra en su Diario, sin preguntar si acepta. Pídela con su voz y por partes: el gancho, el problema, los detalles solo si los pide, y al final la tarea concreta (qué hacer y a quién); sin más de lo que dice su texto. decline: el jugador ha dicho que no (antes de empezar). accept: el jugador se ofrece o cambia de idea. turn_in: entrega una lista para entregar a quien la recibe, que le da la recompensa en la charla. Nunca abras una misión de otra forma.', {
     quest_id: str('ID de la misión (q_…)'), action: enm(['ask', 'accept', 'decline', 'turn_in'], 'Qué pasa'),
   }),
-  tool('give_quest', 'Un NPC le da al actor un encargo o le pide algo concreto que hacer (fuera del tablón): queda en su Diario «en curso» sin que tenga que aceptarlo, y el jugador ve «Nueva misión». Llámalo en el turno en que se lo piden, con quien la pide delante. Si el actor solo lo ha oído (un rumor, otro que lo cuenta), npc_id null y di en heard de dónde le llega.', {
+  tool('give_quest', 'Un NPC le da al actor un encargo o le pide algo concreto que hacer (fuera del tablón): queda en su Diario «en curso» sin que tenga que aceptarlo, y el jugador ve «Nueva misión». Llámalo en el turno en que se lo piden, con quien la pide delante; nunca en un primer saludo si el actor no pregunta por ello. Si el actor solo lo ha oído (un rumor, otro que lo cuenta), npc_id null y di en heard de dónde le llega.', {
     title: str('Título corto, como lo apuntaría el PJ («Las tablas de Hugo»)'),
     text: str('De qué va, en una o dos frases, sin secretos'),
     npc_id: nstr('ID del NPC que se lo pide en persona (tiene que estar con el actor), o null'),
@@ -374,6 +374,8 @@ export interface ToolContext {
   repeat_rejections?: number;
   /** Cierres rechazados por narrar que el actor recibe algo de otro jugador sin oferta (closecheck.ts; uno como mucho). */
   receive_rejections?: number;
+  /** Cierres rechazados por mover un objeto del actor solo de palabra (uno como mucho). */
+  moved_rejections?: number;
   /** Cierres rechazados por ignorar un incidente con testigos delante (crime.ts; dos como mucho). */
   incident_rejections?: number;
   /** Cierres rechazados por mostrar un punto oculto que el actor no ha encontrado (spots.ts; uno como mucho). */
@@ -520,6 +522,13 @@ export function rulesIndex(): RulesIndex {
 /** Olvida el índice cargado (tests o tras volver a ingerir). */
 export function resetRulesIndex(): void {
   rules = null;
+}
+
+const TOO_SOON = 'Es la primera vez que hablan y el actor no ha preguntado por trabajo ni por lo que le pasa: nadie pide un encargo a quien acaba de saludar. Que charlen; se lo pedirá cuando pregunte o lleven un rato.';
+
+/** ¿Pedirle una misión ahora sería soltársela sin conversación previa? */
+function tooSoonToAsk(ctx: ToolContext, npc: Npc): boolean {
+  return talkState(ctx.engine.world, ctx.engine.events.all(), ctx.actor, npc, ctx.nowGameS).first_meeting && !textSignals(ctx.action_text ?? '').asks_work;
 }
 
 export function executeTool(ctx: ToolContext, name: string, raw: Record<string, unknown>): string {
@@ -987,7 +996,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Al inconsciente se le registra sin tirada, pero quien lo vea lo ve como un robo.
       const stolen = Boolean(victim && toType === 'character' && s('to_id') === actor.id
         && ((victim.status === 'alive' && readsAsTheft(ctx.action_text) && !['exito_justo', 'exito_claro', 'critico'].includes(ctx.roll_category ?? '')) || victim.status === 'unconscious'));
-      const r = transferItem(world, s('instance_id'), to, input['quantity'] == null ? undefined : Number(input['quantity']));
+      // Del suelo, sin cantidad, se coge uno: «coger agua» no se lleva el agua entera del pozo.
+      const fromFloor = held?.type === 'spot' && toType === 'character';
+      const r = transferItem(world, s('instance_id'), to, input['quantity'] == null ? (fromFloor ? 1 : undefined) : Number(input['quantity']));
       if (r.ok && stolen) reportIncident(world, { kind: 'theft', perpetrator_id: actor.id, victim_id: victim!.id }, nowGameS);
       if (!r.ok && r.error.code === 'not_reachable' && r.error.reason === 'no está a tu alcance') {
         // Lo que no está en el punto del actor: dónde está y adónde ir.
@@ -1000,7 +1011,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: 'not_reachable', detail: { reason: `está en ${at.name}, a ${at.distance_m} m: fuera de alcance`, distance_m: at.distance_m, go_to: at.spot_id }, hint: `move_to ${at.spot_id} primero; hasta que llegue, no ha ocurrido` };
         }
       }
-      if (!r.ok) return { error: r.error.code, detail: r.error };
+      if (!r.ok) return { error: r.error.code, detail: r.error, ...(r.error.code === 'no_space' && r.error.fits ? { hint: `Caben ${r.error.fits}: repite con quantity ${r.error.fits} si es lo que quiere.` } : {}) };
       // Darle algo a un NPC es un regalo (o una entrega): sube su confianza, con el tope de la charla.
       if (toType === 'npc') { const n = world.npc(s('to_id')); if (n.status === 'alive') trustProgress(ctx, adjustTrust(world, n, actor, 'gift', nowGameS)); }
       return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity, ...(stolen ? crimeNote(ctx) : {}) };
@@ -1069,6 +1080,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     }
     case 'story_quest': {
       const action = s('action') as 'ask' | 'offer' | 'accept' | 'decline' | 'turn_in';
+      if (action === 'ask' || action === 'offer') {
+        const q = storyOf(world)?.quests.find((x) => x.id === s('quest_id'));
+        const giver = q?.giver_npc_id ? world.npcs.get(q.giver_npc_id) : undefined;
+        if (q && giver && questStatus(world, actor, q) === 'available' && tooSoonToAsk(ctx, giver)) return { error: 'too_soon', hint: TOO_SOON };
+      }
       const r = storyQuestAction(world, actor, s('quest_id'), action, nowGameS);
       if (!r.ok) return { error: r.error };
       const told = storyTold(ctx, r.output);
@@ -1099,6 +1115,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (ctx.talk?.state.terms && s('npc_id') === ctx.talk.npc_id) {
         return { error: 'main_quest', hint: 'Eso es lo suyo con el actor, y ya está en su Diario (su situación, su deuda): no abras un encargo nuevo. Díselo en la charla y sigue.' };
       }
+      const asker = world.npcs.get(s('npc_id'));
+      if (asker && tooSoonToAsk(ctx, asker)) return { error: 'too_soon', hint: TOO_SOON };
       const r = giveQuest(world, actor, { title: s('title'), text: s('text'), giver_npc_id: s('npc_id') || null, objective: s('objective') || null, reward: s('reward') || null, heard: input['heard'] == null ? null : s('heard') }, nowGameS);
       if (!r.ok) return { error: 'bad_quest', hint: r.error };
       const q = r.quest;
@@ -1506,6 +1524,14 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: receivedRejection(got) };
         }
       }
+      // Mover algo suyo solo de palabra («lo guardas en la mochila» y sigue en la mano): se reescribe una vez.
+      if ((ctx.moved_rejections ?? 0) < 1 && req === null) {
+        const verb = movedWithoutTool({ action: ctx.action_text ?? '', narration: s('narration_private'), okTools: ctx.ok_tools ?? [] });
+        if (verb) {
+          ctx.moved_rejections = (ctx.moved_rejections ?? 0) + 1;
+          return { error: movedRejection(verb) };
+        }
+      }
       // Un NPC que dice que va con el actor (o a algún sitio) sin set_npc_order se queda donde está: se reescribe una vez.
       if ((ctx.order_rejections ?? 0) < 1) {
         const lines = parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id));
@@ -1560,7 +1586,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           // Conversación de grupo (scene.ts): quien habla pasa a llevarla y los demás siguen unidos.
           const prev = npc.talking_to;
           const group = prev && (prev.character_id === actor.id || prev.with?.includes(actor.id)) ? [prev.character_id, ...(prev.with ?? [])].filter((id) => id !== actor.id) : [];
-          npc.talking_to = { character_id: actor.id, since_game_s: nowGameS, ...(group.length ? { with: group } : {}) };
+          const going = prev && (prev.character_id === actor.id || prev.with?.includes(actor.id)) && !prev.reserved;
+          // Cerrar el turno con alguien no le abre sus misiones: solo si la charla ha llegado a eso (talk.ts).
+          const ripe = ctx.talk?.npc_id === npc.id && offersNow(ctx.talk, input['talk_situation']);
+          npc.talking_to = { character_id: actor.id, since_game_s: nowGameS, started_game_s: going ? prev.started_game_s ?? prev.since_game_s : nowGameS, ...(group.length ? { with: group } : {}), ...(ripe ? { ripe: true } : {}) };
           const note = input['npc_memory_note'] == null ? '' : cleanText(s('npc_memory_note'));
           if (note) {
             const imp = Math.min(3, Math.max(1, Math.round(Number(input['npc_memory_importance']) || 1))) as 1 | 2 | 3;

@@ -436,7 +436,7 @@ Tres reglas de servidor (el master nunca decide si algo cabe):
 | Manos (2) | 1 ítem cada una, o 1 `bulky` en las dos | Instantáneo |
 | Equipado (cabeza, cuerpo, manos, pies, cuello, anillo×2, espalda, cinturón) | 1 por slot | Ya puesto |
 | Bolsillos / cinturón | 4 slots, solo `tiny`/`small` | Instantáneo |
-| Mochila / bolsa / alforja | Según el ítem (mochila: 20 slots, 30 lb) | Cuesta una acción |
+| Mochila / bolsa / alforja | Según el ítem (mochila: 20 slots, 60 lb) | Cuesta una acción |
 | Contenedores mágicos | Bolsa de contención: 500 lb, slots ilimitados hasta `medium` | Acción |
 | Alijos en el mundo | Cofre de posada, casa, banco del gremio (contenedor fijo en un `spot`) | Solo estando allí |
 | Monturas / carros | Contenedor móvil con `location_id` propio | — |

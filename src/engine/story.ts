@@ -19,9 +19,11 @@
  *   - **Disponible** (no se ve): quien la da (`giver_npc_id`) la tiene si el PJ
  *     cumple sus requisitos: nivel mínimo (`min_level`) y `requires` (misión
  *     previa, reputación, conocerle…). Nada flota sobre nadie.
- *   - **Te la piden en escena**: al hablar con él (o el máster con
- *     `story_quest ask`) entra en el Diario, ya activa. Aceptar es implícito; el
- *     jugador puede decir que no (`decline`) y el Diario lo apunta.
+ *   - **Te la piden en escena**: cuando la charla da para ello (el PJ pregunta
+ *     por trabajo o qué le pasa, o llevan un rato hablando: talk.ts, `ripe`), el
+ *     máster con `story_quest ask` o, si no lo hace, el servidor al cerrar ese
+ *     turno. Nunca en un primer saludo. Entra en el Diario, ya activa. Aceptar es
+ *     implícito; el jugador puede decir que no (`decline`) y el Diario lo apunta.
  *   - **Activa** → **lista para entregar** → **entregada**: la recompensa la da
  *     quien la recibe (`turn_in_npc_id`, por defecto quien la dio), al hablar.
  *   Lo que se oye por ahí (`rumor`) es una línea de ambiente en el hilo que dice
@@ -795,8 +797,12 @@ export function questStatus(world: World, c: Character, q: StoryQuest): StorySta
  * más, que pregunte, y el máster la pide con story_quest ask.
  */
 function askedInTalk(world: World, c: Character, n: Npc): boolean {
-  const since = n.talking_to?.since_game_s ?? Infinity;
-  return (characterStory(c).log ?? []).some((x) => (x.kind === 'open' || x.kind === 'offered' || x.kind === 'declined') && x.game_s >= since && quest(world, x.quest_id)?.giver_npc_id === n.id);
+  return askedSince(world, c, n, n.talking_to?.started_game_s ?? n.talking_to?.since_game_s ?? Infinity);
+}
+
+/** ¿Le ha pedido ese NPC alguna misión desde ese momento? */
+export function askedSince(world: World, c: Character, n: Npc, sinceS: number): boolean {
+  return (characterStory(c).log ?? []).some((x) => (x.kind === 'open' || x.kind === 'offered' || x.kind === 'declined') && x.game_s >= sinceS && quest(world, x.quest_id)?.giver_npc_id === n.id);
 }
 
 /** NPC al final de un paso: con quien hay que estar, a quien dar algo o quien da su pista. */
@@ -1007,8 +1013,8 @@ function advanceCharacter(world: World, c: Character, nowS: number, o: StoryOutp
     }
     if (st.declined?.[q.id] !== undefined || whyLocked(world, c, q)) continue;
     const giver = world.npcs.get(q.giver_npc_id!)!;
-    if (talkingWith(giver, c) && !askedInTalk(world, c, giver)) {
-      // Pedida en escena: entra activa y cuenta ya lo que el PJ haya hecho (llevar el agua encima).
+    if (talkingWith(giver, c) && giver.talking_to?.ripe && !askedInTalk(world, c, giver)) {
+      // Pedida en escena, con la charla ya en marcha: entra activa y cuenta ya lo que el PJ haya hecho (llevar el agua encima).
       ask(world, c, q, nowS, o);
       if (!npcDeaths(world, c, q, nowS, o)) progress(world, c, q, nowS, o);
       continue;
@@ -1406,7 +1412,7 @@ export function storyContext(world: World, c: Character, nowS: number): string |
   for (const q of story.quests) {
     if (!q.giver_npc_id || !npcHere(q.giver_npc_id)) continue;
     const s = questStatus(world, c, q);
-    if (s === 'available') L.push(`- ${name(q.giver_npc_id)} puede pedirle «${q.title}» [${q.id}] (nivel ${q.level}): «${q.text}». Si viene a cuento en la charla, que la pida con su voz (story_quest ask); si el actor habla con ${name(q.giver_npc_id)}, el servidor se la pide al cerrar el turno.`);
+    if (s === 'available') L.push(`- ${name(q.giver_npc_id)} puede pedirle «${q.title}» [${q.id}] (nivel ${q.level}): «${q.text}». Solo cuando la charla dé para ello (pregunta qué le pasa, se ofrece, o llevan un rato hablando), que la pida con su voz (story_quest ask); en un primer saludo, no: el servidor lo rechaza.`);
     else if (s === 'declined') L.push(`- El actor le dijo que no a ${name(q.giver_npc_id)} con «${q.title}» [${q.id}]: que no insista; si el actor cambia de idea, story_quest accept.`);
     else if (s === 'locked' && !q.exclusive && cst.done.length + cst.open.length > 0 && q.act > 1) L.push(`- ${name(q.giver_npc_id)} aún no tiene nada más para el actor (${whyLocked(world, c, q)}): que no lo insinúe.`);
   }
