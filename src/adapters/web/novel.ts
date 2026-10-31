@@ -515,7 +515,7 @@ export const NOVEL_JS = String.raw`
     if (n.link) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'link'; b.textContent = n.link;
-      b.addEventListener('click', function () { goTab(n.tab || 'journal'); });
+      b.addEventListener('click', function () { if (n.quest) goQuests(n.quest.event); else goTab(n.tab || 'journal'); });
       div.appendChild(b);
     }
     if (n.quest && n.quest.why) {
