@@ -1,6 +1,6 @@
 # Tavernus
 
-D&D multijugador por chat con Master IA. La spec completa está en [`docs/SPEC.md`](docs/SPEC.md); la dirección y las fases hacia mundos generados y vivos, en [`docs/PLAN.md`](docs/PLAN.md).
+D&D multijugador por chat con Master IA. La spec completa está en [`docs/SPEC.md`](docs/SPEC.md); la dirección y las fases hacia mundos generados y vivos, en [`docs/PLAN.md`](docs/PLAN.md). Para jugar: [Cómo se juega](docs/GUIA-USUARIO.md).
 
 Principio rector: **la base de datos es la verdad; el master IA solo puede cambiarla a través de tools.**
 

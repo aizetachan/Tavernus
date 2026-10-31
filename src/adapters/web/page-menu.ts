@@ -410,6 +410,7 @@ export const MENU = String.raw`<!doctype html>
     <button type="button" id="resume" class="art" hidden><span class="cap"><span class="eyebrow">Continúa tu historia</span><b id="resume-name"></b><span class="go"><span id="resume-meta"></span><span><svg class="i" style="width:14px;height:14px"><use href="#i-play"/></svg>Continuar</span></span></span></button>
     <div id="list"></div>
     <div class="new-wrap"><button id="open-new" class="btn primary sm" type="button"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button></div>
+    <div class="new-wrap"><a class="btn ghost sm" href="https://github.com/aizetachan/Tavernus/blob/main/docs/GUIA-USUARIO.md" target="_blank" rel="noopener">Cómo se juega</a></div>
   </div>
   <button type="button" id="fab"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button>
 </aside>
