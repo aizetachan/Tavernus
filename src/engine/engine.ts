@@ -145,6 +145,8 @@ export interface MasterCall {
   model: string | null;
   ms: number;
   usage: { input: number; output: number; cache_read: number; cache_write: number; iterations: number } | null;
+  /** El actor que dio voz al NPC (ai/actor.ts), si hubo: su gasto aparte. */
+  actor?: { model: string; input: number; output: number; cache_read: number; cache_write: number };
   error?: { reason: string; message: string };
 }
 export type MasterCallListener = (c: MasterCall) => void;
@@ -1489,7 +1491,7 @@ export class Engine {
     else { this.masterErr.push({ ts: Date.now(), reason: out.reason, message: out.message.slice(0, 200) }); if (this.masterErr.length > 100) this.masterErr.shift(); }
     this.reportMaster({
       character_id: c.id, action_type: actionType, ok: out.ok, model: out.ok ? out.model : null, ms: Date.now() - t0, usage: usageOf(out.usage),
-      ...(out.ok ? {} : { error: { reason: out.reason, message: out.message } }),
+      ...(out.ok ? (out.actor ? { actor: out.actor as NonNullable<MasterCall['actor']> } : {}) : { error: { reason: out.reason, message: out.message } }),
     });
     if (!out.ok) {
       this.announcePending(c.id);

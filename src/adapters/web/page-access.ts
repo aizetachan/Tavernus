@@ -7,7 +7,7 @@
 import type { ChargenCatalog } from '../../engine/chargen.js';
 import { CHARGEN_CSS, CHARGEN_JS } from './page-creation.js';
 
-const HEAD = (title: string, css = '') => String.raw`<!doctype html>
+export const HEAD = (title: string, css = '') => String.raw`<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
