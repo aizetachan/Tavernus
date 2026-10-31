@@ -25,7 +25,7 @@ import { boardState } from '../src/adapters/web/board.js';
 import { levelUp } from '../src/engine/levels.js';
 import type { Character, GameEvent } from '../src/engine/model.js';
 import type { QuestChange } from '../src/engine/progress.js';
-import { fakeTime } from './helpers.js';
+import { fakeTime, waitUntil } from './helpers.js';
 
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 const H = 3600;
@@ -358,8 +358,7 @@ describe('la partida del 2026-10-27: muertes, voz y nombres', () => {
     expect(allHooks(engine.world).some((h) => h.for_character_id === c.id && /Es de la cripta/.test(h.what))).toBe(true);
     time.advanceReal(1000);
     await engine.tick();
-    await new Promise((r) => setTimeout(r, 20));
-    expect(told.some((t) => /Es de la cripta/.test(t))).toBe(true);
+    await waitUntil(() => expect(told.some((t) => /Es de la cripta/.test(t))).toBe(true));
     expect(engine.events.all().some((e) => e.action_type === 'progress_story' && /Es de la cripta/.test(e.narration_private))).toBe(false);
     engine.attachMaster(null);
     engine.emitStory({ personal: [], announcements: [], beats: [{ character_id: c.id, text: 'Hal silba.' }] });

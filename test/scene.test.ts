@@ -101,14 +101,13 @@ describe('el NPC atiende a uno cada vez', () => {
 
 describe('conversación de grupo', () => {
   it('unirse y agrupar: dos frases en la ventana, una sola llamada al máster, la misma respuesta para los dos', async () => {
-    const { engine, kael, mira, talk, calls } = await bar({ groupWindowMs: 2000 });
+    // Ventana de una hora: si la esperase, el test no acabaría; ya han hablado todos.
+    const { engine, kael, mira, talk, calls } = await bar({ groupWindowMs: 3_600_000 });
     const seen: Record<string, string[]> = {};
     engine.onDelivery((d) => { (seen[d.character_id] ??= []).push(d.text); });
     talk(kael.id);
     expect((await engine.act(mira.id, 'Unirme a la conversación con Brenna')).event!.action_type).toBe('npc_join');
-    const t0 = Date.now();
     const [a, b] = await Promise.all([engine.act(kael.id, 'preguntarle por el pozo'), engine.act(mira.id, 'preguntarle por la cerveza')]);
-    expect(Date.now() - t0).toBeLessThan(1500); // no espera a la ventana: ya han hablado todos
     const group = calls.filter((c) => c.text.startsWith('(conversación de grupo'));
     expect(group).toHaveLength(1);
     expect(group[0]!.context).toContain('## Conversación de grupo con Brenna: responde UNA vez a todos');
@@ -159,14 +158,13 @@ describe('rondas en escenas tensas', () => {
   });
 
   it('ronda completa: si actúan todos no espera al temporizador; una segunda acción en la misma ronda se rechaza', async () => {
-    const { engine, kael, mira, calls } = await bar({ roundMs: 5000 });
+    // Temporizador de una hora: si lo esperase, el test no acabaría.
+    const { engine, kael, mira, calls } = await bar({ roundMs: 3_600_000 });
     engine.world.location('loc_taberna').state['tense'] = true;
-    const t0 = Date.now();
     const first = engine.act(kael.id, 'cubrir la puerta');
     const again = await engine.act(kael.id, 'y además gritar');
     expect(again).toMatchObject({ ok: false, text: 'Ya has actuado en la ronda 1: espera a que se resuelva.' });
     const [a, b] = await Promise.all([first, engine.act(mira.id, 'apagar la vela')]);
-    expect(Date.now() - t0).toBeLessThan(3000);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.text).toBe('(ronda 1) Kael: cubrir la puerta / Mira: apagar la vela');
     expect(a.event!.id).toBe(b.event!.id);

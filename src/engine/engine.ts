@@ -263,7 +263,7 @@ export class Engine {
     this.realClock = !opts.now;
     this.world = new World(snapshot);
     this.clock = GameClock.fromCampaign(this.world.campaign);
-    this.events = new EventLog(this.world, this.clock, lastSeq);
+    this.events = new EventLog(this.world, this.clock, lastSeq, this.now);
     this.world.onChange((c) => this.pending.set(`${c.collection}/${c.id}`, c));
     // Antes de persistir y entregar: el evento sale ya con sus momentos en el payload.
     this.events.onEvent((e) => this.noteMoments(e));

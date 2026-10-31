@@ -12,9 +12,9 @@ const STYLE = styleBible({ tone: 'grim' });
 const KAEL = { name: 'Kael', race: 'enano', class_name: 'guerrero', look: 'barba roja trenzada' };
 
 /** fetch simulado: cada imagen distinta (para ver qué versión es cuál) y nunca toca la red. */
-function fakeFetch(fail = () => false) {
+function fakeFetch(fail = () => false, hold: () => Promise<void> | null = () => null) {
   let n = 0;
-  const fn = vi.fn(async () => (fail() ? new Response('no', { status: 500 }) : new Response(new Uint8Array([0xff, 0xd8, n++, 0xff, 0xd9]), { status: 200, headers: { 'content-type': 'image/jpeg' } })));
+  const fn = vi.fn(async () => (await hold(), fail() ? new Response('no', { status: 500 }) : new Response(new Uint8Array([0xff, 0xd8, n++, 0xff, 0xd9]), { status: 200, headers: { 'content-type': 'image/jpeg' } })));
   return fn as unknown as typeof fetch;
 }
 
@@ -57,24 +57,28 @@ describe('prompt del avatar', () => {
 });
 
 describe('estudio de avatares', () => {
-  async function studioFor(opts: { limit?: number; gameLimit?: number; now?: () => number; fail?: () => boolean } = {}) {
+  async function studioFor(opts: { limit?: number; gameLimit?: number; now?: () => number; fail?: () => boolean; hold?: () => Promise<void> | null } = {}) {
     const { engine } = await bootEngine(undefined, { deterministic: true });
-    const ill = new Illustrator({ dir, worldSeed: 'demo', fetch: fakeFetch(opts.fail), minIntervalMs: 0, queue: new PollinationsQueue(), cloudflareLimit: new Limiter(2), log: () => {} });
+    const ill = new Illustrator({ dir, worldSeed: 'demo', fetch: fakeFetch(opts.fail, opts.hold), minIntervalMs: 0, queue: new PollinationsQueue(), cloudflareLimit: new Limiter(2), log: () => {} });
     const studio = new AvatarStudio(engine, ill, { dir, log: () => {}, ...opts });
     return { engine, ill, studio };
   }
 
   it('límite diario por personaje con mensaje claro; al día siguiente se puede otra vez', async () => {
     let t = Date.UTC(2026, 9, 22, 10);
-    const { studio } = await studioFor({ limit: 2, now: () => t });
+    // La imagen se retiene hasta que el test la suelta: si no, puede llegar antes de que acabe la petición.
+    let hold: Promise<void> | null = null, release = () => {};
+    const { studio } = await studioFor({ limit: 2, now: () => t, hold: () => hold });
     await studio.ensure('ch_kael');
     await studio.settled('ch_kael');
     // La primera no cuenta.
     expect(studio.view('ch_kael')).toMatchObject({ used: 0, left: 2, chosen: 1 });
     for (let i = 0; i < 2; i++) {
+      hold = new Promise((r) => { release = r; });
       expect((await studio.regenerate('ch_kael')).ok).toBe(true);
       // De una en una.
       expect(await studio.regenerate('ch_kael')).toMatchObject({ ok: false, status: 409 });
+      release();
       await studio.settled('ch_kael');
     }
     const r = await studio.regenerate('ch_kael');
@@ -84,6 +88,8 @@ describe('estudio de avatares', () => {
     t += 24 * 3600_000;
     expect(studio.view('ch_kael')).toMatchObject({ used: 0, left: 2 });
     expect((await studio.regenerate('ch_kael')).ok).toBe(true);
+    // Que acabe de escribir antes de que afterEach borre la carpeta.
+    await studio.settled('ch_kael');
   });
 
   it('también hay tope por partida, y lo que falla no cuenta', async () => {

@@ -7,7 +7,7 @@ import { offlineClient } from '../src/ai/offline.js';
 import { Illustrator, illustratorOf, Limiter, LIGHT_EN, PollinationsQueue } from '../src/ai/illustrate.js';
 import { gameDayOf, paintKey, paintMomentOf, PaintLimits, withoutDialogue } from '../src/ai/paint.js';
 import { lightAt } from '../src/engine/perception.js';
-import { bootEngine, fakeTime } from './helpers.js';
+import { bootEngine, fakeTime, waitUntil } from './helpers.js';
 
 const IDS = /\b(?:npc|ch|loc|sp|it|ii|ev)_[a-z0-9_]+/i;
 
@@ -157,7 +157,7 @@ describe('ruta /api/illustrate', () => {
     expect(first.status).toBe(202);
     const ack = await first.json() as { ok: boolean; key: string; seq: number; cached: boolean; left: number };
     expect(ack).toMatchObject({ ok: true, cached: false, left: 0, key: `manual:${id}:${ack.seq}` });
-    await vi.waitFor(() => expect(moments).toContainEqual({ key: ack.key, kind: 'manual', seq: ack.seq }));
+    await waitUntil(() => expect(moments).toContainEqual({ key: ack.key, kind: 'manual', seq: ack.seq }));
     expect(manualCalls()).toBe(1);
 
     // El mismo turno: la cacheada, sin gastar ni pedir otra.

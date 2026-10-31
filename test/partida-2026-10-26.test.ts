@@ -235,9 +235,9 @@ describe('n.º 7: tras un move_to del máster no hay otra narración de llegada'
       }));
     });
     await Promise.all([engine.act(leodhin.id, 'Salir por la puerta'), engine.act(miau.id, 'Salir por la puerta')]);
-    await new Promise((r) => setTimeout(r, 30));
+    await engine.settle();
     await engine.tick();
-    await new Promise((r) => setTimeout(r, 30));
+    await engine.settle();
     expect(moves.map((m) => m['arrived'])).toEqual([true, true]);
     expect(engine.world.characterSpot(leodhin)!.id).toBe('sp_pl_taberna');
     expect(engine.world.characterSpot(miau)!.id).toBe('sp_pl_taberna');

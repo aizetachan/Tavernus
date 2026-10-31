@@ -50,7 +50,7 @@ export class EventLog {
   private deliveryListeners: DeliveryListener[] = [];
   private eventListeners: EventListener[] = [];
 
-  constructor(private readonly world: World, private readonly clock: GameClock, lastSeq = 0) {
+  constructor(private readonly world: World, private readonly clock: GameClock, lastSeq = 0, private readonly now: () => number = Date.now) {
     this.seq = lastSeq;
   }
 
@@ -96,7 +96,7 @@ export class EventLog {
     return this.events.filter((e) => e.location_id === locationId).slice(-n);
   }
 
-  emit(input: EmitInput, realMs: number = Date.now()): GameEvent {
+  emit(input: EmitInput, realMs: number = this.now()): GameEvent {
     const nowGameS = this.clock.gameNow(realMs);
     const actor = input.actor_id ? this.world.characters.get(input.actor_id) ?? null : null;
     const at = input.at ?? (actor ? positionOf(this.world, actor, nowGameS) : null);

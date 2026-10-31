@@ -13,7 +13,7 @@ import type { Id } from '../src/engine/model.js';
 import { GameManager } from '../src/games/manager.js';
 import { combatView, type CombatView, type TurnContext } from '../src/adapters/web/fight.js';
 import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
-import { bootEngine, fakeTime } from './helpers.js';
+import { bootEngine, fakeTime, readSse } from './helpers.js';
 
 /** Kael y Mira en la barra, con Brenna (CA 10, 9 PG) al lado. */
 async function bar() {
@@ -25,9 +25,6 @@ async function bar() {
   kael.location = { type: 'spot', id: brenna.location.id };
   mira.location = { type: 'spot', id: brenna.location.id };
   engine.setPresence(kael.id, true); engine.setPresence(mira.id, true);
-  // Los eventos, con el reloj del motor (falso): emit usa el real si no se le pasa.
-  const emit = engine.events.emit.bind(engine.events);
-  engine.events.emit = (input, realMs = time.now()) => emit(input, realMs);
   const loc = engine.world.spot(brenna.location.id).location_id;
   return { engine, time, kael, mira, brenna, loc };
 }
@@ -163,11 +160,11 @@ describe('vista del combate por jugador (fight.ts)', () => {
   });
 
   it('el turno: te toca, esperando a otro, otro está actuando, el narrador resuelve, caído', async () => {
-    const { engine, kael, mira, loc } = await bar();
+    const { engine, time, kael, mira, loc } = await bar();
     engine.events.emit({ actor_id: kael.id, action_type: 'master', narration_private: 'Golpe.', observable: null, tags: ['master', 'combat'] });
     const e = at(engine, loc)!;
     const turn = (viewer: Id, ctx: TurnContext) => combatView(engine.world, e, viewer, ctx)!.turn;
-    const round = { kind: 'round' as const, location_id: loc, n: 2, acted: [kael.id], waiting: [mira.id], deadline_ms: Date.now() + 30_000, open: true };
+    const round = { kind: 'round' as const, location_id: loc, n: 2, acted: [kael.id], waiting: [mira.id], deadline_ms: time.now() + 30_000, open: true };
     expect(turn(kael.id, { ...idle, round })).toMatchObject({ kind: 'wait', text: 'Esperando a Mira', deadline_ms: round.deadline_ms });
     expect(turn(mira.id, { ...idle, round })).toMatchObject({ kind: 'you', text: 'Te toca' });
     expect(turn(kael.id, { ...idle, busy: [mira.id] })).toMatchObject({ kind: 'other', who: ['Mira'], text: 'Turno de Mira: está actuando' });
@@ -188,24 +185,11 @@ describe('combate en la web (SSE «combat»)', () => {
   let web: WebServer | undefined;
   afterEach(async () => { await web?.stop(); web = undefined; if (dir) await rm(dir, { recursive: true, force: true }); });
 
-  async function readSse(res: Response, until: (text: string) => boolean, ms = 4000): Promise<string> {
-    const reader = res.body!.getReader();
-    const dec = new TextDecoder();
-    let text = '';
-    const deadline = Date.now() + ms;
-    while (!until(text) && Date.now() < deadline) {
-      const chunk = await Promise.race([reader.read(), new Promise<null>((r) => setTimeout(() => r(null), Math.max(1, deadline - Date.now())))]);
-      if (!chunk || chunk.done) break;
-      text += dec.decode(chunk.value);
-    }
-    reader.releaseLock();
-    return text;
-  }
   const combats = (text: string): (CombatView | { active: false; why?: string })[] => [...text.matchAll(/event: combat\ndata: (.*)\n\n/g)].map((m) => JSON.parse(m[1]!));
 
   it('llega a los dos jugadores del sitio, se actualiza con cada acción y avisa al empezar y al acabar', async () => {
     dir = await mkdtemp(join(tmpdir(), 'tavernus-fight-'));
-    const time = fakeTime(Date.now());
+    const time = fakeTime();
     const games = new GameManager({ root: join(dir, 'games'), env: { DATA_DIR: join(dir, 'local') }, masterFor: (e) => new Master(e, { client: offlineClient() }), engine: { deterministic: false, now: time.now }, log: () => {}, budget: null });
     web = createWebServer(games, { tickMs: 3_600_000 });
     await new Promise<void>((resolve) => web!.server.listen(0, '127.0.0.1', resolve));
@@ -226,14 +210,15 @@ describe('combate en la web (SSE «combat»)', () => {
     const torStream = await fetch(`${base}/api/stream${g}&character=${tor}`);
     // Cada PJ nuevo se presenta primero (prólogo); hasta entonces su hilo no recibe nada más.
     const ready = (t: string) => t.includes('event: presence') && (!t.includes('event: opening') || t.includes('"chapter":{"kind":"prologue"'));
-    await readSse(liaStream, ready, 10_000);
-    await readSse(torStream, ready, 10_000);
+    await readSse(liaStream, ready);
+    await readSse(torStream, ready);
 
     // Lia ataca a Brenna: el máster (offline) pide la tirada y el motor resuelve el golpe.
     expect((await post('/api/act', { character: lia, text: 'ataco a Brenna' })).status).toBe(200);
     expect((await post('/api/roll', { character: lia })).status).toBe(200);
-    const torText = await readSse(torStream, (t) => combats(t).some((c) => c.active && c.log.length > 0), 8000);
-    const liaText = await readSse(liaStream, (t) => combats(t).some((c) => c.active && c.log.length > 0), 8000);
+    // Tor lee hasta que le toca: mientras Lia actúa, su vista dice «Turno de Lia», y según la carga de la máquina esa vista llega antes con el golpe ya en el registro.
+    const torText = await readSse(torStream, (t) => { const v = combats(t).filter((c): c is CombatView => c.active).at(-1); return !!v && v.log.length > 0 && v.turn.kind === 'you'; });
+    const liaText = await readSse(liaStream, (t) => combats(t).some((c) => c.active && c.log.length > 0));
     for (const text of [torText, liaText]) {
       expect(text).toContain('"combat":{"phase":"start","text":"⚔ Empieza el combate en ');
       const last = combats(text).filter((c): c is CombatView => c.active).at(-1)!;
