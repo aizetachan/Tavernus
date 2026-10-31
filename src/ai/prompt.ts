@@ -16,11 +16,11 @@ import { hiddenSpots, knownSpots, unseenSpots } from '../engine/spots.js';
 import { containerLoads, inventoryDetailed, inventoryView } from '../engine/inventory.js';
 import { SKILLS, armorClass } from '../engine/rules.js';
 import { activeJobs } from '../engine/progress.js';
-import { contractArticles, descriptorOf } from '../engine/narrate.js';
+import { contractArticles, descriptorOf, fmtDuration } from '../engine/narrate.js';
 import { attitudeOf, dueNpcTurns } from '../engine/combat.js';
 import { encounterAt } from '../engine/encounter.js';
 import { describeHook } from '../engine/hooks.js';
-import { AHEAD_NOTICE_S, aheadBy, travelBlock } from '../engine/travel.js';
+import { AHEAD_NOTICE_S, aheadBy, justBack, travelBlock } from '../engine/travel.js';
 import { scheduleContext } from '../engine/schedule.js';
 import { orderLine } from '../engine/npcorders.js';
 import { clueBlocked, openSources, storyContext } from '../engine/story.js';
@@ -269,6 +269,13 @@ function aheadText(engine: Engine, actor: Character): string {
   return `\nVA POR DELANTE DEL MUNDO: esa es su hora, pero para todos los demás son las ${hhmm(g)}. Los NPC, los horarios y los ruidos son de las ${hhmm(g)}: la gente sigue en lo que hacía a esa hora (para ellos no ha pasado la noche). No narres que el pueblo duerme ni que han pasado horas para nadie más que el actor; si lo nota, es que va adelantado, y el mundo le alcanza solo.`;
 }
 
+/** Acaba de volver y el mundo le había adelantado (travel.ts, thawClock): para el PJ ese tiempo no ha pasado. */
+function backText(engine: Engine, actor: Character): string {
+  const gap = justBack(actor, engine.nowFor(actor));
+  if (!gap) return '';
+  return `\nACABA DE VOLVER: su jugador estuvo fuera y a su personaje no le ha pasado el tiempo, pero el mundo ha seguido ${fmtDuration(gap.to_game_s - gap.from_game_s)} (de las ${hhmm(gap.from_game_s)} a las ${hhmm(gap.to_game_s)}). No está cansado ni hambriento por eso ni recuerda ese rato: lo que haya cambiado lo descubre ahora.`;
+}
+
 function boardLine(jobs: string[]): string {
   return jobs.length ? `Tablón: ${jobs.join(' · ')}.` : 'Tablón: vacío.';
 }
@@ -281,7 +288,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   const spot = world.spot(pos.spot_id);
   const L: string[] = [];
 
-  L.push(`## Tiempo\n${engine.clock.format(nowG)}. Luz: ${lightAt(engine.clock, loc, nowG)}. 1 h real = 3 h de juego.${aheadText(engine, actor)}`);
+  L.push(`## Tiempo\n${engine.clock.format(nowG)}. Luz: ${lightAt(engine.clock, loc, nowG)}. 1 h real = 3 h de juego.${aheadText(engine, actor)}${backText(engine, actor)}`);
 
   // La luz real ya va en Tiempo; el estado solo si hay algo.
   L.push(`## Localización: ${loc.name} (${loc.id})\n${loc.description_base}\nAmbiente: ruido ${loc.ambience.noise}${loc.ambience.smell ? `, olor a ${loc.ambience.smell}` : ''}.${Object.keys(loc.state).length ? ` Estado: ${JSON.stringify(loc.state)}` : ''}`);

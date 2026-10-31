@@ -273,7 +273,7 @@ El deudor empieza con la deuda anotada (`set_debt`, vence con el reloj), el letr
 
 ### 2.10 La amenaza que escala si nadie interviene **[cambia]**
 
-Tres días desde las 18:00 del día 1 (72 h de juego, 24 h reales al ritmo 3×).
+Tres días desde las 18:00 del día 1 (72 h de juego, 24 h reales *jugadas* al ritmo 3×). Solo corre con alguien jugando y mira el reloj del PJ presente más adelantado, así que dormir y viajar la acercan (docs/MULTIJUGADOR.md, «Reloj y desconexión»).
 
 | Cuándo | Escalón | Se evita con | Qué pasa |
 |---|---|---|---|

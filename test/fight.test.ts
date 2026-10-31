@@ -232,7 +232,8 @@ describe('combate en la web (SSE «combat»)', () => {
     // Lia ataca a Brenna: el máster (offline) pide la tirada y el motor resuelve el golpe.
     expect((await post('/api/act', { character: lia, text: 'ataco a Brenna' })).status).toBe(200);
     expect((await post('/api/roll', { character: lia })).status).toBe(200);
-    const torText = await readSse(torStream, (t) => combats(t).some((c) => c.active && c.log.length > 0), 8000);
+    // Con la acción de Lia aún en curso, Tor ve «está actuando»: se espera a que acabe.
+    const torText = await readSse(torStream, (t) => combats(t).some((c) => c.active && c.log.length > 0 && c.turn.kind === 'you'), 8000);
     const liaText = await readSse(liaStream, (t) => combats(t).some((c) => c.active && c.log.length > 0), 8000);
     for (const text of [torText, liaText]) {
       expect(text).toContain('"combat":{"phase":"start","text":"⚔ Empieza el combate en ');

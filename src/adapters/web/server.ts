@@ -406,6 +406,8 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       engine.setAway(id, false);
       announce(id, true, wasAway);
       seen.add(id);
+      // Vuelve sin abrir otro stream (la pestaña oculta que se ve otra vez): el resumen le llega por el que tiene abierto.
+      if (wasAway) void engine.welcomeBack(id).catch((e) => console.error(`[web] recap partida=${slug} pj=${id}:`, e));
     };
     // Pasada la gracia sin pestañas que cuenten, su PJ se queda ausente donde estaba (docs/MULTIJUGADOR.md, «Desconexiones»).
     const wentOffline = (id: Id) => {

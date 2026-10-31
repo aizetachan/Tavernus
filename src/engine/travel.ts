@@ -23,6 +23,10 @@
  *     jugador, en el texto del descanso y en «dónde estoy» (aheadNotice); al
  *     máster, en el contexto (prompt.ts). La gente sigue a la hora del mundo:
  *     la cena no se acaba porque él haya dormido (partida del 27-10, seq 98–106).
+ *   - Desconectado: su reloj se congela (`frozen_game_s`); su ahora es esa hora,
+ *     aunque el mundo siga con otros. Al volver se iguala al mundo y lo suyo
+ *     (estados, cárcel, plazos) se aplaza lo que pasó (thawClock). Si no queda
+ *     nadie jugando se para el mundo entero (Engine.pauseClock).
  *
  * Encuentros: por trayecto entre localizaciones, una tirada con el rng del
  * motor contra una probabilidad por tipo de zona, distancia, luz y ritmo. Si
@@ -85,7 +89,10 @@ export type TravelHint =
   | { kind: 'encounter'; encounter: TravelEncounter }
   | { kind: 'arrival'; departed_game_s: number; arrived_game_s: number };
 
-type Traveller = Character & { ahead_until_game_s?: number; journey?: PausedJourney | null };
+/** Al volver el mundo le había adelantado: de qué hora a qué hora, y si «Donde lo dejamos» ya lo ha mirado. */
+export interface CaughtUp { from_game_s: number; to_game_s: number; told?: boolean }
+
+type Traveller = Character & { ahead_until_game_s?: number; journey?: PausedJourney | null; frozen_game_s?: number; caught_up?: CaughtUp };
 
 /** Margen para considerar que dos PJs viven la misma hora (s de juego). */
 export const SAME_TIME_TOLERANCE_S = 60;
@@ -101,9 +108,71 @@ export function aheadUntil(c: Character): number | null {
   return typeof v === 'number' ? v : null;
 }
 
-/** Ahora del PJ: el del mundo, o la hora a la que llegó si va por delante. */
+/** Ahora del PJ: el del mundo, la hora a la que llegó si va por delante o, desconectado, la hora a la que se fue. */
 export function nowFor(c: Character, worldNowS: number): number {
-  return Math.max(worldNowS, aheadUntil(c) ?? -Infinity);
+  return frozenAt(c) ?? Math.max(worldNowS, aheadUntil(c) ?? -Infinity);
+}
+
+export function frozenAt(c: Character): number | null {
+  const v = (c as Traveller).frozen_game_s;
+  return typeof v === 'number' ? v : null;
+}
+
+export function caughtUp(c: Character): CaughtUp | null {
+  return (c as Traveller).caught_up ?? null;
+}
+
+/** Acaba de volver con el mundo por delante: lo que dura el aviso (AHEAD_NOTICE_S de su reloj). null si no. */
+export function justBack(c: Character, nowS: number): CaughtUp | null {
+  const gap = caughtUp(c);
+  return gap && nowS - gap.to_game_s <= AHEAD_NOTICE_S ? gap : null;
+}
+
+/** Se desconecta: su reloj se queda en la hora que tenía. */
+export function freezeClock(c: Character, worldNowS: number): void {
+  if (frozenAt(c) !== null) return;
+  const t = c as Traveller;
+  t.frozen_game_s = nowFor(c, worldNowS);
+  delete t.caught_up;
+}
+
+/**
+ * Vuelve: si seguía por delante del mundo, sigue igual; si el mundo le ha
+ * adelantado, se iguala a él y lo suyo se aplaza lo que ha pasado, para que
+ * nada se le cumpla sin haberlo jugado. Devuelve los segundos de juego perdidos.
+ */
+export function thawClock(c: Character, worldNowS: number): number {
+  const t = c as Traveller;
+  const from = frozenAt(c);
+  if (from === null) return 0;
+  delete t.frozen_game_s;
+  if (from >= worldNowS) { setAhead(c, from, worldNowS); return 0; }
+  delete t.ahead_until_game_s;
+  const gap = worldNowS - from;
+  postpone(c, gap);
+  if (gap >= SAME_TIME_TOLERANCE_S) t.caught_up = { from_game_s: from, to_game_s: worldNowS };
+  return gap;
+}
+
+/** Lo que corre con el reloj del PJ, no con el del mundo. */
+function postpone(c: Character, s: number): void {
+  for (const x of c.conditions) if (x.expires_game_s !== null) x.expires_game_s += s;
+  if (c.helped_by) c.helped_by.expires_game_s += s;
+  if (c.jailed) c.jailed.until_game_s += s;
+  if (c.rest?.last_long_rest_game_s != null) c.rest.last_long_rest_game_s += s;
+  if (c.dying) {
+    c.dying.next_game_s += s;
+    if (c.dying.stable_until_game_s !== null) c.dying.stable_until_game_s += s;
+  }
+  for (const d of c.debts ?? []) if (d.due_game_s !== null) d.due_game_s += s;
+  if (c.situation?.deadline_game_s !== undefined) c.situation.deadline_game_s += s;
+  if (c.transit) {
+    c.transit.departed_game_s += s;
+    c.transit.arrives_game_s += s;
+    for (const l of c.transit.legs) l.ends_game_s += s;
+  }
+  const j = journeyOf(c);
+  if (j) j.started_game_s += s;
 }
 
 /** Cuánto va el PJ por delante del mundo (s de juego), o 0. */

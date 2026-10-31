@@ -51,6 +51,8 @@ export interface Campaign {
   real_epoch_ms: number;
   /** Segundos de juego transcurridos en `real_epoch_ms`. */
   game_epoch_s: number;
+  /** Reloj parado (no queda nadie jugando) desde ese instante real (clock.ts). Ausente: corre. */
+  clock_paused_real_ms?: number | null;
   calendar: Calendar;
   /** Puntos de inicio con su origen narrativo. Un PJ nuevo aparece en el de la localización menos poblada. */
   starting_points: { spot_id: Id; origin: string }[];

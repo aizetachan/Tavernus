@@ -47,7 +47,7 @@ Estados: **funciona**, **a medias** (funciona con matices), **fallaba** (corregi
 | **Cola de conversación con NPC** (§9.6) | A medias: `talking_to` más una instrucción al máster, sin cola real ni «te toca». | **Deseable**. |
 | **Ventana decisiva con varios jugadores** (§9.3): el orden de llegada decide | Las ventanas son por PJ (`openDecisive`). El orden lo da la cola, pero no hay recurso disputado explícito. | **Deseable**. |
 | **Dificultad según el número de PJ** (§10) | No existe: el máster no escala los encuentros. | **Deseable**. |
-| **Tiempo de juego divergente** (§10) | Resuelto con el reloj propio por PJ (`travel.ts`): al llegar a donde hay otros PJ con una hora anterior, el reloj del que llega se iguala al suyo (`Engine.joinClock`). Nadie espera (27-10-2026). | Hecho. |
+| **Tiempo de juego divergente** (§10) | Resuelto con el reloj propio por PJ (`travel.ts`): al llegar a donde hay otros PJ con una hora anterior, el reloj del que llega se iguala al suyo (`Engine.joinClock`). Nadie espera (27-10-2026). Quien se desconecta queda congelado y al volver se iguala al mundo: ver «Reloj y desconexión». | Hecho. |
 | **Cuentas de verdad** (§11.1, issue #15: identidades, email, OAuth) | Ahora hay identidad ligera por enlace. Sin cuentas: perder el enlace es perder el acceso hasta que el anfitrión lo renueve. | Enlaces: **hecho**. Cuentas: **después**. |
 | **Límite de gasto** (#17) | Hecho, por PJ y día. Falta un tope global por partida o por servidor. | Por PJ: **hecho**. Global: **deseable**. |
 | **Reportar errores con ⚠️** (§11.2) | Era de Discord. En la web no existe. | **Deseable** para jugar con amigos y recoger fallos. |
@@ -78,7 +78,7 @@ La página pide `/api/session` (rol, PJ ligado, `can_switch`). Si el jugador est
 - **Hoja**: bloque «Tu grupo» con una línea por jugador.
 - **Hilo**: aviso de sistema, sin pasar por el narrador, en el hilo de quien esté en línea: «Kael ha entrado en la partida», «Kael se ha marchado» y «Kael ha vuelto». A los que están en su mismo sitio se lo cuenta el motor («Kael se ha ido; su personaje se queda en la barra», «Kael ha vuelto»), también como aviso de sistema.
 - **Avisos de sistema** (estilo WhatsApp, «Fulano ha salido del grupo»): lo informativo (entradas, salidas, movimientos, objetos, tiradas, progreso, el paso del tiempo) sale como una línea centrada y apagada, no como narración; para emitir uno, `payload: { notice: 'all' | 'others' }` en el evento del motor (`src/engine/notices.ts`, que también trae la tabla por `action_type`) o `notice: webNotice(texto)` en un mensaje del servidor (`src/adapters/web/notice.ts`).
-- **Motor**: `setPresence(true)` al entrar y `false` a los 30 min de irse. A partir de ahí manda §9.1: dormido, con velo y sin contar para ganchos. Al volver, se despierta solo.
+- **Motor**: `setPresence(true)` al entrar y `false` a los 30 min de irse. A partir de ahí manda §9.1: dormido, con velo y sin contar para ganchos. Al volver, se despierta solo. El reloj no espera a los 30 min: se congela al quedar ausente (ver «Reloj y desconexión»).
 - **Al cargar la partida no hay nadie conectado** (27-10-2026): `Engine.boot` pone `connected = false` a todos, aunque se guardara `true` en disco o en la semilla de la partida principal (Kael y Mira). Cuenta como conectado quien abre su pestaña (`setPresence`) o actúa. No duerme a nadie: si no vuelve, a los 30 min llega el velo como siempre. Para igualar relojes al llegar solo cuentan los conectados que no están ausentes (`Character.away`).
 
 ### (d) Bloqueo de doble acción y «esperando a…»
@@ -184,7 +184,7 @@ Dar algo sigue siendo una oferta (Aceptar o Rechazar), no una reacción. En una 
 
 ## Desconexiones (25-10-2026)
 
-El mundo es abierto: el reloj sigue y cada uno entra cuando quiere. Estas reglas dicen qué pasa cuando un jugador se va en mitad de algo compartido. Código: `Engine.setAway` (motor), `stabilizeIfAway` (`combat.ts`), `roundMembers` (rondas), `markStep` y `complete` (`story.ts`: créditos y finales), `relevantWhileAway` y `absence` (`prologue.ts`). Tests: `test/away.test.ts`, una prueba por regla, con relojes simulados y dos PJ.
+El mundo es abierto: el reloj sigue mientras alguien juegue (ver «Reloj y desconexión») y cada uno entra cuando quiere. Estas reglas dicen qué pasa cuando un jugador se va en mitad de algo compartido. Código: `Engine.setAway` (motor), `stabilizeIfAway` (`combat.ts`), `roundMembers` (rondas), `markStep` y `complete` (`story.ts`: créditos y finales), `relevantWhileAway` y `absence` (`prologue.ts`). Tests: `test/away.test.ts`, una prueba por regla, con relojes simulados y dos PJ.
 
 **Cuándo se está ausente.** La presencia ya existía: al cerrar la última pestaña, pasado el margen de 20 s (una recarga no cuenta), el PJ queda **ausente** (`Character.away`, con desde cuándo y dónde). A los 30 minutos sin pestañas llega el velo de la spec (§9.1: dormido y velado), como antes. Al abrir una pestaña deja de estar ausente.
 
@@ -199,6 +199,25 @@ El mundo es abierto: el reloj sigue y cada uno entra cuando quiere. Estas reglas
 | 7 | **Misiones y finales** | Cada paso de misión guarda quién lo dio y quién estaba (`story_state.credits`). Quien estaba presente (activo, no ausente, en la misma localización) y va por ese mismo paso de esa misión lo da también («✔ … (con Aren)»). Los finales excluyentes guardan quién los cerró y con quién (`story_state.finals`): si se cierra uno mientras otro jugador está ausente, su «Donde lo dejamos» empieza por eso: «**Lo primero.** Mientras no estabas, Aren cerró «…». (final). Para ti, eso cierra «…»: el valle ya ha elegido.» |
 | 8 | **Pestaña abierta sin actuar** | No es ausencia: en rondas y ventanas decisivas manda el temporizador (duda; la amenaza se cumple), pero nunca sale de la ronda. Fuera de eso, nada. |
 | 9 | **Al volver** | «Donde lo dejamos» sale también antes de las 72 h si se fue (hay un `away` suyo después de su último turno) y entretanto pasó algo que le afecta: combate en su sitio, rondas que se resolvieron con él dudando, algo dirigido a él o un ataque contra él, ofertas canceladas, seguir que se cortó, su historia (pasos compartidos, misiones que se cierran) o un final cerrado sin él. Eso va delante en «Entretanto». Una recarga o un rato fuera sin nada de eso no la provoca. Los avisos que le llegan a su nombre mientras no está (historia, ofertas, seguir) no cuentan como turno suyo. |
+
+## Reloj y desconexión (31-10-2026)
+
+Para quien no está no pasa el tiempo: al volver retoma donde lo dejó. Código: `GameClock.pause` y `resume` (`clock.ts`), `freezeClock` y `thawClock` (`travel.ts`), la sección «Reloj parado» de `Engine`, `threatNow` y `tickStory` (`story.ts`). Tests: `test/reloj-parado.test.ts`, con reloj simulado.
+
+| Qué | Cómo queda |
+|---|---|
+| **Quién cuenta como jugando** | Un PJ conectado y no ausente. Una pestaña visible sin actuar cuenta: no hay detección de inactividad. Una oculta deja de contar como siempre (60 s más los 20 s de margen). |
+| **No queda nadie** | El mundo entero se para al quedar ausente el último (20 s sin pestañas), no a los 30 min. Se guarda en `campaign.clock_paused_real_ms`; al volver alguien, `real_epoch_ms` se corre lo que estuvo parado y el reloj sigue sin saltos ni ticks de más. Con el mundo parado nada se resuelve: la ronda abierta y la ventana decisiva esperan con lo que les quedaba, y quien estaba cayendo sigue cayendo al volver. |
+| **El mundo alcanza al que se va** | Si el último en irse iba por delante (ha dormido o viajado), antes de parar el mundo avanza hasta su hora. No le cuesta tiempo a nadie y al volver cada NPC está donde toca a esa hora. |
+| **Queda alguien jugando** | El mundo sigue. El ausente se congela (`frozen_game_s`): `nowFor` devuelve la hora a la que se fue y la cabecera (`sheet.footer`, ahora la hora del PJ) no avanza. Al volver se iguala al mundo y, si este le ha sacado 1 h de juego o más, recibe «Donde lo dejamos» con «**El tiempo.** Para ti no ha pasado…». Si seguía por delante del mundo, sigue igual. |
+| **Corre con el mundo** | Agenda y horarios de NPC, tablón, ganchos, recolección y amenaza. Una misión ligada a un hito del mundo («Garrán clava la herrería») se puede perder estando fuera: es un hecho del mundo y va en el resumen. |
+| **Corre con el PJ** | Estados, ayuda, cárcel, enfriamiento del descanso largo, caída estable, deudas, plazo de la situación inicial y trayecto en curso. Al igualarse se aplazan lo que ha pasado (`postpone`). Las misiones por descansos no avanzan porque no descansa. |
+| **Corre en real** | La espera para volver de la muerte (2 h): sigue contando fuera. Al volver, se resuelve en el primer tick. El velo también sigue a los 30 min, aunque el mundo esté parado: protege del PvP y no tiene que ver con el tiempo. |
+| **Amenaza** | Mira el reloj del PJ presente más adelantado (`story_state.threat_game_s`; nunca retrocede). Dormir o viajar la acerca; un ausente, no. Sin esto, con la pausa, las 72 h de Brezal serían 24 h *jugadas*. |
+| **A quien está fuera no le salta nada** | Los ganchos de hora esperan a alguien presente y las llegadas no se narran para un ausente. |
+| **Servidor apagado o partida cerrada** | No cuenta. El gestor de partidas arranca con `pauseOnBoot`: el reloj se queda en el último minuto procesado y todos congelados hasta que alguien entre. |
+| **Máster** | En `## Tiempo`, durante 30 min de juego tras volver: «ACABA DE VOLVER», con lo que avanzó el mundo y que el PJ no vivió ese rato. `/recap` lo dice también. |
+| **Partidas guardadas** | Cargan sin migración: los campos nuevos son opcionales. |
 
 ## Muerte y descanso (25-10-2026, issue #23)
 
