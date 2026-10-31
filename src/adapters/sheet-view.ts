@@ -41,7 +41,7 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
   const inv = inventoryView(engine.world, c.id);
   const status = { active: 'despierto', asleep: c.veiled ? 'dormido (velo)' : 'dormido', unconscious: isStable(c) ? 'inconsciente, estable' : 'inconsciente, cayendo', dead: 'muerto', retired: 'retirado' }[c.status];
   const death: SheetView['death'] = c.status === 'dead' && c.death
-    ? { mode: c.death_mode, state: 'dead', respawn_real_ms: c.death.respawn_real_ms, respawn_place: engine.world.spot(respawnSpotId(engine.world)).name }
+    ? { mode: c.death_mode, state: 'dead', respawn_real_ms: c.death.respawn_real_ms, respawn_place: engine.world.spot(respawnSpotId(engine.world, c)).name }
     : isDying(c) ? { mode: c.death_mode, state: 'dying', success: c.dying!.success, fail: c.dying!.fail }
     : isStable(c) ? { mode: c.death_mode, state: 'stable', ...(c.dying?.stable_until_game_s ? { stable_until: hhmm(c.dying.stable_until_game_s) } : {}) }
     : { mode: c.death_mode, state: 'alive' };

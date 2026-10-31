@@ -35,11 +35,11 @@ function clauses(text: string): string[] {
  * Expresiones de trato cerrado, normalizadas (sin tildes). Verbos y giros, no
  * sustantivos sueltos: «la deuda» o «hablamos de prendas» nombran, no cierran.
  */
-const DEAL = /\b((?:en|como|de) (?:prenda|fianza)|acept\w* (?:la|tu|su|el|esa|ese) (?:prenda|fianza|trato|oferta|fiado|deuda)|fiad[oa]s?|te (?:lo |la |los |las )?fio|fiarte|te (?:lo |la )?apunto|lo apunto|queda apuntad[oa]|queda anotad[oa]|apuntalo|apuntamelo|anotalo|trato hecho|hecho el trato|cerramos el trato|cerrado el trato|a cambio de|te debo|me debes|me deberas|quedas a deber|empen(?:a|as|o|e|aste|ado|ada)\b(?! en\b))/;
+const DEAL = /\b((?:en|como|de) (?:prenda|fianza)|acept\w* (?:la|tu|su|el|esa|ese) (?:prenda|fianza|trato|oferta|fiado|deuda)|(?:dej\w*|doy|da|das|sirv\w*|va|queda\w*|vend\w*|llev\w*|pon\w*)\s+(?:\w+\s+){0,3}?fiad[oa]s?|te (?:lo |la |los |las )?fio|fiarte|te (?:lo |la )?apunto|lo apunto|queda apuntad[oa]|queda anotad[oa]|apuntalo|apuntamelo|anotalo|trato hecho|hecho el trato|cerramos el trato|cerrado el trato|a cambio de|te debo|me debes|me deberas|quedas a deber|empen(?:a|as|o|e|aste|ado|ada)\b(?! en\b))/;
 /** Lo que niega, rechaza, pregunta u ofrece: no cierra nada. */
-const NOT_CLOSED = /\b(no|ni|nunca|jamas|sin|niega\w*|rechaza\w*|tampoco|nadie|nada|ofreces|ofrece|propones|propone|pides|pide|preguntas|pregunta|quieres|quiere|si|tal vez|quiza\w*|podria\w*|espera\w*|piensa\w*|pesando|ya tengo|ya guarda|sigue\w*|hablamos)\b/;
+const NOT_CLOSED = /\b(no|ni|nunca|jamas|sin|niega\w*|rechaza\w*|tampoco|nadie|nada|ofreces|ofrece|propones|propone|pides|pide|preguntas|pregunta|quieres|quiere|si|tal vez|quiza\w*|podria\w*|espera\w*|piensa\w*|pesando|ya tengo|ya guarda|sigue\w*|hablamos|al contado|algo|quien|cualquiera|cada uno)\b/;
 /** Tools que dejan estado de un trato. */
-export const DEAL_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'transfer_item', 'buy_item', 'sell_item', 'complete_job']);
+export const DEAL_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'transfer_item', 'buy_item', 'sell_item', 'complete_job']);
 
 /**
  * Frases que dan un trato por cerrado sin tool que lo respalde. Mira lo que
@@ -70,6 +70,101 @@ export function dealWithoutState(input: { narration: string; lines?: readonly Di
 }
 
 export const DEAL_REJECTION = 'Has narrado un trato sin registrarlo: usa set_debt / pawn_item / transfer_item (o el tool que toque) o narra que no se cierra.';
+
+// ---------------------------------------------------------------------------
+// Monedas que cambian de manos solo de palabra
+// ---------------------------------------------------------------------------
+
+/** Tools que mueven las monedas del actor. */
+export const COIN_TOOLS = new Set(['give_coins', 'settle_debt', 'buy_item', 'sell_item', 'set_debt', 'pawn_item', 'complete_job']);
+const COIN = String.raw`(?:monedas?|cobres?|platas?|oros?)`;
+/** El actor las suelta («dejas las monedas sobre la mesa», «le das diez de plata», «pagas la cuenta»). */
+const HANDS_COINS = new RegExp(String.raw`(?<!\bte )\b(dejas|pones|sueltas|entregas|das|pagas|tiendes|deslizas|empujas|pasas)\b[^,]{0,40}\b${COIN}\b|\b(pagas|saldas)\b`);
+/** Quien las recibe se las queda («Brenna recoge la moneda»), si el jugador iba a pagar. */
+const TAKES_COINS = new RegExp(String.raw`\b(recoge|coge|se guarda|guarda|se embolsa|hace desaparecer|acepta)\b[^,]{0,30}\b${COIN}\b`);
+const WANTS_TO_PAY = new RegExp(String.raw`\b(pago|pagar|pagarte|pagarle|saldo|soborno|sobornar|propina)\b|\b(dejo|pongo|doy|entrego|ofrezco|suelto)\b[^.;:]{0,40}\b${COIN}\b`);
+/** Lo que no llega a pagar: niega, se queda en intento u ocurre en otro momento. */
+const COINS_NOT_PAID = /\b(no|ni|nunca|sin|si|quieres|intentas|ofreces|propones|vas a|antes de|tampoco|nadie|nada)\b/;
+
+/**
+ * La narración da por pagado algo y en el turno no se ha movido ninguna moneda: el jugador pone 200 sobre la mesa,
+ * el regidor las cuenta y el jugador sigue con sus 200. Las palabras entre «» no cuentan: decirlo no es pagarlo.
+ */
+export function coinsWithoutTool(input: { action: string; narration: string; okTools: readonly string[]; pendingRoll?: boolean }): string | null {
+  if (input.pendingRoll || input.okTools.some((t) => COIN_TOOLS.has(t))) return null;
+  const acts = norm(input.narration).replace(/«[^»]*»/g, ' . ');
+  const wants = WANTS_TO_PAY.test(norm(input.action).replace(/«[^»]*»/g, ' '));
+  for (const c of clauses(acts)) {
+    if (COINS_NOT_PAID.test(c)) continue;
+    const m = HANDS_COINS.exec(c) ?? (wants ? TAKES_COINS.exec(c) : null);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+export function coinsRejection(phrase: string): string {
+  return `La narración da monedas por pagadas («${phrase}») y en este turno no se ha movido ninguna: lo que no pasa por un tool no ha ocurrido. Usa give_coins (propina, soborno, un pago sin precio), settle_debt (una deuda) o buy_item (algo de su lista), o narra que no llega a pagar. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Golpe declarado sin tirada de ataque
+// ---------------------------------------------------------------------------
+
+const WEAPON = '(?:hacha|hachuela|daga|espada|cuchillo|navaja|estoque|filo|punal|lanza|hoja|acero|baston|maza|mazo|martillo|piedra|jarra|flecha|virote|hombro|puno|bota|rodilla|codo|cabeza|dientes)';
+const BLOW = String.raw`\w*(?:punetazo|golpe|cabezazo|rodillazo|patada|tajo|hachazo|espadazo|bastonazo|codazo|mazazo|navajazo|bofetada|tortazo|guantazo|mamporro|sopapo|zarpazo)`;
+const BODY = '(?:cara|nariz|boca|brazo|brazos|costilla|costillas|craneo|cabeza|muneca|munecas|pierna|piernas|dientes|mandibula|cuello)';
+/** Lo que hace el propio PJ, en primera persona o infinitivo de botón. Con persona detrás: «golpeo la mesa» o «me pego a la pared» no son un ataque. */
+const STRIKE = new RegExp([
+  String.raw`\b(?:ataco|atacar|atacarle|atacarla|atacarlo)\b`,
+  String.raw`\b(?:le|la|lo|les|los|las|te)\s+(?:golpeo|apunalo|acuchillo|rajo|pateo|disparo|muerdo)\b`,
+  String.raw`\b(?:golpeo|golpear|apunalo|apunalar|disparo|disparar|pateo|embisto|embestir|acuchillo)\s+(?:a|al)\b`,
+  String.raw`\b(?:embisto|arremeto)\s+contra\b`,
+  String.raw`\bme\s+(?:abalanzo|lanzo|echo)\s+(?:sobre|contra|encima de)\b`,
+  String.raw`\b(?:le|te)\s+(?:clavo|hundo|estrello|descargo|lanzo|hinco)\s+(?:(?:el|la|mi|un|una|los|las)\s+)?${WEAPON}\b`,
+  String.raw`\b(?:le|les)\s+(?:parto|rompo|reviento)\s+(?:(?:el|la|los|las)\s+)?${BODY}\b`,
+  String.raw`\b(?:le|les)\s+corto\s+(?:el cuello|la garganta)\b`,
+  String.raw`\b(?:le|te|les)\s+(?:doy|suelto|lanzo|pego|planto|meto|atizo|arreo|casco)\s+(?:un|una|dos)\s+${BLOW}\b`,
+  String.raw`\blanzo\s+(?:el|un|mi)\s+golpe\b`,
+  String.raw`\blanzo\s+(?:(?:el|la|mi|un|una)\s+)?${WEAPON}\s+(?:de mano\s+)?contra\b`,
+  String.raw`\ble\s+aplasto\s+(?:la|el)\s+${BODY}\b`,
+  String.raw`\bdescargo\s+(?:(?:el|la|mi|un)\s+)?(?:golpe|${WEAPON})\b`,
+].join('|'));
+/** Una amenaza, una condición o un plan no es el golpe, si va delante: «si no hablas, le parto el brazo», «o le parto el brazo», «voy a…». */
+const NOT_A_STRIKE = /\b(si|como|cuando|proxima|voy a|vas a|quiero|quieres|puedo|podria|deberia|tendria|amenaz\w*|finjo|fingir|amago|amagar|ademan|no|ni|sin|juro|manana|pienso|pretendo|de lo contrario|porque|para que|casi|o (?:te|le|lo|la|les)|que (?:te|le|lo|la|les))\b/;
+/** Lo mismo detrás, hasta la coma: «te rompo la cara si no hablas», «le parto el brazo como vuelvas». */
+const THEN_THREAT = /\b(si|como|cuando|hasta que|de lo contrario)\b/;
+/** Un mueble no es un objetivo: «le clavo el hacha en el tablón», «le doy un golpe a la puerta». */
+const AT_A_THING = /\b(?:en|a|contra|sobre)\s+(?:el|la|los|las)\s+(?:tablon|marco|mesa|banco|puerta|pared|suelo|madera|yunque|aldaba|barra|reja|vela|carta|cofre|bolsa|llave)\b/;
+
+/** El golpe que declara el jugador, o null. Lo que dice (entre comillas, entre ¡!, tras «:») no es lo que hace. */
+export function declaredStrike(action: string): string | null {
+  const acts = norm(action).replace(/«[^»]*»|"[^"]*"|“[^”]*”/g, ' . ').replace(/¡[^!]*!?|¿[^?]*\??/g, ' . ').replace(/:[^.\n]*/g, ' . ');
+  for (const c of clauses(acts)) {
+    const m = STRIKE.exec(c);
+    if (!m) continue;
+    const rest = c.slice(m.index + m[0].length).split(',')[0]!;
+    if (!NOT_A_STRIKE.test(c.slice(0, m.index + m[0].length)) && !THEN_THREAT.test(rest) && !AT_A_THING.test(m[0] + rest)) return m[0];
+  }
+  return null;
+}
+
+/** Por qué no hay tirada, dicho en la narración: no está a su alcance, va sin arma o algo se lo impide. */
+const STRIKE_REASON = /\b(no (?:llevas|tienes|alcanzas|llegas|hay nadie|esta aqui|esta alli|ves a|puedes)|fuera de (?:tu )?alcance|sin arma|manos vacias|la reja|los barrotes|al otro lado|ya no esta|se ha ido|se ha marchado|te sujeta\w*|te detiene\w*|te frena\w*)\b/;
+
+/**
+ * El jugador declara un golpe y el cierre no lo resuelve: sin tirada de ataque y sin que el PJ haya atacado. Un NPC
+ * que le pega a él no cuenta. Con una razón en la narración (nadie al alcance, sin arma) vale.
+ */
+export function strikeWithoutAttack(input: { action: string; narration: string; attackRoll: boolean; pcAttacked: boolean; okTools: readonly string[] }): string | null {
+  if (input.attackRoll || input.pcAttacked || input.okTools.some((t) => t === 'cast_spell' || t === 'request_reaction' || t === 'restrain_npc')) return null;
+  const strike = declaredStrike(input.action);
+  if (!strike) return null;
+  return STRIKE_REASON.test(norm(input.narration).replace(/«[^»]*»/g, ' ')) ? null : strike;
+}
+
+export function strikeRejection(strike: string): string {
+  return `El jugador declara un golpe («${strike}») y este cierre no lo resuelve. El ataque del jugador va con requires_roll_kind=attack, requires_roll_key=melee o ranged y requires_roll_target=ID del objetivo; la narración solo cuenta el momento previo y el servidor tira. Si de verdad no puede (nadie a su alcance, no lleva arma, algo se lo impide), dilo en la narración. Reescribe log_event.`;
+}
 
 // ---------------------------------------------------------------------------
 // Desenlace contra la tirada

@@ -155,7 +155,15 @@ export type StoryEffect =
   | { kind: 'cancel_schedule'; event_id: Id }
   | { kind: 'rumor'; id: Id; location_id: Id; rumor_kind: RumorKind; name: string; hint: string; where?: string | null; days?: number }
   /** Se cuenta a quien esté en esa localización (o a todos, `public`). */
-  | { kind: 'announce'; location_id: Id; spot_id?: Id; text: string; public?: boolean };
+  | { kind: 'announce'; location_id: Id; spot_id?: Id; text: string; public?: boolean }
+  /** Cierre por tiempo: a cada PJ, lo que ha jugado (recapOf). */
+  | { kind: 'recap'; recap: StoryRecap };
+
+/**
+ * Texto de un cierre por tiempo, en los datos de la campaña. El motor solo rellena: {list} con títulos de misiones y
+ * {final} con el final que cumplió. `closing` deja claro que se puede seguir jugando.
+ */
+export interface StoryRecap { done: string; none: string; open: string; with_final: string; without_final: string; closing: string }
 
 export interface StoryStep {
   id: Id;
@@ -718,8 +726,30 @@ function applyWorld(world: World, e: StoryEffect, nowS: number, o: StoryOutput):
     case 'announce':
       o.announcements.push({ location_id: e.location_id, spot_id: e.spot_id ?? null, text: e.text, public: e.public ?? false });
       break;
+    case 'recap':
+      for (const c of world.characters.values()) if (c.status !== 'retired') tellTo(o, c, [{ kind: 'story', text: recapOf(world, c, e.recap) }]);
+      break;
     default: break;
   }
+}
+
+const listing = (xs: readonly string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs.at(-1)!}`);
+
+/** Lo que ha jugado este PJ, con el texto de los datos: lo cumplido, su final si lo hay, lo pendiente y que la historia sigue. */
+export function recapOf(world: World, c: Character, r: StoryRecap): string {
+  const questsIn = (ids: readonly Id[]) => ids.map((id) => quest(world, id)).filter((q): q is StoryQuest => Boolean(q));
+  const st = characterStory(c);
+  const done = questsIn(st.done);
+  const final = done.find((q) => q.exclusive === 'final');
+  const named = (qs: readonly StoryQuest[]) => listing(qs.map((q) => `«${q.title}»`));
+  const others = done.filter((q) => q !== final);
+  const open = questsIn(st.open);
+  return [
+    others.length ? r.done.replace('{list}', named(others)) : final ? '' : r.none,
+    final ? r.with_final.replace('{final}', final.title) : r.without_final,
+    open.length ? r.open.replace('{list}', named(open)) : '',
+    r.closing,
+  ].filter(Boolean).join(' ');
 }
 
 // ---------------------------------------------------------------------------

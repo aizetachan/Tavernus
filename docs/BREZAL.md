@@ -391,6 +391,7 @@ generateSeed: esqueleto + relleno ── buildSnapshot ─────┘ (el mi
 
 ## 5. Cómo se juega y se prueba
 
+- **Cambios del 31-10, sin probar con modelo** (docs/PLAN-ARREGLOS-PLAYTEST.md): se reaparece en el camastro de Ilse o, si no te acoge, en el molino con Mateo (`death_rules.respawn_points`). Ilse, Brenna, Mateo, Tobías y Úrsula son `noncombatant`: dejan caído y no rematan. El epílogo añade un resumen personal (efecto `recap`) y deja claro que se puede seguir jugando.
 - Menú web → Nueva partida → «Brezal (demo)». El personaje recibe su situación según la clase.
 - `npm test`: `test/brezal.test.ts` valida la campaña (una zona, diez lugares, el Cerco), comprueba los planos, reparte situaciones a 3 días, recorre a pie los diez lugares, completa el acto I, el acto II y el final A por tools (andar, coger, dar, hablar, `story_quest`, `grant_clue`, `discover_spot`, `advance_story`) subiendo de nivel por el camino, prueba los finales B (Osric escondido y encontrado) y C, la escalada hora a hora en tres días, el epílogo de cada final, el choque con la niebla (por texto y por `move_to`) y que el menú carga la campaña.
 - `test/confianza.test.ts`: el caso de Ilse (seq 21–24) por el motor, con una Persuasión con éxito: sigue siendo extraño, el máster no recibe la Brasa y `grant_clue` la rechaza con motivo; el tope por charla; Ilse amiga tras *El agua turbia*; el recado de Doro y la llegada de parte de Ilse; las bajadas; que ninguna pista clave salga en la primera charla con un extraño; el validador de dos caminos y las partidas guardadas.

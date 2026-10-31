@@ -7,7 +7,15 @@ import {
   buildReport, detectFailedToolNarrated, detectInventedPlace, detectLongNarration, detectNoResponse, detectNpcOutOfReach,
   detectPromiseWithoutState, detectRepeatedSuggestion, detectTrivialRoll, judgeRun, parseJudge, runDetectors, turnsFromEvents, type GameJudgement, type Turn,
 } from '../scripts/judge.js';
-import { cleanOwnAction, parseSuggestedChoice, runAutoplay } from '../scripts/autoplay.js';
+import { cleanOwnAction, dryMasterClient, dryPlayerClient, estimate, FINAL_PROFILES, masterTally, parseSuggestedChoice, prepareBrezalAct, PROFILES, runAutoplay, type GameSummary } from '../scripts/autoplay.js';
+import { analyzeGame, buildPlaytest, buildWindowSection, dryFunClient, judgeFun, similar, windowMetrics } from '../scripts/playtest-report.js';
+import { authoredSeed } from '../src/data/campaigns/index.js';
+import { Engine } from '../src/engine/engine.js';
+import { questStatus, storyOf } from '../src/engine/story.js';
+import { claimSituation } from '../src/worldgen/index.js';
+import { MemoryRepository } from '../src/persistence/memory.js';
+import { fakeTime } from './helpers.js';
+import { loadGame } from '../scripts/judge.js';
 
 const PC = 'ch_test';
 let seq = 0;
@@ -187,6 +195,131 @@ describe('autoplay en dry-run', () => {
       await rm(dir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it('la línea de la muerte no rompe el resumen de la partida: solo guarda el modelo', () => {
+    const usage = { input: 1000, output: 100, cache_read: 0, cache_write: 0 };
+    const tally = masterTally([
+      { payload: { master: { model: 'claude-haiku-5-5', usage } } },
+      { payload: { master: 'claude-haiku-5-5' } },
+    ] as unknown as GameEvent[]);
+    expect(tally.calls).toBe(1);
+    expect(tally.input).toBe(1000);
+    expect(tally.cost_usd).toBeGreaterThan(0);
+  });
+
+  it('juega Brezal por perfiles, a la vez, y el análisis saca conversaciones, misiones y combate', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tavernus-playtest-'));
+    try {
+      const out = join(dir, 'run');
+      const models = { master: 'claude-haiku-5-5', player: 'claude-haiku-5-5', worldgen: 'claude-haiku-5-5', judge: 'claude-haiku-5-5' };
+      const profiles = PROFILES.filter((p) => p.id === 'violento' || p.id === 'charlatan');
+      const run = await runAutoplay({ games: 2, actions: 3, seed: 7, models, dryRun: true, gamesDir: join(dir, 'games'), outDir: out, stamp: 'test', profiles, campaign: 'brezal', parallel: 2 });
+      expect(run.errors).toEqual([]);
+      expect(run.games.map((g) => g.profile)).toEqual(profiles.map((p) => p.id));
+      const g = run.games[0]!;
+      expect(g.campaign_id).toBe('brezal');
+      expect(g.actions[0]!.state?.hp_max).toBeGreaterThan(0);
+      expect(g.escalated).toContain('esc_epilogo');
+      const loaded = loadGame(g.dir, g.character.id);
+      const m = analyzeGame(g, loaded.events, loaded.state);
+      expect(m.actions).toBe(3);
+      const judge = await judgeFun(g, m, dryFunClient(), models.judge);
+      const md = buildPlaytest(run, [m], [judge], [], 0);
+      for (const title of ['## Fluidez', '## Conversaciones', '## Misiones', '## Combate y muerte', '## Final', '## Diversión y fluidez']) expect(md).toContain(title);
+    } finally {
+      delete process.env['MASTER_MODEL'];
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it('--start-act prepara el acto sin llamar a nadie y deja elegibles los finales', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tavernus-acto-'));
+    try {
+      const models = { master: 'claude-haiku-5-5', player: 'claude-haiku-5-5', worldgen: 'claude-haiku-5-5', judge: 'claude-haiku-5-5' };
+      const inner = dryMasterClient();
+      let calls = 0;
+      let atPrepared = -1;
+      const masterClient = { create: (p: Parameters<typeof inner.create>[0]) => { calls++; return inner.create(p); } };
+      const profiles = FINAL_PROFILES.filter((p) => p.id === 'dirigido-templar');
+      const run = await runAutoplay({
+        games: 1, actions: 2, seed: 3, models, dryRun: false, masterClient, playerClient: dryPlayerClient(), gamesDir: join(dir, 'games'), outDir: join(dir, 'run'), stamp: 'test', profiles, campaign: 'brezal', startAct: 3,
+        log: (s) => { if (s.includes('preparado el acto')) atPrepared = calls; },
+      });
+      expect(run.errors).toEqual([]);
+      expect(atPrepared).toBe(0);
+      const g = run.games[0]!;
+      expect(g.start_act).toBe(3);
+      expect(g.start_done).toBeGreaterThanOrEqual(8);
+      expect(g.actions[0]!.state?.level).toBe(3);
+      expect(g.epilogue).toContain('queda abierta');
+    } finally {
+      delete process.env['MASTER_MODEL'];
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it.each(PROFILES.map((p) => p.class_id))('la preparación del acto III vale para %s, con los tres finales elegibles', async (class_id) => {
+    const time = fakeTime(Date.UTC(2026, 9, 22, 12, 0, 0));
+    const seed = authoredSeed('brezal', { now: new Date(time.now()) });
+    const engine = await Engine.boot({ repo: new MemoryRepository(), campaignId: 'brezal', seed, now: time.now, deterministic: false });
+    const r = await engine.createCharacter(`u_${class_id}`, 'Fen', { class_id });
+    if (!r.ok) throw new Error(r.reason);
+    claimSituation(engine.world, r.character.id, engine.gameNow());
+    const c = r.character;
+    const str = c.abilities.str;
+    await prepareBrezalAct(engine, c, 3, (d) => time.advanceGame(d));
+    expect(c.level).toBe(3);
+    expect(c.abilities.str).toBe(str);
+    expect(engine.world.itemsCarriedBy(c.id).some((i) => i.item_id === 'it_cadena_fria')).toBe(true);
+    expect(engine.world.itemsCarriedBy(c.id).some((i) => i.item_id === 'it_libro_cuentas')).toBe(true);
+    expect(storyOf(engine.world)!.quests.filter((q) => q.exclusive === 'final').map((q) => questStatus(engine.world, c, q))).toEqual(['available', 'available', 'available']);
+  }, 30_000);
+
+  it('el dirigido deja a quien se niega dos veces', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tavernus-dirigido-'));
+    try {
+      const models = { master: 'claude-haiku-5-5', player: 'claude-haiku-5-5', worldgen: 'claude-haiku-5-5', judge: 'claude-haiku-5-5' };
+      const inner = dryMasterClient();
+      const says = (res: Awaited<ReturnType<typeof inner.create>>) => ({ ...res, content: res.content.map((b) => (b.type === 'tool_use' && b.name === 'log_event' ? { ...b, input: { ...(b.input as object), narration_private: 'Eso no se le cuenta a un forastero.', suggested_actions: '' } } : b)) });
+      const masterClient = { create: async (p: Parameters<typeof inner.create>[0]) => says(await inner.create(p)) as Awaited<ReturnType<typeof inner.create>> };
+      const run = await runAutoplay({ games: 1, actions: 4, seed: 3, models, dryRun: false, masterClient, playerClient: dryPlayerClient(), gamesDir: join(dir, 'games'), outDir: join(dir, 'run'), stamp: 'test', profiles: PROFILES.filter((p) => p.id === 'dirigido'), campaign: 'brezal' });
+      expect(run.errors).toEqual([]);
+      expect(run.games[0]!.actions.map((a) => a.impulse)).toContain('dejar');
+    } finally {
+      delete process.env['MASTER_MODEL'];
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it('las métricas del plan salen de los eventos y comparan dos tandas', () => {
+    const ev = (seq: number, action_type: string, extra: Record<string, unknown> = {}, payload: Record<string, unknown> = {}) => ({ id: `e${seq}`, seq, actor_id: 'pc', action_type, input_text: null, narration_private: '', payload, ...extra }) as unknown as GameEvent;
+    const say = (seq: number, narration_private: string) => ev(seq, 'master', { input_text: 'Ilse, dime', narration_private }, { npc_id: 'npc_ilse', master: { calls: [{ name: 'log_event', result: '{"ok":true}' }] } });
+    const events = [
+      say(1, 'Eso no se le cuenta a un forastero.'), say(2, 'Sigue con la corteza.'),
+      ev(3, 'master', { input_text: 'Le clavo el hacha' }, { master: { calls: [{ name: 'log_event', result: '{"error":"x"}' }, { name: 'attack', result: '{"ok":true}' }] } }),
+      ev(4, 'roll', {}, { roll: { label: 'Persuasión' } }), ev(5, 'down'),
+      say(9, 'Eso no se le cuenta a un forastero.'),
+    ];
+    const turn = (i: number, text: string, ids: string[]) => ({ i, text, event_ids: ids, state: { done: 1, steps: 2, clues: 1 } });
+    const g = { n: 1, profile: 'violento', character: { id: 'pc' }, final_quest: null, start_done: 1, actions: [turn(1, 'Ilse, dime', ['e1']), turn(2, 'Ilse, dime', ['e2']), turn(3, 'Le clavo el hacha', ['e3', 'e5']), turn(4, 'Ilse, dime', ['e9'])] } as unknown as GameSummary;
+    const m = windowMetrics(g, events, 3);
+    expect(m).toMatchObject({ actions: 3, npc_run: 2, refusals: 1, social_rolls: 1, done: 0, attack_verbs: 1, attack_verbs_rolled: 0, npc_attacks: 1, downs: 1, master_turns: 3, rejected_turns: 1 });
+    const md = buildWindowSection(3, [m], [{ ...m, npc_run: 54 }]);
+    expect(md).toContain('primeras 3 acciones');
+    expect(md).toContain('54 → 2');
+  });
+
+  it('la estimación de Brezal usa lo medido: 0,27 céntimos por acción', () => {
+    const models = { master: 'claude-haiku-5-5', player: 'claude-haiku-5-5', worldgen: 'claude-haiku-5-5', judge: 'claude-haiku-5-5' };
+    const e = estimate(1, 100, models, true);
+    expect(e.master).toBeCloseTo(0.27);
+    expect(e.worldgen).toBe(0);
+  });
+
+  it('la similitud ignora el orden y las palabras cortas', () => {
+    expect(similar('La niebla baja por el valle', 'por el valle baja la niebla')).toBe(1);
+    expect(similar('La niebla baja', 'Brenna seca jarras')).toBe(0);
+  });
 
   it('el informe agrega por tipo y saca el top de turnos', () => {
     const g: GameJudgement = {

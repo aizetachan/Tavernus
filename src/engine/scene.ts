@@ -112,9 +112,12 @@ export function tenseScene(world: World, locationId: Id, recentTags: readonly st
   return null;
 }
 
-/** «dejar la conversación», «me despido», «dejo de hablar con…». */
+/**
+ * La orden de irse: «dejar la conversación», «me despido», «me despido de Hugo», «dejo de hablar con la tabernera».
+ * Solo la orden: «Me despido de Hugo con un silbido y echo a correr» es una acción, y la narra el máster.
+ */
 export function isLeaveTalk(text: string): boolean {
-  return /^(?:dejar la conversaci[oó]n|dejo la conversaci[oó]n|salir de la conversaci[oó]n|me despido|despedirme|dejar de hablar|dejo de hablar)\b/i.test(text.trim());
+  return /^(?:dejar la conversaci[oó]n|dejo la conversaci[oó]n|salir de la conversaci[oó]n|me despido|despedirme|dejar de hablar|dejo de hablar)(?:\s+(?:de|con)\s+(?:(?:el|la|los|las|mi)\s+)?\S+(?:\s+\S+)?)?[\s.!]*$/i.test(text.trim());
 }
 
 /** «Esperar turno con Hugo» y «Unirme a la conversación (con Hugo)»: los botones del NPC ocupado. */

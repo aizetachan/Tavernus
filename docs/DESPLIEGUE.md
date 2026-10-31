@@ -44,9 +44,9 @@ Cada acción de cada jugador con máster real es una llamada a la API de Claude,
 - **Límite por personaje y día** (#17, ya en la web): `DAILY_MASTER_ACTIONS` (200 por defecto) y
   `DAILY_MASTER_TOKENS` en `/etc/tavernus/env`. Al pasarlo, ese jugador sigue con el máster offline
   (gratis) hasta medianoche. Falta un tope global por partida o por servidor (docs/MULTIJUGADOR.md).
-- **Órdenes de magnitud** (docs/PLAN.md y docs/MULTIJUGADOR.md): con Haiku 5.5, unos 0,12 céntimos
-  por acción, así que 200 acciones son unos 0,25 € por jugador y día. Con Sonnet 5.5, de 1,2 a 1,6
-  céntimos por acción. Con Opus 5.5, unos 6 € por jugador y día al tope. Un «mundo nuevo» cuesta de
+- **Órdenes de magnitud** (docs/PLAN.md y docs/PLAYTEST-2026-10-31.md): con Haiku 5.5 en Brezal, 0,27
+  céntimos por acción medidos, así que 200 acciones son unos 0,55 $ por jugador y día. Por precio, con los
+  mismos tokens, Sonnet 5.5 serían unos 5,5 céntimos por acción y Opus 5.5 unos 11. Un «mundo nuevo» cuesta de
   0,07 a 0,15 $ (`WORLDGEN_MODEL`). La plantilla trae `MASTER_MODEL=claude-haiku-5-5`.
 - **Gratis por defecto**: la voz del narrador (la del navegador) y el sonido (sintetizado). Las
   ilustraciones (`IMAGES=on` con Cloudflare) entran en el plan gratuito de 10 000 neuronas al día.

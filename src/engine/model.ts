@@ -138,6 +138,17 @@ export interface DeathRules {
   respawn_spot_id: Id | null;
   /** Quién le encontró y le trajo, para la narración de la vuelta («Ilse te encontró…»). */
   respawn_story: string;
+  /** Sitios donde puede volver, por preferencia: el primero donde le acojan (death.ts). Vacío: `respawn_spot_id` y `respawn_story`. */
+  respawn_points: RespawnPoint[];
+}
+
+/** Un sitio donde vuelve un PJ muerto. */
+export interface RespawnPoint {
+  spot_id: Id;
+  /** Quién le encontró y le trajo, para la narración de la vuelta. */
+  story: string;
+  /** Quien le acoge: si ha muerto o no quiere verle, este sitio no vale. */
+  by_npc_id?: Id;
 }
 
 /** Evento de generación de un mundo (src/worldgen). */
@@ -664,6 +675,8 @@ export interface Npc {
   knowledge?: NpcKnowledge[];
   /** Carácter: la adulación le resta confianza en vez de sumarla (trust.ts). Sin campo, la agradece. */
   dislikes_flattery?: boolean;
+  /** No es de pelear (combat.ts): no entra solo en los turnos del combate y, si golpea, no mata: deja caído y estable. Sin campo, pelea. */
+  noncombatant?: boolean;
   /** Confianza en cada PJ (trust.ts): puntos y lo ganado en la última charla. */
   trust?: Record<Id, NpcTrust>;
   memory: NpcMemory[];

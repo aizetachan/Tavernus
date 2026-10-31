@@ -57,10 +57,14 @@ export const BREZAL: AuthoredCampaign = {
     // Quién hace cumplir la ley, dónde encierra y quién es dueño de qué (crime.ts).
     law: LAW,
     situations: SITUATIONS,
-    // Quien muere vuelve en el camastro de Ilse (SPEC §4.7): ella le encontró.
+    // Quien muere vuelve en el camastro de Ilse (SPEC §4.7): ella le encontró. Si Ilse no quiere verle, en el molino, con Mateo.
     death_rules: {
       respawn_spot_id: 'sp_cu_camastro',
       respawn_story: 'Ilse te encontró y te trajo a la Casa de las hierbas. Dice que tardaste mucho en volver a respirar, y no quiere hablar de lo que murmurabas.',
+      respawn_points: [
+        { spot_id: 'sp_cu_camastro', by_npc_id: 'npc_ilse', story: 'Ilse te encontró y te trajo a la Casa de las hierbas. Dice que tardaste mucho en volver a respirar, y no quiere hablar de lo que murmurabas.' },
+        { spot_id: 'sp_mo_sacos', by_npc_id: 'npc_mateo', story: 'Mateo te encontró tirado en el camino y te trajo al molino a cuestas. Te ha dejado sobre los sacos de harina y no pregunta quién te ha hecho eso.' },
+      ],
     },
     schedule: SCHEDULE,
     encounters: ENCOUNTERS,

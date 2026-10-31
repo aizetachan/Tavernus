@@ -75,9 +75,10 @@ más el simulador que la rodean.
 |---|---|
 | Antes, Opus 5, contexto sin recortar (medido en la demo) | 4,1 céntimos |
 | Haiku 5.5, primera acción con escritura de caché (medido) | 0,26 céntimos |
-| Haiku 5.5 en régimen (estimado con los precios actuales) | 0,12 céntimos |
-| Sonnet 5.5 (estimado) | 1,2 a 1,6 céntimos |
-| Opus 5.5 (estimado) | 2,5 a 3 céntimos |
+| Haiku 5.5 en régimen, mundo ligero (estimado con los precios actuales) | 0,12 céntimos |
+| **Haiku 5.5 en Brezal (medido, 2.840 acciones, 31-10)** | **0,27 céntimos** |
+| Sonnet 5.5 en Brezal (estimado por precio, mismos tokens) | unos 5,5 céntimos |
+| Opus 5.5 en Brezal (estimado por precio, mismos tokens) | unos 11 céntimos |
 
 El contexto dinámico bajó un 34 % de media y un 42 % en la taberna. El prefijo cacheado (system con la
 chuleta de reglas más 29 tools) ronda los 12.000 tokens y se paga al 10 %. La salida (razonamiento más
@@ -323,7 +324,7 @@ espaciado y con 2 peticiones a la vez como mucho. Si falla, o se agota la cuota 
 
 | Decisión | Opciones | Cuándo |
 |---|---|---|
-| Modelo y esfuerzo de la partida real | Sonnet 5.5 bajo, Opus 5.5 bajo, Haiku 5.5 | Tras el banco real (cierre de fase 0) |
+| Modelo de la beta: **Haiku 5.5 a esfuerzo bajo** (31-10). Es el único que cabe en el objetivo de coste: 0,27 céntimos por acción medidos en 10 partidas de Brezal (docs/PLAYTEST-2026-10-31.md; la medición costó unos 9,25 $). Decidido por coste, no por calidad: no se ha comparado con otros modelos | Queda abierto si Sonnet 5.5 o un modelo mixto compensan | Tras arreglar lo que frena las partidas, con una comparación corta |
 | Proveedor de imágenes | Por evaluar; una imagen por entidad, nunca por turno | Fase 4 |
 | SQLite por partida | Sí en fase 4, salvo que el JSON aguante | Fase 4 |
 | Reglas para ambientaciones no fantásticas | SRD como núcleo con paquete generado (plan), Fate o Cypher como alternativa | Fase 1 fija el núcleo; revisar tras fase 2 |

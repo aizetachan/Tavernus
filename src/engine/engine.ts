@@ -214,7 +214,9 @@ export class Engine {
    * Verbos mecánicos que no pasan por el master aunque esté configurado. Inventario, quién y dónde, solo la palabra
    * sola y sin interrogación: «¿Dónde está el granero?» o «¿dónde?» en plena charla son preguntas al NPC.
    */
-  private static readonly MECHANICAL = /^(?:(?:inventario|inventory|qui[eé]n|who|d[oó]nde|where)[\s.!]*$|(?:dormir|duermo|me duermo|descansar|descanso|sleep|despierto|despertar|me despierto|wake|parar|me paro|me detengo|stop)\b)/i;
+  private static readonly MECHANICAL = /^(?:(?:inventario|inventory|qui[eé]n|who|d[oó]nde|where|parar|me paro|me detengo|stop)[\s.!]*$|(?:dormir|duermo|me duermo|descansar|descanso|sleep|despierto|despertar|me despierto|wake)\b)/i;
+  /** Empieza por pararse: de camino lo para el motor; quieto, «Me detengo junto a la cerca y miro» es una acción más y va al máster. */
+  private static readonly STOPS = /^(?:parar|me paro|me detengo|stop)\b/i;
 
   /** La cuenta de la IA sin saldo (master.ts, noCredit): no es esperar y reintentar, lo tiene que recargar el anfitrión. */
   static readonly NO_CREDIT = 'El narrador se ha quedado sin crédito: la cuenta de la IA no tiene saldo. El anfitrión tiene que recargarla; en cuanto lo haga, podréis seguir donde lo dejasteis.';
@@ -782,7 +784,7 @@ export class Engine {
       const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryTrivial(c, clean));
       if (fast) {
         r = fast;
-      } else if (this.master && c.status === 'active' && !Engine.MECHANICAL.test(clean)) {
+      } else if (this.master && c.status === 'active' && !this.isMechanical(c, clean)) {
         r = await this.resolveWithMaster(c, clean, undefined, undefined, undefined, decisive);
         if (!r.ok && r.text === '') {
           r = this.resolveAction(c, clean); // fallo del master: parser plano
@@ -828,6 +830,11 @@ export class Engine {
     const locId = this.world.characterSpot(c)?.location_id;
     const happening = locId ? [...new Set(activeIn(this.world, locId, g).map(({ event }) => event.title))] : [];
     return aheadNotice(c, g, this.clock, happening);
+  }
+
+  /** ¿Lo resuelve el parser plano, sin máster? */
+  private isMechanical(c: Character, text: string): boolean {
+    return Engine.MECHANICAL.test(text) || (Boolean(c.transit) && Engine.STOPS.test(text));
   }
 
   /** ¿Es moverse (a otro punto o a otra localización), sola o con algo que hacer allí? */
@@ -2470,13 +2477,14 @@ export class Engine {
    * sigue el camino de siempre.
    */
   private sceneRoute(c: Character, text: string): Promise<ActionResult> | null {
-    if (!this.master || c.status !== 'active' || Engine.MECHANICAL.test(text)) return null;
+    if (!this.master || c.status !== 'active' || this.isMechanical(c, text)) return null;
     const nowG = this.nowFor(c);
     const locId = positionOf(this.world, c, nowG).location_id;
     const events = this.events.recentInLocation(locId, 60);
     // Escena tensa con dos o más jugadores: todo va a la ronda (sin contar a los ausentes que ya salieron de ella).
     if (this.rounds.has(locId) || (tenseScene(this.world, locId, this.recentTags([locId])) && this.roundMembers(locId).length >= 2)) return this.joinRound(c, text, locId);
-    if (isLeaveTalk(text)) return Promise.resolve(this.leaveTalk(c, true));
+    // «Me despido de Hugo» sin estar hablando con él es un gesto como otro cualquiera: lo cuenta el máster. El botón sí contesta.
+    if (isLeaveTalk(text) && (!/^(?:me despido|despedirme)\b/i.test(text.trim()) || [...this.world.npcs.values()].some((n) => n.talking_to?.character_id === c.id || n.talking_to?.with?.includes(c.id)))) return Promise.resolve(this.leaveTalk(c, true));
     // Esperar o unirse, con el botón o con sus palabras: sin máster y sin repetir el gesto del NPC.
     const turn = parseTurn(text);
     if (turn && (!turn.loose || this.busyNpcFor(c, turn.who, events, nowG))) return Promise.resolve(this.takeTurn(c, turn.kind, turn.who, events, nowG));
@@ -2703,7 +2711,7 @@ export class Engine {
   downText(c: Character): string {
     if (c.status === 'dead' && c.death) {
       const left = Math.max(0, c.death.respawn_real_ms - this.now());
-      const back = this.world.spot(respawnSpotId(this.world)).name;
+      const back = this.world.spot(respawnSpotId(this.world, c)).name;
       return c.death.respawn_real_ms
         ? `☠ Has muerto. Volverás en ${back} dentro de ${fmtDuration(left / 1000)} reales (${fmtDuration(this.clock.realToGame(left / 1000))} de juego). Mientras, solo puedes mirar.`
         : '☠ Has muerto.';
@@ -2910,7 +2918,7 @@ export class Engine {
     if (!r) return;
     const spot = this.world.spot(r.spot_id);
     const bodyLoc = this.world.locationOfSpot(r.body_spot_id);
-    const story = deathRules(this.world).respawn_story || `Alguien te encontró y te trajo ${aEs(spot.name)}.`;
+    const story = r.story || `Alguien te encontró y te trajo ${aEs(spot.name)}.`;
     const things = r.left.length || r.coins_left ? (r.mode === 'casual'
       ? ` Tus cosas siguen donde caíste, en ${this.world.spot(r.body_spot_id).name} (${bodyLoc.name}): nadie más puede tocarlas.`
       : ` No llevas nada encima: lo tuyo se quedó en ${this.world.spot(r.body_spot_id).name} (${bodyLoc.name}), si nadie se lo ha llevado.`) : '';
@@ -3193,7 +3201,7 @@ export class Engine {
     this.world.touch('characters', c.id);
     const spot = this.world.spot(d.spot_id);
     const loc = this.world.location(spot.location_id);
-    const back = this.world.spot(respawnSpotId(this.world)).name;
+    const back = this.world.spot(respawnSpotId(this.world, c)).name;
     const when = `${fmtDuration(wait)} reales (${fmtDuration(this.clock.realToGame(wait))} de juego)`;
     const things = d.left.length || d.coins_left
       ? d.mode === 'casual' ? ' Lo que llevabas se queda en tu cuerpo, esperándote: solo tú puedes recogerlo.' : ' Lo que llevabas se queda en tu cuerpo, y cualquiera puede llevárselo.'
@@ -3259,7 +3267,7 @@ export class Engine {
       const pace: Pace = /^corr/.test(lower) || m[2] === 'corriendo' ? 'run' : m[2] === 'sigilosamente' ? 'stealth' : 'walk';
       return this.doMove(c, text, m[1]!, pace);
     }
-    if (/^(parar|me paro|me detengo|stop)\b/.test(lower)) {
+    if (Engine.STOPS.test(lower) && (c.transit || Engine.MECHANICAL.test(lower))) {
       if (!c.transit) return { ok: false, text: 'No ibas a ningún sitio.' };
       const stop = interruptTransit(this.world, c, nowG);
       const spot = this.world.spot(stop);
@@ -3490,6 +3498,7 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     // Partidas de antes del saber por niveles (trust.ts): lo toman de la semilla.
     if (!n.knowledge && seedNpc?.knowledge) { n.knowledge = structuredClone(seedNpc.knowledge); changed = true; }
     if (n.dislikes_flattery === undefined && seedNpc?.dislikes_flattery) { n.dislikes_flattery = true; changed = true; }
+    if (n.noncombatant === undefined && seedNpc?.noncombatant) { n.noncombatant = true; changed = true; }
     if (n.buys === undefined || n.stats === undefined) changed = true;
     n.buys ??= seedNpc?.buys ?? []; n.sells ??= seedNpc?.sells ?? [];
     if (n.home_spot_id === undefined && seedNpc?.home_spot_id) { n.home_spot_id = seedNpc.home_spot_id; changed = true; }
@@ -3538,6 +3547,7 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   }
   // Partidas de antes de la muerte y la reaparición: el punto de vuelta de la campaña escrita.
   if (seed?.campaign.death_rules && !camp2.death_rules) { camp2.death_rules = structuredClone(seed.campaign.death_rules); changed = true; }
+  if (seed?.campaign.death_rules?.respawn_points && !camp2.death_rules?.respawn_points) { camp2.death_rules = { ...camp2.death_rules, respawn_points: structuredClone(seed.campaign.death_rules.respawn_points) }; changed = true; }
   // Partidas de antes de las costumbres de la campaña escrita.
   if (seed?.campaign.customs && !camp2.customs) { camp2.customs = [...seed.campaign.customs]; changed = true; }
   // Partidas de antes de las monedas de oro, plata y cobre (money.ts): la campaña escrita trae sus monedas y sus

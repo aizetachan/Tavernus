@@ -2792,7 +2792,7 @@ ${FIGHT_SCRIPT}
     var pt = '<span class="pt" style="--npc:' + color + '">' + (c.portrait ? '<img alt="" src="' + escapeHtml(c.portrait) + '">' : escapeHtml(initial(c.name))) + '</span>';
     var last = c.exchanges[c.exchanges.length - 1];
     var h = '<details class="talk" style="--npc:' + color + '"' + (i === 0 ? ' open' : '') + '><summary>' + pt + '<span class="tt"><b>' + escapeHtml(c.name) + '</b><small>' +
-      escapeHtml([c.known ? c.role : 'nombre desconocido', c.exchanges.length + (c.exchanges.length === 1 ? ' intercambio' : ' intercambios'), last ? last.when : ''].filter(Boolean).join(' · ')) + '</small></span>' + CHEV + '</summary><div class="ex">';
+      escapeHtml([c.known ? c.role : 'nombre desconocido', c.rapport, c.exchanges.length + (c.exchanges.length === 1 ? ' intercambio' : ' intercambios'), last ? last.when : ''].filter(Boolean).join(' · ')) + '</small></span>' + CHEV + '</summary><div class="ex">';
     c.exchanges.forEach(function (x) {
       h += '<div class="exh"><span class="when">' + escapeHtml(x.when + ' · ' + x.location) + '</span>' +
         x.said.map(function (s) { return '<div class="me">' + escapeHtml(s) + '</div>'; }).join('') +
