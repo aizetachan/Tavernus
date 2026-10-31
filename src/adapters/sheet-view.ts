@@ -1,6 +1,6 @@
 /**
- * Hoja viva (SPEC §4.9) como datos planos, sin cliente: Discord la pinta como
- * embed y la web como panel. Posición, estado, combate, inventario y carga.
+ * Hoja viva (SPEC §4.9) como datos planos, sin cliente: la web la pinta como
+ * panel. Posición, estado, combate, inventario y carga.
  */
 
 import type { Engine } from '../engine/engine.js';
@@ -21,7 +21,7 @@ export interface SheetView {
   footer: string;
   /** Modo de muerte y estado de caída o muerte (la web pinta la cuenta atrás con `respawn_real_ms`). */
   death: { mode: 'casual' | 'hardcore'; state: 'alive' | 'dying' | 'stable' | 'dead'; success?: number; fail?: number; stable_until?: string; respawn_real_ms?: number; respawn_place?: string };
-  /** Clase y nivel (levels.ts): PX, rasgos con usos, elecciones y conjuros. La web lo pinta como sección; Discord, con los campos de texto. */
+  /** Clase y nivel (levels.ts): PX, rasgos con usos, elecciones y conjuros. La web lo pinta como sección. */
   class: ClassSheet;
   /** Lo que lleva, con sus huecos (la web pinta los libres): manos, cada hueco de equipo, bolsillos y contenedores. */
   pack: PackView & { coins: number; money: string; load: string; carry: Carry };

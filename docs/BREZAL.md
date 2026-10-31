@@ -387,7 +387,7 @@ generateSeed: esqueleto + relleno ── buildSnapshot ─────┘ (el mi
 
 ## 4. Qué queda de `demo.ts`
 
-`src/data/seed/demo.ts` no se retira: sigue siendo el fixture pequeño y estable de la mayoría de los tests (Kael, Mira, tres lugares), la semilla de la partida principal heredada (`CAMPAIGN_ID=demo`, Discord, scripts de banco y piloto) y la fuente de `DEFAULT_MASTER` y del catálogo común de objetos que usa el generador. El menú ya no lo carga: «Brezal (demo)» crea una partida con `campaign_id: 'brezal'` y el gestor arranca de `authoredSeed`.
+`src/data/seed/demo.ts` no se retira: sigue siendo el fixture pequeño y estable de la mayoría de los tests (Kael, Mira, tres lugares), la semilla de la partida principal heredada (`CAMPAIGN_ID=demo`, REPL, scripts de banco y piloto) y la fuente de `DEFAULT_MASTER` y del catálogo común de objetos que usa el generador. El menú ya no lo carga: «Brezal (demo)» crea una partida con `campaign_id: 'brezal'` y el gestor arranca de `authoredSeed`.
 
 ## 5. Cómo se juega y se prueba
 

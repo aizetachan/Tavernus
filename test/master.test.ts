@@ -212,7 +212,7 @@ describe('primera escena', () => {
       msg([logEvent('Bajas al claro con el estómago vacío. Junto al roble, alguien ha dejado un hacha clavada en un tocón reciente.', 'Una figura baja por el sendero.')]),
     ]);
     engine.attachMaster(new Master(engine, { client }));
-    const r = await engine.createCharacter('discord:1', 'Ana');
+    const r = await engine.createCharacter('web:1', 'Ana');
     if (!r.ok) throw new Error(r.reason);
     // Sin intro aún: el evento de llegada no le dice nada al actor (la intro lo sustituye).
     expect(seen(r.character.id)).toEqual([]);

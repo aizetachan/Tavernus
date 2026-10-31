@@ -281,7 +281,7 @@ su enlace. Los enlaces de invitación de las partidas que subas son los de tu co
 - **Telegram:** crea un bot con @BotFather y copia el token. Escríbele algo y abre
   `https://api.telegram.org/bot<TOKEN>/getUpdates` para ver tu `chat.id`. Luego
   `ALERT_WEBHOOK=https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>`.
-- **Discord:** en el canal, «Editar canal → Integraciones → Webhooks → Nuevo webhook» y copia la URL.
+- **Discord:** en el canal, «Editar canal → Integraciones → Webhooks → Nuevo webhook» y copia la URL (va por el POST JSON genérico, con su campo `content`).
 - **ntfy:** `ALERT_WEBHOOK=https://ntfy.sh/<un-tema-largo-y-secreto>` y suscríbete al tema en la app.
 - **Otro (Slack…):** recibe un POST JSON con `{"text": …, "content": …}`.
 
@@ -393,7 +393,6 @@ En el repo, `deploy/`:
 | `tavernus-web.service`, `tavernus-{health,backup}.{service,timer}` | unidades de systemd |
 | `Caddyfile` · `nginx-tavernus.conf` | proxy inverso |
 | `env.example` · `local.env.example` | plantillas del entorno del servidor y de tu `local.env` |
-| `gcp/` | legado: la VM de Google con el bot de Discord |
 
 ## 10. Problemas frecuentes
 
