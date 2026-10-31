@@ -71,7 +71,7 @@ try {
     Write-Host "[push] subiendo deploy/ a $adminHost"
     $tgz = Join-Path $tmp 'deploy.tgz'
     $up = '/tmp/tavernus-deploy-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.tgz'
-    Invoke-Native $tar @('-czf', $tgz, '--exclude=deploy/local.env', '--exclude=deploy/gcp', 'deploy')
+    Invoke-Native $tar @('-czf', $tgz, '--exclude=deploy/local.env', 'deploy')
     Invoke-Native 'scp' ($adminScpOpts + @($tgz, "${adminHost}:$up"))
     if ($Ops) { $run = '$D/deploy/install-ops.sh $D/deploy' }
     else {

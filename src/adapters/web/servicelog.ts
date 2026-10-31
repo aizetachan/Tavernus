@@ -79,6 +79,11 @@ export function masterLine(game: string, name: string | null, c: MasterCall): st
   return `[máster] ${fields({ partida: game, pj: c.character_id, nombre: name, tipo: c.action_type, ms: c.ms, ...masterFields([c]), resultado: c.ok ? 'ok' : 'error', error: err ? clean(err) : null })}`;
 }
 
+/** Un jugador reporta algo (report.ts): quién, de qué evento y dónde está el fichero. Nunca su texto. */
+export function reportLine(game: string, character: Id, name: string | null, r: { seq: number | null; general: boolean; event_type: string | null; length: number; file: string }): string {
+  return `[reporte] ${fields({ partida: game, pj: character, nombre: name, seq: r.seq, tipo: r.general ? 'general' : 'mensaje', evento: r.event_type, caracteres: r.length, fichero: r.file })}`;
+}
+
 export type PresenceEvent = 'conecta' | 'desconecta' | 'cierra_pestaña' | 'en_línea' | 'fuera_de_línea';
 
 export function presenceLine(game: string, character: Id, name: string | null, event: PresenceEvent, extra: Record<string, LogValue> = {}): string {
@@ -92,7 +97,8 @@ export function presenceLine(game: string, character: Id, name: string | null, e
 export class ActionLog {
   private readonly open = new Map<Id, MasterCall[]>();
 
-  constructor(private readonly game: string, private readonly nameOf: (id: Id) => string | null, private readonly log: (line: string) => void) {}
+  /** onAction: cada acción acabada, para los contadores de /admin/estado (status.ts). */
+  constructor(private readonly game: string, private readonly nameOf: (id: Id) => string | null, private readonly log: (line: string) => void, private readonly onAction: (r: ActionRecord) => void = () => {}) {}
 
   /** Del motor (engine.onMaster). */
   master(c: MasterCall): void {
@@ -110,7 +116,9 @@ export class ActionLog {
     const t0 = now();
     const done = (result: ActionRecord['result'], error: string | null) => {
       if (mine) this.open.delete(character);
-      this.log(actionLine({ game: this.game, character, name: this.nameOf(character), kind, ms: now() - t0, result, calls: mine ? calls : [], error }));
+      const rec: ActionRecord = { game: this.game, character, name: this.nameOf(character), kind, ms: now() - t0, result, calls: mine ? calls : [], error };
+      this.log(actionLine(rec));
+      this.onAction(rec);
     };
     let r: T;
     try { r = await run(); } catch (e) { done('error', (e as Error).message ?? String(e)); throw e; }

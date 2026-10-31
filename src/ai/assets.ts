@@ -12,8 +12,8 @@
  * Quien lo usa:
  *   - el ilustrador (src/ai/illustrate.ts): antes de pedir nada a una IA mira
  *     aquí; si hay activo escrito lo copia a la carpeta de imágenes de la
- *     partida y lo sirve como cualquier otra imagen (web por /images, Discord
- *     como adjunto);
+ *     partida y lo sirve como cualquier otra imagen (por /images en
+ *     la web);
  *   - la caché de planos (src/adapters/web/mapcache.ts): si la localización
  *     tiene plano escrito, se usa ese y no se genera.
  *

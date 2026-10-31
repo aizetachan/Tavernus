@@ -16,7 +16,8 @@
 
 import { cp, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { Engine, type EngineOptions } from '../engine/engine.js';
+import { chargenCatalog, previewCharacter, type ChargenCatalog } from '../engine/chargen.js';
+import { Engine, type CharacterSpec, type EngineOptions } from '../engine/engine.js';
 import { seededRng, type Rng } from '../engine/dice.js';
 import type { Id, WorldSnapshot } from '../engine/model.js';
 import { makeSeed } from '../data/seed/demo.js';
@@ -24,6 +25,7 @@ import { authoredSeed, isAuthoredCampaign } from '../data/campaigns/index.js';
 import { chatterWriter } from '../ai/chatter-writer.js';
 import { CLASSES, RACES } from '../data/srd/index.js';
 import { JsonFileRepository } from '../persistence/jsonfile.js';
+import { CATALOG } from '../worldgen/fill.js';
 import { claimSituation, generateSeed, TONES, type GenerateOptions, type Tone } from '../worldgen/index.js';
 import { Master, noCredit } from '../ai/master.js';
 import { isMasterMode, masterCacheDir, masterModeFromEnv, masterOptionsFor, type MasterMode } from '../ai/mode.js';
@@ -117,11 +119,24 @@ export interface CreateGameInput {
   name: string;
   mode: NewGameMode;
   /** `hook`: lo que el jugador cuenta de por qué viene; en un mundo generado entra en su situación inicial. */
-  character?: { name: string; race_id?: string; class_id?: string; hook?: string; /** Cómo se ve: alimenta su primer avatar (src/ai/avatar.ts). */ appearance?: string; /** Al morir (SPEC §4.7): casual por defecto. */ death_mode?: 'casual' | 'hardcore' } | null;
+  character?: { name: string; race_id?: string; class_id?: string; background_id?: string; /** Array estándar asignado (SPEC §4.6). */ abilities?: CharacterSpec['abilities']; /** Skills de clase elegidas (SPEC §4.8). */ skills?: string[]; hook?: string; /** Cómo se ve: alimenta su primer avatar (src/ai/avatar.ts). */ appearance?: string; /** Al morir (SPEC §4.7): casual por defecto. */ death_mode?: 'casual' | 'hardcore' } | null;
   dice_seed?: number | null;
   campaign_id?: Id;
   /** Mundo nuevo generado en vez de la semilla demo. */
   world?: WorldInput | null;
+}
+
+/** Lo que el motor valida (chargen.ts); lo que no venga, sus valores por defecto. */
+function specOf(input: NonNullable<CreateGameInput['character']>): Partial<CharacterSpec> {
+  return {
+    ...(input.race_id !== undefined ? { race_id: input.race_id } : {}),
+    ...(input.class_id !== undefined ? { class_id: input.class_id } : {}),
+    ...(input.background_id !== undefined ? { background_id: input.background_id } : {}),
+    ...(input.abilities !== undefined ? { abilities: input.abilities } : {}),
+    ...(input.skills !== undefined ? { skills: input.skills } : {}),
+    ...(cleanLook(input.appearance ?? '') ? { appearance: cleanLook(input.appearance!) } : {}),
+    death_mode: input.death_mode ?? 'casual',
+  };
 }
 
 export interface GamePaths { dir: string; data: string; cache: string; initial: string | null }
@@ -194,8 +209,13 @@ export class GameManager {
   }
 
   /** Opciones del formulario de nueva partida. */
-  static characterOptions(): { races: { id: string; name: string }[]; classes: { id: string; name: string }[]; tones: { id: Tone; name: string }[] } {
-    return { races: RACES.map((r) => ({ id: r.id, name: r.name })), classes: CLASSES.map((c) => ({ id: c.id, name: c.name })), tones: TONE_OPTIONS };
+  static characterOptions(): ChargenCatalog & { tones: { id: Tone; name: string }[] } {
+    return { ...chargenCatalog(), tones: TONE_OPTIONS };
+  }
+
+  /** El resumen del asistente de creación. Todas las campañas llevan el equipo inicial en el catálogo común (`CATALOG`). */
+  static previewCharacter(input: NonNullable<CreateGameInput['character']>): ReturnType<typeof previewCharacter> {
+    return previewCharacter(input.name, specOf(input), CATALOG);
   }
 
   // -------------------------------------------------------------------------
@@ -334,6 +354,7 @@ export class GameManager {
     const seed = m.world ? JSON.parse(await readFile(join(p.dir, m.world.file), 'utf8')) as WorldSnapshot
       : isAuthoredCampaign(m.campaign_id) ? authoredSeed(m.campaign_id, { now: this.now() }) : makeSeed();
     const engine = await Engine.boot({
+      pauseOnBoot: true,
       ...this.engineOpts,
       repo: new JsonFileRepository(p.data), campaignId: m.campaign_id,
       ...(m.campaign_id === seed.campaign.id ? { seed } : {}),
@@ -388,12 +409,7 @@ export class GameManager {
    */
   private async spawnCharacter(engine: Engine, game: GameManifest, userId: Id, input: NonNullable<CreateGameInput['character']>, nearId: Id | null = null): Promise<Id> {
     const situations = Boolean(game.world || isAuthoredCampaign(game.campaign_id));
-    const r = await engine.createCharacter(userId, input.name.trim(), {
-      ...(input.race_id ? { race_id: input.race_id } : {}),
-      ...(input.class_id ? { class_id: input.class_id } : {}),
-      ...(cleanLook(input.appearance ?? '') ? { appearance: cleanLook(input.appearance!) } : {}),
-      death_mode: input.death_mode === 'hardcore' ? 'hardcore' : 'casual',
-    }, {
+    const r = await engine.createCharacter(userId, input.name.trim(), specOf(input), {
       place: (c) => {
         const near = nearId ? engine.world.characters.get(nearId) : null;
         const together = near && near.id !== c.id && near.status !== 'retired' && near.location.type === 'spot' ? near : null;
@@ -436,6 +452,11 @@ export class GameManager {
     const seedIn = input.dice_seed;
     if (seedIn !== undefined && seedIn !== null && (!Number.isInteger(seedIn) || seedIn < 0 || seedIn > 0xffffffff)) throw new GameError('La semilla de dados debe ser un entero entre 0 y 4294967295.');
     const charName = input.character?.name?.trim() ?? '';
+    // Antes de crear nada: un personaje inválido no debe gastar una generación de mundo.
+    if (charName) {
+      const check = GameManager.previewCharacter({ ...input.character!, name: charName });
+      if (!check.ok) throw new GameError(check.reason);
+    }
     const world = input.world ? parseWorldInput(input.world) : null;
 
     const slug = await this.freeSlug(slugify(name));

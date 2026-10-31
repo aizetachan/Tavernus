@@ -18,7 +18,7 @@
  * sale de la semilla del mundo + id de la localización.
  *
  * El servidor guarda el JPEG en <dir>/<locId>-<seed>.jpg y los clientes lo
- * reciben de ahí (la web por /images, Discord como adjunto). Con Pollinations:
+ * reciben de ahí (la web por /images). Con Pollinations:
  *   - Sin POLLINATIONS_API_KEY (anónimo): lleva un logo pequeño y el límite es
  *     ~1 imagen cada 45 s por IP, contados desde que termina la anterior.
  *   - Con POLLINATIONS_API_KEY: Authorization: Bearer y nologo; sin límite.

@@ -155,7 +155,15 @@ export type StoryEffect =
   | { kind: 'cancel_schedule'; event_id: Id }
   | { kind: 'rumor'; id: Id; location_id: Id; rumor_kind: RumorKind; name: string; hint: string; where?: string | null; days?: number }
   /** Se cuenta a quien esté en esa localización (o a todos, `public`). */
-  | { kind: 'announce'; location_id: Id; spot_id?: Id; text: string; public?: boolean };
+  | { kind: 'announce'; location_id: Id; spot_id?: Id; text: string; public?: boolean }
+  /** Cierre por tiempo: a cada PJ, lo que ha jugado (recapOf). */
+  | { kind: 'recap'; recap: StoryRecap };
+
+/**
+ * Texto de un cierre por tiempo, en los datos de la campaña. El motor solo rellena: {list} con títulos de misiones y
+ * {final} con el final que cumplió. `closing` deja claro que se puede seguir jugando.
+ */
+export interface StoryRecap { done: string; none: string; open: string; with_final: string; without_final: string; closing: string }
 
 export interface StoryStep {
   id: Id;
@@ -265,7 +273,9 @@ export interface StoryState {
   credits?: Record<Id, { by: Id; with: Id[]; game_s: number }>;
   /** Finales excluyentes cerrados: cuál, quién, con quién y cuándo (para el «Donde lo dejamos» de quien no estaba). */
   finals?: { quest_id: Id; by: Id; with: Id[]; game_s: number }[];
-  /** Último instante de juego visto (para `world_hours`). */
+  /** Hasta dónde ha llegado la amenaza (para `world_hours`): el reloj del PJ presente más adelantado (Engine.threatNow); nunca retrocede. */
+  threat_game_s?: number;
+  /** Último instante de juego visto. */
   last_game_s?: number;
 }
 
@@ -427,7 +437,7 @@ export function holds(world: World, c: Character | null, cond: StoryCondition): 
     case 'reputation': return (c!.reputation[cond.faction_id ?? world.campaign.achievement.faction_id] ?? 0) >= cond.at_least;
     case 'debt_paid': return (c!.debts ?? []).some((d) => d.npc_id === cond.npc_id && d.settled);
     case 'escalated': return stateOf(world).escalated.includes(cond.id);
-    case 'world_hours': { const s = stateOf(world); return (s.last_game_s ?? s.started_game_s) - s.started_game_s >= cond.at_least * GAME_HOUR; }
+    case 'world_hours': { const s = stateOf(world); return (s.threat_game_s ?? s.last_game_s ?? s.started_game_s) - s.started_game_s >= cond.at_least * GAME_HOUR; }
     case 'job': return c!.completed_jobs.includes(cond.job_id);
     case 'quest': return characterStory(c!).done.includes(cond.quest_id);
     case 'fact': return hasFact(world, cond.id);
@@ -718,8 +728,30 @@ function applyWorld(world: World, e: StoryEffect, nowS: number, o: StoryOutput):
     case 'announce':
       o.announcements.push({ location_id: e.location_id, spot_id: e.spot_id ?? null, text: e.text, public: e.public ?? false });
       break;
+    case 'recap':
+      for (const c of world.characters.values()) if (c.status !== 'retired') tellTo(o, c, [{ kind: 'story', text: recapOf(world, c, e.recap) }]);
+      break;
     default: break;
   }
+}
+
+const listing = (xs: readonly string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs.at(-1)!}`);
+
+/** Lo que ha jugado este PJ, con el texto de los datos: lo cumplido, su final si lo hay, lo pendiente y que la historia sigue. */
+export function recapOf(world: World, c: Character, r: StoryRecap): string {
+  const questsIn = (ids: readonly Id[]) => ids.map((id) => quest(world, id)).filter((q): q is StoryQuest => Boolean(q));
+  const st = characterStory(c);
+  const done = questsIn(st.done);
+  const final = done.find((q) => q.exclusive === 'final');
+  const named = (qs: readonly StoryQuest[]) => listing(qs.map((q) => `«${q.title}»`));
+  const others = done.filter((q) => q !== final);
+  const open = questsIn(st.open);
+  return [
+    others.length ? r.done.replace('{list}', named(others)) : final ? '' : r.none,
+    final ? r.with_final.replace('{final}', final.title) : r.without_final,
+    open.length ? r.open.replace('{list}', named(open)) : '',
+    r.closing,
+  ].filter(Boolean).join(' ');
 }
 
 // ---------------------------------------------------------------------------
@@ -1094,14 +1126,14 @@ function complete(world: World, c: Character, q: StoryQuest, nowS: number, o: St
   if (r.reputation) { const ach = checkAchievement(world, c); if (ach) tellTo(o, c, [ach]); }
 }
 
-/** Escalones de la amenaza vencidos: pasan (o se evitan) una sola vez. */
-function escalate(world: World, nowS: number, o: StoryOutput): void {
+/** Escalones de la amenaza vencidos según su reloj (`dueS`): pasan (o se evitan) una sola vez. */
+function escalate(world: World, dueS: number, nowS: number, o: StoryOutput): void {
   const story = storyOf(world);
   if (!story) return;
   const st = stateOf(world);
   for (const e of story.escalation) {
     if (st.escalated.includes(e.id) || st.escalated.includes(`!${e.id}`)) continue;
-    if (nowS < st.started_game_s + e.after_hours * GAME_HOUR) continue;
+    if (dueS < st.started_game_s + e.after_hours * GAME_HOUR) continue;
     const averted = holds(world, null, e.unless);
     st.escalated.push(averted ? `!${e.id}` : e.id);
     world.touch('campaign', world.campaign.id);
@@ -1133,13 +1165,18 @@ function findHidden(world: World, o: StoryOutput): void {
   }
 }
 
-/** En cada tick y tras cada acción: amenaza y misiones de todos los PJ. Sin historia, no hace nada. */
-export function tickStory(world: World, nowS: number): StoryOutput {
+/**
+ * En cada tick y tras cada acción: amenaza y misiones de todos los PJ. Sin historia, no hace nada.
+ * `threatS`: el reloj de la amenaza, si va por delante del mundo (quien duerme o viaja la adelanta).
+ */
+export function tickStory(world: World, nowS: number, threatS: number = nowS): StoryOutput {
   const o = out();
   if (!storyOf(world)) return o;
-  stateOf(world).last_game_s = nowS;
+  const st = stateOf(world);
+  st.last_game_s = nowS;
+  st.threat_game_s = Math.max(st.threat_game_s ?? nowS, threatS);
   findHidden(world, o);
-  escalate(world, nowS, o);
+  escalate(world, st.threat_game_s, nowS, o);
   for (const c of world.characters.values()) {
     if (c.status === 'retired' || c.status === 'dead') continue;
     advanceCharacter(world, c, nowS, o);
@@ -1369,7 +1406,7 @@ export function nextEscalation(world: World, nowS: number): { escalation: StoryE
   if (!story) return null;
   const st = stateOf(world);
   const e = story.escalation.find((x) => !st.escalated.includes(x.id) && !st.escalated.includes(`!${x.id}`));
-  return e ? { escalation: e, in_s: Math.max(0, st.started_game_s + e.after_hours * GAME_HOUR - nowS) } : null;
+  return e ? { escalation: e, in_s: Math.max(0, st.started_game_s + e.after_hours * GAME_HOUR - Math.max(nowS, st.threat_game_s ?? nowS)) } : null;
 }
 
 /** Bloque del contexto del máster: misiones del actor por estado, lo que pueden ofrecer los presentes y la amenaza. null sin historia. */

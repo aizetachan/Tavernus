@@ -1,6 +1,6 @@
 /**
- * Hoja viva (SPEC §4.9) como datos planos, sin cliente: Discord la pinta como
- * embed y la web como panel. Posición, estado, combate, inventario y carga.
+ * Hoja viva (SPEC §4.9) como datos planos, sin cliente: la web la pinta como
+ * panel. Posición, estado, combate, inventario y carga.
  */
 
 import type { Engine } from '../engine/engine.js';
@@ -21,7 +21,7 @@ export interface SheetView {
   footer: string;
   /** Modo de muerte y estado de caída o muerte (la web pinta la cuenta atrás con `respawn_real_ms`). */
   death: { mode: 'casual' | 'hardcore'; state: 'alive' | 'dying' | 'stable' | 'dead'; success?: number; fail?: number; stable_until?: string; respawn_real_ms?: number; respawn_place?: string };
-  /** Clase y nivel (levels.ts): PX, rasgos con usos, elecciones y conjuros. La web lo pinta como sección; Discord, con los campos de texto. */
+  /** Clase y nivel (levels.ts): PX, rasgos con usos, elecciones y conjuros. La web lo pinta como sección. */
   class: ClassSheet;
   /** Lo que lleva, con sus huecos (la web pinta los libres): manos, cada hueco de equipo, bolsillos y contenedores. */
   pack: PackView & { coins: number; money: string; load: string; carry: Carry };
@@ -41,7 +41,7 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
   const inv = inventoryView(engine.world, c.id);
   const status = { active: 'despierto', asleep: c.veiled ? 'dormido (velo)' : 'dormido', unconscious: isStable(c) ? 'inconsciente, estable' : 'inconsciente, cayendo', dead: 'muerto', retired: 'retirado' }[c.status];
   const death: SheetView['death'] = c.status === 'dead' && c.death
-    ? { mode: c.death_mode, state: 'dead', respawn_real_ms: c.death.respawn_real_ms, respawn_place: engine.world.spot(respawnSpotId(engine.world)).name }
+    ? { mode: c.death_mode, state: 'dead', respawn_real_ms: c.death.respawn_real_ms, respawn_place: engine.world.spot(respawnSpotId(engine.world, c)).name }
     : isDying(c) ? { mode: c.death_mode, state: 'dying', success: c.dying!.success, fail: c.dying!.fail }
     : isStable(c) ? { mode: c.death_mode, state: 'stable', ...(c.dying?.stable_until_game_s ? { stable_until: hhmm(c.dying.stable_until_game_s) } : {}) }
     : { mode: c.death_mode, state: 'alive' };
@@ -76,7 +76,7 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
       { name: 'Monedas', value: money(engine.world, inv.coins), inline: true },
       { name: 'Carga', value: load, inline: true },
     ],
-    footer: engine.clock.format(nowG),
+    footer: engine.clock.format(engine.nowFor(c)), // la hora que lleva él (travel.ts), no la del mundo
     death,
     class: cls,
     pack: { ...packView(engine.world, c.id), coins: inv.coins, money: money(engine.world, inv.coins), load, carry: carryOf(engine, c.abilities.str, inv.encumbrance) },

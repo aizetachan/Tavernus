@@ -11,13 +11,19 @@ import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
 import type { AccessOptions } from '../src/adapters/web/access.js';
 import type { MasterLike } from '../src/engine/engine.js';
 import { spawnItem } from '../src/engine/inventory.js';
-import { bootEngine, fakeTime } from './helpers.js';
+import { bootEngine, fakeTime, readSse } from './helpers.js';
 
-/** Máster offline que tarda: deja ver acciones a la vez. */
-const slow = (ms: number): MasterFactory => (engine) => {
-  const m = new Master(engine, { client: offlineClient() });
-  return { resolve: async (...a) => { await new Promise((r) => setTimeout(r, ms)); return m.resolve(...a); } };
-};
+/** Máster offline que retiene la acción `text` hasta que el test la suelta: deja ver acciones a la vez. */
+function holding(text: string) {
+  let started!: () => void, release!: () => void;
+  const running = new Promise<void>((r) => { started = r; });
+  const gate = new Promise<void>((r) => { release = r; });
+  const masterFor: MasterFactory = (engine) => {
+    const m = new Master(engine, { client: offlineClient() });
+    return { resolve: async (...a) => { if (a[1] === text) { started(); await gate; } return m.resolve(...a); } };
+  };
+  return { masterFor, running, release };
+}
 
 let dir: string;
 let games: GameManager;
@@ -51,21 +57,6 @@ function browser() {
     post: (path: string, body: unknown = {}) => fetch(base + path, { method: 'POST', redirect: 'manual', headers: { cookie: cookie(), 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(keep),
     del: (path: string) => fetch(base + path, { method: 'DELETE', redirect: 'manual', headers: { cookie: cookie() } }).then(keep),
   };
-}
-
-/** Lee un SSE hasta que el texto acumulado cumpla `until` (o se acabe el tiempo). */
-async function readSse(res: Response, until: (text: string) => boolean, ms = 4000): Promise<string> {
-  const reader = res.body!.getReader();
-  const dec = new TextDecoder();
-  let text = '';
-  const deadline = Date.now() + ms;
-  while (!until(text) && Date.now() < deadline) {
-    const chunk = await Promise.race([reader.read(), new Promise<null>((r) => setTimeout(() => r(null), Math.max(1, deadline - Date.now())))]);
-    if (!chunk || chunk.done) break;
-    text += dec.decode(chunk.value);
-  }
-  reader.releaseLock();
-  return text;
 }
 
 const ACCESS: AccessOptions = { mode: 'invite', adminToken: 'token-de-admin-para-tests', secret: 'secreto-de-tests' };
@@ -219,13 +210,13 @@ describe('presencia y cola en la web', () => {
     const kaelStream = await fetch(`${base}/api/stream${g}&character=${kael}`, { signal: ctrl.signal });
     const kaelFirst = await readSse(kaelStream, (t) => t.includes('event: presence'));
     expect(kaelFirst).toContain('"name":"Lia","online":true');
-    const joined = await readSse(miraStream, (t) => t.includes('ha entrado'));
+    const joined = await readSse(miraStream, (t) => t.includes('ha entrado') && t.includes('"text":"Tor está aquí"'));
     expect(joined).toContain('Tor ha entrado en la partida');
     expect(joined).toContain('"online":true,"where":"here","text":"Tor está aquí"');
 
     ctrl.abort();
     // Están en el mismo sitio: el aviso es de la ficción, y su PJ se queda (docs/MULTIJUGADOR.md, «Desconexiones»).
-    const leftText = await readSse(miraStream, (t) => t.includes('se ha ido'));
+    const leftText = await readSse(miraStream, (t) => t.includes('se ha ido') && t.includes('Tor está aquí (ausente)'));
     expect(leftText).toMatch(/"kind":"system","text":"","notice":\{"text":"Tor se ha ido; su personaje se queda en [^"]+"\}.*"presence":\{"id":"[^"]+","online":false\}/);
     expect(leftText).toContain('Tor está aquí (ausente)');
     await miraStream.body!.cancel();
@@ -240,32 +231,61 @@ describe('presencia y cola en la web', () => {
     const g = `?game=${game.slug}`;
     const beat = (character: string, tab: string, state: string) => fetch(`${base}/api/presence${g}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ character, tab, state }) });
 
-    const liaStream = await fetch(`${base}/api/stream${g}&character=${lia}&tab=lia`);
+    // Sin `tab`, Lia cuenta mientras su stream siga abierto: no hace falta que lata para seguir leyendo los avisos.
+    const liaStream = await fetch(`${base}/api/stream${g}&character=${lia}`);
     await readSse(liaStream, (t) => t.includes('event: presence'));
-    const liaAlive = setInterval(() => void beat(lia, 'lia', 'visible'), 40);
-    try {
-      const torStream = await fetch(`${base}/api/stream${g}&character=${tor}&tab=tor`);
-      expect(await readSse(liaStream, (t) => t.includes('ha entrado'))).toContain('Tor ha entrado en la partida');
-      // Tor no late: su stream sigue abierto, pero a los 150 ms más la gracia se le da por ido.
-      const t0 = Date.now();
-      const gone = await readSse(liaStream, (t) => t.includes('se ha marchado'));
-      expect(Date.now() - t0).toBeGreaterThan(100);
-      expect(gone).toContain('Tor se ha marchado');
-      expect(gone).toMatch(/"kind":"system","text":"","notice":\{"text":"Tor se ha marchado"\},"presence":\{"id":"[^"]+","online":false\}/);
-      expect(gone).toContain('"name":"Tor","online":false');
-      // Vuelve a latir (el portátil despierta): ha vuelto, sin abrir otro stream.
-      await beat(tor, 'tor', 'visible');
-      expect(await readSse(liaStream, (t) => t.includes('ha vuelto'))).toContain('Tor ha vuelto');
-      // Oculta: cuenta un rato y luego se va igual.
-      await beat(tor, 'tor', 'hidden');
-      expect(await readSse(liaStream, (t) => t.includes('se ha marchado'))).toContain('Tor se ha marchado');
-      await torStream.body!.cancel();
-    } finally { clearInterval(liaAlive); }
+    // El plazo de Tor empieza al conectarse, nunca antes de aquí.
+    const t0 = Date.now();
+    const torStream = await fetch(`${base}/api/stream${g}&character=${tor}&tab=tor`);
+    expect(await readSse(liaStream, (t) => t.includes('ha entrado'))).toContain('Tor ha entrado en la partida');
+    // Tor no late: su stream sigue abierto, pero a los 150 ms más la gracia se le da por ido.
+    const gone = await readSse(liaStream, (t) => t.includes('se ha marchado') && t.includes('"name":"Tor","online":false'));
+    expect(Date.now() - t0).toBeGreaterThan(100);
+    expect(gone).toContain('Tor se ha marchado');
+    expect(gone).toMatch(/"kind":"system","text":"","notice":\{"text":"Tor se ha marchado"\},"presence":\{"id":"[^"]+","online":false\}/);
+    expect(gone).toContain('"name":"Tor","online":false');
+    // Vuelve a latir (el portátil despierta): ha vuelto, sin abrir otro stream.
+    await beat(tor, 'tor', 'visible');
+    expect(await readSse(liaStream, (t) => t.includes('ha vuelto'))).toContain('Tor ha vuelto');
+    // Oculta: cuenta un rato y luego se va igual.
+    await beat(tor, 'tor', 'hidden');
+    expect(await readSse(liaStream, (t) => t.includes('se ha marchado'))).toContain('Tor se ha marchado');
+    await torStream.body!.cancel();
+    await liaStream.body!.cancel();
+  });
+
+  it('la pestaña oculta que se ve otra vez: se iguala al mundo y el resumen llega por el stream que ya tenía', async () => {
+    await start(undefined, { leaveNoticeMs: 40, staleMs: 60_000, hiddenMs: 150 });
+    const { game, character_id: lia } = await games.create({ name: 'Oculta', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
+    const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
+    const engine = await games.open(game.slug);
+    const g = `?game=${game.slug}`;
+    const post = (path: string, body: unknown) => fetch(`${base}${path}${g}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const ready = (t: string) => t.includes('event: presence') && (!t.includes('event: opening') || t.includes('"chapter":{"kind":"prologue"'));
+    const liaStream = await fetch(`${base}/api/stream${g}&character=${lia}&tab=lia`);
+    await readSse(liaStream, ready, 10_000);
+    const torStream = await fetch(`${base}/api/stream${g}&character=${tor}&tab=tor`);
+    await readSse(torStream, ready, 10_000);
+    expect((await post('/api/act', { character: tor, text: 'mirar' })).status).toBe(200);
+
+    await post('/api/presence', { character: tor, tab: 'tor', state: 'hidden' });
+    await readSse(liaStream, (t) => t.includes('se ha marchado'));
+    const left = engine.nowFor(tor);
+    expect(engine.clock.paused).toBe(false);
+    engine.clock.shift(2 * 3600);
+    engine.world.campaign.game_epoch_s += 2 * 3600;
+    expect(engine.nowFor(tor)).toBe(left);
+
+    await post('/api/presence', { character: tor, tab: 'tor', state: 'visible' });
+    expect(await readSse(torStream, (t) => t.includes('El mundo ha seguido'))).toContain('El mundo ha seguido 2 h');
+    expect(engine.nowFor(tor)).toBeGreaterThanOrEqual(left + 2 * 3600);
+    await torStream.body!.cancel();
     await liaStream.body!.cancel();
   });
 
   it('dos acciones a la vez en el mismo sitio: en orden, la segunda «esperando a» la primera; doble acción del mismo PJ, 409', async () => {
-    await start(undefined, { masterFor: slow(250) });
+    const first = holding('miro la sala');
+    await start(undefined, { masterFor: first.masterFor });
     const { game, character_id: mira } = await games.create({ name: 'Cola', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
     const kael = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: mira });
     const g = `?game=${game.slug}`;
@@ -274,12 +294,13 @@ describe('presencia y cola en la web', () => {
     const post = (body: unknown) => fetch(`${base}/api/act${g}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
     const a = post({ character: mira, text: 'miro la sala' });
-    await new Promise((r) => setTimeout(r, 40));
+    await first.running;
     const twice = await post({ character: mira, text: 'y otra cosa' });
     expect(twice.status).toBe(409);
     const b = post({ character: kael, text: 'miro la puerta' });
     const waiting = await readSse(kaelStream, (t) => t.includes('"waiting_for":["Lia"]'));
     expect(waiting).toContain('event: queue\ndata: {"waiting_for":["Lia"]}');
+    first.release();
     const [ra, rb] = await Promise.all([a, b]);
     expect([ra.status, rb.status]).toEqual([200, 200]);
     await kaelStream.body!.cancel();

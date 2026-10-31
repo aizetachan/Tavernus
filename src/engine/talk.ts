@@ -4,10 +4,12 @@
  * qué tiene que hacer el NPC, con reglas fijas:
  *
  *   1. señales: del estado (primer encuentro, trato, reputación, crimen, lo que
- *      acaba de hacer el PJ, misiones que puede dar o tiene en curso) y del
- *      texto del jugador (saludo, pregunta, lore, comercio…), heurísticas;
+ *      acaba de hacer el PJ, misiones que puede dar o tiene en curso, las veces
+ *      que ya se ha negado) y del texto del jugador (saludo, pregunta, lore,
+ *      comercio, argumentar…), heurísticas;
  *   2. situación: la primera que se cumple por prioridad, y una secundaria;
- *   3. guion: pasos en orden, lo prohibido y la longitud, según el trato.
+ *   3. guion: pasos en orden, lo prohibido y la longitud, según el trato. Negarse
+ *      deja siempre una salida (`wayOut`), y argumentar puede pedir tirada.
  *
  * El máster (prompt.ts) recibe el guion; el cierre (tools.ts, `talkProblems`)
  * comprueba lo comprobable. Si el texto no da señales, el máster puede
@@ -27,8 +29,9 @@ import { transcriptOf } from './conversation.js';
 import { rumorsIn } from './rumors.js';
 import { activeJobs } from './progress.js';
 import { givenQuests, droppedAt } from './quests.js';
-import { askedSince, questStatus, storyOf } from './story.js';
+import { askedSince, holds, questStatus, storyOf, type StoryCondition } from './story.js';
 import { npcTarget } from './scene.js';
+import { talkPartner, TALK_GAP_S } from './trust.js';
 
 export const TALK_SITUATIONS = ['danger', 'reaction', 'cold', 'errand', 'trade', 'offer', 'lore', 'question', 'greeting', 'farewell', 'chat'] as const;
 export type TalkSituation = typeof TALK_SITUATIONS[number];
@@ -44,6 +47,8 @@ export const SITUATION_WORDS: Record<TalkSituation, number> = {
   danger: 40, reaction: 40, cold: 25, errand: 45, trade: 40, offer: 60, lore: 60, question: 45, greeting: 30, farewell: 20, chat: 40,
 };
 const SECOND_WORDS = 15;
+/** Margen antes de pedir que lo recorte: el exceso típico en las partidas era de 18 palabras, no de un discurso. */
+const WORDS_MARGIN = 25;
 
 /** Una charla de antes es «de hace tiempo» pasadas 12 h de juego. */
 const RETURNING_S = 12 * 3600;
@@ -53,6 +58,13 @@ const RECENT_S = 15 * 60;
 const RIPE_TURNS = 2;
 /** Líneas de la transcripción que se miran para contar esos turnos. */
 const TALK_MEMORY_LINES = 24;
+/** A partir de estas negativas seguidas, la siguiente corta la charla. */
+const CUT_AFTER_REFUSALS = 2;
+/** Salidas que se le dan como mucho al máster. */
+const WAY_OUT_MAX = 3;
+/** CD de una tirada social por lo delicado, según el trato. */
+const SOCIAL_DC: Record<TalkTier, number> = { hostile: 20, wary: 17, stranger: 15, acquaintance: 12, friend: 10, ally: 10 };
+const SOCIAL_SKILLS = new Set(['persuasion', 'deception', 'intimidation']);
 
 // ---------------------------------------------------------------------------
 // 1. Señales
@@ -64,6 +76,10 @@ const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
 export interface TextSignals {
   greeting: boolean; farewell: boolean; question: boolean; request: boolean; trade: boolean;
   asks_work: boolean; delivery: boolean; hostile: boolean; lore_word: boolean;
+  /** Da razones, promete o se hace pasar por alguien: intenta convencerle. */
+  argues: boolean;
+  /** Le aprieta con lo que puede pasarle si no habla. */
+  presses: boolean;
 }
 
 const RE = {
@@ -76,6 +92,8 @@ const RE = {
   delivery: /\b(traigo|aqui tienes|aqui esta|toma|ya esta hecho|lo tengo|la tengo|he encontrado|lo he hecho|cumplido|entrego|vengo a cobrar)\b/,
   hostile: /\b(amenaz\w*|te mato|te voy a matar|cabron\w*|imbecil|idiota|estupid\w*|callate|maldit\w*|escoria|basura|inutil)\b/,
   lore_word: /\b(historia|leyenda|que se cuenta|que se dice|que paso|antiguamente|origen|cuentame|cuentanos)\b/,
+  argues: /\b(te (juro|prometo|aseguro|interesa)|le (juro|prometo|aseguro)|mi palabra|confia en mi|fiate de mi|convenc\w*|persuad\w*|escuchame|piensalo|por tu bien|vengo de parte|me envia|me manda|entiende que|si me (cuentas|dices|ayudas)|a cambio)\b/,
+  presses: /\b(si no me (dices|cuentas)|mas te vale|te aviso|te advierto|te arrepentiras|lo lamentaras|o te (cuento|mato|parto|rompo|arranco|corto|cuelgo)|o le cuento|le cuento a|o lo cuento)\b/,
 };
 
 export function textSignals(text: string): TextSignals {
@@ -84,6 +102,7 @@ export function textSignals(text: string): TextSignals {
     greeting: RE.greeting.test(t), farewell: RE.farewell.test(t),
     question: /[?¿]/.test(text) || RE.question.test(t), request: RE.request.test(t), trade: RE.trade.test(t),
     asks_work: RE.asks_work.test(t), delivery: RE.delivery.test(t), hostile: RE.hostile.test(t), lore_word: RE.lore_word.test(t),
+    argues: RE.argues.test(t), presses: RE.presses.test(t),
   };
 }
 
@@ -134,6 +153,9 @@ export function loreTopics(world: World, npc: Npc, text: string, nowG: number): 
   return out.slice(0, 3);
 }
 
+/** Una salida que deja una negativa: lo que se le dice al máster y los nombres por los que se reconoce al cierre. */
+export interface WayOut { text: string; names: string[] }
+
 /** Lo que el estado dice de este NPC con este PJ. */
 export interface TalkState {
   first_meeting: boolean;
@@ -164,6 +186,16 @@ export interface TalkState {
   terms: string | null;
   /** La charla empieza ahora: no han hablado en los últimos 15 min de juego. */
   new_talk: boolean;
+  /** Veces seguidas que se ha negado en esta charla. */
+  refusals: number;
+  /** Lo que le pedía cuando se negó, para no ofrecerlo otra vez en los botones. */
+  refused_asks: string[];
+  /** Por dónde puede seguir el PJ si se niega. Nunca el secreto. */
+  way_out: WayOut[];
+  /** Cómo se niega según los datos de la pista, si la hay: un gesto suyo en vez de una frase hecha. */
+  refusal_note: string | null;
+  /** Ya ha intentado una tirada social con él en esta charla. */
+  social_tried: boolean;
 }
 
 interface Call { name: string; input?: Record<string, unknown>; result?: unknown }
@@ -201,6 +233,93 @@ function termsWith(world: World, pc: Character, npc: Npc, nowG: number): string 
   return out.length ? out.join(' ') : null;
 }
 
+type RawLine = { speaker?: string; npc_id?: Id; text?: string };
+
+/** Lo que dijo este NPC en un evento. */
+function saidBy(e: GameEvent, npcId: Id): string {
+  const lines = (e.payload['lines'] as RawLine[] | undefined) ?? [];
+  return lines.filter((l) => l.speaker === 'npc' && (l.npc_id === npcId || (!l.npc_id && e.payload['npc_id'] === npcId))).map((l) => l.text ?? '').join(' ');
+}
+
+/** Las negativas seguidas de este NPC en esta charla, de la última hacia atrás. Una respuesta de verdad las pone a cero. */
+function refusalStreak(events: readonly GameEvent[], pc: Character, npc: Npc, nowG: number): string[] {
+  const asks: string[] = [];
+  let last = nowG;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.actor_id !== pc.id) continue;
+    if (last - e.timestamp_game_s > TALK_GAP_S) break;
+    const said = saidBy(e, npc.id);
+    if (!said) continue;
+    const t = norm(said);
+    if (!REFUSES.test(t) && !ALREADY_SAID.test(t)) break;
+    asks.push(e.input_text ?? '');
+    last = e.timestamp_game_s;
+  }
+  return asks;
+}
+
+/** ¿Ha intentado ya convencerle con una tirada en esta charla? */
+function triedSocial(events: readonly GameEvent[], pc: Character, npc: Npc, nowG: number): boolean {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.actor_id !== pc.id) continue;
+    if (nowG - e.timestamp_game_s > TALK_GAP_S) return false;
+    const roll = e.payload['requires_roll'] as { key?: string } | undefined;
+    if (roll?.key && SOCIAL_SKILLS.has(roll.key) && e.payload['npc_id'] === npc.id) return true;
+  }
+  return false;
+}
+
+/** Las misiones que pide un requisito, ya al alcance del PJ. */
+function questsAsked(world: World, pc: Character, cond: StoryCondition): string[] {
+  if (cond.kind === 'any' || cond.kind === 'all') return cond.of.flatMap((x) => questsAsked(world, pc, x));
+  if (cond.kind !== 'quest') return [];
+  const q = storyOf(world)?.quests.find((x) => x.id === cond.quest_id);
+  if (!q) return [];
+  const s = questStatus(world, pc, q);
+  return s === 'available' || s === 'active' || s === 'ready' ? [q.title] : [];
+}
+
+/**
+ * Por dónde puede seguir el PJ cuando este NPC se niega, de lo más a mano a lo menos: lo que tiene a medias, un
+ * encargo que puede darle, lo que abriría sus pistas, otra persona que sabe algo de ellas y lo que él quiere. Son
+ * títulos y nombres, nunca lo que dice la pista. Con trato hostil no hay salida: se cierra en banda.
+ */
+export function wayOut(world: World, pc: Character, npc: Npc, st: Pick<TalkState, 'tier' | 'pending' | 'can_offer'>): { ways: WayOut[]; refusal: string | null } {
+  if (st.tier === 'hostile') return { ways: [], refusal: null };
+  const ways: WayOut[] = [];
+  const add = (text: string, ...names: string[]) => { if (!ways.some((w) => w.text === text)) ways.push({ text, names }); };
+  // Uno de cada, para que quepan caminos distintos.
+  for (const t of st.pending.slice(0, 1)) add(`lo que tiene a medias: «${t}»`, t);
+  if (st.tier !== 'wary') for (const t of st.can_offer.slice(0, 1)) add(`algo que puede hacer por él: «${t}»`, t);
+  let refusal: string | null = null;
+  const people: Npc[] = [];
+  for (const clue of world.campaign.clues ?? []) {
+    if (pc.clues.includes(clue.id)) continue;
+    const sources = clue.sources ?? [];
+    if (!clue.npc_ids?.includes(npc.id) && !sources.some((s) => s.npc_id === npc.id)) continue;
+    for (const s of sources) {
+      if (s.npc_id === npc.id) {
+        if (!s.requires || holds(world, pc, s.requires)) continue;
+        refusal ??= s.refusal ?? null;
+        for (const t of questsAsked(world, pc, s.requires)) add(`lo que le haría hablar: cumplir «${t}»`, t);
+      } else if (s.npc_id && (!s.requires || holds(world, pc, s.requires))) {
+        const o = world.npcs.get(s.npc_id);
+        if (o) people.push(o);
+      }
+    }
+    if (!sources.length) for (const id of clue.npc_ids ?? []) { const o = id === npc.id ? null : world.npcs.get(id); if (o) people.push(o); }
+  }
+  for (const o of people) {
+    if (o.status !== 'alive' || o.mute) continue;
+    const name = pc.knows.includes(o.id) ? o.name : descriptorOf(world, o.id);
+    add(`otra persona que sabe algo: ${name}, sin decir qué sabe`, name);
+  }
+  add('qué querría a cambio, sacado de lo que quiere él');
+  return { ways: ways.slice(0, WAY_OUT_MAX), refusal };
+}
+
 export function talkState(world: World, events: readonly GameEvent[], pc: Character, npc: Npc, nowG: number): TalkState {
   const said = transcriptOf(events, pc.id, npc.id, 1);
   const mem = npc.memory.filter((m) => m.character_id === pc.id);
@@ -225,8 +344,11 @@ export function talkState(world: World, events: readonly GameEvent[], pc: Charac
   const tier = talkTier(npc, pc);
   // Turnos en que ya le ha contestado; lo hablado en otro momento (su memoria) también cuenta como charla previa.
   const answers = new Set(transcriptOf(events, pc.id, npc.id, TALK_MEMORY_LINES).filter((l) => l.who === 'npc').map((l) => l.game_s)).size;
-  const talked = answers >= RIPE_TURNS || mem.some((m) => nowG - m.game_s > RECENT_S);
+  const refused_asks = refusalStreak(events, pc, npc, nowG);
+  // Ya se ha negado una vez: lo que tiene para él es justo la salida, no hace falta esperar otro turno.
+  const talked = answers >= RIPE_TURNS || refused_asks.length > 0 || mem.some((m) => nowG - m.game_s > RECENT_S);
   const ripe = can_offer.length > 0 && talked && tier !== 'hostile' && tier !== 'wary' && !askedSince(world, pc, npc, nowG - RECENT_S);
+  const out = wayOut(world, pc, npc, { tier, pending, can_offer });
   return {
     first_meeting: !said.length && !mem.length,
     returning: last > -Infinity && nowG - last > RETURNING_S,
@@ -241,6 +363,8 @@ export function talkState(world: World, events: readonly GameEvent[], pc: Charac
     trades: npc.sells.length > 0 || npc.buys.length > 0,
     terms: termsWith(world, pc, npc, nowG),
     new_talk: !said.length || nowG - said.at(-1)!.game_s > RECENT_S,
+    refusals: refused_asks.length, refused_asks, way_out: out.ways, refusal_note: out.refusal,
+    social_tried: triedSocial(events, pc, npc, nowG),
   };
 }
 
@@ -371,11 +495,11 @@ function steps(s: TalkSituation, p: TalkPlan, npcName: string): string[] {
     case 'lore': return [
       `Lo que sabe todo el mundo: ${p.topics.map((t) => `${t.name} (${t.known})`).join('; ')}.`,
       'Su opinión o su miedo sobre eso.',
-      tier === 'stranger' ? 'Lo delicado, no: a un forastero no se le cuenta.' : 'Lo delicado, solo lo que su trato permite (lo que «contaría a este nivel» en su línea).',
+      tier === 'stranger' ? 'Lo delicado, no, y deja una salida.' : 'Lo delicado, solo lo que su trato permite (lo que «contaría a este nivel» en su línea).',
     ];
     case 'question': return [
       'Primera frase: contesta (sí, no o no lo sé; «eso no te lo digo», solo para lo delicado, nunca para lo público).',
-      tier === 'stranger' ? 'Si lo sabe y es delicado, lo esquiva («eso no se le cuenta a un forastero»).'
+      tier === 'stranger' ? 'Si lo sabe y es delicado, no lo cuenta, con palabras suyas y sin frase hecha, y deja una salida.'
         : tier === 'acquaintance' ? 'Si lo sabe y es delicado, pide un motivo o algo a cambio.'
           : 'Si lo sabe, lo cuenta con su opinión; lo que no le toca contar, a medias.',
       'Si no lo sabe, lo dice y, si alguien de aquí lo sabe, dice a quién preguntar.',
@@ -413,8 +537,49 @@ function forbidden(s: TalkSituation, p: TalkPlan): string[] {
   if (s === 'offer') out.push('Listar condiciones o preguntar «¿aceptas?».');
   if (s === 'trade') out.push('Dar por cerrado un trato sin buy_item o sell_item.');
   if (s === 'cold') out.push('Lo delicado (secretos, lo que su trato no da). Negar lo público o lo suyo con el actor.');
+  if (st.way_out.length && LADDER.includes(s)) out.push('Negarse sin dejar salida. «Mañana» o «ya veremos» no son una salida.');
   if (!st.new_talk) out.push('Volver a preguntarle para qué lo quiere.');
   return out;
+}
+
+/** Situaciones en las que puede negarse a algo delicado. */
+const LADDER: readonly TalkSituation[] = ['question', 'lore', 'cold', 'chat'];
+
+const waysText = (st: TalkState) => st.way_out.map((w) => w.text).join('; ');
+
+/** Lo que hace con las negativas en este turno: la salida y, si ya se ha negado, cerrar el tema o cortar la charla. */
+function refusalLines(p: TalkPlan, npcName: string): string[] {
+  const st = p.state;
+  if (!LADDER.includes(p.situation) || !st.way_out.length) return [];
+  const ways = waysText(st);
+  const note = st.refusal_note ? ` Cómo se niega él (a su manera, no lo copies): ${st.refusal_note}.` : '';
+  if (st.refusals >= CUT_AFTER_REFUSALS) return [`Ya se ha negado ${st.refusals} veces. Si vuelve sobre lo mismo, se acabó: una sola frase de ${npcName}, que no sigue con esto y qué haría falta (${ways}), y vuelve a lo suyo. Bájale la confianza (npc_trust harass). La charla termina aquí.`];
+  if (st.refusals === 1) return [`Ya se ha negado una vez. Si vuelve sobre lo mismo, lo cierra en una frase, sin repetir lo que dijo, y le deja claro qué haría falta: ${ways}.`];
+  return [`Si se niega a algo delicado, la salida, sin contar el secreto: ${ways}.${note}`];
+}
+
+/** ¿Pide tirada este turno? Cuando intenta convencerle o le aprieta con algo delicado, una vez por charla. */
+function socialLine(p: TalkPlan): string | null {
+  const st = p.state;
+  if (!(p.text.argues || p.text.presses) || !LADDER.includes(p.situation) || st.tier === 'hostile') return null;
+  if (st.social_tried) return 'Ya lo ha intentado con una tirada en esta charla: no pidas otra.';
+  const skill = p.text.presses ? 'intimidation' : 'persuasion o, si lo que dice es mentira, deception';
+  return `Intenta ${p.text.presses ? 'apretarle' : 'convencerle'}. Si lo que pide es delicado, no contestes aún: cierra con requires_roll (skill ${skill}, CD ${SOCIAL_DC[st.tier]}) y narra solo el momento previo. Si es público o sin importancia, contesta sin tirada.`;
+}
+
+/**
+ * La línea del contexto al resolver una tirada social con quien habla (prompt.ts, «Resultado de la tirada»). Con
+ * éxito da el camino, no el secreto; con fallo se cierra. El servidor ya ha movido la confianza (trust.ts).
+ */
+export function socialOutcomeLine(world: World, events: readonly GameEvent[], pc: Character, skill: string, success: boolean | null, nowG: number): string | null {
+  if (!SOCIAL_SKILLS.has(skill) || success === null) return null;
+  const npc = talkPartner(world, pc);
+  if (!npc) return null;
+  const name = pc.knows.includes(npc.id) ? npc.name : descriptorOf(world, npc.id);
+  if (!success) return `Tirada social fallida: ${name} se cierra y lo nota como insistencia. No da nada nuevo.`;
+  const ways = waysText(talkState(world, events, pc, npc, nowG));
+  const grudge = skill === 'intimidation' ? ' Lo dice de mala gana y no se lo perdona.' : '';
+  return `Tirada social con éxito: ${name} no cuenta lo que calla (su confianza no llega), pero cede algo y lo dice en lines: por dónde seguir (${ways}).${grudge}`;
 }
 
 /** Palabras como mucho de lo que dice el NPC con este plan. */
@@ -442,6 +607,8 @@ export function talkScript(world: World, pc: Character, p: TalkPlan): string {
     'Este guion manda sobre las reglas generales de conversación. Pasos, en orden:',
     ...steps(p.situation, p, name).map((x, i) => `${i + 1}. ${x}`),
     ...(second.length ? [`Después, si cabe (${SITUATION_ES[p.second!]}):`, ...second.map((x) => `- ${x}`)] : []),
+    ...refusalLines(p, name),
+    socialLine(p) ?? '',
     `Prohibido: ${forbidden(p.situation, p).join(' ')}`,
     `Longitud: lo que dice, ${planWords(p)} palabras como mucho, en lines.`,
     p.doubtful ? `Si el jugador busca otra cosa (${TALK_SITUATIONS.filter((x) => x !== 'chat').join(', ')}), pon esa en talk_situation de log_event y responde con su regla; si no, talk_situation null.` : 'talk_situation de log_event: null.',
@@ -455,9 +622,42 @@ export function talkScript(world: World, pc: Character, p: TalkPlan): string {
 const words = (s: string) => norm(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean).length;
 
 /** Negarse a contar («eso no te lo digo», «no lo cuento en una mesa»). Sobre texto normalizado. */
-const REFUSES = /\b(no te lo (digo|cuento|voy a decir|repito)|eso no (te lo digo|se dice|se cuenta|te importa|es asunto tuyo)|no lo cuento|no es asunto tuyo|no te incumbe)\b/;
+const REFUSES = /\b(no te lo (digo|cuento|voy a decir|voy a contar|repito)|no te voy a (decir|contar)|eso no (te lo digo|lo digo|lo cuento|se dice|se cuenta|se le cuenta|te importa|es asunto tuyo|es cosa tuya)|no se le cuenta|no lo cuento|no lo digo|no es asunto tuyo|no es cosa tuya|no te incumbe|de eso no (hablo|se habla)|no hablo de eso)\b/;
+/** Remitir a lo ya dicho: para las negativas seguidas es lo mismo. */
+const ALREADY_SAID = /\b(ya te lo he dicho|te lo he dicho ya|ya te he (dicho|contestado)|ya me lo has preguntado)\b/;
+/** Lo que deja una salida: qué hacer o a quién acudir. «Mañana» no, que no lleva a ningún sitio. */
+const WAY_WORDS = /\b(primero|antes|cuando|trae|traeme|traes|lleva|llevale|vuelve|vuelves|ve a|ve al|ve con|habla con|preguntale|pregunta a|pregunta al|busca a|si me|si traes|hazme|ayudame|a cambio|encargo|ganate)\b/;
 /** Volver a preguntar para qué lo quiere. */
 const WHY_AGAIN = /\b(para que (lo )?(quieres|preguntas)|por que (lo )?(quieres saber|preguntas)|y tu (para|por) que)\b/;
+
+/** ¿Lo que dice (normalizado) deja una salida? */
+function leavesWayOut(said: string, st: TalkState): boolean {
+  return WAY_WORDS.test(said) || st.way_out.some((w) => w.names.some((x) => names(said, x)));
+}
+
+/** ¿Esta respuesta es la negativa que corta la charla? Quien cierra el turno deja al NPC libre. */
+export function endsTalk(p: TalkPlan, lines: readonly DialogueLine[]): boolean {
+  if (p.state.refusals < CUT_AFTER_REFUSALS || !LADDER.includes(p.situation)) return false;
+  const said = norm(lines.filter((l) => l.speaker === 'npc' && (!l.npc_id || l.npc_id === p.npc_id)).map((l) => l.text).join(' '));
+  return REFUSES.test(said) || ALREADY_SAID.test(said);
+}
+
+const askWords = (s: string) => new Set(norm(s).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3));
+
+/**
+ * Los botones sin lo que ya se le ha negado: lo mismo que le pedía y, tras cortar la charla, cualquier otra pregunta
+ * a ese NPC. Dar o entregar sigue valiendo: es justo lo que puede abrirla.
+ */
+export function withoutRefused(world: World, p: TalkPlan, suggested: readonly string[]): string[] {
+  const npc = world.npc(p.npc_id);
+  const asks = p.state.refused_asks.map(askWords);
+  const cut = p.state.refusals >= CUT_AFTER_REFUSALS;
+  return suggested.filter((s) => {
+    const w = askWords(s);
+    if (w.size && asks.some((a) => [...w].filter((x) => a.has(x)).length / w.size >= 0.6)) return false;
+    return !(cut && /^(preguntar|insistir|exigir|presionar|pedir|volver a preguntar)\b/.test(norm(s)) && names(norm(s), npc.name.split(/\s+/)[0]!));
+  });
+}
 
 /**
  * Lo que el cierre incumple del plan, o []. `declared`: la situación que pone
@@ -493,10 +693,12 @@ export function talkProblems(p: TalkPlan, input: { lines: readonly DialogueLine[
   const calm = plan.situation !== 'danger' && plan.situation !== 'reaction' && p.state.tier !== 'hostile';
   if (calm && (asksTerms || asksPublic) && REFUSES.test(ns)) {
     out.push(`${input.npcName} se niega a contar algo público${asksTerms ? ' o su trato con el actor («Lo suyo con el actor»)' : ''}: eso se dice, aunque sea seco. Contesta.`);
+  } else if (calm && LADDER.includes(plan.situation) && p.state.way_out.length && REFUSES.test(ns) && !leavesWayOut(ns, p.state)) {
+    out.push(`${input.npcName} se niega sin dejar salida: que diga qué haría falta, sin contar el secreto (${waysText(p.state)}).`);
   }
   if (!p.state.new_talk && WHY_AGAIN.test(ns)) out.push(`${input.npcName} ya le preguntó para qué lo quiere: no lo repitas, contesta.`);
   const max = planWords(plan);
   const n = words(said);
-  if (n > max + 10) out.push(`${input.npcName} dice ${n} palabras y el guion pide ${max} como mucho: recórtalo.`);
+  if (n > max + WORDS_MARGIN) out.push(`${input.npcName} dice ${n} palabras y el guion pide ${max} como mucho: recórtalo.`);
   return out;
 }

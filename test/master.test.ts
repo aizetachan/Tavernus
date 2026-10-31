@@ -212,7 +212,7 @@ describe('primera escena', () => {
       msg([logEvent('Bajas al claro con el estómago vacío. Junto al roble, alguien ha dejado un hacha clavada en un tocón reciente.', 'Una figura baja por el sendero.')]),
     ]);
     engine.attachMaster(new Master(engine, { client }));
-    const r = await engine.createCharacter('discord:1', 'Ana');
+    const r = await engine.createCharacter('web:1', 'Ana');
     if (!r.ok) throw new Error(r.reason);
     // Sin intro aún: el evento de llegada no le dice nada al actor (la intro lo sustituye).
     expect(seen(r.character.id)).toEqual([]);
@@ -236,7 +236,7 @@ describe('memoria y cola de conversación de NPC', () => {
     const time = fakeTime();
     const { engine } = await bootEngine(time);
     const { client, requests } = fakeClient([
-      msg([logEvent('Brenna asiente.', 'Kael habla con Brenna.', { npc_id: 'npc_brenna', npc_memory_note: 'Kael preguntó por el incendio de Vharn y dijo venir del sur.', npc_memory_importance: 2, lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'De eso no se habla aquí.' }] })]),
+      msg([logEvent('Brenna asiente.', 'Kael habla con Brenna.', { npc_id: 'npc_brenna', npc_memory_note: 'Kael preguntó por el incendio de Vharn y dijo venir del sur.', npc_memory_importance: 2, lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'Eso fue hace mucho.' }] })]),
       msg([logEvent('Brenna te sirve.', null, { npc_id: 'npc_brenna', npc_memory_note: 'Pidió una cerveza.', npc_memory_importance: 1 })]),
       msg([logEvent('Brenna te mira.', null)]),
     ]);

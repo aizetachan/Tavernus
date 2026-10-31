@@ -244,18 +244,36 @@ export const NOVEL_STYLE = String.raw`
     background: radial-gradient(ellipse at 70% 30%, var(--control) 55%, transparent 80%); color: var(--muted); opacity: 0; transition: opacity .12s ease; cursor: pointer; }
   .msg-more svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
   .msg-more:hover { color: var(--text); }
-  .msg.row.replyable:hover .msg-more, .msg.row.replyable.menu-open .msg-more, .msg-more:focus-visible { opacity: 1; }
+  .msg.row.replyable:hover .msg-more, .msg.row.replyable.menu-open .msg-more, .msg.row.reportable:hover .msg-more, .msg.row.reportable.menu-open .msg-more, .msg-more:focus-visible { opacity: 1; }
   #msg-menu { position: fixed; z-index: 60; min-width: 190px; padding: 6px; border-radius: 14px; background: var(--bubble, #232526); border: 1px solid var(--line); box-shadow: var(--window-shadow, 0 12px 32px rgba(0,0,0,.5)); }
   #msg-menu[hidden] { display: none; }
   #msg-menu button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 40px; padding: 6px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--text); font: 500 14px/1.2 var(--sans); text-align: left; }
+  #msg-menu button[hidden] { display: none; }
   #msg-menu button:hover, #msg-menu button:focus-visible { background: var(--hover); outline: none; }
   #msg-menu svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   #msg-menu [data-do="reply"] svg { stroke: var(--accent); }
   /* En táctil: el gesto horizontal es nuestro (deslizar para responder) y la pulsación larga no selecciona texto. */
   @media (hover: none) {
     .msg.row.replyable .body { touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    /* Sin ratón no hay «al pasar»: la flechita se ve siempre, tenue, y solo ella abre el menú en las burbujas del máster. */
+    .msg.row.reportable .msg-more { opacity: .5; }
   }
   .msg.row.replyable.swipe-ok .body { box-shadow: -3px 0 0 var(--accent); }
+  /* Reportar un mensaje o «Algo va mal»: un cuadro corto (report.ts). */
+  #report-box { width: min(440px, calc(100vw - 32px)); padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--bubble, #232526); color: var(--text); box-shadow: var(--window-shadow, 0 12px 32px rgba(0,0,0,.5)); }
+  #report-box::backdrop { background: rgba(0,0,0,.55); }
+  #report-box h2 { margin: 0 0 8px; font: 600 16px/1.3 var(--sans); }
+  #report-box blockquote { margin: 0 0 10px; padding: 6px 10px; border-left: 2px solid var(--line); color: var(--muted); font-size: 13px; line-height: 1.4; max-height: 5.6em; overflow: hidden; }
+  #report-box blockquote:empty { display: none; }
+  #report-box textarea { display: block; width: 100%; min-height: 96px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--control); color: var(--text); font: 15px/1.4 var(--sans); resize: vertical; }
+  #report-box textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #report-box p { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+  #report-box p.err { color: var(--error, #ff6b5e); }
+  #report-box p.done { color: var(--text); font-size: 14px; }
+  #report-box .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  #report-box .btns button { min-height: 38px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--text); font: 500 14px/1 var(--sans); box-shadow: inset 0 0 0 1px var(--line); }
+  #report-box .btns [data-do="send"] { background: var(--accent); color: #2a1d05; font-weight: 600; box-shadow: none; }
+  #report-box .btns button:disabled { opacity: .5; }
   .msg.row .decisive { align-self: flex-start; }
   .msg.row .actions { margin-top: 8px; }
   .nv-av { position: relative; width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 50%; overflow: hidden; font-size: 13px; font-weight: 600;
@@ -726,6 +744,7 @@ export const NOVEL_JS = String.raw`
       host.parentNode.insertBefore(jr, host.nextSibling);
       if (!live) jb.disabled = true;
     }
+    if (!m.notice && (m.narrator || m.kind === 'master')) reportable(m.seq, before);
     if (m.reply_to) replyable(m.reply_to, before, main);
     // El turno no se da por pintado hasta que se ve el resultado del dado: lo siguiente espera detrás.
     if (held) chatTurn.held = held;
@@ -785,16 +804,82 @@ export const NOVEL_JS = String.raw`
     // Un cierre del máster que te tiene de objetivo no trae burbuja suya: la flechita va en la narración.
     if (!rows.length && main && main.classList.contains('row')) rows.push(main);
     rows.forEach(function (r) {
-      var body = r.querySelector('.body');
-      if (!body || body.querySelector('.msg-more')) return;
+      var b = moreButton(r);
+      if (!b) return;
       r.classList.add('replyable');
       r._replyTo = { id: to.id, name: to.name };
-      var b = document.createElement('button');
-      b.type = 'button'; b.className = 'msg-more';
-      b.setAttribute('aria-label', 'Opciones del mensaje de ' + to.name); b.setAttribute('aria-haspopup', 'menu');
-      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
-      body.appendChild(b);
+      b.setAttribute('aria-label', 'Opciones del mensaje de ' + to.name);
     });
+  }
+  /** La flechita de una burbuja (la misma para responder y para reportar). */
+  function moreButton(row) {
+    var body = row.querySelector('.body');
+    if (!body) return null;
+    var b = body.querySelector('.msg-more');
+    if (b) return b;
+    b = document.createElement('button');
+    b.type = 'button'; b.className = 'msg-more';
+    b.setAttribute('aria-label', 'Opciones del mensaje'); b.setAttribute('aria-haspopup', 'menu');
+    b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+    body.appendChild(b);
+    return b;
+  }
+  /** Las burbujas de este turno del máster (narración y NPC, no lo del jugador) se pueden reportar: llevan su evento. */
+  function reportable(seq, before) {
+    for (var e = before ? before.nextElementSibling : log.firstElementChild; e; e = e.nextElementSibling) {
+      if (!e.classList.contains('row') || e.classList.contains('mine') || !moreButton(e)) continue;
+      e.classList.add('reportable');
+      e._reportSeq = seq;
+    }
+  }
+  /**
+   * Reportar un problema (report.ts): de una burbuja, con su evento, o «Algo va mal» desde los ajustes (seq null).
+   * El servidor adjunta lo que hizo falta para entenderlo; aquí solo se pregunta qué ha pasado.
+   */
+  var reportBox = null;
+  function openReport(seq, quoted) {
+    if (!reportBox) {
+      reportBox = document.createElement('dialog');
+      reportBox.id = 'report-box';
+      // Sin <form>: el cuadro de la página habilita y deshabilita todos los botones de formulario al esperar.
+      reportBox.innerHTML = '<div class="fields"><h2></h2><blockquote></blockquote>' +
+        '<textarea maxlength="1000" placeholder="¿Qué ha pasado?" aria-label="¿Qué ha pasado?"></textarea>' +
+        '<p class="msg"></p><div class="btns"><button type="button" data-do="cancel">Cancelar</button><button type="button" data-do="send">Enviar</button></div></div>';
+      reportBox.querySelector('[data-do="cancel"]').addEventListener('click', function () { reportBox.close(); });
+      reportBox.querySelector('[data-do="send"]').addEventListener('click', function () {
+        var area = reportBox.querySelector('textarea'), send = reportBox.querySelector('[data-do="send"]'), note = reportBox.querySelector('.msg');
+        var text = area.value.trim();
+        if (!text) { area.focus(); return; }
+        send.disabled = true;
+        post('/api/report', { seq: reportBox._seq, text: text, at: new Date().toISOString() }).then(function (r) {
+          send.disabled = false;
+          note.classList.toggle('err', !r.ok);
+          if (!r.ok) { note.textContent = r.text || 'No se ha podido enviar.'; return; }
+          // Hecho: no vuelve a enviarse y se cierra solo.
+          reportBox.querySelector('.fields').hidden = true;
+          var done = document.createElement('p');
+          done.className = 'done'; done.setAttribute('role', 'status');
+          done.textContent = 'Enviado. Gracias: quien organiza la partida ya puede verlo.';
+          reportBox.appendChild(done);
+          setTimeout(function () { if (done.parentNode) reportBox.close(); }, 2200);
+        });
+      });
+      reportBox.addEventListener('close', function () {
+        var done = reportBox.querySelector('.done');
+        if (done) done.remove();
+        reportBox.querySelector('.fields').hidden = false;
+      });
+      document.body.appendChild(reportBox);
+    }
+    reportBox._seq = seq;
+    reportBox.querySelector('h2').textContent = seq === null ? 'Algo va mal' : 'Reportar este mensaje';
+    reportBox.querySelector('blockquote').textContent = quoted ? (quoted.length > 220 ? quoted.slice(0, 220) + '…' : quoted) : '';
+    reportBox.querySelector('textarea').value = '';
+    var note = reportBox.querySelector('.msg');
+    note.classList.remove('err');
+    note.textContent = seq === null ? 'Cuenta qué ha pasado y qué esperabas. Lo verá quien organiza la partida, con lo último que has vivido.' : 'Cuenta qué tiene de raro. Lo verá quien organiza la partida, con los datos de este turno.';
+    reportBox.showModal();
+    reportBox.querySelector('textarea').focus();
   }
   /** Lo que dice la burbuja, sin el nombre, la frase que la presenta ni sus botones: para la cita. */
   function rowText(row) {
@@ -811,7 +896,13 @@ export const NOVEL_JS = String.raw`
     if (!row) return;
     row.classList.remove('replyable');
     row.classList.add('ignored');
-    var b = row.querySelector('.msg-more'); if (b) b.remove();
+    row._replyTo = null;
+    // Si también se puede reportar, la flechita se queda.
+    var b = row.querySelector('.msg-more'); if (b && !row.classList.contains('reportable')) b.remove();
+  }
+  function reportRow(row) {
+    closeMsgMenu();
+    if (row && row._reportSeq !== undefined) openReport(row._reportSeq, rowText(row));
   }
   var msgMenu = null, msgMenuRow = null;
   function closeMsgMenu() {
@@ -820,21 +911,22 @@ export const NOVEL_JS = String.raw`
     if (msgMenu) msgMenu.hidden = true;
   }
   function openMsgMenu(row) {
-    if (!row || !row.classList.contains('replyable')) return;
+    if (!row || !(row.classList.contains('replyable') || row.classList.contains('reportable'))) return;
     if (msgMenuRow === row) { closeMsgMenu(); return; }
     closeMsgMenu();
     if (!msgMenu) {
       msgMenu = document.createElement('div');
       msgMenu.id = 'msg-menu'; msgMenu.setAttribute('role', 'menu'); msgMenu.hidden = true;
       msgMenu.innerHTML = '<button type="button" role="menuitem" data-do="reply"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 8V4l-7 7 7 7v-4c5 0 8.5 1.6 11 5-1-5-4-10-11-11z"/></svg><span>Responder</span></button>' +
-        '<button type="button" role="menuitem" data-do="ignore"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M6 18L18 6"/></svg><span>Ignorar</span></button>';
+        '<button type="button" role="menuitem" data-do="ignore"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M6 18L18 6"/></svg><span>Ignorar</span></button>' +
+        '<button type="button" role="menuitem" data-do="report"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4h13l-2.5 4.5L18 13H5"/></svg><span>Reportar</span></button>';
       msgMenu.addEventListener('click', function (ev) {
         var b = ev.target.closest('button'); if (!b) return;
-        var r = msgMenuRow;
-        if (b.getAttribute('data-do') === 'reply') replyToRow(r); else ignoreRow(r);
+        var r = msgMenuRow, what = b.getAttribute('data-do');
+        if (what === 'reply') replyToRow(r); else if (what === 'report') reportRow(r); else ignoreRow(r);
       });
       msgMenu.addEventListener('keydown', function (ev) {
-        var items = [].slice.call(msgMenu.querySelectorAll('button')), i = items.indexOf(document.activeElement);
+        var items = [].slice.call(msgMenu.querySelectorAll('button:not([hidden])')), i = items.indexOf(document.activeElement);
         if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); items[(i + (ev.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
         else if (ev.key === 'Escape' || ev.key === 'Tab') { var a = msgMenuRow && msgMenuRow.querySelector('.msg-more'); closeMsgMenu(); if (a && ev.key === 'Escape') a.focus(); }
       });
@@ -844,14 +936,18 @@ export const NOVEL_JS = String.raw`
     row.classList.add('menu-open');
     var arrow = row.querySelector('.msg-more');
     if (arrow) arrow.setAttribute('aria-expanded', 'true');
-    msgMenu.querySelector('[data-do="reply"] span').textContent = 'Responder a ' + row._replyTo.name;
+    var replies = !!row._replyTo;
+    msgMenu.querySelector('[data-do="reply"]').hidden = !replies;
+    msgMenu.querySelector('[data-do="ignore"]').hidden = !replies;
+    msgMenu.querySelector('[data-do="report"]').hidden = row._reportSeq === undefined;
+    if (replies) msgMenu.querySelector('[data-do="reply"] span').textContent = 'Responder a ' + row._replyTo.name;
     msgMenu.hidden = false;
     // Bajo la flechita, alineado a la derecha de la burbuja; si no cabe debajo, encima.
     var r = (arrow || row.querySelector('.body')).getBoundingClientRect(), mw = msgMenu.offsetWidth, mh = msgMenu.offsetHeight;
     var left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
     var top = r.bottom + 4 + mh > window.innerHeight - 8 ? Math.max(8, r.top - mh - 4) : r.bottom + 4;
     msgMenu.style.left = left + 'px'; msgMenu.style.top = top + 'px';
-    msgMenu.querySelector('button').focus({ preventScroll: true });
+    msgMenu.querySelector('button:not([hidden])').focus({ preventScroll: true });
   }
   // Cierra al pulsar fuera, al desplazar el hilo o al cambiar el tamaño.
   document.addEventListener('pointerdown', function (ev) {

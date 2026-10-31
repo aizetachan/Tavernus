@@ -30,6 +30,7 @@
 
 import { GAME_DAY } from '../clock/clock.js';
 import type { Engine } from './engine.js';
+import { talkTier, type TalkTier } from './concerns.js';
 import { characterFacts } from './facts.js';
 import { debtLine } from './debts.js';
 import { money } from './money.js';
@@ -138,11 +139,19 @@ export interface JournalExchange {
   replied: string[];
 }
 
+/** El trato (concerns.ts) como lo notaría el jugador: en palabras, sin niveles ni puntos. */
+const RAPPORT: Record<TalkTier, string> = {
+  hostile: 'te tiene por enemigo', wary: 'te mira con recelo', stranger: 'aún no se fía de ti',
+  acquaintance: 'te conoce, pero no se abre', friend: 'se fía de ti', ally: 'está de tu parte',
+};
+
 export interface JournalConversation {
   npc_id: Id;
   name: string;
   role: string;
   known: boolean;
+  /** Cómo está el trato con él, en palabras («te mira con recelo»); null si aún no sabe quién es. */
+  rapport: string | null;
   exchanges: JournalExchange[];
   memory: { when: string; note: string }[];
   last_game_s: number;
@@ -549,7 +558,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
       if (!replied.length) continue;
       let conv = convs.get(id);
       if (!conv) {
-        conv = { npc_id: id, name: npcTag(c, npc), role: npc.role, known: c.knows.includes(id), exchanges: [], memory: [], last_game_s: 0 };
+        conv = { npc_id: id, name: npcTag(c, npc), role: npc.role, known: c.knows.includes(id), rapport: null, exchanges: [], memory: [], last_game_s: 0 };
         convs.set(id, conv);
       }
       conv.exchanges.push({
@@ -562,6 +571,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   for (const conv of convs.values()) {
     const npc = w.npc(conv.npc_id);
     conv.memory = npc.memory.filter((m) => m.character_id === c.id).map((m) => ({ when: fmt(m.game_s), note: m.note }));
+    conv.rapport = conv.known ? RAPPORT[talkTier(npc, c)] : null;
   }
   const conversations = [...convs.values()].sort((x, y) => y.last_game_s - x.last_game_s);
 

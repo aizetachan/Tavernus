@@ -33,6 +33,7 @@ const srd = (a: keyof typeof ARCHETYPES, hp: number, extra: Partial<NpcStats> = 
 export const NPCS: AuthoredNpc[] = [
   {
     id: 'npc_brenna', name: 'Brenna', role: 'tabernera', spot_id: 'sp_tab_barra', passive_perception: 12, attitude: 'neutral',
+    noncombatant: true,
     description: 'Cincuenta años, brazos de amasar, una quemadura vieja en el dorso de la mano izquierda. Seca la misma jarra cuando piensa. Habla poco, en frases cortas, y mira mucho; cuando algo le duele, cambia de tema hacia el precio de la cerveza. La jarra es de barro, con una muesca en el asa; cuanto más se acerca alguien a lo que le duele, más deprisa la seca. Cada noche deja una cerveza que nadie bebe en el último taburete de la barra. Nunca ha salido del valle.',
     motivation: 'Que la taberna siga en pie, que su perro Ceniza vuelva a casa y que nadie remueva el granero de Vharn ni lo que ella enterró.',
     dislikes_flattery: true,
@@ -119,6 +120,7 @@ export const NPCS: AuthoredNpc[] = [
   },
   {
     id: 'npc_ilse', name: 'Ilse', role: 'curandera', spot_id: 'sp_cu_hierbas', passive_perception: 14, attitude: 'neutral',
+    noncombatant: true,
     description: 'Muy vieja, encorvada, los ojos claros como agua. Habla bajito y despacio, con palabras de rezo mezcladas con las de la cocina. Siempre tiene las manos manchadas de corteza. Nunca cura sin cobrar algo pequeño, un huevo o un hilo: «lo que no cuesta no sana». Antes del tónico pregunta «¿con quién estás reñido?», y a los moribundos, «¿ya has dejado de debérselo?».',
     motivation: 'Curar la tos gris, que el pueblo no vuelva a arder y morirse habiendo dejado el rito en buenas manos. Entender el cerrojo de niebla que ha cerrado el valle.',
     dislikes_flattery: true,
@@ -164,6 +166,7 @@ export const NPCS: AuthoredNpc[] = [
   },
   {
     id: 'npc_mateo', name: 'Mateo', role: 'molinero', spot_id: 'sp_mo_muelas', passive_perception: 10, attitude: 'friendly',
+    noncombatant: true,
     description: 'Cincuentón redondo, enharinado hasta las cejas, con una tos gris que le corta las frases. Cuenta chistes malos para no hablar de su hijo. Tiene siete chistes y no cambia de repertorio; uno, «un molinero tenía un hijo que…», no lo termina nunca. Usa su propio ataúd de arcón para la harina: «así no me lo quitan».',
     motivation: 'Que el molino no se pare: el agua baja tibia y con ceniza, la rueda se atasca y la harina sale gris. Y que su hijo no se meta en líos.',
     knowledge: [
@@ -183,6 +186,7 @@ export const NPCS: AuthoredNpc[] = [
   },
   {
     id: 'npc_tobias', name: 'Tobías', role: 'hijo del molinero', spot_id: 'sp_mo_sacos', passive_perception: 13, attitude: 'unfriendly',
+    noncombatant: true,
     description: 'Diecisiete años, delgado, el pelo lleno de harina y las uñas negras de otra cosa. Contesta con preguntas y se le escapa una sonrisa cuando alguien habla mal del regidor. Es el único joven del valle que sabe leer: le enseñó su madre, ya muerta.',
     motivation: 'Ser alguien. La mujer del granero le ha prometido que será señor de Vharn cuando caiga el mayordomo.',
     knowledge: [
@@ -244,6 +248,7 @@ export const NPCS: AuthoredNpc[] = [
   },
   {
     id: 'npc_ursula', name: 'Úrsula', role: 'granjera', spot_id: 'sp_co_gallinero', passive_perception: 12, attitude: 'neutral',
+    noncombatant: true,
     description: 'Viuda de cuarenta y tantos, recia, el pañuelo atado a la nuca y las manos agrietadas de agua fría. Habla con las gallinas igual que con la gente, a medias riñendo. Cada poco mira hacia la cerca de atrás, hacia la niebla. Su marido murió en el incendio, velando el fuego de la noche de prestar la lumbre: es la única que mira a Brenna a los ojos. Se ata a la niebla con una cuerda que trenzó él.',
     motivation: 'Que su hijo Pol vuelva del otro lado. Mientras tanto, que no le falte pienso a las gallinas ni le maten las ovejas.',
     dislikes_flattery: true,

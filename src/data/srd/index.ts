@@ -21,7 +21,7 @@ export interface ClassDef {
   spellcasting?: Ability;
   saves: Ability[];
   skill_choices: { count: number; from: string[]; /** Las que elige por defecto, por orden (saltando las que ya da el trasfondo). */ prefer: string[] };
-  /** Trasfondo por defecto si el jugador no elige (la web no lo pregunta). */
+  /** Trasfondo por defecto si la petición no trae ninguno; el asistente de la web lo marca como sugerido. */
   background: string;
   /** Array estándar recomendado, en orden STR DEX CON INT WIS CHA. */
   recommended: [number, number, number, number, number, number];

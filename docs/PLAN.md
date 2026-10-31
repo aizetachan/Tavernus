@@ -50,7 +50,7 @@ más el simulador que la rodean.
   caché de respuestas, consulta de reglas.
 - **Clientes**: web (`src/adapters/web`) con menú de partidas, chat, hoja, tablero SVG y mapa de zona y
   región (`regionmap.ts`: grafo de lugares conocidos por el PJ, dispuesto desde los datos, con los
-  personajes encima); bot de Discord; REPL.
+  personajes encima); REPL. El bot de Discord se retiró en octubre de 2026 (issue #5).
 - **Persistencia**: JSON por partida (`data/games/<slug>`); Firestore escrito pero nunca ejecutado.
 - **Calidad**: 179 tests en vitest y typecheck en verde; `docs/NOTAS-GUIA-USUARIO.md` con las
   observaciones de las pruebas con personas.
@@ -75,9 +75,10 @@ más el simulador que la rodean.
 |---|---|
 | Antes, Opus 5, contexto sin recortar (medido en la demo) | 4,1 céntimos |
 | Haiku 5.5, primera acción con escritura de caché (medido) | 0,26 céntimos |
-| Haiku 5.5 en régimen (estimado con los precios actuales) | 0,12 céntimos |
-| Sonnet 5.5 (estimado) | 1,2 a 1,6 céntimos |
-| Opus 5.5 (estimado) | 2,5 a 3 céntimos |
+| Haiku 5.5 en régimen, mundo ligero (estimado con los precios actuales) | 0,12 céntimos |
+| **Haiku 5.5 en Brezal (medido, 2.840 acciones, 31-10)** | **0,27 céntimos** |
+| Sonnet 5.5 en Brezal (estimado por precio, mismos tokens) | unos 5,5 céntimos |
+| Opus 5.5 en Brezal (estimado por precio, mismos tokens) | unos 11 céntimos |
 
 El contexto dinámico bajó un 34 % de media y un 42 % en la taberna. El prefijo cacheado (system con la
 chuleta de reglas más 29 tools) ronda los 12.000 tokens y se paga al 10 %. La salida (razonamiento más
@@ -132,7 +133,7 @@ cuando el jugador pregunta por algo permitido por el esqueleto y aún sin rellen
 ahí mismo y la escena sigue.
 
 **Capa 5, presentación.** Tablero de localización y mapa de región desde los datos; imágenes
-generadas una vez por entidad y guardadas como asset; clientes web, Discord y PWA sobre el mismo motor.
+generadas una vez por entidad y guardadas como asset; clientes web y PWA sobre el mismo motor.
 
 ### 3.1 Flujo de una acción
 
@@ -201,7 +202,7 @@ ahora.
 
 | Qué se prueba | Cómo | Coste |
 |---|---|---|
-| Motor, tablero, menú, movimiento, inventario, tiradas | `MASTER_MODE=offline` (configuración `tavernus-web-offline`) | 0 |
+| Motor, tablero, menú, movimiento, inventario, tiradas | `npm run web:offline` | 0 |
 | Recorridos repetibles de una partida real | `record` una vez, `replay` después, semilla de dados fija | Solo la grabación |
 | Narrativa y tools en desarrollo | `MASTER_MODEL=claude-haiku-5-5` (configuración `tavernus-web-haiku`) | 0,12 céntimos por acción |
 | Elegir modelo y esfuerzo de la partida real | `npm run bench` con la ruta fija y `bench:report` | Unos céntimos por pasada |
@@ -210,6 +211,12 @@ ahora.
 Reglas de trabajo:
 
 - Toda pieza nueva pasa `npm test` y `npm run typecheck` antes de darse por hecha.
+- Los tests no dependen del azar ni del tiempo real. `test/setup.ts` fija `Math.random` en cada test,
+  y el que necesite un resultado concreto pasa su `rng` al motor. El reloj es `fakeTime()`
+  (`test/helpers.ts`), inyectado con `now`. Nada de medir milisegundos ni de dormir un rato: se espera
+  una condición (`waitUntil`, `engine.settle()`, `readSse` hasta ver el estado) o se retiene lo que
+  tarda con una promesa que suelta el test. Para probar que algo no espera a un temporizador, se le
+  pone de una hora. Y cada test deja acabado lo que arrancó antes de que se borre su carpeta.
 - Toda llamada al modelo registra `usage` y coste en el evento; el banco y el panel los agregan.
 - Métricas que importan: tokens y céntimos por acción, porcentaje de acciones deterministas, coste
   por jugador y hora, latencia del máster, errores de tool.
@@ -231,7 +238,7 @@ Pendiente de cierre:
 - Lanzar el banco real con Sonnet 5.5 y Haiku 5.5 a esfuerzo bajo y decidir el modelo de la
   partida real; cambiar la semilla si procede.
 - Una grabación real corta con `record` y su conversión en demo, para tener una demo con historia.
-- Script `npm run web:offline` y `web:haiku` que funcionen igual en PowerShell y bash.
+- Script `npm run web:offline` y `web:haiku` que funcionen igual en PowerShell y bash (hecho, issue #7).
 - Pasar las observaciones de hoy a `docs/NOTAS-GUIA-USUARIO.md`.
 
 ### Fase 1. Generador de campaña desde semilla
@@ -310,8 +317,8 @@ espaciado y con 2 peticiones a la vez como mucho. Si falla, o se agota la cuota 
 ### Fase 5. Online y sociedad
 
 - **Objetivo**: varias personas en el mismo mundo desde distintos clientes.
-- **Entregables**: Game API con autenticación (spec §11.1) y la web como cliente de verdad; Discord
-  sobre el gestor de partidas; despliegue en la VM y Firestore o Postgres probados; lo que la spec
+- **Entregables**: Game API con autenticación (spec §11.1) y la web como cliente de verdad;
+  despliegue en el VPS y Firestore o Postgres probados; lo que la spec
   deja decidido y aún no está: descanso, muerte y reaparición (§4.7, §9.1), hechizos con resolvedor y
   barra rápida (§4.10), PvP, crimen y ley (§9.4), compañías (§9.5).
 - **Hecho cuando**: diez jugadores en un mundo generado durante una semana sin corrección manual, con
@@ -323,7 +330,7 @@ espaciado y con 2 peticiones a la vez como mucho. Si falla, o se agota la cuota 
 
 | Decisión | Opciones | Cuándo |
 |---|---|---|
-| Modelo y esfuerzo de la partida real | Sonnet 5.5 bajo, Opus 5.5 bajo, Haiku 5.5 | Tras el banco real (cierre de fase 0) |
+| Modelo de la beta: **Haiku 5.5 a esfuerzo bajo** (31-10). Es el único que cabe en el objetivo de coste: 0,27 céntimos por acción medidos en 10 partidas de Brezal (docs/PLAYTEST-2026-10-31.md; la medición costó unos 9,25 $). Decidido por coste, no por calidad: no se ha comparado con otros modelos | Queda abierto si Sonnet 5.5 o un modelo mixto compensan | Tras arreglar lo que frena las partidas, con una comparación corta |
 | Proveedor de imágenes | Por evaluar; una imagen por entidad, nunca por turno | Fase 4 |
 | SQLite por partida | Sí en fase 4, salvo que el JSON aguante | Fase 4 |
 | Reglas para ambientaciones no fantásticas | SRD como núcleo con paquete generado (plan), Fate o Cypher como alternativa | Fase 1 fija el núcleo; revisar tras fase 2 |

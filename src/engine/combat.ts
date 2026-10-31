@@ -5,6 +5,9 @@
  *   - Un NPC hostil actúa en cada turno del combate: si el máster no le hace
  *     atacar, lo hace el motor al cerrar (forceNpcTurns), con su multiataque.
  *     Un NPC actúa una vez por turno.
+ *   - Quien no es de pelear (`Npc.noncombatant`) no entra en esos turnos: se
+ *     defiende si el máster lo cuenta, y su golpe deja caído y estable, no mata.
+ *     No remata a nadie: echa, pide ayuda o llama a la guardia.
  *   - Golpe no letal (SRD): un PJ que deja a un NPC a 0 PG con un arma
  *     contundente, los puños o diciendo «pegar», «golpear» o «reducir» le deja
  *     inconsciente. Le mata si dice que quiere matarle, si el arma corta o
@@ -120,6 +123,8 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
   if (t.kind === 'npc' && (!t.n.stats || (t.n.status !== 'alive' && t.n.status !== 'unconscious'))) return { error: `${t.n.name} no es un objetivo válido` };
   if (t.kind === 'character' && (t.c.status === 'dead' || t.c.veiled)) return { error: t.c.veiled ? `${t.c.name} está bajo el velo: no puede recibir daño` : `${t.c.name} ya está muerto` };
   if (a.kind === 'character' && a.c.status !== 'active') return { error: `${a.c.name} no puede actuar (${a.c.status})` };
+  const nonLethal = a.kind === 'npc' && Boolean(a.n.noncombatant);
+  if (nonLethal && t.kind === 'character' && t.c.status === 'unconscious') return { error: `${a.n.name} no es de pelear y no remata a quien está en el suelo: que le deje, le eche o pida ayuda. Narra eso.` };
   // SRD: contra alguien inconsciente, ventaja (y el golpe a 0 PG suma fallos de salvación).
   if (t.kind === 'character' && t.c.status === 'unconscious' && advantage === 'none') advantage = 'advantage';
   // Un NPC inconsciente o atado no se defiende: el golpe entra solo.
@@ -158,7 +163,7 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
   if (t.kind === 'character') {
     const c = t.c;
     if (hit) {
-      const r = damageCharacter(world, c, damage, { crit: roll.natural === 20, cause: `${nameOfCombatant(a)} (${weaponName})`, ...(nowGameS === undefined ? {} : { nowGameS }) });
+      const r = damageCharacter(world, c, damage, { crit: roll.natural === 20, cause: `${nameOfCombatant(a)} (${weaponName})`, ...(nowGameS === undefined ? {} : { nowGameS }), ...(nonLethal ? { nonLethal } : {}), ...(rng ? { rng } : {}) });
       down = r.down; dead = r.died; failures = r.failures;
     }
     targetHp = `${c.hp_current}/${c.hp_max}`;
@@ -193,7 +198,8 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
     if (t.n.attitude.by_character[a.c.id] !== 'hostile') adjustTrust(world, t.n, a.c, 'attacked', worldNow(world));
     t.n.attitude.by_character[a.c.id] = 'hostile'; world.touch('npcs', t.n.id);
   }
-  if (a.kind === 'npc' && t.kind === 'character') { a.n.attitude.by_character[t.c.id] = 'hostile'; world.touch('npcs', a.n.id); }
+  // Quien no es de pelear no sigue la pelea: se queda receloso, y vuelve a hostil solo si le atacan otra vez.
+  if (a.kind === 'npc' && t.kind === 'character') { a.n.attitude.by_character[t.c.id] = nonLethal ? 'unfriendly' : 'hostile'; world.touch('npcs', a.n.id); }
 
   return {
     attacker: nameOfCombatant(a), target: nameOfCombatant(t), weapon: weaponName,
@@ -243,8 +249,8 @@ export function npcTurn(world: World, npcId: Id, targetId: Id, advantage: Advant
 export interface DueTurn { npc: Npc; target: Character }
 
 /**
- * NPC que deben actuar en este turno: en pie y sueltos, con bloque de combate,
- * hostiles con alguno de los PJ del turno que siga en pie en su misma
+ * NPC que deben actuar en este turno: en pie y sueltos, con bloque de combate
+ * y de los que pelean (no `noncombatant`), hostiles con alguno de los PJ del turno que siga en pie en su misma
  * localización, y que aún no han actuado (`acted`). Su objetivo, el primero
  * de `pcIds` con quien es hostil (el actor va primero). Sin efectos.
  */
@@ -252,7 +258,7 @@ export function dueNpcTurns(world: World, pcIds: readonly Id[], acted: ReadonlyS
   const pcs = pcIds.map((id) => world.characters.get(id)).filter((c): c is Character => Boolean(c && c.status === 'active' && !c.veiled && !c.transit));
   const out: DueTurn[] = [];
   for (const n of world.npcs.values()) {
-    if (!n.stats || !npcCanAct(n) || acted.has(n.id)) continue;
+    if (!n.stats || n.noncombatant || !npcCanAct(n) || acted.has(n.id)) continue;
     const loc = world.spots.get(n.location.id)?.location_id;
     const target = pcs.find((c) => world.characterSpot(c)?.location_id === loc && attitudeOf(n, c.id) === 'hostile');
     if (target) out.push({ npc: n, target });
@@ -306,5 +312,16 @@ export function forcedTurnText(world: World, t: ForcedTurn, readerId: Id | null,
 }
 
 export function attitudeOf(n: Npc, characterId: Id) { return n.attitude.by_character[characterId] ?? n.attitude.default; }
+
+/**
+ * ¿Viene este daño de alguien que no es de pelear? Para el daño que narra el
+ * máster sin `attack`: su nombre, o su arma si está con la víctima.
+ */
+export function nonLethalSource(world: World, target: Character, source: string): boolean {
+  const s = source.toLowerCase();
+  const loc = world.characterSpot(target)?.location_id;
+  return [...world.npcs.values()].some((n) => n.noncombatant && n.status === 'alive' && (s.includes(n.name.toLowerCase())
+    || (world.spots.get(n.location.id)?.location_id === loc && Boolean(n.stats) && s.includes(n.stats!.attack_name.toLowerCase()))));
+}
 
 export { stabilizeIfAway } from './death.js';

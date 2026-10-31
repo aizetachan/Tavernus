@@ -16,11 +16,11 @@ import { hiddenSpots, knownSpots, unseenSpots } from '../engine/spots.js';
 import { containerLoads, inventoryDetailed, inventoryView } from '../engine/inventory.js';
 import { SKILLS, armorClass } from '../engine/rules.js';
 import { activeJobs } from '../engine/progress.js';
-import { contractArticles, descriptorOf } from '../engine/narrate.js';
+import { contractArticles, descriptorOf, fmtDuration } from '../engine/narrate.js';
 import { attitudeOf, dueNpcTurns } from '../engine/combat.js';
 import { encounterAt } from '../engine/encounter.js';
 import { describeHook } from '../engine/hooks.js';
-import { AHEAD_NOTICE_S, aheadBy, travelBlock } from '../engine/travel.js';
+import { AHEAD_NOTICE_S, aheadBy, justBack, travelBlock } from '../engine/travel.js';
 import { scheduleContext } from '../engine/schedule.js';
 import { orderLine } from '../engine/npcorders.js';
 import { clueBlocked, openSources, storyContext } from '../engine/story.js';
@@ -48,7 +48,7 @@ import { hhmm } from '../engine/schedule.js';
 import { currencyOf, money } from '../engine/money.js';
 import { priceFor } from '../engine/standing.js';
 import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
-import { talkPlan, talkScript, type TalkPlan } from '../engine/talk.js';
+import { socialOutcomeLine, talkPlan, talkScript, type TalkPlan } from '../engine/talk.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
 const LENGTH_ES = { short: 'uno o dos párrafos cortos de narración, unas 60-90 palabras sin contar lo que se dice; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
@@ -269,6 +269,13 @@ function aheadText(engine: Engine, actor: Character): string {
   return `\nVA POR DELANTE DEL MUNDO: esa es su hora, pero para todos los demás son las ${hhmm(g)}. Los NPC, los horarios y los ruidos son de las ${hhmm(g)}: la gente sigue en lo que hacía a esa hora (para ellos no ha pasado la noche). No narres que el pueblo duerme ni que han pasado horas para nadie más que el actor; si lo nota, es que va adelantado, y el mundo le alcanza solo.`;
 }
 
+/** Acaba de volver y el mundo le había adelantado (travel.ts, thawClock): para el PJ ese tiempo no ha pasado. */
+function backText(engine: Engine, actor: Character): string {
+  const gap = justBack(actor, engine.nowFor(actor));
+  if (!gap) return '';
+  return `\nACABA DE VOLVER: su jugador estuvo fuera y a su personaje no le ha pasado el tiempo, pero el mundo ha seguido ${fmtDuration(gap.to_game_s - gap.from_game_s)} (de las ${hhmm(gap.from_game_s)} a las ${hhmm(gap.to_game_s)}). No está cansado ni hambriento por eso ni recuerda ese rato: lo que haya cambiado lo descubre ahora.`;
+}
+
 function boardLine(jobs: string[]): string {
   return jobs.length ? `Tablón: ${jobs.join(' · ')}.` : 'Tablón: vacío.';
 }
@@ -281,7 +288,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   const spot = world.spot(pos.spot_id);
   const L: string[] = [];
 
-  L.push(`## Tiempo\n${engine.clock.format(nowG)}. Luz: ${lightAt(engine.clock, loc, nowG)}. 1 h real = 3 h de juego.${aheadText(engine, actor)}`);
+  L.push(`## Tiempo\n${engine.clock.format(nowG)}. Luz: ${lightAt(engine.clock, loc, nowG)}. 1 h real = 3 h de juego.${aheadText(engine, actor)}${backText(engine, actor)}`);
 
   // La luz real ya va en Tiempo; el estado solo si hay algo.
   L.push(`## Localización: ${loc.name} (${loc.id})\n${loc.description_base}\nAmbiente: ruido ${loc.ambience.noise}${loc.ambience.smell ? `, olor a ${loc.ambience.smell}` : ''}.${Object.keys(loc.state).length ? ` Estado: ${JSON.stringify(loc.state)}` : ''}`);
@@ -377,7 +384,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const crime = npcCrimeLine(world, n, actor, nowG);
     present.push([
       `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}.${crime ? `\n  ${crime}\n ` : ''} ${n.description}`,
-      `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage})${(n.stats.multiattack ?? 1) > 1 ? `, multiataque ×${n.stats.multiattack}` : ''}.${n.bound ? ' ATADO: no se mueve ni pelea.' : ''}` : ' No combate.'}`,
+      `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage})${(n.stats.multiattack ?? 1) > 1 ? `, multiataque ×${n.stats.multiattack}` : ''}.${n.bound ? ' ATADO: no se mueve ni pelea.' : ''}${n.noncombatant ? ' No es de pelear: se defiende si le atacan, pero no remata a nadie; le deja, le echa, pide ayuda o llama a la guardia.' : ''}` : ' No combate.'}`,
       // Opinión con el actor, temas que tiene en la cabeza y reacción a sus etiquetas (standing.ts, worldrules.ts).
       ...npcStandingLines(world, n, actor, nowG),
       n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${money(world, priceFor(n, actor.id, b.price, 'sell'))}`).join(', ')}` : '',
@@ -428,7 +435,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     tagsLine(world, actor),
     `FUE ${actor.abilities.str} DES ${actor.abilities.dex} CON ${actor.abilities.con} INT ${actor.abilities.int} SAB ${actor.abilities.wis} CAR ${actor.abilities.cha}. Competente en: ${skills.join(', ') || 'nada'}.`,
     actor.appearance ? `Aspecto: ${actor.appearance}` : '',
-    actor.backstory ? `Historia: ${actor.backstory}` : '',
+    // El primer instante solo vale para abrir la partida: repetido cada turno, sus «botas tras la puerta» duraban días.
+    actor.backstory ? `Historia: ${intro ? actor.backstory : actor.backstory.replace(/^Primer instante:.*(?:\n|$)/m, '').trimEnd()}` : '',
     characterFacts(actor).length ? `Ha contado de sí (verdad para su personaje, no para el mundo; record_character_fact): ${characterFacts(actor).slice(-FACTS_IN_CONTEXT).map((f) => dot(f.text)).join(' ')}` : '',
     `Manos: ${inv.hands.main ?? '—'} / ${inv.hands.off ?? '—'}. Monedas: ${money(world, inv.coins)} (= ${inv.coins} de ${currencyOf(world.campaign).at(-1)!.name}; los amount de los tools van en esa moneda). Carga: ${inv.encumbrance.level}.`,
     openDebts(actor).length ? `Deudas (set_debt, pawn_item, settle_debt con quien la cobra; lo que no esté aquí no se debe):\n${openDebts(actor).map((d) => `- ${debtLine(world, d, nowG, (n) => n.name, true)}. Motivo: ${d.reason}.`).join('\n')}` : '',
@@ -501,7 +509,10 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       'Un párrafo corto. Ejecuta los cambios con tools si los hay. Sin tirada del jugador. Con 2-3 acciones sugeridas para reaccionar.',
     ].join('\n'));
   } else if (roll) {
-    L.push(`## Resultado de la tirada\nAcción original: «${roll.original_text}»\n${roll.result.label}: ${roll.result.breakdown} → ${roll.result.success === null ? 'sin CD' : roll.result.success ? 'ÉXITO' : 'FALLO'}${roll.result.natural ? ` (${roll.result.natural} natural)` : ''}.${rollLine(roll.result)}\nNarra la consecuencia y aplica los cambios con tools. No pidas otra tirada para esta misma acción.`);
+    // Una tirada social con éxito da el camino, no el secreto (talk.ts).
+    const skill = Object.entries(SKILLS).find(([, v]) => roll.result.label.startsWith(v.es))?.[0];
+    const social = skill ? socialOutcomeLine(world, engine.events.all(), actor, skill, roll.result.success, engine.nowFor(actor)) : null;
+    L.push(`## Resultado de la tirada\nAcción original: «${roll.original_text}»\n${roll.result.label}: ${roll.result.breakdown} → ${roll.result.success === null ? 'sin CD' : roll.result.success ? 'ÉXITO' : 'FALLO'}${roll.result.natural ? ` (${roll.result.natural} natural)` : ''}.${rollLine(roll.result)}${social ? `\n${social}` : ''}\nNarra la consecuencia y aplica los cambios con tools. No pidas otra tirada para esta misma acción.`);
   } else if (engine.sceneHints(actor.id)?.round || engine.sceneHints(actor.id)?.group) {
     // Turno compartido: lo de cada uno va en su bloque (Ronda o Conversación de grupo), no como acción del actor.
     L.push(`## Turno compartido\nLo ha mandado más de un jugador a la vez (abajo, cada uno con lo suyo). El bloque «Actor» es solo el primero que actuó: no le hables a él como si fuera el único; las fichas de los demás, con get_character.`);

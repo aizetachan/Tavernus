@@ -12,7 +12,7 @@ import { threadKind } from '../../engine/notices.js';
 import type { QuestChange } from '../../engine/progress.js';
 
 /** Pestaña del cajón a la que lleva el enlace de un aviso. */
-export type NoticeTab = 'journal' | 'sheet' | 'bag';
+export type NoticeTab = 'journal' | 'sheet' | 'bag' | 'tablon';
 
 /**
  * Aviso de una línea: `link` + `tab`, un enlace a esa pestaña; `tone` tiñe el texto (una tirada que sale bien o mal).
@@ -49,7 +49,7 @@ type NoticeEvent = Pick<GameEvent, 'action_type' | 'narration_private' | 'observ
  */
 export function noticeOf(e: NoticeEvent, readerId: Id | null = e.actor_id ?? null, text?: string): WebNotice | null {
   // El tablón cambia, pero sus encargos no entran en el Diario hasta que el PJ lo lee.
-  if (e.action_type === 'board') return webNotice('Hay avisos nuevos en el tablón de la plaza: pásate a leerlos');
+  if (e.action_type === 'board') return webNotice('Hay avisos nuevos en el tablón de la plaza: pásate a leerlos', { link: 'ver el Tablón', tab: 'tablon' });
   const q = e.payload?.['quest'] as QuestChange | undefined;
   if (/^progress_/.test(e.action_type) && q && QUEST_HEAD[q.event]) {
     // Un rumor es lo que se oye en el sitio: una línea de ambiente, sin enlace ni entrada en el Diario.
