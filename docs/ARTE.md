@@ -29,7 +29,7 @@ assets/campaigns/brezal/
   cambia o añade ids, se cambia el nombre del fichero y la línea del manifiesto, no al revés.
 - **No va en `public/`**: lo de `public/` se sirve a cualquiera, y una vista del sótano o un plano con la
   trampilla destriparían la partida. El motor copia cada imagen a `data/games/<partida>/images/` cuando el
-  jugador llega a ella, y desde ahí se sirve como las generadas (web por `/images`, Discord como adjunto).
+  jugador llega a ella, y desde ahí se sirve como las generadas (en la web, por `/images`).
 - `manifest.json` ya lista todas las rutas esperadas: subir un fichero con ese nombre basta para que se use.
   Una ruta cuyo fichero no existe se ignora (se genera). Para otra campaña: otra carpeta con su manifiesto y su
   lista `campaigns` (los `campaign.id` a los que sirve; hoy `brezal` y `demo`).
@@ -66,8 +66,8 @@ sobre un fondo casi negro, con un único acento ámbar.
 
 ## Tamaños y formatos
 
-Todo en **JPEG** (`.jpg`), sRGB, calidad 80–85, progresivo y sin metadatos. Hoy el servidor solo sirve JPEG y
-Discord lo muestra sin conversiones; WebP queda para cuando el servidor lo admita.
+Todo en **JPEG** (`.jpg`), sRGB, calidad 80–85, progresivo y sin metadatos. Hoy el servidor solo sirve JPEG;
+WebP queda para cuando el servidor lo admita.
 
 | Tipo | Medida | Peso máx. | Encuadre |
 |---|---|---|---|

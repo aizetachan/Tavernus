@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Engine } from '../src/engine/engine.js';
-import { renderSheet } from '../src/adapters/discord/sheet.js';
-import { slug } from '../src/adapters/discord/bot.js';
+import { sheetView } from '../src/adapters/sheet-view.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
 describe('alta de personaje y presencia', () => {
@@ -9,26 +8,26 @@ describe('alta de personaje y presencia', () => {
     const { engine, repo } = await bootEngine();
     const texts: string[] = [];
     engine.onDelivery((d) => texts.push(`${d.character_id}: ${d.text}`));
-    const r = await engine.createCharacter('discord:123', 'Ánxela do Mar');
+    const r = await engine.createCharacter('web:123', 'Ánxela do Mar');
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     // Taberna y plaza ya tienen un PJ cada una; el claro está vacío.
     expect(r.character.location).toEqual({ type: 'spot', id: 'sp_cl_sendero' });
-    expect(engine.characterByUser('discord:123')?.id).toBe(r.character.id);
+    expect(engine.characterByUser('web:123')?.id).toBe(r.character.id);
     expect(await engine.command(r.character.id, '/inventory')).toContain('mochila: antorcha ×5, ración ×5, cuerda de cáñamo');
     expect(await engine.command(r.character.id, '/inventory')).toContain('Manos: espada larga / escudo');
     // Nadie está en el claro: solo ella recibe su llegada.
     expect(texts).toEqual([`${r.character.id}: Llegas a Claro del Roble.`]);
     // El siguiente reparte: ahora las tres tienen uno; empate → el primero de la lista.
-    const r2 = await engine.createCharacter('discord:789', 'Bruno');
+    const r2 = await engine.createCharacter('web:789', 'Bruno');
     expect(r2.ok && r2.character.location.id).toBe('sp_tab_puerta');
     // Los PJ de la partida se conocen por su nombre desde que coinciden: Kael ya sabe quién es Bruno.
     expect(texts).toContain('ch_kael: Bruno llega a la puerta.');
     expect(repo.writes.some((w) => w.collection === 'characters' && w.id === r.character.id)).toBe(true);
     // Validaciones.
-    expect(await engine.createCharacter('discord:123', 'Otro')).toMatchObject({ ok: false, reason: 'Ya tienes un personaje.' });
-    expect(await engine.createCharacter('discord:456', 'kael')).toMatchObject({ ok: false, reason: 'Ese nombre ya está en uso.' });
-    expect(await engine.createCharacter('discord:456', 'X')).toMatchObject({ ok: false });
+    expect(await engine.createCharacter('web:123', 'Otro')).toMatchObject({ ok: false, reason: 'Ya tienes un personaje.' });
+    expect(await engine.createCharacter('web:456', 'kael')).toMatchObject({ ok: false, reason: 'Ese nombre ya está en uso.' });
+    expect(await engine.createCharacter('web:456', 'X')).toMatchObject({ ok: false });
   });
 
   it('conectado = presencia online o acción en los últimos 30 min; si no, velo', async () => {
@@ -61,17 +60,12 @@ describe('alta de personaje y presencia', () => {
 
   it('la hoja viva se renderiza desde los datos', async () => {
     const { engine } = await bootEngine();
-    const embed = renderSheet(engine, 'ch_kael').toJSON();
-    expect(embed.title).toBe('Kael · humano guerrero · nivel 1');
-    expect(embed.fields?.find((f) => f.name === 'Combate')?.value).toContain('PG 12/12 · CA 11');
-    expect(embed.description).toContain('Taberna del Jabalí, la barra');
-    expect(embed.fields?.find((f) => f.name === 'Manos')?.value).toBe('daga / —');
-    expect(embed.fields?.find((f) => f.name === 'mochila')?.value).toBe('cuerda de cáñamo, antorcha ×3');
-  });
-
-  it('slug de canal', () => {
-    expect(slug('Ánxela do Mar')).toBe('anxela-do-mar');
-    expect(slug('  Kael!! ')).toBe('kael');
+    const sheet = sheetView(engine, 'ch_kael');
+    expect(sheet.title).toBe('Kael · humano guerrero · nivel 1');
+    expect(sheet.fields.find((f) => f.name === 'Combate')?.value).toContain('PG 12/12 · CA 11');
+    expect(sheet.description).toContain('Taberna del Jabalí, la barra');
+    expect(sheet.fields.find((f) => f.name === 'Manos')?.value).toBe('daga / —');
+    expect(sheet.fields.find((f) => f.name === 'mochila')?.value).toBe('cuerda de cáñamo, antorcha ×3');
   });
 });
 

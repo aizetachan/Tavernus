@@ -51,6 +51,8 @@ export interface Campaign {
   real_epoch_ms: number;
   /** Segundos de juego transcurridos en `real_epoch_ms`. */
   game_epoch_s: number;
+  /** Reloj parado (no queda nadie jugando) desde ese instante real (clock.ts). Ausente: corre. */
+  clock_paused_real_ms?: number | null;
   calendar: Calendar;
   /** Puntos de inicio con su origen narrativo. Un PJ nuevo aparece en el de la localización menos poblada. */
   starting_points: { spot_id: Id; origin: string }[];
@@ -138,6 +140,17 @@ export interface DeathRules {
   respawn_spot_id: Id | null;
   /** Quién le encontró y le trajo, para la narración de la vuelta («Ilse te encontró…»). */
   respawn_story: string;
+  /** Sitios donde puede volver, por preferencia: el primero donde le acojan (death.ts). Vacío: `respawn_spot_id` y `respawn_story`. */
+  respawn_points: RespawnPoint[];
+}
+
+/** Un sitio donde vuelve un PJ muerto. */
+export interface RespawnPoint {
+  spot_id: Id;
+  /** Quién le encontró y le trajo, para la narración de la vuelta. */
+  story: string;
+  /** Quien le acoge: si ha muerto o no quiere verle, este sitio no vale. */
+  by_npc_id?: Id;
 }
 
 /** Evento de generación de un mundo (src/worldgen). */
@@ -456,6 +469,8 @@ export interface Character {
   last_seen_event_id: Id | null;
   /** Fijado al desconectar: desde dónde contar el /recap al volver. null = sin recap pendiente. */
   recap_from: { event_id: Id | null } | null;
+  /** Hasta qué evento ha leído el jugador su hilo (lo dice la página con el latido): «Hasta aquí habías leído» y «Mientras no estabas». */
+  read_seq?: number;
   connected: boolean;
   veiled: boolean;
   /** Mundo generado: su situación inicial (src/worldgen). */
@@ -664,6 +679,8 @@ export interface Npc {
   knowledge?: NpcKnowledge[];
   /** Carácter: la adulación le resta confianza en vez de sumarla (trust.ts). Sin campo, la agradece. */
   dislikes_flattery?: boolean;
+  /** No es de pelear (combat.ts): no entra solo en los turnos del combate y, si golpea, no mata: deja caído y estable. Sin campo, pelea. */
+  noncombatant?: boolean;
   /** Confianza en cada PJ (trust.ts): puntos y lo ganado en la última charla. */
   trust?: Record<Id, NpcTrust>;
   memory: NpcMemory[];

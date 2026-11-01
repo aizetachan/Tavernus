@@ -5,7 +5,7 @@
  * La demo jugable del menú ya no sale de aquí: «Brezal (demo)» es la campaña
  * escrita de src/data/campaigns/brezal (once lugares, historia en tres actos).
  * Esto queda como fixture pequeño y estable de los tests (Kael y Mira), como
- * semilla de la partida principal heredada (CAMPAIGN_ID=demo, Discord) y como
+ * semilla de la partida principal heredada (CAMPAIGN_ID=demo, REPL) y como
  * fuente de DEFAULT_MASTER y del catálogo común de objetos (worldgen/fill.ts).
  */
 

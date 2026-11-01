@@ -34,7 +34,7 @@ import { nameFor, storyQuestAction, tickStory, type StoryOutput } from './story.
 import { trustFromRoll, trustNotice } from './trust.js';
 import { fillSet, setsWanting, speakerLabel, tickChatter, type ChatterWriter } from './chatter.js';
 import { tickWorld } from './worldrules.js';
-import { aheadNotice, aheadUntil, clearAheadIfCaught, crossesLocations, encounterSuggestions, encounterTeaser, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
+import { aheadNotice, aheadUntil, caughtUp, clearAheadIfCaught, justBack, crossesLocations, encounterSuggestions, encounterTeaser, freezeClock, frozenAt, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, thawClock, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
 import { seededRng, type Rng } from './dice.js';
 import { harvest } from './resources.js';
 import { spawnItem } from './inventory.js';
@@ -43,11 +43,10 @@ import { characterCheck, type CheckKind } from './rules.js';
 import { activeJobs, addPractice, rotateBoard, type ProgressEvent } from './progress.js';
 import { resolveAttack } from './combat.js';
 import { attackRoll, checkRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
-import { abilityModifier } from './dice.js';
 import { passivePerception, type Ability } from './rules.js';
 import { casterOf, initClass, levelUp, levelUpText, makeChoice, setSpells } from './levels.js';
 import { spellById } from '../data/srd/spells.js';
-import { ABILITIES, backgroundById, classById, raceById, STANDARD_ARRAY } from '../data/srd/index.js';
+import { characterNameProblem, cleanCharacterName, newCharacter, resolveCharacterSpec } from './chargen.js';
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
 import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, NPC_DOWN_HINT, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, wakeNpcs, type DeathSave } from './death.js';
@@ -128,7 +127,7 @@ type Arrival = NonNullable<QuietArrival['arrived']>;
 export interface SceneNotice { kind: 'round'; location_id: Id; n: number; acted: Id[]; waiting: Id[]; deadline_ms: number; open: boolean }
 export type SceneListener = (n: SceneNotice) => void;
 interface Batch { items: { id: Id; text: string }[]; members: Id[]; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; timer: NodeJS.Timeout }
-interface Round { n: number; items: Map<Id, string>; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; deadline_ms: number; timer: NodeJS.Timeout }
+interface Round { n: number; items: Map<Id, string>; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; deadline_ms: number; timer: NodeJS.Timeout; /** Con el reloj parado: lo que le quedaba. */ left_ms?: number }
 
 export type MasterResolution =
   | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number }; /** El actor que dio voz al NPC (ai/actor.ts), si hubo: su gasto aparte. */ actor?: unknown }
@@ -146,6 +145,8 @@ export interface MasterCall {
   model: string | null;
   ms: number;
   usage: { input: number; output: number; cache_read: number; cache_write: number; iterations: number } | null;
+  /** El actor que dio voz al NPC (ai/actor.ts), si hubo: su gasto aparte. */
+  actor?: { model: string; input: number; output: number; cache_read: number; cache_write: number };
   error?: { reason: string; message: string };
 }
 export type MasterCallListener = (c: MasterCall) => void;
@@ -179,6 +180,11 @@ export interface EngineOptions {
   groupWindowMs?: number;
   /** Tiempo de una ronda en escena tensa (ms; ROUND_SECONDS, 60 s por defecto). */
   roundMs?: number;
+  /**
+   * Al cargar no hay nadie jugando: el reloj se queda parado en el último minuto procesado y los PJ, congelados, hasta
+   * que alguien entre. Así el tiempo con la partida cerrada o el servidor apagado no cuenta. Lo pide el gestor de partidas.
+   */
+  pauseOnBoot?: boolean;
 }
 
 export class Engine {
@@ -186,7 +192,7 @@ export class Engine {
   readonly clock: GameClock;
   readonly events: EventLog;
   private readonly repo: Repository;
-  private readonly now: () => number;
+  readonly now: () => number;
   private pending = new Map<string, Change>();
   private queues = new Map<Id, Promise<unknown>>();
   /** Acciones de jugadores que esperan en la cola de su localización (el máster las ve como «a la vez»). */
@@ -214,7 +220,9 @@ export class Engine {
    * Verbos mecánicos que no pasan por el master aunque esté configurado. Inventario, quién y dónde, solo la palabra
    * sola y sin interrogación: «¿Dónde está el granero?» o «¿dónde?» en plena charla son preguntas al NPC.
    */
-  private static readonly MECHANICAL = /^(?:(?:inventario|inventory|qui[eé]n|who|d[oó]nde|where)[\s.!]*$|(?:dormir|duermo|me duermo|descansar|descanso|sleep|despierto|despertar|me despierto|wake|parar|me paro|me detengo|stop)\b)/i;
+  private static readonly MECHANICAL = /^(?:(?:inventario|inventory|qui[eé]n|who|d[oó]nde|where|parar|me paro|me detengo|stop)[\s.!]*$|(?:dormir|duermo|me duermo|descansar|descanso|sleep|despierto|despertar|me despierto|wake)\b)/i;
+  /** Empieza por pararse: de camino lo para el motor; quieto, «Me detengo junto a la cerca y miro» es una acción más y va al máster. */
+  private static readonly STOPS = /^(?:parar|me paro|me detengo|stop)\b/i;
 
   /** La cuenta de la IA sin saldo (master.ts, noCredit): no es esperar y reintentar, lo tiene que recargar el anfitrión. */
   static readonly NO_CREDIT = 'El narrador se ha quedado sin crédito: la cuenta de la IA no tiene saldo. El anfitrión tiene que recargarla; en cuanto lo haga, podréis seguir donde lo dejasteis.';
@@ -263,7 +271,7 @@ export class Engine {
     this.realClock = !opts.now;
     this.world = new World(snapshot);
     this.clock = GameClock.fromCampaign(this.world.campaign);
-    this.events = new EventLog(this.world, this.clock, lastSeq);
+    this.events = new EventLog(this.world, this.clock, lastSeq, this.now);
     this.world.onChange((c) => this.pending.set(`${c.collection}/${c.id}`, c));
     // Antes de persistir y entregar: el evento sale ya con sus momentos en el payload.
     this.events.onEvent((e) => this.noteMoments(e));
@@ -326,7 +334,7 @@ export class Engine {
     const past = await opts.repo.loadEvents(opts.campaignId, 0);
     const lastSeq = past.reduce((m, e) => Math.max(m, e.seq), 0);
     const engine = new Engine(snapshot, opts, lastSeq);
-    // Al cargar no hay nadie conectado (aunque se guardara así): lo dirá su presencia (una pestaña, Discord) o su primera
+    // Al cargar no hay nadie conectado (aunque se guardara así): lo dirá su presencia (una pestaña) o su primera
     // acción. Sin dormir a nadie: si no vuelve, el velo llega con setConnected cuando el adaptador lo dé por ido.
     for (const c of engine.world.characters.values()) c.connected = false;
     // Partidas de antes de la regla: los PJ se conocen por su nombre desde que coinciden en la partida.
@@ -335,6 +343,7 @@ export class Engine {
     engine.seedMoments(past);
     engine.restorePendingRolls(past);
     await engine.installTickers();
+    if (opts.pauseOnBoot) await engine.holdAtBoot();
     if (migrated) {
       engine.world.touch('campaign', snapshot.campaign.id);
       for (const c of engine.world.characters.values()) engine.world.touch('characters', c.id);
@@ -406,10 +415,114 @@ export class Engine {
       if (changed) this.world.touch('npcs', n.id);
     }
     for (const c of this.world.characters.values()) {
+      if (frozenAt(c) !== null) continue; // no le corren: al volver se aplazan (thawClock)
       const before = c.conditions.length;
       c.conditions = c.conditions.filter((x) => x.expires_game_s === null || x.expires_game_s > tickGameS);
       if (c.conditions.length !== before) this.world.touch('characters', c.id);
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Reloj parado (docs/MULTIJUGADOR.md, «Reloj y desconexión»): para quien no está no pasa el tiempo.
+  // -------------------------------------------------------------------------
+
+  /** Hasta dónde ha procesado el mundo con el reloj parado; null, si corre. */
+  private settledG: number | null = null;
+
+  /** ¿Hay alguien jugando? Un ausente o un desconectado no cuentan, aunque su PJ siga en el mundo. */
+  private someonePlaying(): boolean {
+    return [...this.world.characters.values()].some((c) => c.status !== 'retired' && c.connected && !c.away);
+  }
+
+  /** El jugador deja de estar: su reloj se congela y, si era el último, se para el mundo a la hora que él llevaba. */
+  private stopClockFor(c: Character): void {
+    const own = this.nowFor(c);
+    freezeClock(c, this.gameNow());
+    this.world.touch('characters', c.id);
+    if (!this.clock.paused && !this.someonePlaying()) this.pauseClock(own);
+  }
+
+  /** El jugador vuelve: si estaba parado, el mundo sigue; él se iguala al mundo si este le adelantó. */
+  private startClockFor(c: Character): void {
+    if (c.away) return;
+    if (this.clock.paused && this.someonePlaying()) this.resumeClock();
+    this.catchUp(c);
+  }
+
+  private catchUp(c: Character): void {
+    if (frozenAt(c) === null) return;
+    thawClock(c, this.gameNow());
+    this.world.touch('characters', c.id);
+  }
+
+  /**
+   * Nadie jugando: el reloj se para. Antes, el mundo alcanza a quien se va si iba por delante (lo que ya ha vivido
+   * durmiendo o viajando): al volver, cada NPC está donde toca a su hora. Lo procesa el siguiente tick.
+   * La ronda abierta y las ventanas decisivas esperan con lo que les quedaba.
+   */
+  private pauseClock(targetG: number): void {
+    const camp = this.world.campaign;
+    const behind = targetG - this.gameNow();
+    if (behind > 0) { this.clock.shift(behind); camp.game_epoch_s += behind; }
+    const at = this.now();
+    this.clock.pause(at);
+    camp.clock_paused_real_ms = at;
+    this.world.touch('campaign', camp.id);
+    for (const r of this.rounds.values()) { clearTimeout(r.timer); r.left_ms = Math.max(0, r.deadline_ms - Date.now()); }
+    for (const t of this.decisiveTimers.values()) clearTimeout(t);
+    this.decisiveTimers.clear();
+  }
+
+  /** Vuelve alguien: el reloj sigue donde estaba y lo que iba en tiempo real se aplaza lo que ha estado parado. */
+  private resumeClock(): void {
+    const camp = this.world.campaign;
+    const ms = this.clock.resume(this.now());
+    camp.real_epoch_ms = this.clock.realEpoch;
+    delete camp.clock_paused_real_ms;
+    this.world.touch('campaign', camp.id);
+    this.settledG = null;
+    for (const c of this.world.characters.values()) {
+      for (const o of c.offers ?? []) o.expires_real_ms += ms;
+      for (const r of c.reactions ?? []) r.expires_real_ms += ms;
+      if (c.decisive) { c.decisive.opened_real_ms += ms; this.armDecisive(c, c.decisive.event_id, c.decisive.window_s * 1000 - (this.now() - c.decisive.opened_real_ms)); }
+      this.world.touch('characters', c.id);
+    }
+    for (const [locId, r] of this.rounds) {
+      if (r.left_ms === undefined) continue;
+      clearTimeout(r.timer);
+      r.deadline_ms = Date.now() + r.left_ms;
+      r.timer = setTimeout(() => void this.flushRound(locId), r.left_ms);
+      delete r.left_ms;
+      this.notifyScene(this.roundNotice(locId, r, true));
+    }
+  }
+
+  /** Al cargar (EngineOptions.pauseOnBoot): parado en el último minuto procesado y todos congelados. */
+  private async holdAtBoot(): Promise<void> {
+    const camp = this.world.campaign;
+    if (!this.clock.paused) {
+      const last = this.tickers.find((t) => t.name === 'minute')?.lastTick ?? this.gameNow();
+      const at = Math.min(this.now(), this.clock.realAt(last));
+      this.clock.pause(at);
+      camp.clock_paused_real_ms = at;
+      this.world.touch('campaign', camp.id);
+    }
+    for (const c of this.world.characters.values()) {
+      if (c.status === 'retired' || frozenAt(c) !== null) continue;
+      freezeClock(c, this.gameNow());
+      this.world.touch('characters', c.id);
+    }
+    await this.flush();
+  }
+
+  /** Reloj de la amenaza: el del PJ presente más adelantado. Dormir o viajar también la acerca. */
+  private threatNow(nowG: number): number {
+    let at = nowG;
+    for (const c of this.world.characters.values()) {
+      if (c.status === 'retired' || c.status === 'dead' || !c.connected || c.away) continue;
+      at = Math.max(at, nowFor(c, nowG));
+    }
+    return at;
   }
 
   /** Ahora de un PJ: el del mundo, o su hora de llegada si ha viajado por delante del reloj (travel.ts). */
@@ -497,7 +610,7 @@ export class Engine {
         }
         // Con master, la llegada al destino la narra él (escena de llegada) salvo que sea trivial: entonces, plantilla.
         // El aviso plano queda para los tramos intermedios y para quien no está mirando.
-        const live = last && this.master !== null && c.status === 'active' && c.connected;
+        const live = last && this.master !== null && c.status === 'active' && c.connected && !c.away;
         const crossed = (this.tripFrom.get(c.id) ?? startLoc) !== spot.location_id;
         const plan = live ? this.arrivalPlan(c, spot.id, firstVisit, crossed) : null;
         if (last) this.tripFrom.delete(c.id);
@@ -551,7 +664,7 @@ export class Engine {
       }, this.clock.realAt(enc.at_game_s));
       return;
     }
-    const live = this.master !== null && c.status === 'active' && c.connected;
+    const live = this.master !== null && c.status === 'active' && c.connected && !c.away;
     const suggested = encounterSuggestions(this.world, enc);
     this.events.emit({
       actor_id: c.id, action_type: 'travel_encounter',
@@ -638,25 +751,34 @@ export class Engine {
     if (this.tickerTask) return this.tickerTask;
     this.tickerTask = (async () => {
       const nowG = this.gameNow();
-      for (const t of this.tickers) {
-        if (t.run(nowG) > 0) await this.repo.saveTicker(this.world.campaign.id, t.name, t.snapshot());
+      // Parado y ya al día: el mundo no hace nada. Solo la presencia, que va en tiempo real (el velo).
+      const idle = this.clock.paused && this.settledG === nowG;
+      if (!idle) {
+        for (const t of this.tickers) {
+          if (t.run(nowG) > 0) await this.repo.saveTicker(this.world.campaign.id, t.name, t.snapshot());
+        }
+        this.settleAll(nowG);
+        this.tickDeath(nowG);
+        // Agenda (schedule.ts): eventos a su hora y horarios de NPC, sin IA.
+        tickSchedule(this.world, nowG, (i, s) => { this.events.emit(i, this.clock.realAt(s)); });
+        this.advanceStory(nowG);
+        // La agenda ha movido a la gente: corre la noticia de lo que haya pasado y la ley actúa (crime.ts).
+        this.announceIncidents();
+        // Lo que la gente comenta al pasar (chatter.ts), sin máster.
+        this.emitChatter(nowG);
       }
-      this.settleAll(nowG);
-      this.tickDeath(nowG);
-      // Agenda (schedule.ts): eventos a su hora y horarios de NPC, sin IA.
-      tickSchedule(this.world, nowG, (i, s) => { this.events.emit(i, this.clock.realAt(s)); });
-      this.advanceStory(nowG);
-      // La agenda ha movido a la gente: corre la noticia de lo que haya pasado y la ley actúa (crime.ts).
-      this.announceIncidents();
-      // Lo que la gente comenta al pasar (chatter.ts), sin máster.
-      this.emitChatter(nowG);
       for (const id of this.presence.keys()) this.refreshConnection(id);
-      this.expireOffers();
-      this.expireReactions();
-      this.serveQueues();
-      this.checkDecisiveWindows();
-      this.fireTimeHooks(nowG);
-      pruneHooks(this.world, nowG);
+      if (!this.clock.paused) {
+        this.expireOffers();
+        this.expireReactions();
+        this.serveQueues();
+        this.checkDecisiveWindows();
+      }
+      if (!idle) {
+        this.fireTimeHooks(nowG);
+        pruneHooks(this.world, nowG);
+      }
+      this.settledG = this.clock.paused ? nowG : null;
       await this.flush();
     })();
     try { await this.tickerTask; } finally { this.tickerTask = null; }
@@ -673,7 +795,7 @@ export class Engine {
     const byLoc = new Map<Id, Hook[]>();
     for (const h of due) byLoc.set(h.location_id, [...(byLoc.get(h.location_id) ?? []), h]);
     for (const [locId, hooks] of byLoc) {
-      const here = this.world.charactersInLocation(locId).filter((c) => c.status === 'active' && c.connected && !c.transit);
+      const here = this.world.charactersInLocation(locId).filter((c) => c.status === 'active' && c.connected && !c.away && !c.transit);
       const fire: { c: Character; hooks: Hook[] }[] = [];
       for (const h of hooks) {
         const c = h.for_character_id ? here.find((x) => x.id === h.for_character_id) : here[0];
@@ -736,7 +858,7 @@ export class Engine {
     await this.tick();
     const c = this.world.character(characterId);
     this.lastAction.set(c.id, this.now());
-    if (!c.connected) this.setConnected(c.id, true);
+    this.setConnected(c.id, true);
     // Pregunta sobre el juego («¿qué hechizos tengo?»): contesta el sistema ya, sin cola ni máster, y no gasta la tirada pendiente ni el turno de la ronda.
     const ask = this.deterministic ? parseInfo(text) : null;
     // Dormido o en el suelo no ve a nadie: eso, al camino de siempre; su hoja sí la consulta.
@@ -782,7 +904,7 @@ export class Engine {
       const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryTrivial(c, clean));
       if (fast) {
         r = fast;
-      } else if (this.master && c.status === 'active' && !Engine.MECHANICAL.test(clean)) {
+      } else if (this.master && c.status === 'active' && !this.isMechanical(c, clean)) {
         r = await this.resolveWithMaster(c, clean, undefined, undefined, undefined, decisive);
         if (!r.ok && r.text === '') {
           r = this.resolveAction(c, clean); // fallo del master: parser plano
@@ -828,6 +950,11 @@ export class Engine {
     const locId = this.world.characterSpot(c)?.location_id;
     const happening = locId ? [...new Set(activeIn(this.world, locId, g).map(({ event }) => event.title))] : [];
     return aheadNotice(c, g, this.clock, happening);
+  }
+
+  /** ¿Lo resuelve el parser plano, sin máster? */
+  private isMechanical(c: Character, text: string): boolean {
+    return Engine.MECHANICAL.test(text) || (Boolean(c.transit) && Engine.STOPS.test(text));
   }
 
   /** ¿Es moverse (a otro punto o a otra localización), sola o con algo que hacer allí? */
@@ -1209,10 +1336,13 @@ export class Engine {
   private openDecisive(c: Character, d: { threat: string; npc_id: string | null }, eventId: Id): void {
     c.decisive = { opened_real_ms: this.now(), window_s: Engine.DECISIVE_WINDOW_S, threat: d.threat, npc_id: d.npc_id, event_id: eventId };
     this.world.touch('characters', c.id);
-    if (this.realClock) {
-      const t = setTimeout(() => { void this.expireDecisive(c.id, eventId); }, Engine.DECISIVE_WINDOW_S * 1000);
-      this.decisiveTimers.set(c.id, t);
-    }
+    this.armDecisive(c, eventId, Engine.DECISIVE_WINDOW_S * 1000);
+  }
+
+  private armDecisive(c: Character, eventId: Id, ms: number): void {
+    if (!this.realClock) return;
+    clearTimeout(this.decisiveTimers.get(c.id));
+    this.decisiveTimers.set(c.id, setTimeout(() => { void this.expireDecisive(c.id, eventId); }, Math.max(0, ms)));
   }
 
   private closeDecisive(c: Character): void {
@@ -1225,7 +1355,7 @@ export class Engine {
   /** La ventana caduca: la amenaza se ejecuta contra el PJ sin que actúe (SPEC §9.3). */
   private async expireDecisive(characterId: Id, eventId: Id): Promise<void> {
     const c = this.world.characters.get(characterId);
-    if (!c || !c.decisive || c.decisive.event_id !== eventId || !this.master) return;
+    if (!c || !c.decisive || c.decisive.event_id !== eventId || !this.master || this.clock.paused) return;
     const locId = positionOf(this.world, c, this.gameNow()).location_id;
     await this.runInLocation(locId, async () => {
       if (!c.decisive || c.decisive.event_id !== eventId) return; // respondió justo antes
@@ -1263,7 +1393,7 @@ export class Engine {
 
   /** Historia escrita (story.ts): la amenaza que avanza y las misiones de cada PJ; y quien está ante el tablón lo lee. */
   private advanceStory(nowG: number): void {
-    const out = tickStory(this.world, nowG);
+    const out = tickStory(this.world, nowG, this.threatNow(nowG));
     this.emitStory(out);
     // Hechos y reglas del mundo (worldrules.ts): lo que acaba de cambiar dispara las reacciones de los datos.
     this.emitStory(tickWorld(this.world, nowG).story);
@@ -1335,6 +1465,12 @@ export class Engine {
     }
   }
 
+  /** El jugador abre el Tablón en la web: lo lee, igual que con /tablon. */
+  readTablon(characterId: Id): void {
+    const c = this.world.character(characterId);
+    this.noteBoard(c, this.nowFor(c));
+  }
+
   /** Estado del tablón para /tablon. */
   boardText(): string {
     const jobs = activeJobs(this.world);
@@ -1355,11 +1491,11 @@ export class Engine {
     else { this.masterErr.push({ ts: Date.now(), reason: out.reason, message: out.message.slice(0, 200) }); if (this.masterErr.length > 100) this.masterErr.shift(); }
     this.reportMaster({
       character_id: c.id, action_type: actionType, ok: out.ok, model: out.ok ? out.model : null, ms: Date.now() - t0, usage: usageOf(out.usage),
-      ...(out.ok ? {} : { error: { reason: out.reason, message: out.message } }),
+      ...(out.ok ? (out.actor ? { actor: out.actor as NonNullable<MasterCall['actor']> } : {}) : { error: { reason: out.reason, message: out.message } }),
     });
     if (!out.ok) {
       this.announcePending(c.id);
-      // Sin oyentes (REPL, Discord), el aviso de siempre; la web lo apunta con la partida y el PJ.
+      // Sin oyentes (REPL), el aviso de siempre; la web lo apunta con la partida y el PJ.
       if (!this.masterListeners.length) console.warn(`[master] ${out.reason}: ${out.message}`);
       if (out.reason === 'refusal') return { ok: false, text: 'El narrador prefiere no seguir por ahí. Prueba otra cosa.' };
       if (out.reason === 'no_credit') return { ok: false, text: Engine.NO_CREDIT };
@@ -1485,7 +1621,9 @@ export class Engine {
       case 'look': return describeSurroundings(this.world, this.clock, c, nowG);
       case 'recap': {
         const missed = this.recapFor(c.id);
-        return missed.length ? missed.map((d) => `· ${d.text}`).join('\n') : 'No te has perdido nada.';
+        const gap = justBack(c, nowG);
+        const head = gap ? `Para ti no pasó el tiempo; el mundo siguió ${fmtDuration(gap.to_game_s - gap.from_game_s)} sin ti.\n` : '';
+        return head + (missed.length ? missed.map((d) => `· ${d.text}`).join('\n') : 'No te has perdido nada.');
       }
       case 'time': return `${this.clock.format(nowG)} (ratio ${this.clock.timeRatio}×).${nowG - this.gameNow() > SAME_TIME_TOLERANCE_S ? ` Vas ${fmtDuration(nowG - this.gameNow())} por delante del reloj del mundo (has viajado).` : ''}`;
       case 'tablon': this.noteBoard(c, nowG); return this.boardText();
@@ -1520,52 +1658,18 @@ export class Engine {
    * salen en el sitio donde de verdad empieza, no en el punto de inicio genérico.
    */
   async createCharacter(userId: Id, name: string, spec?: Partial<CharacterSpec>, opts: { place?: (c: Character) => void } = {}): Promise<{ ok: true; character: Character } | { ok: false; reason: string }> {
-    const clean = name.trim().replace(/\s+/g, ' ');
-    if (clean.length < 2 || clean.length > 24) return { ok: false, reason: 'El nombre debe tener entre 2 y 24 caracteres.' };
+    const clean = cleanCharacterName(name);
+    const badName = characterNameProblem(clean);
+    if (badName) return { ok: false, reason: badName.reason };
     if (this.characterByUser(userId)) return { ok: false, reason: 'Ya tienes un personaje.' };
-    if ([...this.world.characters.values()].some((c) => c.name.toLowerCase() === clean.toLowerCase())) return { ok: false, reason: 'Ese nombre ya está en uso.' };
+    if (this.characterNameTaken(clean)) return { ok: false, reason: 'Ese nombre ya está en uso.' };
 
-    const race = raceById(spec?.race_id ?? 'human');
-    const klass = classById(spec?.class_id ?? 'fighter');
-    const bg = backgroundById(spec?.background_id ?? klass?.background ?? 'soldier');
-    if (!race || !klass || !bg) return { ok: false, reason: 'Raza, clase o trasfondo no válidos.' };
+    const check = resolveCharacterSpec(spec);
+    if (!check.ok) return { ok: false, reason: check.reason };
+    const klass = check.resolved.klass;
 
-    // Características: array estándar asignado (validado) o el recomendado de la clase.
-    const base = spec?.abilities ?? Object.fromEntries(ABILITIES.map((a, i) => [a, klass.recommended[i]])) as Record<Ability, number>;
-    const sorted = ABILITIES.map((a) => base[a]).sort((x, y) => y - x);
-    if (sorted.join(',') !== [...STANDARD_ARRAY].join(',')) return { ok: false, reason: 'Las características deben ser el array estándar 15, 14, 13, 12, 10, 8.' };
-    const abilities = Object.fromEntries(ABILITIES.map((a) => [a, base[a] + (race.ability_bonus[a] ?? 0)])) as Record<Ability, number>;
-
-    // Skills: trasfondo + raza fijas; clase elige N de su lista sin repetir.
-    const fixed = [...new Set([...bg.skills, ...race.skills])];
-    const choices = spec?.skills ?? [...new Set([...klass.skill_choices.prefer, ...klass.skill_choices.from])].filter((k) => klass.skill_choices.from.includes(k) && !fixed.includes(k)).slice(0, klass.skill_choices.count);
-    if (choices.length !== klass.skill_choices.count) return { ok: false, reason: `Elige ${klass.skill_choices.count} habilidades de clase.` };
-    for (const k of choices) {
-      if (!klass.skill_choices.from.includes(k)) return { ok: false, reason: `${k} no es una habilidad de ${klass.name}.` };
-      if (fixed.includes(k)) return { ok: false, reason: `${k} ya la tienes por trasfondo o raza.` };
-    }
-    const skills = [...new Set([...fixed, ...choices])];
-
-    const conMod = abilityModifier(abilities.con);
-    const hp = klass.hit_die + conMod;
     const id = `ch_${clean.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_')}_${Date.now().toString(36)}`;
-    const c: Character = {
-      id, user_id: userId, name: clean,
-      race: race.name.toLowerCase(), class_name: klass.name.toLowerCase(), race_id: race.id, class_id: klass.id, background_id: bg.id,
-      hit_die: klass.hit_die, death_mode: spec?.death_mode ?? 'casual',
-      level: 1, appearance: spec?.appearance ?? '', backstory: '',
-      hp_max: hp, hp_current: hp, hp_temp: 0, conditions: [],
-      proficiencies: { skills, expert: [], saves: [...klass.saves] },
-      practice: {}, practice_bonus: {}, reputation: {}, knows: [], clues: [], completed_jobs: [], achievements: [],
-      decisive: null, xp: 0,
-      location: { type: 'spot', id: this.pickStartingPoint().spot_id },
-      transit: null, status: 'active', speed_ft: race.speed_ft,
-      abilities, passive_perception: 10, darkvision: race.darkvision, condition_speed_factor: 1,
-      coins: this.world.campaign.starting_coins ?? DEFAULT_STARTING_COINS, last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
-    };
-    // Lo de su clase (levels.ts): conjuros, pericia, estilo… con sus valores por defecto.
-    initClass(c);
-    c.passive_perception = passivePerception(c);
+    const c = newCharacter(id, userId, clean, check.resolved, { spot_id: this.pickStartingPoint().spot_id, coins: this.world.campaign.starting_coins ?? DEFAULT_STARTING_COINS });
     this.world.characters.set(c.id, c);
     this.world.touch('characters', c.id);
     opts.place?.(c);
@@ -1604,6 +1708,11 @@ export class Engine {
     this.meetAll();
     await this.flush();
     return { ok: true, character: c };
+  }
+
+  characterNameTaken(name: string): boolean {
+    const clean = cleanCharacterName(name).toLowerCase();
+    return [...this.world.characters.values()].some((c) => c.name.toLowerCase() === clean);
   }
 
   /** Punto de inicio en la localización con menos PJs vivos; empate → el primero de la lista. */
@@ -1674,7 +1783,11 @@ export class Engine {
     this.recapping.add(c.id);
     try {
       await this.tick();
+      // Lo primero, igualarse: el resumen ya cuenta con la hora a la que vuelve.
+      this.catchUp(c);
       const gone = absence(this, c, this.now(), absenceRule(env));
+      const gap = caughtUp(c);
+      if (gap && !gap.told) { gap.told = true; this.world.touch('characters', c.id); }
       if (!gone) return null;
       let text = recapTemplate(this, c, gone.since, gone.hours);
       let meta: Record<string, unknown> = {};
@@ -1734,15 +1847,28 @@ export class Engine {
   setConnected(characterId: Id, connected: boolean): void {
     const c = this.world.character(characterId);
     // Desconectado desde la carga (boot) y aún sin velo: darle por ido sí lo vela.
-    if (connected === c.connected && (connected || c.veiled)) return;
+    // Ya conectado (un PJ recién creado nace así): su entrada también pone en marcha un reloj parado.
+    if (connected === c.connected && (connected || c.veiled)) { if (connected) this.startClockFor(c); return; }
     c.connected = connected;
     if (!connected) {
       if (c.status === 'active') c.status = 'asleep';
       c.veiled = true;
       if (!c.recap_from) c.recap_from = { event_id: c.last_seen_event_id };
+      this.stopClockFor(c);
     } else {
       c.veiled = false;
+      this.startClockFor(c);
     }
+    this.world.touch('characters', c.id);
+  }
+
+  /** La página dice hasta dónde ha leído el jugador: solo avanza y nunca pasa del último evento. */
+  markRead(characterId: Id, seq: number): void {
+    const c = this.world.characters.get(characterId);
+    if (!c || !Number.isFinite(seq)) return;
+    const read = Math.min(Math.floor(seq), this.events.lastSeq);
+    if (read <= (c.read_seq ?? 0)) return;
+    c.read_seq = read;
     this.world.touch('characters', c.id);
   }
 
@@ -1811,7 +1937,7 @@ export class Engine {
   async say(characterId: Id, text: string, opts: { to?: Id | null; mode?: SayMode } = {}): Promise<ActionResult> {
     const c = this.world.character(characterId);
     this.lastAction.set(c.id, this.now());
-    if (!c.connected) this.setConnected(c.id, true);
+    this.setConnected(c.id, true);
     if (c.status !== 'active') return { ok: false, text: c.status === 'asleep' ? 'Estás dormido.' : `No puedes hablar (${c.status}).` };
     const parsed = parseSay(text, true);
     if (!parsed) return { ok: false, text: '¿Qué dices?' };
@@ -2158,7 +2284,7 @@ export class Engine {
   async answerReaction(characterId: Id, reactionId: Id, answer: 'accept' | 'resist' | null, text: string | null = null): Promise<ActionResult> {
     const c = this.world.character(characterId);
     this.lastAction.set(c.id, this.now());
-    if (!c.connected) this.setConnected(c.id, true);
+    this.setConnected(c.id, true);
     const r = c.reactions?.find((x) => x.id === reactionId);
     if (!r || this.resolvingReactions.has(r.id)) return { ok: false, text: 'Eso ya se ha decidido.' };
     const reply = text?.trim().slice(0, 300) || null;
@@ -2365,15 +2491,17 @@ export class Engine {
     if (!away) {
       c.away = null;
       this.awayHesitations.delete(c.id);
+      this.startClockFor(c);
       this.world.touch('characters', c.id);
       if (at) this.events.emit({ actor_id: c.id, at, action_type: 'back', narration_private: '', observable: `${c.name} ha vuelto.`, also_to: present, tags: ['presence'], payload: { master: null } }, this.now());
       this.background(this.flush());
       return;
     }
-    c.away = { since_real_ms: this.now(), since_game_s: this.gameNow(), spot_id: spot?.id ?? null };
-    this.world.touch('characters', c.id);
-    // Se va mientras cae: queda estable, no muere ausente.
-    if (isDying(c)) { stabilizeIfAway(this.world, c, this.nowFor(c)); this.announceDeathStates(); }
+    c.away = { since_real_ms: this.now(), since_game_s: this.nowFor(c), spot_id: spot?.id ?? null };
+    if (!c.recap_from) c.recap_from = { event_id: c.last_seen_event_id };
+    this.stopClockFor(c);
+    // Se va mientras cae: queda estable, no muere ausente. Con el mundo parado, sigue como estaba al volver.
+    if (isDying(c) && !this.clock.paused) { stabilizeIfAway(this.world, c, this.nowFor(c)); this.announceDeathStates(); }
     if (at) {
       this.events.emit({
         actor_id: c.id, at, action_type: 'away', narration_private: '', also_to: present, tags: ['presence'],
@@ -2383,7 +2511,7 @@ export class Engine {
     // Conversación de grupo y colas: fuera; el NPC sigue con los que quedan.
     this.leaveTalk(c, false);
     // Ronda abierta en su sitio: si solo faltaba él, se cierra ya (no se espera al temporizador).
-    const round = spot ? this.rounds.get(spot.location_id) : undefined;
+    const round = spot && !this.clock.paused ? this.rounds.get(spot.location_id) : undefined;
     if (spot && round) {
       if (round.items.size && this.roundComplete(spot.location_id, round)) void this.flushRound(spot.location_id);
       else this.notifyScene(this.roundNotice(spot.location_id, round, true));
@@ -2470,13 +2598,14 @@ export class Engine {
    * sigue el camino de siempre.
    */
   private sceneRoute(c: Character, text: string): Promise<ActionResult> | null {
-    if (!this.master || c.status !== 'active' || Engine.MECHANICAL.test(text)) return null;
+    if (!this.master || c.status !== 'active' || this.isMechanical(c, text)) return null;
     const nowG = this.nowFor(c);
     const locId = positionOf(this.world, c, nowG).location_id;
     const events = this.events.recentInLocation(locId, 60);
     // Escena tensa con dos o más jugadores: todo va a la ronda (sin contar a los ausentes que ya salieron de ella).
     if (this.rounds.has(locId) || (tenseScene(this.world, locId, this.recentTags([locId])) && this.roundMembers(locId).length >= 2)) return this.joinRound(c, text, locId);
-    if (isLeaveTalk(text)) return Promise.resolve(this.leaveTalk(c, true));
+    // «Me despido de Hugo» sin estar hablando con él es un gesto como otro cualquiera: lo cuenta el máster. El botón sí contesta.
+    if (isLeaveTalk(text) && (!/^(?:me despido|despedirme)\b/i.test(text.trim()) || [...this.world.npcs.values()].some((n) => n.talking_to?.character_id === c.id || n.talking_to?.with?.includes(c.id)))) return Promise.resolve(this.leaveTalk(c, true));
     // Esperar o unirse, con el botón o con sus palabras: sin máster y sin repetir el gesto del NPC.
     const turn = parseTurn(text);
     if (turn && (!turn.loose || this.busyNpcFor(c, turn.who, events, nowG))) return Promise.resolve(this.takeTurn(c, turn.kind, turn.who, events, nowG));
@@ -2703,7 +2832,7 @@ export class Engine {
   downText(c: Character): string {
     if (c.status === 'dead' && c.death) {
       const left = Math.max(0, c.death.respawn_real_ms - this.now());
-      const back = this.world.spot(respawnSpotId(this.world)).name;
+      const back = this.world.spot(respawnSpotId(this.world, c)).name;
       return c.death.respawn_real_ms
         ? `☠ Has muerto. Volverás en ${back} dentro de ${fmtDuration(left / 1000)} reales (${fmtDuration(this.clock.realToGame(left / 1000))} de juego). Mientras, solo puedes mirar.`
         : '☠ Has muerto.';
@@ -2870,6 +2999,7 @@ export class Engine {
     for (const c of this.world.characters.values()) {
       const now = nowFor(c, nowWorldG);
       if (isDying(c)) {
+        if (this.clock.paused) continue;
         if (c.away || c.veiled) { stabilizeIfAway(this.world, c, now); continue; }
         const locId = this.world.characterSpot(c)?.location_id;
         if (locId && this.rounds.has(locId)) continue; // con rondas, una por ronda
@@ -2910,7 +3040,7 @@ export class Engine {
     if (!r) return;
     const spot = this.world.spot(r.spot_id);
     const bodyLoc = this.world.locationOfSpot(r.body_spot_id);
-    const story = deathRules(this.world).respawn_story || `Alguien te encontró y te trajo ${aEs(spot.name)}.`;
+    const story = r.story || `Alguien te encontró y te trajo ${aEs(spot.name)}.`;
     const things = r.left.length || r.coins_left ? (r.mode === 'casual'
       ? ` Tus cosas siguen donde caíste, en ${this.world.spot(r.body_spot_id).name} (${bodyLoc.name}): nadie más puede tocarlas.`
       : ` No llevas nada encima: lo tuyo se quedó en ${this.world.spot(r.body_spot_id).name} (${bodyLoc.name}), si nadie se lo ha llevado.`) : '';
@@ -3193,7 +3323,7 @@ export class Engine {
     this.world.touch('characters', c.id);
     const spot = this.world.spot(d.spot_id);
     const loc = this.world.location(spot.location_id);
-    const back = this.world.spot(respawnSpotId(this.world)).name;
+    const back = this.world.spot(respawnSpotId(this.world, c)).name;
     const when = `${fmtDuration(wait)} reales (${fmtDuration(this.clock.realToGame(wait))} de juego)`;
     const things = d.left.length || d.coins_left
       ? d.mode === 'casual' ? ' Lo que llevabas se queda en tu cuerpo, esperándote: solo tú puedes recogerlo.' : ' Lo que llevabas se queda en tu cuerpo, y cualquiera puede llevárselo.'
@@ -3259,7 +3389,7 @@ export class Engine {
       const pace: Pace = /^corr/.test(lower) || m[2] === 'corriendo' ? 'run' : m[2] === 'sigilosamente' ? 'stealth' : 'walk';
       return this.doMove(c, text, m[1]!, pace);
     }
-    if (/^(parar|me paro|me detengo|stop)\b/.test(lower)) {
+    if (Engine.STOPS.test(lower) && (c.transit || Engine.MECHANICAL.test(lower))) {
       if (!c.transit) return { ok: false, text: 'No ibas a ningún sitio.' };
       const stop = interruptTransit(this.world, c, nowG);
       const spot = this.world.spot(stop);
@@ -3490,6 +3620,7 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     // Partidas de antes del saber por niveles (trust.ts): lo toman de la semilla.
     if (!n.knowledge && seedNpc?.knowledge) { n.knowledge = structuredClone(seedNpc.knowledge); changed = true; }
     if (n.dislikes_flattery === undefined && seedNpc?.dislikes_flattery) { n.dislikes_flattery = true; changed = true; }
+    if (n.noncombatant === undefined && seedNpc?.noncombatant) { n.noncombatant = true; changed = true; }
     if (n.buys === undefined || n.stats === undefined) changed = true;
     n.buys ??= seedNpc?.buys ?? []; n.sells ??= seedNpc?.sells ?? [];
     if (n.home_spot_id === undefined && seedNpc?.home_spot_id) { n.home_spot_id = seedNpc.home_spot_id; changed = true; }
@@ -3538,6 +3669,7 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   }
   // Partidas de antes de la muerte y la reaparición: el punto de vuelta de la campaña escrita.
   if (seed?.campaign.death_rules && !camp2.death_rules) { camp2.death_rules = structuredClone(seed.campaign.death_rules); changed = true; }
+  if (seed?.campaign.death_rules?.respawn_points && !camp2.death_rules?.respawn_points) { camp2.death_rules = { ...camp2.death_rules, respawn_points: structuredClone(seed.campaign.death_rules.respawn_points) }; changed = true; }
   // Partidas de antes de las costumbres de la campaña escrita.
   if (seed?.campaign.customs && !camp2.customs) { camp2.customs = [...seed.campaign.customs]; changed = true; }
   // Partidas de antes de las monedas de oro, plata y cobre (money.ts): la campaña escrita trae sus monedas y sus

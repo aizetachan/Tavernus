@@ -28,7 +28,7 @@
 import { GameClock, GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
 import { abilityModifier, rollDie, type Rng } from './dice.js';
 import { directlyCarried } from './inventory.js';
-import type { CarrySlot, Character, DeathRules, Id, ItemDef, ItemInstance, Npc } from './model.js';
+import type { CarrySlot, Character, DeathRules, Id, ItemDef, ItemInstance, Npc, RespawnPoint } from './model.js';
 import { ABILITY_ES, type Ability } from './rules.js';
 import { adjustTrust } from './trust.js';
 import type { World } from './world.js';
@@ -39,6 +39,7 @@ export const DEFAULT_DEATH_RULES: DeathRules = {
   hardcore_ability_penalty: 1,
   respawn_spot_id: null,
   respawn_story: '',
+  respawn_points: [],
 };
 
 /** Cada cuánto tira el servidor fuera de rondas (s de juego): con amenaza y sin ella. */
@@ -51,10 +52,46 @@ export function deathRules(world: World): DeathRules {
   return { ...DEFAULT_DEATH_RULES, ...(world.campaign.death_rules ?? {}) };
 }
 
-/** Dónde vuelve un PJ: el punto de la campaña o, si no tiene, el primer punto de inicio. */
-export function respawnSpotId(world: World): Id {
-  const id = deathRules(world).respawn_spot_id;
-  return id && world.spots.has(id) ? id : world.campaign.starting_points[0]!.spot_id;
+/** Los sitios donde se vuelve, por preferencia: los de `respawn_points` o, sin ellos, el punto de la campaña o el primero de inicio. */
+function respawnPoints(world: World): RespawnPoint[] {
+  const r = deathRules(world);
+  const points = r.respawn_points.filter((p) => world.spots.has(p.spot_id));
+  if (points.length) return points;
+  const id = r.respawn_spot_id && world.spots.has(r.respawn_spot_id) ? r.respawn_spot_id : world.campaign.starting_points[0]!.spot_id;
+  return [{ spot_id: id, story: r.respawn_story }];
+}
+
+/** ¿No quiere verle? Hostil o receloso con él por lo que ha hecho, o hostil con todos. */
+function wontTakeIn(n: Npc, characterId: Id): boolean {
+  const own = n.attitude.by_character[characterId];
+  return own === 'hostile' || own === 'unfriendly' || n.attitude.default === 'hostile';
+}
+
+/** ¿Le acogen en este sitio? Quien le acoge sigue vivo y nadie de allí, presente o que viva allí, le quiere mal. */
+function takenIn(world: World, p: RespawnPoint, characterId: Id): boolean {
+  if (p.by_npc_id) {
+    const host = world.npcs.get(p.by_npc_id);
+    if (host?.status !== 'alive' || wontTakeIn(host, characterId)) return false;
+  }
+  const locationOf = (id: Id | undefined) => (id ? world.spots.get(id)?.location_id : undefined);
+  const here = locationOf(p.spot_id);
+  for (const n of world.npcs.values()) {
+    if (n.status !== 'alive' || !wontTakeIn(n, characterId)) continue;
+    if (locationOf(n.location.id) === here || locationOf(n.home_spot_id) === here) return false;
+  }
+  return true;
+}
+
+/** El primer sitio donde le acogen. Si no le acogen en ninguno, el último de la lista, sin que nadie cuente que le ha traído. */
+function respawnPointFor(world: World, characterId: Id): RespawnPoint {
+  const points = respawnPoints(world);
+  const point = points.find((p) => takenIn(world, p, characterId));
+  return point ?? { spot_id: points.at(-1)!.spot_id, story: '' };
+}
+
+/** Dónde vuelve un PJ. Con `c`, el primer sitio donde le acogen; sin él, el primero de la campaña. */
+export function respawnSpotId(world: World, c?: Character): Id {
+  return c ? respawnPointFor(world, c.id).spot_id : respawnPoints(world)[0]!.spot_id;
 }
 
 export function respawnWaitS(world: World, mode: Character['death_mode']): number {
@@ -92,9 +129,11 @@ export interface DamageOutcome {
 
 /**
  * Aplica daño a un PJ con las reglas de 0 PG. `crit`: el golpe fue crítico
- * (dos fallos si ya estaba a 0 PG). Devuelve qué ha pasado; el motor lo cuenta.
+ * (dos fallos si ya estaba a 0 PG). `nonLethal`: quien golpea no es de pelear
+ * (Npc.noncombatant): deja caído y estable, y a quien ya está en el suelo no le
+ * hace nada. Devuelve qué ha pasado; el motor lo cuenta.
  */
-export function damageCharacter(world: World, c: Character, amount: number, opts: { crit?: boolean; cause: string; nowGameS?: number }): DamageOutcome {
+export function damageCharacter(world: World, c: Character, amount: number, opts: { crit?: boolean; cause: string; nowGameS?: number; nonLethal?: boolean; rng?: Rng }): DamageOutcome {
   const out: DamageOutcome = { down: false, died: false, failures: 0, blocked: false };
   if (c.status === 'dead') return out;
   if (c.veiled) return { ...out, blocked: true };
@@ -109,12 +148,13 @@ export function damageCharacter(world: World, c: Character, amount: number, opts
     c.hp_current = Math.max(0, c.hp_current - left);
     if (c.hp_current > 0) { world.touch('characters', c.id); return out; }
     // Daño masivo: lo que sobra iguala sus PG máximos. Un ausente no muere ausente.
-    if (over >= c.hp_max && !c.away) { die(world, c, nowG, opts.cause); return { ...out, down: true, died: true }; }
+    if (over >= c.hp_max && !c.away && !opts.nonLethal) { die(world, c, nowG, opts.cause); return { ...out, down: true, died: true }; }
     fall(world, c, nowG, opts.cause);
+    if (opts.nonLethal) stabilize(world, c, nowG, null, 'un golpe que no buscaba matar', opts.rng);
     return { ...out, down: true };
   }
   // Ya estaba a 0 PG.
-  if (c.away) { world.touch('characters', c.id); return out; }
+  if (c.away || opts.nonLethal) { world.touch('characters', c.id); return out; }
   if (left >= c.hp_max) { die(world, c, nowG, opts.cause); return { ...out, died: true }; }
   const d = c.dying ?? newDying(nowG, opts.cause);
   if (d.stable_until_game_s !== null) { d.stable_until_game_s = null; c.conditions = c.conditions.filter((x) => x.name !== STABLE); }
@@ -335,13 +375,16 @@ export interface Respawn {
   left: string[];
   coins_left: number;
   body_spot_id: Id;
+  /** Quién le encontró y le trajo. Vacío si no le acoge nadie: lo cuenta el motor sin nombrar a nadie. */
+  story: string;
 }
 
-/** Vuelve: en el punto de reaparición, con la mitad de sus PG; el cuerpo pasa a ser «las cosas de X». */
+/** Vuelve: en el primer sitio donde le acogen, con la mitad de sus PG; el cuerpo pasa a ser «las cosas de X». */
 export function respawn(world: World, c: Character): Respawn | null {
   if (c.status !== 'dead' || !c.death) return null;
   const d = c.death;
-  const spotId = respawnSpotId(world);
+  const point = respawnPointFor(world, c.id);
+  const spotId = point.spot_id;
   c.location = { type: 'spot', id: spotId };
   c.status = 'active';
   c.hp_current = Math.max(1, Math.ceil(c.hp_max / 2));
@@ -366,7 +409,7 @@ export function respawn(world: World, c: Character): Respawn | null {
     if (empty) world.remove('item_instances', body.id);
     else { bodyDef(world, c, true); world.touch('item_instances', body.id); }
   }
-  const out: Respawn = { spot_id: spotId, hp: c.hp_current, mode: d.mode, penalty, left: d.left, coins_left: d.coins_left, body_spot_id: d.spot_id };
+  const out: Respawn = { spot_id: spotId, hp: c.hp_current, mode: d.mode, penalty, left: d.left, coins_left: d.coins_left, body_spot_id: d.spot_id, story: point.story };
   c.death = null;
   world.touch('characters', c.id);
   return out;

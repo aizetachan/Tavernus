@@ -166,12 +166,14 @@ Lo que se puede comprobar sin IA se comprueba, y si falla se pide otra vez al m�
   del jugador. No entra en la apertura, llegadas, tiradas ni turnos compartidos (ronda o charla de grupo).
 - **Cierre** (`tools.ts`, `log_event`): `talk_situation` (opcional; el servidor la valida con `situationFits`). Se
   reescribe una vez si el NPC no contesta cuando le toca, si nombra una misión que el PJ aún no puede coger, si en un
-  primer saludo suelta un encargo sin que se lo pidan o si dice más de las palabras de su situación (más 10 de margen).
+  primer saludo suelta un encargo sin que se lo pidan o si dice más de las palabras de su situación (más 25 de margen
+  desde la v1.3).
 - **Longitud**, palabras de lo que dice el NPC: saludo 30, despedida 20, pregunta 45, lore 60, misión que da 60,
   misión en curso 45, comercio 40, reacción 40, peligro 40, frío 25, charla 40; la situación secundaria suma 15.
 - **Máster offline** (`offline.ts`, `talkReply`): una plantilla por situación (saludo de primera vez o de conocido,
   pregunta, lore, comercio, despedida…); la charla sin más se queda con la respuesta de siempre.
-- **Fuera de la v1**: insistir en lo ya negado, halagos, comprobar el precio dicho, excepciones por NPC en sus datos.
+- **Fuera de la v1**: halagos, comprobar el precio dicho, excepciones por NPC en sus datos. Insistir en lo ya negado
+  entró en la v1.3.
 
 Prueba en vivo con Haiku (27-10, Brenna en Brezal, cinco frases): cada turno cayó en su situación (saludo, lore,
 misión que da, comercio, despedida con su misión en curso). La respuesta de lore salió larga (unas 100 palabras), el
@@ -229,3 +231,43 @@ Antes, cerrar un turno con un NPC delante le abría sus misiones: bastaba un «B
 
 Prueba en vivo con Haiku (31-10, Brenna, un monje recién llegado): «Buenas noches» y la segunda frase no abren nada;
 en la tercera Brenna cuenta lo del guardia del portón y «La cena del portón» entra en el Diario.
+
+## v1.3 (31-10): las negativas tienen salida y convencer es una mecánica
+
+Sale de las partidas por perfil (PLAYTEST-2026-10-31.md): el charlatán pasó 190 turnos con Ilse a base de negativas,
+«Eso no se le cuenta a un forastero» salió 46 veces porque se lo dictaba el propio guion, y el bardo hizo 2 tiradas en
+300 acciones, ninguna social, porque el guion manda sobre la regla general de tirar. Sin probar todavía con modelo.
+
+- **Salida** (`wayOut`): al negarse a algo delicado, el NPC deja por dónde seguir, de lo más a mano a lo menos: lo que
+  el PJ tiene a medias con él, un encargo que puede darle, la misión que abriría lo que calla (`requires` de las
+  fuentes de la pista), otra persona que tiene una fuente abierta y lo que él querría a cambio. Son títulos y nombres:
+  nunca el `how` de la pista ni el título de una pista sin obtener. Los lugares no entran, porque nombrar un sitio oculto
+  ya lo destriparía. El `refusal` de la pista le da el gesto con que se niega, en vez de una frase hecha.
+- **Negativas seguidas** (`refusals`): el motor cuenta las de este NPC en esta charla (una hora de juego,
+  `TALK_GAP_S`). Una respuesta de verdad las pone a cero. No distingue temas: es una aproximación.
+  - La primera: la salida.
+  - La segunda: cierra el tema en una frase y deja claro qué haría falta.
+  - La tercera: corta la charla y baja la confianza (`npc_trust harass`). `endsTalk` dice al cerrar si ha sido esta.
+- **Control al cierre**: negarse sin salida se reescribe una vez. «Mañana» o «ya veremos» no cuentan, porque Hugo
+  repetía «mañana» durante decenas de turnos. Con el NPC hostil, insultado o atacado no actúa: puede cerrarse en banda.
+- **Antes la misión**: tras una negativa, lo que el NPC tiene para él ya puede salir (`ripe`), sin esperar otro turno.
+- **Botones** (`withoutRefused`): no ofrecen lo que ya se le ha negado y, tras cortar la charla, ninguna otra pregunta a
+  ese NPC. Dar o entregar sigue valiendo, porque es lo que puede abrirla.
+- **Convencer** (`argues`, `presses`): si el jugador da razones, promete, finge o aprieta y lo que pide es delicado, el
+  guion pide tirada de Persuasión, Engaño o Intimidación antes de contestar. Lo público se contesta sin tirada. Una
+  tirada por charla (`social_tried`) y ninguna con un NPC hostil.
+
+  | Trato | CD |
+  |---|---:|
+  | Receloso | 17 |
+  | Extraño | 15 |
+  | Conocido | 12 |
+  | Amigo o aliado | 10 |
+
+- **Resultado** (`socialOutcomeLine`, decisión de Miguel del 31-10): con éxito sube la confianza, con su tope por charla,
+  y el NPC da el camino, no el secreto: una tirada no salta niveles. Una Persuasión que falla cuenta como insistir
+  (`harass`); Intimidar y un Engaño pillado restan como antes.
+- **Longitud**: 25 palabras de margen en vez de 10. Sobre lo jugado, los rechazos por hablar de más bajan de 183 a 42.
+
+**A vigilar:** sobre las 2.149 líneas de NPC de la tanda, 197 son negativas y 154 no llevan salida. Con el guion nuevo
+deberían ser menos, pero este control puede sumar reintentos: si pasa del 5 % de los turnos, se revisa.

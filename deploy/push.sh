@@ -70,7 +70,7 @@ export COPYFILE_DISABLE=1
 # --setup, --ops y --usuario-deploy: como administrador (root o sudo), con el deploy/ de aquí.
 if [ -n "$ADMIN_SCRIPT" ]; then
   echo "[push] subiendo deploy/ a $ADMIN_HOST y ejecutando $ADMIN_SCRIPT"
-  tar -czf "$TMP/deploy.tgz" --exclude=deploy/local.env --exclude=deploy/gcp deploy
+  tar -czf "$TMP/deploy.tgz" --exclude=deploy/local.env deploy
   up=/tmp/tavernus-deploy-$(date +%Y%m%d-%H%M%S).tgz
   scp "${ADMIN_SCP_OPTS[@]}" "$TMP/deploy.tgz" "$ADMIN_HOST:$up"
   # printf %q para pasar las opciones tal cual por ssh.

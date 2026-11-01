@@ -1,6 +1,6 @@
 /**
  * Avisos al anfitrión desde la web: el mismo ALERT_WEBHOOK que usa la comprobación de salud
- * (deploy/healthcheck.sh, docs/DESPLIEGUE.md), con Telegram, Discord, ntfy o un POST JSON genérico.
+ * (deploy/healthcheck.sh, docs/DESPLIEGUE.md), con Telegram, ntfy o un POST JSON genérico.
  *
  * Hoy solo avisa de una cosa: la cuenta de la IA se ha quedado sin crédito (master.ts, noCredit). Esperar no lo
  * arregla, así que el anfitrión tiene que enterarse. Un aviso al quedarse sin saldo y otro al volver, no uno por acción.
@@ -20,8 +20,6 @@ export function webhookAlert(env: NodeJS.ProcessEnv, log: (line: string) => void
       let res: Response;
       if (/api\.telegram\.org\//.test(hook)) {
         res = await fetchFn(hook, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ text: body }).toString(), signal: AbortSignal.timeout(15_000) });
-      } else if (/discord(app)?\.com\/api\/webhooks\//.test(hook)) {
-        res = await fetchFn(hook, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: body }), signal: AbortSignal.timeout(15_000) });
       } else if (/ntfy\.sh\/|\/ntfy\//.test(hook)) {
         res = await fetchFn(hook, { method: 'POST', headers: { Title: 'Tavernus' }, body, signal: AbortSignal.timeout(15_000) });
       } else {

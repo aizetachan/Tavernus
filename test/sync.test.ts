@@ -13,7 +13,7 @@ import type { Engine, MasterLike } from '../src/engine/engine.js';
 import type { Delivery } from '../src/engine/events.js';
 import type { Character } from '../src/engine/model.js';
 import { namedPc, npcTarget } from '../src/engine/scene.js';
-import { bootEngine, fakeTime } from './helpers.js';
+import { bootEngine, fakeTime, waitUntil } from './helpers.js';
 
 type Call = { actor: string; text: string; context: string };
 
@@ -86,12 +86,10 @@ describe('dos jugadores mandan a la vez en el mismo sitio', () => {
     const gate = new Promise<void>((r) => { release = r; });
     const calls = fakeMaster(engine, { gate });
     const first = engine.act(kael.id, 'pedir una jarra');
-    await new Promise((r) => setTimeout(r, 5));
-    expect(calls).toHaveLength(1);
+    await waitUntil(() => expect(calls).toHaveLength(1));
     // Mira manda mientras el máster narra lo de Kael: espera en la cola, a la vista.
     const second = engine.act(mira.id, 'atacar al guardia ahora');
-    await new Promise((r) => setTimeout(r, 5));
-    expect(engine.waitingIn('loc_taberna')).toEqual([{ character_id: mira.id, text: 'atacar al guardia ahora' }]);
+    await waitUntil(() => expect(engine.waitingIn('loc_taberna')).toEqual([{ character_id: mira.id, text: 'atacar al guardia ahora' }]));
     expect(actionContext(engine, kael, 'ak ataque')).toContain('- Mira acaba de mandar, a la vez: «atacar al guardia ahora». Se resuelve justo después de esta acción');
     // La de Mira no se pierde: tiene su propia respuesta, después de la de Kael.
     release();

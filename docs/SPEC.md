@@ -32,7 +32,7 @@ Lo que define el creador de la partida antes de que entre nadie. Se convierte en
 | `house_rules` | Texto libre: "críticos hacen daño máximo + tirada", "no hay flanqueo", etc. |
 
 ### 1.3 Tiempo del mundo — DECIDIDO
-Reloj **global único con velocidad fija**, ligado al reloj real, que avanza solo y siempre igual. Nadie tiene un tiempo distinto y la velocidad no cambia nunca.
+Reloj **global único con velocidad fija**, ligado al reloj real, que avanza solo mientras alguien juega. La velocidad no cambia nunca. Si no queda nadie, el mundo se para; quien se desconecta queda congelado y al volver se iguala (decidido el 31-10-2026; ver docs/MULTIJUGADOR.md, «Reloj y desconexión»).
 
 | Campo | Valor |
 |---|---|
@@ -54,7 +54,7 @@ Consecuencias de diseño:
 - `advance_time` no es un tool del master. El tiempo solo lo mueve el servidor.
 - `travel_time`, descansos y `respawn_at` se expresan en tiempo de juego y se convierten a real con el ratio fijo.
 - Horarios de NPC, luz día/noche y eventos programados se derivan de `current_datetime`.
-- El mundo sigue corriendo aunque nadie juegue: eso solo afecta a las **líneas secundarias** (§3.1 Capa B). La **trama principal** (Capa A) nunca avanza por tiempo, solo por acontecimientos, así que una semana sin jugadores no consume la historia.
+- Sin jugadores el mundo no corre: una semana sin nadie no consume nada, ni las **líneas secundarias** (§3.1 Capa B) ni la amenaza. La **trama principal** (Capa A) nunca avanza por tiempo, solo por acontecimientos.
 
 ---
 
@@ -703,17 +703,19 @@ Broadcast: cada evento se entrega **por punto de vista**: el servidor calcula qu
 ## 10. Casos límite que hay que decidir antes de construir
 
 - **Jugador desconectado en combate**: su PJ cae aturdido en el sitio; tras 30 min sin acción entra el velo (§9.1) y deja de ser objetivo válido. Hasta entonces, expuesto.
-- **Jugador ausente días**: sigue dormido donde se desconectó (§9.1), sujeto a lo que pase; al volver recibe `/recap` desde `last_seen_event_id`.
+- **Jugador ausente días**: sigue dormido donde se desconectó (§9.1), sujeto a lo que hagan quienes juegan, pero para él no pasa el tiempo; al volver se iguala al mundo y recibe «Donde lo dejamos» y `/recap` desde `last_seen_event_id`.
 - **Muerte**: según `death_mode` del personaje (§4.7). Nunca hay muerte permanente; hardcore pierde inventario y características, no el personaje.
 - **PJ solo vs. grupo**: el master adapta dificultad por número de PJs presentes (`difficulty` × factor).
 - **Dos jugadores discuten el mismo objeto**: el orden de la cola decide; `transfer_item` es atómico.
-- **Tiempo de juego divergente — DECIDIDO (27-10-2026, como en Baldur's Gate 3).** El reloj del mundo es uno y va con el real; cada PJ lleva el suyo, que viajar o descansar adelanta (`travel.ts`). Nadie espera a nadie: quien llega viajando a donde ya hay otro PJ activo y conectado con una hora anterior iguala su reloj al de él (o al del mundo) y actúa en el acto; los minutos que «pierde» no se notan. Ver docs/MULTIJUGADOR.md.
+- **Tiempo de juego divergente — DECIDIDO (27-10-2026, como en Baldur's Gate 3).** El reloj del mundo es uno y va con el real; cada PJ lleva el suyo, que viajar o descansar adelanta (`travel.ts`). Nadie espera a nadie: quien llega viajando a donde ya hay otro PJ activo y conectado con una hora anterior iguala su reloj al de él (o al del mundo) y actúa en el acto; los minutos que «pierde» no se notan. Quien se desconecta se queda en su hora hasta que vuelve (31-10-2026). Ver docs/MULTIJUGADOR.md.
 - **Contenido que rompe el rating**: el tool devuelve error, el master narra una consecuencia alternativa.
 - **Coste de LLM**: acciones triviales (`/sheet`, mirar inventario) no pasan por el modelo; cachear la parte estática del prompt.
 
 ---
 
 ## 11. Arquitectura de cliente — DECIDIDO: Discord primero, PWA después
+
+> **Histórico.** Esta sección y lo que dice la spec sobre Discord (§9.1, §11.2, §13, §14) se escribieron con el bot como primer cliente. Desde octubre de 2026 el producto es la web propia (`src/adapters/web`) y el bot está retirado; el despliegue real está en [`DESPLIEGUE.md`](DESPLIEGUE.md). La regla de oro sigue en pie.
 
 Regla de oro: **el motor de juego no sabe qué cliente lo usa.** Discord es un adaptador; la PWA será otro. Nada de lógica de juego vive en el bot.
 

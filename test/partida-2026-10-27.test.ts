@@ -26,7 +26,8 @@ async function brezal() {
   const time = fakeTime(EPOCH);
   const seed = authoredSeed('brezal', { now: new Date(EPOCH) });
   const repo = new MemoryRepository();
-  const engine = await Engine.boot({ repo, campaignId: 'brezal', seed, now: time.now, deterministic: false, fastTravel: false });
+  // Azar fijo: sin él, un imprevisto corta el descanso (planRest) y no se duerme las ocho horas.
+  const engine = await Engine.boot({ repo, campaignId: 'brezal', seed, now: time.now, deterministic: false, fastTravel: false, rng: () => 0.99 });
   return { engine, time, repo, seed };
 }
 

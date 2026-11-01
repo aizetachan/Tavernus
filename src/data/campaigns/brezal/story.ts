@@ -557,6 +557,14 @@ const ESCALATION: StoryEscalation[] = [
       { kind: 'location_state', location_id: 'loc_plaza', patch: { tense: false } },
       { kind: 'announce', location_id: 'loc_plaza', spot_id: 'sp_pl_pozo', text: 'Amanece el sexto día. Ilse sube al tejado del molino, mira la niebla un rato largo y dice: «Cambia. Pero sigue cerrada». Brezal sigue sellada. La Guarda de Vharn tiene más nudos.', public: true },
       { kind: 'rumor', id: 'rm_guarda', location_id: 'loc_plaza', rumor_kind: 'place', name: 'La Guarda de Vharn', hint: 'Ilse dice que la niebla es un cerrojo con más de un nudo, y que alguno está fuera del valle', where: 'el Lindero y más allá', days: 30 },
+      { kind: 'recap', recap: {
+        done: 'Lo que has dejado hecho en estos días: {list}.',
+        none: 'En estos días no has cerrado ningún asunto en Brezal.',
+        with_final: 'Lo del ascua lo decidiste tú: «{final}».',
+        without_final: 'Nadie ha decidido todavía qué hacer con el ascua de Ysolde, y aún se puede.',
+        open: 'Sigue pendiente: {list}.',
+        closing: 'Tu historia en Brezal queda abierta: la niebla no se ha ido y puedes seguir aquí tanto como quieras.',
+      } },
     ],
   },
 ];

@@ -41,7 +41,7 @@
 import { GAME_DAY, GAME_MINUTE } from '../clock/clock.js';
 import { addChatter, type ChatterKind } from './chatter.js';
 import { allIncidents, deedText } from './crime.js';
-import type { Character, Id, IncidentKind, Npc } from './model.js';
+import type { Character, GameEvent, Id, IncidentKind, Npc } from './model.js';
 import { changeOpinion, dropTag, earnTag, opinionEffects, opinionOf, opinionReasons, tagLabel, tagReactionsFor, tagsOf, type OpinionChange } from './standing.js';
 import { applyStoryEffects, characterStory, conditionErrors, effectErrors, emptyStoryOutput, holds, storyOf, type Story, type StoryCondition, type StoryEffect, type StoryOutput, type StoryRefs } from './story.js';
 import { allFacts, FACT_NEWS_S, factById, knowsFact, learnFact, removeFact, setFact, type WorldFact } from './worldfacts.js';
@@ -697,6 +697,17 @@ export function tagOptions(world: World, c: Character, skillName: (key: string) 
     }
   }
   return out;
+}
+
+/** Una charla: lo ofrecido hace menos de esto no se vuelve a ofrecer. */
+export const TAG_OPTION_GAP_S = 3600;
+
+/** Las opciones con etiqueta que aún no se le han ofrecido en esta charla: el «[Noble]…» salía en cada turno. */
+export function freshTagOptions(options: readonly string[], events: readonly GameEvent[], characterId: Id, nowG: number): string[] {
+  const offered = new Set(events
+    .filter((e) => e.actor_id === characterId && nowG - e.timestamp_game_s < TAG_OPTION_GAP_S)
+    .flatMap((e) => (e.payload['suggested_actions'] as string[] | undefined) ?? []));
+  return options.filter((o) => !offered.has(o));
 }
 
 // ---------------------------------------------------------------------------

@@ -1,10 +1,13 @@
 /**
  * Páginas del acceso por invitación (access.ts): «pide una invitación», crear tu
- * personaje en un asiento libre y, para el anfitrión, los asientos de una partida
+ * personaje en un asiento libre (con el asistente de page-creation.ts) y, para el anfitrión, los asientos de una partida
  * con sus enlaces. Pequeñas y sin dependencias, con el mismo aire que el menú.
  */
 
-const HEAD = (title: string) => String.raw`<!doctype html>
+import type { ChargenCatalog } from '../../engine/chargen.js';
+import { CHARGEN_CSS, CHARGEN_JS } from './page-creation.js';
+
+export const HEAD = (title: string, css = '') => String.raw`<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -38,12 +41,7 @@ const HEAD = (title: string) => String.raw`<!doctype html>
   p { margin: 8px 0; color: var(--muted); }
   label { display: block; margin: 12px 0 0; font-size: 13px; color: var(--muted); }
   input[type=text], select { display: block; width: 100%; margin-top: 4px; height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bubble); }
-  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .check { display: flex; gap: 8px; align-items: center; margin-top: 14px; color: var(--text); }
-  .death { border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px 12px; margin: 14px 0 0; }
-  .death legend { padding: 0 6px; color: var(--muted); font-size: 13px; }
-  .death .check { margin-top: 8px; align-items: flex-start; }
-  .death small { display: block; margin-top: 8px; }
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 999px; font-size: 14px; font-weight: 600; text-decoration: none; }
   .btn.primary { background: var(--accent); color: var(--accent-ink); }
   .btn.primary:hover:not(:disabled) { background: var(--glow); }
@@ -62,8 +60,8 @@ const HEAD = (title: string) => String.raw`<!doctype html>
   .link input { flex: 1; min-width: 0; height: 32px; font: 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #d9d2c6; }
   .tools { display: flex; gap: 8px; flex-wrap: wrap; }
   a { color: var(--accent); }
-  @media (max-width: 520px) { .row2 { grid-template-columns: 1fr; } .box { padding: 18px; } }
-</style>
+  @media (max-width: 520px) { .box { padding: 18px; } }
+${css}</style>
 </head>
 <body>
 `;
@@ -85,55 +83,47 @@ export function invitePage(reason: string | null = null): string {
 
 export interface JoinPageInput {
   game: { slug: string; name: string };
-  options: { races: { id: string; name: string }[]; classes: { id: string; name: string }[] };
+  options: ChargenCatalog;
   /** PJ ya en la partida, para empezar a su lado. */
   others: { id: string; name: string }[];
 }
 
 /** Asiento libre: el invitado crea su personaje y entra. */
 export function joinPage(input: JoinPageInput): string {
-  return HEAD(`${input.game.name} — tu personaje`) + String.raw`<form class="box" id="f" autocomplete="off">
+  return HEAD(`${input.game.name} — tu personaje`, CHARGEN_CSS) + String.raw`<div class="box">
   <span class="eyebrow">${esc(input.game.name)}</span>
   <h1>Te han invitado a la partida</h1>
   <p>Crea tu personaje. Este enlace queda ligado a él: guárdalo para volver desde otro dispositivo.</p>
-  <label>Nombre<input type="text" id="name" maxlength="24" required placeholder="Aren"></label>
-  <div class="row2">
-    <label>Raza<select id="race"></select></label>
-    <label>Clase<select id="klass"></select></label>
-  </div>
-  <label>¿Qué le trae aquí? · opcional<input type="text" id="hook" maxlength="400" placeholder="Busca a su hermano, que vino a este pueblo y no volvió"></label>
-  <label>Cómo se ve · opcional<input type="text" id="look" maxlength="300" placeholder="Pelo cobrizo trenzado, cicatriz en la ceja"></label>
-  <fieldset class="death"><legend>Si muere</legend>
-    <label class="check"><input type="radio" name="death" value="casual" checked> <b>Casual</b> · vuelve a las 2 h con lo suyo esperándole</label>
-    <label class="check"><input type="radio" name="death" value="hardcore"> <b>Hardcore</b> · vuelve a los 30 min, sin nada y con una característica rebajada</label>
-    <small class="muted">Nadie muere para siempre: elige cuánto cuesta volver.</small>
-  </fieldset>
-  <div id="near-row"></div>
-  <div class="foot"><span class="error" id="err" role="alert"></span><button class="btn primary" type="submit">Entrar en la partida</button></div>
-</form>
+  <div id="cg" class="cg"></div>
+</div>
 <script>
+${CHARGEN_JS}
 (function () {
   var D = ${data(input)};
   function $(id) { return document.getElementById(id); }
-  function fill(sel, list, def) { list.forEach(function (o) { var x = document.createElement('option'); x.value = o.id; x.textContent = o.name; if (o.id === def) x.selected = true; sel.appendChild(x); }); }
-  fill($('race'), D.options.races, 'human');
-  fill($('klass'), D.options.classes, 'fighter');
+  // Empezar junto a otro PJ: va al final del resumen.
+  var near = null;
   if (D.others.length) {
-    var row = $('near-row');
-    row.innerHTML = '<label class="check"><input type="checkbox" id="near-on" checked> Empezar junto a <select id="near" style="width:auto;display:inline-block;height:32px;margin:0 0 0 4px"></select></label>';
-    fill($('near'), D.others, D.others[0].id);
+    near = document.createElement('label');
+    near.className = 'check';
+    near.innerHTML = '<input type="checkbox" id="near-on" checked> Empezar junto a <select id="near" style="width:auto;display:inline-block;height:32px;margin:0 0 0 4px"></select>';
+    D.others.forEach(function (c) { var x = document.createElement('option'); x.value = c.id; x.textContent = c.name; near.querySelector('select').appendChild(x); });
   }
-  $('f').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var b = e.target.querySelector('button[type=submit]');
-    b.disabled = true; $('err').textContent = '';
-    var near = $('near-on') && $('near-on').checked ? $('near').value : null;
-    fetch('/api/seat/claim?game=' + encodeURIComponent(D.game.slug), { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: $('name').value, race: $('race').value, class: $('klass').value, hook: $('hook').value, appearance: $('look').value, death_mode: (document.querySelector('input[name=death]:checked') || {}).value || 'casual', near: near }) })
-      .then(function (r) { return r.json(); })
-      .then(function (r) { if (!r.ok) { $('err').textContent = r.text; b.disabled = false; return; } location.href = '/?game=' + encodeURIComponent(D.game.slug); })
-      .catch(function () { $('err').textContent = 'No hay conexión con el servidor.'; b.disabled = false; });
-  });
+  var slug = encodeURIComponent(D.game.slug);
+  tavernusChargen($('cg'), {
+    options: D.options,
+    previewUrl: '/api/character/preview?game=' + slug,
+    confirmLabel: 'Entrar en la partida',
+    showHook: function () { return true; },
+    summaryExtra: near,
+    onConfirm: function (p, ui) {
+      p.near = near && $('near-on').checked ? $('near').value : null;
+      fetch('/api/seat/claim?game=' + slug, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(p) })
+        .then(function (r) { return r.json(); })
+        .then(function (r) { if (!r.ok) { ui.fail(r.text); return; } location.href = '/?game=' + slug; })
+        .catch(function () { ui.fail('No hay conexión con el servidor.'); });
+    }
+  }).open();
 })();
 </script>
 </body></html>`;

@@ -222,7 +222,25 @@ describe('diario: conversaciones', () => {
     kael.knows = kael.knows.filter((id) => id !== 'npc_doro');
     engine.world.npc('npc_doro').location = { type: 'spot', id: 'sp_tab_barra' };
     talk(engine, 'ch_kael', 'Saludar al guardia', 'El guardia gruñe.', [{ speaker: 'npc', npc_id: 'npc_doro', text: 'Hm.' }]);
-    expect(journalOf(engine, 'ch_kael').conversations[0]).toMatchObject({ npc_id: 'npc_doro', name: 'Guardia', known: false });
+    expect(journalOf(engine, 'ch_kael').conversations[0]).toMatchObject({ npc_id: 'npc_doro', name: 'Guardia', known: false, rapport: null });
+  });
+
+  it('el trato con quien conoce sale en palabras, sin niveles ni puntos, y cambia con la actitud y la confianza', async () => {
+    const { engine } = await bootEngine();
+    talk(engine, 'ch_kael', 'Saludar', 'Brenna asiente.', [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'Buenas.' }]);
+    const brenna = engine.world.npc('npc_brenna');
+    const rapport = () => journalOf(engine, 'ch_kael').conversations[0]!.rapport;
+    brenna.attitude.by_character['ch_kael'] = 'unfriendly';
+    expect(rapport()).toBe('te mira con recelo');
+    brenna.attitude.by_character['ch_kael'] = 'hostile';
+    expect(rapport()).toBe('te tiene por enemigo');
+    brenna.attitude.by_character['ch_kael'] = 'neutral';
+    const ladder: [number, string][] = [[0, 'aún no se fía de ti'], [2, 'te conoce, pero no se abre'], [5, 'se fía de ti'], [9, 'está de tu parte']];
+    for (const [points, text] of ladder) {
+      brenna.trust = { ch_kael: { points } };
+      expect(rapport()).toBe(text);
+    }
+    expect(rapport()).not.toMatch(/\d/);
   });
 });
 
@@ -278,7 +296,7 @@ describe('diario: crónica y lugares', () => {
 
 describe('diario: web', () => {
   it('el tablón y el progreso no generan burbuja: un aviso de una línea que lleva al Diario', () => {
-    expect(noticeOf({ action_type: 'board', narration_private: '', observable: '📜 Tablón de Brezal: • **Leña** — …' })).toEqual({ text: 'Hay avisos nuevos en el tablón de la plaza: pásate a leerlos' });
+    expect(noticeOf({ action_type: 'board', narration_private: '', observable: '📜 Tablón de Brezal: • **Leña** — …' })).toEqual({ text: 'Hay avisos nuevos en el tablón de la plaza: pásate a leerlos', link: 'ver el Tablón', tab: 'tablon' });
     expect(noticeOf({ action_type: 'progress_job', narration_private: 'Encargo completado: Leña para la posada. +900 monedas. Reputación en Brezal: 1.', observable: null }))
       .toEqual({ text: 'Encargo completado: Leña para la posada', link: 'ver en el Diario', tab: 'journal' });
     expect(noticeOf({ action_type: 'master', narration_private: 'Brenna te mira.', observable: null })).toBeNull();

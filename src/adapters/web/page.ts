@@ -8,6 +8,8 @@ import { PAINT_JS, PAINT_STYLE } from './paint.js';
 import { AVATAR_SCRIPT, AVATAR_STYLE } from './avatar.js';
 import { HEARTBEAT_MS } from './presence.js';
 import { FIGHT_SCRIPT, FIGHT_STYLE } from './fight.js';
+import { AWAY_JS, AWAY_STYLE } from './whileaway.js';
+import { TABLON_JS, TABLON_STYLE } from './tablon.js';
 
 /** El modo Decir vuelve solo a Hacer tras este rato sin escribir ni decir nada (revisión de la partida del 2026-10-26, n.º 9). */
 export const SAY_IDLE_MS = 30_000;
@@ -699,6 +701,8 @@ ${AVATAR_STYLE}
 ${NOVEL_STYLE}
 ${PAINT_STYLE}
 ${FIGHT_STYLE}
+${AWAY_STYLE}
+${TABLON_STYLE}
   /* B5 sobre los módulos (novel, tts, sfx, voz, pincel, avatar): mismas piezas, otra piel. */
   .msg.row { gap: 8px; margin-top: 8px; max-width: min(760px, 100%); }
   .msg.scene, .moment.combat, .moment.discovery, .moment.manual { width: min(640px, calc(100% - 42px)); }
@@ -968,6 +972,10 @@ ${FIGHT_STYLE}
   #gear-menu .tts-pop, #gear-menu .sfx-pop { display: block !important; position: static; width: auto; margin: 0; padding: 6px; border: 0; border-radius: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
   #gear-menu .gm-paint { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 10px; border: 0; border-radius: 12px; background: var(--control); color: var(--text); text-align: left; }
   #gear-menu .gm-paint[hidden] { display: none; }
+  .tts-pop .report-open { display: block; width: 100%; min-height: 34px; margin-top: 12px; padding: 6px 12px; border: 0; border-radius: 12px; background: var(--control); color: var(--text); font: 500 13px/1.2 var(--sans); text-align: center; }
+  .tts-pop .report-open:hover { background: var(--hover); }
+  #gear-menu .tts-pop .report-open { display: none; }
+  #gear-menu .gm-report .bub svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   #gear-menu .voice-auto { display: flex; width: 100%; height: auto; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--control); color: var(--text); font-size: 13px; text-align: left; white-space: normal; }
   #gear-menu .voice-auto[aria-pressed="true"] { color: var(--accent); background: var(--accent-tint); border-color: rgba(230,183,90,.45); }
   #gear-menu .gm-paint .bub { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: var(--accent-tint); color: var(--accent); }
@@ -1113,6 +1121,7 @@ ${FIGHT_STYLE}
     <div class="pane" data-pane="map"><div id="map"></div><p class="none">Aún no hay mapa de la zona.</p></div>
     <div id="near"></div>
     <div id="quest"></div>
+    <div id="tablon-side"></div>
   </div>
 </aside>
 <main id="play">
@@ -1138,12 +1147,14 @@ ${FIGHT_STYLE}
       <div class="dr-body">
         <div class="dr-pane" data-drpane="sheet"><div id="group" aria-live="polite"></div><div id="sheet"></div><p class="none">Cargando la hoja…</p></div>
         <div class="dr-pane" data-drpane="journal"><div id="journal"></div><p class="none">El diario está en blanco.</p></div>
+        <div class="dr-pane" data-drpane="tablon"><div id="tablon"></div><p class="none">Cargando el tablón…</p></div>
         <div class="dr-pane" data-drpane="pack"><div id="pack"></div><p class="none">Cargando la mochila…</p><p class="vh" id="pk-live" aria-live="polite"></p></div>
         <div class="dr-pane" data-drpane="side"></div>
       </div>
       <div class="dr-tabs" role="tablist" aria-label="Contenido de la partida">
         <button type="button" role="tab" data-dr="sheet">Hoja</button>
         <button type="button" role="tab" data-dr="journal">Diario</button>
+        <button type="button" role="tab" data-dr="tablon">Tablón</button>
         <button type="button" role="tab" data-dr="pack">Mochila</button>
         <button type="button" role="tab" data-dr="side" class="m-only">Tablero</button>
       </div>
@@ -1171,6 +1182,7 @@ ${FIGHT_STYLE}
         <section data-slot="sfx"><h3>Audio</h3></section>
         <section data-slot="tts"><h3>Narrador</h3></section>
         <section data-slot="voice"><h3>Dictar con la voz</h3></section>
+        <section><h3>Ayuda</h3><button type="button" class="gm-paint gm-report"><span class="bub"><svg class="i" viewBox="0 0 24 24"><path d="M5 21V4h13l-2.5 4.5L18 13H5"/></svg></span><span><b>Algo va mal</b><small>Cuéntaselo a quien organiza la partida</small></span></button></section>
       </div>
       <span class="inwrap"><input id="input" placeholder="¿Qué haces?" aria-label="Acción"></span>
       <button type="button" id="cube" aria-haspopup="menu" aria-expanded="false" aria-controls="cube-menu" title="Hoja, diario y mochila" aria-label="Menú de la partida: hoja, diario y mochila"><svg class="i ic-cube"><use href="#i-cube"/></svg><svg class="i ic-x"><use href="#i-x"/></svg></button>
@@ -1182,6 +1194,7 @@ ${FIGHT_STYLE}
     <button type="button" role="menuitem" class="m-only" data-side><span class="bub side"><svg class="i"><use href="#i-map"/></svg></span><span><b class="lbl">Tablero y mapa<i class="dotnew" hidden></i></b><small>Tu ficha, el sitio, la gente y la misión</small></span></button>
     <button type="button" role="menuitem" data-open="sheet"><span class="bub sheet"><svg class="i"><use href="#i-sheet"/></svg></span><span><b class="lbl">Hoja</b><small>Características y habilidades</small></span></button>
     <button type="button" role="menuitem" data-open="journal"><span class="bub journal"><svg class="i"><use href="#i-book"/></svg></span><span><b class="lbl">Diario<i class="dotnew" hidden></i></b><small>Misiones, charlas, crónica y lugares</small></span></button>
+    <button type="button" role="menuitem" data-open="tablon"><span class="bub tablon"><svg class="i"><use href="#i-board"/></svg></span><span><b class="lbl">Tablón<i class="dotnew" hidden></i></b><small>Encargos: quién los pide, recompensa y plazo</small></span></button>
     <button type="button" role="menuitem" data-open="pack"><span class="bub pack"><svg class="i"><use href="#i-pack"/></svg></span><span><b class="lbl">Mochila</b><small id="pack-sub">Lo que llevas encima</small></span></button>
   </div>
 </main>
@@ -1243,7 +1256,7 @@ ${FIGHT_STYLE}
     }).join('');
   }
 
-  function scroll() { log.scrollTop = log.scrollHeight; }
+  function scroll() { if (!holdUnread()) log.scrollTop = log.scrollHeight; }
   // Las de una reacción pendiente no: siguen en pie hasta que se decide o se acaba el tiempo.
   function spendButtons() { log.querySelectorAll('.actions:not(.reaction) button').forEach(function (b) { b.disabled = true; }); }
 
@@ -1308,10 +1321,13 @@ ${FIGHT_STYLE}
 ${NOVEL_JS}
 ${PAINT_JS}
 ${FIGHT_SCRIPT}
+${AWAY_JS}
+${TABLON_JS}
   /** Cada mensaje del stream entra en el hilo tipo chat (novel.ts): avatar, burbuja, botones e imágenes. */
   function renderMessage(m, live, animate) {
     // Irse o volver: aviso de sistema, sin puntos del narrador ni turno (el propio no tiene texto).
     if (m.presence) { if (m.notice) addNotice(m.notice); else if (m.text) add('system', m.text); return Promise.resolve(); }
+    if (m.away_card) { addAwayCard(m.away_card); return Promise.resolve(); }
     var shown = chatMessage(m, live, animate); sceneDot(); return shown;
   }
   /** La última ilustración del sitio hace de foto del «chat» en la cabecera, como en WhatsApp. */
@@ -1395,6 +1411,7 @@ ${FIGHT_SCRIPT}
 
   function act(text) {
     if (busy) return;
+    clearUnread();
     // Sin burbuja de «prompt»: mientras piensa el narrador se ve atenuado; luego lo sustituye lo que el PJ dice o hace.
     pendingMine(text);
     setBusy(true);
@@ -1490,6 +1507,7 @@ ${FIGHT_SCRIPT}
     if (!left) clearInterval(roundTimer);
   }
   function say(text) {
+    clearUnread();
     setQuote(null);
     armSayIdle();
     post('/api/say', { text: text, to: sayTo ? sayTo.id : null }).then(function (r) {
@@ -2668,8 +2686,8 @@ ${FIGHT_SCRIPT}
   }
   /** El punto del cofre: hay novedades en alguna de sus opciones (el Diario o, en el móvil, el tablero). */
   function cubeNew() {
-    var journal = document.querySelector('#cube-menu [data-open="journal"] .dotnew'), side = document.querySelector('#cube-menu [data-side] .dotnew');
-    $('cube').classList.toggle('new', !journal.hidden || (!side.hidden && window.matchMedia('(max-width: 820px)').matches));
+    var journal = document.querySelector('#cube-menu [data-open="journal"] .dotnew'), side = document.querySelector('#cube-menu [data-side] .dotnew'), tablon = document.querySelector('#cube-menu [data-open="tablon"] .dotnew');
+    $('cube').classList.toggle('new', !journal.hidden || !tablon.hidden || (!side.hidden && window.matchMedia('(max-width: 820px)').matches));
   }
   function markJournalSeen() {
     if (!journalData) return;
@@ -2792,7 +2810,7 @@ ${FIGHT_SCRIPT}
     var pt = '<span class="pt" style="--npc:' + color + '">' + (c.portrait ? '<img alt="" src="' + escapeHtml(c.portrait) + '">' : escapeHtml(initial(c.name))) + '</span>';
     var last = c.exchanges[c.exchanges.length - 1];
     var h = '<details class="talk" style="--npc:' + color + '"' + (i === 0 ? ' open' : '') + '><summary>' + pt + '<span class="tt"><b>' + escapeHtml(c.name) + '</b><small>' +
-      escapeHtml([c.known ? c.role : 'nombre desconocido', c.exchanges.length + (c.exchanges.length === 1 ? ' intercambio' : ' intercambios'), last ? last.when : ''].filter(Boolean).join(' · ')) + '</small></span>' + CHEV + '</summary><div class="ex">';
+      escapeHtml([c.known ? c.role : 'nombre desconocido', c.rapport, c.exchanges.length + (c.exchanges.length === 1 ? ' intercambio' : ' intercambios'), last ? last.when : ''].filter(Boolean).join(' · ')) + '</small></span>' + CHEV + '</summary><div class="ex">';
     c.exchanges.forEach(function (x) {
       h += '<div class="exh"><span class="when">' + escapeHtml(x.when + ' · ' + x.location) + '</span>' +
         x.said.map(function (s) { return '<div class="me">' + escapeHtml(s) + '</div>'; }).join('') +
@@ -2871,7 +2889,7 @@ ${FIGHT_SCRIPT}
   });
   /** Abre algo desde el hilo: Hoja, Diario o Mochila en la columna del chat; tablero o mapa en el panel. */
   function goTab(t) {
-    if (t === 'sheet' || t === 'journal' || t === 'pack') { openDrawer(t); return; }
+    if (t === 'sheet' || t === 'journal' || t === 'pack' || t === 'tablon') { openDrawer(t); return; }
     if (t === 'board' || t === 'map') { setView(t); showSide(true); }
   }
 
@@ -2880,6 +2898,7 @@ ${FIGHT_SCRIPT}
     store('tavernus.character.' + game, id);
     if (stream) stream.close();
     log.innerHTML = '';
+    readSeq = 0; serverRead = null; lastShownSeq = 0; unreadHold = false;
     fight = null; fightTurnKey = null; document.body.classList.remove('in-combat'); renderFight();
     board.innerHTML = ''; boardData = null; clearTimeout(boardTimer); document.body.classList.remove('board-big');
     mapEl.innerHTML = ''; mapData = null; document.body.classList.remove('map-big');
@@ -2894,19 +2913,25 @@ ${FIGHT_SCRIPT}
     // Personaje nuevo presentándose: su hilo empieza en el prólogo, que llega por el stream; no se pide /look.
     var opening = false;
     stream.addEventListener('opening', function () { opening = true; });
+    stream.addEventListener('read', function (e) { serverRead = JSON.parse(e.data).seq; });
     stream.addEventListener('history', function (e) {
       log.innerHTML = '';
-      var h = JSON.parse(e.data);
+      var h = JSON.parse(e.data), unread = firstUnread(h), last = h.length - 1;
+      while (last > 0 && h[last].away_card) last--;
       // Vivo: el último mensaje y la tirada que el servidor aún tiene pendiente, aunque haya avisos detrás.
-      h.forEach(function (m, i) { renderMessage(m, i === h.length - 1 || Boolean(m.roll_pending)); });
+      h.forEach(function (m, i) { if (i === unread) addUnreadLine(); renderMessage(m, i === last || Boolean(m.roll_pending)); });
+      if (h.length && h[h.length - 1].seq > lastShownSeq) lastShownSeq = h[h.length - 1].seq;
+      noteRead();
+      anchorUnread();
       if (!opening && !h.some(function (m) { return !m.scene; })) command('look');
       enterGame();
     });
     stream.addEventListener('cast', function (e) { setCast(JSON.parse(e.data)); });
     stream.addEventListener('message', function (e) {
       var m = JSON.parse(e.data);
-      if (m.presence) { inChat(function () { return renderMessage(m); }); return; }
+      if (m.presence) { inChat(function () { liveUnread(m); return renderMessage(m); }); return; }
       inChat(function () {
+        liveUnread(m);
         if (window.TavernusSfx) TavernusSfx.cue(m.sfx);
         loadBoard(); loadScene();
         return renderMessage(m, true, true);
@@ -2923,6 +2948,7 @@ ${FIGHT_SCRIPT}
     stream.addEventListener('place', function (e) { var p = JSON.parse(e.data); inChat(function () { placeReady(p); }); });
     paintConnect(stream);
     stream.addEventListener('journal', loadJournal);
+    stream.addEventListener('journal', loadTablon);
     stream.addEventListener('presence', function (e) { renderPresence(JSON.parse(e.data)); });
     stream.addEventListener('typing', function (e) { showTyping(JSON.parse(e.data)); });
     stream.addEventListener('round', function (e) { showRound(JSON.parse(e.data)); });
@@ -2933,6 +2959,7 @@ ${FIGHT_SCRIPT}
     loadSheet();
     loadScene();
     loadJournal();
+    loadTablon();
     input.focus();
   }
 
@@ -2941,7 +2968,7 @@ ${FIGHT_SCRIPT}
   var TAB = Math.random().toString(36).slice(2, 12);
   function beat(state) {
     if (!current) return;
-    var body = JSON.stringify({ character: current, tab: TAB, state: state || (document.hidden ? 'hidden' : 'visible') });
+    var body = JSON.stringify({ character: current, tab: TAB, state: state || (document.hidden ? 'hidden' : 'visible'), read: readSeq });
     if (state === 'gone' && navigator.sendBeacon) { navigator.sendBeacon(api('/api/presence'), new Blob([body], { type: 'application/json' })); return; }
     fetch(api('/api/presence'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: body, keepalive: true }).catch(function () {});
   }
@@ -3122,9 +3149,9 @@ ${FIGHT_SCRIPT}
 
   // --- El cubo: Hoja, Diario y Mochila en la misma columna del chat ---------------------
   var cube = $('cube'), cubeMenu = $('cube-menu'), drawer = $('drawer'), drawerKey = null;
-  var DR_TITLE = { sheet: 'Hoja', journal: 'Diario', pack: 'Mochila', side: 'Tablero y mapa' };
+  var DR_TITLE = { sheet: 'Hoja', journal: 'Diario', tablon: 'Tablón', pack: 'Mochila', side: 'Tablero y mapa' };
   /** En el móvil, «Tablero» del modal se lleva del panel el tablero, el mapa, la gente cerca y la misión, y al cerrar los devuelve. */
-  var SIDE_PARTS = ['.views', '.pane[data-pane="board"]', '.pane[data-pane="map"]', '#near', '#quest'];
+  var SIDE_PARTS = ['.views', '.pane[data-pane="board"]', '.pane[data-pane="map"]', '#near', '#quest', '#tablon-side'];
   function moveSide(toDrawer) {
     var dest = toDrawer ? document.querySelector('[data-drpane="side"]') : document.querySelector('#side .side-scroll');
     SIDE_PARTS.forEach(function (sel) { var el = document.querySelector(sel); if (el && el.parentNode !== dest) dest.appendChild(el); });
@@ -3147,6 +3174,7 @@ ${FIGHT_SCRIPT}
     cube.classList.add('on');
     cube.setAttribute('aria-label', 'Cerrar ' + DR_TITLE[k].toLowerCase()); cube.title = 'Cerrar';
     if (k === 'sheet' && sheetData) renderSheet(sheetData);
+    if (k === 'tablon') { tablonNew = {}; loadTablon(); }
     if (k === 'journal') {
       // Se pinta con las novedades marcadas y, ya vistas, dejan de contar en el recuadro del panel.
       if (journalData) renderJournal(journalData);
@@ -3194,8 +3222,13 @@ ${FIGHT_SCRIPT}
     var more = document.querySelector('.chat-head .tts-more'), pop = document.querySelector('.chat-head .tts-pop'), gear = $('side-gear');
     if (more && pop) {
       more.innerHTML = '<svg class="i"><use href="#i-gear"/></svg>';
-      more.title = 'Ajustes de la voz del narrador'; more.setAttribute('aria-label', more.title);
+      more.title = 'Ajustes'; more.setAttribute('aria-label', more.title);
       gear.appendChild(more); gear.appendChild(pop);
+      // «Algo va mal» (report.ts) al pie de los ajustes. En el móvil este panel se muda al #gear-menu, que trae el suyo.
+      var report = document.createElement('button');
+      report.type = 'button'; report.className = 'report-open'; report.textContent = 'Algo va mal';
+      report.addEventListener('click', function () { if (!pop.hidden) more.click(); openReport(null, ''); });
+      pop.appendChild(report);
     }
   });
 
@@ -3234,6 +3267,7 @@ ${FIGHT_SCRIPT}
   }
   gear.addEventListener('click', function (ev) { ev.stopPropagation(); setMenu(false); openSlash(false); setGear(gearMenu.hidden); });
   gearMenu.querySelector('.gm-paint').addEventListener('click', function () { var brush = document.querySelector('form .brush'); setGear(false); if (brush) brush.click(); });
+  gearMenu.querySelector('.gm-report').addEventListener('click', function () { setGear(false); openReport(null, ''); });
   document.addEventListener('click', function (ev) { if (!gearMenu.hidden && !ev.target.closest('#gear-menu') && !ev.target.closest('#gear')) setGear(false); });
   mobileQ.addEventListener('change', placeSettings);
   document.addEventListener('DOMContentLoaded', function () { if (mobileQ.matches) placeSettings(); });

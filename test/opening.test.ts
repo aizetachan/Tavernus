@@ -7,6 +7,7 @@ import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
 import { GameManager, type MasterFactory } from '../src/games/manager.js';
 import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
+import { waitUntil } from './helpers.js';
 
 /**
  * Arranque de un PJ nuevo: se anuncia donde de verdad empieza (su situación
@@ -66,7 +67,7 @@ describe('arranque de un personaje nuevo', () => {
       const { game, character_id } = (await r.json()) as { game: { slug: string }; character_id: string };
       const engine = await games.open(game.slug);
       // Espera a que el motor termine la presentación (prólogo y primera escena).
-      for (let i = 0; i < 100 && !engine.events.all().some((e) => e.action_type === 'master_intro' && e.actor_id === character_id); i++) await new Promise((res) => setTimeout(res, 20));
+      await waitUntil(() => expect(engine.events.all().some((e) => e.action_type === 'master_intro' && e.actor_id === character_id)).toBe(true));
       const prologue = engine.events.all().find((e) => e.action_type === 'prologue' && e.actor_id === character_id)!;
       expect(prologue).toBeDefined();
       // Antes del prólogo el motor ya ha emitido cosas que el PJ percibe (su llegada y los NPC colocándose).

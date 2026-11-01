@@ -1,133 +1,45 @@
 # Dónde lo dejamos y qué sigue
 
-## Al retomar (21 de octubre de 2026): empieza por aquí
-
-**Cambio de rumbo:** Discord deja de usarse. El producto es la **web propia** (`src/adapters/web`).
-Todo lo que sigue en este fichero sobre el bot y la VM de Discord queda como historia; la issue #5
-es retirarlo y ajustar la documentación.
-
-**Hecho en la sesión del 21 de octubre:**
-
-- **Diseño en Figma** (archivo TAVERNUS, https://www.figma.com/design/DLtN2zFOjXqXO4qDTudun3/TAVERNUS).
-  - Elegida la propuesta 4 · versión B, «vidrio espacial» (página «04 · Liquid Glass · layout v2»).
-  - La pantalla de partida de referencia es «P1B · Prueba fondo plano» (nodo 55-2938). Además hay
-    una prueba con brillos ámbar (55-3130) y la modal de imagen ampliada.
-  - El inicio de referencia es P0B (nodo 47-5114). Su imagen es la taberna vikinga al amanecer,
-    hecha con Nano Banana 2.1 en Magnific a partir de una referencia (nodo 62-3359). Las demás
-    versiones están al lado para comparar.
-- **Rediseño implementado en la web, en el PR #3:**
-  - Enlace: https://github.com/aizetachan/Tavernus/pull/3. Rama `redesign-interfaz`; el PR #2 se
-    cerró por la «ñ» del nombre de la rama.
-  - **Partida** (`page.ts`): el chat ocupa el centro y las ilustraciones van dentro del chat, con
-    modal al pulsar. El panel lateral lleva la ficha y las pestañas Tablero / Mapa / Hoja; en móvil
-    hay una barra inferior.
-  - **Menú** (`page-menu.ts`): héroe con la taberna, «Continúa tu historia», pestañas y tarjetas, y
-    una hoja para crear una nueva partida.
-  - Imagen en `public/taberna.jpg`, servida por la ruta nueva `/assets/` de `server.ts`.
-  - La lógica del juego no cambia; los 211 tests pasan.
-- **Organización en GitHub (primer borrador, a revisar con el equipo):**
-  - Etiquetas de área y prioridad, más `borrador`.
-  - 4 milestones con fecha: M0 Base (31 oct), M1 Diseño: kit y UX (21 nov), M2 Beta cerrada
-    (19 dic) y M3 Mundos generados (26 feb 2027).
-  - 27 issues, de la #4 a la #30.
-  - Project «Tavernus · hacia la beta»: https://github.com/users/aizetachan/projects/11
-
-**Dónde nos quedamos y qué sigue:**
-
-1. Santy revisa el borrador de issues, milestones y fechas con el equipo (issue #4). El Project
-   tiene los campos de fecha «Inicio» y «Fin» en cada issue. Su vista Roadmap usa esos campos,
-   está agrupada por milestone, a escala de trimestre y con los milestones como marcadores.
-2. Revisar y fusionar el PR #3.
-3. Diseño: rediseñar más a fondo, con un kit pequeño y una vuelta fuerte de UX (issues #8 a #13).
-   El estilo actual es una primera fase.
-4. La documentación del proceso irá también a Notion cuando el equipo lo use; las notas de
-   `NOTAS-GUIA-USUARIO.md` se convierten en issues.
-
-**Para probar el front sin gastar:** `IMAGES=on MASTER_MODE=offline WEB_PORT=3107 DATA_DIR=./data/local/offline
-GAMES_DIR=./data/local/offline/games ANTHROPIC_BASE_URL=http://127.0.0.1:9 DISCORD_TOKEN= npm run web`
-y abrir http://127.0.0.1:3107/ (o el perfil `tavernus-web-offline` de `.claude/launch.json`). El HTML
-está en strings de `page*.ts`: hay que reiniciar el servidor tras cada cambio.
-
----
-
-Actualizado: 14 de septiembre de 2026. El plan por fases hacia mundos generados y vivos, con lo
-construido el 16 de octubre de 2026 (modos sin API, tablero, menú de partidas, reglas, recorte de
-contexto), está en [`PLAN.md`](PLAN.md); este fichero sigue siendo el estado del despliegue.
+Actualizado: 31 de octubre de 2026.
 
 ## Estado
 
-El juego funciona en Discord con un máster de Claude. Hecho: mundo compartido (mapa, movimiento con
-tiempo real de viaje, inventario y capacidad, percepción por bandas, reloj), máster con tools y dados,
-memoria de NPC, creación de personaje con SRD, combate conversacional, y la demo jugable de Brezal
-(pistas, encargos del tablón, reputación, oficios y logro). 83 tests en verde.
+El producto es la **web propia** (`src/adapters/web`), en producción en tavernus.com, en un VPS propio
+([`DESPLIEGUE.md`](DESPLIEGUE.md)). La última versión desplegada es `20261031-093930`: despliegue con
+el usuario `tavernus`, sin root (PR #67), y misiones con charla previa y mochila (PR #68).
 
-**El bot corre en el Mac de Santy**, no en un servidor:
-
-```
-nohup scripts/run-bot.sh &        # arrancar (se relanza solo si falla)
-pkill -f run-bot.sh; pkill -f "src/index.ts"   # parar
-tail -f logs/bot.log              # ver qué hace
-```
-
-Si alguien dice que el bot "no responde", lo primero es `pgrep -f src/index.ts`. Si el Mac se apaga o
-se cierra la tapa sin corriente, el juego se para y nadie recibe aviso. Por eso toca la VM.
-
-## Lo siguiente: mover el bot a la VM de Google
-
-> **Superado (25 de octubre de 2026):** la web se despliega en el VPS propio con
-> [`DESPLIEGUE.md`](DESPLIEGUE.md). Los scripts de esta sección están ahora en `deploy/gcp/`
-> (`deploy/gcp/create-vm.sh`, `deploy/gcp/push.sh`…) y no se mantienen.
-
-Coste: la máquina es gratuita (nivel gratuito permanente). Lo único que se paga sigue siendo la API
-de Claude.
-
-### Pasos de Santy (15 minutos, nadie más puede hacerlos)
-
-1. Entrar en https://console.cloud.google.com con **la cuenta personal de Gmail**, no con la del
-   trabajo (la de nakamateam tiene un proyecto de empresa y no debe usarse: la factura iría a la
-   empresa y el acceso dependería de ese trabajo). Comprobar el avatar arriba a la derecha.
-2. Crear un proyecto, por ejemplo "tavernus", y apuntar el **ID del proyecto**.
-3. Facturación: vincular una tarjeta al proyecto (Google la exige aunque la máquina sea gratuita) y
-   crear una alerta de presupuesto de 10 €.
-4. En la terminal de Claude Code, ejecutar y elegir la cuenta personal en el navegador:
-
-   ```
-   ! CLOUDSDK_ACTIVE_CONFIG_NAME=tavernus gcloud auth login
-   ```
-
-5. Dar el ID del proyecto.
-
-La configuración `tavernus` de `gcloud` ya está creada y **sin activar**, para no tocar la cuenta del
-trabajo. Todos los scripts de `deploy/` la usan mediante `CLOUDSDK_ACTIVE_CONFIG_NAME=tavernus`.
-
-### Pasos automáticos (ya escritos en `deploy/`)
+Para arrancarla, [`README.md`](../README.md). Sin gastar API:
 
 ```
-PROJECT=<id-del-proyecto> deploy/create-vm.sh   # crea e2-micro en us-central1 y la prepara
-deploy/push.sh --with-data                      # sube código + .env + partida; para el bot del Mac
-deploy/push.sh                                  # actualizaciones posteriores (no toca la partida)
+npm run web:offline
 ```
 
-`create-vm.sh` instala Node 24, 1 GB de swap y copias diarias de la partida con 7 días de historial.
-`push.sh` compila con `tsc` y deja el bot como servicio `systemd`: se relanza solo y arranca al
-encender la máquina. En la VM: `sudo journalctl -u tavernus -f` o `/opt/tavernus/logs/bot.log`.
+## Qué sigue
 
-**Importante:** dos bots con el mismo token responden por duplicado. `push.sh --with-data` para el
-del Mac automáticamente; después, no volver a arrancar `run-bot.sh` en el Mac.
+1. **Jugar en tavernus.com** para comprobar la mochila y las misiones en una partida real: desde ese
+   despliegue no hay ninguna acción en producción.
+2. **Revisar los PR abiertos**: [#69](https://github.com/aizetachan/Tavernus/pull/69) (test de
+   ilustraciones con azar fijo) y [#70](https://github.com/aizetachan/Tavernus/pull/70) (diario de
+   misiones en pestañas).
+3. **Traer a la web lo que solo existía en Discord:**
+   - Creación completa de personaje (issue #14). Los pasos, sin cliente, están en `src/engine/creation.ts`.
+   - Reportar un problema y estado para el admin (issue #18).
+   - Avisos de lo que pasa mientras no estás y tablón (issue #19).
+   - Bienvenida: sin issue todavía. Los textos del bot siguen en el historial
+     (`git show 77662ab:src/adapters/discord/texts.ts`).
+4. **Revisar con el equipo** el borrador de issues, milestones y fechas (issue #4): M0 Base (31 oct),
+   M1 Diseño: kit y UX (21 nov), M2 Beta cerrada (19 dic) y M3 Mundos generados (26 feb 2027). Están en
+   el [Project «Tavernus · hacia la beta»](https://github.com/users/aizetachan/projects/11).
+5. **Diseño:** kit pequeño y vuelta fuerte de UX (issues #8 a #13). La referencia es el
+   [archivo TAVERNUS de Figma](https://www.figma.com/design/DLtN2zFOjXqXO4qDTudun3/TAVERNUS), propuesta 4
+   versión B, «vidrio espacial».
 
-### Pendiente tras el despliegue
+El plan por fases hacia mundos generados y vivos está en [`PLAN.md`](PLAN.md).
 
-- Aviso externo por correo si el bot deja de dar señales (lo único que el Mac no puede hacer).
-- Probar Firestore de verdad. Hoy la partida son ficheros JSON en `data/local`, que funcionan y se
-  copian a diario; Firestore está escrito pero nunca se ha ejecutado contra un proyecto real.
+## Historia
 
-## Después de la VM, en el juego
-
-1. Descanso, muerte y reaparición según el modo elegido al crear el personaje (§9.1, §4.7).
-2. Hechizos con resolvedor y barra rápida (§4.10).
-3. Contenido: más localizaciones, NPCs y pistas; hoy Brezal se agota en un par de horas.
-4. Director de trama y líneas secundarias (§3.1).
-5. Panel de admin y métricas (§13).
-
-Las observaciones de las pruebas con jugadores reales están en `docs/NOTAS-GUIA-USUARIO.md`, que es
-la materia prima de la futura guía de usuario.
+El juego nació como bot de Discord, con la spec de [`SPEC.md`](SPEC.md). Corrió en el Mac de Santy y se
+preparó una VM gratuita de Google para moverlo allí. El 21 de octubre de 2026 el producto pasó a ser la
+web, y el 25 se desplegó en el VPS. El bot, sus scripts y los de la VM se retiraron el 31 de octubre
+(issue #5); el último commit que los contiene es `77662ab`. Lo observado en las pruebas con jugadores
+de entonces sigue en [`NOTAS-GUIA-USUARIO.md`](NOTAS-GUIA-USUARIO.md).

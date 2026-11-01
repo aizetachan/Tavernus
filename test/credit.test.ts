@@ -63,12 +63,12 @@ describe('aviso al anfitrión (alert.ts)', () => {
     const fake = (async (url: string, init: RequestInit) => { reqs.push({ url, init }); return new Response('ok'); }) as unknown as typeof fetch;
     const log: string[] = [];
     await webhookAlert({ ALERT_WEBHOOK: 'https://api.telegram.org/botX/sendMessage?chat_id=1' }, (l) => log.push(l), fake)('hola');
-    await webhookAlert({ ALERT_WEBHOOK: 'https://discord.com/api/webhooks/1/abc' }, (l) => log.push(l), fake)('hola');
+    await webhookAlert({ ALERT_WEBHOOK: 'https://ejemplo.test/hook' }, (l) => log.push(l), fake)('hola');
     await webhookAlert({ ALERT_WEBHOOK: 'https://ntfy.sh/tema' }, (l) => log.push(l), fake)('hola');
     await webhookAlert({}, (l) => log.push(l), fake)('hola');
     expect(reqs).toHaveLength(3);
     expect(String(reqs[0]!.init.body)).toBe('text=%5BTavernus%5D+hola');
-    expect(JSON.parse(String(reqs[1]!.init.body))).toEqual({ content: '[Tavernus] hola' });
+    expect(JSON.parse(String(reqs[1]!.init.body))).toEqual({ text: '[Tavernus] hola', content: '[Tavernus] hola' });
     expect(reqs[2]!.init.body).toBe('[Tavernus] hola');
     expect(log).toEqual(Array(4).fill('[aviso] hola'));
   });

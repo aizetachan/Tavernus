@@ -1,5 +1,7 @@
 /** Menú de partidas de la web: crear, continuar, demos y grabaciones. Un solo string, como page.ts. */
 
+import { CHARGEN_CSS, CHARGEN_JS } from './page-creation.js';
+
 export const MENU = String.raw`<!doctype html>
 <html lang="es">
 <head>
@@ -188,6 +190,13 @@ export const MENU = String.raw`<!doctype html>
   .new-head h2 { margin: 0; font: 700 18px/1.2 var(--display); letter-spacing: -.02em; }
   .new-head .ib { margin-left: auto; background: rgba(255,255,255,.06); color: var(--text); }
   #new-form { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0; }
+  #new-form[hidden], #no-char[hidden] { display: none; }
+  /* El asistente de personaje (page-creation.ts) ocupa la hoja, con su pie fijo. */
+${CHARGEN_CSS}
+  #cg-host { flex: 1; min-height: 0; }
+  #cg-host .cg-head { padding: 14px 24px 0; }
+  #cg-host .cg-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 24px 20px; }
+  #cg-host .cg-foot { margin: 0; padding: 12px 24px; border-top: 1px solid var(--sep); }
   .new-body { flex: 1; min-height: 0; overflow-y: auto; }
   .new-in { padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 20px; }
   .lead { margin: 0; color: var(--muted); font-size: 14px; }
@@ -208,7 +217,6 @@ export const MENU = String.raw`<!doctype html>
   .dd-menu.pop { top: 52px; width: 300px; gap: 10px; padding: 14px; }
   .dd-menu.pop b { font-size: 14px; font-weight: 600; color: var(--text); }
   .dd-menu.pop .note { margin: 0; font-size: 12.5px; line-height: 1.45; }
-  .char-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 46px; gap: 8px; align-items: end; }
   .seats { position: relative; }
   .seats-btn { display: flex; align-items: center; gap: 10px; width: 100%; height: 46px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px;
     background: var(--control); color: var(--text); font-size: 15px; }
@@ -243,7 +251,6 @@ export const MENU = String.raw`<!doctype html>
   .fsel-btn[aria-expanded=true] { border-color: rgba(230,183,90,.55); }
   .fsel-btn[aria-expanded=true] svg.i { transform: rotate(180deg); }
   .fsel .dd-menu { top: 52px; left: 0; right: 0; min-width: 0; max-height: 300px; overflow-y: auto; }
-  .sub.death { margin: 6px 0 4px; }
   .opt small { font-size: 12.5px; line-height: 1.4; color: var(--muted); }
   /* Tarjeta con portada: la imagen arriba, con el mismo margen que el texto y esquinas redondeadas, y debajo el
      título y dos líneas. */
@@ -252,8 +259,8 @@ export const MENU = String.raw`<!doctype html>
   .opt.cover:not(:has(input:checked)) .pic { filter: saturate(.75) brightness(.85); }
   .opt:has(input:checked) { background: rgba(230,183,90,.08); box-shadow: inset 0 0 0 1.5px var(--accent); }
   .opt:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
-  #world-opts, #hook-row { display: flex; flex-direction: column; gap: 10px; }
-  #world-opts[hidden], #hook-row[hidden] { display: none; }
+  #world-opts { display: flex; flex-direction: column; gap: 10px; }
+  #world-opts[hidden] { display: none; }
   .note { font-size: 13px; color: var(--muted); }
   .warn { color: #ffb38a; }
   .new-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 24px; border-top: 1px solid var(--sep); background: var(--panel); flex: none; }
@@ -317,6 +324,7 @@ export const MENU = String.raw`<!doctype html>
 
   /* Escritorio: la imagen ocupa toda la pantalla y la tabla de partidas queda encima, con su sombra. */
   @media (min-width: 821px) {
+    #new.cg-on { height: min(860px, calc(100vh - 48px)); }
     main { position: fixed; inset: 0; z-index: 0; }
     .hero .cap, .hero > .body, .hero > .intro { padding-left: 480px; }
     .hero::after { background: linear-gradient(90deg, rgba(11,13,12,.25) 0, rgba(11,13,12,.25) 440px, rgba(11,13,12,.82) 440px, rgba(11,13,12,.55) 760px, rgba(11,13,12,.1) 1000px, rgba(11,13,12,0) 1200px), linear-gradient(to top, rgba(11,13,12,.5), rgba(11,13,12,0) 35%); }
@@ -337,12 +345,14 @@ export const MENU = String.raw`<!doctype html>
     .new-head { min-height: 52px; padding: 0 8px 0 16px; }
     .new-in { padding: 8px 16px 20px; }
     .grid3, .grid2 { grid-template-columns: 1fr; }
-    .char-row { grid-template-columns: minmax(0, 1fr) 46px; }
-    .char-row > :nth-child(2), .char-row > :nth-child(3) { grid-column: 1 / -1; }
     .opt { min-height: 0; }
     .new-foot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
     .new-foot .btn.primary { width: 100%; }
-    .new-foot .btn.ghost { display: none; }
+    .new-foot .btn.ghost:not(#no-char) { display: none; }
+    .new-foot #no-char { width: 100%; }
+    #cg-host .cg-head { padding: 8px 16px 0; }
+    #cg-host .cg-body { padding: 0 16px 20px; }
+    #cg-host .cg-foot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
     .new-foot .grow:has(#new-error:empty) { display: none; }
     #open-new { display: none; }
     #status { top: auto; left: 16px; bottom: calc(28px + env(safe-area-inset-bottom)); }
@@ -378,7 +388,6 @@ export const MENU = String.raw`<!doctype html>
   <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
   <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.2A5 5 0 0 1 21.5 19"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
-  <symbol id="i-portrait" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="12" cy="10" r="3.2"/><path d="M6.5 19a5.5 5.5 0 0 1 11 0"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 1.8 1.8.7-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
   <symbol id="i-offline" viewBox="0 0 24 24"><path d="M2 8.5a15 15 0 0 1 4.2-2.6M10 4.6A15 15 0 0 1 22 8.5"/><path d="M5 12a10 10 0 0 1 3.2-2M13.5 9.6A10 10 0 0 1 19 12"/><path d="M8.5 15.5a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/><path d="M3 3l18 18"/></symbol>
   <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor"/></symbol>
@@ -404,12 +413,15 @@ export const MENU = String.raw`<!doctype html>
       <div class="mh" id="theme-h">Aspecto</div>
       <button type="button" role="menuitemradio" data-theme-opt="penumbra" aria-describedby="theme-h"><span>Penumbra</span><small>Plano</small></button>
       <button type="button" role="menuitemradio" data-theme-opt="taberna" aria-describedby="theme-h"><span>Taberna</span><small>Ilustrado</small></button>
+      <div class="sep status-link" role="separator" hidden></div>
+      <button type="button" role="menuitem" class="status-link" hidden onclick="location.href='/admin/estado'"><span>Estado del servidor</span></button>
     </div>
   </div>
   <div class="scroll">
     <button type="button" id="resume" class="art" hidden><span class="cap"><span class="eyebrow">Continúa tu historia</span><b id="resume-name"></b><span class="go"><span id="resume-meta"></span><span><svg class="i" style="width:14px;height:14px"><use href="#i-play"/></svg>Continuar</span></span></span></button>
     <div id="list"></div>
     <div class="new-wrap"><button id="open-new" class="btn primary sm" type="button"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button></div>
+    <div class="new-wrap"><a class="btn ghost sm" href="https://github.com/aizetachan/Tavernus/blob/main/docs/GUIA-USUARIO.md" target="_blank" rel="noopener">Cómo se juega</a></div>
   </div>
   <button type="button" id="fab"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button>
 </aside>
@@ -444,27 +456,6 @@ export const MENU = String.raw`<!doctype html>
             </div>
           </div>
         </div>
-        <div class="fld">
-          <span class="lbl">Tu personaje <span class="note">· opcional</span></span>
-          <div class="char-row">
-            <label class="sub">Nombre<input id="g-char" type="text" maxlength="24" placeholder="Aren"></label>
-            <label class="sub">Raza<select id="g-race"></select></label>
-            <label class="sub">Clase<select id="g-class"></select></label>
-            <div class="sub"><span id="lbl-look">Aspecto</span>
-              <div class="popwrap">
-                <button id="look-btn" class="sq-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="look-pop" aria-labelledby="lbl-look" title="Cómo se ve tu personaje"><svg class="i"><use href="#i-portrait"/></svg></button>
-                <div id="look-pop" class="dd-menu pop" role="dialog" aria-labelledby="look-title" hidden>
-                  <b id="look-title">Cómo se ve</b>
-                  <p class="note">Descríbelo en pocas palabras: pelo, cara, ropa, algún rasgo. De aquí sale su retrato; luego puedes pedir otro.</p>
-                  <input id="g-look" type="text" maxlength="300" placeholder="Pelo cobrizo trenzado, cicatriz en la ceja, capa de lana verde">
-                </div>
-              </div>
-            </div>
-          </div>
-          <div id="hook-row" hidden>
-            <label class="sub">¿Qué le trae aquí? · si lo dejas vacío, el mundo se lo inventa<input id="g-hook" type="text" maxlength="400" placeholder="Busca a su hermano, que vino a este pueblo y no volvió"></label>
-          </div>
-        </div>
         <div class="fld" role="radiogroup" aria-labelledby="lbl-world">
           <span class="lbl" id="lbl-world">Mundo</span>
           <div class="grid2">
@@ -489,30 +480,25 @@ export const MENU = String.raw`<!doctype html>
           </div>
           <p id="key-warn" class="note warn" hidden>No hay ANTHROPIC_API_KEY: en real o grabando, el máster narrará en plano.</p>
         </div>
-        <div class="fld">
-          <div class="sub death" role="radiogroup" aria-labelledby="lbl-death"><span class="lbl" id="lbl-death">Muerte <span class="note">· nadie muere para siempre: elige cuánto cuesta volver</span></span>
-            <div class="grid2">
-              <label class="opt cover"><input type="radio" name="death" value="casual" checked><span class="pic" style="background-image:url(/assets/muerte-casual.jpg)"></span><b>Casual</b><small>Vuelve a las 2 h con lo suyo esperándole.</small></label>
-              <label class="opt cover"><input type="radio" name="death" value="hardcore"><span class="pic" style="background-image:url(/assets/muerte-hardcore.jpg)"></span><b>Hardcore</b><small>Vuelve a los 30 min, sin nada y más débil.</small></label>
-            </div>
-          </div>
-        </div>
         <p id="gen-note" class="note" hidden></p>
       </div></div>
       <div class="new-foot">
         <span class="grow"><span id="new-error" class="error" role="alert"></span></span>
         <button class="btn ghost sm" type="button" id="cancel-new">Cancelar</button>
-        <button class="btn primary" type="submit">Crear y jugar</button>
+        <button class="btn ghost sm" type="button" id="no-char" hidden>Crear sin personaje</button>
+        <button class="btn primary" type="submit">Crear personaje</button>
       </div>
     </form>
+    <div id="cg-host" class="cg" hidden></div>
   </section>
 </main>
 <div id="toast" role="alert" hidden></div>
 <script>
+${CHARGEN_JS}
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var MODE = { live: 'Máster real', offline: 'Offline', record: 'Grabando', replay: 'Demo' };
-  var apiKey = true, modeTouched = false, lists = { continue: [], demos: [], recordings: [] }, tab = 'continue', selected = null, query = '';
+  var chargenOptions = null, chargen = null, apiKey = true, modeTouched = false, lists = { continue: [], demos: [], recordings: [] }, tab = 'continue', selected = null, query = '';
   var mobile = function () { return window.matchMedia('(max-width: 820px)').matches; };
 
   function fmt(iso) {
@@ -790,9 +776,7 @@ export const MENU = String.raw`<!doctype html>
     pop.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' || (ev.key === 'Enter' && ev.target.tagName === 'INPUT')) { ev.preventDefault(); ev.stopPropagation(); show(false); btn.focus(); } });
     document.addEventListener('click', function () { if (!pop.hidden) show(false); });
   }
-  popover('look-btn', 'look-pop', 'g-look');
   popover('adv-btn', 'adv-pop', 'g-seed');
-  $('g-look').addEventListener('input', function () { $('look-btn').classList.toggle('set', !!$('g-look').value.trim()); });
   $('g-seed').addEventListener('input', function () { $('adv-btn').classList.toggle('set', !!$('g-seed').value.trim()); });
   /** Cambia un select por el desplegable de la aplicación; el select sigue con el valor (y avisa con «change»). */
   function fancySelect(sel) {
@@ -828,7 +812,7 @@ export const MENU = String.raw`<!doctype html>
     new MutationObserver(paint).observe(sel, { childList: true });
     paint();
   }
-  ['g-race', 'g-class', 'g-tone'].forEach(function (id) { fancySelect($(id)); });
+  fancySelect($('g-tone'));
   function seatsMenu(open) {
     $('seats-menu').hidden = !open;
     $('seats-btn').setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -876,6 +860,7 @@ export const MENU = String.raw`<!doctype html>
   function load() {
     return fetch('/api/games').then(function (r) { return r.json(); }).then(function (d) {
       apiKey = d.api_key;
+      document.querySelectorAll('.status-link').forEach(function (x) { x.hidden = !d.admin; x.style.display = d.admin ? '' : 'none'; });
       var st = $('status');
       st.hidden = false;
       st.textContent = apiKey ? 'Claude disponible' : 'Solo offline';
@@ -883,11 +868,9 @@ export const MENU = String.raw`<!doctype html>
       // Sin clave, lo sensato por defecto es offline (si el usuario no ha elegido otra cosa).
       if (!apiKey && !modeTouched) document.querySelector('input[name=mode][value=offline]').checked = true;
       keyWarn();
-      if (!$('g-race').options.length) {
-        d.options.races.forEach(function (r) { $('g-race').add(new Option(r.name, r.id)); });
-        d.options.classes.forEach(function (c) { $('g-class').add(new Option(c.name, c.id)); });
-        (d.options.tones || []).forEach(function (t) { $('g-tone').add(new Option(t.name, t.id)); });
-      }
+      chargenOptions = d.options;
+      $('no-char').hidden = !d.character_optional;
+      if (!$('g-tone').options.length) (d.options.tones || []).forEach(function (t) { $('g-tone').add(new Option(t.name, t.id)); });
       var games = d.games;
       lists.continue = games.filter(function (g) { return !g.demo && g.mode !== 'record'; });
       lists.demos = games.filter(function (g) { return g.demo; });
@@ -912,7 +895,6 @@ export const MENU = String.raw`<!doctype html>
   function worldChanged() {
     var gen = generated();
     $('world-opts').hidden = !gen;
-    $('hook-row').hidden = !gen;
     $('new-lead').textContent = gen
       ? 'Un mundo distinto cada vez: un puerto, una mina, un monasterio, una caravana… con su gente, sus secretos y una situación inicial para tu personaje.'
       : 'Empieza en la taberna de la semilla, con los personajes de siempre y, si quieres, uno tuyo.';
@@ -922,7 +904,15 @@ export const MENU = String.raw`<!doctype html>
   // El formulario y su velo cuelgan del body, no de <main>: así el velo oscurece también el panel lateral y el
   // formulario queda en el centro de la pantalla, por encima de todo.
   document.body.appendChild($('new-scrim')); document.body.appendChild($('new'));
+  /** La hoja tiene dos partes: la partida y, después, el asistente de su personaje. El borrador se guarda al ir y volver. */
+  function characterStage(on) {
+    $('new-form').hidden = on;
+    $('cg-host').hidden = !on;
+    $('new').classList.toggle('cg-on', on);
+    $('new-title').textContent = on ? 'Tu personaje' : 'Nueva partida';
+  }
   function openNew() {
+    characterStage(false);
     $('new').hidden = false;
     document.body.classList.add('new-open');
     setTimeout(function () { $('g-name').focus(); }, 30);
@@ -942,38 +932,51 @@ export const MENU = String.raw`<!doctype html>
 
   $('new-form').addEventListener('submit', function (e) {
     e.preventDefault();
-    var submit = e.target.querySelector('button[type=submit]');
     $('new-error').textContent = '';
-    submit.disabled = true;
+    if (!chargenOptions) { $('new-error').textContent = 'No hay conexión con el servidor.'; return; }
+    if (!chargen) chargen = tavernusChargen($('cg-host'), {
+      options: chargenOptions,
+      previewUrl: '/api/character/preview',
+      confirmLabel: 'Crear y jugar',
+      showHook: generated,
+      onBack: function () { characterStage(false); },
+      onConfirm: createGame
+    });
+    characterStage(true);
+    chargen.open();
+  });
+  $('no-char').addEventListener('click', function () {
+    if (!$('new-form').reportValidity()) return;
+    var b = $('no-char'), submit = $('new-form').querySelector('button[type=submit]');
+    $('new-error').textContent = '';
+    b.disabled = submit.disabled = true;
+    createGame(null, {
+      busy: function (text, note) { if (note) { $('gen-note').hidden = false; $('gen-note').textContent = note; } },
+      fail: function (text) { $('new-error').textContent = text; $('gen-note').hidden = true; b.disabled = submit.disabled = false; }
+    });
+  });
+
+  /** Crea la partida, con el personaje del asistente si lo hay. */
+  function createGame(p, ui) {
     var gen = generated();
-    var body = { name: $('g-name').value, mode: mode(), character: $('g-char').value, race: $('g-race').value, class: $('g-class').value, appearance: $('g-look').value, death_mode: (document.querySelector('input[name=death]:checked') || { value: 'casual' }).value, dice_seed: $('g-seed').value, seats: Math.max(0, Math.min(7, parseInt($('g-seats').value, 10) || 0)) };
-    if (gen) {
-      body.world = { seed: $('g-wseed').value, tone: $('g-tone').value, setting: $('g-setting').value };
-      body.hook = $('g-hook').value;
-    }
+    var body = Object.assign({}, p || {}, { name: $('g-name').value, mode: mode(), character: p ? p.name : '', dice_seed: $('g-seed').value, seats: Math.max(0, Math.min(7, parseInt($('g-seats').value, 10) || 0)) });
+    if (gen) body.world = { seed: $('g-wseed').value, tone: $('g-tone').value, setting: $('g-setting').value };
     // Generar con Claude tarda: el botón lo dice y una nota explica cuánto.
-    var label = submit.textContent, note = $('gen-note');
-    if (gen) {
-      submit.textContent = 'Generando mundo…';
-      note.hidden = false;
-      note.textContent = mode() === 'offline' ? 'Mundo de prueba, sin API: es un momento.' : 'Claude está escribiendo el lugar, su gente y tu situación inicial. Suele tardar uno o dos minutos.';
-    }
-    function done() { submit.disabled = false; submit.textContent = label; note.hidden = true; }
+    if (gen) ui.busy('Generando mundo…', mode() === 'offline' ? 'Mundo de prueba, sin API: es un momento.' : 'Claude está escribiendo el lugar, su gente y tu situación inicial. Suele tardar uno o dos minutos.');
     fetch('/api/games', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json(); })
       .then(function (r) {
-        if (!r.ok) { $('new-error').textContent = r.text; done(); return; }
+        if (!r.ok) { ui.fail(r.text); return; }
         // Pediste a Claude y salió de plantilla (sin clave de API): se dice antes de entrar.
         if (gen && mode() !== 'offline' && r.game.world && r.game.world.template) {
-          note.hidden = false;
-          note.textContent = 'Sin clave de API: el mundo ha salido en modo plantilla (nombres y textos de prueba). Entrando…';
+          ui.busy(null, 'Sin clave de API: el mundo ha salido en modo plantilla (nombres y textos de prueba). Entrando…');
           setTimeout(function () { open(r.game.slug, r.character_id); }, 3500);
           return;
         }
         open(r.game.slug, r.character_id);
       })
-      .catch(function () { $('new-error').textContent = 'No hay conexión con el servidor.'; done(); });
-  });
+      .catch(function () { ui.fail('No hay conexión con el servidor.'); });
+  }
 
   // Música del menú (public/music/menu-instrumental.mp3): en bucle y baja. El navegador no deja sonar nada antes
   // de que la persona toque la página, así que, si no puede empezar sola, empieza al primer clic o tecla.

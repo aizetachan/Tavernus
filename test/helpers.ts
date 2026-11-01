@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { Engine, type EngineOptions } from '../src/engine/engine.js';
 import { World } from '../src/engine/world.js';
 import { GameClock } from '../src/clock/clock.js';
@@ -14,6 +15,40 @@ export function fakeTime(startMs = SEED_REAL_EPOCH_MS) {
     advanceGame(s: number) { t += (s / 3) * 1000; },
     set(ms: number) { t = ms; },
   };
+}
+
+/** Espera a que se cumpla `check`. El plazo es holgado: solo cuenta cuando el test ya va a fallar. */
+export function waitUntil<T>(check: () => T): Promise<T> {
+  return vi.waitFor(check, { timeout: 15_000, interval: 5 });
+}
+
+/** Lo que ya ha llegado de cada stream y aún no se ha leído. */
+const unread = new WeakMap<Response, { buf: string; dec: TextDecoder }>();
+
+/**
+ * Lee un SSE de evento en evento hasta que el texto leído cumpla `until` (o se acabe el tiempo).
+ * Varios eventos pueden llegar en el mismo trozo: lo que sobra queda para la siguiente lectura.
+ */
+export async function readSse(res: Response, until: (text: string) => boolean, ms = 15_000): Promise<string> {
+  const st = unread.get(res) ?? { buf: '', dec: new TextDecoder() };
+  unread.set(res, st);
+  const reader = res.body!.getReader();
+  let text = '';
+  const deadline = Date.now() + ms;
+  while (!until(text)) {
+    const end = st.buf.indexOf('\n\n');
+    if (end >= 0) {
+      text += st.buf.slice(0, end + 2);
+      st.buf = st.buf.slice(end + 2);
+      continue;
+    }
+    if (Date.now() >= deadline) break;
+    const chunk = await Promise.race([reader.read(), new Promise<null>((r) => setTimeout(() => r(null), Math.max(1, deadline - Date.now())))]);
+    if (!chunk || chunk.done) break;
+    st.buf += st.dec.decode(chunk.value, { stream: true });
+  }
+  reader.releaseLock();
+  return text;
 }
 
 export function freshWorld() {

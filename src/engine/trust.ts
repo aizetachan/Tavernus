@@ -162,13 +162,15 @@ const WINNING_SKILLS = new Set(['persuasion', 'performance', 'insight']);
 
 /**
  * Una tirada social en la charla: Persuasión, Interpretación o Perspicacia con éxito suben (con tope); Intimidar
- * resta siempre, salga o no; un Engaño que falla es una mentira descubierta.
+ * resta siempre, salga o no; un Engaño que falla es una mentira descubierta; una Persuasión que falla cuenta como
+ * insistir. Con éxito nunca salta niveles: da el camino, no el secreto (talk.ts, `socialOutcomeLine`).
  */
 export function trustFromRoll(world: World, c: Character, skill: string, success: boolean | null, nowS: number): TrustResult | null {
   const n = talkPartner(world, c);
   if (!n) return null;
   if (skill === 'intimidation') return adjustTrust(world, n, c, 'threat', nowS);
   if (skill === 'deception' && success === false) return adjustTrust(world, n, c, 'lie_caught', nowS);
+  if (skill === 'persuasion' && success === false) return adjustTrust(world, n, c, 'harass', nowS);
   if (WINNING_SKILLS.has(skill) && success === true) return adjustTrust(world, n, c, 'social_roll', nowS);
   return null;
 }

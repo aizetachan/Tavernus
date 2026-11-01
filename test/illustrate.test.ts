@@ -213,7 +213,8 @@ describe('cola', () => {
 describe('disparador en el motor', () => {
   it('avisa la primera llegada al crear personaje y al viajar, y solo la primera', async () => {
     const time = fakeTime();
-    const { engine } = await bootEngine(time, { deterministic: true });
+    // Azar fijo: sin él, un encuentro en el camino (travel.ts) corta el viaje al claro una de cada tres veces.
+    const { engine } = await bootEngine(time, { deterministic: true, rng: () => 0.99 });
     const visits: FirstVisit[] = [];
     engine.onFirstVisit((v) => visits.push(v));
     const r = await engine.createCharacter('u1', 'Ana');

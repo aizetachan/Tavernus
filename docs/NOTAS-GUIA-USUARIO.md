@@ -4,6 +4,9 @@ Cuaderno de observaciones durante las pruebas reales. Aquí se apunta todo lo qu
 ocurre al poner en marcha y jugar, para convertirlo después en la guía de
 usuario y en la guía de administrador. Se añade en cada sesión de prueba.
 
+> **Las sesiones 1 a 6 son del bot de Discord**, ya retirado: sirven por lo que enseñaron del juego y
+> de los jugadores, no como pasos a seguir. Desde «Web local para trabajar el front» todo es de la web.
+
 ## Sesión 1 — 2026-09-06 — puesta en marcha del bot (Santy, admin)
 
 ### Pasos que hicieron falta (guía de administrador)
@@ -244,7 +247,7 @@ exactos que escribió la gente y qué respondió el bot. Los reportes ⚠️ que
 
 ## Web local para trabajar el front (21 oct 2026)
 
-- **Arrancar sin gastar API ni levantar Discord:** perfil `tavernus-web-offline` de `.claude/launch.json`
+- **Arrancar sin gastar API:** `npm run web:offline`
   (puerto 3107, `MASTER_MODE=offline`, partidas en `data/local/offline/`). Abre `http://localhost:3107`.
 - **El servidor no recarga solo:** el HTML/CSS/JS está en strings de `src/adapters/web/page*.ts`;
   tras cada cambio hay que reiniciarlo.

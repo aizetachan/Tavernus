@@ -9,6 +9,7 @@ import { GameManager, type MasterFactory } from '../src/games/manager.js';
 import { accessBanner, createWebServer, type WebServer } from '../src/adapters/web/server.js';
 import { ActionLog, actionLine, clean, fields, masterLine, presenceLine } from '../src/adapters/web/servicelog.js';
 import type { MasterCall } from '../src/engine/engine.js';
+import { waitUntil } from './helpers.js';
 
 const call = (over: Partial<MasterCall> = {}): MasterCall => ({
   character_id: 'ch_ana', action_type: 'master', ok: true, model: 'claude-test', ms: 900,
@@ -178,6 +179,6 @@ describe('registro de la web', () => {
     const mine = () => lines.filter((l) => l.startsWith(`[presencia] partida=${game.slug} pj=${character_id} nombre=Ana`));
     expect(mine().map((l) => l.replace(/.* evento=/, ''))).toEqual(['conecta pestaña=pestana- streams=1', 'en_línea']);
     ctrl.abort();
-    await vi.waitFor(() => expect(mine().map((l) => l.replace(/.* evento=/, ''))).toEqual(['conecta pestaña=pestana- streams=1', 'en_línea', 'desconecta pestaña=pestana- streams=0', 'fuera_de_línea']), { timeout: 2000 });
+    await waitUntil(() => expect(mine().map((l) => l.replace(/.* evento=/, ''))).toEqual(['conecta pestaña=pestana- streams=1', 'en_línea', 'desconecta pestaña=pestana- streams=0', 'fuera_de_línea']), { timeout: 2000 });
   });
 });

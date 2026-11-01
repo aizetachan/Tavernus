@@ -19,7 +19,7 @@ import { adjustTrust, knowledgeFor, MASTER_TRUST_CHANGES, TRUST_LABEL, trustNoti
 import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
 import { finishQuest, giveQuest } from '../engine/quests.js';
-import { attitudeOf, forcedTurnText, forceNpcTurns, intentOf, lethalBlow, npcTurn, resolveAttack, type ForcedTurn } from '../engine/combat.js';
+import { attitudeOf, forcedTurnText, forceNpcTurns, intentOf, lethalBlow, nonLethalSource, npcTurn, resolveAttack, type ForcedTurn } from '../engine/combat.js';
 import { encounterAt } from '../engine/encounter.js';
 import { INCIDENT_KINDS, incidentRejection, npcCrimeLine, pendingIncidents, reactionSentences, readsAsTheft, reportAssault, reportIncident, reportKill, unnarratedReactors, type IncidentKind } from '../engine/crime.js';
 import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, helplessNpc, isDying, killNpc, knockOutNpc, medicineDc, NPC_DOWN_HINT, reviveNpc, stabilize } from '../engine/death.js';
@@ -27,7 +27,7 @@ import { spendResource } from '../engine/rest.js';
 import { castSpell } from '../engine/levels.js';
 import { ABILITY_ES, armorClass, characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
 import { SOCIAL_SKILLS, socialDcShift } from '../engine/standing.js';
-import { tagOptions } from '../engine/worldrules.js';
+import { freshTagOptions, tagOptions } from '../engine/worldrules.js';
 import { aEs, descriptorOf, fmtDuration, maskUnknownNames } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
 import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
@@ -39,11 +39,11 @@ import { openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/
 import { inventedPlaces } from '../engine/places.js';
 import { money } from '../engine/money.js';
 import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
-import { movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
+import { coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
-import { offersNow, talkProblems, talkState, textSignals, TALK_SITUATIONS, type TalkPlan } from '../engine/talk.js';
+import { endsTalk, offersNow, talkProblems, talkState, textSignals, TALK_SITUATIONS, withoutRefused, type TalkPlan } from '../engine/talk.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
@@ -177,6 +177,9 @@ export const MASTER_TOOLS: Tool[] = [
   }),
   tool('settle_debt', 'Salda (o rebaja) la deuda del actor con un NPC: coins paga con sus monedas (amount o todo), work la da por pagada con un trabajo ya hecho, forfeit la da por perdida y el NPC se queda la prenda. Al saldarla, la prenda vuelve al actor.', {
     npc_id: str('ID del NPC'), how: enm([...SETTLE_HOW], 'coins (paga), work (trabajo hecho), forfeit (pierde la prenda)'), amount: nnum('Solo coins: lo que paga, en la moneda más pequeña (cobre); null = todo'),
+  }),
+  tool('give_coins', 'El actor da monedas a un NPC sin deuda ni compra: propina, soborno, limosna, un pago sin precio. Si hay deuda, settle_debt; si está en su lista, buy_item. Sin este tool las monedas no se han movido.', {
+    npc_id: str('ID del NPC'), amount: num('Lo que da, en la moneda más pequeña (cobre)'), reason: str('Por qué, en pocas palabras'),
   }),
   tool('attack', 'Ataque de un NPC (o de un PJ fuera del flujo de tirada del jugador). El servidor tira contra la CA, calcula y aplica el daño. Un NPC hace aquí su turno entero (con su multiataque, si lo tiene): una llamada por NPC y turno. Para el ataque del propio jugador usa requires_roll con kind=attack y requires_roll_target. A 0 PG un NPC cae inconsciente si el golpe es contundente o el jugador solo quiere pegar o reducir; muere si quiere matar o el arma corta o perfora (el servidor lo decide por la acción y el arma).', {
     attacker_id: str('ID del que ataca (NPC o personaje)'), target_id: str('ID del objetivo'), advantage: enm(ADV, 'Ventaja o desventaja'),
@@ -324,7 +327,7 @@ export const MASTER_TOOLS: Tool[] = [
 /** Tools que cambian el mundo: si fallan, eso no ha ocurrido y no se puede narrar (master.ts). */
 export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story', 'story_quest',
-  'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
+  'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
   'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident', 'npc_trust', 'restrain_npc',
 ]);
 
@@ -376,6 +379,12 @@ export interface ToolContext {
   receive_rejections?: number;
   /** Cierres rechazados por mover un objeto del actor solo de palabra (uno como mucho). */
   moved_rejections?: number;
+  /** Cierres rechazados por dar monedas por pagadas sin moverlas (closecheck.ts; uno como mucho). */
+  coins_rejections?: number;
+  /** El PJ ha atacado en esta acción con el tool attack (el de un NPC no cuenta). */
+  pc_attacked?: boolean;
+  /** Cierres rechazados por dejar sin resolver un golpe que declara el jugador (closecheck.ts; uno como mucho). */
+  strike_rejections?: number;
   /** Cierres rechazados por ignorar un incidente con testigos delante (crime.ts; dos como mucho). */
   incident_rejections?: number;
   /** Cierres rechazados por mostrar un punto oculto que el actor no ha encontrado (spots.ts; uno como mucho). */
@@ -1165,6 +1174,17 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!r.ok) return { error: r.error };
       return { ok: true, paid: r.paid, remaining: r.remaining, settled: r.settled, returned: r.returned, kept_by_npc: r.kept, coins_left: actor.coins };
     }
+    case 'give_coins': {
+      const npc = world.npc(s('npc_id'));
+      const miss = reachNpc(ctx, npc);
+      if (miss) return miss;
+      const amount = Math.floor(Number(input['amount']));
+      if (!(amount > 0)) return { error: 'amount debe ser mayor que cero' };
+      if (amount > actor.coins) return { error: 'not_enough_coins', hint: `Solo lleva ${money(world, actor.coins)}: narra que no le llega.` };
+      actor.coins -= amount;
+      world.touch('characters', actor.id);
+      return { ok: true, paid: money(world, amount), to: npc.name, coins_left: actor.coins };
+    }
     case 'request_reaction': {
       if (engine.inReactionOutcome(actor.id)) return { error: 'Esto ya es el desenlace de una reacción: narra lo que ha pasado; no pidas otra.' };
       const to = world.characters.get(s('target_character_id'));
@@ -1193,6 +1213,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       }
       // Un PJ ausente no ataca ni gasta recursos: solo se defiende.
       if (atk && atk.away) return { error: `${atk.name} está ausente: no ataca ni gasta recursos; si le atacan, se defiende solo` };
+      if (atk?.id === actor.id) ctx.pc_attacked = true;
       if (atk) {
         // Cuerpo a cuerpo hay que estar en el mismo punto; a distancia basta la misma localización.
         const tc = world.characters.get(s('target_id'));
@@ -1246,7 +1267,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const c = world.character(s('target_id'));
       if (c.veiled) return { error: `${c.name} está bajo el velo: no puede recibir daño` };
       if (c.status === 'dead') return { error: `${c.name} ya está muerto` };
-      const r = damageCharacter(world, c, Number(input['amount']) || 0, { cause: s('source') || s('damage_type') || 'daño', nowGameS });
+      const r = damageCharacter(world, c, Number(input['amount']) || 0, { cause: s('source') || s('damage_type') || 'daño', nowGameS, ...(nonLethalSource(world, c, s('source')) ? { nonLethal: true, rng: ctx.rng } : {}) });
       return {
         ok: true, hp: `${c.hp_current}/${c.hp_max}`, status: c.status,
         ...(r.down ? { down: true, note: c.away ? 'está ausente: cae y queda estable (no muere ausente)' : 'cae a 0 PG: inconsciente; el servidor tira sus salvaciones contra muerte' } : {}),
@@ -1532,6 +1553,28 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: movedRejection(verb) };
         }
       }
+      // Monedas pagadas solo de palabra (pone 200 sobre la mesa y sigue con sus 200): se reescribe una vez.
+      if ((ctx.coins_rejections ?? 0) < 1) {
+        const paid = coinsWithoutTool({ action: ctx.action_text ?? '', narration: s('narration_private'), okTools: ctx.ok_tools ?? [], pendingRoll: req !== null });
+        if (paid) {
+          ctx.coins_rejections = (ctx.coins_rejections ?? 0) + 1;
+          return { error: coinsRejection(paid) };
+        }
+      }
+      // El jugador declara un golpe y nadie lo resuelve: se reescribe una vez, y si hay razón para no tirar, que la cuente.
+      // No tras la tirada (el resultado ya lo trae), ni en turnos compartidos, ni sin nadie a quien golpear.
+      if ((ctx.strike_rejections ?? 0) < 1 && ctx.action_text && !ctx.roll_category) {
+        const strike = strikeWithoutAttack({ action: ctx.action_text, narration: s('narration_private'), attackRoll: req?.kind === 'attack', pcAttacked: ctx.pc_attacked === true, okTools: ctx.ok_tools ?? [] });
+        if (strike) {
+          const hints = engine.sceneHints(actor.id);
+          const afterRoll = engine.events.all().filter((e) => e.actor_id === actor.id).at(-1)?.action_type === 'roll';
+          const someone = [...world.npcs.values()].some((n) => n.status === 'alive' && world.spot(n.location.id).location_id === here()) || world.charactersInLocation(here()).length > 1;
+          if (!hints?.round && !hints?.group && !afterRoll && someone) {
+            ctx.strike_rejections = (ctx.strike_rejections ?? 0) + 1;
+            return { error: strikeRejection(strike) };
+          }
+        }
+      }
       // Un NPC que dice que va con el actor (o a algún sitio) sin set_npc_order se queda donde está: se reescribe una vez.
       if ((ctx.order_rejections ?? 0) < 1) {
         const lines = parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id));
@@ -1634,6 +1677,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const inputs = sharedInputs(engine, actor.id);
       const invented = inputs ? parsedLines.filter((l) => (l.speaker === 'pc' || l.speaker === 'actor') && !saidByPlayer(l.text, inputs.get(l.speaker === 'pc' ? l.character_id! : actor.id))) : [];
       const closingLines = parsedLines.filter((l) => !invented.includes(l));
+      // La tercera negativa corta la charla (talk.ts).
+      if (ctx.talk && endsTalk(ctx.talk, closingLines)) world.npc(ctx.talk.npc_id).talking_to = null;
       const unsay = (t: string) => invented.reduce((acc, l) => acc.split(`«${l.text}»`).join('').replace(/[ \t]{2,}/g, ' ').trim(), t);
       // Arranques en falso que el modelo corrige sobre la marcha («MIAU Lenzo... no. MIAU se queda…»): se quitan.
       const tidy = (t: string) => withoutSelfCorrection(cleanText(t));
@@ -1676,11 +1721,13 @@ ${forcedTail}` : ''),
         // Esperar o unirse a un NPC ocupado con otro jugador lo ofrecen los botones del motor (scene.ts), no el máster.
         suggested_actions: s('suggested_actions').split('|').map((t) => t.trim()).filter((t) => t && !isPlaceholder(t)).filter((t) => !(busyHere(engine, actor, nowGameS) && /^(esperar|aguardar|unirme|unirse|sumarme)\b/i.test(t)))
           // Ni un rincón que no conoce («Ir a la trampilla» sin haberla encontrado: spots.ts).
-          .filter((t) => spotsNamedIn(world, here(), t).every((sp) => knowsSpot(actor, sp))).slice(0, 4)
+          .filter((t) => spotsNamedIn(world, here(), t).every((sp) => knowsSpot(actor, sp)))
+          // Ni lo que este NPC ya le ha negado (talk.ts).
+          .filter((t, _i, all) => !ctx.talk || withoutRefused(world, ctx.talk, all).includes(t)).slice(0, 4)
           // Un nombre que el actor no sabe no se le escapa en los botones: «Preguntar a la tabernera», no «a Brenna».
           .map((t) => capFirst(maskUnknownNames(world, actor.id, t)))
           // Una opción con etiqueta (worldrules.ts), como las de BG3: «[Soldado] Hablarle de tú a tú (Persuasión CD 12)».
-          .concat(req ? [] : tagOptions(world, actor, (k) => SKILLS[k]?.es ?? k).slice(0, 1))
+          .concat(req ? [] : freshTagOptions(tagOptions(world, actor, (k) => SKILLS[k]?.es ?? k), engine.events.all(), actor.id, nowGameS).slice(0, 1))
           .filter((t, i, all) => all.indexOf(t) === i).slice(-4),
         requires_roll: req,
         decisive: input['decisive_threat'] ? { threat: cleanText(s('decisive_threat')), npc_id: input['decisive_npc_id'] ? s('decisive_npc_id') : null } : null,

@@ -10,7 +10,7 @@ import { offlineClient } from '../src/ai/offline.js';
 import { attachIllustrator, entityKey, Illustrator, illustratorOf, itemPrompt, Limiter, PollinationsQueue, portraitPrompt, sceneSeed, styleBible, STYLE } from '../src/ai/illustrate.js';
 import { spawnItem } from '../src/engine/inventory.js';
 import { seededRng } from '../src/engine/dice.js';
-import { bootEngine, fakeTime } from './helpers.js';
+import { bootEngine, fakeTime, waitUntil } from './helpers.js';
 
 const NONE = { itemOfInstance: () => null };
 
@@ -236,8 +236,9 @@ describe('ilustrador por entidad', () => {
     const got: { kind?: string; entity?: string; seq: number | null }[] = [];
     ill.onEntity((r) => got.push({ kind: r.image.kind, entity: r.image.entity_id, seq: r.event_seq }));
     const r = await engine.act('ch_kael', 'Hablo con Brenna');
-    await vi.waitFor(() => expect(got).toHaveLength(2));
-    expect(got).toEqual([{ kind: 'portrait', entity: 'npc_brenna', seq: r.event!.seq }, { kind: 'portrait', entity: 'ch_kael', seq: null }]);
+    await waitUntil(() => expect(got).toHaveLength(2));
+    // Los dos a la vez: cualquiera puede llegar antes.
+    expect(got).toEqual(expect.arrayContaining([{ kind: 'portrait', entity: 'npc_brenna', seq: r.event!.seq }, { kind: 'portrait', entity: 'ch_kael', seq: null }]));
     await engine.act('ch_kael', 'mirar alrededor');
     await engine.act('ch_kael', 'Hablo con Brenna otra vez');
     await new Promise((res) => setTimeout(res, 20));
@@ -286,7 +287,7 @@ describe('hilo de la web', () => {
     const base = `http://127.0.0.1:${(web.server.address() as import('node:net').AddressInfo).port}`;
     const engine = await games.open(game.slug);
     const ill = illustratorOf(engine)!;
-    await vi.waitFor(() => expect(ill.imageFor(engine.world.characterSpot(engine.world.character(character_id!))!.location_id)).not.toBeNull());
+    await waitUntil(() => expect(ill.imageFor(engine.world.characterSpot(engine.world.character(character_id!))!.location_id)).not.toBeNull());
 
     const r = await fetch(`${base}/api/act?game=${game.slug}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ character: character_id, text: 'Espero un rato' }) });
     expect((await r.json() as { ok: boolean }).ok).toBe(true);
@@ -314,6 +315,8 @@ describe('hilo de la web', () => {
     expect(again).toEqual(history);
     // Tras reiniciar el servidor (el historial sale del log de eventos), la vista sigue en su burbuja.
     await games.closeAll();
+    // Al abrir, el ilustrador lee su índice sin esperar: hasta que acaba no sabe que la vista existe.
+    await illustratorOf(await games.open(game.slug))!.load();
     const reopened = await open();
     expect((reopened.find((x) => x.type === 'history')!.data as typeof history).filter((m) => m.place)).toEqual(places);
     await games.closeAll();

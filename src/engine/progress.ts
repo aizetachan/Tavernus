@@ -136,12 +136,30 @@ export function rotateBoard(world: World, nowGameS: number, force = false): Job[
   if (!force && b.last_rotation_day === day) return null;
   const jobs = world.campaign.jobs;
   if (jobs.length === 0) return null;
-  const n = Math.min(3, jobs.length);
-  const start = (day * n) % jobs.length;
-  b.active_job_ids = Array.from({ length: n }, (_, i) => jobs[(start + i) % jobs.length]!.id);
+  b.active_job_ids = boardOfDay(world, day);
   b.last_rotation_day = day;
   world.touch('campaign', world.campaign.id);
   return b.active_job_ids.map((id) => jobs.find((j) => j.id === id)!);
+}
+
+/** Los encargos que salen en el tablón un día de juego dado. */
+function boardOfDay(world: World, day: number): Id[] {
+  const jobs = world.campaign.jobs;
+  const n = Math.min(3, jobs.length);
+  const start = (day * n) % jobs.length;
+  return Array.from({ length: n }, (_, i) => jobs[(start + i) % jobs.length]!.id);
+}
+
+/**
+ * Cuándo sale un encargo del tablón (segundo de juego del cambio), o null si no sale nunca (hay 3 o menos).
+ * Es su plazo: fuera del tablón no se puede cobrar (completeJob).
+ */
+export function leavesBoardAt(world: World, jobId: Id, nowGameS: number): number | null {
+  const today = Math.floor(nowGameS / GAME_DAY);
+  for (let day = today + 1; day <= today + world.campaign.jobs.length; day++) {
+    if (!boardOfDay(world, day).includes(jobId)) return day * GAME_DAY;
+  }
+  return null;
 }
 
 export function activeJobs(world: World): Job[] {
