@@ -144,7 +144,8 @@ export const MENU = String.raw`<!doctype html>
     padding: 5px 9px; border-radius: 8px; background: rgba(14,15,16,.96); box-shadow: 0 6px 18px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.08);
     color: var(--text); font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; white-space: nowrap; pointer-events: none; }
   .eyebrow .badge.dot { margin-left: 10px; vertical-align: middle; }
-  .row .more { display: none; }
+  .row .more, .row .play { display: none; }
+  .row .m, .filters.menu .mobile-only { display: none; }
   .menu-pop { position: absolute; right: 12px; top: 56px; z-index: 5; display: flex; flex-direction: column; min-width: 220px; padding: 6px; border-radius: 14px; background: var(--bubble); box-shadow: var(--shadow); }
   .menu-pop[hidden] { display: none; }
   .menu-pop button { text-align: left; height: 32px; padding: 0 12px; border-radius: 10px; background: transparent; font-size: 14px; }
@@ -366,15 +367,22 @@ ${CHARGEN_CSS}
     #status { top: auto; left: 16px; bottom: calc(28px + env(safe-area-inset-bottom)); }
     #fab { position: fixed; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 10; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px 0 14px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 600; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
     .scroll { padding-bottom: 96px; }
-    #resume { position: relative; display: block; height: 190px; margin: 4px 12px 14px; border-radius: 18px; overflow: hidden; color: var(--text); text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: calc(100% - 24px); text-align: left; }
+    #resume { position: relative; display: block; height: 190px; margin: 4px 0 14px; border-radius: 18px; overflow: hidden; color: var(--text); text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: 100%; text-align: left; cursor: default; }
     #resume[hidden] { display: none; }
     #resume::after { content: ''; position: absolute; inset: 25% 0 0; background: linear-gradient(to top, rgba(11,13,12,.95), rgba(11,13,12,0)); }
     #resume .cap { position: absolute; left: 16px; right: 16px; bottom: 14px; z-index: 1; display: flex; flex-direction: column; gap: 4px; }
     #resume b { font: 800 20px/1.2 var(--display); letter-spacing: -.02em; }
     #resume .go { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #d9d3c8; }
     #resume .go span:first-child { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #resume .go span:last-child { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px 0 14px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 14px; font-weight: 600; }
     .row .more { display: inline-grid; }
+    .row .play { display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); }
+    .row .play svg.i { width: 14px; height: 14px; margin-left: 2px; }
+    .row .d { display: none; }
+    .row time.m { display: inline; flex: none; font-size: 12px; }
+    .row .badge.m { display: inline-flex; margin-left: auto; }
+    .filters.menu .mobile-only { display: flex; }
+    .filters.menu .sep.mobile-only { display: block; }
+    #guide-wrap { display: none; }
   }
 </style>
 </head>
@@ -412,15 +420,17 @@ ${CHARGEN_CSS}
       <div class="mh" id="theme-h">Aspecto</div>
       <button type="button" role="menuitemradio" data-theme-opt="penumbra" aria-describedby="theme-h"><span>Penumbra</span><small>Plano</small></button>
       <button type="button" role="menuitemradio" data-theme-opt="taberna" aria-describedby="theme-h"><span>Taberna</span><small>Ilustrado</small></button>
+      <div class="sep mobile-only" role="separator"></div>
+      <button type="button" role="menuitem" class="mobile-only" onclick="window.open('https://github.com/aizetachan/Tavernus/blob/main/docs/GUIA-USUARIO.md', '_blank', 'noopener')"><span>Cómo se juega</span></button>
       <div class="sep status-link" role="separator" hidden></div>
       <button type="button" role="menuitem" class="status-link" hidden onclick="location.href='/admin/estado'"><span>Estado del servidor</span></button>
     </div>
   </div>
   <div class="scroll">
-    <button type="button" id="resume" class="art" hidden><span class="cap"><span class="eyebrow">Continúa tu historia</span><b id="resume-name"></b><span class="go"><span id="resume-meta"></span><span><svg class="i" style="width:14px;height:14px"><use href="#i-play"/></svg>Continuar</span></span></span></button>
+    <button type="button" id="resume" class="art" hidden><span class="cap"><span class="eyebrow" id="resume-eyebrow">Continúa tu historia</span><b id="resume-name"></b><span class="go"><span id="resume-meta"></span></span></span></button>
     <div id="list"></div>
     <div class="new-wrap"><button id="open-new" class="btn primary sm" type="button"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button></div>
-    <div class="new-wrap"><a class="btn ghost sm" href="https://github.com/aizetachan/Tavernus/blob/main/docs/GUIA-USUARIO.md" target="_blank" rel="noopener">Cómo se juega</a></div>
+    <div class="new-wrap" id="guide-wrap"><a class="btn ghost sm" href="https://github.com/aizetachan/Tavernus/blob/main/docs/GUIA-USUARIO.md" target="_blank" rel="noopener">Cómo se juega</a></div>
   </div>
   <button type="button" id="fab"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button>
 </aside>
@@ -704,15 +714,23 @@ ${CHARGEN_JS}
     r.setAttribute('aria-label', g.name + '. ' + when(g));
     var pic = el('span', 'pic art'); pic.setAttribute('data-zoom', '2.6'); if (ring) pic.style.setProperty('--ring', ring); r.appendChild(pic); art(pic, g);
     var tt = el('span', 'tt');
-    var l1 = el('span', 'l1'); l1.appendChild(el('b', '', g.name)); l1.appendChild(el('time', '', stamp(g.last_opened_at || g.created_at))); tt.appendChild(l1);
-    var l2 = el('span', 'l2'); l2.appendChild(el('span', '', summary(g))); l2.appendChild(badge(g)); tt.appendChild(l2);
+    // Escritorio: la hora junto al título y el punto junto al grupo. Móvil (.m): al revés.
+    var at = stamp(g.last_opened_at || g.created_at);
+    var b1 = badge(g); b1.classList.add('m');
+    var b2 = badge(g); b2.classList.add('d');
+    var l1 = el('span', 'l1'); l1.appendChild(el('b', '', g.name)); l1.appendChild(el('time', 'd', at)); l1.appendChild(b1); tt.appendChild(l1);
+    var l2 = el('span', 'l2'); l2.appendChild(el('span', '', summary(g))); l2.appendChild(b2); l2.appendChild(el('time', 'm', at)); tt.appendChild(l2);
     r.appendChild(tt);
     var pop = el('div', 'menu-pop'); pop.hidden = true;
     extras(g, '').forEach(function (b) { pop.appendChild(b); });
     var more = el('button', 'ib more'); more.type = 'button'; more.setAttribute('aria-label', 'Más acciones'); more.innerHTML = icon('i-more');
     more.addEventListener('click', function (ev) { ev.stopPropagation(); var was = pop.hidden; closeMenus(); pop.hidden = !was; });
     r.appendChild(more); r.appendChild(pop);
-    var go = function () { if (mobile()) open(g.slug); else { selected = g.slug; closeNew(); render(); } };
+    // Móvil: «Continuar» en cada partida, a la derecha de los tres puntos; tocar la fila la enseña arriba.
+    var play = el('button', 'ib play'); play.type = 'button'; play.setAttribute('aria-label', 'Continuar ' + g.name); play.innerHTML = icon('i-play');
+    play.addEventListener('click', function (ev) { ev.stopPropagation(); open(g.slug); });
+    r.appendChild(play);
+    var go = function () { selected = g.slug; closeNew(); render(); };
     r.addEventListener('click', go);
     r.addEventListener('dblclick', function () { open(g.slug); });
     r.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); if (ev.key === 'Enter' && g.slug === selected) open(g.slug); else go(); } });
@@ -802,13 +820,14 @@ ${CHARGEN_JS}
     var g = games.filter(function (x) { return x.slug === selected; })[0];
     detail(g, g && lists.continue[0] && g.slug === lists.continue[0].slug);
     // Móvil: la última partida jugada, en grande arriba, para seguir con un toque.
-    var last = tab === 'continue' && !query ? lists.continue[0] : null, resume = $('resume');
+    // Móvil: arriba, la vista previa de la partida elegida (al entrar, la última jugada). Se entra con su «Continuar».
+    var last = g || (tab === 'continue' && !query ? lists.continue[0] : null), resume = $('resume');
     resume.hidden = !last;
     if (last) {
       art(resume, last);
+      $('resume-eyebrow').textContent = lists.continue[0] && last.slug === lists.continue[0].slug ? 'Continúa tu historia' : EYEBROW[tab];
       $('resume-name').textContent = last.name;
       $('resume-meta').textContent = [MODE[last.mode], when(last)].join(' · ');
-      resume.onclick = function () { open(last.slug); };
     }
   }
   /** Ventanitas sin velo (Aspecto, Opciones avanzadas): se abren con su botón y se cierran al pulsar fuera o con Esc. */
