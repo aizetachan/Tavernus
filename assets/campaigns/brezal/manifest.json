@@ -1,10 +1,34 @@
 {
   "campaigns": ["brezal","demo"],
-  "scene": {"loc_taberna":"vista/loc_taberna.jpg","loc_plaza":"vista/loc_plaza.jpg","loc_claro":"vista/loc_claro.jpg"},
+  "scene": {
+    "loc_taberna": "vista/loc_taberna.jpg",
+    "loc_sotano": "vista/loc_sotano.jpg",
+    "loc_plaza": "vista/loc_plaza.jpg",
+    "loc_herreria": "vista/loc_herreria.jpg",
+    "loc_casona": "vista/loc_casona.jpg",
+    "loc_curandera": "vista/loc_curandera.jpg",
+    "loc_molino": "vista/loc_molino.jpg",
+    "loc_corrales": "vista/loc_corrales.jpg",
+    "loc_claro": "vista/loc_claro.jpg",
+    "loc_ruinas": "vista/loc_ruinas.jpg",
+    "loc_lindero": "vista/loc_lindero.jpg",
+    "loc_valcruz": "vista/loc_valcruz.jpg"
+  },
   "portrait": {
     "npc_brenna": "retrato/npc_brenna.jpg",
     "npc_doro": "retrato/npc_doro.jpg",
+    "npc_osric": "retrato/npc_osric.jpg",
+    "npc_garran": "retrato/npc_garran.jpg",
+    "npc_ilse": "retrato/npc_ilse.jpg",
+    "npc_hugo": "retrato/npc_hugo.jpg",
+    "npc_mateo": "retrato/npc_mateo.jpg",
+    "npc_tobias": "retrato/npc_tobias.jpg",
+    "npc_ysolde": "retrato/npc_ysolde.jpg",
+    "npc_hal": "retrato/npc_hal.jpg",
+    "npc_ursula": "retrato/npc_ursula.jpg",
     "npc_lobo": "retrato/npc_lobo.jpg",
+    "npc_loba": "retrato/npc_loba.jpg",
+    "npc_ceniza": "retrato/npc_ceniza.jpg",
     "master": "retrato/master.jpg",
     "pc:human": "retrato/pc-human.jpg",
     "pc:elf": "retrato/pc-elf.jpg",
@@ -16,16 +40,36 @@
     "pc:tiefling": "retrato/pc-tiefling.jpg",
     "pc:dragonborn": "retrato/pc-dragonborn.jpg"
   },
-  "item": {"it_cofre":"objeto/it_cofre.jpg","it_hacha":"objeto/it_hacha.jpg","it_llave_vharn":"objeto/it_llave_vharn.jpg"},
+  "item": {
+    "it_cofre": "objeto/it_cofre.jpg",
+    "it_pocion": "objeto/it_pocion.jpg",
+    "it_hacha": "objeto/it_hacha.jpg",
+    "it_llave_vharn": "objeto/it_llave_vharn.jpg",
+    "it_libro_cuentas": "objeto/it_libro_cuentas.jpg",
+    "it_cadena_fria": "objeto/it_cadena_fria.jpg",
+    "it_cartas_tobias": "objeto/it_cartas_tobias.jpg",
+    "it_bolsa_ceniza": "objeto/it_bolsa_ceniza.jpg",
+    "it_llave_arcon": "objeto/it_llave_arcon.jpg",
+    "it_copa_vharn": "objeto/it_copa_vharn.jpg",
+    "it_agua_pozo": "objeto/it_agua_pozo.jpg",
+    "it_carta_sello": "objeto/it_carta_sello.jpg",
+    "it_tonico": "objeto/it_tonico.jpg"
+  },
   "discovery": {
     "clue_hacha": "descubrimiento/clue_hacha.jpg",
     "clue_pozo": "descubrimiento/clue_pozo.jpg",
-    "clue_doro": "descubrimiento/clue_doro.jpg",
-    "clue_brenna": "descubrimiento/clue_brenna.jpg",
     "clue_trampilla": "descubrimiento/clue_trampilla.jpg",
-    "sp_tab_trampilla": "descubrimiento/clue_trampilla.jpg"
+    "sp_tab_trampilla": "descubrimiento/clue_trampilla.jpg",
+    "clue_libro": "descubrimiento/clue_libro.jpg",
+    "sp_so_hueco": "descubrimiento/sp_so_hueco.jpg",
+    "sp_he_losa": "descubrimiento/sp_he_losa.jpg",
+    "sp_ca_bodega": "descubrimiento/sp_ca_bodega.jpg",
+    "sp_mo_desvan": "descubrimiento/sp_mo_desvan.jpg"
   },
-  "combat": {"npc_lobo":"combate/npc_lobo.jpg"},
+  "combat": {
+    "npc_lobo": "combate/npc_lobo.jpg",
+    "npc_loba": "combate/npc_loba.jpg"
+  },
   "region_map": "mapa/region.jpg",
   "plan_campaigns": ["brezal"],
   "map_backgrounds": {
