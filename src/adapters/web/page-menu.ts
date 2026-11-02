@@ -333,6 +333,8 @@ ${CHARGEN_CSS}
     main { position: fixed; inset: 0; z-index: 0; }
     .hero .cap, .hero > .body, .hero > .intro { padding-left: 480px; }
     .hero > .intro { max-width: 1000px; }
+    /* La barra de partidas (440 px) tapa la izquierda: la imagen se centra en lo que queda a la vista. */
+    #stage { left: 440px; }
     .hero::after { background: linear-gradient(90deg, rgba(11,13,12,.25) 0, rgba(11,13,12,.25) 440px, rgba(11,13,12,.82) 440px, rgba(11,13,12,.55) 760px, rgba(11,13,12,.1) 1000px, rgba(11,13,12,0) 1200px), linear-gradient(to top, rgba(11,13,12,.5), rgba(11,13,12,0) 35%); }
     aside { z-index: 2; }
     .search { background: rgba(255,255,255,.07); }
