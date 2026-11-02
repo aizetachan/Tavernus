@@ -289,8 +289,7 @@ ${CHARGEN_CSS}
   @media (prefers-reduced-motion: reduce) { body.leaving .tech { animation: none; } }
 
   /* Tema Penumbra (el de por defecto): el estilo de la pantalla de partida, plano. Sin tablones ni marco: el panel de
-     la lista es el de la partida, y las imágenes van en duotono (sus luces y sombras teñidas del dorado de la app),
-     para que una ilustración se lea como ambiente y no como un cuadro. Taberna es todo lo de arriba, sin tocar. */
+     la lista es el de la partida, y las imágenes se ven tal cual, con sus colores. Taberna es todo lo de arriba, sin tocar. */
   :root[data-theme="penumbra"] aside { padding: 0; background: var(--panel); border-right: 1px solid var(--sep);
     --glass: var(--control); --glass-hover: #23272a; --glass-on: #2a2e31; }
   :root[data-theme="penumbra"] aside::before, :root[data-theme="penumbra"] aside::after, :root[data-theme="penumbra"] .tech { display: none; }
@@ -308,11 +307,6 @@ ${CHARGEN_CSS}
   :root[data-theme="penumbra"] aside .row.on .badge { color: inherit; }
   :root[data-theme="penumbra"] h1 .logo { filter: none; }
   :root[data-theme="penumbra"] .filters.menu, :root[data-theme="penumbra"] .dd-menu { background: rgba(20,22,23,.97); }
-  /* Duotono (filtro #duo del sprite): una copia de la imagen debajo del contenido, de negro a dorado según su luz. */
-  :root[data-theme="penumbra"] .art, :root[data-theme="penumbra"] .opt.cover .pic { position: relative; isolation: isolate; }
-  :root[data-theme="penumbra"] .art::before, :root[data-theme="penumbra"] .opt.cover .pic::before { content: ''; position: absolute; inset: 0; z-index: -1;
-    background: inherit; border-radius: inherit; filter: url(#duo); }
-  :root[data-theme="penumbra"] .opt.cover:not(:has(input:checked)) .pic::before { filter: url(#duo) brightness(.75); }
   /* Entrar en una partida: un fundido a negro, sin la madera que se vuelve tecnología. */
   :root[data-theme="penumbra"] body.leaving::after { transition: opacity .5s ease; }
   :root[data-theme="penumbra"] body.leaving aside > *, :root[data-theme="penumbra"] body.leaving main, :root[data-theme="penumbra"] body.leaving #status { transition: opacity .35s ease; }
@@ -372,15 +366,6 @@ ${CHARGEN_CSS}
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <!-- Duotono de Penumbra: la luz de la imagen, de casi negro (#0b0d0c) a dorado (#e6b75a), con los medios oscuros. -->
-  <filter id="duo" color-interpolation-filters="sRGB">
-    <feColorMatrix type="matrix" values=".2126 .7152 .0722 0 0  .2126 .7152 .0722 0 0  .2126 .7152 .0722 0 0  0 0 0 1 0"/>
-    <feComponentTransfer>
-      <feFuncR type="table" tableValues=".043 .22 .62 .95"/>
-      <feFuncG type="table" tableValues=".051 .16 .47 .80"/>
-      <feFuncB type="table" tableValues=".047 .08 .22 .48"/>
-    </feComponentTransfer>
-  </filter>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z" fill="currentColor" stroke="none"/></symbol>
   <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/></symbol>
