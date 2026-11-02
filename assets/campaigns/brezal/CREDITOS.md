@@ -3,7 +3,7 @@
 Autor: Santiago Fernández Alfaro (Nakama Studio). Generado con Magnific (Google Nano Banana 2.1) a partir de las referencias de estilo de `assets/style-refs/` y retocado/seleccionado a mano. Fecha: 2026-11-02.
 Licencia: obra propia del proyecto Tavernus.
 
-> Nota: `docs/ARTE.md` pedía arte a mano sin IA; esta tanda cambia ese criterio (estilo cartoon-realista 3D). Pendiente actualizar `docs/ARTE.md`.
+> El método (Magnific, Nano Banana 2.1, referencias de `assets/style-refs/`) está en `docs/ARTE.md`.
 
 Vistas, descubrimientos y combates reescalados ×2 (2048 × 1152) con el upscaler de Magnific (Precision «sublime»), para que la portada del menú y la vista ampliada se vean nítidas.
 

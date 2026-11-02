@@ -1,13 +1,13 @@
-# Arte a mano — guía de estilo y convención
+# Arte de Brezal — guía de estilo y convención
 
-Para la demo de Brezal las imágenes y los planos los hace el equipo a mano: más calidad, más coherencia y
-nada inventado por una IA. El motor ya lo sabe: **si hay un activo escrito, se usa ese y no se llama a
-ninguna IA**; si no lo hay, se genera como siempre (Cloudflare o Pollinations, `src/ai/illustrate.ts`). Así se
-puede ir subiendo arte poco a poco: lo que falta sigue saliendo generado.
+El arte de la demo de Brezal está hecho por el equipo en Magnific con un estilo propio, **cartoon-realista**, y
+elegido a mano: más calidad y más coherencia que lo que genera el juego en marcha. El motor ya lo sabe: **si hay un
+activo escrito, se usa ese y no se llama a ninguna IA**; si no lo hay, se genera como siempre (Cloudflare o
+Pollinations, `src/ai/illustrate.ts`). Lo que falta sigue saliendo generado.
 
-El trabajo está repartido en issues de GitHub con las etiquetas `arte` y `brezal` (épica:
-[#32](https://github.com/aizetachan/Tavernus/issues/32)). Cada issue dice qué
-es, cómo es según los datos, el fichero exacto y cuándo está hecho.
+Estado (2 de noviembre de 2026): está hecho todo el arte de Brezal salvo 14 fondos de plano (ver «Inventario»). El
+registro de cada pieza, con su imagen, está en Notion: «Libro de Arte e Historia de Tavernus» → «Libro de Arte» →
+«Registro de assets de Brezal».
 
 ## Dónde va cada cosa
 
@@ -18,11 +18,14 @@ assets/campaigns/brezal/
   vista/<loc_id>.jpg       vista de cada localización
   retrato/<npc_id>.jpg     retrato de cada NPC; master.jpg = el narrador
   retrato/pc-<raza>.jpg    retrato genérico de PJ por raza (opcional: pc-<raza>-<clase>.jpg)
-  objeto/<item_id>.jpg     objeto clave en la mano
+  objeto/png/<item_id>.png objeto sin fondo (PNG transparente): el que usa el juego
+  objeto/<item_id>.jpg     el mismo objeto sobre #121318 (copia, por si hace falta un JPEG)
   descubrimiento/<id>.jpg  una pista encontrada (clue_…) o un punto oculto (sp_…); las pistas oídas no
   combate/<npc_id>.jpg     escena de combate contra ese NPC (opcional)
   mapa/region.jpg          mapa de la región
   plano/<loc_id>.jpg       fondo pintado del plano (opcional)
+assets/style-refs/         referencias de estilo para Magnific (no las usa el juego)
+public/salvapantallas-N.jpg  las imágenes que rotan en la portada del menú (estas sí son públicas)
 ```
 
 - Los ids son los de los datos de la campaña (`loc_…`, `npc_…`, `it_…`, `clue_…`, `sp_…`). Si Brezal escrito
@@ -33,19 +36,23 @@ assets/campaigns/brezal/
 - `manifest.json` ya lista todas las rutas esperadas: subir un fichero con ese nombre basta para que se use.
   Una ruta cuyo fichero no existe se ignora (se genera). Para otra campaña: otra carpeta con su manifiesto y su
   lista `campaigns` (los `campaign.id` a los que sirve; hoy `brezal` y `demo`).
-- Las fuentes (PSD, KRA, PNG grandes) no van al repositorio: en la carpeta compartida del equipo, enlazadas
-  desde la issue. En el repo solo el fichero final.
+- Las fuentes (originales a 2K, variantes) se quedan en Magnific, en el proyecto «TAVERNUS · Estudio de estilo»
+  (carpetas Vistas, Retratos, Objetos, Objetos sin fondo, Descubrimientos, Mapa y combate, Salvapantallas épicos).
+  En el repo solo el fichero final.
+- Al abrir una partida ya empezada, el juego actualiza su caché de imágenes: lo que venía de un activo se vuelve a
+  copiar (por si el arte cambió) y una vista, un retrato de NPC o un objeto que se generó antes de existir su activo
+  pasa a ser el activo. Los combates, descubrimientos y retratos de PJ ya generados no cambian.
 
 ## Técnica y tono
 
 Brezal es una aldea de fantasía medieval oscura que vive de espaldas a una montaña quemada. El arte tiene que
-sentirse **sombrío, frío y concreto**, y convivir con la web, que es «vidrio espacial»: paneles translúcidos
-sobre un fondo casi negro, con un único acento ámbar.
+sentirse **sombrío, frío y concreto**, y convivir con una web casi negra con un único acento ámbar.
 
-- **Técnica:** pintura digital de aspecto tradicional (gouache u óleo), pincelada visible, sin línea de
-  contorno, sin aspecto 3D ni fotográfico. Detalle donde mira el jugador; el resto, masas.
-- **Luz:** clave baja. Sombras frías (azul pizarra, gris ceniza) y una sola fuente cálida (vela, brasas,
-  farol, ocaso). Nada de cielos azules alegres ni colores saturados: incluso de día, nublado y gris.
+- **Técnica: cartoon-realista.** Render 3D hiperrealista con rasgos de caricatura sutilmente exagerados; cada
+  personaje con su propia silueta (no copiar el cuerpo de la referencia); texturas de material reales (poros,
+  óxido, madera, cuero); acabado de fotograma de cine. Nada de acabado Pixar/Disney ni de ilustración pintada.
+- **Luz:** clave baja. Una sola fuente cálida ámbar (`#e9a94e`: vela, brasas, farol, ocaso), sombras azul pizarra y
+  gris ceniza, paleta apagada. Nada de cielos azules alegres: incluso de día, nublado y gris.
 - **Paleta** (la de la web):
 
   | Uso | Color |
@@ -57,25 +64,59 @@ sobre un fondo casi negro, con un único acento ámbar.
   | Frío lejano: luna, magia (muy poco) | `#63d1ff` |
   | Vegetación apagada | `#3f4a35` · `#5c6b4a` |
 
-- **Prohibido:** texto, letras, firmas o marcas de agua dentro de la imagen (el pie lo pone la web); marcos;
-  anacronismos (lámparas eléctricas, cristal moderno); estilo anime o caricatura; arte generado por IA,
-  aunque sea retocado. **Excepción:** los fondos de plano, que se generan a partir de la referencia exacta del plano
-  (ver «Fondos pintados»).
+- **Prohibido:** texto, letras, firmas o marcas de agua dentro de la imagen (el pie lo pone la web; excepción, lo
+  que forma parte de una pista, como las iniciales «T. M.» del hacha); marcos; anacronismos; acabado Pixar/Disney o
+  de ilustración pintada; el sello de la brasa (Vharn) en objetos que no son de Vharn, porque se confunden con pistas.
 - **Coherencia:** la misma aldea en todas las vistas (madera negra, piedra gris, tejados de pizarra, nada de
-  teja roja), el mismo fresno y roble en el bosque, y la montaña de Vharn siempre al norte cuando se vea.
+  teja roja), la niebla gris, el mismo fresno y roble en el bosque, y la montaña de Vharn siempre al norte.
+
+## Cómo se hace (Magnific)
+
+Modelo: Google **Nano Banana 2.1**, con las referencias de `assets/style-refs/` como imagen de referencia en cada
+petición: personajes (Brenna, Doro, Ilse) para retratos y combates; escenarios (taberna, plaza, granero) para vistas y
+descubrimientos; la llave de Vharn para los objetos. Retratos y objetos en 1:1; vistas, descubrimientos y combates en
+16:9 a 2K y reescalados ×2 con Magnific Precision («sublime») hasta 2048 × 1152. Se elige a mano entre las variantes.
+
+Plantillas (lo que va entre corchetes sale de los datos de la campaña):
+
+- **Retrato:** «Take ONLY the rendering style from the reference images: cartoon-realistic hyperrealistic 3D
+  render, physically real materials, photographic cinematic lighting (warm amber from the left, cool slate-blue
+  shadows on the right), plain near-black background with soft vignette, subtly exaggerated caricature features. Do
+  NOT copy the reference characters' bodies or faces. Character with [his/her/its] OWN exaggerated silhouette:
+  [nombre, edad, complexión, rasgos, ropa, objeto en mano, expresión]. Real skin pores, [materiales]. NOT painterly,
+  NOT glossy Pixar/Disney/DreamWorks look. Bust framing, head in the upper third, readable when cropped to a circle.
+  No text.»
+- **Vista:** «Take ONLY the rendering style from the reference images: cartoon-realistic 3D render with photographic
+  cinematic lighting and subtly exaggerated caricature shapes, same world. Location: [lugar, interior/exterior],
+  eye-level, no people: [elementos]. ULTRA HYPERREALISTIC MACRO-LEVEL TEXTURES: [materiales]. Physically based
+  materials, 8K detail. [luz], muted palette. Keep 8% safe margin. NOT painterly, NOT smooth CGI, NOT Pixar look.
+  No text.»
+- **Descubrimiento:** «… Discovery close-up, no people: [el hallazgo]; light falls on [el hallazgo], [el sitio]
+  softly blurred behind (shallow depth of field). ULTRA HYPERREALISTIC MACRO TEXTURES: [materiales]. [luz], muted
+  palette. NOT painterly, NOT smooth CGI. No text.»
+- **Combate:** «… Combat scene: a lone hooded adventurer seen from behind over the shoulder, [arma], facing [rival]
+  in [lugar]. ULTRA HYPERREALISTIC TEXTURES: […]. [luz], muted palette. Keep 8% safe margin. NOT painterly, NOT
+  Pixar look. No text.»
+- **Objeto** (referencia: la llave): «Replace the key in the reference image with [objeto y materiales], keeping
+  exactly the same style: hyperrealistic 3D render with chunky stylized proportions, physically real materials,
+  same warm amber highlight and cool slate-blue fill, centered and filling about 70% of the frame, isolated on a
+  plain flat pure white background, no table, no cast shadow, clean edges. No text.» Después se quita el fondo en
+  Magnific (PNG transparente) y se recorta y centra a 512 × 512.
 
 ## Tamaños y formatos
 
-Todo en **JPEG** (`.jpg`), sRGB, calidad 80–85, progresivo y sin metadatos. Hoy el servidor solo sirve JPEG;
-WebP queda para cuando el servidor lo admita.
+JPEG (`.jpg`), sRGB, calidad 80–85, progresivo y sin metadatos; los objetos, en PNG transparente. El servidor
+sirve JPEG para todo y PNG solo para objetos.
 
 | Tipo | Medida | Peso máx. | Encuadre |
 |---|---|---|---|
-| Vista de localización | 1024 × 576 (16:9) | 350 KB | Vista del lugar a la altura de los ojos, sin personajes en primer plano (los NPC tienen su retrato). Deja un 8 % de margen: la web recorta y pone el pie abajo. |
-| Retrato (NPC, narrador, PJ) | 512 × 512 | 150 KB | Busto de frente o tres cuartos, cabeza en el tercio superior, fondo oscuro liso con viñeta. Que funcione recortado en círculo. |
-| Objeto | 512 × 512 | 120 KB | El objeto solo, sostenido en una mano o sobre madera, centrado y ocupando ~70 %, fondo oscuro. |
-| Descubrimiento (pista) | 1024 × 576 | 350 KB | El detalle que se descubre, de cerca, con la luz sobre el hallazgo. |
+| Vista de localización | 2048 × 1152 (16:9) | 600 KB | El lugar a la altura de los ojos, sin personajes en primer plano (los NPC tienen su retrato). Deja un 8 % de margen: la web recorta y pone el pie abajo. Es también la portada de la partida en el menú, a pantalla completa. |
+| Retrato (NPC, narrador, PJ) | 512 × 512 | 150 KB | Busto de frente o tres cuartos, cabeza en el tercio superior, fondo casi negro con viñeta. Que funcione recortado en círculo. |
+| Objeto | 512 × 512, PNG transparente | 400 KB | El objeto solo, sin fondo, centrado y ocupando ~78 %. Se ve en el chat y en las casillas de la mochila. |
+| Descubrimiento (pista) | 2048 × 1152 | 600 KB | El detalle que se descubre, de cerca, con la luz sobre el hallazgo. |
+| Combate | 2048 × 1152 | 600 KB | El PJ de espaldas frente a su rival. |
 | Mapa de región | 2048 × 1536 (4:3) | 1,5 MB | Vista cenital o de cartógrafo, norte arriba, con la montaña de Vharn al norte. Rótulos a mano permitidos solo aquí. |
+| Salvapantallas del menú | 2560 × 1440 | 600 KB | Escenas épicas de la campaña. Rotan en la portada mientras no se elige partida. Van en `public/`: no deben destripar nada que importe. |
 | Fondo de plano (opcional) | 40 px por metro de `bounds`, máx. 2048 px de lado (la medida exacta la da `scripts/plans.ts reference`) | 800 KB | Cenital, ortogonal, sin perspectiva. Suelo, paredes y muebles en el mismo sitio que en el plano escrito; lo oculto no. |
 
 ## Qué pinta cada momento generado
@@ -119,21 +160,20 @@ plano escrito, el tablero usa ese; si no, lo genera `src/adapters/web/mapgen.ts`
 
 ## Licencia y atribución
 
-- Solo obra propia o con licencia compatible (CC0 o CC BY 4.0). Nada de bancos de imágenes sin licencia, nada
-  de IA generativa.
-- Cada fichero se apunta en `assets/campaigns/brezal/CREDITOS.md`: fichero, autor, licencia y fecha. Lo propio
-  se cede al proyecto Tavernus para usarlo en el juego y en su promoción.
-- La issue se cierra con el fichero en su ruta, la línea en `CREDITOS.md` y la captura del juego.
+- Obra propia del proyecto (hecha en Magnific con este método y elegida a mano) o con licencia compatible (CC0 o
+  CC BY 4.0). Nada de bancos de imágenes sin licencia.
+- Cada fichero se apunta en `assets/campaigns/brezal/CREDITOS.md`: fichero, autor, herramienta, licencia y fecha.
+  Lo propio se cede al proyecto Tavernus para usarlo en el juego y en su promoción.
 
 ## Cómo probarlo
 
 1. Copia el fichero a su ruta (la del manifiesto) y arranca la web con `IMAGES=on`.
-2. Empieza una partida nueva de la demo y llega al sitio, habla con el NPC o coge el objeto.
+2. Empieza una partida de Brezal y llega al sitio, habla con el NPC o coge el objeto.
 3. La imagen sale sin esperar a ninguna IA, y en `data/games/<partida>/images/index.json` aparece con
-   `"provider": "written"`.
+   `"provider": "written"`. Los objetos con imagen salen también en las casillas de la mochila, en cualquier partida.
 
-En una partida ya empezada la imagen generada antes sigue en caché hasta que se vuelva a pedir; para verla al
-momento, borra `data/games/<partida>/images/`. Los planos escritos se usan en cuanto se reinicia el servidor.
+En una partida ya empezada, el arte nuevo de vistas, retratos de NPC y objetos se toma al volver a abrirla (al
+reiniciar el servidor). Los planos escritos se usan en cuanto se reinicia el servidor.
 
 Lo que aún no hace la web (issue aparte): pintar el mapa de región (`region_map`) en la vista de región.
 
@@ -180,25 +220,20 @@ también los de puntos que el PJ aún no ha visitado.
 
 ## Inventario
 
-Hoy, de la demo (`src/data/seed/demo.ts`). **Cuando aterrice Brezal escrito** (`docs/BREZAL.md`,
-`src/data/campaigns/brezal/`, unas 8 localizaciones y 10–12 NPC) se amplía esta lista, el manifiesto y las
-issues con sus localizaciones, NPC, objetos y pistas.
+Brezal (`src/data/campaigns/brezal/`), 2 de noviembre de 2026. El detalle de cada pieza, con su imagen, en el
+registro de Notion.
 
-| Activo | Tipo | Fichero | Issue |
+| Activo | Cuántos | Fichero | Estado |
 |---|---|---|---|
-| Taberna del Jabalí | vista | `vista/loc_taberna.jpg` | [#33](https://github.com/aizetachan/Tavernus/issues/33) |
-| Plaza del Pozo | vista | `vista/loc_plaza.jpg` | [#34](https://github.com/aizetachan/Tavernus/issues/34) |
-| Claro del Roble | vista | `vista/loc_claro.jpg` | [#35](https://github.com/aizetachan/Tavernus/issues/35) |
-| Brenna, la tabernera | retrato | `retrato/npc_brenna.jpg` | [#36](https://github.com/aizetachan/Tavernus/issues/36) |
-| Doro, el guardia | retrato | `retrato/npc_doro.jpg` | [#37](https://github.com/aizetachan/Tavernus/issues/37) |
-| El lobo gris | retrato | `retrato/npc_lobo.jpg` | [#38](https://github.com/aizetachan/Tavernus/issues/38) |
-| Combate contra el lobo (opcional) | combate | `combate/npc_lobo.jpg` | [#38](https://github.com/aizetachan/Tavernus/issues/38) |
-| El Narrador | retrato | `retrato/master.jpg` | [#39](https://github.com/aizetachan/Tavernus/issues/39) |
-| PJ por raza (9) | retrato | `retrato/pc-<raza>.jpg` | [#40](https://github.com/aizetachan/Tavernus/issues/40) |
-| Cofre, hacha, llave de Vharn | objeto | `objeto/<item_id>.jpg` | [#41](https://github.com/aizetachan/Tavernus/issues/41) |
-| Las cinco pistas | descubrimiento | `descubrimiento/<clue_id>.jpg` | [#42](https://github.com/aizetachan/Tavernus/issues/42) |
-| Valle de Vharn | mapa | `mapa/region.jpg` | [#43](https://github.com/aizetachan/Tavernus/issues/43) |
-| Planos de taberna, plaza y claro | plano | `manifest.json` → `maps` | [#44](https://github.com/aizetachan/Tavernus/issues/44) |
+| Vistas de localización | 12 | `vista/<loc_id>.jpg` | hechas (2048 × 1152) |
+| Retratos de NPC y narrador | 15 | `retrato/<npc_id>.jpg` · `retrato/master.jpg` | hechos |
+| Retratos de PJ por raza | 9 | `retrato/pc-<raza>.jpg` | hechos (son el avatar de base del PJ) |
+| Objetos | 46 | `objeto/png/<item_id>.png` | hechos: todos los del juego salvo la noche de posada, que es un servicio |
+| Descubrimientos | 8 | `descubrimiento/<id>.jpg` | hechos (las pistas oídas no llevan imagen) |
+| Combates | 2 | `combate/npc_lobo.jpg` · `combate/npc_loba.jpg` | hechos |
+| Mapa de la región | 1 | `mapa/region.jpg` | hecho (la web aún no lo enseña) |
+| Salvapantallas del menú | 7 | `public/salvapantallas-N.jpg` | hechos |
+| Fondos de plano | 19 | `plano/<loc_id>.jpg` | 5 hechos; faltan 14 (ver «Fondos pintados») |
 
 Los iconos del tablero no hacen falta por ahora: el tablero dibuja muebles y fichas como vectores desde los
 datos. Si se quieren pintados, es una issue aparte que también toca el dibujo del tablero.
