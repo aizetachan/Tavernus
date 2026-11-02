@@ -6,7 +6,7 @@ export const MENU = String.raw`<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Tavernus</title>
 <script>(function () { var t = null; try { t = localStorage.getItem('tavernus.theme'); } catch (e) {} document.documentElement.setAttribute('data-theme', t === 'taberna' ? 'taberna' : 'penumbra'); })();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,6 +19,8 @@ export const MENU = String.raw`<!doctype html>
 <style>
   /* Safari en iPhone agranda el texto al girar a horizontal y a veces no lo deshace al volver: la letra no depende de la orientación. */
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  /* Safari en iPhone/iPad amplía la página al tocar un campo con letra de menos de 16 px (y no siempre deshace el zoom): ahí, 16 px. */
+  @supports (-webkit-touch-callout: none) { input, textarea, select { font-size: 16px !important; } }
   /* Estilo B5 (lienzo «Tavernus · Pantalla de partida»): tus partidas como los chats de WhatsApp. A la izquierda
      la lista; a la derecha la partida elegida o la creación de una nueva. En el móvil, la lista a pantalla completa,
      un botón flotante para crear y la creación como una hoja que sube desde abajo. */

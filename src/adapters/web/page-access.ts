@@ -11,7 +11,7 @@ export const HEAD = (title: string, css = '') => String.raw`<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>${title}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
@@ -23,6 +23,8 @@ export const HEAD = (title: string, css = '') => String.raw`<!doctype html>
 <style>
   /* Safari en iPhone agranda el texto al girar a horizontal y a veces no lo deshace al volver: la letra no depende de la orientación. */
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  /* Safari en iPhone/iPad amplía la página al tocar un campo con letra de menos de 16 px (y no siempre deshace el zoom): ahí, 16 px. */
+  @supports (-webkit-touch-callout: none) { input, textarea, select { font-size: 16px !important; } }
   :root {
     --bg: #0e0f10; --panel: #141617; --bubble: #1f2426; --text: #ece7df; --muted: #9a948a;
     --accent: #e6b75a; --accent-ink: #2a1d05; --glow: #f0c56b; --line: rgba(255,255,255,.08); --hover: rgba(255,255,255,.06);

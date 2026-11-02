@@ -31,6 +31,8 @@ export const PAGE = String.raw`<!doctype html>
 <style>
   /* Safari en iPhone agranda el texto al girar a horizontal y a veces no lo deshace al volver: la letra no depende de la orientación. */
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  /* Safari en iPhone/iPad amplía la página al tocar un campo con letra de menos de 16 px (y no siempre deshace el zoom): ahí, 16 px. */
+  @supports (-webkit-touch-callout: none) { input, textarea, select { font-size: 16px !important; } }
   /* Estilo B5 (lienzo de diseño «Tavernus · Pantalla de partida»): como WhatsApp, un panel con la partida
      a la izquierda y el chat a la derecha. Fondos planos, burbujas con sombra, Manrope en los títulos.
      Hoja, Diario y Mochila salen del cubo junto a Enviar y se abren en la misma columna del chat. */
