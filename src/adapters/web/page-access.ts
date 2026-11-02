@@ -21,6 +21,8 @@ export const HEAD = (title: string, css = '') => String.raw`<!doctype html>
 <link rel="icon" type="image/png" sizes="512x512" href="/assets/icon-512.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
 <style>
+  /* Safari en iPhone agranda el texto al girar a horizontal y a veces no lo deshace al volver: la letra no depende de la orientación. */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   :root {
     --bg: #0e0f10; --panel: #141617; --bubble: #1f2426; --text: #ece7df; --muted: #9a948a;
     --accent: #e6b75a; --accent-ink: #2a1d05; --glow: #f0c56b; --line: rgba(255,255,255,.08); --hover: rgba(255,255,255,.06);

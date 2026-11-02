@@ -17,6 +17,8 @@ export const MENU = String.raw`<!doctype html>
 <link rel="icon" type="image/png" sizes="512x512" href="/assets/icon-512.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
 <style>
+  /* Safari en iPhone agranda el texto al girar a horizontal y a veces no lo deshace al volver: la letra no depende de la orientación. */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   /* Estilo B5 (lienzo «Tavernus · Pantalla de partida»): tus partidas como los chats de WhatsApp. A la izquierda
      la lista; a la derecha la partida elegida o la creación de una nueva. En el móvil, la lista a pantalla completa,
      un botón flotante para crear y la creación como una hoja que sube desde abajo. */

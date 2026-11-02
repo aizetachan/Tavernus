@@ -29,6 +29,8 @@ export const PAGE = String.raw`<!doctype html>
 <link rel="icon" type="image/png" sizes="512x512" href="/assets/icon-512.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
 <style>
+  /* Safari en iPhone agranda el texto al girar a horizontal y a veces no lo deshace al volver: la letra no depende de la orientación. */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   /* Estilo B5 (lienzo de diseño «Tavernus · Pantalla de partida»): como WhatsApp, un panel con la partida
      a la izquierda y el chat a la derecha. Fondos planos, burbujas con sombra, Manrope en los títulos.
      Hoja, Diario y Mochila salen del cubo junto a Enviar y se abren en la misma columna del chat. */

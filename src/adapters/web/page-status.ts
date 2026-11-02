@@ -30,6 +30,8 @@ function esc(s: unknown): string {
 }
 
 const STYLE = `<style>
+  /* Safari en iPhone agranda el texto al girar a horizontal y a veces no lo deshace al volver: la letra no depende de la orientación. */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { padding: 24px 16px 64px; }
   .box.status { max-width: 960px; }
   h2 { font: 700 15px/1.3 var(--display); margin: 26px 0 8px; }
