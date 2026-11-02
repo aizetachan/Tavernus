@@ -173,7 +173,13 @@ export const TTS_STYLE = String.raw`
      según lo que se calcula que falta (--load, 0-1, lo mueve el script); lleno, empieza la voz y vuelve a latir.
      El avatar recorta lo que sobresale (overflow: hidden): el anillo va por dentro del borde, encima de la foto. */
   .msg .nv-av.tts-wait, .msg.tts-able > .nv-av.tts-wait:hover { box-shadow: none; }
-  .msg .nv-av.tts-wait::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: 50%; pointer-events: none;
+  /* El altavoz de los capítulos hace lo mismo que un avatar: se carga en su borde y luego late con la voz, sin barras. */
+  .msg.chapter .tts-say.tts-voice { --lvl: 0; box-shadow: 0 0 0 2px var(--accent), 0 0 0 calc(2px + var(--lvl) * 7px) rgba(233,169,78, calc(.12 + var(--lvl) * .38)); transition: none; }
+  .msg.chapter .tts-say.tts-wait { box-shadow: none; }
+  .msg.chapter.tts-on .tts-say .spk { display: block; }
+  .msg.chapter.tts-on .tts-say .bars { display: none; }
+  @media (prefers-reduced-motion: reduce) { .msg.chapter .tts-say.tts-voice { box-shadow: 0 0 0 2px var(--accent); } }
+  .msg .nv-av.tts-wait::after, .msg.chapter .tts-say.tts-wait::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: 50%; pointer-events: none;
     background: conic-gradient(var(--accent) calc(var(--load, 0) * 360deg), rgba(233,169,78,.2) 0);
     -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
     mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px)); }
@@ -265,6 +271,8 @@ export const TTS_SCRIPT = String.raw`<script>
   var voiceAv = null, clickedAv = null, lvl = 0, lastBeat = 0, raf = null, analyser = null, actx = null, abuf = null, vgain = null;
   /** El avatar que late: el que se pulsó o, si no, el visible más cercano de esa narración (las agrupadas no lo muestran). */
   function avatarFor(div) {
+    // Los capítulos (prólogo, recapitulación) no tienen avatar: late su altavoz.
+    if (div.classList.contains('chapter')) return div.querySelector('.who .tts-say');
     var n = div;
     while (n && n.classList.contains('cont')) n = n.previousElementSibling;
     return n && n.classList.contains('row') ? n.querySelector('.nv-av') : null;
