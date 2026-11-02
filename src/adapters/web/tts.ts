@@ -618,9 +618,24 @@ export const TTS_SCRIPT = String.raw`<script>
     if (cloud() && !audio) { audio = new Audio(); audio.addEventListener('ended', function () { if (playing) step(); }); }
   }
   function lastMaster() { var l = log.querySelectorAll('.msg.master'); return l.length ? l[l.length - 1] : null; }
+  /** Al empezar la partida (con prólogo y sin nada dicho por el jugador): el prólogo y las narraciones que lo siguen. */
+  function prologueStart() {
+    var pro = log.querySelector('.msg.chapter.prologue');
+    if (!pro || !pro.ttsMsg || log.querySelector('.msg.mine')) return null;
+    var out = [pro];
+    log.querySelectorAll('.msg.master').forEach(function (m) { if (m !== pro && m.ttsMsg && (pro.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING)) out.push(m); });
+    return out;
+  }
   function setAuto(on) {
     auto = on; store('tavernus.tts.auto', on ? '1' : '0');
-    if (on) { unlock(); var last = lastMaster(); if (last && !playing && last.ttsMsg) speak(last); keepAwake(); }
+    if (on) {
+      unlock();
+      // El altavoz al empezar: el narrador cuenta el prólogo; si no, la última narración.
+      var start = !playing && prologueStart();
+      if (start) { speak(start[0]); start.slice(1).forEach(enqueue); }
+      else { var last = lastMaster(); if (last && !playing && last.ttsMsg) speak(last); }
+      keepAwake();
+    }
     else release();
     ui();
   }

@@ -3302,9 +3302,10 @@ ${TABLON_JS}
     if (!closed && k === 'view') { if (view === 'board' && boardData) renderBoard(boardData); if (view === 'map' && mapData) renderMap(mapData); }
   }
   ['view', 'near', 'quest'].forEach(function (k) { if (store('tavernus.col.' + k) === '1') setCol(k, true); });
-  $('side').addEventListener('click', function (ev) {
-    var b = ev.target.closest('[data-col]');
-    if (b) { var k = b.getAttribute('data-col'); setCol(k, !document.body.classList.contains('col-' + k)); }
+  // En toda la página: en el móvil, «Tablero y mapa» se lleva estas secciones a su ventana, fuera de #side.
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-col]');
+    if (b && (b.closest('#side') || b.closest('#drawer'))) { var k = b.getAttribute('data-col'); setCol(k, !document.body.classList.contains('col-' + k)); }
   });
   $('quest').addEventListener('click', function (ev) {
     // La pastilla de novedades y el recuadro abren el Diario en Misiones (allí se ven marcadas las nuevas).
