@@ -233,7 +233,10 @@ describe('rutas web con ?game', () => {
     const ctrl = new AbortController();
     const stream = await fetch(`${base}/api/stream${g}&character=${created.character_id}`, { signal: ctrl.signal });
     expect(stream.headers.get('content-type')).toContain('text/event-stream');
-    const first = new TextDecoder().decode((await stream.body!.getReader().read()).value);
+    // El servidor puede mandar antes un relleno (comentario «:») para que los proxies no retengan el stream.
+    const reader = stream.body!.getReader();
+    let first = '';
+    for (let i = 0; i < 10 && !first.includes('event: history'); i++) first += new TextDecoder().decode((await reader.read()).value);
     expect(first).toContain('event: history');
     ctrl.abort();
 
