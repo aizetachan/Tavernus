@@ -444,8 +444,6 @@ export const PAGE = String.raw`<!doctype html>
     border: 1px solid rgba(230,183,90,.24); background: rgba(10,8,6,.62); color: #c9bda8; font: inherit; text-align: center; cursor: default;
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   .pk-doll .pk-s { position: absolute; width: 18%; aspect-ratio: 1; box-shadow: inset 0 0 12px rgba(0,0,0,.7); }
-  .pk-doll .pk-s.tall-hand { aspect-ratio: 1 / 2; }
-  .pk-doll .pk-s.tall-body { aspect-ratio: 1 / 1.4; }
   .pk-s svg.i { width: 26px; height: 26px; stroke-width: 1.6; }
   /* Arte del objeto (PNG transparente o JPEG), si la campaña lo trae: ocupa el sitio del icono. */
   .pk-s img.art { flex: 0 1 auto; width: 68%; min-height: 0; aspect-ratio: 1; object-fit: contain; pointer-events: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
@@ -848,14 +846,13 @@ ${TABLON_STYLE}
   form .mic, form .brush { width: 32px; height: 32px; margin: 0; }
   form .mic svg.i, form .brush svg.i { width: 18px; height: 18px; }
 
-  /* Entrada en la partida. Mientras carga (body.boot): el cuadro de texto encogido a la izquierda con un brillo de
-     carga, la ventana del chat vacía y reducida a una franja abajo, y el panel sin contenido. Al llegar el historial
+  /* Entrada en la partida. El marco (panel, cabeceras, barra) está desde el principio. Mientras carga (body.boot): el
+     cuadro de texto con un brillo de carga, la ventana del chat vacía y reducida a una franja abajo, y el panel sin contenido. Al llegar el historial
      (body.entered): el cuadro crece, la ventana se abre hacia arriba, los mensajes aparecen con un fundido y los
      bloques del panel entran uno tras otro con un pequeño rebote. */
   .inwrap { max-width: 100%; transition: max-width .65s cubic-bezier(.2,.8,.2,1); }
   .chat-body { clip-path: inset(0 0 0 0); transition: clip-path .75s cubic-bezier(.22,.9,.25,1) .1s; }
   #log { transition: opacity .55s ease .7s; }
-  body.boot .inwrap { max-width: 48px; }
   body.boot form input { color: transparent; pointer-events: none; background: linear-gradient(100deg, rgba(255,255,255,.05) 30%, rgba(240,197,107,.22) 50%, rgba(255,255,255,.05) 70%) 0 0 / 300% 100%; animation: boot-shine 1.2s linear infinite; }
   body.boot form input::placeholder { color: transparent; }
   .inwrap .mic { transition: opacity .3s ease .55s; }
@@ -864,17 +861,12 @@ ${TABLON_STYLE}
   /* El cuadro y la ventana no se ven mientras carga: aparecen justo al empezar a moverse. */
   .chat-body { transition: clip-path .75s cubic-bezier(.22,.9,.25,1) .1s, opacity .15s ease .1s; }
   .inwrap { transition: max-width .65s cubic-bezier(.2,.8,.2,1), opacity .15s ease; }
-  body.boot .inwrap { opacity: 0; }
-  /* Mientras se monta todo es negro (no gris); cuando ya está montado, panel, cabecera y barra vuelven a su gris. */
+  /* El marco (panel, cabeceras, barra del texto) está desde el primer momento, con su color: es lo primero que se ve. */
   .chat-body { background: var(--chat); }
-  aside, .chat-head, form, #play, .compose { transition: background-color .8s ease; }
-  body.boot aside, body.boot .chat-head, body.boot form, body.boot #play, body.boot .compose,
-  body.entered aside, body.entered .chat-head, body.entered form, body.entered #play, body.entered .compose { background-color: #000; box-shadow: none; }
-  body.boot aside, body.boot .chat-head, body.boot form, body.boot #play, body.boot .compose { transition: none; }
   body.boot #log, body.boot #thinking, body.boot .chat-acts { opacity: 0; }
   body.boot .side-head, body.boot .side-scroll > *, body.boot .chat-head > * { opacity: 0; }
   /* Llegada desde el menú: la página aparece desde negro. */
-  body::before { content: ''; position: fixed; inset: 0; z-index: 100; background: #000; pointer-events: none; animation: from-black .7s ease 1.2s both; }
+  body::before { content: ''; position: fixed; inset: 0; z-index: 100; background: #000; pointer-events: none; animation: from-black .25s ease both; }
   @keyframes from-black { from { opacity: 1; } to { opacity: 0; visibility: hidden; } }
   @keyframes boot-shine { from { background-position: 100% 0; } to { background-position: -50% 0; } }
   @keyframes enter-pop { 0% { opacity: 0; transform: translateY(16px) scale(.98); } 65% { opacity: 1; transform: translateY(-4px) scale(1.005); } 82% { transform: translateY(1.5px); } 100% { opacity: 1; transform: none; } }
@@ -889,13 +881,6 @@ ${TABLON_STYLE}
   body.entered #quest { animation-delay: .63s; }
   body.entered .chat-head > * { animation: enter-fade .45s ease .25s both; }
   body.entered .chat-acts { animation: enter-fade .45s ease .85s both; }
-  body.boot form > button { opacity: 0; }
-  body.entered form > button { animation: enter-fade .35s ease both; }
-  body.entered form > button:nth-of-type(1) { animation-delay: 0.68s; }
-  body.entered form > button:nth-of-type(2) { animation-delay: 0.78s; }
-  body.entered form > button:nth-of-type(3) { animation-delay: 0.88s; }
-  body.entered form > button:nth-of-type(4) { animation-delay: 0.98s; }
-  body.entered form > button:nth-of-type(5) { animation-delay: 1.08s; }
   body.entered #near, body.entered #quest { animation: none; }
   body.entered .sec-t, body.entered .sec-b > .prow { animation: enter-pop .55s cubic-bezier(.2,.8,.25,1) both; }
   body.entered #near .sec-t { animation-delay: .58s; }
@@ -1312,9 +1297,9 @@ ${TABLON_STYLE}
     setTimeout(function () {
       document.body.classList.remove('boot');
       document.body.classList.add('entered');
-      setTimeout(function () { scroll(); input.focus(); }, 760);
+      setTimeout(function () { scroll(); input.focus(); }, 300);
       setTimeout(function () { document.body.classList.remove('entered'); }, 2600);
-    }, Math.max(0, 2200 - (Date.now() - bootStart)));
+    }, Math.max(0, 400 - (Date.now() - bootStart)));
   }
   setTimeout(enterGame, 6000);
   var current = null, stream = null, busy = false;
@@ -1864,16 +1849,16 @@ ${TABLON_JS}
    * por encima, al enfocarlo o al cogerlo, la ficha del objeto: peso, daño o CA, propiedades y para qué sirve.
    */
   var EQUIP_ES = { head: 'Cabeza', body: 'Cuerpo', hands: 'Guantes', feet: 'Pies', neck: 'Cuello', ring1: 'Anillo', ring2: 'Anillo', back: 'Espalda o capa', belt: 'Cinturón' };
-  // Dónde va cada hueco en el muñeco (en % del tablero, que mantiene la proporción 4:5) y su silueta vacía.
+  // Dónde va cada hueco en el muñeco (en % del tablero, que mantiene la proporción 4:5) y su silueta vacía. Todos cuadrados.
   var DOLL = [
     { dest: 'equip:head', slot: 'head', x: 41, y: 2, icon: 'head' },
     { dest: 'equip:neck', slot: 'neck', x: 61, y: 5, icon: 'neck' },
-    { dest: 'equip:body', slot: 'body', x: 41, y: 19, icon: 'armor', tall: 'body' },
+    { dest: 'equip:body', slot: 'body', x: 41, y: 22, icon: 'armor' },
     { dest: 'equip:back', slot: 'back', x: 41, y: 42, icon: 'back' },
-    { dest: 'hand:main', hand: 'main', x: 2, y: 18, icon: 'weapon', tall: 'hand', name: 'Mano principal' },
+    { dest: 'hand:main', hand: 'main', x: 2, y: 25, icon: 'weapon', name: 'Mano principal' },
     { dest: 'equip:hands', slot: 'hands', x: 2, y: 51, icon: 'hands' },
     { dest: 'equip:ring1', slot: 'ring1', x: 2, y: 68, icon: 'ring' },
-    { dest: 'hand:off', hand: 'off', x: 80, y: 18, icon: 'shield', tall: 'hand', name: 'Otra mano' },
+    { dest: 'hand:off', hand: 'off', x: 80, y: 25, icon: 'shield', name: 'Otra mano' },
     { dest: 'equip:belt', slot: 'belt', x: 80, y: 51, icon: 'belt' },
     { dest: 'equip:ring2', slot: 'ring2', x: 80, y: 68, icon: 'ring' },
     { dest: 'equip:feet', slot: 'feet', x: 41, y: 83, icon: 'feet' },
@@ -1922,7 +1907,7 @@ ${TABLON_JS}
     h += '<div class="kv-t">Equipo</div><div class="pk-doll" role="group" aria-label="Lo que llevas puesto y en las manos">' + DOLL_FIG;
     DOLL.forEach(function (d) {
       var where = d.name || EQUIP_ES[d.slot], st = 'left:' + d.x + '%;top:' + d.y + '%';
-      var cls = d.tall ? 'tall-' + d.tall : '';
+      var cls = '';
       if (d.hand === 'off' && p.hands.both) h += slot(null, { dest: d.dest, where: where, style: st, cls: cls, ghost: p.hands.main });
       else h += slot(d.hand ? p.hands[d.hand] : eq[d.slot], { dest: d.dest, where: where, style: st, cls: cls, icon: d.icon, empty: where });
     });
