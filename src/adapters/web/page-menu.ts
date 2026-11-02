@@ -126,7 +126,7 @@ export const MENU = String.raw`<!doctype html>
   .row { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 76px; padding: 10px 12px 10px 16px; border-bottom: 1px solid rgba(255,255,255,.05); background: transparent; color: var(--text); text-align: left; }
   .row:hover { background: rgba(255,255,255,.03); }
   .row.on { background: rgba(255,255,255,.06); }
-  .row .pic { width: 52px; height: 52px; flex: none; border-radius: 50%; box-shadow: 0 0 0 3px var(--ring, rgba(255,255,255,.25)); }
+  .row .pic { width: 52px; height: 52px; flex: none; border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring, rgba(255,255,255,.25)) 60%, transparent); }
   .row .tt { min-width: 0; flex: 1; }
   .row .l1 { display: flex; align-items: center; gap: 8px; }
   .row .l1 b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
