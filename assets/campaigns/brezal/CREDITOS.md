@@ -5,7 +5,7 @@ Licencia: obra propia del proyecto Tavernus.
 
 > Nota: `docs/ARTE.md` pedía arte a mano sin IA; esta tanda cambia ese criterio (estilo cartoon-realista 3D). Pendiente actualizar `docs/ARTE.md`.
 
-Los items también están en PNG transparente en `objeto/png/` (para cuando el servidor sirva PNG); hoy el juego usa los `.jpg` sobre fondo oscuro.
+Los items están en PNG transparente en `objeto/png/`, que es lo que usa el juego; los `.jpg` de `objeto/` son la misma imagen sobre fondo oscuro (#121318).
 
 | Fichero | Autor | Licencia | Fecha |
 |---|---|---|---|

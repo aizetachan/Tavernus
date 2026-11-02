@@ -19,7 +19,8 @@
  *
  * La carpeta no se sirve tal cual (no está en public/): así una vista del
  * sótano o un plano con la trampilla no se filtran antes de descubrirlos.
- * Hoy el servidor solo sirve JPEG, así que las imágenes se entregan en .jpg.
+ * Las imágenes se entregan en .jpg; los objetos también en .png, con transparencia
+ * (se ven recortados sobre la tarjeta de la interfaz).
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -60,8 +61,10 @@ export interface AssetManifest {
   map_backgrounds?: Record<Id, string>;
 }
 
-/** Formatos que el servidor sabe servir hoy. */
-const SERVABLE = new Set(['.jpg', '.jpeg']);
+/** Formatos que el servidor sirve: JPEG para todo y, además, PNG para los objetos (fondo transparente). */
+const JPEG = new Set(['.jpg', '.jpeg']);
+const JPEG_OR_PNG = new Set(['.jpg', '.jpeg', '.png']);
+const SERVABLE: Partial<Record<AssetKind, Set<string>>> = { item: JPEG_OR_PNG };
 
 /** Carpeta de activos: ASSETS_DIR o `assets/campaigns` en la raíz del repo (vale desde src/ y desde dist/). */
 export function assetsRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -102,11 +105,11 @@ export function assetsFor(campaignId: Id, root?: string): AssetManifest | null {
 }
 
 /** Ruta absoluta de un fichero del manifiesto; null si se sale de su carpeta, no es servible o no existe. */
-function fileOf(m: AssetManifest, rel: string | undefined): string | null {
+function fileOf(m: AssetManifest, rel: string | undefined, formats: Set<string> = JPEG): string | null {
   if (!rel) return null;
   const abs = resolve(m.dir, rel);
   if (!abs.startsWith(resolve(m.dir) + sep)) return null;
-  if (!SERVABLE.has(extname(abs).toLowerCase())) return null;
+  if (!formats.has(extname(abs).toLowerCase())) return null;
   return existsSync(abs) ? abs : null;
 }
 
@@ -118,9 +121,10 @@ export function writtenImage(m: AssetManifest | null, kind: AssetKind | (string 
   if (!m) return null;
   const table = m[kind as AssetKind];
   if (!table) return null;
+  const formats = SERVABLE[kind as AssetKind] ?? JPEG;
   for (const id of ids) {
     const rel = table[id];
-    const file = fileOf(m, rel);
+    const file = fileOf(m, rel, formats);
     if (rel && file) return { id, file, rel };
   }
   return null;

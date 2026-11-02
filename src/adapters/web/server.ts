@@ -1025,10 +1025,10 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
   /** Solo ficheros de la carpeta images/ de la partida, con nombre plano (sin rutas). */
   async function serveImage(res: ServerResponse, name: string, slug: string | null): Promise<void> {
     const m = slug ? await games.get(slug) : null;
-    if (!m || !/^[A-Za-z0-9_-]+\.jpg$/.test(name)) { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
+    if (!m || !/^[A-Za-z0-9_-]+\.(jpg|png)$/.test(name)) { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
     let bytes: Buffer;
     try { bytes = await readFile(join(games.paths(m).dir, 'images', name)); } catch { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
-    res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' });
+    res.writeHead(200, { 'content-type': name.endsWith('.png') ? 'image/png' : 'image/jpeg', 'cache-control': 'public, max-age=86400' });
     res.end(bytes);
   }
 

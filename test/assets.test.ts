@@ -1,15 +1,22 @@
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { assetsFor, forgetManifests, loadManifests, writtenImage, writtenMap, writtenMapBackground, type AssetManifest } from '../src/ai/assets.js';
+import { assetsFor, assetsRoot, forgetManifests, loadManifests, writtenImage, writtenMap, writtenMapBackground, type AssetManifest } from '../src/ai/assets.js';
 import { attachIllustrator, Illustrator, PollinationsQueue, sceneOf, sceneSeed } from '../src/ai/illustrate.js';
 import { mapCacheOf } from '../src/adapters/web/mapcache.js';
 import { rect, type LocationMap } from '../src/data/seed/maps.js';
+import { Master } from '../src/ai/master.js';
+import { offlineClient } from '../src/ai/offline.js';
+import { GameManager } from '../src/games/manager.js';
+import { createWebServer } from '../src/adapters/web/server.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
 const HAND = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 9, 9]);
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
 
 const PLANO: LocationMap = {
   cell_m: 1.5, bounds: { x: -2, y: -2, w: 16, h: 12 }, background: 'void',
@@ -28,6 +35,8 @@ describe('activos escritos', () => {
     const brezal = join(root, 'campaigns', 'brezal');
     await mkdir(join(brezal, 'vista'), { recursive: true });
     await mkdir(join(brezal, 'retrato'), { recursive: true });
+    await mkdir(join(brezal, 'objeto', 'png'), { recursive: true });
+    await writeFile(join(brezal, 'objeto', 'png', 'it_llave_vharn.png'), PNG);
     await writeFile(join(brezal, 'vista', 'loc_plaza.jpg'), HAND);
     await writeFile(join(brezal, 'retrato', 'pc-human-fighter.jpg'), HAND);
     await writeFile(join(brezal, 'retrato', 'npc_doro.png'), HAND);
@@ -35,6 +44,7 @@ describe('activos escritos', () => {
       campaigns: ['brezal', 'demo'],
       scene: { loc_plaza: 'vista/loc_plaza.jpg', loc_claro: 'vista/loc_claro.jpg', loc_taberna: '../../fuera.jpg' },
       portrait: { 'pc:human-fighter': 'retrato/pc-human-fighter.jpg', npc_doro: 'retrato/npc_doro.png' },
+      item: { it_llave_vharn: 'objeto/png/it_llave_vharn.png' },
       maps: { loc_taberna: PLANO },
     }));
     forgetManifests();
@@ -62,7 +72,8 @@ describe('activos escritos', () => {
     expect(writtenImage(m, 'scene', ['loc_plaza'])?.rel).toBe('vista/loc_plaza.jpg');
     expect(writtenImage(m, 'scene', ['loc_claro'])).toBeNull(); // no subido todavía
     expect(writtenImage(m, 'scene', ['loc_taberna'])).toBeNull(); // se sale de la carpeta
-    expect(writtenImage(m, 'portrait', ['npc_doro'])).toBeNull(); // PNG: hoy no se sirve
+    expect(writtenImage(m, 'portrait', ['npc_doro'])).toBeNull(); // PNG: solo los objetos
+    expect(writtenImage(m, 'item', ['it_llave_vharn'])?.rel).toBe('objeto/png/it_llave_vharn.png');
     expect(writtenImage(m, 'portrait', ['ch_kael', 'pc:human-fighter'])?.id).toBe('pc:human-fighter');
     expect(writtenMap(m, 'demo', 'loc_taberna')).toEqual(PLANO);
     expect(writtenMap(m, 'demo', 'loc_plaza')).toBeNull();
@@ -90,6 +101,15 @@ describe('activos escritos', () => {
     const pc = await ill.illustrateEntity({ kind: 'portrait', entity_id: 'ch_kael', name: 'Kael', location_id: 'loc_plaza', prompt: 'p', asset_ids: ['pc:human-fighter'] });
     expect(pc?.provider).toBe('written');
     expect(urls).toHaveLength(0);
+  });
+
+  it('un objeto en PNG se copia a la partida como PNG, con su transparencia', async () => {
+    const { ill, urls } = make(assetsFor('brezal', join(root, 'campaigns')));
+    const img = await ill.illustrateEntity({ kind: 'item', entity_id: 'it_llave_vharn', name: 'llave', location_id: 'loc_plaza', prompt: 'p' });
+    expect(urls).toHaveLength(0);
+    expect(img).toMatchObject({ provider: 'written', url: 'asset:objeto/png/it_llave_vharn.png' });
+    expect(img?.file).toMatch(/^item-it_llave_vharn-\d+-escrito\.png$/);
+    expect(await readFile(ill.pathOf(img!))).toEqual(PNG);
   });
 
   it('sin manifiesto o sin el fichero, se genera como hoy', async () => {
@@ -136,5 +156,51 @@ describe('activos escritos', () => {
     expect(writtenMapBackground(m, 'brezal', 'loc_taberna')).toBe(join(brezal, 'plano', 'loc_taberna.jpg'));
     expect(writtenMapBackground(m, 'demo', 'loc_taberna')).toBeNull();
     expect(writtenMapBackground(m, 'brezal', 'loc_plaza')).toBeNull(); // sin plano escrito, el fondo no encajaría
+  });
+});
+
+describe('el manifiesto de Brezal del repositorio', () => {
+  it('cada ruta de imagen tiene su fichero, y los objetos van en PNG', () => {
+    forgetManifests();
+    const m = assetsFor('brezal', assetsRoot({}));
+    expect(m).not.toBeNull();
+    const missing: string[] = [];
+    for (const kind of ['scene', 'portrait', 'item', 'discovery', 'combat'] as const) {
+      for (const [id, rel] of Object.entries(m![kind] ?? {})) {
+        if (!existsSync(join(m!.dir, rel)) || !writtenImage(m, kind, [id])) missing.push(`${kind}:${id} → ${rel}`);
+      }
+    }
+    for (const rel of [m!.region_map, ...Object.values(m!.map_backgrounds ?? {})]) if (rel && !existsSync(join(m!.dir, rel))) missing.push(rel);
+    expect(missing).toEqual([]);
+    expect(Object.values(m!.item ?? {}).every((rel) => rel.endsWith('.png'))).toBe(true);
+    forgetManifests();
+  });
+});
+
+describe('/images sirve JPEG y PNG', () => {
+  it('cada uno con su tipo; otros formatos, no', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tavernus-imagenes-'));
+    const games = new GameManager({ root: join(dir, 'games'), env: { DATA_DIR: join(dir, 'local') }, masterFor: (e) => new Master(e, { client: offlineClient() }), engine: { deterministic: false }, log: () => {}, budget: null });
+    const web = createWebServer(games, { tickMs: 3_600_000 });
+    try {
+      await new Promise<void>((resolve) => web.server.listen(0, '127.0.0.1', resolve));
+      const base = `http://127.0.0.1:${(web.server.address() as AddressInfo).port}`;
+      const { game } = await games.create({ name: 'Imágenes', mode: 'offline' });
+      const images = join(games.paths(game).dir, 'images');
+      await mkdir(images, { recursive: true });
+      await writeFile(join(images, 'item-it_llave-1-escrito.png'), PNG);
+      await writeFile(join(images, 'loc_plaza-1-escrito.jpg'), HAND);
+      await writeFile(join(images, 'otra.gif'), HAND);
+      const png = await fetch(`${base}/images/item-it_llave-1-escrito.png?game=${game.slug}`);
+      expect(png.status).toBe(200);
+      expect(png.headers.get('content-type')).toBe('image/png');
+      expect(Buffer.from(await png.arrayBuffer())).toEqual(PNG);
+      const jpg = await fetch(`${base}/images/loc_plaza-1-escrito.jpg?game=${game.slug}`);
+      expect(jpg.headers.get('content-type')).toBe('image/jpeg');
+      expect((await fetch(`${base}/images/otra.gif?game=${game.slug}`)).status).toBe(404);
+    } finally {
+      await web.stop();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

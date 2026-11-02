@@ -41,19 +41,19 @@
     "pc:dragonborn": "retrato/pc-dragonborn.jpg"
   },
   "item": {
-    "it_cofre": "objeto/it_cofre.jpg",
-    "it_pocion": "objeto/it_pocion.jpg",
-    "it_hacha": "objeto/it_hacha.jpg",
-    "it_llave_vharn": "objeto/it_llave_vharn.jpg",
-    "it_libro_cuentas": "objeto/it_libro_cuentas.jpg",
-    "it_cadena_fria": "objeto/it_cadena_fria.jpg",
-    "it_cartas_tobias": "objeto/it_cartas_tobias.jpg",
-    "it_bolsa_ceniza": "objeto/it_bolsa_ceniza.jpg",
-    "it_llave_arcon": "objeto/it_llave_arcon.jpg",
-    "it_copa_vharn": "objeto/it_copa_vharn.jpg",
-    "it_agua_pozo": "objeto/it_agua_pozo.jpg",
-    "it_carta_sello": "objeto/it_carta_sello.jpg",
-    "it_tonico": "objeto/it_tonico.jpg"
+    "it_cofre": "objeto/png/it_cofre.png",
+    "it_pocion": "objeto/png/it_pocion.png",
+    "it_hacha": "objeto/png/it_hacha.png",
+    "it_llave_vharn": "objeto/png/it_llave_vharn.png",
+    "it_libro_cuentas": "objeto/png/it_libro_cuentas.png",
+    "it_cadena_fria": "objeto/png/it_cadena_fria.png",
+    "it_cartas_tobias": "objeto/png/it_cartas_tobias.png",
+    "it_bolsa_ceniza": "objeto/png/it_bolsa_ceniza.png",
+    "it_llave_arcon": "objeto/png/it_llave_arcon.png",
+    "it_copa_vharn": "objeto/png/it_copa_vharn.png",
+    "it_agua_pozo": "objeto/png/it_agua_pozo.png",
+    "it_carta_sello": "objeto/png/it_carta_sello.png",
+    "it_tonico": "objeto/png/it_tonico.png"
   },
   "discovery": {
     "clue_hacha": "descubrimiento/clue_hacha.jpg",

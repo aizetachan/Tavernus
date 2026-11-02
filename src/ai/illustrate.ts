@@ -48,7 +48,7 @@
  */
 
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 import type { Engine, FirstVisit, MomentNotice } from '../engine/engine.js';
 import type { Campaign, GameEvent, Id, LightLevel } from '../engine/model.js';
 import { itemIllustrable } from '../engine/moments.js';
@@ -485,7 +485,8 @@ export class Illustrator {
     const found = writtenImage(this.assets, meta.kind ?? 'scene', [meta.entity_id ?? meta.location_id, ...alt]);
     if (!found) return null;
     const index = await this.loadIndex();
-    const file = `${key}-escrito.jpg`;
+    // Conserva el formato: un objeto en PNG lleva su transparencia hasta la interfaz.
+    const file = `${key}-escrito${extname(found.file).toLowerCase() === '.png' ? '.png' : '.jpg'}`;
     await mkdir(this.opts.dir, { recursive: true });
     await copyFile(found.file, join(this.opts.dir, file));
     const image: SceneImage = { key, ...meta, seed, prompt, provider: 'written', url: `asset:${found.rel}`, file };
