@@ -111,12 +111,11 @@ export const MENU = String.raw`<!doctype html>
   h1 { margin: 0; flex: 1; font: 800 20px/1.2 var(--display); letter-spacing: -.02em; }
   /* El nombre, en letras de madera dorada (public/logo-tavernus.png): 24 px de alto, con su sombra sobre los tablones. */
   h1 .logo { display: block; height: 24px; width: auto; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
-  /* Estado del máster: solo la bolita y el texto, en verde, arriba a la izquierda sobre la imagen, fuera del panel. */
-  #status { position: fixed; top: 22px; left: 470px; z-index: 4; display: flex; align-items: center; gap: 6px;
-    font-size: 11.5px; font-weight: 600; color: var(--ok); text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  /* Estado del máster: la bolita y el texto, en verde, como primera línea del menú de ajustes. */
+  #status { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px;
+    font-size: 12.5px; font-weight: 600; color: var(--ok); }
   #status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor; }
   #status.off { color: var(--info); }
-  body.new-open #status { display: none; }
   #status[hidden] { display: none; }
   .search { margin: 0 12px 10px; display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 12px; border-radius: 10px; background: var(--control); color: var(--muted); }
   .search input, .search input[type=text] { flex: 1; min-width: 0; height: 30px; padding: 0; border: 0; background: transparent; color: var(--text); outline: none; font-size: 14px; }
@@ -126,7 +125,7 @@ export const MENU = String.raw`<!doctype html>
   .row { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 76px; padding: 10px 12px 10px 16px; border-bottom: 1px solid rgba(255,255,255,.05); background: transparent; color: var(--text); text-align: left; }
   .row:hover { background: rgba(255,255,255,.03); }
   .row.on { background: rgba(255,255,255,.06); }
-  .row .pic { width: 52px; height: 52px; flex: none; border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring, rgba(255,255,255,.25)) 60%, transparent); }
+  .row .pic { width: 52px; height: 52px; flex: none; border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring, rgba(255,255,255,.25)) 40%, transparent); }
   .row .tt { min-width: 0; flex: 1; }
   .row .l1 { display: flex; align-items: center; gap: 8px; }
   .row .l1 b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -296,7 +295,7 @@ ${CHARGEN_CSS}
   aside > .head, aside > .searchrow, aside > .scroll, aside > #fab { transition: opacity .6s ease; }
   body.leaving aside > .head, body.leaving aside > .searchrow, body.leaving aside > .scroll, body.leaving aside > #fab { opacity: 0; }
   body.leaving aside::before, body.leaving aside::after { opacity: 0; transition: opacity .3s linear 1.5s; }
-  body.leaving main, body.leaving #status { opacity: 0; transition: opacity 2.2s ease; }
+  body.leaving main { opacity: 0; transition: opacity 2.2s ease; }
   @keyframes tech { 0% { opacity: 0; } 40% { opacity: 1; } 55% { opacity: 1; } 100% { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { body.leaving .tech { animation: none; } }
 
@@ -321,7 +320,7 @@ ${CHARGEN_CSS}
   :root[data-theme="penumbra"] .filters.menu, :root[data-theme="penumbra"] .dd-menu { background: rgba(20,22,23,.97); }
   /* Entrar en una partida: un fundido a negro, sin la madera que se vuelve tecnología. */
   :root[data-theme="penumbra"] body.leaving::after { transition: opacity .5s ease; }
-  :root[data-theme="penumbra"] body.leaving aside > *, :root[data-theme="penumbra"] body.leaving main, :root[data-theme="penumbra"] body.leaving #status { transition: opacity .35s ease; }
+  :root[data-theme="penumbra"] body.leaving aside > *, :root[data-theme="penumbra"] body.leaving main { transition: opacity .35s ease; }
   /* Aspecto, en el menú de Ajustes: los dos temas, debajo de las listas. */
   .filters.menu .sep { height: 1px; margin: 6px 4px; background: var(--line); }
   .filters.menu .mh { margin: 4px 12px 2px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
@@ -364,7 +363,6 @@ ${CHARGEN_CSS}
     #cg-host .cg-foot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
     .new-foot .grow:has(#new-error:empty) { display: none; }
     #open-new { display: none; }
-    #status { top: auto; left: 16px; bottom: calc(28px + env(safe-area-inset-bottom)); }
     #fab { position: fixed; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 10; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px 0 14px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 600; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
     .scroll { padding-bottom: 96px; }
     #resume { position: relative; display: block; height: 190px; margin: 4px 0 14px; border-radius: 18px; overflow: hidden; color: var(--text); text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: 100%; text-align: left; cursor: default; }
@@ -413,6 +411,8 @@ ${CHARGEN_CSS}
     <label class="search"><svg class="i"><use href="#i-search"/></svg><span class="vh">Buscar partidas</span><input id="q" type="text" placeholder="Buscar partidas" autocomplete="off"></label>
     <button id="lists-btn" class="btn ghost sm" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="lists-menu" title="Ajustes: qué partidas ver" aria-label="Ajustes: qué partidas ver"><svg class="i"><use href="#i-gear"/></svg></button>
     <div id="lists-menu" class="filters menu" role="menu" aria-label="Qué partidas ver" hidden>
+      <div id="status" role="note" hidden></div>
+      <div class="sep" role="separator"></div>
       <button type="button" role="menuitemradio" data-list="continue" class="on"><span>Partidas</span><span id="n-continue">0</span></button>
       <button type="button" role="menuitemradio" data-list="demos"><span>Demos</span><span id="n-demos">0</span></button>
       <button type="button" role="menuitemradio" data-list="recordings"><span>Grabaciones</span><span id="n-recordings">0</span></button>
@@ -434,7 +434,6 @@ ${CHARGEN_CSS}
   </div>
   <button type="button" id="fab"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button>
 </aside>
-<div id="status" hidden></div>
 <main>
   <div id="stage" aria-hidden="true"><div class="layer top"></div><div class="layer"></div></div>
   <section id="pick" aria-live="polite"></section>
