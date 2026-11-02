@@ -578,7 +578,7 @@ ${CHARGEN_JS}
    */
   var ART = { w: 2560, h: 1440, x: 0.71, y: 0.45 };
   function art(node, g) {
-    var cover = g && g.cover && theme() === 'penumbra' ? g.cover : null;
+    var cover = g && g.cover ? g.cover : null;
     node.style.backgroundImage = (cover ? 'url("' + cover + '"), ' : '') + 'url(/assets/taberna.jpg?v=3)';
     node.style.backgroundRepeat = 'no-repeat';
     if (cover) node.setAttribute('data-cover', ''); else node.removeAttribute('data-cover');
@@ -587,7 +587,7 @@ ${CHARGEN_JS}
   function fitArt(node) {
     var W = node.clientWidth, H = node.clientHeight;
     if (!W || !H) return;
-    // Con portada propia (Penumbra): las dos capas cubren el hueco, centradas.
+    // Con portada propia: las dos capas cubren el hueco, centradas.
     if (node.hasAttribute('data-cover')) { node.style.backgroundSize = 'cover'; node.style.backgroundPosition = 'center'; return; }
     var zoom = Number(node.getAttribute('data-zoom')) || 1;
     // data-left: lo que tapa el panel de cristal a la izquierda; la casa se centra en lo que queda a la vista.
@@ -635,7 +635,7 @@ ${CHARGEN_JS}
   /** Sin partida: el salvapantallas, rotando. Con partida: su portada (o la taberna), quieta. */
   function backdrop(g) {
     clearInterval(stage.timer); stage.timer = null;
-    if (g) { stageShow(g.cover && theme() === 'penumbra' ? g.cover : '/assets/taberna.jpg?v=3'); return; }
+    if (g) { stageShow(g.cover || '/assets/taberna.jpg?v=3'); return; }
     stageShow(SALVA[stage.i % SALVA.length]);
     // La siguiente, precargada en caché antes de su turno.
     new Image().src = SALVA[(stage.i + 1) % SALVA.length];
