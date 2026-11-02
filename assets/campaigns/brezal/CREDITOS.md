@@ -5,6 +5,8 @@ Licencia: obra propia del proyecto Tavernus.
 
 > Nota: `docs/ARTE.md` pedía arte a mano sin IA; esta tanda cambia ese criterio (estilo cartoon-realista 3D). Pendiente actualizar `docs/ARTE.md`.
 
+Vistas, descubrimientos y combates reescalados ×2 (2048 × 1152) con el upscaler de Magnific (Precision «sublime»), para que la portada del menú y la vista ampliada se vean nítidas.
+
 Los items están en PNG transparente en `objeto/png/`, que es lo que usa el juego; los `.jpg` de `objeto/` son la misma imagen sobre fondo oscuro (#121318).
 
 | Fichero | Autor | Licencia | Fecha |
@@ -69,3 +71,36 @@ Los items están en PNG transparente en `objeto/png/`, que es lo que usa el jueg
 | vista/loc_sotano.jpg | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1) | Obra propia | 2026-11-02 |
 | vista/loc_taberna.jpg | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1) | Obra propia | 2026-11-02 |
 | vista/loc_valcruz.jpg | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1) | Obra propia | 2026-11-02 |
+| objeto/it_antorcha.jpg · objeto/png/it_antorcha.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_arco_corto.jpg · objeto/png/it_arco_corto.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_armadura_cuero.jpg · objeto/png/it_armadura_cuero.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_barril.jpg · objeto/png/it_barril.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_baston.jpg · objeto/png/it_baston.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_bayas.jpg · objeto/png/it_bayas.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_bolsa_componentes.jpg · objeto/png/it_bolsa_componentes.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_cerveza.jpg · objeto/png/it_cerveza.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_col.jpg · objeto/png/it_col.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_cota_escamas.jpg · objeto/png/it_cota_escamas.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_cota_malla.jpg · objeto/png/it_cota_malla.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_cuerda.jpg · objeto/png/it_cuerda.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_daga.jpg · objeto/png/it_daga.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_escudo.jpg · objeto/png/it_escudo.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_espada_corta.jpg · objeto/png/it_espada_corta.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_espada_larga.jpg · objeto/png/it_espada_larga.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_estoque.jpg · objeto/png/it_estoque.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_flechas.jpg · objeto/png/it_flechas.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_ganzuas.jpg · objeto/png/it_ganzuas.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_gran_hacha.jpg · objeto/png/it_gran_hacha.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_hacha_mano.jpg · objeto/png/it_hacha_mano.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_harina.jpg · objeto/png/it_harina.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_huevo.jpg · objeto/png/it_huevo.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_laud.jpg · objeto/png/it_laud.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_libro_conjuros.jpg · objeto/png/it_libro_conjuros.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_llave_cuarto.jpg · objeto/png/it_llave_cuarto.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_madera.jpg · objeto/png/it_madera.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_maza.jpg · objeto/png/it_maza.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_mochila.jpg · objeto/png/it_mochila.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_pescado.jpg · objeto/png/it_pescado.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_piel.jpg · objeto/png/it_piel.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_racion.jpg · objeto/png/it_racion.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
+| objeto/it_simbolo_sagrado.jpg · objeto/png/it_simbolo_sagrado.png | Santiago Fernández Alfaro (Magnific / Nano Banana 2.1, referencia: llave de Vharn) | Obra propia | 2026-11-02 |
