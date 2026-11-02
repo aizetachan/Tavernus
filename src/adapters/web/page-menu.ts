@@ -364,9 +364,11 @@ ${CHARGEN_CSS}
     #cg-host .cg-body { padding: 0 16px 20px; }
     #cg-host .cg-foot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); }
     .new-foot .grow:has(#new-error:empty) { display: none; }
-    #open-new { display: none; }
-    #fab { position: fixed; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 10; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px 0 14px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 600; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
-    .scroll { padding-bottom: 96px; }
+    /* «Nueva partida»: justo debajo de la última partida; sin partidas, abajo del todo (dentro del marco de Taberna). */
+    .scroll { display: flex; flex-direction: column; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    .scroll > * { flex: none; }
+    .scroll:not(:has(#list .row)) #new-wrap { margin-top: auto; }
+    #new-wrap { padding: 10px 0 6px; }
     #resume { position: relative; display: block; height: 190px; margin: 4px 0 14px; border-radius: 18px; overflow: hidden; color: var(--text); text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: 100%; text-align: left; cursor: default; }
     #resume[hidden] { display: none; }
     #resume::after { content: ''; position: absolute; inset: 25% 0 0; background: linear-gradient(to top, rgba(11,13,12,.95), rgba(11,13,12,0)); }
@@ -431,7 +433,7 @@ ${CHARGEN_CSS}
   <div class="scroll">
     <button type="button" id="resume" class="art" hidden><span class="cap"><span class="eyebrow" id="resume-eyebrow">Continúa tu historia</span><b id="resume-name"></b><span class="go"><span id="resume-meta"></span></span></span></button>
     <div id="list"></div>
-    <div class="new-wrap"><button id="open-new" class="btn primary sm" type="button"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button></div>
+    <div class="new-wrap" id="new-wrap"><button id="open-new" class="btn primary sm" type="button"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button></div>
     <div class="new-wrap" id="guide-wrap"><a class="btn ghost sm" href="https://github.com/aizetachan/Tavernus/blob/main/docs/GUIA-USUARIO.md" target="_blank" rel="noopener">Cómo se juega</a></div>
   </div>
   <button type="button" id="fab"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button>
