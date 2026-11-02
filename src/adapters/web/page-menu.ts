@@ -160,7 +160,16 @@ export const MENU = String.raw`<!doctype html>
   #pick { flex: 1; min-height: 0; overflow-y: auto; }
   #pick[hidden] { display: none; }
   /* La imagen ocupa toda la columna, con la casa en su centro; el texto va encima, abajo a la izquierda. */
-  #pick { position: relative; }
+  #pick { position: relative; z-index: 1; }
+  /* Fondo de la portada: dos capas que se relevan. La de atrás ya tiene la imagen siguiente cargada y no se ve hasta
+     que la de delante se desvanece. Sin partida elegida, rotan los salvapantallas; al elegir una, su portada. */
+  main { position: relative; }
+  #stage { position: absolute; inset: 0; z-index: 0; overflow: hidden; background: #0b0d0c; pointer-events: none; }
+  #stage .layer { position: absolute; inset: 0; background: center / cover no-repeat; opacity: 1; z-index: 1; transition: opacity 1.6s ease; }
+  #stage .layer.top { z-index: 2; }
+  #stage .layer.out { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { #stage .layer { transition: none; } }
+  .hero { background: transparent; }
   .hero { position: relative; min-height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 40px 0; }
   .hero::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(11,13,12,.86) 0%, rgba(11,13,12,.6) 32%, rgba(11,13,12,.12) 62%, rgba(11,13,12,0) 80%), linear-gradient(to top, rgba(11,13,12,.5), rgba(11,13,12,0) 35%); }
   .hero .cap { position: relative; z-index: 1; padding: 0 40px; display: flex; flex-direction: column; gap: 8px; }
@@ -323,6 +332,7 @@ ${CHARGEN_CSS}
     #new.cg-on { height: min(860px, calc(100vh - 48px)); }
     main { position: fixed; inset: 0; z-index: 0; }
     .hero .cap, .hero > .body, .hero > .intro { padding-left: 480px; }
+    .hero > .intro { max-width: 1000px; }
     .hero::after { background: linear-gradient(90deg, rgba(11,13,12,.25) 0, rgba(11,13,12,.25) 440px, rgba(11,13,12,.82) 440px, rgba(11,13,12,.55) 760px, rgba(11,13,12,.1) 1000px, rgba(11,13,12,0) 1200px), linear-gradient(to top, rgba(11,13,12,.5), rgba(11,13,12,0) 35%); }
     aside { z-index: 2; }
     .search { background: rgba(255,255,255,.07); }
@@ -414,6 +424,7 @@ ${CHARGEN_CSS}
 </aside>
 <div id="status" hidden></div>
 <main>
+  <div id="stage" aria-hidden="true"><div class="layer top"></div><div class="layer"></div></div>
   <section id="pick" aria-live="polite"></section>
   <button type="button" id="new-scrim" aria-label="Cerrar"></button>
   <section id="new" role="dialog" aria-labelledby="new-title" hidden>
@@ -577,6 +588,50 @@ ${CHARGEN_JS}
     node.style.backgroundSize = Math.round(iw) + 'px ' + Math.round(ih) + 'px';
     node.style.backgroundPosition = Math.round(x) + 'px ' + Math.round(y) + 'px';
   }
+  /** Salvapantallas de la portada (public/salvapantallas-N.jpg): rotan mientras no hay partida elegida. */
+  var SALVA = [1, 2, 3, 4, 5, 6, 7].map(function (i) { return '/assets/salvapantallas-' + i + '.jpg'; });
+  var SALVA_MS = 9000;
+  var stage = { shown: null, want: null, i: 0, timer: null, busy: false };
+  function stageLayers() { var s = $('stage'); var top = s.querySelector('.layer.top'); return { top: top, back: top === s.firstElementChild ? s.lastElementChild : s.firstElementChild }; }
+  /** Pone la imagen detrás (ya cargada) y desvanece la de delante para descubrirla. */
+  function stageShow(src) {
+    stage.want = src;
+    if (stage.busy || src === stage.shown) return;
+    var img = new Image();
+    img.onload = function () {
+      if (stage.want !== src) { stage.busy = false; stageShow(stage.want); return; }
+      var l = stageLayers();
+      l.back.style.backgroundImage = 'url("' + src + '")';
+      l.back.classList.remove('out');
+      if (!stage.shown) { l.back.classList.add('top'); l.top.classList.remove('top'); stage.shown = src; stage.busy = false; return; }
+      stage.busy = true;
+      // Un fotograma para que la de atrás pinte antes de empezar el fundido.
+      requestAnimationFrame(function () { requestAnimationFrame(function () { l.top.classList.add('out'); }); });
+      var done = function () {
+        l.top.removeEventListener('transitionend', done); clearTimeout(safety);
+        l.top.classList.remove('top'); l.back.classList.add('top'); l.top.classList.remove('out');
+        stage.shown = src; stage.busy = false;
+        if (stage.want !== src) stageShow(stage.want);
+      };
+      var safety = setTimeout(done, 2400);
+      l.top.addEventListener('transitionend', done);
+    };
+    img.onerror = function () { if (stage.want === src && SALVA.indexOf(src) >= 0) { stage.i++; stageShow(SALVA[stage.i % SALVA.length]); } };
+    img.src = src;
+  }
+  /** Sin partida: el salvapantallas, rotando. Con partida: su portada (o la taberna), quieta. */
+  function backdrop(g) {
+    clearInterval(stage.timer); stage.timer = null;
+    if (g) { stageShow(g.cover && theme() === 'penumbra' ? g.cover : '/assets/taberna.jpg?v=3'); return; }
+    stageShow(SALVA[stage.i % SALVA.length]);
+    // La siguiente, precargada en caché antes de su turno.
+    new Image().src = SALVA[(stage.i + 1) % SALVA.length];
+    stage.timer = setInterval(function () {
+      stage.i++;
+      stageShow(SALVA[stage.i % SALVA.length]);
+      new Image().src = SALVA[(stage.i + 1) % SALVA.length];
+    }, SALVA_MS);
+  }
   var fitTimer = null;
   window.addEventListener('resize', function () { clearTimeout(fitTimer); fitTimer = setTimeout(function () { document.querySelectorAll('.art').forEach(fitArt); }, 100); });
   function summary(g) {
@@ -676,18 +731,18 @@ ${CHARGEN_JS}
   function detail(g, first) {
     var p = $('pick');
     p.innerHTML = '';
+    backdrop(g || null);
     if (!g) {
-      var hero = el('div', 'hero art'); hero.setAttribute('data-left', '400');
+      var hero = el('div', 'hero');
       hero.innerHTML = '<div class="cap"><span class="eyebrow">Tavernus</span><h2>Rol por chat con un máster de IA</h2></div>';
       p.appendChild(hero);
       var box = el('div', 'intro');
-      box.appendChild(el('p', '', EMPTY[tab]));
+      box.appendChild(el('p', '', visible().length ? 'Elige una partida de la lista para seguirla, o empieza una nueva.' : EMPTY[tab]));
       if (tab === 'continue') box.appendChild(button('Nueva partida', 'btn primary', openNew));
       hero.appendChild(box);
-      art(hero);
       return;
     }
-    var hero2 = el('div', 'hero art'); hero2.setAttribute('data-left', '400');
+    var hero2 = el('div', 'hero');
     var cap = el('div', 'cap');
     var eb = el('span', 'eyebrow', tab === 'continue' && !first ? 'Partida en curso' : EYEBROW[tab]);
     eb.appendChild(badge(g));
@@ -726,7 +781,6 @@ ${CHARGEN_JS}
     meta.appendChild(el('span', 'facts', 'Creada el ' + day(g.created_at)));
     body.appendChild(meta);
     hero2.appendChild(body);
-    art(hero2, g);
   }
 
   function visible() {
@@ -737,7 +791,8 @@ ${CHARGEN_JS}
     var box = $('list'), games = visible();
     box.innerHTML = '';
     document.querySelectorAll('.filters [data-list]').forEach(function (b) { var on = b.getAttribute('data-list') === tab; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
-    if (!games.some(function (g) { return g.slug === selected; })) selected = games[0] ? games[0].slug : null;
+    // Sin elegir nada, la portada es el salvapantallas; una partida se elige pulsándola.
+    if (selected && !games.some(function (g) { return g.slug === selected; })) selected = null;
     if (!games.length) box.appendChild(el('p', 'empty', query ? 'Ninguna partida coincide.' : EMPTY[tab]));
     var rings = ringsFor(games);
     games.forEach(function (g) { box.appendChild(row(g, rings[g.slug])); });
