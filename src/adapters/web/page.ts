@@ -861,12 +861,15 @@ ${TABLON_STYLE}
   /* El cuadro y la ventana no se ven mientras carga: aparecen justo al empezar a moverse. */
   .chat-body { transition: clip-path .75s cubic-bezier(.22,.9,.25,1) .1s, opacity .15s ease .1s; }
   .inwrap { transition: max-width .65s cubic-bezier(.2,.8,.2,1), opacity .15s ease; }
-  /* El marco (panel, cabeceras, barra del texto) está desde el primer momento, con su color: es lo primero que se ve. */
+  /* El marco (panel, cabeceras, barra del texto) es lo primero: sale de negro a su color en .6 s, y cuando entra el
+     contenido (a partir de .6 s, ver enterGame) ya está casi entero. */
   .chat-body { background: var(--chat); }
+  body.boot :is(aside, .chat-head, form, #play, .compose), body.entered :is(aside, .chat-head, form, #play, .compose) { animation: chrome-in .6s cubic-bezier(.45,0,.25,1) both; }
+  @keyframes chrome-in { from { background-color: #000; box-shadow: none; } }
   body.boot #log, body.boot #thinking, body.boot .chat-acts { opacity: 0; }
   body.boot .side-head, body.boot .side-scroll > *, body.boot .chat-head > * { opacity: 0; }
   /* Llegada desde el menú: la página aparece desde negro. */
-  body::before { content: ''; position: fixed; inset: 0; z-index: 100; background: #000; pointer-events: none; animation: from-black .25s ease both; }
+  body::before { content: ''; position: fixed; inset: 0; z-index: 100; background: #000; pointer-events: none; animation: from-black .3s ease both; }
   @keyframes from-black { from { opacity: 1; } to { opacity: 0; visibility: hidden; } }
   @keyframes boot-shine { from { background-position: 100% 0; } to { background-position: -50% 0; } }
   @keyframes enter-pop { 0% { opacity: 0; transform: translateY(16px) scale(.98); } 65% { opacity: 1; transform: translateY(-4px) scale(1.005); } 82% { transform: translateY(1.5px); } 100% { opacity: 1; transform: none; } }
@@ -899,6 +902,7 @@ ${TABLON_STYLE}
     body.boot form input { animation: none; }
     body::before { animation-duration: .01s; }
     body.entered .side-head, body.entered .side-scroll > *, body.entered .chat-head > *, body.entered .chat-acts, body.entered form > button, body.entered #card .stats-btn, body.entered #card .hpline, body.entered .sec-t, body.entered .sec-b > .prow { animation: none; }
+    body.boot :is(aside, .chat-head, form, #play, .compose), body.entered :is(aside, .chat-head, form, #play, .compose) { animation: none; }
   }
   /* Respuestas del sistema (consultas, errores, notas del pincel): la misma piel que los avisos, un punto más
      legible porque las ha pedido el jugador; rojo si algo falla. */
@@ -1299,7 +1303,7 @@ ${TABLON_STYLE}
       document.body.classList.add('entered');
       setTimeout(function () { scroll(); input.focus(); }, 300);
       setTimeout(function () { document.body.classList.remove('entered'); }, 2600);
-    }, Math.max(0, 400 - (Date.now() - bootStart)));
+    }, Math.max(0, 550 - (Date.now() - bootStart)));
   }
   setTimeout(enterGame, 6000);
   var current = null, stream = null, busy = false;
