@@ -18,6 +18,7 @@
  *   GET  /api/board?character=ID    tablero
  *   GET  /api/tablon?character=ID   encargos del tablón (tablon.ts)  ·  POST /api/tablon/read {character}   abrirlo es leerlo
  *   GET  /api/board/background?character=ID  fondo pintado del plano donde está el PJ (JPEG)
+ *   GET  /api/item-art?character=ID&item=ITEM  imagen escrita de un objeto que lleva el PJ (JPEG o PNG)
  *   GET  /api/map?character=ID      mapa de zona y región
  *   GET  /api/scene?character=ID    ilustración de la localización actual (IMAGES=on), o null
  *   GET  /images/<fichero>          ilustraciones descargadas de la partida (data/games/<slug>/images)
@@ -69,6 +70,7 @@ import { sheetView } from '../sheet-view.js';
 import { PAGE } from './page.js';
 import { MENU } from './page-menu.js';
 import { handleBoardBackgroundRequest, handleBoardRequest } from './board.js';
+import { handleItemArtRequest, withItemArt } from './itemart.js';
 import { handleMapRequest } from './regionmap.js';
 import { handleTtsRequest } from './tts.js';
 import { handleSfxRequest } from './sfx.js';
@@ -792,6 +794,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     }
     if (req.method === 'GET' && url.pathname === '/api/board') { handleBoardRequest(engine, req, res, url, slug); return; }
     if (req.method === 'GET' && url.pathname === '/api/board/background') { await handleBoardBackgroundRequest(engine, res, url); return; }
+    if (req.method === 'GET' && url.pathname === '/api/item-art') { await handleItemArtRequest(engine, res, url); return; }
     if (req.method === 'GET' && url.pathname === '/api/journal') { handleJournalRequest(engine, req, res, url, slug); return; }
     if (req.method === 'GET' && url.pathname === '/api/tablon') {
       const id = characterOr404(engine, characterParam, res);
@@ -815,7 +818,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     }
     if (req.method === 'GET' && url.pathname === '/api/sheet') {
       const id = characterOr404(engine, characterParam, res);
-      if (id) json(res, 200, sheetView(engine, id));
+      if (id) { const s = sheetView(engine, id); json(res, 200, { ...s, pack: withItemArt(engine, s.pack, id, slug) }); }
       return;
     }
     if (req.method === 'POST') {

@@ -445,6 +445,9 @@ export const PAGE = String.raw`<!doctype html>
   .pk-doll .pk-s.tall-hand { aspect-ratio: 1 / 2; }
   .pk-doll .pk-s.tall-body { aspect-ratio: 1 / 1.4; }
   .pk-s svg.i { width: 26px; height: 26px; stroke-width: 1.6; }
+  /* Arte del objeto (PNG transparente o JPEG), si la campaña lo trae: ocupa el sitio del icono. */
+  .pk-s img.art { flex: 0 1 auto; width: 68%; min-height: 0; aspect-ratio: 1; object-fit: contain; pointer-events: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+  .pk-s.art-slot { padding: 2px 4px 4px; gap: 1px; }
   .pk-s .nm { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; font-size: 11px; line-height: 1.2; overflow-wrap: anywhere; }
   .pk-s .qt { position: absolute; top: 3px; right: 5px; font-size: 10.5px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
   .pk-s.free { color: rgba(230,183,90,.28); border-style: dashed; border-color: rgba(230,183,90,.2); background: rgba(10,8,6,.4); }
@@ -1887,11 +1890,11 @@ ${TABLON_JS}
     var note = function (it) { if (it) pk.items[it.id] = it; return it; };
     // Un hueco: «dest» dice adónde iría lo que se suelte en él; «g», su grupo de orden libre (si lo tiene).
     var slot = function (it, o) {
-      var cls = 'pk-s' + (o.cls ? ' ' + o.cls : '') + (it ? ' full' : ' free');
+      var cls = 'pk-s' + (o.cls ? ' ' + o.cls : '') + (it ? ' full' : ' free') + (it && it.art ? ' art-slot' : '');
       var attrs = ' data-dest="' + escapeHtml(o.dest) + '"' + (o.g ? ' data-g="' + escapeHtml(o.g) + '" data-i="' + o.i + '"' : '') + (it ? ' data-id="' + escapeHtml(note(it).id) + '"' : '') +
         (o.style ? ' style="' + o.style + '"' : '');
       var label = o.where + ': ' + (it ? it.label : o.ghost ? o.ghost.label + ', a dos manos' : 'libre');
-      var body = it ? '<svg class="i"><use href="' + pkIcon(it.icon) + '"/></svg><span class="nm">' + escapeHtml(it.name) + '</span>' + (it.quantity > 1 ? '<span class="qt">×' + it.quantity + '</span>' : '')
+      var body = it ? (it.art ? '<img class="art" src="' + escapeHtml(it.art) + '" alt="" draggable="false">' : '<svg class="i"><use href="' + pkIcon(it.icon) + '"/></svg>') + '<span class="nm">' + escapeHtml(it.name) + '</span>' + (it.quantity > 1 ? '<span class="qt">×' + it.quantity + '</span>' : '')
         : o.ghost ? '<svg class="i"><use href="' + pkIcon(o.ghost.icon) + '"/></svg><span class="nm">a dos manos</span>'
         : (o.icon ? '<svg class="i"><use href="' + pkIcon(o.icon) + '"/></svg>' : '') + (o.empty ? '<span class="nm">' + escapeHtml(o.empty) + '</span>' : '');
       return '<button type="button" class="' + cls + (o.ghost ? ' ghost' : '') + '"' + attrs + ' aria-label="' + escapeHtml(label) + '">' + body + '</button>';

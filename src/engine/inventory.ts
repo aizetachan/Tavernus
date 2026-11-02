@@ -350,6 +350,8 @@ export interface PackItem {
   stat?: string;
   props: string[];
   about: string;
+  /** Imagen escrita del objeto (la pone la web, src/adapters/web/itemart.ts); sin ella, el icono. */
+  art?: string;
 }
 export interface PackView {
   hands: { main: PackItem | null; off: PackItem | null; both: boolean };
