@@ -130,6 +130,13 @@ export function writtenImage(m: AssetManifest | null, kind: AssetKind | (string 
   return null;
 }
 
+/** El fichero de una ruta del manifiesto para ese tipo (si sigue existiendo y es servible). */
+export function writtenFile(m: AssetManifest | null, kind: AssetKind | (string & {}), rel: string): { file: string; rel: string } | null {
+  if (!m) return null;
+  const file = fileOf(m, rel, SERVABLE[kind as AssetKind] ?? JPEG);
+  return file ? { file, rel } : null;
+}
+
 /** ¿Los planos del manifiesto valen para esta campaña? */
 function plansFor(m: AssetManifest, campaignId: Id): boolean {
   return (m.plan_campaigns ?? m.campaigns).includes(campaignId);

@@ -112,6 +112,33 @@ describe('activos escritos', () => {
     expect(await readFile(ill.pathOf(img!))).toEqual(PNG);
   });
 
+  it('al abrir una partida antigua, lo generado que ahora tiene activo pasa a ser el activo, y las copias se refrescan', async () => {
+    // Antes del arte: la plaza y Doro, generados; un descubrimiento ya escrito con una copia vieja.
+    const before = make(null);
+    await before.ill.illustrate({ location_id: 'loc_plaza', name: 'Plaza', description: 'x', light: 'day', indoor: false });
+    await before.ill.illustrate({ location_id: 'loc_claro', name: 'Claro', description: 'x', light: 'day', indoor: false });
+    const brezal = join(root, 'campaigns', 'brezal');
+    await mkdir(join(brezal, 'descubrimiento'), { recursive: true });
+    await writeFile(join(brezal, 'descubrimiento', 'clue_pozo.jpg'), HAND);
+    const index = JSON.parse(await readFile(join(dir, 'index.json'), 'utf8')) as Record<string, { file: string }>;
+    index['discovery-ev_9-1'] = { key: 'discovery-ev_9-1', location_id: 'loc_plaza', name: 'el pozo', kind: 'discovery', entity_id: 'ev_9', seed: 1, prompt: 'p', provider: 'written', url: 'asset:descubrimiento/clue_pozo.jpg', file: 'discovery-ev_9-1-escrito.jpg' } as never;
+    await writeFile(join(dir, 'discovery-ev_9-1-escrito.jpg'), JPEG);
+    await writeFile(join(dir, 'index.json'), JSON.stringify(index));
+
+    // Llega el arte: al abrir la partida, sin pedir nada a nadie.
+    const { ill, urls } = make(assetsFor('demo', join(root, 'campaigns')));
+    await ill.load();
+    expect(urls).toHaveLength(0);
+    const plaza = ill.imageFor('loc_plaza')!;
+    expect(plaza).toMatchObject({ provider: 'written', url: 'asset:vista/loc_plaza.jpg' });
+    expect(await readFile(ill.pathOf(plaza))).toEqual(HAND);
+    expect(ill.imageFor('loc_claro')?.provider).toBe('pollinations'); // sin activo: como estaba
+    const pozo = ill.entityImage('discovery', 'ev_9')!;
+    expect(await readFile(ill.pathOf(pozo))).toEqual(HAND); // la copia vieja, refrescada
+    const saved = JSON.parse(await readFile(join(dir, 'index.json'), 'utf8')) as Record<string, { provider: string; url: string }>;
+    expect(Object.values(saved).filter((v) => v.provider === 'written').map((v) => v.url).sort()).toEqual(['asset:descubrimiento/clue_pozo.jpg', 'asset:vista/loc_plaza.jpg']);
+  });
+
   it('sin manifiesto o sin el fichero, se genera como hoy', async () => {
     const { ill, urls } = make(assetsFor('demo', join(root, 'campaigns')));
     const claro = await ill.illustrate({ location_id: 'loc_claro', name: 'Claro', description: 'x', light: 'day', indoor: false });

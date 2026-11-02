@@ -54,7 +54,7 @@ import type { Campaign, GameEvent, Id, LightLevel } from '../engine/model.js';
 import { itemIllustrable } from '../engine/moments.js';
 import { lightAt } from '../engine/perception.js';
 import type { MasterMode } from './mode.js';
-import { assetsFor, writtenImage, type AssetManifest } from './assets.js';
+import { assetsFor, writtenFile, writtenImage, type AssetManifest } from './assets.js';
 
 export const POLLINATIONS_BASE = 'https://image.pollinations.ai/prompt/';
 export const STYLE = 'fantasy illustration, medieval, painterly';
@@ -619,14 +619,46 @@ export class Illustrator {
       const raw = JSON.parse(await readFile(join(this.opts.dir, 'index.json'), 'utf8')) as Record<string, SceneImage>;
       for (const [k, v] of Object.entries(raw)) if (v && typeof v.file === 'string') loaded[k] = v;
     } catch { /* sin índice todavía */ }
+    const refreshed = await this.refreshFromAssets(loaded);
     // Otra llamada pudo cargarlo mientras se leía.
     if (this.index) return this.index;
     this.index = loaded;
+    if (refreshed) await this.saveIndex();
     for (const img of Object.values(loaded)) {
       if (img.kind && img.kind !== 'scene') { if (img.entity_id) this.byEntity.set(`${img.kind}:${img.entity_id}`, img); }
       else if (!this.byLocation.has(img.location_id)) this.byLocation.set(img.location_id, img);
     }
     return loaded;
+  }
+
+  /**
+   * Partidas de antes de un activo escrito, o de una versión anterior de él: al abrirlas, lo que viene de un activo se
+   * vuelve a copiar (el arte pudo cambiar, p. ej. reescalado) y lo generado de una vista, un retrato de NPC o un objeto
+   * que ahora tiene activo pasa a ser ese. Lo demás (combates, descubrimientos y PJ, cuyos ids de activo no se guardan;
+   * el pincel) se queda como está. Devuelve si cambió algo del índice.
+   */
+  private async refreshFromAssets(index: Record<string, SceneImage>): Promise<boolean> {
+    const m = this.assets;
+    if (!m) return false;
+    let changed = false;
+    for (const [key, img] of Object.entries(index)) {
+      const kind = img.kind ?? 'scene';
+      if (kind === 'manual') continue;
+      const rel = img.url.startsWith('asset:') ? img.url.slice('asset:'.length) : null;
+      const swappable = kind === 'scene' || kind === 'item' || (kind === 'portrait' && !!img.entity_id?.startsWith('npc_'));
+      const id = kind === 'scene' ? img.location_id : img.entity_id;
+      // Lo que el manifiesto dice hoy de esa entidad; si no se sabe (combate, descubrimiento, PJ), la misma ruta de antes.
+      const found = (swappable && id ? writtenImage(m, kind, [id]) : null) ?? (rel ? writtenFile(m, kind, rel) : null);
+      if (!found) continue;
+      const file = `${key}-escrito${extname(found.file).toLowerCase() === '.png' ? '.png' : '.jpg'}`;
+      try {
+        await mkdir(this.opts.dir, { recursive: true });
+        await copyFile(found.file, join(this.opts.dir, file));
+      } catch { continue; }
+      if (img.provider !== 'written' || img.file !== file || img.url !== `asset:${found.rel}`) changed = true;
+      index[key] = { ...img, provider: 'written', url: `asset:${found.rel}`, file };
+    }
+    return changed;
   }
 
   private saveIndex(): Promise<void> {
