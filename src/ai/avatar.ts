@@ -286,6 +286,9 @@ export class AvatarStudio {
     this.errors.delete(c.id);
     const loc = this.engine.world.characterSpot(c)?.location_id ?? '';
     const input: EntityInput = { kind: 'portrait', entity_id: version.entity_id, name: c.name, location_id: loc, prompt: version.prompt };
+    // La versión 1 es el retrato de base: si la campaña trae uno escrito por raza (y clase), se usa ese, como en portraitOf.
+    // Las demás son versiones pedidas por el jugador: esas sí se pintan.
+    if (version.v === 1) input.asset_ids = [`pc:${c.race_id}-${c.class_id}`, `pc:${c.race_id}`];
     const done = this.ill.illustrateEntity(input).then(async (img) => {
       if (img && isVersionImage(img, version.entity_id)) {
         version.file = img.file;

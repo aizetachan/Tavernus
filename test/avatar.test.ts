@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -104,6 +104,27 @@ describe('estudio de avatares', () => {
     expect((await studio.regenerate('ch_kael')).ok).toBe(true);
     await studio.settled('ch_kael');
     expect(await studio.regenerate('ch_mira')).toMatchObject({ ok: false, status: 429 });
+  });
+
+  it('la versión 1 usa el retrato escrito de su raza; pedir otra sí la pinta', async () => {
+    const fetch = fakeFetch();
+    const { engine } = await bootEngine(undefined, { deterministic: true });
+    const ill = new Illustrator({ dir, worldSeed: 'demo', fetch, minIntervalMs: 0, queue: new PollinationsQueue(), cloudflareLimit: new Limiter(2), log: () => {} });
+    const race = engine.world.character('ch_kael').race_id;
+    const assets = join(dir, 'activos');
+    await mkdir(join(assets, 'retrato'), { recursive: true });
+    await writeFile(join(assets, 'retrato', 'pc.jpg'), new Uint8Array([0xff, 0xd8, 7, 0xff, 0xd9]));
+    ill.assets = { campaigns: ['demo'], dir: assets, portrait: { [`pc:${race}`]: 'retrato/pc.jpg' } };
+    const studio = new AvatarStudio(engine, ill, { dir, log: () => {} });
+    await studio.ensure('ch_kael');
+    await studio.settled('ch_kael');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(ill.entityImage('portrait', 'ch_kael')).toMatchObject({ provider: 'written', url: 'asset:retrato/pc.jpg' });
+    expect(studio.view('ch_kael')!.versions[0]!.file).toMatch(/-escrito\.jpg$/);
+    expect((await studio.regenerate('ch_kael')).ok).toBe(true);
+    await studio.settled('ch_kael');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(ill.entityImage('portrait', 'ch_kael')?.provider).toBe('pollinations');
   });
 
   it('describirlo guarda el aspecto y pinta con él; elegir fija la versión en el ilustrador', async () => {
