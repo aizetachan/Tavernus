@@ -385,6 +385,14 @@ ${CHARGEN_CSS}
     .filters.menu .mobile-only { display: flex; }
     .filters.menu .sep.mobile-only { display: block; }
     #guide-wrap { display: none; }
+    /* Taberna en móvil: marco más fino y tarjetas más ceñidas, para que el nombre de la partida quepa junto al
+       botón de jugar. Abajo sin relleno: la lista pasa por debajo del marco. */
+    :root[data-theme="taberna"] aside { --frame: 34px; padding: calc(var(--frame) * .8) calc(var(--frame) * .62) 0; }
+    :root[data-theme="taberna"] aside .head { padding: 8px 4px 10px; }
+    :root[data-theme="taberna"] .searchrow { margin: 0 4px 10px; }
+    :root[data-theme="taberna"] aside .scroll { padding: 2px 2px calc(12px + env(safe-area-inset-bottom)); }
+    :root[data-theme="taberna"] aside .row { padding: 10px 8px 10px 10px; gap: 10px; }
+    :root[data-theme="taberna"] aside .row .pic { width: 46px; height: 46px; }
   }
 </style>
 </head>
