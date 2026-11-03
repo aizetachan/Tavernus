@@ -59,6 +59,7 @@ import { CreditAlarm, webhookAlert, type AlertSender } from './alert.js';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Engine, ActionResult, CharacterSpec } from '../../engine/engine.js';
 import type { InfoAnswer } from '../../engine/info.js';
 import type { Character, GameEvent, Id } from '../../engine/model.js';
@@ -238,6 +239,8 @@ export interface WebServerOptions {
   log?: (line: string) => void;
   /** Avisos al anfitrión (alert.ts); por defecto, ALERT_WEBHOOK del entorno. */
   alert?: AlertSender;
+  /** Carpeta con la wiki ya construida (dist/wiki, de npm run build; docs/WIKI.md). */
+  wikiDir?: string;
 }
 
 export function createWebServer(games: GameManager, opts: WebServerOptions = {}): WebServer {
@@ -255,6 +258,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
   const statusTz = process.env['BUDGET_TZ']?.trim() || 'Europe/Madrid';
   const stats = new ServiceStats(join(games.root, STATS_FILE), statusTz);
   const reportQuota = new ReportQuota();
+  const wikiDir = opts.wikiDir ?? fileURLToPath(new URL('../../../dist/wiki/', import.meta.url));
 
   const timer = setInterval(() => {
     void games.openEngines().then((list) => { for (const [, e] of list) void e.tick(); });
@@ -639,6 +643,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       return;
     }
     if (req.method === 'GET' && url.pathname.startsWith('/assets/')) { await serveAsset(res, url.pathname.slice('/assets/'.length)); return; }
+    if (req.method === 'GET' && (url.pathname === '/wiki' || url.pathname.startsWith('/wiki/'))) { await serveWiki(res, url.pathname); return; }
     if (req.method === 'GET' && url.pathname.startsWith('/music/')) { await serveMusic(req, res, url.pathname.slice('/music/'.length)); return; }
 
     const admin = isAdmin(access, req);
@@ -1033,6 +1038,29 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
   }
 
   /** Imágenes fijas de la interfaz: public/ en la raíz del proyecto (vale igual desde src/ que desde dist/). */
+  /**
+   * La wiki (docs/WIKI.md): los ficheros de dist/wiki tal cual, pública como la portada. Sin extensión es una
+   * página (.html); con barra final, el índice de la carpeta. Nada fuera de la carpeta ni de los tipos de la wiki.
+   */
+  async function serveWiki(res: ServerResponse, pathname: string): Promise<void> {
+    if (pathname === '/wiki') { res.writeHead(301, { location: '/wiki/' }); res.end(); return; }
+    let p = pathname.slice('/wiki/'.length);
+    if (p === '' || p.endsWith('/')) p += 'index.html';
+    else if (!/\.[a-z0-9]+$/.test(p)) p += '.html';
+    const ext = p.slice(p.lastIndexOf('.') + 1);
+    const type = WIKI_TYPES[ext];
+    if (!type || !/^[a-z0-9][a-z0-9._/-]*$/.test(p) || p.includes('..') || p.includes('//')) { wikiMissing(res); return; }
+    let bytes: Buffer;
+    try { bytes = await readFile(join(wikiDir, p)); } catch { wikiMissing(res); return; }
+    res.writeHead(200, { 'content-type': type, 'cache-control': ext === 'html' ? 'no-cache' : 'public, max-age=86400' });
+    res.end(bytes);
+  }
+
+  function wikiMissing(res: ServerResponse): void {
+    res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
+    res.end('<!doctype html><html lang="es"><meta charset="utf-8"><title>No está · Wiki de Tavernus</title><link rel="stylesheet" href="/wiki/wiki.css"><body><div class="page"><article><h1>No hay esa página</h1><p>Puede que la hayan movido o que la wiki no esté construida. <a href="/wiki/">Ir a la portada de la wiki</a>.</p></article></div></body></html>');
+  }
+
   async function serveAsset(res: ServerResponse, name: string): Promise<void> {
     if (!/^[A-Za-z0-9_-]+\.(jpg|png)$/.test(name)) { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
     let bytes: Buffer;
@@ -1157,7 +1185,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
  * journald (y en las alertas); se dice dónde leerlo, y quien entra al servidor lo consulta allí.
  */
 export function accessBanner(access: AccessOptions, base: string, env: NodeJS.ProcessEnv, root: string): string[] {
-  const out = [`[web] abre ${base}`];
+  const out = [`[web] abre ${base}`, `[web] la wiki, en ${base}/wiki/`];
   if (access.mode === 'open') {
     out.push('[web] acceso abierto: cualquiera que llegue a esta URL juega con cualquier personaje (WEB_ACCESS=invite o ADMIN_TOKEN para invitaciones)');
     return out;
@@ -1474,6 +1502,12 @@ function html(res: ServerResponse, status: number, page: string): void {
   res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
   res.end(page);
 }
+
+/** Lo que hay en dist/wiki: páginas, estilos, buscador e imágenes. */
+const WIKI_TYPES: Record<string, string> = {
+  html: 'text/html; charset=utf-8', css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8', json: 'application/json; charset=utf-8',
+  jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp',
+};
 
 function json(res: ServerResponse, status: number, data: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });

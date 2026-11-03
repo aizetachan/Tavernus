@@ -96,7 +96,8 @@ echo "[push] empaquetando la versión $STAMP"
 # Lista explícita de lo que se sube (nunca node_modules, data/, .env ni .git). Mejor que --exclude:
 # el tar de macOS y de Windows (bsdtar) no ancla los patrones y «./data» quitaría también dist/data.
 items=(package.json package-lock.json tsconfig.json src public assets deploy docs README.md)
-[ "$REMOTE_BUILD" = 0 ] && items+=(dist)
+# Compilado aquí va dist/ (con la wiki ya hecha); compilado allí hace falta wiki/, la fuente (docs/WIKI.md).
+[ "$REMOTE_BUILD" = 0 ] && items+=(dist) || items+=(wiki)
 present=()
 for i in "${items[@]}"; do [ -e "$i" ] && present+=("$i"); done
 tar -czf "$TMP/release.tgz" --exclude=deploy/local.env --exclude='*.log' "${present[@]}"
