@@ -1052,6 +1052,7 @@ ${SHOP_STYLE}
   #gear-menu .gm-paint[hidden] { display: none; }
   .tts-pop .report-open { display: block; width: 100%; min-height: 34px; margin-top: 12px; padding: 6px 12px; border: 0; border-radius: 12px; background: var(--control); color: var(--text); font: 500 13px/1.2 var(--sans); text-align: center; }
   .tts-pop .report-open:hover { background: var(--hover); }
+  .tts-pop .fights-open + .report-open { margin-top: 6px; }
   #gear-menu .tts-pop .report-open { display: none; }
   #gear-menu .gm-report .bub svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   #gear-menu .voice-auto { display: flex; width: 100%; height: auto; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--control); color: var(--text); font-size: 13px; text-align: left; white-space: normal; }
@@ -1263,6 +1264,7 @@ ${SHOP_STYLE}
         <section data-slot="sfx"><h3>Audio</h3></section>
         <section data-slot="tts"><h3>Narrador</h3></section>
         <section data-slot="voice"><h3>Dictar con la voz</h3></section>
+        <section><h3>Combate</h3><button type="button" class="gm-paint gm-fights"><span class="bub" aria-hidden="true">⚔</span><span><b>Registro de combates</b><small>Lo que ha pasado en cada combate</small></span></button></section>
         <section><h3>Ayuda</h3><button type="button" class="gm-paint gm-report"><span class="bub"><svg class="i" viewBox="0 0 24 24"><path d="M5 21V4h13l-2.5 4.5L18 13H5"/></svg></span><span><b>Algo va mal</b><small>Cuéntaselo a quien organiza la partida</small></span></button></section>
       </div>
       <span class="inwrap"><input id="input" placeholder="¿Qué haces?" aria-label="Acción"></span>
@@ -3454,6 +3456,11 @@ ${SHOP_JS}
       report.type = 'button'; report.className = 'report-open'; report.textContent = 'Algo va mal';
       report.addEventListener('click', function () { if (!pop.hidden) more.click(); openReport(null, ''); });
       pop.appendChild(report);
+      // Y encima, el registro de combates (fight.ts).
+      var fights = document.createElement('button');
+      fights.type = 'button'; fights.className = 'report-open fights-open'; fights.textContent = '⚔ Registro de combates';
+      fights.addEventListener('click', function () { if (!pop.hidden) more.click(); openFightLog(); });
+      pop.insertBefore(fights, report);
     }
   });
 
@@ -3493,6 +3500,7 @@ ${SHOP_JS}
   gear.addEventListener('click', function (ev) { ev.stopPropagation(); setMenu(false); openSlash(false); setGear(gearMenu.hidden); });
   gearMenu.querySelector('.gm-paint').addEventListener('click', function () { var brush = document.querySelector('form .brush'); setGear(false); if (brush) brush.click(); });
   gearMenu.querySelector('.gm-report').addEventListener('click', function () { setGear(false); openReport(null, ''); });
+  gearMenu.querySelector('.gm-fights').addEventListener('click', function () { setGear(false); openFightLog(); });
   document.addEventListener('click', function (ev) { if (!gearMenu.hidden && !ev.target.closest('#gear-menu') && !ev.target.closest('#gear')) setGear(false); });
   mobileQ.addEventListener('change', placeSettings);
   document.addEventListener('DOMContentLoaded', function () { if (mobileQ.matches) placeSettings(); });
