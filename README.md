@@ -1,6 +1,6 @@
 # Tavernus
 
-D&D multijugador por chat con Master IA, que se juega en una web propia. La spec completa está en [`docs/SPEC.md`](docs/SPEC.md); la dirección y las fases hacia mundos generados y vivos, en [`docs/PLAN.md`](docs/PLAN.md); dónde lo dejamos, en [`docs/RETOMAR.md`](docs/RETOMAR.md). Para jugar: [Cómo se juega](docs/GUIA-USUARIO.md).
+D&D multijugador por chat con Master IA, que se juega en una web propia. La spec completa está en [`docs/SPEC.md`](docs/SPEC.md); la dirección y las fases hacia mundos generados y vivos, en [`docs/PLAN.md`](docs/PLAN.md); dónde lo dejamos, en [`docs/RETOMAR.md`](docs/RETOMAR.md). Para jugar: [Cómo se juega](docs/GUIA-USUARIO.md). La wiki del mundo, los personajes y las misiones de Brezal está en [`wiki/`](wiki/index.md) y se publica en `/wiki/` ([`docs/WIKI.md`](docs/WIKI.md)).
 
 Principio rector: **la base de datos es la verdad; el master IA solo puede cambiarla a través de tools.**
 

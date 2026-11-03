@@ -371,6 +371,32 @@
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
         "IMAGES": "off"
       }
+    },
+    {
+      "name": "tavernus-wiki",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "C:/Users/migue/.claude/hooks/con-tope.ps1",
+        "-GB",
+        "2",
+        "-Comando",
+        "npm run web"
+      ],
+      "port": 3109,
+      "env": {
+        "MASTER_MODE": "offline",
+        "WEB_PORT": "3109",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/wiki",
+        "GAMES_DIR": "./data/local/wiki/games",
+        "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
+        "SFX": "off",
+        "TTS": "off"
+      }
     }
   ]
 }
