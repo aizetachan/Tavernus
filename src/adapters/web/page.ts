@@ -3141,7 +3141,8 @@ ${TABLON_JS}
   }
   setInterval(function () { if (!document.hidden) beat(); }, ${HEARTBEAT_MS});
   document.addEventListener('visibilitychange', function () { beat(); });
-  window.addEventListener('pagehide', function () { beat('gone'); });
+  // Con persisted la página no se cierra: el navegador (iOS, Android) la guarda al cambiar de app; cuenta como oculta.
+  window.addEventListener('pagehide', function (e) { beat(e.persisted ? 'hidden' : 'gone'); });
   // Vuelve de la caché del navegador (atrás/adelante): si el stream se cerró, se reabre.
   window.addEventListener('pageshow', function (e) { if (!e.persisted || !current) return; if (stream && stream.readyState === 2) connect(current); else beat(); });
 

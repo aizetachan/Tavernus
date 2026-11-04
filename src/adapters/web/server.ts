@@ -86,7 +86,7 @@ import { handleAvatarRequest } from './avatar.js';
 import { journeyOf } from '../../engine/travel.js';
 import { accessFromEnv, checkSeatCookie, cookies, isAdmin, isHostSeat, adminTokenMatches, newSeat, randomToken, SeatStore, seatCookieName, seatCookieValue, seatIdOf, setAdminCookie, setCookie, type AccessOptions, type Seat } from './access.js';
 import { invitePage, joinPage, seatsPage } from './page-access.js';
-import { PRESENCE_TIMING, PresenceTracker, type PresenceTiming } from './presence.js';
+import { PRESENCE_TIMING, PresenceTracker, REPEAT_NOTICE_MS, type PresenceTiming } from './presence.js';
 import { pcLabel, pcName, sayLooksLikeAction } from '../../engine/party.js';
 import { talkingWith } from '../../engine/scene.js';
 import { descriptorOf } from '../../engine/narrate.js';
@@ -234,6 +234,8 @@ export interface WebServerOptions {
   leaveNoticeMs?: number;
   staleMs?: number;
   hiddenMs?: number;
+  /** Tras un «ha vuelto» anunciado, otra ida en este plazo no se anuncia (por defecto 5 min, o PRESENCE_REPEAT_MIN del entorno). */
+  repeatNoticeMs?: number;
   engineOfflineMs?: number;
   /** Fuera de línea al menos esto para que salga «Mientras no estabas» (por defecto 30 min, o AWAY_CARD_MIN del entorno). */
   awayCardMs?: number;
@@ -250,7 +252,10 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
   const access: AccessOptions = opts.access ?? { mode: 'open', adminToken: null, secret: randomToken(32) };
   const seats = new SeatStore();
   const claiming = new Set<string>();
-  const timing: PresenceTiming = { graceMs: opts.leaveNoticeMs ?? PRESENCE_TIMING.graceMs, staleMs: opts.staleMs ?? PRESENCE_TIMING.staleMs, hiddenMs: opts.hiddenMs ?? PRESENCE_TIMING.hiddenMs };
+  // Minutos del entorno para probar con esperas cortas (como AWAY_CARD_MIN); 0 o ausente, el valor de siempre.
+  const envMs = (name: string) => { const n = Number(process.env[name]); return n > 0 ? n * 60_000 : undefined; };
+  const timing: PresenceTiming = { graceMs: opts.leaveNoticeMs ?? PRESENCE_TIMING.graceMs, staleMs: opts.staleMs ?? PRESENCE_TIMING.staleMs, hiddenMs: opts.hiddenMs ?? envMs('PRESENCE_HIDDEN_MIN') ?? PRESENCE_TIMING.hiddenMs };
+  const repeatNoticeMs = opts.repeatNoticeMs ?? envMs('PRESENCE_REPEAT_MIN') ?? REPEAT_NOTICE_MS;
   const engineOfflineMs = opts.engineOfflineMs ?? ENGINE_OFFLINE_MS;
   const awayMin = Number(process.env['AWAY_CARD_MIN']);
   const awayCardMs = opts.awayCardMs ?? (awayMin > 0 ? awayMin * 60_000 : AWAY_CARD_MS);
@@ -419,6 +424,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
      * engine.setAway), también como aviso de sistema.
      */
     const announce = (id: Id, online: boolean, inFiction = !online) => {
+      if (quietNow.has(id)) { sendPresence(); return; }
       const notice = webNotice(online ? `${nameOf(id)} ${seen.has(id) ? 'ha vuelto' : 'ha entrado en la partida'}` : `${nameOf(id)} se ha marchado`);
       const where = locOf(id);
       for (const other of streams.keys()) {
@@ -427,6 +433,12 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       }
       sendPresence();
     };
+    /** «Se ha ido» ya dicho a los demás y aún sin su «ha vuelto»: solo entonces se anuncia la vuelta. */
+    const toldGone = new Set<Id>();
+    /** Cuándo se dijo el último «ha vuelto» de cada uno (para no repetir ida y vuelta seguidas). */
+    const toldBackAt = new Map<Id, number>();
+    /** Mientras dura el cambio de estado de ese PJ en el motor, sin texto para nadie (announce solo pone el circulito). */
+    const quietNow = new Set<Id>();
     const cameOnline = (id: Id) => {
       clearTimeout(offlineTimers.get(id)); offlineTimers.delete(id);
       const c = engine.world.characters.get(id);
@@ -438,8 +450,13 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const woken = wasVeiled ? engine.act(id, 'despierto').then(() => {}).catch((e) => console.error(`[web] despertar partida=${slug} pj=${id}:`, e)) : Promise.resolve();
       // Vuelve: deja de estar ausente (los presentes leen «ha vuelto» del motor; el resto, el aviso de la web).
       const wasAway = Boolean(engine.world.characters.get(id)?.away);
-      engine.setAway(id, false);
+      // «Ha vuelto» solo si antes se dijo «se ha ido»; si no, el estado cambia sin avisos. La primera entrada sí se dice.
+      const loud = toldGone.has(id) || !seen.has(id);
+      if (!loud) quietNow.add(id);
+      engine.setAway(id, false, { quiet: !loud });
       announce(id, true, wasAway);
+      quietNow.delete(id);
+      if (toldGone.delete(id)) toldBackAt.set(id, Date.now());
       seen.add(id);
       // Vuelve sin abrir otro stream (la pestaña oculta que se ve otra vez): el resumen le llega por el que tiene abierto.
       const recap = wasAway ? engine.welcomeBack(id).catch((e) => console.error(`[web] recap partida=${slug} pj=${id}:`, e)) : Promise.resolve(null);
@@ -458,8 +475,14 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     };
     // Pasada la gracia sin pestañas que cuenten, su PJ se queda ausente donde estaba (docs/MULTIJUGADOR.md, «Desconexiones»).
     const wentOffline = (id: Id) => {
-      engine.setAway(id, true);
+      // Una ida y vuelta justo después de otra ya anunciada no se repite: ni el «se ha ido» ni su «ha vuelto».
+      const since = toldBackAt.get(id);
+      const loud = since === undefined || Date.now() - since >= repeatNoticeMs;
+      if (!loud) quietNow.add(id);
+      engine.setAway(id, true, { quiet: !loud });
       announce(id, false);
+      quietNow.delete(id);
+      if (loud) toldGone.add(id);
       scheduleOffline(id);
     };
     // Una acción a la vez por PJ; si otro PJ del mismo sitio va delante en la cola del motor, «esperando a…».

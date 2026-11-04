@@ -30,9 +30,9 @@ let games: GameManager;
 let web: WebServer;
 let base: string;
 
-async function start(access?: AccessOptions, extra: { masterFor?: MasterFactory; leaveNoticeMs?: number; staleMs?: number; hiddenMs?: number } = {}) {
+async function start(access?: AccessOptions, extra: { masterFor?: MasterFactory; leaveNoticeMs?: number; staleMs?: number; hiddenMs?: number; repeatNoticeMs?: number } = {}) {
   games = new GameManager({ root: join(dir, 'games'), env: { DATA_DIR: join(dir, 'local') }, masterFor: extra.masterFor ?? ((e) => new Master(e, { client: offlineClient() })), engine: { deterministic: false }, log: () => {}, budget: null });
-  web = createWebServer(games, { tickMs: 3_600_000, ...(access ? { access } : {}), ...(extra.leaveNoticeMs !== undefined ? { leaveNoticeMs: extra.leaveNoticeMs } : {}), ...(extra.staleMs !== undefined ? { staleMs: extra.staleMs } : {}), ...(extra.hiddenMs !== undefined ? { hiddenMs: extra.hiddenMs } : {}) });
+  web = createWebServer(games, { tickMs: 3_600_000, ...(access ? { access } : {}), ...(extra.leaveNoticeMs !== undefined ? { leaveNoticeMs: extra.leaveNoticeMs } : {}), ...(extra.staleMs !== undefined ? { staleMs: extra.staleMs } : {}), ...(extra.hiddenMs !== undefined ? { hiddenMs: extra.hiddenMs } : {}), ...(extra.repeatNoticeMs !== undefined ? { repeatNoticeMs: extra.repeatNoticeMs } : {}) });
   await new Promise<void>((resolve) => web.server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${(web.server.address() as AddressInfo).port}`;
 }
@@ -223,7 +223,7 @@ describe('presencia y cola en la web', () => {
   });
 
   it('sin cerrar el stream (colgado tras un proxy u oculta), los demás leen que se ha marchado sin que nadie actúe', async () => {
-    await start(undefined, { leaveNoticeMs: 40, staleMs: 150, hiddenMs: 150 });
+    await start(undefined, { leaveNoticeMs: 40, staleMs: 150, hiddenMs: 150, repeatNoticeMs: 0 });
     const { game, character_id: lia } = await games.create({ name: 'Latido', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
     const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
     // En otro sitio: el aviso es de la web («se ha marchado», «ha vuelto»), no del motor.
@@ -254,8 +254,52 @@ describe('presencia y cola en la web', () => {
     await liaStream.body!.cancel();
   });
 
+  it('histéresis: un vistazo a otra app no avisa; oculta mucho, un «se ha marchado» y un «ha vuelto»; el ciclo seguido no se repite', async () => {
+    await start(undefined, { leaveNoticeMs: 40, staleMs: 60_000, hiddenMs: 400, repeatNoticeMs: 60_000 });
+    const { game, character_id: lia } = await games.create({ name: 'Histéresis', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
+    const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
+    const engine = await games.open(game.slug);
+    engine.world.character(tor).location = { type: 'spot', id: 'sp_tab_barra' };
+    const g = `?game=${game.slug}`;
+    const beat = (state: string) => fetch(`${base}/api/presence${g}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ character: tor, tab: 'tor', state }) });
+    const nap = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const liaStream = await fetch(`${base}/api/stream${g}&character=${lia}`);
+    await readSse(liaStream, (t) => t.includes('event: presence'));
+    const torStream = await fetch(`${base}/api/stream${g}&character=${tor}&tab=tor`);
+    expect(await readSse(liaStream, (t) => t.includes('ha entrado'))).toContain('Tor ha entrado en la partida');
+
+    // Un vistazo: oculta mucho menos que hiddenMs y visible otra vez. Ni aviso ni cambio de estado.
+    await beat('hidden');
+    await nap(120);
+    await beat('visible');
+    const glance = await readSse(liaStream, () => false, 800);
+    expect(glance).not.toContain('se ha marchado');
+    expect(glance).not.toContain('ha vuelto');
+    expect(engine.world.character(tor).away).toBeFalsy();
+
+    // Oculta de verdad: un aviso al irse y otro al volver.
+    await beat('hidden');
+    expect(await readSse(liaStream, (t) => t.includes('se ha marchado'))).toContain('Tor se ha marchado');
+    expect(engine.world.character(tor).away).toBeTruthy();
+    await beat('visible');
+    expect(await readSse(liaStream, (t) => t.includes('ha vuelto'))).toContain('Tor ha vuelto');
+    expect(engine.world.character(tor).away).toBeFalsy();
+
+    // Otro ciclo enseguida: el estado cambia (el circulito, ausente en el motor), pero el texto no se repite.
+    await beat('hidden');
+    const again = await readSse(liaStream, (t) => t.includes('"name":"Tor","online":false'));
+    expect(again).not.toContain('se ha marchado');
+    expect(engine.world.character(tor).away).toBeTruthy();
+    await beat('visible');
+    const back = await readSse(liaStream, (t) => t.includes('"name":"Tor","online":true'));
+    expect(back).not.toContain('ha vuelto');
+    expect(engine.world.character(tor).away).toBeFalsy();
+    await torStream.body!.cancel();
+    await liaStream.body!.cancel();
+  });
+
   it('la pestaña oculta que se ve otra vez: se iguala al mundo y el resumen llega por el stream que ya tenía', async () => {
-    await start(undefined, { leaveNoticeMs: 40, staleMs: 60_000, hiddenMs: 150 });
+    await start(undefined, { leaveNoticeMs: 40, staleMs: 60_000, hiddenMs: 150, repeatNoticeMs: 0 });
     const { game, character_id: lia } = await games.create({ name: 'Oculta', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
     const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
     const engine = await games.open(game.slug);

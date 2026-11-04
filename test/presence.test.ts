@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PresenceTracker } from '../src/adapters/web/presence.js';
+import { PRESENCE_TIMING, PresenceTracker } from '../src/adapters/web/presence.js';
 
-const T = { graceMs: 20_000, staleMs: 45_000, hiddenMs: 60_000 };
+const T = { graceMs: 20_000, staleMs: 45_000, hiddenMs: 4 * 60_000 };
 
 /** Un tracker con reloj falso y la lista de cambios que avisa. */
 function tracker() {
@@ -118,6 +118,39 @@ describe('presencia en tiempo real (presence.ts)', () => {
     p.close('mira', 'viejo');
     vi.advanceTimersByTime(T.graceMs + 1000);
     expect(changes).toEqual(['mira:entra', 'mira:se va']);
+  });
+
+  it('por defecto, un vistazo a otra app no es irse: oculta 30 s y visible otra vez, sin cambios', () => {
+    expect(PRESENCE_TIMING.hiddenMs).toBeGreaterThanOrEqual(3 * 60_000);
+    const changes: string[] = [];
+    const p = new PresenceTracker(PRESENCE_TIMING, (id, online) => changes.push(`${id}:${online ? 'entra' : 'se va'}`));
+    p.open('maikol', 'a');
+    p.beat('maikol', 'a', false);
+    vi.advanceTimersByTime(30_000);
+    p.beat('maikol', 'a', true);
+    vi.advanceTimersByTime(PRESENCE_TIMING.graceMs * 3);
+    expect(changes).toEqual(['maikol:entra']);
+  });
+
+  it('el móvil oculto pierde el stream y no latía: el corte del stream no lo saca antes de hiddenMs', () => {
+    // El caso del 2026-11-04: pantalla apagada, el navegador cierra el stream; con la pestaña oculta 80 s ya se iba.
+    const { p, changes } = tracker();
+    p.open('maikol', 'a');
+    p.beat('maikol', 'a', false);
+    p.close('maikol', 'a');
+    vi.advanceTimersByTime(T.hiddenMs - 1000);
+    expect(p.online('maikol')).toBe(true);
+    p.open('maikol', 'a'); // vuelve a mirar: EventSource reconecta con el mismo id
+    p.beat('maikol', 'a', true);
+    for (let i = 0; i < 20; i++) { vi.advanceTimersByTime(15_000); p.beat('maikol', 'a', true); }
+    expect(changes).toEqual(['maikol:entra']);
+    // Y si no vuelve en todo ese rato, se va (hiddenMs más la gracia) y al volver entra una sola vez.
+    p.beat('maikol', 'a', false);
+    p.close('maikol', 'a');
+    vi.advanceTimersByTime(T.hiddenMs + T.graceMs + 1000);
+    expect(changes).toEqual(['maikol:entra', 'maikol:se va']);
+    p.open('maikol', 'a');
+    expect(changes).toEqual(['maikol:entra', 'maikol:se va', 'maikol:entra']);
   });
 
   it('cada PJ va por su cuenta', () => {

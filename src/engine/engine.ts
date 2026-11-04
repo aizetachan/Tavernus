@@ -2481,8 +2481,11 @@ export class Engine {
    * conversación de grupo y de las colas de turno; quien le seguía deja de
    * hacerlo y él deja de seguir; las ofertas pendientes con él se cancelan.
    * A los 30 min llega el velo (setPresence/setConnected, SPEC §9.1).
+   * `quiet`: el estado cambia igual (defenderse solo, no bloquear rondas), pero el evento
+   * `away`/`back` no lleva texto para nadie; la web lo usa para no repetir avisos en
+   * idas y vueltas seguidas (server.ts, «Desconexiones»).
    */
-  setAway(characterId: Id, away: boolean): void {
+  setAway(characterId: Id, away: boolean, opts: { quiet?: boolean } = {}): void {
     const c = this.world.characters.get(characterId);
     if (!c || c.status === 'dead' || c.status === 'retired' || Boolean(c.away) === away) return;
     const spot = this.world.characterSpot(c);
@@ -2493,7 +2496,7 @@ export class Engine {
       this.awayHesitations.delete(c.id);
       this.startClockFor(c);
       this.world.touch('characters', c.id);
-      if (at) this.events.emit({ actor_id: c.id, at, action_type: 'back', narration_private: '', observable: `${c.name} ha vuelto.`, also_to: present, tags: ['presence'], payload: { master: null } }, this.now());
+      if (at) this.events.emit({ actor_id: c.id, at, action_type: 'back', narration_private: '', observable: opts.quiet ? null : `${c.name} ha vuelto.`, also_to: opts.quiet ? [] : present, tags: ['presence'], payload: { master: null, ...(opts.quiet ? { quiet: true } : {}) } }, this.now());
       this.background(this.flush());
       return;
     }
@@ -2504,8 +2507,8 @@ export class Engine {
     if (isDying(c) && !this.clock.paused) { stabilizeIfAway(this.world, c, this.nowFor(c)); this.announceDeathStates(); }
     if (at) {
       this.events.emit({
-        actor_id: c.id, at, action_type: 'away', narration_private: '', also_to: present, tags: ['presence'],
-        observable: `${c.name} se ha ido; su personaje se queda ${spot ? `en ${spot.name}` : 'donde estaba'}.`, payload: { master: null },
+        actor_id: c.id, at, action_type: 'away', narration_private: '', also_to: opts.quiet ? [] : present, tags: ['presence'],
+        observable: opts.quiet ? null : `${c.name} se ha ido; su personaje se queda ${spot ? `en ${spot.name}` : 'donde estaba'}.`, payload: { master: null, ...(opts.quiet ? { quiet: true } : {}) },
       }, this.now());
     }
     // Conversación de grupo y colas: fuera; el NPC sigue con los que quedan.
