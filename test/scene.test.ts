@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { actionContext } from '../src/ai/prompt.js';
 import type { Engine, MasterLike, SceneNotice } from '../src/engine/engine.js';
+import { encounterAt } from '../src/engine/encounter.js';
 import { npcTarget, parseTurn, talkersOf, TALK_IDLE_S, tenseScene } from '../src/engine/scene.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
@@ -139,6 +140,14 @@ describe('rondas en escenas tensas', () => {
     engine.setPresence('ch_mira', false); engine.setConnected('ch_mira', false);
     expect(tenseScene(engine.world, 'loc_taberna', [])).toBeNull();
     void kael;
+  });
+
+  it('la etiqueta combat del máster tensa la escena (ronda) pero no abre combate (partida del 04-11)', async () => {
+    const { engine, kael } = await bar();
+    engine.events.emit({ actor_id: kael.id, action_type: 'master', input_text: 'le robo la bolsa a Brenna', narration_private: 'Brenna te agarra la muñeca.', observable: 'Brenna agarra a Kael de la muñeca.', tags: ['master', 'combat'] });
+    const tags = engine.events.recentInLocation('loc_taberna', 12).flatMap((e) => e.tags);
+    expect(tenseScene(engine.world, 'loc_taberna', tags)).toBeTruthy();
+    expect(encounterAt(engine.world, engine.events.recentInLocation('loc_taberna', 400), 'loc_taberna', engine.gameNow())).toBeNull();
   });
 
   it('ronda con un jugador ausente: vence el temporizador, el que no actuó duda, nadie se bloquea', async () => {
