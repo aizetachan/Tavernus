@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { blocksSpeech, cleanProse, novelBlocks } from '../src/adapters/web/novel.js';
+import { blocksSpeech, cleanProse, NOVEL_JS, NOVEL_STYLE, novelBlocks } from '../src/adapters/web/novel.js';
+import { PAINT_JS, PAINT_STYLE } from '../src/adapters/web/paint.js';
 import type { DialogueLine } from '../src/engine/moments.js';
 
 describe('prosa del narrador sin repetir el diálogo', () => {
@@ -124,5 +125,29 @@ describe('el turno en su orden real (bloques)', () => {
       'npc_marisa: Y la cama aparte.',
       'N: Vuelve a su paño.',
     ]);
+  });
+});
+
+describe('las imágenes van dentro de la burbuja, nunca como tarjeta suelta', () => {
+  it('el script del hilo y el del pincel siguen siendo JavaScript válido', () => {
+    expect(() => new Function(NOVEL_JS)).not.toThrow();
+    expect(() => new Function(PAINT_JS)).not.toThrow();
+  });
+
+  it('los momentos (retrato, objeto, combate, hallazgo, a mano) no se crean como mensaje del hilo', () => {
+    // Antes eran `figure.msg.moment`, hermanas de las burbujas; ahora son `figure.moment` dentro del cuerpo de la burbuja de su turno.
+    for (const code of [NOVEL_JS, PAINT_JS]) {
+      expect(code).not.toMatch(/className = 'msg moment/);
+      expect(code).not.toMatch(/data-for/);
+      expect(code).not.toMatch(/log\.appendChild\(fig\)/);
+    }
+    for (const css of [NOVEL_STYLE, PAINT_STYLE]) expect(css).not.toMatch(/\.msg\.moment/);
+    expect(NOVEL_JS).toMatch(/className = 'moment ' \+ x\.kind/);
+    expect(NOVEL_JS).toMatch(/\.body'\) \|\| host\)\.appendChild\(fig\)/);
+  });
+
+  it('el pie de la imagen no separa con el punto medio ni la viñeta', () => {
+    expect(NOVEL_JS).toContain('function momentName(n)');
+    expect(NOVEL_JS).toContain('[·•]');
   });
 });
