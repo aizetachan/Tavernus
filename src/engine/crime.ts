@@ -23,6 +23,12 @@
  *     autoridad sepa dónde estás y, en vez de PX, infamia.
  *   - Detención: si te entregas, calabozo o multa; si te resistes, la
  *     autoridad pasa a hostil y entra en el combate; si te tumba, calabozo.
+ *     Bajo el alto hay UN intento de ganar tiempo (hablar, persuadir, gritar
+ *     a otro): al segundo, o en cuanto falla una tirada, la autoridad actúa
+ *     (te reduce y te ata, o te ataca si ya es hostil). Quien ya se resistió
+ *     no recibe otro alto: la autoridad va a por él en cuanto le ve.
+ *   - Nadie da el alto a quien no ve: escondido (tirada de Sigilo) o fuera de
+ *     su línea de visión (perception.ts, `npcSees`).
  *
  * Funciones sobre el mundo, sin IA ni eventos: el motor (engine.ts) emite las
  * reacciones en el acto (evento `incident`) y el alto (`arrest`); el contexto
@@ -37,7 +43,7 @@
  */
 
 import { GAME_DAY, GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
-import type { Character, Id, IncidentKind, LawRules, Npc, NpcBond, Spot, Wanted } from './model.js';
+import type { ArrestAttempt, Character, Id, IncidentKind, LawRules, Npc, NpcBond, Spot, Wanted } from './model.js';
 import { coinsOf, pay } from './money.js';
 import { descriptorOf, fmtDuration } from './narrate.js';
 import { orderOf, setNpcOrder } from './npcorders.js';
@@ -46,7 +52,7 @@ import { crowdHere, routineOf } from './schedule.js';
 import { stabilize } from './death.js';
 import { opinionRefusal } from './standing.js';
 import { adjustTrust } from './trust.js';
-import { isDwelling } from './perception.js';
+import { isDwelling, npcSees } from './perception.js';
 import type { World } from './world.js';
 
 export type { IncidentKind } from './model.js';
@@ -696,14 +702,23 @@ function authoritiesWhoKnow(world: World, c: Character): Npc[] {
   return [...ids].map((id) => world.npcs.get(id)).filter((n): n is Npc => Boolean(n) && n!.status === 'alive');
 }
 
-/** Si hay delante una autoridad que lo sabe, le da el alto (queda pendiente de anunciar). */
+/**
+ * Si hay delante una autoridad que lo sabe y le VE (npcSees: ni escondido ni
+ * fuera de su vista), le da el alto (queda pendiente de anunciar). Si es una a
+ * la que ya se resistió, no hay alto: va a por él, hostil (`resisted`).
+ */
 function checkArrest(world: World, c: Character, nowG: number): void {
   if (!c.wanted || c.wanted.arrest || c.jailed || c.status === 'dead' || c.status === 'retired' || c.transit) return;
   const here = world.characterSpot(c);
   if (!here) return;
-  const enf = authoritiesWhoKnow(world, c).find((n) => world.spot(n.location.id).location_id === here.location_id);
+  const seeing = authoritiesWhoKnow(world, c).filter((n) => npcSees(world, n, c, nowG));
+  const resisted = new Set(c.wanted.resisted_by ?? []);
+  // Primero quien ya le conoce por resistirse: ese no negocia.
+  const enf = seeing.find((n) => resisted.has(n.id)) ?? seeing[0];
   if (!enf) return;
-  c.wanted.arrest = { npc_id: enf.id, since_game_s: nowG, announced: false, resisted: false };
+  const chase = resisted.has(enf.id);
+  c.wanted.arrest = { npc_id: enf.id, since_game_s: nowG, announced: false, resisted: chase, attempts: 0 };
+  if (chase) { enf.attitude.by_character[c.id] = 'hostile'; world.touch('npcs', enf.id); }
   // Se le acerca.
   if (enf.location.id !== here.id) setNpcOrder(world, { npc_id: enf.id, order: 'go', spot_id: here.id, minutes: 30 }, nowG);
   world.touch('characters', c.id);
@@ -761,6 +776,19 @@ function jail(world: World, c: Character, hours: number, reason: string, nowC: n
 
 /** Se entrega: el motor dicta la pena y la cumple (multa o calabozo). null si no le estaban deteniendo. */
 export function surrender(world: World, c: Character, nowG: number, nowC: number = nowG): Sentence | null {
+  return sentence(world, c, nowG, nowC);
+}
+
+/**
+ * La autoridad le reduce y le ata sin que se entregue (se le acabó el intento
+ * bajo el alto, falló una tirada o dejó pasar la ventana): la misma pena que
+ * si se entregara (calabozo o, sin calabozo, multa), cumplida por la fuerza.
+ */
+export function subdue(world: World, c: Character, nowG: number, nowC: number = nowG): Sentence | null {
+  return sentence(world, c, nowG, nowC);
+}
+
+function sentence(world: World, c: Character, nowG: number, nowC: number): Sentence | null {
   const w = c.wanted;
   if (!w?.arrest) return null;
   const by = world.npcs.get(w.arrest.npc_id) ?? null;
@@ -788,10 +816,13 @@ export function resist(world: World, c: Character, nowG: number): Npc[] {
   const w = c.wanted;
   if (!w?.arrest) return [];
   w.arrest.resisted = true;
+  // Se recuerda: esa autoridad no vuelve a darle el alto (va a por él en cuanto le ve).
+  w.resisted_by = [...new Set([...(w.resisted_by ?? []), w.arrest.npc_id])];
   const spot = world.characterSpot(c);
   const here = spot?.location_id;
   const out = authoritiesWhoKnow(world, c).filter((n) => world.spot(n.location.id).location_id === here);
   for (const n of out) { n.attitude.by_character[c.id] = 'hostile'; world.touch('npcs', n.id); }
+  w.resisted_by = [...new Set([...w.resisted_by, ...out.map((n) => n.id)])];
   for (const id of enforcerIds(world)) {
     const n = world.npcs.get(id);
     if (!n || !spot || n.status !== 'alive' || n.bound || out.includes(n) || !n.stats) continue;
@@ -804,8 +835,42 @@ export function resist(world: World, c: Character, nowG: number): Npc[] {
   return out;
 }
 
+/** Intentos de ganar tiempo que la autoridad tolera bajo el alto (el primero; luego actúa). */
+export const ARREST_PATIENCE = 1;
+
+/**
+ * Apunta lo que hace bajo el alto y no es entregarse ni resistirse. Devuelve
+ * true si la autoridad actúa ya: al segundo intento de ganar tiempo (hablar,
+ * persuadir, gritar a otro), en cuanto falla una tirada suya o si deja pasar
+ * la ventana decisiva. Una tirada con éxito compra un intento más (uno como
+ * mucho): hablar no anula la detención (eso es `npc_trust calm` o cumplir).
+ */
+export function arrestAttempt(c: Character, kind: ArrestAttempt['kind'], text: string, nowG: number): boolean {
+  const a = c.wanted?.arrest;
+  if (!a) return false;
+  a.last_attempt = { kind, text: text.trim().slice(0, 160), game_s: nowG };
+  if (kind === 'roll_ok') {
+    if ((a.bought ?? 0) < 1) a.bought = (a.bought ?? 0) + 1;
+    return false;
+  }
+  if (kind === 'stall') {
+    a.attempts = (a.attempts ?? 0) + 1;
+    return a.attempts > ARREST_PATIENCE + (a.bought ?? 0);
+  }
+  return true;
+}
+
+/** ¿La autoridad que le detiene ya va a por él (se resistió, o ya es hostil)? Entonces no le ata: le ataca. */
+export function arrestHostile(world: World, c: Character): boolean {
+  const a = c.wanted?.arrest;
+  if (!a) return false;
+  const by = world.npcs.get(a.npc_id);
+  return a.resisted || (c.wanted!.resisted_by ?? []).includes(a.npc_id) || (by ? (by.attitude.by_character[c.id] ?? by.attitude.default) === 'hostile' : false);
+}
+
 export interface LawNotice {
-  kind: 'arrest' | 'jailed' | 'released';
+  /** pursuit: le ve una autoridad a la que ya se resistió: sin alto, va a por él. */
+  kind: 'arrest' | 'pursuit' | 'jailed' | 'released';
   character: Character;
   npc: Npc | null;
   sentence?: Sentence;
@@ -838,7 +903,7 @@ export function lawTick(world: World, nowG: number, nowFor: (c: Character) => nu
     if (here) {
       // Alguien que lo sabe le ve aquí: la autoridad sabrá dónde está.
       const knowers = new Set(wantedIncidents(world, c).flatMap((i) => i.knowers.map((k) => k.npc_id)));
-      const seen = [...knowers].some((id) => { const n = world.npcs.get(id); return n?.status === 'alive' && world.spot(n.location.id).location_id === here.location_id; });
+      const seen = [...knowers].some((id) => { const n = world.npcs.get(id); return Boolean(n) && npcSees(world, n!, c, nowG); });
       if (seen && (w.last_seen?.spot_id !== here.id || nowG - w.last_seen.game_s > GAME_MINUTE * 10)) { w.last_seen = { location_id: here.location_id, spot_id: here.id, game_s: nowG }; world.touch('characters', c.id); }
     }
     // Ha caído delante de quien le detenía: al calabozo.
@@ -862,14 +927,16 @@ export function lawTick(world: World, nowG: number, nowFor: (c: Character) => nu
     if (c.wanted?.arrest && !c.wanted.arrest.announced) {
       c.wanted.arrest.announced = true;
       world.touch('characters', c.id);
-      out.push({ kind: 'arrest', character: c, npc: world.npcs.get(c.wanted.arrest.npc_id) ?? null });
+      out.push({ kind: c.wanted.arrest.resisted ? 'pursuit' : 'arrest', character: c, npc: world.npcs.get(c.wanted.arrest.npc_id) ?? null });
       continue;
     }
-    // Si se ha ido de delante de quien le detenía, la detención queda en el aire (le siguen buscando).
+    // Si se ha ido de delante de quien le detenía (o ya no le ve: se ha escondido), la detención queda en el aire
+    // (le siguen buscando; si se resistió, `resisted_by` lo recuerda).
     if (c.wanted?.arrest && here) {
       const by = world.npcs.get(c.wanted.arrest.npc_id);
-      if (!by || by.status !== 'alive' || world.spot(by.location.id).location_id !== here.location_id) { c.wanted.arrest = null; world.touch('characters', c.id); }
+      if (!by || by.status !== 'alive' || !npcSees(world, by, c, nowG)) { c.wanted.arrest = null; world.touch('characters', c.id); }
     }
+
     hunt(world, c, nowG);
   }
   return out;
@@ -1073,10 +1140,21 @@ export function crimeContext(world: World, c: Character, nowG: number): string |
     lines.push(`El actor está BUSCADO: ${c.wanted.reason}. Quien lo sabe no le vende ni le aloja; no descansa tranquilo donde la autoridad sepa que está.`);
     const a = c.wanted.arrest;
     const by = a ? world.npcs.get(a.npc_id) : null;
-    if (a && by) lines.push(a.resisted
-      ? `Se ha resistido a ${by.name}: la autoridad es hostil y pelea. Si cae, el servidor le lleva al calabozo.`
-      : `${by.name} le está DETENIENDO: si se entrega (botón «Entregarme» o lo dice), el servidor dicta la pena (calabozo o multa); si ataca o huye, se resiste y ${by.name} pelea. No lo resuelvas tú: narra el alto y la tensión.`);
+    if (a && by) {
+      if (arrestHostile(world, c)) {
+        lines.push(`Se ha resistido a ${by.name}: ${by.name} le persigue, no negocia. No le da el alto ni le avisa: si le ve, va a por él y pelea (el servidor resuelve sus ataques). Si cae, el servidor le lleva al calabozo; si se entrega, el servidor dicta la pena.`);
+      } else {
+        lines.push(`${by.name} le está DETENIENDO: si se entrega (botón «Entregarme» o lo dice), el servidor dicta la pena (calabozo o multa); si ataca o huye, se resiste y ${by.name} pelea. No lo resuelvas tú: narra el alto y la tensión.`);
+        const n = a.attempts ?? 0;
+        const left = ARREST_PATIENCE + (a.bought ?? 0) - n;
+        const tried = a.last_attempt?.text ? ` (ahora: «${a.last_attempt.text}»)` : '';
+        if (n > 0 && left <= 0) lines.push(`Ya ha gastado su ÚNICO intento de ganar tiempo${tried}: ${by.name} le escucha lo justo y ya le ha avisado una vez; a la siguiente actúa. Narra ese último aviso, firme y corto, sin negociar ni abrir otra ventana decisiva: si en su próxima acción no se entrega (o si falla una tirada), el servidor hace que ${by.name} le reduzca y le ate.`);
+        else if (n > 0) lines.push(`Su tirada le ha comprado un intento más${tried}: ${by.name} le escucha, pero la detención sigue en pie; a la siguiente actúa.`);
+        else lines.push(`Tiene UN intento de hablar o ganar tiempo: ${by.name} le escucha esa vez y le avisa; al siguiente (o si falla una tirada, o si deja pasar la ventana) el servidor actúa.`);
+      }
+    }
   }
+
   if ((c.infamy ?? 0) > 0) lines.push(`Infamia del actor: ${c.infamy} (ha matado a quien no era hostil o profanado un cuerpo).`);
   if (lines.length) L.push(`## Ley\n${lines.join('\n')}`);
   return L.length ? L.join('\n\n') : null;

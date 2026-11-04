@@ -12,14 +12,22 @@ import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, takeAmount, transferItem, type InventoryView, type TransferError } from './inventory.js';
-import type { CarrySlot, Character, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
+import type { CarrySlot, Character, DecisiveConsequence, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
+
 import { EQUIP_SLOTS } from './model.js';
+
 import { approachSpot, interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
+
 import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswered, parseGive, parseOfferAnswer, parseParty, parseSay, pcName, SAY_LOUDNESS, type SayMode } from './party.js';
-import { witnesses } from './perception.js';
+
+import { npcSees, witnesses } from './perception.js';
+
 import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, readsAsAccept, readsAsResist } from './reactions.js';
+
 import { TURN_WINDOW_MS, windowClashes, type Clash } from './turnwindow.js';
+
 import { encounterAt } from './encounter.js';
+
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { settleAudience } from './audience.js';
 import { bounceOff, parseCrossing } from './barrier.js';
@@ -31,8 +39,10 @@ import { parseErrand, pendingLine, trivialAction, type Errand } from './errand.j
 import { atBoard, dropQuest, readBoard, readsBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, plantBeat, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { activeIn, crowdHere, tickSchedule } from './schedule.js';
-import { allIncidents, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, surrender, type LawNotice } from './crime.js';
+import { allIncidents, arrestAttempt, arrestHostile, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, subdue, surrender, type LawNotice } from './crime.js';
+
 import { coinsOf, currencyOf, DEFAULT_STARTING_COINS, migrateLegacyCoins, money, newPurse, pay } from './money.js';
+
 import { tickOrders } from './npcorders.js';
 import { nameFor, storyQuestAction, tickStory, type StoryOutput } from './story.js';
 import { syncStoryPack, type Story } from './story.js';
@@ -47,7 +57,10 @@ import { spawnItem } from './inventory.js';
 import { classifyMoments, momentLookupOf, seenFromEvents, type DialogueLine, type Moment } from './moments.js';
 import { characterCheck, type CheckKind } from './rules.js';
 import { activeJobs, addPractice, buyFromNpc, rotateBoard, type ProgressEvent } from './progress.js';
-import { resolveAttack } from './combat.js';
+
+import { decisiveConsequence, engineNpcTurn, forcedTurnText, resolveAttack, type ForcedTurn } from './combat.js';
+import { npcCanAct } from './death.js';
+
 import { attackRoll, checkRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
 import { passivePerception, type Ability } from './rules.js';
 import { casterOf, initClass, levelUp, levelUpText, makeChoice, setSpells } from './levels.js';
@@ -151,8 +164,15 @@ interface TurnWindow { items: { id: Id; text: string }[]; done: Promise<ActionRe
 interface Round { n: number; items: Map<Id, string>; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; deadline_ms: number; timer: NodeJS.Timeout; /** Con el reloj parado: lo que le quedaba. */ left_ms?: number }
 
 export type MasterResolution =
-  | { ok: true; closed: { narration_private: string; /** Turno compartido: lo de cada PJ, en segunda persona, y lo común (narration_private ya lleva lo del actor + lo común). */ narration_by_pc?: Record<Id, string>; narration_common?: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number }; /** El actor que dio voz al NPC (ai/actor.ts), si hubo: su gasto aparte. */ actor?: unknown }
+  | { ok: true; closed: { narration_private: string; /** Turno compartido: lo de cada PJ, en segunda persona, y lo común (narration_private ya lleva lo del actor + lo común). */ narration_by_pc?: Record<Id, string>; narration_common?: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null; consequence?: DecisiveConsequence | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number }; /** El actor que dio voz al NPC (ai/actor.ts), si hubo: su gasto aparte. */ actor?: unknown }
+
   | { ok: false; reason: string; message: string; usage?: unknown; calls?: unknown };
+
+/**
+ * Lo que el motor acaba de hacer en este turno y el máster tiene que contar sin contradecirlo (la amenaza de una
+ * ventana decisiva que caducó): con quién (NPC), en una frase para el actor, y el turno del NPC si lo hubo.
+ */
+export interface EngineDone { npc_id: Id | null; text: string; forced?: ForcedTurn }
 
 /**
  * Una llamada al máster, para el registro del servicio: quién, de qué tipo, modelo, cuánto tardó, tokens y error.
@@ -953,6 +973,8 @@ export class Engine {
         decisive = { seconds, speed: seconds < Engine.DECISIVE_FAST_S ? 'fast' : 'normal', threat: c.decisive.threat };
         this.closeDecisive(c);
       }
+      // Escondido (perception.ts): lo visible o ruidoso le descubre.
+      this.noteVisible(c, clean);
       // Quien sigue a otro y se mueve por su cuenta deja de seguirle.
       if (c.following && (travel || this.isMove(c, clean))) { c.following = null; this.world.touch('characters', c.id); }
       // La ley delante (crime.ts): entregarse o resistirse a un alto; y lo que el motor ve como crimen antes de que narre el máster.
@@ -1406,6 +1428,28 @@ export class Engine {
       if (helper) roll.note = `con la ayuda de ${pcName(this.world, c.id, helper)}`;
       const shown = rollTextForRoller(roll);
       this.announceRoll(roll, { roll: { ...result, dc: undefined }, ...(attack ? { attack } : {}) });
+      // Una tirada con éxito deja atrás la ventana decisiva anterior: puede abrirse otra (SPEC §9.3).
+      if (result.success) this.clearDecisiveLog(c);
+      // Sigilo fallado: a la vista (el que sale bien ya lo apunta noteSneak, arriba).
+      const stealth = pending.roll.kind === 'skill' && pending.roll.key === 'stealth';
+      if (stealth && !result.success && c.sneak) { c.sneak = null; this.world.touch('characters', c.id); }
+      // Bajo el alto (crime.ts): una tirada fallada y la autoridad actúa ya, sin máster; una social con éxito compra un intento más.
+      // Las de un hurto o un careo (conflict.ts) no: su fallo ya lo resuelve el motor allí (careo, delito, alto).
+      if (pending.roll.kind !== 'attack' && !pending.roll.conflict && !pending.roll.confront && c.wanted?.arrest?.announced && c.status === 'active') {
+        if (!result.success && arrestAttempt(c, 'roll_failed', pending.text, this.nowFor(c))) {
+          this.world.touch('characters', c.id);
+          const law = this.enforceArrest(c, 'roll', pending.text, [], result.label);
+          if (law) {
+            this.settleAll(this.gameNow());
+            this.announceDeathStates();
+            await this.flush();
+            return law;
+          }
+        } else if (result.success && pending.roll.kind === 'skill' && Engine.SOCIAL_SKILLS.has(pending.roll.key)) {
+          arrestAttempt(c, 'roll_ok', pending.text, this.nowFor(c));
+          this.world.touch('characters', c.id);
+        }
+      }
       if (pending.roll.kind === 'skill' && (pending.roll.dc ?? 0) >= this.world.campaign.progression.practice_min_dc) {
         const pe = addPractice(this.world, c, pending.roll.key);
         if (pe) this.emitProgress(c, [pe]);
@@ -1418,6 +1462,8 @@ export class Engine {
       }
       let r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result, ...(conflictNote ? { conflict: conflictNote } : {}) });
       if (!r.ok && r.text === '') r = { ok: false, text: `${shown}\nEl narrador no responde; inténtalo de nuevo.` };
+      // Si el máster le llevó a otro punto al contarlo («te metes en el callejón»), se esconde allí.
+      if (stealth && result.success && c.sneak && c.sneak.spot_id !== this.world.characterSpot(c)?.id) noteSneak(this.world, c, result.total, this.nowFor(c));
       this.settleAll(this.gameNow());
       this.advanceStory(this.gameNow());
       this.announceDeathStates();
@@ -1443,10 +1489,85 @@ export class Engine {
     }, this.stampFor(pc));
   }
 
-  private openDecisive(c: Character, d: { threat: string; npc_id: string | null }, eventId: Id): void {
-    c.decisive = { opened_real_ms: this.now(), window_s: Engine.DECISIVE_WINDOW_S, threat: d.threat, npc_id: d.npc_id, event_id: eventId };
+  private openDecisive(c: Character, d: { threat: string; npc_id: string | null; consequence?: DecisiveConsequence | null }, eventId: Id): void {
+    c.decisive = { opened_real_ms: this.now(), window_s: Engine.DECISIVE_WINDOW_S, threat: d.threat, npc_id: d.npc_id, event_id: eventId, consequence: d.consequence ?? null };
+    // Se apunta (para no abrir dos seguidas ni más de una por NPC y combate: combat.ts, decisiveRefusal).
+    const loc = this.world.characterSpot(c)?.location_id;
+    if (loc) c.decisive_log = [...(c.decisive_log ?? []), { npc_id: d.npc_id, location_id: loc, game_s: this.nowFor(c), cleared: false }].slice(-6);
     this.world.touch('characters', c.id);
     this.armDecisive(c, eventId, Engine.DECISIVE_WINDOW_S * 1000);
+  }
+
+  /** La ventana anterior queda atrás (tirada con éxito, o un turno del máster sin ventana ni tirada): se puede abrir otra. */
+  private clearDecisiveLog(c: Character): void {
+    if (!c.decisive_log?.some((d) => !d.cleared)) return;
+    for (const d of c.decisive_log) d.cleared = true;
+    this.world.touch('characters', c.id);
+  }
+
+  /**
+   * Lo que cumple el motor si la ventana caduca: la que trae (la abrió un NPC hostil o la autoridad) o, con un alto
+   * encima y la autoridad delante, la detención. null: prosa, la cuenta el máster.
+   */
+  private consequenceOf(c: Character): DecisiveConsequence | null {
+    if (!c.decisive) return null;
+    return c.decisive.consequence ?? decisiveConsequence(this.world, c, c.decisive.npc_id, this.nowFor(c));
+  }
+
+  /**
+   * Cumple la amenaza de una ventana caducada sin IA (SPEC §9.3): la autoridad le reduce y le ata (o le ataca, si ya
+   * es hostil), o el NPC hostil hace su turno. Lo del NPC lo cuenta el máster (sabe el resultado y no lo puede
+   * contradecir); sin máster, o si falla, lo cuenta el motor. false si el NPC ya no puede (caído, ido, sin verle).
+   */
+  private async fulfilDecisive(c: Character, cons: DecisiveConsequence): Promise<boolean> {
+    if (cons.kind === 'arrest' && c.wanted?.arrest?.npc_id === cons.npc_id) {
+      arrestAttempt(c, 'timeout', '(sin respuesta)', this.nowFor(c));
+      this.world.touch('characters', c.id);
+      return this.enforceArrest(c, 'timeout', null, ['decisive_timeout']) !== null;
+    }
+    const f = engineNpcTurn(this.world, cons.npc_id, c.id, this.rng, this.nowFor(c));
+    if (!f) return false;
+    const text = forcedTurnText(this.world, f, c.id, (id) => this.labelFor(c, id));
+    this.engineDoneFor.set(c.id, [{ npc_id: f.npc_id, text, forced: f }]);
+    let r: ActionResult | null = null;
+    try {
+      if (this.master) r = await this.resolveWithMaster(c, c.away ? '(ausente: se defiende)' : '(sin respuesta)', undefined, undefined, 'decisive_timeout');
+    } finally {
+      this.engineDoneFor.delete(c.id);
+    }
+    if (!r?.ok) {
+      this.events.emit({
+        actor_id: c.id, action_type: 'decisive_expired', narration_private: `No reaccionas a tiempo. ${text}`,
+        observable: forcedTurnText(this.world, f, null, (id) => this.world.npc(id).name), tags: ['combat', 'decisive_timeout', 'deterministic'],
+        payload: { master: null, npc_id: f.npc_id },
+      }, this.stampFor(c));
+    }
+    this.announceDeathStates();
+    return true;
+  }
+
+  /** Lo que el motor acaba de hacer y el máster tiene que contar en este turno (ai/prompt.ts, ai/tools.ts). */
+  engineDone(characterId: Id): readonly EngineDone[] {
+    return this.engineDoneFor.get(characterId) ?? [];
+  }
+
+  /** Cómo llama el PJ a un NPC: su nombre si lo sabe; si no, lo que se ve («el guardia»). */
+  private labelFor(c: Character, npcId: Id): string {
+    return c.knows.includes(npcId) ? this.world.npc(npcId).name : descriptorOf(this.world, npcId);
+  }
+
+  /**
+   * Lo que hace un PJ que va a escondidas (`sneak`, conflict.ts y perception.ts) y le descubre: atacar, gritar,
+   * hablar en voz alta o moverse sin sigilo. Quedarse quieto, mirar, escuchar o meter la mano a escondidas (hurtar)
+   * no. Irse del punto o que pase el rato (SNEAK_S) ya le descubre solo (sneakNow).
+   */
+  private noteVisible(c: Character, text: string): void {
+    if (!c.sneak) return;
+    const t = text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const careful = /\b(sigil\w*|a escondidas|sin hacer ruido|sin ser vist\w*|voz baja|susurr\w*|en silencio)\b/.test(t);
+    const loud = readsAsResisting(text) || (Engine.LOUD.test(t) && !careful);
+    const moving = this.isMove(c, text) && !careful;
+    if (loud || moving) { c.sneak = null; this.world.touch('characters', c.id); }
   }
 
   private armDecisive(c: Character, eventId: Id, ms: number): void {
@@ -1462,14 +1583,27 @@ export class Engine {
     this.world.touch('characters', c.id);
   }
 
-  /** La ventana caduca: la amenaza se ejecuta contra el PJ sin que actúe (SPEC §9.3). */
+  /**
+   * La ventana caduca: la amenaza se ejecuta contra el PJ sin que actúe (SPEC §9.3). Si la abrió un NPC hostil o
+   * la autoridad que le detiene, la cumple el motor (fulfilDecisive) y el máster solo la cuenta; si es prosa (un
+   * suelo que cede), la resuelve el máster como siempre.
+   */
   private async expireDecisive(characterId: Id, eventId: Id): Promise<void> {
     const c = this.world.characters.get(characterId);
-    if (!c || !c.decisive || c.decisive.event_id !== eventId || !this.master || this.clock.paused) return;
+    if (!c || !c.decisive || c.decisive.event_id !== eventId || this.clock.paused) return;
+    if (!this.master && !this.consequenceOf(c)) return;
     const locId = positionOf(this.world, c, this.gameNow()).location_id;
     await this.runInLocation(locId, async () => {
       if (!c.decisive || c.decisive.event_id !== eventId) return; // respondió justo antes
       this.pendingRolls.delete(c.id);
+      const cons = this.consequenceOf(c);
+      if (cons && await this.fulfilDecisive(c, cons)) {
+        this.closeDecisive(c);
+        this.settleAll(this.gameNow());
+        await this.flush();
+        return;
+      }
+      if (!this.master) { this.closeDecisive(c); return; }
       // Ausente: no se queda sin acción, se defiende (CA y salvaciones normales); el contexto lo dice.
       const r = await this.resolveWithMaster(c, c.away ? '(ausente: se defiende)' : '(sin respuesta)', undefined, undefined, 'decisive_timeout');
       this.closeDecisive(c);
@@ -1637,16 +1771,26 @@ export class Engine {
     const share = this.sharing.get(c.id);
     if (share) { payload['group'] = share.ids; payload['group_inputs'] = share.inputs; }
     // Cada uno lee lo suyo (en segunda persona) y lo común; el actor, en narration_private (events.ts, readerText).
+
     if (share && k.narration_by_pc && Object.keys(k.narration_by_pc).length) { payload['narration_by_pc'] = k.narration_by_pc; payload['narration_common'] = k.narration_common ?? ''; }
+
+    // El turno de una ventana caducada lleva su etiqueta (la web lo pinta como aviso); con un golpe del motor, es combate.
+    const timeout = scene === 'decisive_timeout' ? ['decisive_timeout', ...(this.engineDone(c.id).some((d) => d.forced) && !k.tags.includes('combat') ? ['combat'] : [])] : [];
     const event = this.events.emit({
+
       actor_id: c.id, action_type: actionType, input_text: intro || scene ? null : share ? share.inputs[c.id] ?? text : text,
-      narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags, ...(share ? ['shared'] : [])], payload,
+
+      narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags, ...timeout, ...(share ? ['shared'] : [])], payload,
+
       also_to: [...new Set([...(share ? share.ids : []), ...seen.audience_ids])].filter((id) => id !== c.id),
+
     }, this.stampFor(c));
     // Lo que el máster pidió a otro jugador (request_reaction): la petición sale después de su narración.
     this.announcePending(c.id);
     if (k.requires_roll) this.pendingRolls.set(c.id, { text, roll: k.requires_roll, event_id: event.id, seq: event.seq });
     if (k.decisive && scene !== 'decisive_timeout' && c.status === 'active') this.openDecisive(c, k.decisive, event.id);
+    // Un turno sin ventana ni tirada deja atrás la anterior: la siguiente ya no es «seguida».
+    else if (!k.decisive && !k.requires_roll && scene !== 'decisive_timeout') this.clearDecisiveLog(c);
     for (const sr of out.shown_rolls ?? []) this.announceRoll(sr);
     if (out.progress?.length) this.emitProgress(c, out.progress);
     const r: ActionResult = { ok: true, text: k.narration_private, event, suggested_actions: k.suggested_actions };
@@ -1957,6 +2101,13 @@ export class Engine {
   static readonly DECISIVE_FAST_S = 15;
   static readonly DECISIVE_WINDOW_S = 60;
   private decisiveTimers = new Map<Id, NodeJS.Timeout>();
+  /** Lo que el motor acaba de hacer y el máster tiene que contar (engineDone), por PJ y solo durante su turno. */
+  private engineDoneFor = new Map<Id, EngineDone[]>();
+  /** Tiradas sociales: con éxito bajo el alto compran un intento más (crime.ts). */
+  static readonly SOCIAL_SKILLS = new Set(['persuasion', 'deception', 'intimidation', 'performance']);
+  /** Lo que le descubre (sin acentos): hablar en voz alta, gritar, llamar, golpear, salir. */
+  static readonly LOUD = /\b(grit\w*|llam\w*|chill\w*|voce\w*|habl\w*|digo|decir\w*|dile|saludo|saludar\w*|pregunt\w*|cant\w*|silb\w*|golpe\w*|salgo|salir|entro|entrar)\b/;
+
   private readonly realClock: boolean;
 
   /** El adaptador informa de la presencia del jugador; el motor decide la conexión efectiva. */
@@ -3509,6 +3660,17 @@ export class Engine {
       }, this.stampFor(c));
       return;
     }
+    if (n.kind === 'pursuit') {
+      // Ya se resistió a esta autoridad (crime.ts, resisted_by): no hay alto ni aviso; va a por él.
+      this.events.emit({
+        actor_id: c.id, action_type: 'pursuit',
+        narration_private: mine(`${By} te ve y no te da el alto: ya te resististe una vez. Viene a por ti, con el arma en la mano.`),
+        observable: `${n.npc?.name ?? 'La autoridad'} ve a ${c.name} y va a por él sin mediar palabra.`, loudness: 3,
+        tags: ['crime', 'law', 'combat', 'deterministic'],
+        payload: { master: null, npc_id: n.npc?.id ?? null, observable_vague: 'Pasos que corren y un arma que sale.', suggested_actions: ['Pelear', 'Huir', 'Entregarme'] },
+      }, this.stampFor(c));
+      return;
+    }
     if (n.kind === 'jailed') {
       const s = n.sentence!;
       const where = s.spot_id ? this.world.spot(s.spot_id).name : 'el calabozo';
@@ -3568,13 +3730,23 @@ export class Engine {
   private tryLaw(c: Character, text: string): ActionResult | null {
     const nowG = this.nowFor(c);
     const arrest = c.wanted?.arrest;
+    // Entregarse vale siempre, también tras resistirse.
+    if (arrest && c.status === 'active' && parseSurrender(text)) return this.surrenderNow(c, text);
     if (arrest && !arrest.resisted && c.status === 'active') {
-      if (parseSurrender(text)) return this.surrenderNow(c, text);
       if (parseResist(text) || readsAsResisting(text) || this.isLeaving(c, text) || parseTravel(text)) {
         const who = resist(this.world, c, nowG);
         const names = who.map((n) => n.name).join(' y ') || 'La autoridad';
         if (parseResist(text)) {
           return this.emitTrivial(c, text, 'resist', 'crime', `No te entregas. ${names} ${who.length > 1 ? 'echan' : 'echa'} mano al arma y ${who.length > 1 ? 'vienen' : 'viene'} a por ti.`, `${c.name} se resiste: ${names} va a por él.`, 'Alguien se revuelve.', undefined, { incident: { resisted: true } });
+        }
+      } else if (arrest.announced && !/^(?:inventario|inventory|qui[eé]n|who|d[oó]nde|where)[\s.!?]*$/i.test(text.trim())) {
+        // Ni se entrega ni se resiste: gana tiempo (hablar, persuadir, gritar a otro). Uno se tolera; al siguiente, la autoridad actúa.
+        // Mirar su hoja o quién hay no es hacer nada en la escena: no cuenta.
+        const act = arrestAttempt(c, 'stall', text, nowG);
+        this.world.touch('characters', c.id);
+        if (act) {
+          const r = this.enforceArrest(c, 'stall', text);
+          if (r) return r;
         }
       }
     }
@@ -3590,7 +3762,52 @@ export class Engine {
     return null;
   }
 
+  /**
+   * La autoridad pierde la paciencia (crime.ts): se le acabó el intento bajo el alto, falló una tirada o dejó pasar
+   * la ventana. Si no se había resistido, le reduce y le ata y cumple la pena (calabozo o multa) sin que se entregue;
+   * si ya es hostil, le ataca de verdad (y sigue cada turno, por forceNpcTurns). Evento determinista, sin máster; el
+   * máster lo lee en el hilo y en «## Ley». null si la autoridad no puede (caída, ida, sin verle).
+   */
+  private enforceArrest(c: Character, why: 'stall' | 'roll' | 'timeout', input: string | null, extraTags: string[] = [], rollLabel?: string): ActionResult | null {
+    const a = c.wanted?.arrest;
+    const by = a ? this.world.npcs.get(a.npc_id) : undefined;
+    const from = this.world.characterSpot(c);
+    if (!a || !by || !from || !npcCanAct(by) || !npcSees(this.world, by, c, this.nowFor(c))) return null;
+    const name = this.labelFor(c, by.id);
+    const By = name.charAt(0).toUpperCase() + name.slice(1);
+    const mine = (t: string) => contract(maskUnknownNames(this.world, c.id, t));
+    const lead = why === 'stall' ? `${By} ya te ha avisado una vez y no te deja seguir.` : why === 'roll' ? `No te sale${rollLabel ? ` (${rollLabel})` : ''}.` : 'Se te acaba el tiempo.';
+    const at = { spot_id: from.id, next_spot_id: null, progress: 0, x: from.x, y: from.y, location_id: from.location_id };
+    if (arrestHostile(this.world, c)) {
+      const f = engineNpcTurn(this.world, by.id, c.id, this.rng, this.nowFor(c));
+      if (!f) return null;
+      const priv = mine(`${lead} ${forcedTurnText(this.world, f, c.id, (id) => this.labelFor(c, id))}`);
+      const event = this.events.emit({
+        actor_id: c.id, at, action_type: 'law_attack', input_text: input, narration_private: priv,
+        observable: forcedTurnText(this.world, f, null, (id) => this.world.npc(id).name), loudness: 3,
+        tags: ['crime', 'law', 'combat', 'deterministic', ...extraTags],
+        payload: { master: null, npc_id: by.id, observable_vague: 'Un golpe seco y alguien que cae.', suggested_actions: c.status === 'active' ? ['Entregarme', 'Pelear', 'Huir'] : [], engine_turn: { npc_id: f.npc_id, hit: f.outcome.hit, damage: f.outcome.damage } },
+      }, this.stampFor(c));
+      this.announceDeathStates();
+      return { ok: true, text: priv, event };
+    }
+    const s = subdue(this.world, c, this.gameNow(), this.nowFor(c));
+    if (!s) return null;
+    const where = s.spot_id ? this.world.spot(s.spot_id).name : 'el calabozo';
+    const priv = mine(s.kind === 'jail'
+      ? `${lead} ${By} te agarra del brazo, te lo retuerce a la espalda y te ata las manos. Te lleva a empujones ${aEs(where)}. Cargo: ${c.name} ${s.reason}. No sales hasta las ${hhmm(s.until_game_s!)}.`
+      : `${lead} ${By} te agarra del brazo, te ata las manos y te registra la bolsa: se cobra la multa, ${s.paid} monedas. Cargo: ${c.name} ${s.reason}. Luego te suelta: quedas libre, pero nadie lo olvida.`);
+    const event = this.events.emit({
+      actor_id: c.id, at, action_type: 'seized', input_text: input, narration_private: priv,
+      observable: s.kind === 'jail' ? `${by.name} reduce a ${c.name}, le ata las manos y se lo lleva detenido.` : `${by.name} reduce a ${c.name}, le ata las manos y le cobra la multa.`, loudness: 3,
+      tags: ['crime', 'law', 'deterministic', ...extraTags],
+      payload: { master: null, npc_id: by.id, observable_vague: 'Un forcejeo y alguien que protesta.', sentence: { kind: s.kind, paid: s.paid, until_game_s: s.until_game_s, spot_id: s.spot_id, reason: s.reason, forced: true } },
+    }, this.stampFor(c));
+    return { ok: true, text: priv, event };
+  }
+
   /** Se entrega: el motor dicta la pena (crime.ts) y lo cuenta donde estaba, aunque se lo lleven al calabozo. */
+
   private surrenderNow(c: Character, text: string): ActionResult {
     const from = this.world.characterSpot(c)!;
     const s = surrender(this.world, c, this.gameNow(), this.nowFor(c))!;

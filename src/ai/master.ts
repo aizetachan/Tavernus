@@ -149,6 +149,13 @@ export class Master {
     const talk = intro || scene || roll || conflict ? null : talkPlanFor(engine, actor, text);
     const context = actionContext(engine, actor, text, roll, intro, scene, decisive, talk, conflict);
     const ctx: ToolContext = { engine, actor, nowGameS: engine.nowFor(actor), rng: this.rng, closed: null, rolls: [], progress: [], action_text: roll?.original_text ?? (intro || scene ? null : text), roll_category: roll && !/^ataque/i.test(roll.result.label) ? rollCategory(roll.result) : null, ...(intro ? { intro: true } : {}), ...(talk ? { talk } : {}), ...(conflict ? { conflict_plan: conflict } : {}), ...(roll?.conflict ? { conflict_resolved: true } : {}) };
+    // Lo que el motor ya ha hecho en este turno (la amenaza de una ventana caducada): ese NPC no vuelve a atacar, y si
+    // la narración no lo cuenta, el cierre lo añade (como los turnos que fuerza el motor).
+    const engineDone = engine.engineDone(actor.id);
+    if (engineDone.length) {
+      ctx.npc_turns = new Set(engineDone.flatMap((d) => (d.npc_id ? [d.npc_id] : [])));
+      ctx.forced_turns = engineDone.flatMap((d) => (d.forced ? [d.forced] : []));
+    }
     const calls: ToolCallRecord[] = [];
     const failures: ToolFailure[] = [];
     /** Cierre aceptado: con tool_failed y los errores si algo de escritura falló por el camino. */

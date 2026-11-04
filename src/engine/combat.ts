@@ -16,13 +16,15 @@
  */
 
 import { abilityModifier, proficiencyBonus, rollD20, rollExpr, type Advantage, type Rng } from './dice.js';
-import type { Character, Id, Npc } from './model.js';
+import type { Character, DecisiveConsequence, Id, Npc } from './model.js';
 import { damageCharacter, helplessNpc, killNpc, knockOutNpc, npcCanAct, worldNow } from './death.js';
 import { reportAssault, reportKill, startedBy } from './crime.js';
 import { armorClass } from './rules.js';
 import { attackProfile, combineAdvantage, damageAfterResistance, reachCheck, spendAmmo, throwWeapon } from './itemrules.js';
 import { distance } from './movement.js';
 import { adjustTrust } from './trust.js';
+import { npcSees } from './perception.js';
+import { COMBAT_WINDOW_S } from './encounter.js';
 import type { World } from './world.js';
 
 export type Combatant = { kind: 'character'; c: Character } | { kind: 'npc'; n: Npc };
@@ -279,16 +281,17 @@ export interface DueTurn { npc: Npc; target: Character }
 /**
  * NPC que deben actuar en este turno: en pie y sueltos, con bloque de combate
  * y de los que pelean (no `noncombatant`), hostiles con alguno de los PJ del turno que siga en pie en su misma
- * localización, y que aún no han actuado (`acted`). Su objetivo, el primero
+ * localización y al que vean (npcSees: ni escondido ni fuera de su vista), y que aún no han actuado (`acted`). Su objetivo, el primero
  * de `pcIds` con quien es hostil (el actor va primero). Sin efectos.
  */
-export function dueNpcTurns(world: World, pcIds: readonly Id[], acted: ReadonlySet<Id>): DueTurn[] {
+export function dueNpcTurns(world: World, pcIds: readonly Id[], acted: ReadonlySet<Id>, nowGameS?: number): DueTurn[] {
   const pcs = pcIds.map((id) => world.characters.get(id)).filter((c): c is Character => Boolean(c && c.status === 'active' && !c.veiled && !c.transit));
   const out: DueTurn[] = [];
   for (const n of world.npcs.values()) {
     if (!n.stats || n.noncombatant || !npcCanAct(n) || acted.has(n.id)) continue;
     const loc = world.spots.get(n.location.id)?.location_id;
-    const target = pcs.find((c) => world.characterSpot(c)?.location_id === loc && attitudeOf(n, c.id) === 'hostile');
+    // Solo a quien ve: el escondido que no ha descubierto, o quien está tras una pared, no es objetivo (perception.ts).
+    const target = pcs.find((c) => world.characterSpot(c)?.location_id === loc && attitudeOf(n, c.id) === 'hostile' && npcSees(world, n, c, nowGameS));
     if (target) out.push({ npc: n, target });
   }
   return out;
@@ -298,13 +301,32 @@ export function dueNpcTurns(world: World, pcIds: readonly Id[], acted: ReadonlyS
 export interface ForcedTurn { npc_id: Id; target_id: Id; moved_to: Id | null; outcome: AttackOutcome }
 
 /**
+ * El turno de un NPC que hace el motor contra un PJ concreto (la amenaza de una
+ * ventana decisiva que caduca, la autoridad que pierde la paciencia): si pelea
+ * cuerpo a cuerpo y está en otro punto de la sala, se lanza hasta él; y ataca
+ * con su multiataque. null si no puede (caído, atado, sin bloque de combate, en
+ * otra localización o sin verle).
+ */
+export function engineNpcTurn(world: World, npcId: Id, targetId: Id, rng?: Rng, nowGameS?: number): ForcedTurn | null {
+  const npc = world.npcs.get(npcId);
+  const target = world.characters.get(targetId);
+  if (!npc || !target || !npc.stats || !npcCanAct(npc) || target.status !== 'active' || !npcSees(world, npc, target, nowGameS)) return null;
+  const to = world.characterSpot(target)?.id ?? null;
+  let moved: Id | null = null;
+  if (to && to !== npc.location.id && !npc.stats.ranged) { npc.location = { type: 'spot', id: to }; npc.talking_to = null; world.touch('npcs', npc.id); moved = to; }
+  const r = npcTurn(world, npc.id, target.id, 'none', rng, nowGameS);
+  if ('error' in r) return null;
+  return { npc_id: npc.id, target_id: target.id, moved_to: moved, outcome: r };
+}
+
+/**
  * El motor hace actuar a los NPC que deben y no lo han hecho (dueNpcTurns):
  * el que pelea cuerpo a cuerpo y está en otro punto de la sala se lanza hasta
  * su objetivo, y ataca con su multiataque. Los marca en `acted`.
  */
 export function forceNpcTurns(world: World, pcIds: readonly Id[], acted: Set<Id>, rng?: Rng, nowGameS?: number): ForcedTurn[] {
   const out: ForcedTurn[] = [];
-  for (const { npc, target } of dueNpcTurns(world, pcIds, acted)) {
+  for (const { npc, target } of dueNpcTurns(world, pcIds, acted, nowGameS)) {
     acted.add(npc.id);
     if (target.status !== 'active') continue; // ya cayó con un golpe de otro
     const to = world.characterSpot(target)?.id ?? null;
@@ -337,6 +359,47 @@ export function forcedTurnText(world: World, t: ForcedTurn, readerId: Id | null,
     : t.outcome.target_down ? (you ? ' Caes al suelo, inconsciente.' : ` ${tgt} cae al suelo.`)
     : t.outcome.hit ? (you ? ` Te quedan ${t.outcome.target_hp} PG.` : ` ${tgt} queda a ${t.outcome.target_hp} PG.`) : '';
   return `${lead}${verb}.${end}`;
+}
+
+// ---------------------------------------------------------------------------
+// Ventana decisiva (SPEC §9.3)
+// ---------------------------------------------------------------------------
+
+/** Ventanas decisivas que puede abrir un mismo NPC contra un PJ en un combate. */
+export const MAX_DECISIVE_PER_COMBAT = 1;
+
+/**
+ * Lo que cumple el motor si caduca una ventana que abre ese NPC contra el PJ:
+ * `arrest` si es la autoridad que le está deteniendo (o no hay NPC y hay un
+ * alto encima con la autoridad delante); `attack` si es un NPC hostil con
+ * bloque de combate que pelea. null: prosa (un suelo que cede), la cuenta el máster.
+ */
+export function decisiveConsequence(world: World, c: Character, npcId: Id | null, nowGameS?: number): DecisiveConsequence | null {
+  const a = c.wanted?.arrest;
+  if (a?.announced && (!npcId || npcId === a.npc_id)) {
+    const by = world.npcs.get(a.npc_id);
+    if (by && npcSees(world, by, c, nowGameS)) return { kind: 'arrest', npc_id: a.npc_id };
+  }
+  if (!npcId) return null;
+  const n = world.npcs.get(npcId);
+  if (n?.stats && !n.noncombatant && attitudeOf(n, c.id) === 'hostile') return { kind: 'attack', npc_id: n.id };
+  return null;
+}
+
+/**
+ * ¿Se puede abrir esta ventana? No si la anterior (en este sitio y este rato de
+ * combate) sigue sin quedar atrás: ni una tirada con éxito del PJ ni un turno
+ * sin ventana en medio (nunca dos seguidas). Ni si ese NPC ya tuvo la suya en
+ * este combate (MAX_DECISIVE_PER_COMBAT): entonces actúa. Devuelve el motivo
+ * para el máster, o null si vale.
+ */
+export function decisiveRefusal(world: World, c: Character, npcId: Id | null, locationId: Id, nowGameS: number): string | null {
+  const log = (c.decisive_log ?? []).filter((d) => d.location_id === locationId && nowGameS - d.game_s < COMBAT_WINDOW_S);
+  const last = log.at(-1);
+  if (last && !last.cleared) return 'Ventana decisiva rechazada: acabas de abrirle una a este jugador y no ha salido de ella con éxito; nunca dos seguidas. Lo que amenaza ya no espera: si es un NPC hostil, actúa (attack); si es la autoridad, el servidor ya cumple la detención. Reescribe log_event con decisive_threat=null.';
+  const n = npcId ? world.npcs.get(npcId) : undefined;
+  if (n && log.filter((d) => d.npc_id === n.id).length >= MAX_DECISIVE_PER_COMBAT) return `Ventana decisiva rechazada: ${n.name} ya tuvo la suya en este combate (una por NPC). Ahora actúa: si es hostil, haz su attack; no le avises otra vez. Reescribe log_event con decisive_threat=null.`;
+  return null;
 }
 
 export function attitudeOf(n: Npc, characterId: Id) { return n.attitude.by_character[characterId] ?? n.attitude.default; }
