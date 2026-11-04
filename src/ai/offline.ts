@@ -30,6 +30,8 @@ interface ParsedContext {
   roll: { label: string; outcome: string } | null;
   /** Recado: el motor ya le ha traído (línea de llegada) y queda lo que venía a hacer. */
   errand: { line: string; action: string; obstacle?: string } | null;
+  /** El NPC con quien habla según el motor (nombre o ID del bloque «Cómo responde…»), o null. */
+  talk: string | null;
 }
 
 /** Extrae del contexto (prompt.ts) lo que necesita la narración. Tolerante: si algo falta, lista vacía. */
@@ -56,7 +58,9 @@ export function parseContext(context: string): ParsedContext {
   const em = /^## Viaje ya hecho\n.*?: «(.*)»\. No uses move_to[\s\S]*?^Lo que venía a hacer: «(.*?)»\. En UNA/m.exec(context);
   const om = /^Puede que no lo consiga: (.+?)\. Decide tú/m.exec(context);
   const errand = em ? { line: em[1]!, action: em[2]!, ...(om ? { obstacle: om[1]! } : {}) } : null;
-  return { actor, actor_id, action, spots, exits, npcs, scene, roll, errand };
+  const tm = /^## Cómo responde (?:el NPC \[([\w-]+)\]|(.+?)) en este turno/m.exec(context);
+  const talk = tm ? tm[1] ?? tm[2] ?? null : null;
+  return { actor, actor_id, action, spots, exits, npcs, scene, roll, errand, talk };
 }
 
 /** 2-3 acciones sacadas de lo que hay en el contexto: un NPC, un punto, una salida. */
@@ -143,12 +147,15 @@ function logEventFor(context: string): Record<string, unknown> {
       if (talkTo) {
         // El contexto corta la acción en el primer «»: la comilla de cierre puede faltar.
         const said = /[«"“]([^«»"“”]+)/.exec(action)?.[1]?.trim();
-        const reply = talkReply(context) ?? 'Bienvenido. Aquí no se pregunta de dónde viene nadie: se paga y se bebe. ¿Qué te pongo?';
+        const reply = talkReply(context, action) ?? 'Bienvenido. Aquí no se pregunta de dónde viene nadie: se paga y se bebe. ¿Qué te pongo?';
+        // Cuándo habla el narrador lo dice el motor (narrator.ts): en silencio, solo lines; con acotación, el gesto en la línea.
+        const mode = narratorModeIn(context);
+        const npcLine = { speaker: 'npc', npc_id: talkTo.id, text: reply, ...(mode === 'beat' ? { beat: 'se lo piensa un momento' } : {}) };
         return {
           ...base, tags: 'offline,social', npc_id: talkTo.id,
-          narration_private: `${lead}${said ? `«${said}», dices. ` : ''}${talkTo.name} levanta la vista. «${reply}»`,
+          narration_private: mode === 'full' ? `${lead}${said ? `«${said}», dices. ` : ''}${talkTo.name} levanta la vista: «${reply}»` : lead.trim(),
           observable: `${p.actor} habla con ${talkTo.name}.`,
-          lines: [...(said ? [{ speaker: 'actor', npc_id: null, text: said }] : []), { speaker: 'npc', npc_id: talkTo.id, text: reply }],
+          lines: [...(said ? [{ speaker: 'actor', npc_id: null, text: said }] : []), npcLine],
           suggested_actions: sug,
         };
       }
@@ -174,11 +181,21 @@ const TALK_REPLIES: Record<string, string> = {
   farewell: 'Ve con cuidado.',
 };
 
+/** Charla sin más: una de estas según lo que diga el jugador, para que no repita la misma frase cada turno. */
+const CHAT_REPLIES = [
+  'Hoy ha sido un día largo. Y aún no ha acabado.',
+  'Eso dicen. Yo no me lo creo del todo.',
+  'Aquí cada uno va a lo suyo. Es más sano.',
+  'Mira, de eso sé poco. Pero algo he oído.',
+  'No te creas todo lo que se cuenta por ahí.',
+  'Ya veremos. Las cosas cambian rápido últimamente.',
+];
+
 /**
  * Con el flujo de cinco capas (docs/CONVERSACION-FLUJO.md) el guion trae huecos: el máster offline rellena los que
  * mandan con una plantilla, para probar la estructura sin modelo. Lo urgente y cortar van antes que la situación.
  */
-export function talkReply(context: string): string | null {
+export function talkReply(context: string, action = ''): string | null {
   const s = /^## Cómo responde .+? en este turno \(situación: (\w+)\)/m.exec(context)?.[1];
   if (!s) return null;
   const hole = (k: string) => new RegExp(`^${k} \\([^)]*\\): (.*)$`, 'm').exec(context)?.[1] ?? '';
@@ -190,7 +207,14 @@ export function talkReply(context: string): string | null {
   if (intent === 'quién es quién') return /^Se le presenta/.test(hole('C')) ? 'Bien. Lo recordaré.' : /^Sabe quién es/.test(hole('C')) ? 'Claro que sé quién eres.' : 'No te conozco. ¿Quién eres?';
   if (intent === 'abre la charla') return stranger ? 'Buenas. ¿Qué te trae?' : 'Hombre, tú otra vez. ¿Qué quieres?';
   if (s === 'greeting') return /^Situación: .*Primera vez que hablan/m.test(context) ? 'Buenas. No te había visto por aquí. ¿Qué te trae?' : 'Hombre, tú otra vez. ¿Qué tal?';
+  if (s === 'chat' && action && !/^Situación: .*Primera vez que hablan/m.test(context)) return CHAT_REPLIES[createHash('sha256').update(action).digest()[0]! % CHAT_REPLIES.length]!;
   return TALK_REPLIES[s] ?? null;
+}
+
+/** El modo del narrador que el motor pone en el contexto (narrator.ts, «Narrador en este turno»); sin él, narración normal. */
+export function narratorModeIn(context: string): 'silent' | 'beat' | 'full' {
+  const m = /^Narrador en este turno: (en silencio|una acotación)/m.exec(context)?.[1];
+  return m === 'en silencio' ? 'silent' : m === 'una acotación' ? 'beat' : 'full';
 }
 
 function orderAsked(action: string): 'follow' | 'stop' | null {
@@ -201,7 +225,9 @@ function orderAsked(action: string): 'follow' | 'stop' | null {
 function addressed(p: ParsedContext): ParsedContext['npcs'][number] | undefined {
   const action = p.action ?? '';
   return p.npcs.find((n) => action.toLowerCase().includes(n.name.toLowerCase()))
-    ?? ((TALK_RE.test(action) || orderAsked(action)) && p.npcs.length === 1 ? p.npcs[0] : undefined);
+    ?? ((TALK_RE.test(action) || orderAsked(action)) && p.npcs.length === 1 ? p.npcs[0] : undefined)
+    // Con quien ya está hablando: el motor lo pone en «Cómo responde…» (talk.ts), por su nombre o por su ID.
+    ?? (p.talk ? p.npcs.find((n) => n.name === p.talk || n.id === p.talk) : undefined);
 }
 
 /** Tools antes del cierre: si el jugador pide a un NPC que le acompañe o le despide, set_npc_order. Exportado para tests. */

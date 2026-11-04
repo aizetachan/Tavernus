@@ -34,6 +34,7 @@ import { givenQuests, droppedAt } from './quests.js';
 import { askedSince, holds, questStatus, storyOf, type StoryCondition } from './story.js';
 import { npcTarget } from './scene.js';
 import { talkPartner, TALK_GAP_S } from './trust.js';
+import { narratorLine, type NarratorPlan } from './narrator.js';
 
 export const TALK_SITUATIONS = ['danger', 'reaction', 'cold', 'errand', 'trade', 'offer', 'lore', 'question', 'greeting', 'farewell', 'chat'] as const;
 export type TalkSituation = typeof TALK_SITUATIONS[number];
@@ -662,6 +663,8 @@ export interface TalkPlan {
   cut?: boolean;
   /** El nombre del actor, para que el NPC no lo use si no lo sabe (control al cierre). */
   pc_name?: string;
+  /** Cuándo habla el narrador en este turno (narrator.ts); lo pone quien conoce la escena (prompt.ts, talkPlanFor). */
+  narrator?: NarratorPlan;
 }
 
 /** Las seis intenciones que atiende un vecino de relleno; el resto, le despacha (PLAN-NPC-RELLENO). */
@@ -984,6 +987,7 @@ export function talkScript(world: World, pc: Character, p: TalkPlan): string {
     blocked || p.cut ? '' : socialLine(plan) ?? '',
     `Prohibido: ${forbidden(p.situation, plan).join(' ')}`,
     `Longitud: lo que dice, ${planWords(plan)} palabras como mucho, en lines.`,
+    p.narrator ? narratorLine(p.narrator) : '',
     st.escalation && st.escalation !== 'calm' && !p.cut ? 'Si el actor le da una salida perspicaz o creativa a lo que le molesta (no una disculpa ni un regalo: esos ya cuentan solos), pon en talk_deescalate de log_event qué ha hecho, en una frase; el servidor lo comprueba. Si no, null.' : '',
     p.doubtful ? `Si el jugador busca otra cosa (${TALK_SITUATIONS.filter((x) => x !== 'chat').join(', ')}), pon esa en talk_situation de log_event y responde con su regla; si no, talk_situation null.` : 'talk_situation de log_event: null.',
   ].filter(Boolean).join('\n');

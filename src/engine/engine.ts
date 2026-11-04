@@ -151,7 +151,7 @@ interface TurnWindow { items: { id: Id; text: string }[]; done: Promise<ActionRe
 interface Round { n: number; items: Map<Id, string>; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; deadline_ms: number; timer: NodeJS.Timeout; /** Con el reloj parado: lo que le quedaba. */ left_ms?: number }
 
 export type MasterResolution =
-  | { ok: true; closed: { narration_private: string; /** Turno compartido: lo de cada PJ, en segunda persona, y lo común (narration_private ya lleva lo del actor + lo común). */ narration_by_pc?: Record<Id, string>; narration_common?: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number }; /** El actor que dio voz al NPC (ai/actor.ts), si hubo: su gasto aparte. */ actor?: unknown }
+  | { ok: true; closed: { narration_private: string; /** Turno compartido: lo de cada PJ, en segunda persona, y lo común (narration_private ya lleva lo del actor + lo común). */ narration_by_pc?: Record<Id, string>; narration_common?: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null; /** Lo que hizo el cierre con la narración (narrator.ts), para depurar. */ narrator?: unknown }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number }; /** El actor que dio voz al NPC (ai/actor.ts), si hubo: su gasto aparte. */ actor?: unknown }
   | { ok: false; reason: string; message: string; usage?: unknown; calls?: unknown };
 
 /**
@@ -1088,12 +1088,14 @@ export class Engine {
     const n = r.npc;
     for (const id of r.names ?? []) if (!c.knows.includes(id)) { c.knows.push(id); this.world.touch('characters', c.id); }
     if (r.bought) this.world.touch('characters', c.id);
+    // Si solo hablan, se ven las conversaciones (narrator.ts): el gesto del vecino va en su línea (`beat`), dentro de su
+    // burbuja, y no como burbuja del narrador. Sin línea, la narración es lo único que hay.
     const event = this.events.emit({
-      actor_id: c.id, action_type: 'master', input_text: text, narration_private: r.narration, observable: r.observable,
+      actor_id: c.id, action_type: 'master', input_text: text, narration_private: r.line ? `«${r.line}»` : r.narration, observable: r.observable,
       tags: ['deterministic', 'social', 'extra', ...(r.bought ? ['trade'] : []), ...(r.offtopic ? [OFFTOPIC_TAG] : [])],
       payload: {
         master: null, npc_id: n.id, observable_vague: 'Alguien cruza unas palabras.',
-        ...(r.line ? { lines: [{ speaker: 'npc', npc_id: n.id, text: r.line, to: c.id }] } : {}),
+        ...(r.line ? { lines: [{ speaker: 'npc', npc_id: n.id, text: r.line, to: c.id, ...(r.narration ? { beat: r.narration } : {}) }] } : {}),
         ...(r.bought ? { bought: r.bought } : {}),
       },
     }, this.stampFor(c));
@@ -1621,7 +1623,7 @@ export class Engine {
       observable_vague: k.observable_vague ?? undefined,
       suggested_actions: k.suggested_actions,
       requires_roll: k.requires_roll ?? undefined,
-      master: { model: out.model, usage: out.usage, calls: out.calls, context: out.context, ...(out.actor ? { actor: out.actor } : {}) },
+      master: { model: out.model, usage: out.usage, calls: out.calls, context: out.context, ...(out.actor ? { actor: out.actor } : {}), ...(k.narrator ? { narrator: k.narrator } : {}) },
       ...(this.hints.has(c.id) ? { scene_hints: this.hints.get(c.id) } : {}),
       ...(k.decisive ? { decisive: { threat: k.decisive.threat, window_s: Engine.DECISIVE_WINDOW_S } } : {}),
       ...(k.npc_id ? { npc_id: k.npc_id } : {}),

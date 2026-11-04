@@ -27,7 +27,8 @@
     "bench:report": "node --import tsx scripts/bench-report.ts",
     "bench:creativity": "node --env-file-if-exists=.env --import tsx scripts/creativity-bench.ts",
     "autoplay": "node --env-file-if-exists=.env --import tsx scripts/autoplay.ts",
-    "judge": "node --env-file-if-exists=.env --import tsx scripts/judge.ts"
+    "judge": "node --env-file-if-exists=.env --import tsx scripts/judge.ts",
+    "narrator-count": "node --import tsx scripts/narrator-count.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -193,7 +193,20 @@ export function novelBlocks(narration: string, lines: readonly DialogueLine[]): 
     const next = all[i + 1];
     if (b.kind === 'prose' && /:$/.test(b.text) && next?.kind === 'line' && lines[next.line]?.speaker !== 'actor') b.lead = true;
   });
-  return all;
+  // La acotación de la línea (su `beat`: el gesto de quien habla) va encima de su frase, dentro de su burbuja, como la
+  // presentación con dos puntos. Si el narrador ya la presenta así, manda la del narrador (tiene más que contar).
+  const out2: NovelBlock[] = [];
+  const beaten = new Set<number>();
+  for (const b of all) {
+    const l = b.kind === 'line' ? lines[b.line] : undefined;
+    const prev = out2[out2.length - 1];
+    if (b.kind === 'line' && l?.speaker === 'npc' && l.beat?.trim() && !beaten.has(b.line) && !(prev?.kind === 'prose' && prev.lead)) {
+      out2.push({ kind: 'prose', text: l.beat.trim(), lead: true });
+    }
+    if (b.kind === 'line') beaten.add(b.line);
+    out2.push(b);
+  }
+  return out2;
 }
 
 /**
@@ -699,10 +712,12 @@ export const NOVEL_JS = String.raw`
       // Mensajes sin bloques (anteriores): las frases del jugador primero, luego narración y el resto.
       var cut = 0;
       while (cut < lines.length && lines[cut].speaker === 'actor') cut++;
-      lines.slice(0, cut).forEach(say);
+      // Cada frase con su gesto (beat) encima, si lo trae; sin bloques no hay otra acotación.
+      var sayOwn = function (l) { say(l, l.beat || null); };
+      lines.slice(0, cut).forEach(sayOwn);
       var narration = m.lines ? (m.prose || '') : m.text;
       if (narration) main = narrate(narration);
-      lines.slice(cut).forEach(say);
+      lines.slice(cut).forEach(sayOwn);
     }
     var last = log.lastElementChild;
     // Sin narración (todo era diálogo): el turno cuelga de su última burbuja.

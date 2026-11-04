@@ -136,7 +136,7 @@ const PUBLIC_GAMES_PER_DAY = 20;
  * Un parlamento en modo novela: quién habla (nombre visible para este PJ) y su retrato pequeño si ya existe.
  * `pc`: otro jugador (lo que dice llega literal a quien lo oye bien); `to`: a quién se lo dice, si lo dirige.
  */
-export interface WebLine { speaker: 'npc' | 'actor' | 'pc'; id: Id; name: string; text: string; avatar?: string | null; to?: string }
+export interface WebLine { speaker: 'npc' | 'actor' | 'pc'; id: Id; name: string; text: string; avatar?: string | null; to?: string; /** Su gesto mientras lo dice (DialogueLine.beat). */ beat?: string }
 /** Momento ilustrado junto al evento (retrato, objeto, combate, descubrimiento); `src` cuando ya está en disco. */
 interface WebMoment { kind: Moment['kind']; key: string; entity_id: Id; name?: string; src?: string; /** Retrato de un NPC: su oficio («tabernera»), bajo el nombre. */ role?: string }
 
@@ -1943,7 +1943,7 @@ function witnessMessage(m: WebMessage, d: Delivery, engine: Engine): WebMessage 
       const npc = w.npcs.get(l.npc_id)!;
       const known = w.characters.get(reader)?.knows.includes(npc.id) ?? false;
       const to = manyReaders(e) ? toLabel(w, reader, l.to, e.location_id) : '';
-      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(to ? { to } : {}) });
+      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(to ? { to } : {}), ...(l.beat ? { beat: l.beat } : {}) });
     } else continue;
     kept.push(l);
   }
@@ -1989,7 +1989,7 @@ function novelOf(e: GameEvent, engine: Engine, characterId: Id, text: string): {
       const known = me?.knows.includes(npc.id) ?? false;
       // A quién va, cuando el turno lo leen varios (turno compartido, charla de grupo o algo para todos).
       const to = manyReaders(e) ? toLabel(w, characterId, l.to, e.location_id) : '';
-      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(to ? { to } : {}) });
+      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(to ? { to } : {}), ...(l.beat ? { beat: l.beat } : {}) });
     } else continue;
     kept.push(l);
   }

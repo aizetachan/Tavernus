@@ -25,6 +25,8 @@ import { encounterTable, encounterWhat } from '../src/engine/travel.js';
 import { inventedPeople } from '../src/engine/invented.js';
 import { extraReply } from '../src/engine/extratalk.js';
 import { coinsOf } from '../src/engine/money.js';
+import type { DialogueLine } from '../src/engine/moments.js';
+import { novelBlocks } from '../src/adapters/web/novel.js';
 import { setFact } from '../src/engine/worldfacts.js';
 import { generateSeed, TONES } from '../src/worldgen/index.js';
 import { buildSkeleton } from '../src/worldgen/skeleton.js';
@@ -524,6 +526,17 @@ describe('relleno, fase 3: charla sin máster', () => {
     expect(r.ev?.payload['master']).toBeNull();
     expect(r.line).toMatch(/Pan gris.*2 de cobre/);
     expect(r.text).toMatch(/^La panadera contesta sin levantar la vista\./);
+  });
+
+  it('el gesto de la panadera va dentro de su burbuja, no como burbuja del narrador (narrator.ts)', async () => {
+    const { talk } = await morning('sp_pl_horno');
+    const r = await talk('Hola, panadera');
+    const lines = r.ev!.payload['lines'] as DialogueLine[];
+    expect(lines[0]!.beat).toMatch(/^La panadera contesta sin levantar la vista\./);
+    expect(r.ev!.narration_private).toBe(`«${r.line}»`);
+    const blocks = novelBlocks(r.ev!.narration_private, lines);
+    expect(blocks.filter((b) => b.kind === 'prose' && !b.lead)).toEqual([]);
+    expect(blocks[0]).toEqual({ kind: 'prose', text: lines[0]!.beat, lead: true });
   });
 
   it('«dame un pan» después de hablar con ella: se lo vende, con sus monedas y su existencia', async () => {
