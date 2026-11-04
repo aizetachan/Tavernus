@@ -775,7 +775,7 @@ ${AWAY_STYLE}
 ${TABLON_STYLE}
   /* B5 sobre los módulos (novel, tts, sfx, voz, pincel, avatar): mismas piezas, otra piel. */
   .msg.row { gap: 8px; margin-top: 8px; max-width: min(760px, 100%); }
-  .msg.scene, .moment.combat, .moment.discovery, .moment.manual { width: min(640px, calc(100% - 42px)); }
+  .msg.scene { width: min(640px, calc(100% - 42px)); }
   .msg.row .body { padding: 8px 12px 7px; border-radius: 18px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
   .msg.row:not(.cont):not(.mine) .body { border-top-left-radius: 4px; }
   .msg.row.mine:not(.cont) .body { border-top-right-radius: 4px; }
@@ -786,7 +786,7 @@ ${TABLON_STYLE}
   .nv-av { width: 34px; height: 34px; box-shadow: 0 1px 2px rgba(0,0,0,.5), inset 0 0 0 1.5px currentColor; }
   .msg.row.master .nv-av { background: #22262a; }
   .msg.row.mine .nv-av { background: #2a1d05; }
-  .moment .shot, .scene .shot { border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
+  .scene .shot { border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
   /* El prólogo, como la página de un libro: sin caja; al final, un ornamento dorado separa el libro del narrador. */
   .msg.chapter { border-radius: 0; background: none; box-shadow: none; }
   .msg.chapter .orn { display: flex; justify-content: center; margin: 14px 0 0; color: var(--accent); }
@@ -997,7 +997,7 @@ ${TABLON_STYLE}
     .msg.notice, .msg.system { max-width: 92%; }
     .sfx > .sfx-toggle, .tts > .tts-auto { width: 32px; }
     .nv-av { width: 28px; height: 28px; }
-    .msg.scene, .msg.moment, #log > .actions { margin-left: 36px; }
+    .msg.scene, #log > .actions { margin-left: 36px; }
     form .mic, form .brush { width: 38px; }
   }
   /* Micrófono y Enviar en el mismo sitio y con la misma piel: sin texto, dictar; con texto (o al dictar), Enviar. */
@@ -1067,7 +1067,7 @@ ${TABLON_STYLE}
     #place .gn, #place-sub .sub-pl { display: inline; }
     /* Como en WhatsApp: ninguna burbuja llega al borde contrario; las dos dejan el mismo hueco. */
     #log .msg.row { max-width: calc(100% - 64px); }
-    #log .msg.scene, #log .moment.combat, #log .moment.discovery, #log .moment.manual { width: auto; max-width: calc(100% - 36px - 64px); }
+    #log .msg.scene { width: auto; max-width: calc(100% - 36px - 64px); }
     /* Letra del hilo en el móvil: la misma que el prólogo (13,5 px). */
     #log .msg.row .body { font-size: 13.5px; line-height: 1.5; }
     #log .msg.row .who { font-size: 12px; }

@@ -103,7 +103,6 @@ export const PAINT_STYLE = String.raw`
   form .brush:hover:not(:disabled) { background: var(--hover); color: var(--text); }
   form .brush svg.i { width: 18px; height: 18px; }
   form .brush.wait { color: var(--accent); background: var(--accent-tint); }
-  .moment.manual { width: min(560px, calc(100% - 42px)); }
   .moment.manual .shot { width: 100%; aspect-ratio: 16 / 9; }
   .moment.painting .shot { display: grid; place-items: center; cursor: default; color: var(--accent);
     background: linear-gradient(105deg, var(--platter) 35%, rgba(247,201,121,.13) 50%, var(--platter) 65%) 0 0 / 250% 100%; animation: paint-wet 1.8s linear infinite; }
@@ -131,19 +130,17 @@ export const PAINT_JS = String.raw`
     return found;
   }
   function paintNote(text) { var d = add('system', text); d.classList.add('paint-note'); }
-  /** Marcador «Pintando…» bajo el turno (como showMoment), hasta que llega la imagen. */
+  /** Marcador «Pintando…» dentro de la burbuja del turno (como showMoment), hasta que llega la imagen. */
   function paintPlaceholder(key, seq) {
     if (byAttr('data-paint', key) || byAttr('data-moment', key)) return;
     var fig = document.createElement('figure');
-    fig.className = 'msg moment manual painting';
+    fig.className = 'moment manual painting';
     fig.setAttribute('data-paint', key);
-    fig.setAttribute('data-for', String(seq));
     fig.innerHTML = '<div class="shot" role="status"><span class="wet">' + BRUSH + '</span><figcaption><b>Pintando…</b><span>Momento</span></figcaption></div>';
-    var host = byAttr('data-seq', String(seq));
-    if (!host) { log.appendChild(fig); scroll(); return; }
-    var ref = host;
-    while (ref.nextElementSibling && ref.nextElementSibling.getAttribute('data-for') === String(seq)) ref = ref.nextElementSibling;
-    ref.parentNode.insertBefore(fig, ref.nextSibling);
+    // Dentro de la burbuja del narrador de ese turno, como la imagen que llegará; si el turno no está en el hilo, no hay dónde.
+    var host = momentHost('manual', null, seq);
+    if (!host) return;
+    momentInto(fig, host, 'manual');
     if (log.scrollHeight - log.scrollTop - log.clientHeight < 400) fig.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
   function paintDone(key) { var p = byAttr('data-paint', key); if (p) p.remove(); }
@@ -151,13 +148,7 @@ export const PAINT_JS = String.raw`
     fig.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     fig.classList.remove('again'); void fig.offsetWidth; fig.classList.add('again');
   }
-  // La imagen entra por showMoment (stream o caché): sustituye al marcador, con su fundido.
-  new MutationObserver(function (ms) {
-    ms.forEach(function (m) { m.addedNodes.forEach(function (n) {
-      var k = n.getAttribute && n.getAttribute('data-moment');
-      if (k && k.indexOf('manual:') === 0) paintDone(k);
-    }); });
-  }).observe(log, { childList: true });
+  // La imagen entra por showMoment (stream o caché), que quita el marcador.
 
   brush.addEventListener('click', function () {
     if (!current || busy || brush.classList.contains('wait')) return;
