@@ -1428,11 +1428,14 @@ function novelOf(e: GameEvent, engine: Engine, characterId: Id, text: string): {
       continue;
     }
     if ((l.speaker === 'actor' || l.speaker === 'pc') && me) lines.push({ speaker: 'actor', id: me.id, name: me.name, text: l.text, ...(to ? { to: pcName(w, me.id, to) } : {}) });
-    else if (l.speaker === 'npc' && l.npc_id && l.to && w.characters.has(l.to)) {
+    else if (l.speaker === 'npc' && l.npc_id && l.to && l.to !== 'all') {
+      // Línea del NPC a uno o varios PJ del turno compartido: «a ti», «a Isgral», «a ti y a Isgral».
       const npc = w.npcs.get(l.npc_id);
       if (!npc) continue;
       const known = me?.knows.includes(npc.id) ?? false;
-      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, to: l.to === characterId ? 'ti' : pcName(w, characterId, w.character(l.to)) });
+      const to = (Array.isArray(l.to) ? l.to : [l.to]).filter((id) => w.characters.has(id));
+      const label = to.map((id) => (id === characterId ? 'ti' : pcName(w, characterId, w.character(id)))).join(' y a ');
+      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(label ? { to: label } : {}) });
     }
     else if (l.speaker === 'npc' && l.npc_id) {
       const npc = w.npcs.get(l.npc_id);

@@ -9,7 +9,7 @@ import { moveTo } from '../src/engine/movement.js';
 import { recapTemplate, absence, absenceRule, lastOwnEvent } from '../src/engine/prologue.js';
 import { advanceStory, characterStory, finalsMissedBy, storyQuestAction, tickStory, type Story } from '../src/engine/story.js';
 import { talkersOf } from '../src/engine/scene.js';
-import { bootEngine, fakeTime, waitUntil } from './helpers.js';
+import { bootEngine, fakeTime, fightAt, waitUntil } from './helpers.js';
 
 function collect(engine: Engine) {
   const by = new Map<string, Delivery[]>();
@@ -97,7 +97,7 @@ describe('3. rondas', () => {
   it('el ausente duda y no bloquea; tras dos rondas seguidas ausente, sale y la escena sigue', async () => {
     const { engine, kael, mira } = await bar({ roundMs: 80 });
     const calls = fakeMaster(engine);
-    engine.world.location('loc_taberna').state['tense'] = true;
+    fightAt(engine);
     engine.setAway(mira.id, true);
     await engine.act(kael.id, 'vigilar la puerta');
     await engine.act(kael.id, 'atrancar la puerta');
@@ -114,7 +114,7 @@ describe('3. rondas', () => {
     // Temporizador de una hora: si la ronda lo esperase, el test no acabaría.
     const { engine, kael, mira } = await bar({ roundMs: 3_600_000 });
     const calls = fakeMaster(engine);
-    engine.world.location('loc_taberna').state['tense'] = true;
+    fightAt(engine);
     engine.setAway(mira.id, true);
     await engine.act(kael.id, 'vigilar la puerta');
     expect(calls.map((c) => c.text)).toEqual(['(ronda 1) Kael: vigilar la puerta / dudan: Mira']);
@@ -126,7 +126,7 @@ describe('3. rondas', () => {
     const calls = fakeMaster(engine);
     const banners: string[][] = [];
     engine.onScene((n) => { if (n.open) banners.push(n.waiting); });
-    engine.world.location('loc_taberna').state['tense'] = true;
+    fightAt(engine);
     const acted = engine.act(kael.id, 'vigilar la puerta');
     await waitUntil(() => expect(banners.at(-1)).toEqual([mira.id]));
     engine.setAway(mira.id, true);
@@ -137,7 +137,7 @@ describe('3. rondas', () => {
   it('8. con la pestaña abierta pero sin actuar, manda el temporizador y nunca sale de la ronda', async () => {
     const { engine, kael } = await bar({ roundMs: 60 });
     const calls = fakeMaster(engine);
-    engine.world.location('loc_taberna').state['tense'] = true;
+    fightAt(engine);
     for (const t of ['uno', 'dos', 'tres']) await engine.act(kael.id, t);
     expect(calls.map((c) => c.text)).toEqual(['(ronda 1) Kael: uno / dudan: Mira', '(ronda 2) Kael: dos / dudan: Mira', '(ronda 3) Kael: tres / dudan: Mira']);
   });
@@ -254,7 +254,7 @@ describe('9b. turnos compartidos en «Donde lo dejamos»', () => {
   it('lo que escribió en una ronda cuenta como su último turno', async () => {
     const { engine, time, kael, mira } = await bar({ roundMs: 5000 });
     fakeMaster(engine);
-    engine.world.location('loc_taberna').state['tense'] = true;
+    fightAt(engine);
     await Promise.all([engine.act(kael.id, 'atrancar la puerta'), engine.act(mira.id, 'apagar las brasas')]);
     engine.setAway(mira.id, true);
     engine.events.emit({ actor_id: kael.id, action_type: 'master', narration_private: 'Golpeas al lobo.', observable: 'Kael golpea al lobo.', tags: ['master', 'combat'] });

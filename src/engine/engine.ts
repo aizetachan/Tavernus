@@ -16,7 +16,9 @@ import { EQUIP_SLOTS } from './model.js';
 import { approachSpot, interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
 import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswered, parseGive, parseOfferAnswer, parseParty, parseSay, pcName, SAY_LOUDNESS, type SayMode } from './party.js';
 import { witnesses } from './perception.js';
-import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, readsAsAccept } from './reactions.js';
+import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, readsAsAccept, readsAsResist } from './reactions.js';
+import { TURN_WINDOW_MS, windowClashes, type Clash } from './turnwindow.js';
+import { encounterAt } from './encounter.js';
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { bounceOff, parseCrossing } from './barrier.js';
 import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, listEs, maskUnknownNames, whereAmI, whoIsHere } from './narrate.js';
@@ -109,6 +111,8 @@ export interface SceneHints {
   group?: { npc_id: Id; members: { id: Id; name: string; text: string }[] };
   /** Ronda en escena tensa (scene.ts): la acción de cada PJ y quién duda. */
   round?: { n: number; members: { id: Id; name: string; text: string }[]; hesitant: { id: Id; name: string }[] };
+  /** Acciones de varios PJ en la misma ventana de turno (turnwindow.ts) y dónde chocan. */
+  window?: { members: { id: Id; name: string; text: string }[]; clashes: Clash[] };
   /** Descanso interrumpido (rest.ts): qué le despierta. */
   rest?: { kind: RestKind; what: string; teaser: string };
   /** Recado (errand.ts): el motor ya le ha traído hasta aquí y queda lo que venía a hacer. */
@@ -127,10 +131,11 @@ type Arrival = NonNullable<QuietArrival['arrived']>;
 export interface SceneNotice { kind: 'round'; location_id: Id; n: number; acted: Id[]; waiting: Id[]; deadline_ms: number; open: boolean }
 export type SceneListener = (n: SceneNotice) => void;
 interface Batch { items: { id: Id; text: string }[]; members: Id[]; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; timer: NodeJS.Timeout }
+interface TurnWindow { items: { id: Id; text: string }[]; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; timer: NodeJS.Timeout; opened_ms: number }
 interface Round { n: number; items: Map<Id, string>; done: Promise<ActionResult>; resolve: (r: ActionResult) => void; deadline_ms: number; timer: NodeJS.Timeout; /** Con el reloj parado: lo que le quedaba. */ left_ms?: number }
 
 export type MasterResolution =
-  | { ok: true; closed: { narration_private: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number }; /** El actor que dio voz al NPC (ai/actor.ts), si hubo: su gasto aparte. */ actor?: unknown }
+  | { ok: true; closed: { narration_private: string; /** Turno compartido: lo de cada PJ, en segunda persona, y lo común (narration_private ya lleva lo del actor + lo común). */ narration_by_pc?: Record<Id, string>; narration_common?: string; observable: string | null; observable_vague: string | null; loudness: number; tags: string[]; suggested_actions: string[]; requires_roll: RequiresRoll | null; decisive?: { threat: string; npc_id: string | null } | null; npc_id?: string | null; lines?: DialogueLine[]; target_character_id?: string | null; observable_target?: string | null }; usage: unknown; calls: { name: string; input: unknown; result: string }[]; context: string; model: string; progress?: ProgressEvent[]; shown_rolls?: ShownRoll[]; tool_errors?: { name: string; input: unknown; error: string }[]; approach?: { from_spot_id: Id; to_spot_id: Id; distance_m: number; duration_s: number }; /** El actor que dio voz al NPC (ai/actor.ts), si hubo: su gasto aparte. */ actor?: unknown }
   | { ok: false; reason: string; message: string; usage?: unknown; calls?: unknown };
 
 /**
@@ -178,8 +183,13 @@ export interface EngineOptions {
   fastTravel?: boolean;
   /** Ventana para juntar frases de una conversación de grupo (ms; GROUP_WINDOW_S, 8 s por defecto). */
   groupWindowMs?: number;
-  /** Tiempo de una ronda en escena tensa (ms; ROUND_SECONDS, 60 s por defecto). */
+  /** Tiempo de una ronda en pelea con varios PJ (ms; ROUND_SECONDS, 30 s por defecto). */
   roundMs?: number;
+  /**
+   * Ventana de turno por localización (ms; TURN_WINDOW_S, 3 s por defecto; 0 la apaga). Con el reloj
+   * inyectado (tests) va apagada salvo que se pida: es tiempo real y no debe frenar los demás tests.
+   */
+  turnWindowMs?: number;
   /**
    * Al cargar no hay nadie jugando: el reloj se queda parado en el último minuto procesado y los PJ, congelados, hasta
    * que alguien entre. Así el tiempo con la partida cerrada o el servidor apagado no cuenta. Lo pide el gestor de partidas.
@@ -206,6 +216,7 @@ export class Engine {
   readonly fastTravel: boolean;
   readonly groupWindowMs: number;
   readonly roundMs: number;
+  readonly turnWindowMs: number;
   private hints = new Map<Id, SceneHints>();
   /** Localización desde la que salió cada viaje iniciado por el motor (para saber si la llegada cruza a otra). */
   private tripFrom = new Map<Id, Id>();
@@ -269,6 +280,8 @@ export class Engine {
     this.groupWindowMs = opts.groupWindowMs ?? env('GROUP_WINDOW_S', GROUP_WINDOW_MS);
     this.roundMs = opts.roundMs ?? env('ROUND_SECONDS', ROUND_MS);
     this.realClock = !opts.now;
+    const tw = Number(process.env['TURN_WINDOW_S']);
+    this.turnWindowMs = opts.turnWindowMs ?? (!this.realClock ? 0 : process.env['TURN_WINDOW_S'] !== undefined && Number.isFinite(tw) && tw >= 0 ? tw * 1000 : TURN_WINDOW_MS);
     this.world = new World(snapshot);
     this.clock = GameClock.fromCampaign(this.world.campaign);
     this.events = new EventLog(this.world, this.clock, lastSeq, this.now);
@@ -837,7 +850,7 @@ export class Engine {
     const until = Date.now() + maxMs;
     // Varias vueltas: lo que esperaba al tick (una presentación, una acción) entra en la cola después.
     for (let i = 0; i < 4 && Date.now() < until; i++) {
-      const all = Promise.all([...this.queues.values(), this.tickerTask, ...this.floating]).then(() => undefined);
+      const all = Promise.all([...this.queues.values(), this.tickerTask, ...this.floating, ...[...this.windows.values()].map((w) => w.done)]).then(() => undefined);
       await Promise.race([all, new Promise<void>((r) => setTimeout(r, Math.max(1, until - Date.now())))]);
       await new Promise((r) => setImmediate(r));
     }
@@ -845,10 +858,15 @@ export class Engine {
 
   private runInLocation<T>(locationId: Id, fn: () => Promise<T>): Promise<T> {
     const prev = this.queues.get(locationId) ?? Promise.resolve();
-    const next = prev.then(fn, fn);
+    this.inQueue.set(locationId, (this.inQueue.get(locationId) ?? 0) + 1);
+    const done = () => { const n = (this.inQueue.get(locationId) ?? 1) - 1; if (n > 0) this.inQueue.set(locationId, n); else this.inQueue.delete(locationId); };
+    const next = prev.then(fn, fn).finally(done);
     this.queues.set(locationId, next.catch(() => undefined));
     return next;
   }
+
+  /** Tareas en la cola de cada localización (la que corre y las que esperan): con alguna, no se abre ventana de turno. */
+  private inQueue = new Map<Id, number>();
 
   /** Punto de entrada de cualquier cliente: texto libre de un jugador. */
   async act(characterId: Id, text: string): Promise<ActionResult> {
@@ -872,6 +890,9 @@ export class Engine {
     // Quien espera a que otro jugador decida (reactions.ts) no hace otra cosa hasta saberlo (hablar, sí).
     const waiting = this.reactionWait(c);
     if (waiting) return { ok: false, text: waiting };
+    // Y quien tiene que decidir: lo siguiente que escriba es su respuesta, o espera (no se mezcla con nada ajeno).
+    const pendingAnswer = this.reactionToAnswer(c, text);
+    if (pendingAnswer) return pendingAnswer;
     // «Acepto la cerveza» con una oferta de otro jugador en pie: lo resuelve el motor, como el botón (sin máster que lo dé por hecho).
     const answer = parseOfferAnswer(text);
     const answered = answer ? offerAnswered(this.world, c, answer.what, this.now()) : null;
@@ -883,8 +904,16 @@ export class Engine {
     const betweenPcs = (c.status === 'active' && parseReaction(this.world, c, t0)) || (give && findPresentPc(this.world, c, give.to)) || (party && (party.kind === 'unfollow' || findPresentPc(this.world, c, party.who)));
     const scene = betweenPcs || parseRest(t0) || this.isDeathAction(c, t0) ? null : this.sceneRoute(c, t0);
     if (scene) return scene;
+    // Varios a la vez (turnwindow.ts): lo que manden otros PJ del sitio en unos segundos va al máster en la misma llamada.
+    const win = betweenPcs ? null : this.joinWindow(c, t0, locId);
+    if (win) return win;
+    return this.queueAction(c, text, locId);
+  }
+
+  /** La acción de siempre, en la cola del sitio: atajos del motor o el máster, uno detrás de otro. */
+  private queueAction(c: Character, text: string, locId: Id): Promise<ActionResult> {
     // Mientras espera turno en la cola del sitio, quien va delante lo ve en su contexto (no lo resuelve: va después).
-    this.waiting.set(c.id, { location_id: locId, text: t0, since_ms: this.now() });
+    this.waiting.set(c.id, { location_id: locId, text: text.trim(), since_ms: this.now() });
     return this.runInLocation(locId, async () => {
       this.waiting.delete(c.id);
       const clean = text.trim();
@@ -1521,6 +1550,8 @@ export class Engine {
     // Turno compartido (grupo o ronda): lo reciben todos los que participan, con lo que escribió cada uno.
     const share = this.sharing.get(c.id);
     if (share) { payload['group'] = share.ids; payload['group_inputs'] = share.inputs; }
+    // Cada uno lee lo suyo (en segunda persona) y lo común; el actor, en narration_private (events.ts, readerText).
+    if (share && k.narration_by_pc && Object.keys(k.narration_by_pc).length) { payload['narration_by_pc'] = k.narration_by_pc; payload['narration_common'] = k.narration_common ?? ''; }
     const event = this.events.emit({
       actor_id: c.id, action_type: actionType, input_text: intro || scene ? null : share ? share.inputs[c.id] ?? text : text,
       narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags, ...(share ? ['shared'] : [])], payload,
@@ -2171,6 +2202,23 @@ export class Engine {
   }
 
   /**
+   * El afectado por una petición abierta escribe en la caja de siempre: si se lee
+   * como dejarse o resistirse, es su respuesta; si es otra cosa («¿Cuánto debe la
+   * fragua?»), espera a que decida y no se mezcla con la petición. null si no hay
+   * nada pendiente (o ya se está resolviendo).
+   */
+  private reactionToAnswer(c: Character, text: string): Promise<ActionResult> | ActionResult | null {
+    const nowMs = this.now();
+    const r = (c.reactions ?? []).find((x) => x.expires_real_ms > nowMs && !this.resolvingReactions.has(x.id));
+    if (!r || c.status !== 'active') return null;
+    const t = text.trim();
+    if (readsAsAccept(t) || readsAsResist(t)) return this.answerReaction(c.id, r.id, null, t);
+    const from = this.world.characters.get(r.from_id);
+    const who = from ? pcName(this.world, c.id, from) : 'Alguien';
+    return { ok: false, text: `⏳ ${who.charAt(0).toUpperCase()}${who.slice(1)} intenta ${r.attempt}: antes decide si te dejas o te resistes (quedan ${fmtLeft(r.expires_real_ms - nowMs)}). Con los botones o con tus palabras («me dejo», «me resisto»). Mientras, puedes hablar con «Decir».` };
+  }
+
+  /**
    * Petición de reacción: un PJ intenta algo sobre otro (agarrarlo, llevárselo,
    * empujarlo, atacarlo). No resuelve nada: el otro ve quién, qué y los botones
    * «Dejarse» y «Resistirse» (o responde con sus palabras); quien actúa espera.
@@ -2555,7 +2603,26 @@ export class Engine {
 
   /** PJ que cuentan para cerrar una ronda: los presentes, menos los ausentes que ya han dudado AWAY_ROUNDS_OUT rondas seguidas. */
   private roundMembers(locationId: Id): Character[] {
-    return presentPcs(this.world, locationId).filter((p) => !(p.away && (this.awayHesitations.get(p.id) ?? 0) >= Engine.AWAY_ROUNDS_OUT));
+    return presentPcs(this.world, locationId).filter((p) => !(p.away && (this.awayHesitations.get(p.id) ?? 0) >= Engine.AWAY_ROUNDS_OUT) && !this.inReaction(p));
+  }
+
+  /** ¿Está en una petición de reacción abierta, como quien la pide o quien la decide? Esos dos se esperan entre ellos, no a los demás. */
+  private inReaction(c: Character): boolean {
+    return pendingFrom(this.world, c.id) !== null || (c.reactions ?? []).some((r) => r.expires_real_ms > this.now());
+  }
+
+  /**
+   * ¿Hay pelea de verdad en la localización? El combate en curso (encounter.ts),
+   * un NPC hostil vivo con estadísticas frente a alguno de los PJ presentes o un
+   * PJ con ventana decisiva abierta. Sin eso no hay ronda (la marca `tense` sola
+   * no basta): lo simultáneo lo junta la ventana de turno.
+   */
+  private fightIn(locationId: Id): boolean {
+    const pcs = presentPcs(this.world, locationId);
+    if (pcs.some((c) => c.decisive)) return true;
+    if (encounterAt(this.world, this.events.recentInLocation(locationId, 400), locationId, this.gameNow(), this.rounds.has(locationId))) return true;
+    return [...this.world.npcs.values()].some((n) => n.status === 'alive' && n.stats && this.world.spot(n.location.id).location_id === locationId
+      && pcs.some((c) => (n.attitude.by_character[c.id] ?? n.attitude.default) === 'hostile'));
   }
 
   // -------------------------------------------------------------------------
@@ -2602,8 +2669,8 @@ export class Engine {
     const nowG = this.nowFor(c);
     const locId = positionOf(this.world, c, nowG).location_id;
     const events = this.events.recentInLocation(locId, 60);
-    // Escena tensa con dos o más jugadores: todo va a la ronda (sin contar a los ausentes que ya salieron de ella).
-    if (this.rounds.has(locId) || (tenseScene(this.world, locId, this.recentTags([locId])) && this.roundMembers(locId).length >= 2)) return this.joinRound(c, text, locId);
+    // Escena tensa con pelea de verdad y dos o más jugadores: todo va a la ronda (sin contar a los ausentes que ya salieron de ella).
+    if (this.rounds.has(locId) || (this.fightIn(locId) && tenseScene(this.world, locId, this.recentTags([locId])) && this.roundMembers(locId).length >= 2)) return this.joinRound(c, text, locId);
     // «Me despido de Hugo» sin estar hablando con él es un gesto como otro cualquiera: lo cuenta el máster. El botón sí contesta.
     if (isLeaveTalk(text) && (!/^(?:me despido|despedirme)\b/i.test(text.trim()) || [...this.world.npcs.values()].some((n) => n.talking_to?.character_id === c.id || n.talking_to?.with?.includes(c.id)))) return Promise.resolve(this.leaveTalk(c, true));
     // Esperar o unirse, con el botón o con sus palabras: sin máster y sin repetir el gesto del NPC.
@@ -2822,6 +2889,66 @@ export class Engine {
       await this.flush();
       return r;
     });
+  }
+
+  /** Ventana de turno abierta por localización (turnwindow.ts). */
+  private windows = new Map<Id, TurnWindow>();
+
+  /** Quiénes más pueden entrar en una ventana del sitio: presentes, no ausentes y sin una petición de reacción en el aire. */
+  private windowPeers(c: Character, locId: Id): Character[] {
+    return presentPcs(this.world, locId).filter((p) => p.id !== c.id && !p.away && p.status === 'active' && !this.inReaction(p));
+  }
+
+  /**
+   * Ventana de turno: si hay otro PJ que pueda actuar en el sitio y nada en la
+   * cola, la acción abre (o se suma a) una ventana de TURN_WINDOW_S; al cerrarse,
+   * una acción sola sigue el camino de siempre y dos o más van al máster en una
+   * llamada, con los choques señalados. Fuera quedan lo que no es para el máster
+   * o se resuelve aparte: moverse o viajar, descansar, atender o saquear, la ley,
+   * la ventana decisiva. null si no entra.
+   */
+  private joinWindow(c: Character, text: string, locId: Id): Promise<ActionResult> | null {
+    const w = this.windows.get(locId);
+    if (!w && (!this.turnWindowMs || this.inQueue.has(locId))) return null;
+    if (!this.master || c.status !== 'active' || c.decisive || c.wanted?.arrest || c.transit || this.isMechanical(c, text)) return null;
+    if (this.isMove(c, text) || parseTravel(text) || parseRest(text) || this.isDeathAction(c, text)) return null;
+    if (!w && !this.windowPeers(c, locId).length) return null;
+    let win = w;
+    if (!win) {
+      let resolve!: (r: ActionResult) => void;
+      const done = new Promise<ActionResult>((r) => { resolve = r; });
+      win = { items: [], done, resolve, timer: setTimeout(() => void this.flushWindow(locId), this.turnWindowMs), opened_ms: this.now() };
+      this.windows.set(locId, win);
+    }
+    const prev = win.items.find((i) => i.id === c.id);
+    if (prev) prev.text = `${prev.text} / ${text}`; else win.items.push({ id: c.id, text });
+    // Si ya han mandado todos los que podían, no se espera al temporizador.
+    const first = this.world.character(win.items[0]!.id);
+    if (this.windowPeers(first, locId).every((p) => win!.items.some((i) => i.id === p.id))) void this.flushWindow(locId);
+    return win.done;
+  }
+
+  private async flushWindow(locId: Id): Promise<void> {
+    const w = this.windows.get(locId);
+    if (!w) return;
+    this.windows.delete(locId);
+    clearTimeout(w.timer);
+    try {
+      if (w.items.length === 1) {
+        const only = w.items[0]!;
+        w.resolve(await this.queueAction(this.world.character(only.id), only.text, locId));
+        return;
+      }
+      for (const i of w.items) this.pendingRolls.delete(i.id); // una acción nueva anula la tirada pendiente
+      const members = w.items.map((i) => ({ id: i.id, name: this.world.character(i.id).name, text: i.text }));
+      const actor = this.world.character(members[0]!.id);
+      const clashes = windowClashes(this.world, this.events.recentInLocation(locId, 60), w.items, this.nowFor(actor));
+      const text = `(a la vez) ${members.map((m) => `${m.name}: ${m.text}`).join(' / ')}`;
+      w.resolve(await this.shared(actor, members.map((m) => m.id), Object.fromEntries(w.items.map((i) => [i.id, i.text])), text, { hooks: [], encounter: null, window: { members, clashes } }));
+    } catch (e) {
+      console.warn(`[engine] ventana de turno: ${(e as Error).message}`);
+      w.resolve({ ok: false, text: 'El narrador no responde ahora mismo. Espera un momento y vuelve a intentarlo.' });
+    }
   }
 
   // -------------------------------------------------------------------------

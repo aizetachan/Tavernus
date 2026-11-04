@@ -283,7 +283,7 @@ describe('nombres que el PJ no sabe, fuera de la narración (sección 2)', () =>
   it('seq 95: un nombre que el máster pone en boca del PJ sin que lo sepa, también', async () => {
     const { engine, time, pc } = await boot();
     await walk(engine, time, pc, 'sp_tab_barra');
-    const ctx = ctxFor(engine, pc, 'Insistir en qué le pasó a el herrero');
+    const ctx = ctxFor(engine, pc, 'Insistir en qué le pasó a el herrero, que lo he visto caer');
     run(ctx, 'log_event', logInput({
       narration_private: '«¿Qué le pasó a Hugo? Lo he visto caer.» «El corazón se le paró. Pasa con los que cargan hierro toda la vida.»', npc_id: 'npc_brenna',
       lines: [{ speaker: 'actor', npc_id: null, text: '¿Qué le pasó a Hugo? Lo he visto caer.' }, { speaker: 'npc', npc_id: 'npc_brenna', text: 'El corazón se le paró. Pasa con los que cargan hierro toda la vida.' }],

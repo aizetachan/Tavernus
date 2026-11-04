@@ -25,8 +25,13 @@ import type { World } from './world.js';
 export const TALK_IDLE_S = 10 * 60;
 /** Ventana para agrupar frases de una conversación de grupo (ms reales). */
 export const GROUP_WINDOW_MS = 8_000;
-/** Tiempo de una ronda en escena tensa (ms reales). */
-export const ROUND_MS = 60_000;
+/**
+ * Tiempo de una ronda en pelea con varios PJ (ms reales). Lo simultáneo fuera de
+ * pelea ya lo junta la ventana de turno (turnwindow.ts): la ronda solo da a cada
+ * uno su turno en un combate, y medio minuto basta para escribirlo sin dejar a
+ * los demás esperando.
+ */
+export const ROUND_MS = 30_000;
 
 /** Quién habla ahora con un NPC: el que lleva la conversación y los que se han unido. Vacío si está libre. */
 export function talkersOf(world: World, events: readonly GameEvent[], npc: Npc, nowGameS: number): Id[] {

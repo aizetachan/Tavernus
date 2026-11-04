@@ -16,7 +16,7 @@
  * partidas del piloto (scripts/judge.ts las aplica a partidas grabadas).
  */
 
-import type { DialogueLine } from './moments.js';
+import { lineIsFor, type DialogueLine } from './moments.js';
 import type { GameEvent } from './model.js';
 import { nameRe, npcNameForms } from './narrate.js';
 
@@ -553,22 +553,28 @@ export function saidByPlayer(line: string, input: string | null | undefined): bo
 }
 
 /**
- * Turno compartido (ronda o conversación de grupo, scene.ts): la narración la
- * leen todos los que actuaron, así que cada uno tiene que salir en ella por su
- * nombre o con una línea del NPC dirigida a él (`to`). Devuelve los que faltan.
+ * Turno compartido (ronda, conversación de grupo o ventana de turno): cada uno
+ * de los que actuaron lee lo suyo en `narration_by_pc` (en segunda persona) y lo
+ * común en la narración. Devuelve los que no tienen su parte. Sin `byPc` (el
+ * contrato de antes), basta con que salga en la narración por su nombre o con una
+ * línea del NPC dirigida a él (`to`).
  */
-export function unansweredInShared(input: { narration: string; lines?: readonly DialogueLine[]; acted: readonly { id: string; name: string }[] }): { id: string; name: string }[] {
+export function unansweredInShared(input: { narration: string; lines?: readonly DialogueLine[]; acted: readonly { id: string; name: string }[]; byPc?: Readonly<Record<string, string>> }): { id: string; name: string }[] {
   if (input.acted.length < 2) return [];
+  if (input.byPc) return input.acted.filter((m) => !input.byPc![m.id]?.trim());
   const text = ` ${norm(input.narration).replace(/[^\p{L}\p{N}]+/gu, ' ')} `;
   return input.acted.filter((m) => {
     const n = norm(m.name).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
     if (n && text.includes(` ${n} `)) return false;
-    return !(input.lines ?? []).some((l) => l.speaker === 'npc' && l.to === m.id);
+    return !(input.lines ?? []).some((l) => l.speaker === 'npc' && lineIsFor(l, m.id) && l.to !== 'all');
   });
 }
 
-export function unansweredRejection(missing: readonly { name: string; text: string }[]): string {
-  return `Turno compartido: narration_private la leen todos y no responde a ${missing.map((m) => `${m.name} («${m.text}»)`).join(' ni a ')}. Resuelve lo de CADA uno nombrándolo («${missing[0]!.name}, …») o en plural; nunca «tú» a secas, que cada jugador lo leería como suyo. Si preguntó algo, contéstale a él.`;
+export function unansweredRejection(missing: readonly { id?: string; name: string; text: string }[], vague: string | null = null): string {
+  const parts: string[] = [];
+  if (missing.length) parts.push(`Turno compartido: falta en narration_by_pc lo de ${missing.map((m) => `${m.name}${m.id ? ` [${m.id}]` : ''} («${m.text}»)`).join(' y lo de ')}. Cada jugador que ha actuado lee SU parte en narration_by_pc (por su ID, en segunda persona: lo que hace y lo que le pasa a él; si preguntó algo, la respuesta); lo común, lo que hace el mundo, va en narration_private.`);
+  if (vague) parts.push(`narration_private la leen todos y dice «${vague}»: ahí nada de «tú» a secas; en tercera persona o en plural («os mira»). Lo que es de uno, en su narration_by_pc.`);
+  return parts.join(' ');
 }
 
 // ---------------------------------------------------------------------------

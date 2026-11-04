@@ -37,6 +37,11 @@ export interface Moment {
   subject?: Id;
 }
 
+/** ¿Va esta línea del NPC a este PJ? (`to`: un PJ, varios o `all`). */
+export function lineIsFor(l: Pick<DialogueLine, 'to'>, id: Id): boolean {
+  return l.to === 'all' || l.to === id || (Array.isArray(l.to) && l.to.includes(id));
+}
+
 /** Un parlamento literal del cierre del máster (modo novela). */
 export interface DialogueLine {
   /** `pc`: otro PJ que habla en un turno compartido (conversación de grupo o ronda, scene.ts). */
@@ -44,8 +49,11 @@ export interface DialogueLine {
   npc_id?: Id;
   /** Solo `pc`: qué PJ. */
   character_id?: Id;
-  /** A quién se dirige una línea del NPC en un turno compartido. */
-  to?: Id;
+  /**
+   * A quién se dirige una línea del NPC en un turno compartido: un PJ, varios o
+   * `all` (todos los del turno). Sin él, al actor. Ver `lineIsFor`.
+   */
+  to?: Id | Id[] | 'all';
   text: string;
 }
 

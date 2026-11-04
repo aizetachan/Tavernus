@@ -13,7 +13,7 @@ import type { Engine, MasterLike } from '../src/engine/engine.js';
 import type { Delivery } from '../src/engine/events.js';
 import type { Character } from '../src/engine/model.js';
 import { namedPc, npcTarget } from '../src/engine/scene.js';
-import { bootEngine, fakeTime, waitUntil } from './helpers.js';
+import { bootEngine, fakeTime, fightAt, waitUntil } from './helpers.js';
 
 type Call = { actor: string; text: string; context: string };
 
@@ -141,19 +141,19 @@ describe('lo que un jugador dice a otro no va al NPC de la conversación', () =>
   });
 });
 
-describe('ronda: las dos acciones a la vez se resuelven juntas y la narración es para los dos', () => {
-  it('una llamada; el cierre que solo habla a uno se rechaza; los dos leen la narración que nombra a cada uno', async () => {
+describe('ronda: las dos acciones a la vez se resuelven juntas y cada uno lee lo suyo', () => {
+  it('una llamada; el cierre sin narration_by_pc se rechaza; cada uno lee su parte y la común', async () => {
     const { engine, kael, mira, seen } = await bar();
-    engine.world.location('loc_taberna').state['tense'] = true;
+    fightAt(engine);
     const errors: string[] = [];
     const calls = fakeMaster(engine, {
       close: (actor, text) => {
         const ctx: ToolContext = { engine, actor, nowGameS: engine.nowFor(actor), rng: seededRng(1), closed: null, rolls: [], progress: [] };
-        const log = (narration: string) => JSON.parse(executeTool(ctx, 'log_event', { narration_private: narration, observable: 'Kael y Mira se lanzan a la vez.', observable_vague: null, loudness: 1, tags: 'combat', suggested_actions: '', lines: null })) as { error?: string };
+        const log = (narration: string, byPc: Record<string, string> | null = null) => JSON.parse(executeTool(ctx, 'log_event', { narration_private: narration, narration_by_pc: byPc, observable: 'Kael y Mira se lanzan a la vez.', observable_vague: null, loudness: 1, tags: 'combat', suggested_actions: '', lines: null })) as { error?: string };
         // Como en la partida: «tu maza…» a secas, escrito para el primero que actuó.
         const bad = log('Tu espada cae sobre la mesa y la sala se queda en silencio.');
         if (bad.error) errors.push(bad.error);
-        expect(log('Kael, tu espada cae sobre la mesa. Mira, tu daga corta la cuerda del farol.').error).toBeUndefined();
+        expect(log('La sala se queda en silencio.', { [kael.id]: 'Tu espada cae sobre la mesa.', [mira.id]: 'Tu daga corta la cuerda del farol.' }).error).toBeUndefined();
         return { ...closing(actor, text), closed: { ...ctx.closed!, requires_roll: null } };
       },
     });
@@ -162,14 +162,15 @@ describe('ronda: las dos acciones a la vez se resuelven juntas y la narración e
     expect(calls[0]!.text).toBe('(ronda 1) Kael: golpear la mesa con la espada / Mira: cortar la cuerda del farol');
     expect(calls[0]!.context).toContain('## Turno compartido');
     expect(calls[0]!.context).not.toContain('## Acción del jugador');
-    expect(calls[0]!.context).toContain('«Kael, tu…»; «Mira, tu…»');
+    expect(calls[0]!.context).toContain(`narration_by_pc (${kael.id}, ${mira.id})`);
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatch(/^Turno compartido: narration_private la leen todos y no responde a Kael \(«golpear la mesa con la espada»\) ni a Mira \(«cortar la cuerda del farol»\)/);
-    // Una sola respuesta, la misma, para los dos: con lo que mandó cada uno.
+    expect(errors[0]).toMatch(/^Turno compartido: falta en narration_by_pc lo de Kael \[ch_kael\] \(«golpear la mesa con la espada»\) y lo de Mira \[ch_mira\] \(«cortar la cuerda del farol»\)/);
+    expect(errors[0]).toContain('dice «Tu»');
+    // Un solo evento para los dos, y cada uno lee su parte (en segunda persona) y lo común.
     expect(a.event!.id).toBe(b.event!.id);
-    const text = 'Kael, tu espada cae sobre la mesa. Mira, tu daga corta la cuerda del farol.';
-    expect(seen(kael.id).at(-1)!.text).toBe(text);
-    expect(seen(mira.id).at(-1)!.text).toBe(text);
+    expect(seen(kael.id).at(-1)!.text).toBe('Tu espada cae sobre la mesa.\n\nLa sala se queda en silencio.');
+    expect(seen(mira.id).at(-1)!.text).toBe('Tu daga corta la cuerda del farol.\n\nLa sala se queda en silencio.');
+    expect(a.event!.payload['narration_by_pc']).toEqual({ [kael.id]: 'Tu espada cae sobre la mesa.', [mira.id]: 'Tu daga corta la cuerda del farol.' });
     expect(a.event!.payload['group_inputs']).toEqual({ [kael.id]: 'golpear la mesa con la espada', [mira.id]: 'cortar la cuerda del farol' });
   });
 
@@ -180,6 +181,9 @@ describe('ronda: las dos acciones a la vez se resuelven juntas y la narración e
     expect(unansweredInShared({ narration: 'Brenna mira a Kael y luego a MIAU.', acted: [...acted.slice(0, 1), { id: 'ch_miau', name: 'MIAU' }] })).toEqual([]);
     // Uno solo no es turno compartido.
     expect(unansweredInShared({ narration: 'Tu maza cae.', acted: acted.slice(0, 1) })).toEqual([]);
+    // Con narración por jugador, cada uno que actuó necesita la suya (nombrarlo en la común ya no basta).
+    expect(unansweredInShared({ narration: 'Brenna mira a Kael y a Mira.', acted, byPc: { ch_kael: 'Le pides una jarra.' } }).map((m) => m.name)).toEqual(['Mira']);
+    expect(unansweredInShared({ narration: 'Brenna asiente.', acted, byPc: { ch_kael: 'Le pides una jarra.', ch_mira: 'Preguntas la hora.' } })).toEqual([]);
   });
 });
 

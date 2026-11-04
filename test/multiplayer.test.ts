@@ -7,7 +7,8 @@ import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
 import { BudgetBook, BudgetedMaster, budgetFromEnv, tokensOf } from '../src/ai/budget.js';
 import { GameManager, type MasterFactory } from '../src/games/manager.js';
-import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
+import { createWebServer, toMessage, type WebServer } from '../src/adapters/web/server.js';
+import type { Delivery } from '../src/engine/engine.js';
 import type { AccessOptions } from '../src/adapters/web/access.js';
 import type { MasterLike } from '../src/engine/engine.js';
 import { spawnItem } from '../src/engine/inventory.js';
@@ -485,5 +486,37 @@ describe('varios a la vez en la web', () => {
     expect(pres).toContain('Tor está aquí, hablando con la tabernera');
     await again.body!.cancel();
     await liaStream.body!.cancel();
+  });
+
+  it('turno compartido: cada uno ve su parte y la común, la acción del otro como su línea y a quién habla el NPC', async () => {
+    const { engine } = await bootEngine(fakeTime());
+    const kael = engine.world.character('ch_kael');
+    const mira = engine.world.character('ch_mira');
+    mira.location = { type: 'spot', id: kael.location.id };
+    for (const c of [kael, mira]) if (!c.knows.includes('npc_brenna')) c.knows.push('npc_brenna');
+    const got = new Map<string, Delivery>();
+    engine.onDelivery((d) => got.set(d.character_id, d));
+    const common = 'Brenna os mira a los dos.';
+    engine.events.emit({
+      actor_id: kael.id, action_type: 'master', input_text: 'preguntar a Brenna por el pozo', also_to: [mira.id], tags: ['master', 'shared'],
+      narration_private: `Le preguntas por el pozo.\n\n${common}`, observable: null,
+      payload: {
+        group: [kael.id, mira.id], group_inputs: { [kael.id]: 'preguntar a Brenna por el pozo', [mira.id]: 'contar mis monedas' },
+        narration_by_pc: { [kael.id]: 'Le preguntas por el pozo.', [mira.id]: 'Cuentas tus monedas.' }, narration_common: common,
+        lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'En la plaza.', to: kael.id }, { speaker: 'npc', npc_id: 'npc_brenna', text: 'Aquí se paga antes.', to: 'all' }],
+      },
+    });
+    const toKael = toMessage(got.get(kael.id)!, engine);
+    const toMira = toMessage(got.get(mira.id)!, engine);
+    expect(toKael.text).toBe(`Le preguntas por el pozo.\n\n${common}`);
+    expect(toMira.text).toBe(`Cuentas tus monedas.\n\n${common}`);
+    expect(toMira.text).not.toContain('pozo');
+    // Su propia acción como entrada; la del otro, como línea suya delante.
+    expect(toMira.input).toBe('contar mis monedas');
+    expect(toMira.lines!.find((l) => l.speaker === 'pc')).toMatchObject({ id: kael.id, text: 'preguntar a Brenna por el pozo' });
+    // La línea a uno lleva «a ti» o su nombre; la de todos, sin destinatario.
+    expect(toKael.lines!.find((l) => l.text === 'En la plaza.')!.to).toBe('ti');
+    expect(toMira.lines!.find((l) => l.text === 'En la plaza.')!.to).toBe('Kael');
+    expect(toMira.lines!.find((l) => l.text === 'Aquí se paga antes.')!.to).toBeUndefined();
   });
 });

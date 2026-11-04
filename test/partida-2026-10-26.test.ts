@@ -12,7 +12,7 @@ import { seededRng } from '../src/engine/dice.js';
 import type { Engine, MasterLike } from '../src/engine/engine.js';
 import type { Character } from '../src/engine/model.js';
 import { sayLooksLikeAction } from '../src/engine/party.js';
-import { bootEngine, fakeTime } from './helpers.js';
+import { bootEngine, fakeTime, fightAt } from './helpers.js';
 
 /** Los dos PJ del demo con los nombres de la partida: Kael hace de Leodhin y Mira de MIAU. */
 async function partida(opts: { tense?: boolean } = {}) {
@@ -26,7 +26,7 @@ async function partida(opts: { tense?: boolean } = {}) {
   if (!leodhin.knows.includes(miau.id)) leodhin.knows.push(miau.id);
   if (!miau.knows.includes(leodhin.id)) miau.knows.push(leodhin.id);
   engine.setPresence(leodhin.id, true); engine.setPresence(miau.id, true);
-  if (opts.tense) engine.world.location('loc_taberna').state['tense'] = true;
+  if (opts.tense) fightAt(engine);
   return { engine, time, leodhin, miau };
 }
 
@@ -138,7 +138,8 @@ describe('n.º 3: el máster no pone frases en boca de los jugadores en los turn
     const { engine, leodhin, miau } = await partida({ tense: true });
     const results: Record<string, unknown>[] = [];
     fakeMaster(engine, (ctx) => {
-      results.push(JSON.parse(executeTool(ctx, 'log_event', logInput({
+      // Dos veces: el primero lo rechaza el turno compartido (sin narration_by_pc); el segundo pasa tal cual.
+      for (let i = 0; i < 2; i++) results.push(JSON.parse(executeTool(ctx, 'log_event', logInput({
         narration_private: 'Leodhin, le das un cachete seco a MIAU para comprobar si sigue vivo. La cabeza le cae hacia un lado y vuelve a toser, con los ojos abiertos y sin soltar tu muñeca. MIAU, sin mirarte, te rodea con los brazos y te sujeta contra su pecho con fuerza de sobra: te quedas inmovilizado, sin poder alzar el bastón. Ha sido la única forma de que no vuelva a golpear a nadie.',
         observable: 'Leodhin le da un cachete a MIAU, que vuelve a toser con los ojos abiertos. MIAU rodea a Leodhin con los brazos y lo sujeta contra su pecho, inmovilizándolo.',
         observable_vague: 'Dos figuras forcejean junto a la puerta de la taberna; una se queda abrazada a la otra.', tags: 'combate, social',
@@ -169,7 +170,7 @@ describe('n.º 3: el máster no pone frases en boca de los jugadores en los turn
       executeTool(ctx, 'log_event', input);
     });
     const [a] = await Promise.all([engine.act(leodhin.id, 'lanza le primer conjuro que tengas en la memoria'), engine.act(miau.id, 'le ataco con la espada !')]);
-    expect(errors[0]).toMatch(/no responde a Leodhin/);
+    expect(errors[0]).toMatch(/falta en narration_by_pc lo de Leodhin/);
     const ev = a.event!;
     expect(ev.narration_private).not.toMatch(/¡Ahora!|¡Quieto!/);
     expect(ev.narration_private).toMatch(/la lanza cae con un ruido seco sobre las tablas\.$/i);
