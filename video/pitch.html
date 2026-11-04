@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Tavernus — vídeo de presentación</title>
+<link rel="stylesheet" href="lib/style.css">
+<style>
+  .viz { z-index: 30; }
+  .chip { position: absolute; font-family: Inter, sans-serif; font-weight: 600; font-size: 34px; color: #fff; padding: 22px 34px; border-radius: 16px;
+    background: rgba(20,18,24,.78); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 20px 60px rgba(0,0,0,.5); white-space: nowrap; }
+  .chip .x { position: absolute; left: 24px; right: 24px; top: 50%; height: 4px; background: #ff5a4a; transform-origin: 0 50%; border-radius: 2px; }
+  /* Teléfono */
+  .phone { position: absolute; left: 1120px; top: 60px; width: 560px; height: 960px; border-radius: 56px; background: #0d0c10;
+    box-shadow: 0 0 0 2px rgba(255,255,255,.12), 0 0 0 14px #1b1a20, 0 0 0 15px rgba(255,255,255,.08), 0 60px 140px rgba(0,0,0,.7); overflow: hidden; }
+  .phone .scene { position: absolute; left: 0; top: 0; width: 100%; height: 300px; overflow: hidden; }
+  .phone .scene img { width: 100%; height: 100%; object-fit: cover; }
+  .phone .scene .lab { position: absolute; left: 24px; bottom: 18px; font-family: Cinzel, serif; font-size: 22px; letter-spacing: .12em; color: #f3e6cc; text-shadow: 0 2px 8px #000; }
+  .phone .scene::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 50%, #0d0c10); }
+  .msg { position: absolute; left: 24px; right: 24px; font-family: Cormorant, serif; font-size: 29px; line-height: 1.3; color: #efe3cb; }
+  .msg.n { padding: 18px 22px; background: rgba(255,255,255,.05); border-left: 3px solid var(--gold); border-radius: 6px; }
+  .msg.p { left: 110px; font-family: Inter, sans-serif; font-size: 23px; line-height: 1.4; color: #fff; background: #3a2c17; border: 1px solid rgba(228,181,98,.45); border-radius: 18px 18px 4px 18px; padding: 16px 20px; }
+  .who { font-family: Inter, sans-serif; font-size: 16px; font-weight: 700; letter-spacing: .14em; color: var(--gold); text-transform: uppercase; margin-bottom: 6px; }
+  .dice { position: absolute; left: 50%; width: 150px; height: 150px; margin-left: -75px; }
+  .dice .d { width: 100%; height: 100%; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+    background: linear-gradient(135deg, #f0c773, #9a6a24); display: flex; align-items: center; justify-content: center;
+    font-family: Inter, sans-serif; font-weight: 800; font-size: 60px; color: #1a1206; }
+  .dice .rl { position: absolute; top: 160px; width: 300px; left: -75px; text-align: center; font-family: Inter, sans-serif; font-size: 20px; font-weight: 600; color: #b6f0a8; letter-spacing: .08em; }
+  .inputbar { position: absolute; left: 20px; right: 20px; bottom: 22px; height: 70px; border-radius: 35px; background: #1b1a20; border: 1px solid rgba(255,255,255,.1);
+    font-family: Inter, sans-serif; font-size: 22px; color: rgba(255,255,255,.4); padding: 0 28px; line-height: 70px; }
+  /* Diferenciales */
+  .num { font-family: Inter, sans-serif; font-weight: 800; font-size: 26px; letter-spacing: .2em; color: var(--gold); }
+  .node { position: absolute; width: 230px; height: 150px; border-radius: 22px; background: rgba(20,18,24,.85); border: 1px solid rgba(255,255,255,.14);
+    font-family: Inter, sans-serif; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .node b { font-size: 28px; font-weight: 700; } .node span { font-size: 18px; color: rgba(255,255,255,.6); margin-top: 6px; }
+  .node.gold { border-color: rgba(228,181,98,.8); box-shadow: 0 0 40px rgba(228,181,98,.25), 0 20px 60px rgba(0,0,0,.5); }
+  .arrow { position: absolute; height: 3px; background: rgba(228,181,98,.35); }
+  .arrow i { position: absolute; top: -5px; width: 13px; height: 13px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 18px var(--gold); }
+  .tag { position: absolute; font-family: Inter, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+  .row { position: absolute; left: 0; width: 640px; height: 76px; border-radius: 14px; background: rgba(20,18,24,.8); border: 1px solid rgba(255,255,255,.1);
+    font-family: Inter, sans-serif; color: #fff; font-size: 25px; display: flex; align-items: center; padding: 0 26px; box-sizing: border-box; gap: 22px; }
+  .row .h { font-weight: 800; color: var(--gold); width: 92px; font-variant-numeric: tabular-nums; }
+  .avatar { position: absolute; width: 120px; height: 120px; border-radius: 50%; overflow: hidden; border: 3px solid var(--gold); box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .ring { position: absolute; border-radius: 50%; border: 2px solid rgba(228,181,98,.5); }
+  .npc { position: absolute; width: 300px; height: 380px; border-radius: 18px; overflow: hidden; background: #141218; border: 1px solid rgba(255,255,255,.12); box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .npc img { width: 100%; height: 270px; object-fit: cover; object-position: 50% 25%; display: block; }
+  .npc .nm { font-family: Inter, sans-serif; font-weight: 700; font-size: 24px; color: #fff; padding: 14px 18px 6px; }
+  .npc .bar { margin: 6px 18px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.1); overflow: hidden; }
+  .npc .bar i { display: block; height: 100%; background: linear-gradient(90deg, #9a6a24, #f0c773); }
+  .bubble { position: absolute; font-family: Cormorant, serif; font-style: italic; font-size: 28px; color: #f3e6cc; background: rgba(20,18,24,.92);
+    border: 1px solid rgba(228,181,98,.5); border-radius: 18px; padding: 16px 22px; width: 520px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .bigword { position: absolute; left: 960px; width: 880px; white-space: nowrap; text-align: center; font-family: Cinzel, serif; font-weight: 700; font-size: 62px; color: #fff; letter-spacing: .04em; text-shadow: 0 6px 30px rgba(0,0,0,.8); }
+  .pill { position: absolute; font-family: Inter, sans-serif; font-weight: 600; font-size: 24px; color: #fff; padding: 14px 26px; border-radius: 40px;
+    background: rgba(228,181,98,.16); border: 1px solid rgba(228,181,98,.6); white-space: nowrap; }
+  /* Tabla */
+  table.cmp { position: absolute; left: 260px; top: 280px; width: 1400px; border-collapse: separate; border-spacing: 0; font-family: Inter, sans-serif; color: #fff; }
+  table.cmp th { font-size: 24px; font-weight: 700; padding: 18px 10px; color: rgba(255,255,255,.65); text-align: center; }
+  table.cmp th.us { color: #1a1206; background: linear-gradient(180deg, #f0c773, #c49040); border-radius: 18px 18px 0 0; font-size: 28px; letter-spacing: .1em; }
+  table.cmp td { font-size: 28px; padding: 20px 18px; border-top: 1px solid rgba(255,255,255,.08); text-align: center; }
+  table.cmp td:first-child { text-align: left; font-weight: 500; color: rgba(255,255,255,.88); }
+  table.cmp td.us { background: rgba(228,181,98,.12); }
+  .ok { color: #9be88a; font-weight: 800; } .no { color: rgba(255,120,110,.8); font-weight: 800; } .meh { color: rgba(255,255,255,.4); font-weight: 700; }
+  .stat { position: absolute; width: 400px; text-align: center; }
+  .stat .v { font-family: Inter, sans-serif; font-weight: 800; font-size: 96px; letter-spacing: -0.03em; color: var(--gold); line-height: 1; }
+  .stat .l { font-family: Inter, sans-serif; font-size: 26px; color: rgba(255,255,255,.75); margin-top: 16px; line-height: 1.35; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script src="lib/engine.js"></script>
+<script>
+const { bg, txt, custom, kf, levels, ease, clamp, lerp, env, el, img } = E;
+const I = (f) => '../wiki/Imágenes/' + f;
+const P = (f) => '../public/' + f;
+E.duration = 108;
+levels.grain = 0.05;
+const dark = 'brightness(.38) saturate(.9)';
+const blurDark = 'blur(18px) brightness(.3) saturate(.9)';
+const appear = (lt, t, d = 0.7) => ease.out(clamp((lt - t) / d));
+
+// ---------- 0. La mesa ----------
+bg(P('salvapantallas-2.jpg'), 0, 8.2, { z: [1.15, 1.05], filter: 'brightness(.5)', fi: 1.2, fo: 0.8 });
+txt('Toda gran aventura empezó igual', 0.6, 7.2, { cls: 'p-kicker', x: 160, y: 380, anim: 'fade' });
+txt('Una mesa. Unos dados.<br>Alguien que cuenta la historia.', 1.4, 6.6, { cls: 'p-h1', x: 160, y: 440, w: 1500, stagger: 0.12 });
+
+// ---------- 1. El problema ----------
+bg(I('ilustracion-mesa-master.jpg'), 7.6, 8.4, { z: [1.05, 1.15], filter: blurDark, fi: 0.8 });
+txt('Pero reunir al grupo, encontrar máster<br>y preparar la partida…', 8.2, 7.6, { cls: 'p-h2', x: 160, y: 250, w: 1500 });
+custom(8.2, 7.6, (e) => {
+  e.classList.add('viz');
+  const items = [['Viernes, 22:00', 160, 560], ['¿Quién hace de máster?', 640, 560], ['4 horas preparando', 1240, 560]];
+  return { c: items.map(([s, x, y]) => { const c = el('div', 'chip', e, s); c.style.left = x + 'px'; c.style.top = y + 'px'; const k = el('div', 'x', c); return { c, k }; }) };
+}, (lt, e, { c }) => {
+  e.style.opacity = env(lt, 7.6, 0.3, 0.7);
+  c.forEach(({ c: ch, k }, i) => {
+    const p = appear(lt, 1.2 + i * 0.35);
+    ch.style.opacity = p * (1 - 0.5 * appear(lt, 3.4 + i * 0.3, 0.4));
+    ch.style.transform = `translateY(${(1 - p) * 30}px)`;
+    k.style.transform = `scaleX(${appear(lt, 3.2 + i * 0.3, 0.4)})`;
+  });
+});
+txt('…es la misión que casi nadie completa.', 12.2, 3.6, { cls: 'p-h2 p-gold', x: 160, y: 760, w: 1600 });
+
+// ---------- 2. Tavernus ----------
+bg(I('ilustracion-taberna-interior.jpg'), 15.6, 7.6, { z: [1.25, 1.08], filter: 'brightness(.42)', fi: 1.0 });
+custom(15.6, 7.6, (e) => {
+  e.classList.add('viz');
+  const t = el('div', 'title-cinzel', e, 'TAVERNUS');
+  Object.assign(t.style, { position: 'absolute', left: 0, width: '1920px', top: '330px', textAlign: 'center', fontSize: '190px' });
+  return { t };
+}, (lt, e, { t }) => {
+  const p = appear(lt, 0.2, 1.6), out = clamp((7.6 - lt) / 0.7);
+  t.style.opacity = p * out;
+  t.style.letterSpacing = lerp(0.5, 0.12, ease.outExpo(clamp(lt / 2.6))) + 'em';
+});
+txt('Rol por chat con un máster de IA.', 17.2, 6, { cls: 'p-h2', align: 'center', y: 600 });
+txt('Cuando quieras · Con quien quieras · Desde el móvil', 18.6, 4.6, { cls: 'p-kicker', align: 'center', y: 720, anim: 'fade' });
+
+// ---------- 3. Cómo se juega ----------
+bg(I('ilustracion-plaza-pozo.jpg'), 22.8, 16, { z: [1.1, 1.2], filter: blurDark, fi: 0.8 });
+txt('Así se juega', 23.4, 15, { cls: 'p-kicker', x: 160, y: 300, anim: 'fade' });
+txt('Escribe lo que haría tu personaje.', 23.8, 15, { cls: 'p-h2', x: 160, y: 350, w: 860 });
+txt('El máster narra. Los dados deciden.<br><span class="p-gold">El mundo responde.</span>', 29.0, 9.8, { cls: 'p-h2', x: 160, y: 560, w: 900 });
+custom(22.8, 16, (e) => {
+  e.classList.add('viz');
+  const ph = el('div', 'phone', e);
+  const sc = el('div', 'scene', ph); img(I('ilustracion-taberna-interior.jpg'), '', sc); el('div', 'lab', sc, 'Taberna del Jabalí · anochece');
+  const n1 = el('div', 'msg n', ph, '<div class="who">El narrador</div>El fuego cruje. Brenna seca una jarra sin quitarte ojo.');
+  n1.style.top = '320px';
+  const p1 = el('div', 'msg p', ph, ''); p1.style.top = '500px';
+  const text = 'Le pregunto a Brenna por las luces del granero.';
+  const dice = el('div', 'dice', ph); dice.style.top = '640px';
+  const dd = el('div', 'd', dice, '20'); const rl = el('div', 'rl', dice, 'PERSUASIÓN · ÉXITO');
+  const n2 = el('div', 'msg n', ph, '<div class="who">El narrador</div>Brenna baja la voz: «Esas luces no son de nadie vivo».'); n2.style.top = '610px';
+  const bar = el('div', 'inputbar', ph, '¿Qué haces?');
+  return { ph, n1, p1, text, dice, dd, rl, n2 };
+}, (lt, e, s) => {
+  e.style.opacity = env(lt, 16, 0.5, 0.8);
+  const p = appear(lt, 0.3, 1.2);
+  s.ph.style.transform = `translateY(${(1 - p) * 120}px)`;
+  s.ph.style.opacity = p;
+  s.n1.style.opacity = appear(lt, 1.2);
+  const k = Math.floor(clamp((lt - 2.4) / 2.2) * s.text.length);
+  s.p1.style.opacity = lt > 2.3 ? 1 : 0;
+  s.p1.textContent = s.text.slice(0, k) + (k < s.text.length && Math.floor(lt * 3) % 2 ? '|' : '');
+  // dado: aparece, gira, cae en 17
+  const dp = clamp((lt - 5.4) / 1.6);
+  s.dice.style.opacity = lt > 5.4 && lt < 9.2 ? 1 - appear(lt, 8.6, 0.6) : 0;
+  s.dd.style.transform = `rotate(${(1 - ease.out(dp)) * 720}deg) scale(${lerp(0.4, 1, ease.outBack(clamp((lt - 5.4) / 0.6)))})`;
+  s.dd.textContent = dp < 1 ? String(1 + (Math.floor(lt * 18) % 20)) : '17';
+  s.rl.style.opacity = appear(lt, 7.1, 0.4);
+  s.n2.style.opacity = appear(lt, 9.3);
+  s.n2.style.transform = `translateY(${(1 - appear(lt, 9.3)) * 20}px)`;
+});
+
+// ---------- 4. Diferenciales ----------
+const feats = [];
+function feature(k, t, d, kicker, title, body, bgSrc, viz) {
+  bg(bgSrc, t, d, { z: [1.08, 1.18], filter: blurDark, fi: 0.6, fo: 0.6 });
+  txt(`<span class="num">0${k}</span>&nbsp;&nbsp;${kicker}`, t + 0.3, d - 0.3, { cls: 'p-kicker', x: 140, y: 280, anim: 'fade', fo: 0.5 });
+  txt(title, t + 0.5, d - 0.5, { cls: 'p-h2', x: 140, y: 330, w: 820, fo: 0.5 });
+  txt(body, t + 1.6, d - 1.6, { cls: 'p-body', x: 140, y: 600, w: 760, anim: 'rise', fi: 0.8, fo: 0.5 });
+  custom(t, d, (e) => { e.classList.add('viz'); return viz.build(e); }, (lt, e, ctx) => { e.style.opacity = env(lt, d, 0.5, 0.5); viz.update(lt, ctx); });
+}
+const F0 = 38.6, FD = 7.4;
+
+// 01 · coherencia
+feature(1, F0, FD, 'Coherencia', 'La IA propone.<br><span class="p-gold">El motor dispone.</span>',
+  'Cada objeto, deuda y secreto existe en una base de datos. Lo que no está en el mundo, no se narra: sin inventos ni trampas.',
+  I('ilustracion-mesa-master.jpg'), {
+  build(e) {
+    const N = [['Jugador', 'escribe', 1060, 300], ['Máster IA', 'propone', 1450, 300], ['Motor', 'valida y tira dados', 1450, 640], ['Mundo', 'la única verdad', 1060, 640]];
+    const nodes = N.map(([b, s, x, y], i) => { const n = el('div', 'node' + (i === 3 ? ' gold' : ''), e, `<b>${b}</b><span>${s}</span>`); n.style.left = x + 'px'; n.style.top = y + 'px'; return n; });
+    const mk = (x, y, w, h) => { const a = el('div', 'arrow', e); Object.assign(a.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' }); const i = el('i', '', a); return { a, i, w, h }; };
+    const arrows = [mk(1290, 375, 160, 3), mk(1565, 450, 3, 190), mk(1290, 715, 160, 3), mk(1175, 450, 3, 190)];
+    return { nodes, arrows };
+  },
+  update(lt, { nodes, arrows }) {
+    nodes.forEach((n, i) => { const p = appear(lt, 0.5 + i * 0.35); n.style.opacity = p; n.style.transform = `scale(${lerp(0.85, 1, ease.outBack(p))})`; });
+    arrows.forEach(({ a, i, w, h }, k) => {
+      a.style.opacity = appear(lt, 1.0 + k * 0.35);
+      const q = ((lt * 0.6 - k * 0.25) % 1 + 1) % 1;
+      const rev = k >= 2; const pos = rev ? 1 - q : q;
+      if (w > h) { i.style.left = pos * w - 6 + 'px'; i.style.top = '-5px'; } else { i.style.top = pos * h - 6 + 'px'; i.style.left = '-5px'; }
+    });
+  },
+});
+
+// 02 · mundo vivo
+feature(2, F0 + FD, FD, 'Un mundo vivo', 'El mundo sigue<br>aunque no mires.',
+  'Un reloj global mueve el día y la noche. Los vecinos tienen horarios, las deudas vencen y la amenaza avanza.',
+  I('ilustracion-plaza-pozo.jpg'), {
+  build(e) {
+    const rows = [['08:00', 'Hugo enciende la fragua'], ['13:00', 'Se cuelga un encargo en el tablón'], ['20:00', 'Misa junto al pozo'], ['22:00', 'Alguien prueba la niebla'], ['Día 3', 'La noche de la Brasa']];
+    const box = el('div', '', e); Object.assign(box.style, { position: 'absolute', left: '1100px', top: '250px' });
+    const r = rows.map(([h, s], i) => { const d = el('div', 'row', box, `<span class="h">${h}</span>${s}`); d.style.top = i * 96 + 'px'; if (i === 4) d.style.borderColor = 'rgba(255,100,40,.7)'; return d; });
+    return { r };
+  },
+  update(lt, { r }) {
+    r.forEach((d, i) => { const p = appear(lt, 0.6 + i * 0.45); d.style.opacity = p; d.style.transform = `translateX(${(1 - p) * 60}px)`;
+      const active = lt > 0.6 + i * 0.45 + 0.5 && (i === 4 || lt < 0.6 + (i + 1) * 0.45 + 0.5);
+      d.style.background = active ? (i === 4 ? 'rgba(120,40,15,.85)' : 'rgba(60,45,20,.9)') : 'rgba(20,18,24,.8)'; });
+  },
+});
+
+// 03 · multijugador
+feature(3, F0 + FD * 2, FD, 'Multijugador', 'Juntos en el<br>mismo mundo.',
+  'Hasta 10 jugadores con un simple enlace. Cada uno ve y oye solo lo que percibe su personaje.',
+  P('salvapantallas-5.jpg'), {
+  build(e) {
+    const pts = [[1180, 330, 'retrato-doro.jpg'], [1520, 300, 'retrato-hal.jpg'], [1360, 560, 'retrato-tobias.jpg'], [1640, 620, 'retrato-ursula.jpg']];
+    return { a: pts.map(([x, y, f]) => {
+      const rg = el('div', 'ring', e), rg2 = el('div', 'ring', e);
+      const a = el('div', 'avatar', e); img(I(f), '', a); a.style.left = x + 'px'; a.style.top = y + 'px';
+      return { a, rg, rg2, x: x + 60, y: y + 60 };
+    }) };
+  },
+  update(lt, { a }) {
+    a.forEach(({ a: av, rg, rg2, x, y }, i) => {
+      const p = appear(lt, 0.5 + i * 0.3);
+      av.style.opacity = p; av.style.transform = `scale(${lerp(0.6, 1, ease.outBack(p))})`;
+      [rg, rg2].forEach((r, j) => {
+        const q = ((lt * 0.45 + i * 0.2 + j * 0.5) % 1);
+        const R = 70 + q * 150;
+        Object.assign(r.style, { left: x - R + 'px', top: y - R + 'px', width: 2 * R + 'px', height: 2 * R + 'px', opacity: p * (1 - q) * 0.8 });
+      });
+    });
+  },
+});
+
+// 04 · NPC con memoria
+feature(4, F0 + FD * 3, FD, 'Personajes', 'Gente que recuerda<br>lo que le hiciste.',
+  'Cada vecino tiene memoria, secretos y confianza. Te cuenta más cuanto más se fía de ti.',
+  I('ilustracion-taberna-interior.jpg'), {
+  build(e) {
+    const c = [['retrato-brenna.jpg', 'Brenna', 0.78, 1080, 300], ['retrato-osric-malvez.jpg', 'Osric', 0.18, 1420, 250]];
+    const cards = c.map(([f, n, v, x, y]) => { const d = el('div', 'npc', e); img(I(f), '', d); el('div', 'nm', d, n); const b = el('div', 'bar', d); const i = el('i', '', b); d.style.left = x + 'px'; d.style.top = y + 'px'; return { d, i, v }; });
+    const b = el('div', 'bubble', e, '«Ayer me pagaste la cerveza. Hoy te cuento una cosa…»'); b.style.left = '1180px'; b.style.top = '720px';
+    return { cards, b };
+  },
+  update(lt, { cards, b }) {
+    cards.forEach(({ d, i, v }, k) => { const p = appear(lt, 0.5 + k * 0.4); d.style.opacity = p; d.style.transform = `translateY(${(1 - p) * 50}px) rotate(${(k ? 3 : -3) * p}deg)`; i.style.width = 100 * v * appear(lt, 1.4 + k * 0.4, 1.2) + '%'; });
+    const q = appear(lt, 2.8); b.style.opacity = q; b.style.transform = `translateY(${(1 - q) * 20}px)`;
+  },
+});
+
+// 05 · mundos generados
+feature(5, F0 + FD * 4, FD, 'Mundos generados', 'Cada partida,<br>un mundo nuevo.',
+  '14 tipos de asentamiento y 5 tonos. Tu personaje llega con su porqué, su plazo y su antagonista.',
+  P('mundo-generado.jpg'), {
+  build(e) {
+    const words = ['Aldea', 'Puerto pesquero', 'Ciudad amurallada', 'Monasterio', 'Fortaleza fronteriza', 'Pueblo de chatarra', 'Estación minera', 'Puerto espacial'];
+    const ws = words.map((w) => { const d = el('div', 'bigword', e, w); d.style.top = '440px'; return d; });
+    const tones = ['Sombrío', 'Épico', 'Terror', 'Pulp', 'Cómico'];
+    const ps = tones.map((t, i) => { const d = el('div', 'pill', e, t); d.style.top = '600px'; d.style.left = (1030 + i * 156) + 'px'; return d; });
+    return { ws, ps };
+  },
+  update(lt, { ws, ps }) {
+    const per = 0.72;
+    ws.forEach((w, i) => {
+      const s = 0.6 + i * per; const l = lt - s;
+      const last = i === ws.length - 1;
+      const o = clamp(l / 0.2) * (last ? 1 : clamp((per - l) / 0.2));
+      w.style.opacity = l < 0 ? 0 : o;
+      w.style.transform = `translateY(${(1 - clamp(l / 0.3)) * 30}px)`;
+    });
+    ps.forEach((p, i) => { const q = appear(lt, 1.6 + i * 0.25); p.style.opacity = q; p.style.transform = `translateY(${(1 - q) * 20}px)`; });
+  },
+});
+
+// 06 · reglas, voz y sonido
+feature(6, F0 + FD * 5, FD, 'Rol de verdad', 'Reglas reales.<br>Voz y sonido.',
+  'Reglas de 5ª edición (SRD), dados en servidor y combate. Narrador de voz, dictado y ambiente que cambia con cada lugar.',
+  P('salvapantallas-2.jpg'), {
+  build(e) {
+    const dice = el('div', 'dice', e); Object.assign(dice.style, { left: '1400px', top: '280px', width: '240px', height: '240px', marginLeft: '0' });
+    const dd = el('div', 'd', dice, '20'); dd.style.fontSize = '96px';
+    const pills = ['Tiradas en servidor', 'Combate', 'Narrador de voz', 'Dictado', 'Ambiente vivo'].map((s, i) => {
+      const p = el('div', 'pill', e, s); p.style.left = (1060 + (i % 2) * 330 + (i === 4 ? 165 : 0)) + 'px'; p.style.top = (600 + Math.floor(i / 2) * 90) + 'px'; return p; });
+    // ondas de audio
+    const bars = Array.from({ length: 24 }, (_, i) => { const b = el('div', '', e); Object.assign(b.style, { position: 'absolute', left: (1080 + i * 30) + 'px', width: '12px', borderRadius: '6px', background: 'rgba(228,181,98,.7)' }); return b; });
+    return { dd, pills, bars };
+  },
+  update(lt, { dd, pills, bars }) {
+    const dp = clamp((lt - 0.4) / 1.8);
+    dd.style.transform = `rotate(${(1 - ease.out(dp)) * 900}deg) scale(${lerp(0.3, 1, ease.outBack(clamp((lt - 0.4) / 0.7)))})`;
+    dd.textContent = dp < 1 ? String(1 + (Math.floor(lt * 16) % 20)) : '20';
+    pills.forEach((p, i) => { const q = appear(lt, 1.8 + i * 0.3); p.style.opacity = q; p.style.transform = `translateY(${(1 - q) * 20}px)`; });
+    bars.forEach((b, i) => { const h = 10 + 46 * Math.abs(Math.sin(lt * 5 + i * 0.7) * Math.sin(lt * 2.3 + i * 0.31)); b.style.height = h + 'px'; b.style.top = (900 - h / 2) + 'px'; b.style.opacity = appear(lt, 3.2); });
+  },
+});
+
+// ---------- 5. Comparativa ----------
+const C0 = F0 + FD * 6; // 83
+bg(I('ilustracion-mesa-master.jpg'), C0, 11, { z: [1.05, 1.12], filter: 'blur(22px) brightness(.22)', fi: 0.6 });
+txt('Lo mejor de los dos mundos', C0 + 0.3, 10.4, { cls: 'p-h2', align: 'center', y: 150 });
+custom(C0, 11, (e) => {
+  e.classList.add('viz');
+  const rows = [
+    ['Máster disponible a cualquier hora', ['ok', 'ok', 'no']],
+    ['Mundo coherente que recuerda todo', ['ok', 'no', 'ok']],
+    ['Varios jugadores en el mismo mundo', ['ok', 'no', 'ok']],
+    ['Reglas y dados de verdad', ['ok', 'meh', 'ok']],
+    ['Sin preparar nada', ['ok', 'ok', 'no']],
+  ];
+  const sym = { ok: '✓', no: '✕', meh: '–' };
+  const t = el('table', 'cmp', e);
+  t.innerHTML = `<tr><th></th><th class="us">TAVERNUS</th><th>Chatbots de rol</th><th>Rol de mesa</th></tr>` +
+    rows.map(([r, v]) => `<tr><td>${r}</td>${v.map((x, i) => `<td class="${i === 0 ? 'us ' : ''}${x}">${sym[x]}</td>`).join('')}</tr>`).join('');
+  return { trs: [...t.querySelectorAll('tr')] };
+}, (lt, e, { trs }) => {
+  e.style.opacity = env(lt, 11, 0.5, 0.7);
+  trs.forEach((tr, i) => { const p = appear(lt, 0.6 + i * 0.55); tr.style.opacity = p; tr.style.transform = `translateY(${(1 - p) * 20}px)`; });
+});
+
+// ---------- 6. Números ----------
+const N0 = C0 + 11; // 94
+bg(P('salvapantallas-4.jpg'), N0, 7.6, { z: [1.05, 1.14], filter: 'blur(16px) brightness(.25)', fi: 0.6 });
+txt('Ya funciona', N0 + 0.3, 7.2, { cls: 'p-kicker', align: 'center', y: 250, anim: 'fade' });
+custom(N0, 7.6, (e) => {
+  e.classList.add('viz');
+  const S = [['≈0,2¢', 'por acción del máster<br>(medido en partidas reales)'], ['3 actos', 'demo jugable en tavernus.com<br>14 personajes · 3 finales'], ['1.049', 'tests automáticos<br>motor determinista']];
+  return { s: S.map(([v, l], i) => { const d = el('div', 'stat', e, `<div class="v">${v}</div><div class="l">${l}</div>`); d.style.left = (160 + i * 560) + 'px'; d.style.top = '400px'; return d; }) };
+}, (lt, e, { s }) => {
+  e.style.opacity = env(lt, 7.6, 0.4, 0.7);
+  s.forEach((d, i) => { const p = appear(lt, 0.6 + i * 0.5, 0.9); d.style.opacity = p; d.style.transform = `translateY(${(1 - p) * 40}px)`; });
+});
+
+// ---------- 7. Cierre ----------
+const Z0 = N0 + 7.6; // 101.6
+bg(P('salvapantallas-1.jpg'), Z0, 6.4, { z: [1.12, 1.0], filter: 'brightness(.45)', fi: 1.0, fo: 1.2 });
+custom(Z0, 6.4, (e) => {
+  e.classList.add('viz');
+  const k = el('div', 'p-serif', e, 'La taberna está abierta.');
+  Object.assign(k.style, { position: 'absolute', left: 0, width: '1920px', top: '300px', textAlign: 'center', fontSize: '64px', color: '#f3e6cc', textShadow: '0 4px 20px #000' });
+  const t = el('div', 'title-cinzel', e, 'TAVERNUS');
+  Object.assign(t.style, { position: 'absolute', left: 0, width: '1920px', top: '400px', textAlign: 'center', fontSize: '170px' });
+  const u = el('div', 'p-h2', e, 'tavernus.com');
+  Object.assign(u.style, { position: 'absolute', left: 0, width: '1920px', top: '660px', textAlign: 'center', fontSize: '52px', color: 'var(--gold)' });
+  const c = el('div', 'p-kicker', e, 'Jugadores · Creadores · Inversores — hablemos');
+  Object.assign(c.style, { position: 'absolute', left: 0, width: '1920px', top: '770px', textAlign: 'center', color: 'rgba(255,255,255,.75)' });
+  return { k, t, u, c };
+}, (lt, e, { k, t, u, c }) => {
+  const out = clamp((6.4 - lt) / 1.0);
+  k.style.opacity = appear(lt, 0.3, 1) * out;
+  t.style.opacity = appear(lt, 0.9, 1.4) * out; t.style.letterSpacing = lerp(0.4, 0.12, ease.outExpo(clamp((lt - 0.9) / 2.4))) + 'em';
+  u.style.opacity = appear(lt, 2.0) * out; c.style.opacity = appear(lt, 2.6) * out;
+});
+
+levels.ember = kf([[0, 0.2], [7, 0.15], [8, 0], [15, 0], [16, 0.35], [22, 0.2], [23, 0], [101, 0], [102, 0.5], [108, 0.2]]);
+levels.lower = 0.5;
+</script>
+</body>
+</html>
