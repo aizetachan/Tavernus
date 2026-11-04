@@ -22,9 +22,10 @@
 <div id="stage"></div>
 <script src="lib/engine.js"></script>
 <script>
-const { bg, framed, txt, custom, kf, levels, ease, clamp, lerp, env, el, img } = E;
+const { bg, vbg, framed, txt, custom, kf, levels, ease, clamp, lerp, env, el, img } = E;
 const I = (f) => '../wiki/Imágenes/' + f;
 const P = (f) => '../public/' + f;
+const V = (n) => 'lib/vid/' + n + '.mp4';
 E.duration = 121;
 
 // Texto narrado: abajo a la izquierda, como la voz de quien cuenta
@@ -32,19 +33,18 @@ const say = (html, t, d, o = {}) => txt(html, t, d, { cls: 'tale', x: 160, y: 93
 const mid = (html, t, d, o = {}) => txt(html, t, d, { cls: 'tale big', align: 'center', y: 540, anchor: 'middle', ...o });
 
 // ---------- I. Érase una vez ----------
-bg(I('ilustracion-portada-brezal.jpg'), 1.2, 14.6, { z: [1.22, 1.02], y: [-30, 0], fi: 3, fo: 1.4 });
+vbg(V('c01_portada'), 1.2, 14.6, { z: [1.02, 1.0], fi: 3, fo: 1.4 });
 txt('Un cuento de Brezal', 0.6, 5.4, { cls: 'kicker', align: 'center', y: 470, anim: 'track', ls0: 0.9, ls1: 0.42, trackDur: 4.5, fi: 1.8 });
 say('Érase una vez un valle, al pie de una montaña oscura…', 3.4, 5.4);
 say('y bajo la tierra de ese valle, un <span class="ember-word">fuego</span> que dormía.', 9.0, 6.2);
 
 // ---------- II. Las cadenas ----------
-bg(I('ilustracion-ruinas-vharn.jpg'), 14.4, 12, { z: [1.04, 1.16], x: [40, -40], fo: 1.0 });
+vbg(V('c02_ruinas'), 14.4, 12, { fo: 1.0 });
 say('Los señores de Vharn lo tenían atado con cadenas de hierro frío.', 15.6, 5.0);
 say('Mientras dormía, el trigo crecía alto y el agua del pozo bajaba fría.', 20.8, 5.2);
 
 // ---------- III. El incendio ----------
-bg(I('ilustracion-lugar-el-granero-quemado.jpg'), 25.6, 12.6, { z: [1.0, 1.22], pos: '50% 70%', fi: 0.6, fo: 1.2,
-  filter: 'saturate(1.25) contrast(1.08)' });
+vbg(V('c03_granero'), 25.6, 12.6, { fi: 0.6, fo: 1.2, filter: 'saturate(1.15) contrast(1.05)' });
 say('Hasta que, una noche de fiesta, cuando todo el valle prestaba la lumbre…', 26.2, 4.8, { cls: 'tale small' });
 mid('el granero <span class="ember-word">ardió</span>.', 31.0, 3.6, { cls: 'tale huge', stagger: 0.22, wordDur: 0.9 });
 say('Con él cayeron los señores. Y con ellos, las cadenas.', 34.4, 3.9);
@@ -76,27 +76,27 @@ say('Pero alguien vio una antorcha en la mano equivocada…', 43.6, 4.0);
 say('y lleva veinte años callando.', 47.8, 3.2);
 
 // ---------- V. La niebla ----------
-bg(P('salvapantallas-6.jpg'), 50.6, 12.4, { z: [1.18, 1.04], y: [30, 0], fi: 1.6, filter: 'saturate(.85)' });
+vbg(V('c05_niebla'), 50.6, 12.4, { fi: 1.6, filter: 'saturate(.85)' });
 txt('Veinte años después', 51.0, 4.0, { cls: 'chapter', align: 'center', y: 470, anim: 'track', ls0: 0.7, ls1: 0.35, fi: 1.4 });
 say('una niebla gris bajó del monte y cerró el valle.', 54.6, 3.6);
 say('No la mueve el viento. No deja pasar a nadie.', 58.2, 2.6, { cls: 'tale small' });
 say('Quien entra en ella… sale por donde entró.', 60.6, 2.6);
 
 // ---------- VI. Señales ----------
-bg(I('ilustracion-plaza-pozo.jpg'), 62.8, 6.4, { z: [1.04, 1.14], x: [-30, 30], fi: 1.0, fo: 0.8 });
+vbg(V('c06_pozo'), 62.8, 6.4, { fi: 1.0, fo: 0.8 });
 say('Ahora el pozo trae agua tibia, y la aldea tose ceniza.', 63.4, 5.6);
-bg(P('salvapantallas-3.jpg'), 68.8, 7, { z: [1.06, 1.2], y: [0, -20], fi: 0.6, fo: 1.0 });
+vbg(V('c07_lobo'), 68.8, 7, { fi: 0.6, fo: 1.0 });
 say('Los lobos rondan los corrales.', 69.2, 2.8);
 say('Y de noche… hay luz en el granero quemado.', 72.0, 3.6);
 
 // ---------- VII. Alguien ha vuelto ----------
-bg(P('salvapantallas-7.jpg'), 75.6, 11.2, { z: [1.02, 1.22], x: [0, 120], y: [0, 40], fi: 1.0 });
+vbg(V('c08_ascua'), 75.6, 11.2, { rate: 0.98, fi: 1.0 });
 txt('Alguien ha vuelto.', 76.6, 3.6, { cls: 'tale big', x: 160, y: 520, anim: 'words', stagger: 0.18, wordDur: 1 });
 say('Trae un ascua en el guante…', 80.4, 2.8);
 say('y una pregunta que el valle no quiere responder.', 83.0, 3.6);
 
 // ---------- VIII. Tres noches ----------
-bg(I('ilustracion-amenaza.jpg'), 86.6, 10.6, { z: [1.0, 1.14], pos: '50% 35%', filter: 'brightness(.55)', fi: 1.0 });
+vbg(V('c09_amenaza'), 86.6, 10.6, { filter: 'brightness(.6)', fi: 1.0 });
 custom(86.6, 10.6, (e) => {
   e.classList.add('nights');
   return { n: ['I', 'II', 'III'].map((r, k) => {
@@ -119,8 +119,8 @@ txt('La tercera es la noche de la Brasa.', 90.4, 2.8, { cls: 'tale', align: 'cen
 mid('Para entonces, Brezal sabrá la verdad…<br>o arderá con ella.', 92.6, 4.6, { cls: 'tale big' });
 
 // ---------- IX. La puerta ----------
-bg(P('taberna.jpg'), 97.0, 7.0, { z: [1.0, 1.3], y: [0, 60], pos: '50% 60%', fi: 1.0, fo: 1.4 });
-bg(I('ilustracion-taberna-interior.jpg'), 102.8, 8.4, { z: [1.25, 1.06], fi: 1.6, fo: 1.6 });
+vbg(V('c10_taberna'), 97.0, 7.0, { fi: 1.0, fo: 1.4 });
+vbg(V('c11_interior'), 102.8, 8.4, { fi: 1.6, fo: 1.6 });
 say('En la Taberna del Jabalí, alguien empuja la puerta.', 97.8, 4.6);
 say('Eres tú. Acabas de llegar.', 102.6, 3.4);
 say('Y este cuento… todavía no tiene final.', 106.2, 4.6);

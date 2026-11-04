@@ -33,7 +33,7 @@ if (stills) {
   mkdirSync(dir, { recursive: true });
   const p = await open(browser);
   for (const t of stills.split(',').map(Number)) {
-    await p.evaluate((t) => E.seek(t), t);
+    await p.evaluate((t) => E.seekAsync(t), t);
     await p.screenshot({ path: join(dir, `t${String(t).padStart(6, '0')}.jpg`), type: 'jpeg', quality: 85 });
   }
   console.log('stills en', dir);
@@ -61,7 +61,7 @@ async function segment(w) {
     '-c:v', 'libx264', '-preset', 'medium', '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(fps), file], { stdio: ['pipe', 'inherit', 'inherit'] });
   const p = await open(browser);
   for (let f = a; f < b; f++) {
-    await p.evaluate((t) => E.seek(t), from + f / fps);
+    await p.evaluate((t) => E.seekAsync(t), from + f / fps);
     const buf = await p.screenshot({ type: 'jpeg', quality: 93 });
     if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
     done++;

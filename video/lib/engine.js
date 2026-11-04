@@ -65,6 +65,36 @@
     } });
   }
 
+  // Fondo de vídeo (clip animado): igual que bg, pero el fotograma sale del tiempo del clip.
+  // o.rate: velocidad (1 = tiempo real); o.offset: segundo del clip en el que empieza.
+  const vids = [];
+  function vbg(src, t, d, o = {}) {
+    const wrap = el('div', 'clip bg');
+    const v = document.createElement('video');
+    v.className = 'cover'; v.muted = true; v.preload = 'auto'; v.playsInline = true; v.src = src;
+    wrap.appendChild(v);
+    if (o.filter) v.style.filter = o.filter;
+    const z = o.z || [1.0, 1.04];
+    const entry = { v, target: 0, active: false };
+    vids.push(entry);
+    return add({ t, d, el: wrap, update(lt) {
+      const p = ease.sine(clamp(lt / d));
+      wrap.style.opacity = env(lt, d, o.fi ?? 1.2, o.fo ?? 1.2);
+      v.style.transform = `scale(${lerp(z[0], z[1], p)})`;
+      const dur = v.duration || d;
+      entry.target = clamp((o.offset || 0) + lt * (o.rate ?? 1), 0, dur - 0.05);
+      entry.active = true;
+    } });
+  }
+  async function syncVideos() {
+    await Promise.all(vids.map((e) => {
+      const show = e.v.parentElement.style.display !== 'none' && e.active;
+      e.active = false;
+      if (!show || Math.abs(e.v.currentTime - e.target) < 0.001) return null;
+      return new Promise((r) => { e.v.addEventListener('seeked', r, { once: true }); e.v.currentTime = e.target; });
+    }));
+  }
+
   // Imagen cuadrada en un marco, sobre su propia versión desenfocada a pantalla completa.
   function framed(src, t, d, o = {}) {
     const wrap = el('div', 'clip bg');
@@ -226,7 +256,11 @@
   async function ready() {
     await document.fonts.ready;
     await Promise.all(imgs.map((i) => i.decode().catch(() => console.warn('no carga', i.src))));
+    await Promise.all(vids.map(({ v }) => (v.readyState >= 2 ? null : new Promise((r) => {
+      v.addEventListener('loadeddata', r, { once: true }); v.addEventListener('error', () => { console.warn('no carga', v.src); r(); }, { once: true }); v.load();
+    }))));
   }
+  async function seekAsync(t) { seek(t); await syncVideos(); }
 
   // Reproducción en vivo cuando no se está renderizando
   function play() {
@@ -235,7 +269,7 @@
     loop();
   }
 
-  window.E = { W, H, clamp, lerp, ease, env, kf, rnd, el, img, add, bg, framed, txt, custom, levels, seek, ready, play,
+  window.E = { W, H, clamp, lerp, ease, env, kf, rnd, el, img, add, bg, vbg, framed, seekAsync, txt, custom, levels, seek, ready, play,
     set duration(v) { duration = v; }, get duration() { return duration; } };
   window.addEventListener('load', async () => {
     if (!/render/.test(location.search)) { await ready(); play(); }
