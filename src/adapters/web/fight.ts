@@ -119,6 +119,29 @@ export function turnOf(world: World, viewerId: Id, enc: Encounter, ctx: TurnCont
   return { kind: 'you', who: [], text: 'Te toca', deadline_ms: null };
 }
 
+/** Lo último que un PJ vio de su combate: dónde, con qué rivales, en qué ronda y a qué hora de juego. */
+export interface FightTrail { key: string; location_id: Id; rivals: Id[]; round: number; game_s: number }
+
+/** Un rival que sigue al PJ a otra localización en menos de esto (juego) es el mismo combate que sigue. */
+export const FIGHT_FOLLOW_S = 120;
+
+/**
+ * El aviso de un combate que aparece para un PJ y desde qué ronda cuenta. Si es el mismo que traía (otra
+ * localización, algún rival de antes en pie y a menos de FIGHT_FOLLOW_S), no es nuevo: «El combate sigue en…» y la
+ * ronda continúa (`round_offset`, lo que se suma a la del encuentro nuevo). Si no, «Empieza el combate» o, si ya
+ * llevaba un rato, «Hay un combate en curso». Partida del 04-11-2026: Doro siguió a Cat del callejón a la Casa de
+ * las hierbas y salió «Hay un combate en curso» con la ronda otra vez en 1.
+ */
+export function fightStart(enc: Encounter, view: CombatView, trail: FightTrail | null, nowGameS: number): { text: string; round_offset: number } {
+  const rivals = enc.fighters.filter((f) => f.kind === 'npc' && f.state !== 'dead' && f.state !== 'out').map((f) => f.id);
+  const follows = trail !== null && trail.key !== view.key && trail.location_id !== enc.location_id
+    && nowGameS - trail.game_s < FIGHT_FOLLOW_S && rivals.some((id) => trail.rivals.includes(id));
+  if (follows) return { text: `⚔ El combate sigue en ${view.place}`, round_offset: Math.max(0, trail.round - 1) };
+  // Recién abierto (menos de dos minutos de juego): empieza; si no, ya estaba en marcha cuando llega este PJ.
+  const fresh = nowGameS - enc.started_game_s < 120;
+  return { text: fresh ? `⚔ Empieza el combate en ${view.place}` : `⚔ Hay un combate en curso en ${view.place}`, round_offset: 0 };
+}
+
 /** El combate visto por un PJ; null si ese PJ no está en él. */
 export function combatView(world: World, enc: Encounter, viewerId: Id, ctx: TurnContext): CombatView | null {
   if (!enc.fighters.some((f) => f.id === viewerId)) return null;
@@ -246,7 +269,7 @@ export const FIGHT_SCRIPT = String.raw`
     var div = lastEl && lastEl.classList.contains('turnmark') ? lastEl : document.createElement('div');
     div.className = 'msg turnmark ' + t.kind;
     div.setAttribute('role', 'status');
-    div.textContent = (t.kind === 'you' ? 'Ronda ' + round + ' · ' : '') + t.text;
+    div.textContent = (t.kind === 'you' ? 'Ronda ' + round + ': ' + t.text.charAt(0).toLowerCase() + t.text.slice(1) : t.text);
     if (!div.parentNode) { if (dots) log.insertBefore(div, dots); else log.appendChild(div); }
     scroll();
   }
@@ -268,7 +291,7 @@ export const FIGHT_SCRIPT = String.raw`
       var mark = x.turn === 'acted' ? '<span class="mark acted" title="Ya ha actuado">✓</span>' : x.turn === 'pending' ? '<span class="mark pending" title="Le falta actuar">●</span>' : '';
       var av = x.avatar ? '<span class="av" style="background-image:url(\'' + escapeHtml(x.avatar) + '\')"></span>' : '<span class="av">' + escapeHtml(fightInitials(x.name)) + '</span>';
       var now = (f.turn.kind === 'you' && x.me) || x.turn === 'acting';
-      return '<li class="fx-f ' + x.side + (x.me ? ' me' : '') + ' st-' + x.state + (now ? ' turn-now' : '') + '" title="' + escapeHtml(x.name + ' · iniciativa ' + x.initiative + ' · ' + x.label + (x.away ? ' · ausente' : '')) + '">'
+      return '<li class="fx-f ' + x.side + (x.me ? ' me' : '') + ' st-' + x.state + (now ? ' turn-now' : '') + '" title="' + escapeHtml(x.name + ', iniciativa ' + x.initiative + ', ' + x.label + (x.away ? ', ausente' : '')) + '">'
         + '<span class="ini">' + x.initiative + '</span>' + av
         + '<span class="tx"><span class="nm">' + escapeHtml(x.name) + mark + '</span>'
         + '<span class="hp"><span class="bar"><i class="' + cls + '" style="width:' + pct + '%"></i></span>' + escapeHtml(x.label) + '</span></span></li>';

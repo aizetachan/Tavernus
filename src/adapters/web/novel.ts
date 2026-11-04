@@ -133,6 +133,30 @@ function overlap(span: string, line: string): number {
   return own.filter((t) => said.has(t)).length / own.length;
 }
 
+/**
+ * Desenlace de una tirada (master_roll_outcome): la frase del jugador ya está en el hilo, en el turno que pidió la
+ * tirada. Si el máster la repite como parlamento suyo, sobra (partida del 04-11-2026: «Habla con Ilse antes de
+ * llevarme a nadie, Doro» salía otra vez tras la tirada de Persuasión). Lo que diga de nuevo se queda. Devuelve las
+ * líneas que quedan y los bloques con los índices al día (la prosa que queda junta, en un bloque).
+ */
+export function withoutEcho<L extends { speaker: string; text: string }>(lines: readonly L[], blocks: readonly NovelBlock[], said: string): { lines: L[]; blocks: NovelBlock[] } {
+  const index = new Map<number, number>();
+  const kept: L[] = [];
+  lines.forEach((l, i) => {
+    if (l.speaker === 'actor' && overlap(l.text, said) >= 0.6) return;
+    index.set(i, kept.length);
+    kept.push(l);
+  });
+  const out: NovelBlock[] = [];
+  for (const b of blocks) {
+    if (b.kind === 'line') { if (index.has(b.line)) out.push({ ...b, line: index.get(b.line)! }); continue; }
+    const prev = out.at(-1);
+    if (prev?.kind === 'prose' && !prev.lead) prev.text = `${prev.text} ${b.text}`;
+    else out.push({ ...b });
+  }
+  return { lines: kept, blocks: out };
+}
+
 /** Prosa sin comillas huérfanas ni rayas sueltas. */
 function stripQuoteMarks(text: string): string {
   return text.replace(/[«»“”"]/g, '').replace(/^\s*—\s*/, '').replace(/\s*—\s*([.,;:!?])/g, '$1').replace(/\s*—\s*$/, '').replace(/(^|\s)—(\s|$)/g, '$1$2').replace(/\s{2,}/g, ' ').replace(/\s+([.,;:!?])/g, '$1').trim();
@@ -275,6 +299,10 @@ export const NOVEL_STYLE = String.raw`
   #report-box .btns [data-do="send"] { background: var(--accent); color: #2a1d05; font-weight: 600; box-shadow: none; }
   #report-box .btns button:disabled { opacity: .5; }
   .msg.row .decisive { align-self: flex-start; }
+  /* Ventana decisiva: a cero, «Tiempo agotado»; si el jugador actúa antes, se apaga. Tras caducar, el aviso suelto en el hilo. */
+  .decisive.out { font-weight: 600; }
+  .decisive.done { background: none; color: var(--muted); padding-left: 0; }
+  .msg.decisive.timeout { align-self: center; margin: 6px 0 2px; }
   .msg.row .actions { margin-top: 8px; }
   .nv-av { position: relative; width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 50%; overflow: hidden; font-size: 13px; font-weight: 600;
     color: var(--npc, #e6a587); background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1.5px currentColor; }
@@ -411,7 +439,38 @@ export const NOVEL_JS = String.raw`
   }
   function meWho() { return { id: cast.me.id || current, name: cast.me.name || '', avatar: cast.me.avatar }; }
   /** Lo que escribe el jugador, mientras el narrador piensa: se sustituye por lo que su PJ dice o hace. */
-  function pendingMine(text) { chatRow('mine', meWho(), format(text), { act: true, pending: true }); scroll(); }
+  function pendingMine(text) { decisiveStop('Reaccionas a tiempo.', 'done'); chatRow('mine', meWho(), format(text), { act: true, pending: true }); scroll(); }
+  /**
+   * Ventana decisiva (SPEC §9.3): la cuenta atrás bajo la burbuja que la abre. A cero dice «Tiempo agotado» (el motor
+   * resuelve la amenaza enseguida); si el jugador actúa antes, se apaga. Solo una a la vez: la última.
+   */
+  var decisiveTimer = null, decisiveEl = null;
+  function decisiveStop(text, cls) {
+    if (decisiveTimer) clearInterval(decisiveTimer);
+    decisiveTimer = null;
+    if (decisiveEl && text) { decisiveEl.textContent = text; if (cls) decisiveEl.classList.add(cls); }
+    decisiveEl = null;
+  }
+  function decisiveCountdown(d, until) {
+    decisiveStop();
+    decisiveEl = d;
+    var tick = function () {
+      var left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+      if (!left) { decisiveStop('⏳ Tiempo agotado', 'out'); return; }
+      d.textContent = '⏳ Tienes ' + left + (left === 1 ? ' segundo' : ' segundos') + ' para reaccionar. Si no, la amenaza se cumple.';
+    };
+    tick();
+    if (decisiveEl === d) decisiveTimer = setInterval(tick, 1000);
+  }
+  /** El turno que resuelve una ventana caducada: el contador (si seguía) se cierra y, delante de lo que pasa, el aviso. */
+  function decisiveTimeout() {
+    decisiveStop('⏳ Tiempo agotado', 'out');
+    var div = document.createElement('div');
+    div.className = 'msg decisive timeout';
+    div.setAttribute('role', 'status');
+    div.textContent = '⏳ Se te acaba el tiempo: la amenaza se cumple.';
+    log.appendChild(div);
+  }
   function clearPending() { log.querySelectorAll('.msg.row.pending').forEach(function (d) { d.remove(); }); }
   /**
    * «Escribiendo…»: antes de cada burbuja que no es del jugador (narrador o personaje) se ven sus tres puntos, con
@@ -623,6 +682,8 @@ export const NOVEL_JS = String.raw`
     // Lo que ya había (el mensaje pendiente del jugador se quita al pintar el turno: no vale como marca).
     var old = new Set(log.children);
     chatTurn.held = null;
+    // Recién llegado por el stream (no del historial): una ventana decisiva cuenta desde ahora.
+    chatTurn.fresh = !!animate;
     try { chatTurn(m, live); } catch (e) { console.error(e); }
     var shown, held = chatTurn.held;
     if (animate) {
@@ -660,7 +721,10 @@ export const NOVEL_JS = String.raw`
     if (m.combat) { fightMark(m.combat); return; }
     if (m.scene) { showScene(m.scene); return; }
     if (m.chapter) { addChapter(m); return; }
-    if (m.input) { clearPending(); markChosen(m.input); }
+    if (m.input) { clearPending(); markChosen(m.input); decisiveStop('Reaccionas a tiempo.', 'done'); }
+    if (m.timeout) decisiveTimeout();
+    // Un cambio de sitio que nada ha contado (el máster movió al PJ): su línea gris delante del turno.
+    if (m.moved) addNotice({ text: m.moved });
     var before = log.lastElementChild;
     var lines = m.lines || [], main = null, held = null;
     var say = function (l, lead) {
@@ -730,6 +794,9 @@ export const NOVEL_JS = String.raw`
       d.className = 'decisive';
       d.textContent = '⏳ Tienes ' + m.decisive_s + ' segundos para reaccionar. Si no, la amenaza se cumple.';
       (main.querySelector('.col') || main).appendChild(d);
+      // En vivo cuenta desde ahora; al recargar, hasta el cierre que dice el servidor (si ya se cerró, la frase se queda tal cual).
+      var until = m.decisive_until_ms || (chatTurn.fresh ? Date.now() + m.decisive_s * 1000 : 0);
+      if (until) decisiveCountdown(d, until);
     }
     if (m.join) {
       // Charla ajena en la sala: su aviso de una línea y, debajo, el botón para unirse. Solo el último aviso de esa

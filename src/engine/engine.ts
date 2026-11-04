@@ -1640,7 +1640,7 @@ export class Engine {
     if (share && k.narration_by_pc && Object.keys(k.narration_by_pc).length) { payload['narration_by_pc'] = k.narration_by_pc; payload['narration_common'] = k.narration_common ?? ''; }
     const event = this.events.emit({
       actor_id: c.id, action_type: actionType, input_text: intro || scene ? null : share ? share.inputs[c.id] ?? text : text,
-      narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags, ...(share ? ['shared'] : [])], payload,
+      narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags, ...(share ? ['shared'] : []), ...(scene === 'decisive_timeout' ? ['decisive_timeout'] : [])], payload,
       also_to: [...new Set([...(share ? share.ids : []), ...seen.audience_ids])].filter((id) => id !== c.id),
     }, this.stampFor(c));
     // Lo que el máster pidió a otro jugador (request_reaction): la petición sale después de su narración.
