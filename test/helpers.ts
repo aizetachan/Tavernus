@@ -71,3 +71,14 @@ export async function bootEngine(time = fakeTime(), opts: Partial<EngineOptions>
   if (!offline) for (const c of engine.world.characters.values()) c.connected = true;
   return { engine, repo, time };
 }
+
+/**
+ * Pelea de verdad en la taberna: la marca `tense` y un lobo hostil con estadísticas en la barra.
+ * Las rondas solo se abren con pelea (Engine.fightIn); la marca sola ya no basta.
+ */
+export function fightAt(engine: Engine, locationId = 'loc_taberna', spotId = 'sp_tab_barra'): void {
+  engine.world.location(locationId).state['tense'] = true;
+  const lobo = engine.world.npc('npc_lobo');
+  lobo.location = { type: 'spot', id: spotId };
+  lobo.attitude.default = 'hostile';
+}

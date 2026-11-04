@@ -168,6 +168,16 @@ export function readsAsAccept(text: string): boolean {
   return /^(?:vale|venga|si|sí|claro|de acuerdo|ok|okey|vamos|me dejo|dejo que|bueno|va|por supuesto|encantad[oa])\b/i.test(plain(text));
 }
 
+/**
+ * ¿Se resiste con sus palabras? «no», «suéltame», «me resisto», «me zafo de un tirón y le empujo».
+ * Lo que no se lee ni como sí ni como no (una pregunta a otro) no es respuesta: el motor le pide que decida.
+ */
+export function readsAsResist(text: string): boolean {
+  const t = plain(text);
+  return /^(?:no|ni hablar|nunca|jamas|quita|suelta|sueltame|dejame)\b/i.test(t)
+    || /\b(?:me resisto|resistirme|me resistire|me suelto|soltarme|me zafo|zafarme|me libero|liberarme|me aparto|apartarme|me niego|no me dejo|forcejeo|forcejear|me revuelvo|me escabullo)\b/i.test(t);
+}
+
 /** «1:30» para los avisos. */
 export function fmtLeft(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));

@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { actionContext } from '../src/ai/prompt.js';
+import { executeTool, type ToolContext } from '../src/ai/tools.js';
+import { seededRng } from '../src/engine/dice.js';
 import type { Engine, MasterLike, SceneNotice } from '../src/engine/engine.js';
 import { encounterAt } from '../src/engine/encounter.js';
+import { spawnItem } from '../src/engine/inventory.js';
 import { npcTarget, parseTurn, talkersOf, TALK_IDLE_S, tenseScene } from '../src/engine/scene.js';
+import { windowClashes } from '../src/engine/turnwindow.js';
 import { toMessage } from '../src/adapters/web/server.js';
 import type { LogEventInput } from '../src/ai/tools.js';
 import { settleAudience, viewOf } from '../src/engine/audience.js';
 import type { Delivery } from '../src/engine/events.js';
-import { bootEngine, fakeTime } from './helpers.js';
+import { bootEngine, fakeTime, fightAt } from './helpers.js';
 
 /** Máster falso: apunta cada llamada (actor, texto y el contexto que vería) y responde con una línea de Brenna. */
 function fakeMaster(engine: Engine, delayMs = 0) {
@@ -27,9 +31,9 @@ function fakeMaster(engine: Engine, delayMs = 0) {
 }
 
 /** Kael y Mira en la barra con Brenna, conectados. Kael ya está hablando con ella. */
-async function bar(opts: { groupWindowMs?: number; roundMs?: number } = {}) {
+async function bar(opts: { groupWindowMs?: number; roundMs?: number; turnWindowMs?: number } = {}) {
   const time = fakeTime();
-  const { engine } = await bootEngine(time, { groupWindowMs: opts.groupWindowMs ?? 150, roundMs: opts.roundMs ?? 150 });
+  const { engine } = await bootEngine(time, { groupWindowMs: opts.groupWindowMs ?? 150, roundMs: opts.roundMs ?? 150, turnWindowMs: opts.turnWindowMs ?? 0 });
   const kael = engine.world.character('ch_kael');
   const mira = engine.world.character('ch_mira');
   mira.location = { type: 'spot', id: 'sp_tab_barra' };
@@ -139,7 +143,7 @@ describe('rondas en escenas tensas', () => {
     const { engine, kael } = await bar();
     expect(tenseScene(engine.world, 'loc_taberna', [])).toBeNull();
     expect(tenseScene(engine.world, 'loc_taberna', ['combat'])).toBe('combate');
-    engine.world.location('loc_taberna').state['tense'] = true;
+    fightAt(engine);
     expect(tenseScene(engine.world, 'loc_taberna', [])).toBe('la historia');
     engine.setPresence('ch_mira', false); engine.setConnected('ch_mira', false);
     expect(tenseScene(engine.world, 'loc_taberna', [])).toBeNull();
@@ -158,7 +162,7 @@ describe('rondas en escenas tensas', () => {
     const { engine, kael, mira, calls } = await bar({ roundMs: 150 });
     const notices: SceneNotice[] = [];
     engine.onScene((n) => notices.push(n));
-    engine.world.location('loc_taberna').state['tense'] = true;
+    fightAt(engine);
     const r = await engine.act(kael.id, 'saltar detrás de la barra');
     expect(r.ok).toBe(true);
     expect(calls).toHaveLength(1);
@@ -173,7 +177,7 @@ describe('rondas en escenas tensas', () => {
   it('ronda completa: si actúan todos no espera al temporizador; una segunda acción en la misma ronda se rechaza', async () => {
     // Temporizador de una hora: si lo esperase, el test no acabaría.
     const { engine, kael, mira, calls } = await bar({ roundMs: 3_600_000 });
-    engine.world.location('loc_taberna').state['tense'] = true;
+    fightAt(engine);
     const first = engine.act(kael.id, 'cubrir la puerta');
     const again = await engine.act(kael.id, 'y además gritar');
     expect(again).toMatchObject({ ok: false, text: 'Ya has actuado en la ronda 1: espera a que se resuelva.' });
@@ -190,7 +194,7 @@ describe('rondas en escenas tensas', () => {
 
   it('decir sigue siendo inmediato en plena ronda', async () => {
     const { engine, kael, calls } = await bar({ roundMs: 5000 });
-    engine.world.location('loc_taberna').state['tense'] = true;
+    fightAt(engine);
     const r = await engine.act(kael.id, '— ¡Cuidado!');
     expect(r.event!.action_type).toBe('say');
     expect(calls).toHaveLength(0);
@@ -350,5 +354,164 @@ describe('quién lee qué: el servidor valida las marcas contra el estado', () =
     expect(viewOf(e({ audience: 'actor', target_character_id: 'b' }), 'b')).toBe('party');
     expect(viewOf(e({ group: ['a', 'b'] }), 'b')).toBe('shared');
     expect(viewOf(e({}), 'b')).toBeNull();
+  });
+});
+
+/**
+ * Partida del 2026-11-04 (Isgral y Maikol con Hugo en la herrería), aquí con Kael y Mira en la barra con Brenna.
+ * El máster falso cierra con el log_event real (tools.ts): lo que escribe `close` pasa por los mismos controles.
+ */
+function toolMaster(engine: Engine, close: (ctx: ToolContext, text: string) => Record<string, unknown>[]) {
+  const calls: { actor: string; text: string; context: string }[] = [];
+  const errors: string[] = [];
+  const m: MasterLike = {
+    async resolve(actor, text) {
+      calls.push({ actor: actor.id, text, context: actionContext(engine, actor, text) });
+      const ctx: ToolContext = { engine, actor, nowGameS: engine.nowFor(actor), rng: seededRng(1), closed: null, rolls: [], progress: [], action_text: text };
+      for (const input of close(ctx, text)) {
+        const r = JSON.parse(executeTool(ctx, 'log_event', { observable: null, observable_vague: null, loudness: 1, tags: 'social', suggested_actions: '', lines: null, ...input })) as { error?: string };
+        if (r.error) errors.push(r.error);
+        if (ctx.closed) break;
+      }
+      return { ok: true, usage: {}, calls: [], context: '', model: 'falso', closed: ctx.closed ?? { narration_private: 'Sin cierre.', observable: null, observable_vague: null, loudness: 1, tags: [], suggested_actions: [], requires_roll: null } };
+    },
+  };
+  engine.attachMaster(m);
+  return { calls, errors };
+}
+
+describe('ventana de turno: varios a la vez en el mismo sitio', () => {
+  it('dos acciones dentro de la ventana van en una llamada y cada uno lee su parte y la común', async () => {
+    // Ventana de una hora: si la esperase, el test no acabaría; se cierra en cuanto han mandado los dos.
+    const { engine, kael, mira } = await bar({ turnWindowMs: 3_600_000 });
+    const seen: Record<string, string[]> = {};
+    engine.onDelivery((d) => { (seen[d.character_id] ??= []).push(d.text); });
+    const { calls, errors } = toolMaster(engine, () => [
+      // Como en la partida: todo en un texto con «te» a secas. Se rechaza una vez.
+      { narration_private: 'Kael, te unes a la charla y Brenna te responde. Mira, cuentas las monedas.' },
+      {
+        narration_private: 'Brenna se seca las manos en el delantal y os mira a los dos.',
+        narration_by_pc: { [kael.id]: 'Le preguntas por el pozo y ella señala la plaza con la barbilla.', [mira.id]: 'Cuentas las monedas sobre la barra: te llega para dos jarras.' },
+        npc_id: 'npc_brenna',
+        lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'El pozo está en la plaza.', to: kael.id }, { speaker: 'npc', npc_id: 'npc_brenna', text: 'Aquí se paga antes.' }],
+      },
+    ]);
+    const [a, b] = await Promise.all([engine.act(kael.id, 'preguntar a Brenna por el pozo'), engine.act(mira.id, 'contar mis monedas')]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.text).toBe('(a la vez) Kael: preguntar a Brenna por el pozo / Mira: contar mis monedas');
+    expect(calls[0]!.context).toContain('## A la vez: 2 jugadores han actuado en el mismo momento');
+    expect(calls[0]!.context).toContain('narration_by_pc');
+    expect(calls[0]!.context).not.toContain('CHOQUE');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/falta en narration_by_pc lo de Kael .* y lo de Mira/);
+    expect(errors[0]).toContain('dice «te»');
+    // Un solo evento para los dos; cada uno lee lo suyo y lo común, nada del otro en segunda persona.
+    expect(a.event!.id).toBe(b.event!.id);
+    expect(seen[kael.id]!.at(-1)).toBe('Le preguntas por el pozo y ella señala la plaza con la barbilla.\n\nBrenna se seca las manos en el delantal y os mira a los dos. «El pozo está en la plaza.» «Aquí se paga antes.»');
+    expect(seen[mira.id]!.at(-1)).toMatch(/^Cuentas las monedas sobre la barra: te llega para dos jarras\.\n\nBrenna se seca/);
+    expect(seen[mira.id]!.at(-1)).not.toContain('Le preguntas por el pozo');
+    // La línea sin destinatario va a todos; la otra, a Kael.
+    expect(a.event!.payload['lines']).toEqual([
+      { speaker: 'npc', npc_id: 'npc_brenna', text: 'El pozo está en la plaza.', to: kael.id },
+      { speaker: 'npc', npc_id: 'npc_brenna', text: 'Aquí se paga antes.', to: 'all' },
+    ]);
+  });
+
+  it('dos acciones separadas por más de la ventana van una tras otra, cada una con su llamada', async () => {
+    const { engine, kael, mira } = await bar({ turnWindowMs: 40 });
+    const { calls } = toolMaster(engine, () => [{ narration_private: 'Brenna asiente.' }]);
+    const a = await engine.act(kael.id, 'preguntar a Brenna por el pozo');
+    const b = await engine.act(mira.id, 'contar mis monedas');
+    expect(calls.map((c) => c.text)).toEqual(['preguntar a Brenna por el pozo', 'contar mis monedas']);
+    expect(a.event!.id).not.toBe(b.event!.id);
+    expect(a.event!.payload['group']).toBeUndefined();
+  });
+
+  it('sin otro PJ que pueda actuar en el sitio no hay ventana (ni espera)', async () => {
+    const { engine, kael, mira } = await bar({ turnWindowMs: 3_600_000 });
+    engine.setAway(mira.id, true);
+    const { calls } = toolMaster(engine, () => [{ narration_private: 'Brenna asiente.' }]);
+    await engine.act(kael.id, 'preguntar a Brenna por el pozo');
+    expect(calls.map((c) => c.text)).toEqual(['preguntar a Brenna por el pozo']);
+  });
+
+  it('choque: los dos cogen la misma jarra a la vez; el máster lo sabe y lo resuelve', async () => {
+    const { engine, kael, mira } = await bar({ turnWindowMs: 3_600_000 });
+    const s = spawnItem(engine.world, 'it_cerveza', 1, { type: 'spot', id: 'sp_tab_barra' });
+    const jarra = s.ok ? s.moved.id : '';
+    const { calls } = toolMaster(engine, () => [{
+      narration_private: 'La jarra se tambalea sobre la barra.',
+      narration_by_pc: { [kael.id]: 'Llegas antes y te quedas la jarra.', [mira.id]: 'Kael llega antes: tu mano se cierra en el aire.' },
+    }]);
+    await Promise.all([engine.act(kael.id, 'coger la jarra'), engine.act(mira.id, 'coger la jarra')]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.context).toContain(`CHOQUE: Kael y Mira van a por lo mismo a la vez (jarra de cerveza [${jarra}])`);
+    expect(calls[0]!.context).toContain('con tiradas si hace falta');
+  });
+
+  it('choques puros: mismo NPC, mismo objeto y uno que actúa sobre otro que también actúa', async () => {
+    const { engine, kael, mira } = await bar();
+    const ev = engine.events.all();
+    const g = engine.gameNow();
+    expect(windowClashes(engine.world, ev, [{ id: kael.id, text: 'robarle la bolsa a Brenna' }, { id: mira.id, text: 'distraer a Brenna con un chiste' }], g))
+      .toEqual([{ what: 'Brenna [npc_brenna]', ids: [kael.id, mira.id] }]);
+    expect(windowClashes(engine.world, ev, [{ id: kael.id, text: 'empujar a Mira' }, { id: mira.id, text: 'beber de mi jarra' }], g))
+      .toEqual([{ what: 'Mira [ch_mira]', ids: [kael.id, mira.id] }]);
+    expect(windowClashes(engine.world, ev, [{ id: kael.id, text: 'mirar el fuego' }, { id: mira.id, text: 'contar mis monedas' }], g)).toEqual([]);
+  });
+
+  it('el máster no inventa frases de jugadores: la línea de un PJ que no está en lo que escribió se quita (también fuera de un turno compartido)', async () => {
+    const { engine, kael, mira } = await bar({ turnWindowMs: 3_600_000 });
+    toolMaster(engine, () => [{
+      narration_private: 'Brenna resopla.',
+      narration_by_pc: { [kael.id]: 'Le pides perdón a Brenna.', [mira.id]: 'Sueltas la muñeca de Kael.' },
+      npc_id: 'npc_brenna',
+      lines: [{ speaker: 'pc', character_id: kael.id, text: 'Perdón, Brenna.' }, { speaker: 'pc', character_id: mira.id, text: 'Error. Ya.' }, { speaker: 'npc', npc_id: 'npc_brenna', text: 'Error. Ya.', to: 'all' }],
+    }]);
+    const [a] = await Promise.all([engine.act(kael.id, 'pedirle perdón a Brenna'), engine.act(mira.id, 'soltar la muñeca de Kael')]);
+    const lines = a.event!.payload['lines'] as { speaker: string; character_id?: string; text: string }[];
+    expect(lines.filter((l) => l.speaker !== 'npc').map((l) => l.text)).toEqual(['Perdón, Brenna.']);
+    expect(lines.some((l) => l.speaker === 'pc' && l.character_id === mira.id)).toBe(false);
+    // Fuera de un turno compartido, igual: lo que «dice» el actor tiene que estar en lo que escribió.
+    const solo: ToolContext = { engine, actor: kael, nowGameS: engine.nowFor(kael), rng: seededRng(1), closed: null, rolls: [], progress: [], action_text: 'coger de la mano a Mira y huir' };
+    JSON.parse(executeTool(solo, 'log_event', { narration_private: 'Tiras de Mira hacia la puerta. «Error. Ya.»', observable: null, observable_vague: null, loudness: 1, tags: '', suggested_actions: '', lines: [{ speaker: 'actor', npc_id: null, text: 'Error. Ya.' }] }));
+    expect(solo.closed!.lines).toEqual([]);
+    expect(solo.closed!.narration_private).toBe('Tiras de Mira hacia la puerta.');
+  });
+
+  it('reacción pendiente: la pregunta ajena del afectado no entra ni se mezcla; quien la pidió espera; «me resisto» es la respuesta', async () => {
+    const { engine, kael, mira } = await bar({ turnWindowMs: 3_600_000 });
+    const { calls } = toolMaster(engine, () => [{ narration_private: 'Brenna asiente.' }]);
+    const grab = await engine.act(kael.id, 'agarro a Mira');
+    expect(grab.event!.action_type).toBe('reaction_request');
+    // Mira pregunta otra cosa: no va al máster, se le pide que decida antes.
+    const q = await engine.act(mira.id, '¿Cuánto debe la fragua, Brenna?');
+    expect(q.ok).toBe(false);
+    expect(q.text).toMatch(/^⏳ Kael intenta agarrarte: antes decide si te dejas o te resistes/);
+    // Kael tampoco hace otra cosa mientras.
+    expect((await engine.act(kael.id, 'preguntar a Brenna por el pozo')).text).toMatch(/Esperando a que Mira decida/);
+    expect(calls).toHaveLength(0);
+    expect(mira.reactions).toHaveLength(1);
+    // Con sus palabras, la respuesta: se resiste (tirada enfrentada) y la petición se cierra.
+    const ans = await engine.act(mira.id, 'me resisto, suéltame');
+    expect(ans.event!.action_type).toMatch(/^reaction_/);
+    expect(mira.reactions).toBeUndefined();
+  });
+});
+
+describe('la ronda solo en pelea de verdad', () => {
+  it('la marca tense sola ya no abre ronda: lo simultáneo va por la ventana de turno', async () => {
+    const { engine, kael, mira } = await bar({ turnWindowMs: 3_600_000, roundMs: 3_600_000 });
+    engine.world.location('loc_taberna').state['tense'] = true;
+    const { calls } = toolMaster(engine, () => [{ narration_private: 'La sala contiene el aliento.', narration_by_pc: { [kael.id]: 'Vigilas la puerta.', [mira.id]: 'Apagas la vela.' } }]);
+    await Promise.all([engine.act(kael.id, 'vigilar la puerta'), engine.act(mira.id, 'apagar la vela')]);
+    expect(engine.roundIn('loc_taberna')).toBeNull();
+    expect(calls.map((c) => c.text)).toEqual(['(a la vez) Kael: vigilar la puerta / Mira: apagar la vela']);
+    // Con un hostil delante, sí hay ronda.
+    fightAt(engine);
+    const next = engine.act(kael.id, 'cubrir la puerta');
+    await engine.act(mira.id, 'tirar la mesa');
+    await next;
+    expect(calls.at(-1)!.text).toBe('(ronda 1) Kael: cubrir la puerta / Mira: tirar la mesa');
   });
 });

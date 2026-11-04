@@ -44,6 +44,7 @@ import { coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack,
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
+import { secondPersonSingular } from '../engine/turnwindow.js';
 import { endsTalk, offersNow, talkProblems, talkState, textSignals, TALK_SITUATIONS, withoutRefused, type TalkPlan } from '../engine/talk.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
@@ -290,7 +291,12 @@ export const MASTER_TOOLS: Tool[] = [
   }),
 
   tool('log_event', 'CIERRE OBLIGATORIO de cada acción. Registra lo ocurrido y lo entrega a cada personaje según lo que percibe. Tras llamarlo, termina.', {
-    narration_private: str('Lo que ve el actor. Segunda persona. Breve.'),
+    narration_private: str('Lo que ve el actor. Segunda persona. Breve. En turno compartido (varios PJ a la vez): solo lo COMÚN, lo que hace el mundo, igual para todos, en tercera persona o en plural; lo de cada uno va en narration_by_pc.'),
+    narration_by_pc: {
+      type: ['object', 'null'],
+      description: 'Solo en turno compartido: lo que lee CADA jugador que ha actuado, por su ID de PJ ({"ch_x": "Le preguntas a Hugo… y te contesta…"}). Segunda persona, solo lo suyo y lo que le pasa a él; lo de los demás o del mundo va en narration_private. null fuera de turno compartido.',
+      additionalProperties: { type: 'string' },
+    },
     observable: nstr('Lo que ve quien está en la sala y no participa: UNA línea de aviso en tercera persona con el nombre del actor («Isgral habla con Hugo en voz baja», «Maikol sale por la puerta»). Nunca la conversación ni lo que se dice. null si no hay nada observable.'),
     audience: nstr('Quién lee el turno entero: "actor" (lo suyo; los demás de la sala solo leen observable como aviso), "group" (la charla con un NPC: la leen los que están en ella y a quien el NPC habla en lines con to) o "present" (afecta a todos los presentes: empieza una pelea, alguien entra, un estruendo, el NPC se vuelve hacia el grupo; entonces narration_private es la MISMA narración para todos, en tercera persona y con lo que hace cada uno). El servidor lo valida contra quién está.'),
     observable_vague: nstr('Lo mismo para quien solo distingue una figura, sin nombre ni detalle. null si no aplica.'),
@@ -410,7 +416,11 @@ export interface ToolContext {
 }
 
 export interface LogEventInput {
+  /** Lo que lee el actor. En turno compartido, su parte + lo común. */
   narration_private: string;
+  /** Turno compartido: lo de cada PJ que actuó (segunda persona) y lo común, para que cada uno lea lo suyo (events.ts). */
+  narration_by_pc?: Record<string, string>;
+  narration_common?: string;
   observable: string | null;
   observable_vague: string | null;
   loudness: number;
@@ -440,20 +450,39 @@ function busyHere(engine: Engine, actor: Character, nowGameS: number): boolean {
 /** PJ que comparten el turno del actor (conversación de grupo o ronda, scene.ts); vacío si no. */
 function sharedWith(engine: Engine, actorId: string): string[] {
   const h = engine.sceneHints(actorId);
-  return [...(h?.group?.members ?? []), ...(h?.round?.members ?? []), ...(h?.round?.hesitant ?? [])].map((m) => m.id);
+  return [...(h?.group?.members ?? []), ...(h?.round?.members ?? []), ...(h?.round?.hesitant ?? []), ...(h?.window?.members ?? [])].map((m) => m.id);
+}
+
+/** Los que han actuado en el turno compartido del actor (grupo, ronda o ventana de turno), con lo que escribió cada uno. */
+function sharedActed(engine: Engine, actorId: string): { id: string; name: string; text: string }[] {
+  const h = engine.sceneHints(actorId);
+  return [...(h?.round?.members ?? []), ...(h?.group?.members ?? []), ...(h?.window?.members ?? [])];
 }
 
 /** En un turno compartido, lo que escribió cada PJ (los que dudan, sin entrada); null si no lo es. */
 function sharedInputs(engine: Engine, actorId: string): Map<string, string | null> | null {
   const h = engine.sceneHints(actorId);
-  if (!h?.group && !h?.round) return null;
-  const out = new Map<string, string | null>([...(h.group?.members ?? []), ...(h.round?.members ?? [])].map((m) => [m.id, m.text]));
+  if (!h?.group && !h?.round && !h?.window) return null;
+  const out = new Map<string, string | null>(sharedActed(engine, actorId).map((m) => [m.id, m.text]));
   for (const m of h.round?.hesitant ?? []) out.set(m.id, null);
   return out;
 }
 
 /** Una «línea» del actor que es en realidad su intención («Hablar con Aren», «Preguntarle por…»): no es algo dicho. */
 export const INTENT_LINE = /^(?:hablar|hablarle|preguntar|preguntarle|decir|decirle|contar|contarle|saludar|saludarle|responder|responderle)\b/i;
+
+/** Narración por PJ del cierre: solo PJ del turno y texto no vacío. Acepta objeto o JSON en texto. */
+export function parseByPc(raw: unknown, isMember: (id: string) => boolean): Record<string, string> {
+  let o: unknown = raw;
+  if (typeof o === 'string') { try { o = JSON.parse(o); } catch { return {}; } }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
+  const out: Record<string, string> = {};
+  for (const [id, v] of Object.entries(o as Record<string, unknown>)) {
+    const t = typeof v === 'string' ? cleanText(v) : '';
+    if (t && isMember(id)) out[id] = t;
+  }
+  return out;
+}
 
 /** Parlamentos válidos del cierre: hablante conocido, texto limpio; como mucho 12. Acepta lista o JSON en texto. */
 export function parseLines(raw: unknown, fallbackNpc: string | null, isNpc: (id: string) => boolean, isPc: (id: string) => boolean = () => false, isAddressee: (id: string) => boolean = isPc): DialogueLine[] {
@@ -1444,13 +1473,14 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const empty = !req && emptyClose({ narration: cleanText(s('narration_private')), lines: parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id), (id) => world.characters.has(id)).filter((l) => !isPlaceholder(l.text)) });
       // Turno compartido: cada uno de los que actuaron recibe su respuesta, por su nombre. Se reescribe una vez.
       if ((ctx.shared_rejections ?? 0) < 1) {
-        const h = engine.sceneHints(actor.id);
-        const acted = [...(h?.round?.members ?? []), ...(h?.group?.members ?? [])];
+        const acted = sharedActed(engine, actor.id);
         const lines = parseLines(input['lines'], null, (id) => world.npcs.has(id), (id) => acted.some((m) => m.id === id));
-        const missing = unansweredInShared({ narration: s('narration_private'), lines, acted });
-        if (missing.length) {
+        const byPc = parseByPc(input['narration_by_pc'], (id) => acted.some((m) => m.id === id));
+        const missing = unansweredInShared({ narration: s('narration_private'), lines, acted, byPc });
+        const vague = acted.length >= 2 ? secondPersonSingular(s('narration_private')) : null;
+        if (missing.length || vague) {
           ctx.shared_rejections = (ctx.shared_rejections ?? 0) + 1;
-          return { error: unansweredRejection(missing.map((m) => ({ name: m.name, text: acted.find((a) => a.id === m.id)!.text }))) };
+          return { error: unansweredRejection(missing.map((m) => ({ id: m.id, name: m.name, text: acted.find((a) => a.id === m.id)!.text })), vague) };
         }
       }
       // Trato cerrado en la narración sin tool que lo registre, y desenlace que no respeta la tirada: se reescribe una vez cada uno.
@@ -1580,7 +1610,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           const hints = engine.sceneHints(actor.id);
           const afterRoll = engine.events.all().filter((e) => e.actor_id === actor.id).at(-1)?.action_type === 'roll';
           const someone = [...world.npcs.values()].some((n) => n.status === 'alive' && world.spot(n.location.id).location_id === here()) || world.charactersInLocation(here()).length > 1;
-          if (!hints?.round && !hints?.group && !afterRoll && someone) {
+          if (!hints?.round && !hints?.group && !hints?.window && !afterRoll && someone) {
             ctx.strike_rejections = (ctx.strike_rejections ?? 0) + 1;
             return { error: strikeRejection(strike) };
           }
@@ -1686,9 +1716,13 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         .filter((l) => (l.speaker !== 'actor' || !INTENT_LINE.test(l.text)) && !isPlaceholder(l.text));
       // Turno compartido: lo que dice cada PJ sale de lo que escribió su jugador. Una frase que no está ahí
       // («¡Quieto!» de «le ataco con la espada») es del máster, no suya: fuera de lines y de la narración.
-      const inputs = sharedInputs(engine, actor.id);
+      // Fuera de un turno compartido, igual con el actor: lo que dice sale de lo que escribió (una llegada o un gancho,
+      // sin texto suyo: no dice nada). Sin action_text en el contexto (quien llama no lo dice), no se mira.
+      const inputs = sharedInputs(engine, actor.id) ?? (ctx.action_text !== undefined ? new Map<string, string | null>([[actor.id, ctx.action_text]]) : null);
       const invented = inputs ? parsedLines.filter((l) => (l.speaker === 'pc' || l.speaker === 'actor') && !saidByPlayer(l.text, inputs.get(l.speaker === 'pc' ? l.character_id! : actor.id))) : [];
-      const closingLines = parsedLines.filter((l) => !invented.includes(l));
+      // En turno compartido, la línea del NPC sin destinatario va a todos.
+      const sharedTurn = sharedIds.length > 0;
+      const closingLines = parsedLines.filter((l) => !invented.includes(l)).map((l) => (sharedTurn && l.speaker === 'npc' && !l.to ? { ...l, to: 'all' as const } : l));
       // La tercera negativa corta la charla (talk.ts).
       if (ctx.talk && endsTalk(ctx.talk, closingLines)) world.npc(ctx.talk.npc_id).talking_to = null;
       const unsay = (t: string) => invented.reduce((acc, l) => acc.split(`«${l.text}»`).join('').replace(/[ \t]{2,}/g, ' ').trim(), t);
@@ -1721,11 +1755,17 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const ownLines = closingLines.filter((l) => l.speaker === 'actor').map((l) => [l.text, masked(l.text)] as const).filter(([a, b]) => a !== b);
       const unname = (t: string) => ownLines.reduce((acc, [a, b]) => acc.split(a).join(b), t);
       for (const l of closingLines) if (l.speaker === 'actor') l.text = unname(l.text);
+      // Turno compartido: cada uno lee lo suyo y lo común (narration_private es lo común). El actor, las dos cosas juntas.
+      const byPc = sharedTurn ? Object.fromEntries(Object.entries(parseByPc(input['narration_by_pc'], (id) => id === actor.id || sharedIds.includes(id)))
+        .map(([id, t]) => [id, withoutDeathPhrases(unsay(tidy(id === actor.id ? unname(t) : t)), deathHits)] as const).filter(([, t]) => t)) : {};
+      const common = narrationWithLines(withoutDeathPhrases(unsay(tidy(unname(s('narration_private')))), deathHits), closingLines) + (forcedTail ? `
+
+${forcedTail}` : '');
+      const mine = byPc[actor.id] ? masked(byPc[actor.id]!) : '';
       ctx.closed = {
         // Lo dicho que no va citado en la narración (en conversación puede ir vacía) se guarda como citas.
-        narration_private: approached + masked(narrationWithLines(withoutDeathPhrases(unsay(tidy(unname(s('narration_private')))), deathHits), closingLines)) + (forcedTail ? `
-
-${forcedTail}` : ''),
+        narration_private: approached + [mine, masked(common)].filter((t) => t.trim()).join('\n\n'),
+        ...(Object.keys(byPc).length ? { narration_by_pc: byPc, narration_common: common } : {}),
         observable: input['observable'] == null ? null : withoutDeathPhrases(unsay(tidy(s('observable'))), deathHits) || null,
         observable_vague: input['observable_vague'] == null ? null : tidy(s('observable_vague')) || null,
         loudness: Number(input['loudness']) || 1,
