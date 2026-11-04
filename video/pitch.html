@@ -61,7 +61,7 @@
   table.cmp td.us { background: rgba(228,181,98,.12); }
   .ok { color: #9be88a; font-weight: 800; } .no { color: rgba(255,120,110,.8); font-weight: 800; } .meh { color: rgba(255,255,255,.4); font-weight: 700; }
   .stat { position: absolute; width: 400px; text-align: center; }
-  .stat .v { font-family: Inter, sans-serif; font-weight: 800; font-size: 96px; letter-spacing: -0.03em; color: var(--gold); line-height: 1; }
+  .stat .v { white-space: nowrap; font-family: Inter, sans-serif; font-weight: 800; font-size: 88px; letter-spacing: -0.03em; color: var(--gold); line-height: 1; }
   .stat .l { font-family: Inter, sans-serif; font-size: 26px; color: rgba(255,255,255,.75); margin-top: 16px; line-height: 1.35; }
 </style>
 </head>
@@ -244,27 +244,32 @@ feature(4, F0 + FD * 3, FD, 'Personajes', 'Gente que recuerda<br>lo que le hicis
   },
 });
 
-// 05 · mundos generados
-feature(5, F0 + FD * 4, FD, 'Mundos generados', 'Cada partida,<br>un mundo nuevo.',
-  '14 tipos de asentamiento y 5 tonos. Tu personaje llega con su porqué, su plazo y su antagonista.',
-  P('mundo-generado.jpg'), {
+// 05 · un mundo que crece: Brezal, sus expansiones y, después, mundos generados
+feature(5, F0 + FD * 4, FD, 'Un mundo que crece', 'Una gran campaña.<br>Y luego, más.',
+  'Lanzamos con Brezal, tres actos escritos a mano. Le siguen tres expansiones del mismo mundo y, más adelante, mundos generados para cada partida.',
+  I('ilustracion-ruinas-vharn.jpg'), {
   build(e) {
-    const words = ['Aldea', 'Puerto pesquero', 'Ciudad amurallada', 'Monasterio', 'Fortaleza fronteriza', 'Pueblo de chatarra', 'Estación minera', 'Puerto espacial'];
-    const ws = words.map((w) => { const d = el('div', 'bigword', e, w); d.style.top = '440px'; return d; });
-    const tones = ['Sombrío', 'Épico', 'Terror', 'Pulp', 'Cómico'];
-    const ps = tones.map((t, i) => { const d = el('div', 'pill', e, t); d.style.top = '600px'; d.style.left = (1030 + i * 156) + 'px'; return d; });
-    return { ws, ps };
-  },
-  update(lt, { ws, ps }) {
-    const per = 0.72;
-    ws.forEach((w, i) => {
-      const s = 0.6 + i * per; const l = lt - s;
-      const last = i === ws.length - 1;
-      const o = clamp(l / 0.2) * (last ? 1 : clamp((per - l) / 0.2));
-      w.style.opacity = l < 0 ? 0 : o;
-      w.style.transform = `translateY(${(1 - clamp(l / 0.3)) * 30}px)`;
+    const words = [['Brezal sellada', 'Lanzamiento'], ['Más allá del Cerco', 'Expansión I'], ['La Lobera', 'Expansión II'], ['Las minas de plata', 'Expansión III']];
+    const ws = words.map(([w, k]) => {
+      const d = el('div', 'bigword', e, w); d.style.top = '420px';
+      const t = el('div', 'p-kicker', e, k); Object.assign(t.style, { position: 'absolute', left: '960px', width: '880px', textAlign: 'center', top: '380px' });
+      return { d, t };
     });
-    ps.forEach((p, i) => { const q = appear(lt, 1.6 + i * 0.25); p.style.opacity = q; p.style.transform = `translateY(${(1 - q) * 20}px)`; });
+    const soon = el('div', 'pill', e, 'Próximamente · mundos generados para cada partida');
+    Object.assign(soon.style, { top: '600px', left: '1400px', transform: 'translateX(-50%)' });
+    return { ws, soon };
+  },
+  update(lt, { ws, soon }) {
+    const per = 1.15;
+    ws.forEach(({ d, t }, i) => {
+      const l = lt - (0.6 + i * per);
+      const last = i === ws.length - 1;
+      const o = l < 0 ? 0 : clamp(l / 0.25) * (last ? 1 : clamp((per - l) / 0.25));
+      d.style.opacity = o; t.style.opacity = o;
+      d.style.transform = `translateY(${(1 - clamp(l / 0.35)) * 30}px)`;
+    });
+    const q = appear(lt, 0.6 + ws.length * per - 0.2);
+    soon.style.opacity = q; soon.style.transform = `translateX(-50%) translateY(${(1 - q) * 20}px)`;
   },
 });
 
@@ -319,7 +324,7 @@ bg(P('salvapantallas-4.jpg'), N0, 7.6, { z: [1.05, 1.14], filter: 'blur(16px) br
 txt('Ya funciona', N0 + 0.3, 7.2, { cls: 'p-kicker', align: 'center', y: 250, anim: 'fade' });
 custom(N0, 7.6, (e) => {
   e.classList.add('viz');
-  const S = [['≈0,2¢', 'por acción del máster<br>(medido en partidas reales)'], ['3 actos', 'demo jugable en tavernus.com<br>14 personajes · 3 finales'], ['1.049', 'tests automáticos<br>motor determinista']];
+  const S = [['0,0024 €', 'por acción del máster<br>(medido en partidas reales)'], ['3 actos', 'demo jugable en tavernus.com<br>14 personajes · 3 finales'], ['1.049', 'tests automáticos<br>motor determinista']];
   return { s: S.map(([v, l], i) => { const d = el('div', 'stat', e, `<div class="v">${v}</div><div class="l">${l}</div>`); d.style.left = (160 + i * 560) + 'px'; d.style.top = '400px'; return d; }) };
 }, (lt, e, { s }) => {
   e.style.opacity = env(lt, 7.6, 0.4, 0.7);
