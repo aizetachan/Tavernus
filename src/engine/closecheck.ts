@@ -16,7 +16,7 @@
  * partidas del piloto (scripts/judge.ts las aplica a partidas grabadas).
  */
 
-import { lineIsFor, type DialogueLine } from './moments.js';
+import { addressedTo, type DialogueLine } from './moments.js';
 import type { GameEvent } from './model.js';
 import { nameRe, npcNameForms } from './narrate.js';
 
@@ -566,7 +566,7 @@ export function unansweredInShared(input: { narration: string; lines?: readonly 
   return input.acted.filter((m) => {
     const n = norm(m.name).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
     if (n && text.includes(` ${n} `)) return false;
-    return !(input.lines ?? []).some((l) => l.speaker === 'npc' && lineIsFor(l, m.id) && l.to !== 'all');
+    return !(input.lines ?? []).some((l) => l.speaker === 'npc' && addressedTo(l, m.id) && l.to !== 'all');
   });
 }
 

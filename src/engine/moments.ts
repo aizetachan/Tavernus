@@ -37,11 +37,6 @@ export interface Moment {
   subject?: Id;
 }
 
-/** ¿Va esta línea del NPC a este PJ? (`to`: un PJ, varios o `all`). */
-export function lineIsFor(l: Pick<DialogueLine, 'to'>, id: Id): boolean {
-  return l.to === 'all' || l.to === id || (Array.isArray(l.to) && l.to.includes(id));
-}
-
 /** Un parlamento literal del cierre del máster (modo novela). */
 export interface DialogueLine {
   /** `pc`: otro PJ que habla en un turno compartido (conversación de grupo o ronda, scene.ts). */
@@ -50,11 +45,21 @@ export interface DialogueLine {
   /** Solo `pc`: qué PJ. */
   character_id?: Id;
   /**
-   * A quién se dirige una línea del NPC en un turno compartido: un PJ, varios o
-   * `all` (todos los del turno). Sin él, al actor. Ver `lineIsFor`.
+   * A quién se dirige una línea del NPC (docs/MULTIJUGADOR.md, «Quién lee qué»): un PJ, varios o `all` (todos
+   * los PJ presentes). Sin `to`, a quien lleva la charla. Lo valida el motor contra el estado (audience.ts).
    */
-  to?: Id | Id[] | 'all';
+  to?: LineTo;
   text: string;
+}
+
+/** Destinatario de una línea: un PJ, varios o todos los presentes. */
+export type LineTo = Id | Id[] | 'all';
+
+/** ¿Va esta línea a ese PJ? (por su id, en la lista o a todos). Sin `to`, no se sabe: false. */
+export function addressedTo(l: Pick<DialogueLine, 'to'>, pcId: Id): boolean {
+  const to = l.to;
+  if (!to) return false;
+  return to === 'all' || to === pcId || (Array.isArray(to) && to.includes(pcId));
 }
 
 /** Lo que el clasificador necesita del mundo. */
