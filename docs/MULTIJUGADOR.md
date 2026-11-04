@@ -159,6 +159,30 @@ Lo que no entra en todo esto: **Decir** (sigue siendo inmediato, también en ple
 
 **Concurrencia.** Los lotes y las rondas viven antes de la cola por localización: las acciones que se juntan esperan en memoria hasta que se cierra el lote o la ronda, y entonces la llamada al máster entra en la cola como una acción más (así un lote no bloquea al resto del sitio mientras espera). La cola de turnos, los lotes y las rondas viven en memoria: un reinicio del servidor los vacía (las acciones en vuelo devuelven error y se reintentan). `talking_to` sí se guarda. El detector de «el máster actúa por otro jugador» no cuenta a los que participan en el turno compartido (han dicho qué hacen); sigue valiendo para los demás.
 
+## Quién lee qué en la sala (04-11-2026)
+
+En la partida del 4-11 (Isgral y Maikol en la herrería de Brezal, con Hugo) Isgral tuvo tres turnos de charla con Hugo y Maikol, en el mismo punto, no vio nada; y cuando Hugo pilló a Maikol con la mano en su mandil y les habló a los dos, a Isgral le llegó «Escuchas la conversación con Hugo» y «Unirme», como si fuera ajena. Faltaba un nivel entre «nada» y «la conversación entera», y no había marca de a quién habla un NPC fuera de los turnos compartidos. Código en `src/engine/audience.ts` (`settleAudience`, `viewOf`), `engine.ts` (`resolveWithMaster`), `events.ts` (`readerText`), `notices.ts` (`threadKind`), `tools.ts` (`log_event`), `prompt.ts` y la web (`server.ts` `toMessage`/`witnessMessage`/`toLabel`, `novel.ts`). Tests en `test/scene.test.ts`, `test/listen.test.ts`, `test/novel.test.ts` y `test/multiplayer.test.ts`.
+
+### Tres niveles para quien está en la sala
+
+| Qué pasa | Quién lo lee entero | Qué ve el resto de la sala |
+|---|---|---|
+| **(c) Lo del actor** (`audience: "actor"`): mira, rebusca, habla con un NPC a solas | El actor, como siempre. | Un **aviso de sistema de una línea**, en gris, como «Maikol llega al banco de trabajo»: su `observable` («Isgral habla con Hugo en voz baja», «Maikol sale por la puerta»). Si es una charla, debajo el botón «Unirme a la conversación con Hugo» (solo el último aviso de esa charla lo lleva, y el mismo aviso seguido se queda en uno). Ni una frase de lo que se dicen. |
+| **(a) La charla con un NPC** (`audience: "group"`) | Los que están en ella (`talking_to.character_id` y `talking_to.with`) y cualquier PJ al que el NPC le dirige una línea (`to`), que entra en la charla. Cada frase del NPC lleva a quién va: «a ti», «a Isgral», «a todos». | El aviso de una línea con «Unirme». |
+| **(b) Lo que afecta a todos los presentes** (`audience: "present"`): empieza una pelea, alguien entra, un estruendo, el NPC se vuelve hacia el grupo | Todos los PJ de la localización, con **la misma narración** (`narration_private`, escrita en tercera persona con lo que hace cada uno) y las mismas frases. | Nadie se queda fuera. Corta las charlas sueltas de la sala: el NPC que habla a todos pasa a atender al grupo (todos en su `talking_to.with`); los demás NPC con charla en la sala la cierran (`talking_to = null`). |
+
+Si el actor habla con un NPC delante de otros y el máster no deja `observable`, el aviso lo pone el servidor: «Isgral habla con Hugo.». Quien está más lejos lee el aviso de su banda (`observable_vague`, `observable_hint`). Sin «Escuchar»: para seguir una charla ajena te unes (el NPC sabe que estás); escuchar a escondidas es una acción que resuelve el máster (Sigilo, Percepción), y lo que oiga va en su narración.
+
+### El contrato
+
+- **`DialogueLine.to`** (`moments.ts`): en cada línea de NPC, a quién habla: el ID de un PJ, una lista de IDs o `"all"` (todos los PJ presentes). Sin `to`, a quien lleva la charla. Para preguntar si una línea va a alguien, `addressedTo(línea, id)`; nunca `l.to === id`.
+- **`audience`** en `log_event`: `"actor"`, `"group"` o `"present"`. El motor lo valida contra el estado al cerrar (`settleAudience`):
+  - `to` solo a PJ presentes en la localización (los demás se quitan); `"all"` con un solo PJ en la sala es el actor; una lista de uno, ese PJ. `to` en una línea del actor o de un PJ no cuenta.
+  - Una línea a `"all"` hace el turno `present`. `present` con un solo PJ es `actor`.
+  - `group` y `actor` los decide el estado: si alguien más lee el turno entero (los de la charla, a quien se dirige una línea o el `target_character_id`), es `group`; si no, `actor`.
+- **En el evento**: `payload.audience` y `payload.audience_ids` (los PJ, sin el actor, que lo leen entero). Se entregan con `also_to`. `viewOf(evento, lector)` dice cómo lo lee cada uno: `own`, `shared` (turno compartido o `present`: la narración tal cual), `party` (en la charla: `observable` y las frases) o `notice` (el aviso). Los eventos de antes, sin `audience`, siguen con sus reglas.
+- **El máster** (`prompt.ts`): `observable` es una línea de aviso en tercera persona, nunca la conversación; en «Quién oye al actor» sabe que los de fuera solo leen eso, que poner a uno en `to` lo mete en la charla y que lo que afecta a todos va con `audience: "present"`, narración para todos y `to: "all"`.
+
 ## Sincronía del máster con varios jugadores (26-10-2026)
 
 Lo que salió en la partida online del 26-10 (Leodhin y Miau, Brezal): respuestas a uno escritas en «tú» que leía el otro, frases de un jugador al otro contestadas por la tabernera, un cierre «placeholder» como respuesta y dos jugadores atacando a la vez sin que el máster de uno supiera lo del otro. Código en `scene.ts` (`namedPc`), `engine.ts` (`waitingIn`), `prompt.ts` (`othersBlock`, turno compartido) y `closecheck.ts`; tests en `test/sync.test.ts`.

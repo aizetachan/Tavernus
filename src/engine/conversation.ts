@@ -12,7 +12,7 @@
  */
 
 import type { GameEvent, Id } from './model.js';
-import type { DialogueLine } from './moments.js';
+import { addressedTo, type DialogueLine } from './moments.js';
 
 export interface Conversation {
   npc_id: Id;
@@ -225,11 +225,11 @@ export function transcriptOf(events: readonly GameEvent[], pcId: Id, npcId: Id, 
     const lines = linesOf(e);
     if (!lines.length) continue;
     const mine = e.actor_id === pcId;
-    const group = !mine && lines.some((l) => (l.speaker === 'pc' && l.character_id === pcId) || (l.speaker === 'npc' && l.to === pcId));
+    const group = !mine && lines.some((l) => (l.speaker === 'pc' && l.character_id === pcId) || (l.speaker === 'npc' && addressedTo(l, pcId)));
     if (!mine && !group) continue;
     if (!lines.some((l) => l.speaker === 'npc' && l.npc_id === npcId)) continue;
     for (const l of lines) {
-      if (l.speaker === 'npc' && l.npc_id === npcId && (mine || !l.to || l.to === pcId)) out.push({ who: 'npc', text: l.text.trim(), game_s: e.timestamp_game_s });
+      if (l.speaker === 'npc' && l.npc_id === npcId && (mine || !l.to || addressedTo(l, pcId))) out.push({ who: 'npc', text: l.text.trim(), game_s: e.timestamp_game_s });
       else if ((mine && l.speaker === 'actor') || (l.speaker === 'pc' && l.character_id === pcId)) out.push({ who: 'pc', text: l.text.trim(), game_s: e.timestamp_game_s });
     }
   }

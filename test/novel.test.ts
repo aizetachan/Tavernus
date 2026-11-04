@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { blocksSpeech, cleanProse, NOVEL_JS, NOVEL_STYLE, novelBlocks } from '../src/adapters/web/novel.js';
 import { PAINT_JS, PAINT_STYLE } from '../src/adapters/web/paint.js';
+import { noticeOf } from '../src/adapters/web/notice.js';
+import { toLabel } from '../src/adapters/web/server.js';
 import type { DialogueLine } from '../src/engine/moments.js';
+import { bootEngine, fakeTime } from './helpers.js';
 
 describe('prosa del narrador sin repetir el diálogo', () => {
   it('el caso de la captura: ni la pregunta del jugador ni la paráfrasis de la posadera', () => {
@@ -149,5 +152,34 @@ describe('las imágenes van dentro de la burbuja, nunca como tarjeta suelta', ()
   it('el pie de la imagen no separa con el punto medio ni la viñeta', () => {
     expect(NOVEL_JS).toContain('function momentName(n)');
     expect(NOVEL_JS).toContain('[·•]');
+  });
+});
+
+describe('quién lee qué en el hilo (audience.ts)', () => {
+  it('a quién va cada frase del NPC: «a ti», «a todos», «a Mira», «a Mira y a ti»', async () => {
+    const { engine } = await bootEngine(fakeTime());
+    const w = engine.world;
+    w.character('ch_mira').location = { type: 'spot', id: 'sp_tab_barra' };
+    expect(toLabel(w, 'ch_kael', 'ch_kael', 'loc_taberna')).toBe('ti');
+    expect(toLabel(w, 'ch_kael', 'all', 'loc_taberna')).toBe('todos');
+    expect(toLabel(w, 'ch_kael', 'ch_mira', 'loc_taberna')).toBe('Mira');
+    expect(toLabel(w, 'ch_kael', ['ch_kael', 'ch_mira'], 'loc_taberna')).toBe('Mira y a ti');
+    expect(toLabel(w, 'ch_kael', undefined, 'loc_taberna')).toBe('');
+  });
+
+  it('lo que no comparte, aviso gris de una línea; lo suyo y lo de la charla, narración con sus burbujas', () => {
+    const e = { action_type: 'master', actor_id: 'a', narration_private: 'Brenna deja el trapo.', observable: 'Kael habla con Brenna en voz baja.',
+      payload: { audience: 'group', audience_ids: ['b'], lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: '¿Qué te pongo?' }] } };
+    expect(noticeOf(e, 'c', 'Kael habla con Brenna en voz baja.')).toEqual({ text: 'Kael habla con Brenna en voz baja' });
+    expect(noticeOf(e, 'b', 'Kael habla con Brenna en voz baja.')).toBeNull();
+    expect(noticeOf(e, 'a')).toBeNull();
+    // Algo para todos: narración para todos los presentes.
+    expect(noticeOf({ ...e, payload: { ...e.payload, audience: 'present', audience_ids: ['b', 'c'] } }, 'c', 'Brenna se vuelve hacia todos.')).toBeNull();
+  });
+
+  it('la web pinta «Unirme» bajo el aviso y deja el botón solo en el último aviso de esa charla', () => {
+    expect(NOVEL_JS).toContain("jr.className = 'actions party join'");
+    expect(NOVEL_JS).toContain("old.getAttribute('data-npc') !== m.join.npc");
+    expect(NOVEL_JS).not.toContain('overheard');
   });
 });

@@ -77,7 +77,8 @@ import { handleTtsRequest } from './tts.js';
 import { handleSfxRequest } from './sfx.js';
 import { soundCuesOf } from './soundmap.js';
 import { illustratorOf, MASTER_PORTRAIT_ID, masterPortraitOf, portraitOf, sceneOf, type EntityInput, type Illustrator, type SceneImage } from '../../ai/illustrate.js';
-import { type DialogueLine, type Moment } from '../../engine/moments.js';
+import { type DialogueLine, type LineTo, type Moment } from '../../engine/moments.js';
+import { lineTargets, presentIds, viewOf } from '../../engine/audience.js';
 import { blocksSpeech, novelBlocks, type NovelBlock } from './novel.js';
 import { handleJournalRequest, touchesJournal } from './journal.js';
 import { noticeOf, webNotice, type WebNotice } from './notice.js';
@@ -172,8 +173,8 @@ export interface WebMessage {
   reaction_wait?: { id: Id; name: string; expires_ms: number; open: boolean };
   /** Esa petición ya se ha decidido: la web cierra sus botones y su espera. */
   reaction_done?: Id;
-  /** Conversación ajena que este PJ oye (bien o a trozos): se marca «Escuchas» y se ofrece unirse. */
-  overheard?: { npc: string; join: string; well: boolean };
+  /** Charla ajena en la sala (audience.ts): bajo su aviso de una línea, el botón para unirse. */
+  join?: { npc: Id; label: string };
   /** Aviso de combate en el hilo (fight.ts): empieza, o se acaba (o el PJ sale de él). */
   combat?: { phase: 'start' | 'end'; text: string };
   /** Comentario del mundo al pasar (chatter.ts): ambiente, no narración. Quién (como lo conoce el lector) y qué dice. */
@@ -1281,6 +1282,12 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   }
   // Turno compartido (grupo o ronda): cada participante lo ve como suyo, con su propia acción y la de los demás.
   const group = Array.isArray(e.payload['group']) && (e.payload['group'] as Id[]).includes(d.character_id);
+  // Algo que afecta a todos los presentes (audience.ts): la misma narración y las mismas frases, cada una con a quién va.
+  if (!group && e.actor_id !== d.character_id && viewOf(e, d.character_id) === 'shared') {
+    const novel = notice ? null : novelOf(e, engine, d.character_id, d.text);
+    if (novel) { m.prose = novel.prose; m.lines = novel.lines; m.blocks = novel.blocks; m.speech = novel.speech; }
+    return m;
+  }
   if (e.actor_id !== d.character_id && !group) return witnessMessage(m, d, engine);
   if (group) {
     const inputs = (e.payload['group_inputs'] as Record<Id, string> | undefined) ?? {};
@@ -1350,11 +1357,22 @@ function reactionView(m: WebMessage, e: GameEvent, w: Engine['world'], reader: I
 
 const SAY_TYPES = new Set(['say', 'shout', 'whisper']);
 
-/** Trozos sueltos de lo que se dice, para quien oye mal: unas pocas palabras largas, con puntos suspensivos. */
-export function fragmentsOf(texts: readonly string[]): string {
-  const words = texts.join(' ').split(/\s+/).map((x) => x.replace(/[^\p{L}\p{N}]/gu, '')).filter((x) => x.length >= 5);
-  const picked = words.filter((_, i) => i % 3 === 0).slice(0, 4);
-  return picked.length ? `…${picked.join('… ')}…` : '';
+/**
+ * A quién va una línea, visto por `reader`: «ti», «todos», «Isgral» o «Isgral y a ti» (la web pone «a » delante).
+ * Vacío si no lleva `to`.
+ */
+export function toLabel(w: Engine['world'], reader: Id, to: LineTo | undefined, locationId: Id): string {
+  if (!to) return '';
+  if (to === 'all') return 'todos';
+  const ids = lineTargets(to, presentIds(w, locationId)).filter((id) => w.characters.has(id));
+  const names = ids.filter((id) => id !== reader).map((id) => pcName(w, reader, w.character(id)));
+  if (ids.includes(reader)) names.push('ti');
+  return names.join(' y a ');
+}
+
+/** ¿Lo leen varios? Entonces cada frase del NPC dice a quién va; en una charla a solas no hace falta. */
+function manyReaders(e: GameEvent): boolean {
+  return Array.isArray(e.payload['group']) || (typeof e.payload['audience'] === 'string' && e.payload['audience'] !== 'actor');
 }
 
 /**
@@ -1376,6 +1394,17 @@ function witnessMessage(m: WebMessage, d: Delivery, engine: Engine): WebMessage 
     m.offer = { id: offer.id, label: offer.label, open };
   }
   reactionView(m, e, w, reader);
+  const raw = e.payload['lines'];
+  // Lo que cierra el máster y este no comparte (audience.ts): solo el aviso de una línea y, si es una charla, «Unirme».
+  if (viewOf(e, reader) === 'notice') {
+    const npcLine = Array.isArray(raw) ? (raw as DialogueLine[]).find((l) => l.speaker === 'npc' && l.npc_id && w.npcs.has(l.npc_id)) : undefined;
+    const talkNpc = npcLine ? w.npcs.get(npcLine.npc_id!)! : typeof e.payload['npc_id'] === 'string' ? w.npcs.get(e.payload['npc_id'] as Id) : undefined;
+    if (talkNpc && talkNpc.status === 'alive' && MASTER_TYPES.has(e.action_type)) {
+      const label = w.characters.get(reader)?.knows.includes(talkNpc.id) ? talkNpc.name : descriptorOf(w, talkNpc.id);
+      m.join = { npc: talkNpc.id, label: `Unirme a la conversación con ${label}` };
+    }
+    return m;
+  }
   // Un aviso (llega, se va, coge algo, espera su turno…) no lleva parlamentos ni «Responder a…».
   if (m.notice) return m;
   const say = e.payload['say'] as { to: Id | null } | undefined;
@@ -1385,22 +1414,9 @@ function witnessMessage(m: WebMessage, d: Delivery, engine: Engine): WebMessage 
   if ((SAY_TYPES.has(e.action_type) && heardWell) || (MASTER_TYPES.has(e.action_type) && target === reader)) {
     if (!say?.to || say.to === reader || target === reader) m.reply_to = { id: actor.id, name: pcName(w, reader, actor) };
   }
-  const raw = e.payload['lines'];
-  // Una conversación ajena con un NPC: quien la oye lo sabe («Escuchas») y puede unirse en cualquier momento.
-  const npcLine = Array.isArray(raw) ? (raw as DialogueLine[]).find((l) => l.speaker === 'npc' && l.npc_id && w.npcs.has(l.npc_id)) : undefined;
-  const talkNpc = npcLine ? w.npcs.get(npcLine.npc_id!)! : typeof e.payload['npc_id'] === 'string' ? w.npcs.get(e.payload['npc_id'] as Id) : undefined;
-  const inGroup = Array.isArray(e.payload['group']) && (e.payload['group'] as Id[]).includes(reader);
-  if (talkNpc && MASTER_TYPES.has(e.action_type) && !inGroup && (heardWell || delivered?.sound === 'vague')) {
-    const me = w.characters.get(reader);
-    const label = me && me.knows.includes(talkNpc.id) ? talkNpc.name : descriptorOf(w, talkNpc.id);
-    m.overheard = { npc: label, join: `Unirme a la conversación con ${label}`, well: heardWell };
-    // Desde otro punto se oyen trozos sueltos, no la conversación.
-    if (!heardWell && Array.isArray(raw)) {
-      const bits = fragmentsOf((raw as DialogueLine[]).map((l) => l.text));
-      if (bits) m.text = `Desde donde estás oyes trozos sueltos de la conversación: «${bits}».`;
-    }
-  }
-  if (!heardWell || !Array.isArray(raw) || !raw.length) return m;
+  // En la charla (audience_ids) o aquel a quien se dirige el actor: lee las frases enteras, cada una con a quién va.
+  const party = viewOf(e, reader) === 'party';
+  if ((!heardWell && !party) || !Array.isArray(raw) || !raw.length) return m;
   const toName = say?.to ? (say.to === reader ? 'ti' : (() => { const t = w.characters.get(say.to!); return t ? pcName(w, reader, t) : ''; })()) : '';
   const lines: WebLine[] = [];
   const kept: DialogueLine[] = [];
@@ -1411,7 +1427,8 @@ function witnessMessage(m: WebMessage, d: Delivery, engine: Engine): WebMessage 
     else if (l.speaker === 'npc' && l.npc_id && w.npcs.has(l.npc_id)) {
       const npc = w.npcs.get(l.npc_id)!;
       const known = w.characters.get(reader)?.knows.includes(npc.id) ?? false;
-      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text });
+      const to = manyReaders(e) ? toLabel(w, reader, l.to, e.location_id) : '';
+      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(to ? { to } : {}) });
     } else continue;
     kept.push(l);
   }
@@ -1451,17 +1468,13 @@ function novelOf(e: GameEvent, engine: Engine, characterId: Id, text: string): {
       continue;
     }
     if ((l.speaker === 'actor' || l.speaker === 'pc') && me) lines.push({ speaker: 'actor', id: me.id, name: me.name, text: l.text, ...(to ? { to: pcName(w, me.id, to) } : {}) });
-    else if (l.speaker === 'npc' && l.npc_id && l.to && w.characters.has(l.to)) {
-      const npc = w.npcs.get(l.npc_id);
-      if (!npc) continue;
-      const known = me?.knows.includes(npc.id) ?? false;
-      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, to: l.to === characterId ? 'ti' : pcName(w, characterId, w.character(l.to)) });
-    }
     else if (l.speaker === 'npc' && l.npc_id) {
       const npc = w.npcs.get(l.npc_id);
       if (!npc) continue;
       const known = me?.knows.includes(npc.id) ?? false;
-      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text });
+      // A quién va, cuando el turno lo leen varios (turno compartido, charla de grupo o algo para todos).
+      const to = manyReaders(e) ? toLabel(w, characterId, l.to, e.location_id) : '';
+      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(to ? { to } : {}) });
     } else continue;
     kept.push(l);
   }

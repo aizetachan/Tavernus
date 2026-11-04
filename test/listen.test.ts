@@ -13,7 +13,7 @@ import { MemoryRepository } from '../src/persistence/memory.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
 /** Máster falso: Brenna contesta con una línea. Apunta las llamadas. */
-function fakeMaster(engine: Engine) {
+function fakeMaster(engine: Engine, opts: { to?: string } = {}) {
   const calls: string[] = [];
   const m: MasterLike = {
     async resolve(actor, text) {
@@ -22,7 +22,7 @@ function fakeMaster(engine: Engine) {
       engine.world.npc('npc_brenna').talking_to = { character_id: actor.id, since_game_s: engine.gameNow() };
       return {
         ok: true, usage: {}, calls: [], context: '', model: 'falso',
-        closed: { narration_private: `«${text}», le dices. Brenna seca un vaso. «Poca cosa.»`, observable: `${actor.name} le habla a Brenna en la barra.`, observable_vague: 'Alguien habla en la barra.', loudness: 1, tags: ['social'], suggested_actions: [], requires_roll: null, npc_id: 'npc_brenna', lines: [{ speaker: 'actor', text }, { speaker: 'npc', npc_id: 'npc_brenna', text: 'Poca cosa. El pueblo anda callado.' }] },
+        closed: { narration_private: `«${text}», le dices. Brenna seca un vaso. «Poca cosa.»`, observable: `${actor.name} le habla a Brenna en la barra.`, observable_vague: 'Alguien habla en la barra.', loudness: 1, tags: ['social'], suggested_actions: [], requires_roll: null, npc_id: 'npc_brenna', lines: [{ speaker: 'actor', text }, { speaker: 'npc', npc_id: 'npc_brenna', text: 'Poca cosa. El pueblo anda callado.', ...(opts.to ? { to: opts.to } : {}) }] },
       };
     },
   };
@@ -31,14 +31,14 @@ function fakeMaster(engine: Engine) {
 }
 
 /** Kael habla con Brenna en la barra; Mira llega a la misma barra. Conectados. */
-async function bar() {
+async function bar(opts: { to?: string } = {}) {
   const time = fakeTime();
   const { engine } = await bootEngine(time);
   const kael = engine.world.character('ch_kael');
   const mira = engine.world.character('ch_mira');
   mira.location = { type: 'spot', id: 'sp_tab_barra' };
   engine.setPresence(kael.id, true); engine.setPresence(mira.id, true);
-  const calls = fakeMaster(engine);
+  const calls = fakeMaster(engine, opts);
   const got: Delivery[] = [];
   engine.onDelivery((d) => got.push(d));
   const to = (id: string) => got.filter((d) => d.character_id === id);
@@ -64,14 +64,21 @@ describe('1. los PJ se conocen siempre por su nombre', () => {
 });
 
 describe('2a. sin estilo indirecto duplicado', () => {
-  it('quien oye la frase literal no recibe además «le habla a la tabernera»', async () => {
-    const { engine, kael, mira, to } = await bar();
+  it('quien está en la charla (Brenna le habla también a Mira) lee la frase literal sin «le habla a la tabernera»', async () => {
+    const { engine, kael, mira, to } = await bar({ to: 'all' });
     await engine.act(kael.id, '¿Cómo estás, Brenna? ¿Qué se cuenta el pueblo?');
     const d = to(mira.id).at(-1)!;
-    expect(d.text).toBe('Kael le habla a Brenna en la barra.');
     const m = toMessage(d, engine);
-    expect(m.lines?.map((l) => [l.speaker, l.text])).toEqual([['pc', '¿Cómo estás, Brenna? ¿Qué se cuenta el pueblo?'], ['npc', 'Poca cosa. El pueblo anda callado.']]);
+    expect(m.lines?.map((l) => [l.speaker, l.text, l.to])).toEqual([['pc', '¿Cómo estás, Brenna? ¿Qué se cuenta el pueblo?', undefined], ['npc', 'Poca cosa. El pueblo anda callado.', 'todos']]);
     expect(m.prose ?? '').not.toContain('le habla');
+  });
+
+  it('quien no está en la charla solo lee el aviso de una línea, sin las frases', async () => {
+    const { engine, kael, mira, to } = await bar();
+    await engine.act(kael.id, '¿Cómo estás, Brenna? ¿Qué se cuenta el pueblo?');
+    const m = toMessage(to(mira.id).at(-1)!, engine);
+    expect(m.notice?.text).toBe('Kael le habla a Brenna en la barra');
+    expect(m.lines).toBeUndefined();
   });
 });
 
@@ -120,8 +127,8 @@ describe('2c. el que habla recibe un aviso corto', () => {
   });
 });
 
-describe('2d-2e. quien espera escucha', () => {
-  it('en el mismo punto: «Escuchas», las frases como parlamentos, «Unirme» siempre; también el segundo intercambio; al acabar, «ya puede atenderte»', async () => {
+describe('2d-2e. quien espera ve que hablan, no lo que dicen', () => {
+  it('en el mismo punto: el aviso de una línea y «Unirme» siempre, sin las frases; también el segundo intercambio; al acabar, «ya puede atenderte»', async () => {
     const { engine, kael, mira, to } = await bar();
     await engine.act(kael.id, 'Hola, Brenna');
     await engine.act(mira.id, 'Esperar turno con Brenna');
@@ -129,15 +136,16 @@ describe('2d-2e. quien espera escucha', () => {
     const heard = to(mira.id).filter((d) => d.event.action_type === 'master');
     expect(heard).toHaveLength(2);
     const m = toMessage(heard[1]!, engine);
-    expect(m.overheard).toEqual({ npc: 'Brenna', join: 'Unirme a la conversación con Brenna', well: true });
-    expect(m.lines?.[0]).toMatchObject({ speaker: 'pc', text: '¿Y el regidor?' });
+    expect(m.notice?.text).toBe('Kael le habla a Brenna en la barra');
+    expect(m.join).toEqual({ npc: 'npc_brenna', label: 'Unirme a la conversación con Brenna' });
+    expect(m.lines).toBeUndefined();
     // El máster sabe quién escucha.
     expect(actionContext(engine, kael, 'seguir hablando')).toContain('## Quién oye al actor\nMira (lo oye todo)');
     await engine.act(kael.id, 'dejar la conversación');
     expect(to(mira.id).at(-1)!.text).toBe('Brenna ya puede atenderte.');
   });
 
-  it('en otro punto del local, solo trozos sueltos según el oído', async () => {
+  it('en otro punto del local, el aviso según lo que percibe, con «Unirme»', async () => {
     const { engine, kael, mira, to } = await bar();
     // Un punto desde el que Mira oye a medias la barra (si no lo hay, el local se vuelve más ruidoso).
     const spots = engine.world.spotsOf('loc_taberna').filter((s) => s.id !== 'sp_tab_barra');
@@ -150,8 +158,9 @@ describe('2d-2e. quien espera escucha', () => {
     expect(spot).toBeTruthy();
     await engine.act(kael.id, 'Hola, Brenna, ¿qué se cuenta el pueblo?');
     const m = toMessage(to(mira.id).at(-1)!, engine);
-    expect(m.overheard?.well).toBe(false);
-    expect(m.text).toMatch(/^Desde donde estás oyes trozos sueltos de la conversación: «…/);
+    // Le ve hablar (la vista llega entera aunque el oído no): el aviso, nunca trozos de lo que se dice.
+    expect(m.notice?.text).toBe('Kael le habla a Brenna en la barra');
+    expect(m.join?.npc).toBe('npc_brenna');
     expect(m.lines).toBeUndefined();
   });
 });

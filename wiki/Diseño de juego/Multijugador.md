@@ -82,6 +82,16 @@ Antes, si un jugador agarraba a otro y se lo llevaba a la taberna, el máster lo
 | Hablar con un NPC ocupado | «Esperar turno» o «Unirme a la conversación». En grupo, una sola respuesta para todos |
 | Escena tensa | Rondas: el máster resuelve la ronda entera. Ver [[Combate]] |
 
+### Quién lee qué en la sala
+
+| Qué pasa | Quién lo lee entero | El resto de la sala |
+|---|---|---|
+| Lo tuyo (miras, rebuscas, hablas con un NPC a solas) | Tú | Un aviso gris de una línea: «Isgral habla con Hugo en voz baja», con «Unirme a la conversación» |
+| Una charla con un NPC | Los que están en ella y a quien el NPC le habla. Cada frase dice a quién va: «a ti», «a Isgral», «a todos» | El aviso de una línea |
+| Algo que afecta a todos (empieza una pelea, alguien entra, un estruendo, el NPC se vuelve hacia el grupo) | Todos, con la misma narración | Nadie se queda fuera; las charlas sueltas se cortan y el NPC atiende al grupo |
+
+No hay «escuchar» una charla ajena: o te unes (el NPC lo sabe) o lo intentas a escondidas como una acción más.
+
 ## Desconexiones
 
 El mundo es abierto: el reloj sigue mientras alguien juegue y cada uno entra cuando quiere. Para quien está fuera no pasa el tiempo: ver [[Tiempo y viaje#Si te desconectas]].

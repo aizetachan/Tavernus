@@ -12,6 +12,7 @@ import { positionOf, type Position } from './movement.js';
 import { witnesses } from './perception.js';
 import { maskUnknownNames } from './narrate.js';
 import { secondPerson } from './party.js';
+import { viewOf } from './audience.js';
 import type { World } from './world.js';
 
 export interface EmitInput {
@@ -185,6 +186,8 @@ export function readerText(world: World, e: GameEvent, characterId: Id, level: P
   // Turno compartido (conversación de grupo o ronda, scene.ts): todos leen la misma narración, escrita para todos.
   const group = e.payload['group'];
   if (Array.isArray(group) && group.includes(characterId)) return maskUnknownNames(world, characterId, e.narration_private);
+  // Algo que afecta a todos los presentes (audience.ts): la misma narración para todos.
+  if (viewOf(e, characterId) === 'shared') return maskUnknownNames(world, characterId, e.narration_private);
   const target = e.payload['target_character_id'];
   const own = e.payload['observable_target'];
   let text = level === 'full' && target === characterId && typeof own === 'string' && own.trim() ? own : textFor(e, characterId, level);
