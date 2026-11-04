@@ -8,8 +8,12 @@
  * `payload: { notice: 'all' }` (aviso para todos) u `'others'` (aviso para los
  * testigos; el actor lo lee como narración). Sin marca decide la tabla por
  * `action_type`. La web lo pinta con `noticeOf` (src/adapters/web/notice.ts).
+ *
+ * Lo que cierra el máster es aviso para quien está en la sala y no lo comparte
+ * (audience.ts, `viewOf` = notice): «Isgral habla con Hugo en voz baja».
  */
 
+import { viewOf } from './audience.js';
 import type { GameEvent, Id } from './model.js';
 
 /** A quién le llega como aviso: a todos, solo a los testigos o solo al actor. */
@@ -60,6 +64,8 @@ function scopeOf(e: Classifiable): NoticeScope | null {
  * «Llegas a la barra.» a secas, o lo que ha costado el viaje, es aviso.
  */
 export function threadKind(e: Classifiable, readerId: Id | null, text?: string): ThreadKind {
+  // Lo que cierra el máster y este PJ no comparte (audience.ts): un aviso de una línea («Isgral habla con Hugo»).
+  if (viewOf(e, readerId) === 'notice') return 'notice';
   const scope = scopeOf(e);
   if (!scope) return 'narration';
   const isActor = readerId !== null && readerId === e.actor_id;

@@ -70,7 +70,7 @@ flowchart LR
 
 ## Lo que ven los testigos
 
-- Cada suceso tiene dos textos: el del **actor** y el **observable** para los demás.
+- Cada suceso tiene dos textos: el del **actor** y el **observable** para los demás. Quien está en la sala y no participa lo lee como un aviso de una línea («Isgral habla con Hugo en voz baja»); lo que se dicen solo lo leen los de la charla. Ver [[Multijugador#Quién lee qué en la sala]].
 - Los testigos ven la acción física y lo dicho en voz alta. Nunca las tiradas, lo que el otro descubre ni sus secretos.
 - Si Mira encuentra una trampilla, tú ves «Mira palpa la pared», no «Mira encuentra una trampilla».
 - Los nombres que tu personaje no conoce se enmascaran: «un humano con pinta de pícaro habla con la tabernera».

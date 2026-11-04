@@ -18,6 +18,7 @@ import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswe
 import { witnesses } from './perception.js';
 import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, readsAsAccept } from './reactions.js';
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
+import { settleAudience } from './audience.js';
 import { bounceOff, parseCrossing } from './barrier.js';
 import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, listEs, maskUnknownNames, whereAmI, whoIsHere } from './narrate.js';
 import { encounterChance, parseInfo, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
@@ -1503,6 +1504,10 @@ export class Engine {
     }
     const k = out.closed;
     if (k.requires_roll && decisive?.speed === 'fast' && k.requires_roll.advantage === 'none') k.requires_roll.advantage = 'advantage';
+    // Quién lee qué en la sala (audience.ts): `to` de cada línea y `audience` del cierre, validados contra el estado.
+    const seen = settleAudience(this.world, c, k, this.nowFor(c));
+    k.lines = seen.lines;
+    k.observable = seen.observable;
     const payload: Record<string, unknown> = {
       observable_vague: k.observable_vague ?? undefined,
       suggested_actions: k.suggested_actions,
@@ -1512,6 +1517,7 @@ export class Engine {
       ...(k.decisive ? { decisive: { threat: k.decisive.threat, window_s: Engine.DECISIVE_WINDOW_S } } : {}),
       ...(k.npc_id ? { npc_id: k.npc_id } : {}),
       ...(k.lines?.length ? { lines: k.lines } : {}),
+      audience: seen.audience, ...(seen.audience_ids.length ? { audience_ids: seen.audience_ids } : {}),
       // Otro jugador al que se dirige: lo lee en segunda persona y recibe «Responder a…» (party.ts).
       ...(k.target_character_id ? { target_character_id: k.target_character_id, ...(k.observable_target ? { observable_target: k.observable_target } : {}) } : {}),
       // Tools de escritura que fallaron (el cierre lleva tag tool_failed) y acercamiento que hizo el motor.
@@ -1524,7 +1530,7 @@ export class Engine {
     const event = this.events.emit({
       actor_id: c.id, action_type: actionType, input_text: intro || scene ? null : share ? share.inputs[c.id] ?? text : text,
       narration_private: k.narration_private, observable: k.observable, loudness: k.loudness, tags: ['master', ...k.tags, ...(share ? ['shared'] : [])], payload,
-      ...(share ? { also_to: share.ids.filter((id) => id !== c.id) } : {}),
+      also_to: [...new Set([...(share ? share.ids : []), ...seen.audience_ids])].filter((id) => id !== c.id),
     }, this.stampFor(c));
     // Lo que el máster pidió a otro jugador (request_reaction): la petición sale después de su narración.
     this.announcePending(c.id);

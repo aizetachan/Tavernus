@@ -10,6 +10,7 @@ import { GameManager, type MasterFactory } from '../src/games/manager.js';
 import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
 import type { AccessOptions } from '../src/adapters/web/access.js';
 import type { MasterLike } from '../src/engine/engine.js';
+import type { LogEventInput } from '../src/ai/tools.js';
 import { spawnItem } from '../src/engine/inventory.js';
 import { bootEngine, fakeTime, readSse } from './helpers.js';
 
@@ -484,6 +485,45 @@ describe('varios a la vez en la web', () => {
     // Lia no sabe cómo se llama Brenna: la nombra por su oficio.
     expect(pres).toContain('Tor está aquí, hablando con la tabernera');
     await again.body!.cancel();
+    await liaStream.body!.cancel();
+  });
+});
+
+describe('quién lee qué en la web (audience.ts)', () => {
+  it('Tor habla con Brenna: Lia lee un aviso con «Unirme» y ninguna frase; Brenna se vuelve hacia los dos: la misma narración, «a todos»', async () => {
+    await start();
+    const { game, character_id: lia } = await games.create({ name: 'Herrería', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
+    const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
+    const g = `?game=${game.slug}`;
+    const engine = await games.open(game.slug);
+    const brenna = engine.world.npc('npc_brenna');
+    for (const id of [lia, tor]) engine.world.character(id).location = { type: 'spot', id: brenna.location.id };
+    // Máster con guion: lo que toca en cada paso; Brenna pasa a hablar con quien actúa (como tools.ts).
+    let close: Partial<LogEventInput> = {};
+    engine.attachMaster({
+      async resolve(actor) {
+        brenna.talking_to = { character_id: actor.id, since_game_s: engine.nowFor(actor) };
+        return { ok: true, usage: {}, calls: [], context: '', model: 'guion', closed: { narration_private: '', observable: null, observable_vague: null, loudness: 1, tags: ['social'], suggested_actions: [], requires_roll: null, decisive: null, npc_id: brenna.id, ...close } };
+      },
+    });
+    const act = (character: string, text: string) => fetch(`${base}/api/act${g}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ character, text }) }).then((r) => r.json());
+    const liaStream = await fetch(`${base}/api/stream${g}&character=${lia}`);
+    await readSse(liaStream, (t) => t.includes('event: history'));
+
+    close = { narration_private: '«¿Tienes un momento?» Brenna deja el trapo.', observable: 'Tor habla con Brenna en voz baja.', lines: [{ speaker: 'actor', text: '¿Tienes un momento?' }, { speaker: 'npc', npc_id: brenna.id, text: 'Para ti, siempre.' }] };
+    await act(tor, 'Hablar con Brenna');
+    const quiet = await readSse(liaStream, (t) => t.includes('en voz baja'));
+    // Lia no sabe cómo se llama: «la tabernera».
+    expect(quiet).toContain('"notice":{"text":"Tor habla con la tabernera en voz baja"}');
+    expect(quiet).toContain('"join":{"npc":"npc_brenna","label":"Unirme a la conversación con la tabernera"}');
+    expect(quiet).not.toContain('Para ti, siempre');
+
+    close = { narration_private: 'Brenna golpea la barra con el trapo y se vuelve hacia Tor y Lia:', observable: 'Brenna se vuelve hacia todos.', audience: 'present', lines: [{ speaker: 'npc', npc_id: brenna.id, text: 'Fuera de mi barra los dos.', to: 'all' }] };
+    await act(tor, 'Le guiño un ojo a Brenna');
+    const loud = await readSse(liaStream, (t) => t.includes('Fuera de mi barra'));
+    expect(loud).toContain('"to":"todos"');
+    expect(loud).toContain('golpea la barra con el trapo');
+    expect(loud).not.toContain('"join"');
     await liaStream.body!.cancel();
   });
 });

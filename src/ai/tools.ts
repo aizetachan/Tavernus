@@ -34,7 +34,8 @@ import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
 import { addScheduledEvent, listSchedule, RECURRENCES } from '../engine/schedule.js';
 import { NPC_TASK_KINDS, orderLine, orderOf, promisedMove, promisedMoveRejection, setNpcOrder, type NpcTaskKind } from '../engine/npcorders.js';
 import { characterFacts, recordFact } from '../engine/facts.js';
-import type { DialogueLine } from '../engine/moments.js';
+import type { DialogueLine, LineTo } from '../engine/moments.js';
+import { AUDIENCES, presentIds, type Audience } from '../engine/audience.js';
 import { openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
 import { inventedPlaces } from '../engine/places.js';
 import { money } from '../engine/money.js';
@@ -290,7 +291,8 @@ export const MASTER_TOOLS: Tool[] = [
 
   tool('log_event', 'CIERRE OBLIGATORIO de cada acción. Registra lo ocurrido y lo entrega a cada personaje según lo que percibe. Tras llamarlo, termina.', {
     narration_private: str('Lo que ve el actor. Segunda persona. Breve.'),
-    observable: nstr('Lo que ve un testigo cercano con detalle completo, en tercera persona con el nombre del actor. null si no hay nada observable.'),
+    observable: nstr('Lo que ve quien está en la sala y no participa: UNA línea de aviso en tercera persona con el nombre del actor («Isgral habla con Hugo en voz baja», «Maikol sale por la puerta»). Nunca la conversación ni lo que se dice. null si no hay nada observable.'),
+    audience: nstr('Quién lee el turno entero: "actor" (lo suyo; los demás de la sala solo leen observable como aviso), "group" (la charla con un NPC: la leen los que están en ella y a quien el NPC habla en lines con to) o "present" (afecta a todos los presentes: empieza una pelea, alguien entra, un estruendo, el NPC se vuelve hacia el grupo; entonces narration_private es la MISMA narración para todos, en tercera persona y con lo que hace cada uno). El servidor lo valida contra quién está.'),
     observable_vague: nstr('Lo mismo para quien solo distingue una figura, sin nombre ni detalle. null si no aplica.'),
     loudness: num('Volumen: 0.15 susurro, 1 normal, 5 grito, 15 estruendo'),
     tags: str('Etiquetas separadas por comas: social, exploration, combat, milestone…'),
@@ -316,7 +318,7 @@ export const MASTER_TOOLS: Tool[] = [
       description: 'Parlamentos literales de esta acción, en orden (modo novela). speaker "npc" con su npc_id, o "actor" (npc_id null). text: solo las palabras dichas, sin comillas ni acotaciones. null si nadie habla.',
       items: {
         type: 'object',
-        properties: { speaker: { type: 'string', enum: ['npc', 'actor', 'pc'] }, npc_id: { type: ['string', 'null'] }, text: { type: 'string' }, character_id: { type: ['string', 'null'], description: 'Solo en conversación de grupo o ronda: speaker "pc" con el ID del PJ que habla.' }, to: { type: ['string', 'null'], description: 'Solo en conversación de grupo: ID del PJ al que responde esta línea del NPC.' } },
+        properties: { speaker: { type: 'string', enum: ['npc', 'actor', 'pc'] }, npc_id: { type: ['string', 'null'] }, text: { type: 'string' }, character_id: { type: ['string', 'null'], description: 'Solo en conversación de grupo o ronda: speaker "pc" con el ID del PJ que habla.' }, to: { type: ['string', 'array', 'null'], items: { type: 'string' }, description: 'Solo en líneas de NPC: a quién habla. ID de un PJ, lista de IDs o "all" (todos los PJ presentes). null: a quien lleva la charla con él.' } },
         required: ['speaker', 'npc_id', 'text'],
         additionalProperties: false,
       },
@@ -423,6 +425,8 @@ export interface LogEventInput {
   /** Otro jugador al que se dirige la acción y lo que percibe él, en segunda persona (party.ts). */
   target_character_id?: string | null;
   observable_target?: string | null;
+  /** Quién lee el turno entero (audience.ts): lo declara el máster y lo valida el motor. Sin declarar, `actor`. */
+  audience?: Audience | null;
 }
 
 /** ¿Hay en la sala del actor un NPC hablando con otro PJ? */
@@ -452,7 +456,7 @@ function sharedInputs(engine: Engine, actorId: string): Map<string, string | nul
 export const INTENT_LINE = /^(?:hablar|hablarle|preguntar|preguntarle|decir|decirle|contar|contarle|saludar|saludarle|responder|responderle)\b/i;
 
 /** Parlamentos válidos del cierre: hablante conocido, texto limpio; como mucho 12. Acepta lista o JSON en texto. */
-export function parseLines(raw: unknown, fallbackNpc: string | null, isNpc: (id: string) => boolean, isPc: (id: string) => boolean = () => false): DialogueLine[] {
+export function parseLines(raw: unknown, fallbackNpc: string | null, isNpc: (id: string) => boolean, isPc: (id: string) => boolean = () => false, isAddressee: (id: string) => boolean = isPc): DialogueLine[] {
   let list: unknown = raw;
   if (typeof list === 'string') { try { list = JSON.parse(list); } catch { return []; } }
   if (!Array.isArray(list)) return [];
@@ -466,12 +470,19 @@ export function parseLines(raw: unknown, fallbackNpc: string | null, isNpc: (id:
     else if (r['speaker'] === 'pc' && typeof r['character_id'] === 'string' && isPc(r['character_id'])) out.push({ speaker: 'pc', character_id: r['character_id'], text });
     else if (r['speaker'] === 'npc') {
       const id = typeof r['npc_id'] === 'string' && isNpc(r['npc_id']) ? r['npc_id'] : fallbackNpc;
-      const to = typeof r['to'] === 'string' && isPc(r['to']) ? r['to'] : null;
-      if (id) out.push({ speaker: 'npc', npc_id: id, text, ...(to ? { to } : {}) });
+      if (id) { const to = lineTo(r['to'], isAddressee); out.push({ speaker: 'npc', npc_id: id, text, ...(to ? { to } : {}) }); }
     }
     if (out.length >= 12) break;
   }
   return out;
+}
+
+/** `to` de una línea de NPC: un PJ, varios (lista o «a,b») o `all`; lo que no sea un PJ válido, fuera. */
+function lineTo(raw: unknown, isPc: (id: string) => boolean): LineTo | null {
+  if (raw === 'all' || raw === 'todos') return 'all';
+  const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : [];
+  const ids = [...new Set(list.map((x) => String(x).trim()).filter((x) => x && isPc(x)))];
+  return ids.length === 0 ? null : ids.length === 1 ? ids[0]! : ids;
 }
 
 /** PJs que oyen al actor con detalle (banda full de oído). */
@@ -1669,7 +1680,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const closingNpc = input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null;
       // «Hablar con Aren» es lo que quiere hacer, no algo que diga: fuera de lines.
       const sharedIds = sharedWith(engine, actor.id);
-      const parsedLines = parseLines(input['lines'], closingNpc, (id) => world.npcs.has(id), (id) => sharedIds.includes(id))
+      // `to` puede ser cualquier PJ de la sala (el motor lo valida al cerrar, audience.ts); hablar como «pc», solo los del turno compartido.
+      const parsedLines = parseLines(input['lines'], closingNpc, (id) => world.npcs.has(id), (id) => sharedIds.includes(id), (id) => presentIds(world, here()).includes(id))
         .map((l) => (l.speaker === 'pc' && l.character_id === actor.id ? { speaker: 'actor' as const, text: l.text } : l))
         .filter((l) => (l.speaker !== 'actor' || !INTENT_LINE.test(l.text)) && !isPlaceholder(l.text));
       // Turno compartido: lo que dice cada PJ sale de lo que escribió su jugador. Una frase que no está ahí
@@ -1733,6 +1745,7 @@ ${forcedTail}` : ''),
         decisive: input['decisive_threat'] ? { threat: cleanText(s('decisive_threat')), npc_id: input['decisive_npc_id'] ? s('decisive_npc_id') : null } : null,
         npc_id: closingNpc,
         lines: closingLines,
+        audience: AUDIENCES.includes(s('audience') as Audience) ? s('audience') as Audience : null,
         ...(targetPc ? { target_character_id: targetPc, observable_target: input['observable_target'] == null ? null : unsay(tidy(s('observable_target'))) || null } : {}),
       };
       return { ok: true, closed: true };

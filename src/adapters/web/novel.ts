@@ -286,7 +286,8 @@ export const NOVEL_STYLE = String.raw`
   .nv-av img.on { opacity: 1; }
   /* Avisos fuera de la ficción (tiradas, progreso, consultas): centrados, discretos. */
   .msg.system { align-self: center; max-width: min(560px, 100%); margin: 8px 0 2px; }
-  .overheard { align-self: flex-start; margin: 10px 0 -4px 42px; font-size: 12px; font-style: italic; color: var(--muted); }
+  /* «Unirme a la conversación» bajo el aviso de una charla ajena (audience.ts). */
+  .actions.join { align-self: center; justify-content: center; margin-top: 2px; }
   .msg.system .body { padding: 8px 12px; border-radius: 14px; font-size: 12.5px; }
   /* Imágenes del narrador (escena, retrato, objeto…): bajo su avatar, como una foto en el chat. */
   .msg.scene, .msg.moment { margin: 4px 0 0 42px; animation: nv-in .5s ease-out; }
@@ -728,18 +729,21 @@ export const NOVEL_JS = String.raw`
       d.textContent = '⏳ Tienes ' + m.decisive_s + ' segundos para reaccionar. Si no, la amenaza se cumple.';
       (main.querySelector('.col') || main).appendChild(d);
     }
-    if (m.overheard) {
-      // Conversación ajena: «Escuchas» encima y el botón para unirse en cualquier momento.
-      var tag = document.createElement('div');
-      tag.className = 'overheard';
-      tag.textContent = m.overheard.well ? 'Escuchas la conversación con ' + m.overheard.npc : 'Oyes de lejos la conversación con ' + m.overheard.npc;
-      var first = before ? before.nextElementSibling : log.firstElementChild;
-      if (first) log.insertBefore(tag, first);
+    if (m.join) {
+      // Charla ajena en la sala: su aviso de una línea y, debajo, el botón para unirse. Solo el último aviso de esa
+      // charla lleva botón, y el mismo aviso seguido («Isgral habla con Hugo» tres veces) se queda en uno.
+      log.querySelectorAll('.actions.join').forEach(function (old) {
+        if (old.getAttribute('data-npc') !== m.join.npc) return;
+        var prev = old.previousElementSibling;
+        if (prev && prev !== main && prev.classList.contains('notice') && main && prev.textContent === main.textContent && old.nextElementSibling === main) prev.remove();
+        old.remove();
+      });
       var jr = document.createElement('div');
-      jr.className = 'actions party';
+      jr.className = 'actions party join';
+      jr.setAttribute('data-npc', m.join.npc);
       var jb = document.createElement('button');
-      jb.type = 'button'; jb.textContent = m.overheard.join;
-      jb.onclick = function () { jb.classList.add('chosen'); jb.disabled = true; act(m.overheard.join); };
+      jb.type = 'button'; jb.textContent = m.join.label;
+      jb.onclick = function () { jb.classList.add('chosen'); jb.disabled = true; act(m.join.label); };
       jr.appendChild(jb);
       host.parentNode.insertBefore(jr, host.nextSibling);
       if (!live) jb.disabled = true;
