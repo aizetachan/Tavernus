@@ -559,10 +559,10 @@ describe('varios a la vez en la web', () => {
     // Su propia acción como entrada; la del otro, como línea suya delante.
     expect(toMira.input).toBe('contar mis monedas');
     expect(toMira.lines!.find((l) => l.speaker === 'pc')).toMatchObject({ id: kael.id, text: 'preguntar a Brenna por el pozo' });
-    // La línea a uno lleva «a ti» o su nombre; la de todos, sin destinatario.
+    // La línea a uno lleva «a ti» o su nombre; la de todos, «a todos» (como en «Quién lee qué en la sala»).
     expect(toKael.lines!.find((l) => l.text === 'En la plaza.')!.to).toBe('ti');
     expect(toMira.lines!.find((l) => l.text === 'En la plaza.')!.to).toBe('Kael');
-    expect(toMira.lines!.find((l) => l.text === 'Aquí se paga antes.')!.to).toBeUndefined();
+    expect(toMira.lines!.find((l) => l.text === 'Aquí se paga antes.')!.to).toBe('todos');
   });
 });
 
