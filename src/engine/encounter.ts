@@ -2,16 +2,28 @@
  * Encuentro en curso en una localización: lo que la web enseña como combate
  * (cabecera, turnos, avisos de inicio y fin). Sin estado propio: sale del log
  * de eventos y del mundo, así que es el mismo para todos los jugadores del
- * sitio y sobrevive a un reinicio.
+ * sitio y sobrevive a un reinicio (partida del 04-11-2026: un robo pillado y un
+ * forcejeo abrían y cerraban «combates» sin que nadie pegara a nadie).
  *
- *   - Hay combate si algún evento de combate (etiqueta `combat`, un ataque
- *     resuelto o daño aplicado por el máster) cae dentro de COMBAT_WINDOW_S de
- *     juego, como la escena tensa del motor (scene.ts, Engine.recentTags).
- *   - Empieza en el primero de la cadena de eventos de combate sin huecos
- *     mayores que esa ventana; acaba cuando pasa la ventana sin ninguno, cuando
- *     caen todos los NPC del combate (y no hubo golpes entre PJ) o cuando caen
- *     todos los PJ que pelearon, tras COMBAT_SETTLE_S para que se vea el golpe
- *     final.
+ *   - Hay combate solo con hostilidad real (`hostilityOf`): un ataque resuelto
+ *     (tirada con `payload.attack`, tool `attack`, reacción `attack` entre
+ *     jugadores), daño a un NPC (o de un conjuro a otro PJ), un incidente
+ *     (crime.ts) en el que alguien responde `fight` o una resistencia a la
+ *     autoridad. La etiqueta `combat` que pone el máster no abre nada: es
+ *     tensión (scene.ts), como `threat`. Las tiradas de sigilo, Juego de manos o
+ *     sociales tampoco.
+ *   - Sigue abierto mientras quede un hostil: un NPC vivo con bloque de combate
+ *     y actitud `hostile` hacia un PJ del sitio, o golpes entre PJ. Acaba en
+ *     cuanto no queda ninguno (caídos, muertos, idos del sitio o calmados con
+ *     npc_trust `calm` tras una disculpa, una persuasión o una intimidación),
+ *     tras COMBAT_SETTLE_S desde el último golpe para que se vea; también
+ *     cuando caen todos los PJ que pelearon. COMBAT_WINDOW_S sin un solo golpe
+ *     es solo la red de seguridad (salvo con una ronda abierta).
+ *   - Un encuentro empieza en el primer evento hostil de su cadena y su clave
+ *     (`${location_id}:${started_seq}`) no cambia mientras dure. Si el log
+ *     muestra que acabó (todos los NPC que pelearon, caídos o calmados; sin
+ *     golpes entre PJ ni otro hostil al acecho) y luego alguien vuelve a
+ *     atacar, es otro encuentro.
  *   - Combatientes: los PJ del sitio que juegan (conectados o ausentes, como en
  *     las rondas) o que han golpeado o recibido; los NPC que atacan o reciben
  *     golpes y los NPC vivos con bloque de combate hostiles a alguno de ellos.
@@ -24,9 +36,9 @@ import { isStable } from './death.js';
 import type { Character, GameEvent, Id, Npc } from './model.js';
 import type { World } from './world.js';
 
-/** Sin eventos de combate en este tiempo de juego, el combate se da por acabado (como Engine.recentTags). */
+/** Red de seguridad: sin un golpe en este tiempo de juego, el combate se da por acabado aunque quede un hostil quieto. */
 export const COMBAT_WINDOW_S = 600;
-/** Caídos todos los NPC, el combate sigue este rato de juego (unos segundos reales) antes de acabar. */
+/** Sin hostiles, el combate sigue este rato de juego desde el último golpe (unos segundos reales) antes de acabar. */
 export const COMBAT_SETTLE_S = 30;
 /** Cuántas entradas del registro corto se guardan. */
 export const COMBAT_LOG_MAX = 8;
@@ -108,10 +120,54 @@ function entriesOf(e: GameEvent): EncounterEntry[] {
   return out;
 }
 
-/** ¿Cuenta como combate? Lo mismo que mira la escena tensa, más los golpes que el máster resuelve con tools. */
-export function isCombatEvent(e: GameEvent): boolean {
-  if (e.tags.includes('combat') || e.payload['attack']) return true;
-  return callsOf(e).some((c) => (c.name === 'attack' || c.name === 'apply_damage') && okResult(c.result));
+/**
+ * Lo que un evento dice de la hostilidad. `open`: hay hostilidad real (abre o
+ * mantiene un combate). `npcs`: NPC que entran en la pelea; `out`: NPC que
+ * salen de ella (caídos, muertos o calmados); `pvp`: golpes entre PJ;
+ * `actors`: quién pega o recibe.
+ */
+export interface Hostility { open: boolean; npcs: Id[]; out: Id[]; pvp: boolean; actors: Id[] }
+
+/** Lo que guarda el evento `incident` (Engine.announceIncidents) o el de resistirse a la autoridad. */
+interface IncidentPayload { reactions?: { npc_id: Id; response: string }[]; resisted?: boolean }
+
+export function hostilityOf(world: World, e: GameEvent): Hostility {
+  const h: Hostility = { open: false, npcs: [], out: [], pvp: false, actors: [] };
+  const isNpc = (id: Id) => world.npcs.has(id);
+  const isPc = (id: Id) => world.characters.has(id);
+  const hit = (actor: Id, target: Id, down: boolean) => {
+    h.open = true;
+    h.actors.push(actor, target);
+    for (const id of new Set([actor, target])) if (isNpc(id)) h.npcs.push(id);
+    if (isPc(actor) && isPc(target) && actor !== target) h.pvp = true;
+    if (down && isNpc(target)) h.out.push(target);
+  };
+  const atk = e.payload['attack'] as { target_id: Id; down?: boolean; dead?: boolean } | undefined;
+  if (atk && e.actor_id) hit(e.actor_id, atk.target_id, Boolean(atk.down || atk.dead));
+  const calls = callsOf(e).filter((c) => okResult(c.result));
+  const struck = calls.some((c) => c.name === 'cast_spell' || c.name === 'attack');
+  for (const c of calls) {
+    const r = okResult(c.result)!;
+    const target = String(c.input['target_id'] ?? '');
+    if (c.name === 'attack' && target) hit(String(c.input['attacker_id'] ?? ''), target, r['target_down'] === true || r['target_dead'] === true);
+    // Daño a un NPC es agresión; a un PJ, solo si viene de un conjuro o un golpe del mismo turno (una trampa o una caída no son combate).
+    else if (c.name === 'apply_damage' && target && (isNpc(target) || (struck && e.actor_id && isPc(e.actor_id)))) {
+      hit(e.actor_id ?? target, target, false);
+    } else if (c.name === 'npc_trust' && c.input['change'] === 'calm') h.out.push(String(c.input['npc_id'] ?? ''));
+  }
+  // Reacción `attack` entre jugadores, ya resuelta (Engine.resolveReaction): ataca `from`; el actor del evento es el atacado.
+  const re = e.payload['reaction'] as { kind?: string; from?: Id; to?: Id } | undefined;
+  if (re?.kind === 'attack' && re.from && re.to && (e.action_type === 'reaction_accepted' || e.action_type === 'reaction_resisted')) hit(re.from, re.to, false);
+  // Un incidente en el que alguien se lanza a pelear, o una resistencia a la autoridad (crime.ts). Los demás (gritar, avisar) no.
+  const inc = e.payload['incident'] as IncidentPayload | undefined;
+  const fighters = (inc?.reactions ?? []).filter((r) => r.response === 'fight').map((r) => r.npc_id).filter(isNpc);
+  if (fighters.length || inc?.resisted === true) {
+    h.open = true;
+    h.npcs.push(...fighters);
+    if (e.actor_id) h.actors.push(e.actor_id);
+  }
+  if (e.action_type === 'npc_down' || e.action_type === 'npc_death') h.out.push(String(e.payload['npc_id'] ?? ''));
+  return h;
 }
 
 function stateOf(hp: number, max: number): FighterState {
@@ -137,38 +193,75 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
+/** NPC que mantienen vivo el combate: en pie, con bloque de combate, en la localización y hostiles a alguno de esos PJ. */
+function hostilesAt(world: World, locationId: Id, pcs: readonly Character[]): Npc[] {
+  return [...world.npcs.values()].filter((n) => n.status === 'alive' && n.stats && world.spots.get(n.location.id)?.location_id === locationId
+    && pcs.some((c) => (n.attitude.by_character[c.id] ?? n.attitude.default) === 'hostile'));
+}
+
+interface Chain { first: GameEvent; last: GameEvent; npcs: Set<Id>; out: Set<Id>; pvp: boolean; ended: boolean }
+
+/**
+ * La cadena de eventos hostiles del encuentro más reciente. Se corta con un
+ * hueco de COMBAT_WINDOW_S o cuando el log dice que acabó: todos los NPC que
+ * pelearon han salido (caídos, muertos o calmados), sin golpes entre PJ, pasado
+ * COMBAT_SETTLE_S del último golpe y sin otro hostil al acecho (`lurking`: uno
+ * que nunca peleó en ella; si lo hay, el combate seguía y no se corta).
+ */
+function lastChain(world: World, events: readonly GameEvent[], lurking: ReadonlySet<Id>): Chain | null {
+  let ch: Chain | null = null;
+  for (const e of events) {
+    const h = hostilityOf(world, e);
+    if (h.open) {
+      const t = e.timestamp_game_s;
+      const prev: Chain | null = ch;
+      const stale = prev !== null && t - prev.last.timestamp_game_s >= COMBAT_WINDOW_S;
+      const over = prev !== null && prev.ended && t - prev.last.timestamp_game_s >= COMBAT_SETTLE_S && ![...lurking].some((id) => !prev.npcs.has(id));
+      const cur: Chain = !prev || stale || over ? { first: e, last: e, npcs: new Set(), out: new Set(), pvp: false, ended: false } : prev;
+      cur.last = e;
+      for (const id of h.npcs) { cur.npcs.add(id); cur.out.delete(id); }
+      if (h.pvp) cur.pvp = true;
+      ch = cur;
+    }
+    if (!ch) continue;
+    for (const id of h.out) ch.out.add(id);
+    const c: Chain = ch;
+    c.ended = !c.pvp && c.npcs.size > 0 && [...c.npcs].every((id) => c.out.has(id));
+  }
+  return ch;
+}
+
 /**
  * El combate en curso en esa localización, o null. `events`: los últimos de la
  * localización (EventLog.recentInLocation), en orden. `keepAlive`: hay una ronda
- * abierta en el sitio; mientras dure, el combate no caduca por tiempo.
+ * abierta en el sitio; mientras dure, el combate no caduca por tiempo (sí al
+ * quedarse sin hostiles).
  */
 export function encounterAt(world: World, events: readonly GameEvent[], locationId: Id, nowGameS: number, keepAlive = false): Encounter | null {
-  const fights = events.filter((e) => e.location_id === locationId && isCombatEvent(e));
-  const last = fights.at(-1);
-  if (!last || (!keepAlive && nowGameS - last.timestamp_game_s >= COMBAT_WINDOW_S)) return null;
-  let start = fights.length - 1;
-  while (start > 0 && fights[start]!.timestamp_game_s - fights[start - 1]!.timestamp_game_s < COMBAT_WINDOW_S) start--;
-  const first = fights[start]!;
-  const span = events.filter((e) => e.location_id === locationId && e.seq >= first.seq);
+  const local = events.filter((e) => e.location_id === locationId);
+  const present = [...world.characters.values()].filter((c) => !c.transit && c.status !== 'retired' && world.characterSpot(c)?.location_id === locationId);
+  const chain = lastChain(world, local, new Set(hostilesAt(world, locationId, present).map((n) => n.id)));
+  if (!chain) return null;
+  const { first, last } = chain;
+  if (!keepAlive && nowGameS - last.timestamp_game_s >= COMBAT_WINDOW_S) return null;
+  const span = local.filter((e) => e.seq >= first.seq);
   const log = span.flatMap(entriesOf);
 
   const involved = new Set<Id>();
   for (const x of log) { if (x.actor_id) involved.add(x.actor_id); involved.add(x.target_id); }
-  for (const e of span) if (e.actor_id && isCombatEvent(e)) involved.add(e.actor_id);
-  const here = (c: Character) => !c.transit && c.status !== 'retired' && world.characterSpot(c)?.location_id === locationId
-    && (c.connected || Boolean(c.away) || involved.has(c.id));
-  const npcHere = (n: Npc) => world.spots.get(n.location.id)?.location_id === locationId;
-  const pcs = [...world.characters.values()].filter(here);
+  for (const e of span) for (const id of hostilityOf(world, e).actors) involved.add(id);
+  const pcs = present.filter((c) => c.connected || Boolean(c.away) || involved.has(c.id));
   if (!pcs.length) return null;
+  const npcHere = (n: Npc) => world.spots.get(n.location.id)?.location_id === locationId;
+  const hostiles = hostilesAt(world, locationId, pcs);
   // NPC del combate: los que golpean o reciben (y siguen aquí, vivos o muertos) y los hostiles con bloque de combate.
-  const npcs = [...world.npcs.values()].filter((n) => npcHere(n) && n.stats && (involved.has(n.id)
-    || (n.status === 'alive' && pcs.some((c) => (n.attitude.by_character[c.id] ?? n.attitude.default) === 'hostile'))));
-  // Caídos todos los NPC del combate (y sin golpes entre PJ): se acabó, aunque la ventana siga abierta.
-  const pvp = log.some((x) => x.kind === 'attack' && world.characters.has(x.actor_id) && world.characters.has(x.target_id));
-  if (npcs.length && !pvp && npcs.every((n) => n.status !== 'alive') && nowGameS - last.timestamp_game_s >= COMBAT_SETTLE_S) return null;
+  const npcs = [...world.npcs.values()].filter((n) => npcHere(n) && n.stats && (involved.has(n.id) || hostiles.includes(n)));
+  const settled = nowGameS - last.timestamp_game_s >= COMBAT_SETTLE_S;
+  // Sin hostiles (caídos, muertos, idos o calmados) y sin golpes entre PJ: se acabó en cuanto se ve el último golpe.
+  if (!hostiles.length && !chain.pvp && settled) return null;
   // Caídos todos los PJ que pelearon (en el suelo o muertos): también se acabó; los NPC no rematan a quien está caído.
   const fought = pcs.filter((c) => involved.has(c.id));
-  if (fought.length && fought.every((c) => c.status === 'unconscious' || c.status === 'dead') && nowGameS - last.timestamp_game_s >= COMBAT_SETTLE_S) return null;
+  if (fought.length && fought.every((c) => c.status === 'unconscious' || c.status === 'dead') && settled) return null;
 
   const rng = (id: Id) => seededRng(hash(`${first.id}:${id}`));
   const roll = (id: Id, mod: number) => 1 + Math.floor(rng(id)() * 20) + mod;

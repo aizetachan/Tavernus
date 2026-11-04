@@ -9,6 +9,8 @@ tags: [diseño, mecánicas]
 ## Cómo empieza
 
 - No hay botón de «empezar combate». Empieza cuando la ficción lo pide.
+- **Solo hay combate con hostilidad de verdad**: un ataque resuelto, daño a alguien o un testigo que se lanza a pelear por un crimen. Un robo pillado, un forcejeo o una amenaza no lo abren: se resuelven con su tirada y la reacción del NPC (agarrarte, gritar, avisar a la guardia). Desde la partida del 4 de noviembre de 2026.
+- **Se acaba en cuanto no queda ningún hostil**: caídos, muertos, idos del sitio o calmados (aceptan una disculpa, se dejan convencer o se amilanan). Unos segundos después del último golpe sale «Fin del combate». Si alguien vuelve a atacar, es otro combate.
 - El máster lo marca por dentro para llevar puntos de golpe, condiciones y quién está implicado.
 - **Sin prisa.** El orden lo dan las respuestas de los jugadores. La iniciativa 5e solo sirve de desempate.
 - Huir es moverse como siempre. Los enemigos pueden perseguirte según su velocidad.
@@ -91,7 +93,7 @@ En un momento crítico (el hacha que cae, el puente que cede), el máster abre u
 
 Con dos o más jugadores activos en el mismo sitio y una escena tensa, las acciones entran en **rondas**.
 
-- Escena tensa: combate reciente, una ventana decisiva abierta o un sitio marcado como tenso por la historia (en Brezal, la noche de la Brasa en la plaza).
+- Escena tensa: tensión o combate reciente, una ventana decisiva abierta o un sitio marcado como tenso por la historia (en Brezal, la noche de la Brasa en la plaza).
 - Cuando han actuado todos, o pasan 60 s, el máster resuelve **la ronda entera** en una sola narración.
 - Quien no actuó **duda** y pierde la ronda, sin bloquear a nadie.
 - La interfaz enseña un aviso: «Ronda 2 · faltan Aren y Lys · 0:42».
