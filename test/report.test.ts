@@ -11,9 +11,10 @@ import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
 import { ReportQuota, REPORTS_PER_HOUR, type Report } from '../src/adapters/web/report.js';
 import { costOf, releaseOf, ServiceStats } from '../src/adapters/web/status.js';
 import type { MasterCall } from '../src/engine/engine.js';
-import { signUp } from './helpers.js';
+import { makeAdmin, signUp } from './helpers.js';
+import { memoryDb, type Db } from '../src/db/db.js';
 
-const INVITE: AccessOptions = { mode: 'invite', adminToken: 'token-de-admin-para-los-tests', secret: 'secreto-de-los-tests' };
+const INVITE: AccessOptions = { mode: 'invite', secret: 'secreto-de-los-tests' };
 
 describe('coste estimado (status.ts)', () => {
   it('por modelo, con la caché a su precio; un modelo sin precio no inventa nada', () => {
@@ -97,12 +98,14 @@ describe('reportar y /admin/estado en la web', () => {
   let dir: string;
   let games: GameManager;
   let web: WebServer;
+  let db: Db;
   let base: string;
   let lines: string[];
 
   async function start(access?: AccessOptions) {
     games = new GameManager({ root: join(dir, 'games'), env: { DATA_DIR: join(dir, 'local') }, masterFor: (e) => new Master(e, { client: offlineClient() }), engine: { deterministic: false }, log: () => {}, budget: null });
-    web = createWebServer(games, { tickMs: 3_600_000, log: (l) => lines.push(l), ...(access ? { access } : {}) });
+    db = await memoryDb();
+    web = createWebServer(games, { tickMs: 3_600_000, db, log: (l) => lines.push(l), ...(access ? { access } : {}) });
     await new Promise<void>((resolve) => web.server.listen(0, '127.0.0.1', resolve));
     base = `http://127.0.0.1:${(web.server.address() as AddressInfo).port}`;
   }
@@ -126,6 +129,7 @@ describe('reportar y /admin/estado en la web', () => {
   beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'tavernus-report-')); lines = []; });
   afterEach(async () => {
     await web.stop();
+    await db?.close().catch(() => {});
     await rm(dir, { recursive: true, force: true });
   });
 
@@ -240,14 +244,19 @@ describe('reportar y /admin/estado en la web', () => {
   });
 
   describe('en modo invitación', () => {
+    /** El enlace del asiento del PJ. El anfitrión, con cuenta, queda ligado a su asiento: lo libera antes para que lo ocupe la jugadora. */
     const inviteOf = async (slug: string, admin: string, pick: (s: { character_id: string | null; link: string }) => boolean) => {
-      const seats = await (await fetch(`${base}/api/seats?game=${slug}`, { headers: { cookie: admin } })).json() as { seats: { character_id: string | null; link: string }[] };
-      return seats.seats.find(pick)!.link;
+      const seats = await (await fetch(`${base}/api/seats?game=${slug}`, { headers: { cookie: admin } })).json() as { seats: { id: string; character_id: string | null; link: string }[] };
+      const seat = seats.seats.find(pick)!;
+      expect((await postJson(`/api/seats/release?game=${slug}`, { seat: seat.id }, admin)).status).toBe(200);
+      return seat.link;
     };
+    /** La cuenta de administrador (creada como con `npm run admin`) y su cookie de sesión. */
     const admin = async () => {
-      const r = await fetch(`${base}/admin?token=${INVITE.adminToken}`, { redirect: 'manual' });
-      expect(r.status).toBe(302);
-      return r.headers.get('set-cookie')!.split(';')[0]!;
+      await makeAdmin(db, 'jefe', 'contraseña-de-pruebas');
+      const login = await postJson('/api/auth/login', { username: 'jefe', password: 'contraseña-de-pruebas' });
+      expect(login.status).toBe(200);
+      return login.headers.getSetCookie().find((x) => x.startsWith('tv_u='))!.split(';')[0]!;
     };
     /** Crea una cuenta con el enlace de un asiento: la cookie de su sesión. */
     const enter = (link: string) => signUp(base, 'jugadora', { invite: link });
@@ -273,7 +282,7 @@ describe('reportar y /admin/estado en la web', () => {
       expect(await (await fetch(`${base}/admin/estado`, { headers: { cookie: host } })).text()).toContain('Algo raro');
     });
 
-    it('el menú sabe que quien entra con el enlace de administración administra', async () => {
+    it('el menú sabe que quien entra con la cuenta de administrador administra', async () => {
       await start(INVITE);
       const host = await admin();
       const d = await (await fetch(`${base}/api/games`, { headers: { cookie: host } })).json() as { admin: boolean };

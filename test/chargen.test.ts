@@ -11,7 +11,8 @@ import type { CharacterSpec } from '../src/engine/engine.js';
 import { armorClass, type Ability } from '../src/engine/rules.js';
 import { BACKGROUNDS, CLASSES, RACES } from '../src/data/srd/index.js';
 import { CATALOG } from '../src/worldgen/fill.js';
-import { bootEngine } from './helpers.js';
+import { bootEngine, makeAdmin } from './helpers.js';
+import { memoryDb, type Db } from '../src/db/db.js';
 
 const ABILITIES: Record<Ability, number> = { str: 8, dex: 15, con: 13, int: 12, wis: 10, cha: 14 };
 const ROGUE = { race: 'elf', class: 'rogue', background: 'criminal', abilities: ABILITIES, skills: ['acrobatics', 'athletics', 'insight', 'investigation'], death_mode: 'hardcore' };
@@ -92,13 +93,15 @@ describe('creación por la web', () => {
   let dir: string;
   let games: GameManager;
   let web: WebServer;
+  let db: Db;
   let base: string;
   let worldgens = 0;
 
   async function start(access?: AccessOptions) {
     games = new GameManager({ root: join(dir, 'games'), env: { DATA_DIR: join(dir, 'local') }, masterFor: () => null, engine: { deterministic: false }, log: () => {},
       worldgen: async () => { worldgens++; throw new Error('no debe generar'); } });
-    web = createWebServer(games, { tickMs: 3_600_000, ...(access ? { access } : {}) });
+    db = await memoryDb();
+    web = createWebServer(games, { tickMs: 3_600_000, db, ...(access ? { access } : {}) });
     await new Promise<void>((resolve) => web.server.listen(0, '127.0.0.1', resolve));
     base = `http://127.0.0.1:${(web.server.address() as AddressInfo).port}`;
   }
@@ -113,7 +116,7 @@ describe('creación por la web', () => {
   };
 
   beforeEach(async () => { worldgens = 0; dir = await mkdtemp(join(tmpdir(), 'tavernus-chargen-')); });
-  afterEach(async () => { await web?.stop(); await games?.closeAll(); await rm(dir, { recursive: true, force: true }); });
+  afterEach(async () => { await web?.stop(); await db?.close().catch(() => {}); await games?.closeAll(); await rm(dir, { recursive: true, force: true }); });
 
   it('el menú recibe el catálogo completo y dice si el personaje es opcional', async () => {
     await start();
@@ -175,10 +178,11 @@ describe('creación por la web', () => {
   });
 
   it('el invitado sigue el mismo flujo: valida, no ocupa el asiento si falla y su nombre no se repite', async () => {
-    const access: AccessOptions = { mode: 'invite', adminToken: 'token-de-admin-para-tests', secret: 'secreto-de-tests' };
+    const access: AccessOptions = { mode: 'invite', secret: 'secreto-de-tests' };
     await start(access);
     const host = browser();
-    await host.get(`/admin?token=${access.adminToken}`);
+    await makeAdmin(db, 'anfitrion', 'contraseña-de-pruebas');
+    expect((await host.post('/api/auth/login', { username: 'anfitrion', password: 'contraseña-de-pruebas' })).status).toBe(200);
     const made = (await (await host.post('/api/games', { name: 'Mesa', mode: 'offline', character: 'Aren', seats: 1 })).json()) as { game: { slug: string }; character_id: string };
     const g = `?game=${made.game.slug}`;
     const seats = (await (await host.get(`/api/seats${g}`)).json()) as { seats: { character_id: string | null; link: string }[] };

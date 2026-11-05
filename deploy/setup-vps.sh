@@ -120,10 +120,10 @@ fi
 
 # --- Entorno: /etc/tavernus/env (600, solo root) ----------------------------------------------
 if [ ! -f "$ENV_FILE" ]; then
-  log "creando $ENV_FILE a partir de env.example, con ADMIN_TOKEN y SESSION_SECRET al azar"
+  log "creando $ENV_FILE a partir de env.example, con SESSION_SECRET al azar"
   rnd() { head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
   public_url=''; [ -n "$DOMAIN" ] && public_url="https://$DOMAIN"
-  sed -e "s/^ADMIN_TOKEN=.*/ADMIN_TOKEN=$(rnd 24)/" -e "s/^# SESSION_SECRET=.*/SESSION_SECRET=$(rnd 32)/" \
+  sed -e "s/^# SESSION_SECRET=.*/SESSION_SECRET=$(rnd 32)/" \
       -e "s|^PUBLIC_URL=.*|PUBLIC_URL=$public_url|" "$HERE/env.example" > "$ENV_FILE"
   NEW_ENV=1
 else
@@ -210,6 +210,5 @@ fi
 echo
 log "servidor listo."
 [ "$NEW_ENV" = 1 ] && log "rellena las claves: sudo nano $ENV_FILE   (ANTHROPIC_API_KEY, IMAGES, ALERT_WEBHOOK…)"
-log "primer administrador, cuando la web ya esté desplegada: sudo tavernus-admin <usuario>"
-log "ADMIN_TOKEN (rescate sin cuenta): sudo grep ^ADMIN_TOKEN $ENV_FILE"
+log "primer administrador, cuando la web ya esté desplegada: sudo tavernus-admin <usuario> (la única entrada: no hay token de rescate)"
 log "siguiente paso, desde tu ordenador: deploy/push.sh"

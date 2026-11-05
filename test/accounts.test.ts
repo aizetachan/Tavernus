@@ -17,6 +17,7 @@ import { seatCookieValue, type AccessOptions } from '../src/adapters/web/access.
 import { AccountError, Accounts, ensureAdmin, hashPassword, usernameKey, verifyPassword } from '../src/accounts/accounts.js';
 import { memoryDb, type Db } from '../src/db/db.js';
 import { DbCatalog } from '../src/db/catalog.js';
+import { inventoryDetailed } from '../src/engine/inventory.js';
 
 const PASS = 'contraseña-de-pruebas';
 const ROGUE = { race: 'elf', class: 'rogue', background: 'criminal', abilities: { str: 8, dex: 15, con: 13, int: 12, wis: 10, cha: 14 }, skills: ['acrobatics', 'athletics', 'insight', 'investigation'], death_mode: 'casual' };
@@ -179,7 +180,7 @@ function browser() {
   return b;
 }
 
-const PUBLIC: AccessOptions = { mode: 'public', adminToken: 'token-de-admin-para-tests', secret: SECRET };
+const PUBLIC: AccessOptions = { mode: 'public', secret: SECRET };
 type GamesList = { games: { slug: string; host: boolean }[]; user: { username: string } | null; can_create: boolean };
 
 describe('la web con cuentas', () => {
@@ -276,7 +277,8 @@ describe('la web con cuentas', () => {
   it('invitación sin cuenta: entrar o registrarse liga el asiento, que se ocupa con un personaje de la biblioteca', async () => {
     await start({ ...PUBLIC, mode: 'invite' });
     const admin = browser();
-    await admin.get(`/admin?token=${PUBLIC.adminToken}`);
+    await ensureAdmin(new Accounts(db), 'jefe', PASS);
+    expect((await admin.login('jefe')).status).toBe(200);
     const made = (await (await admin.post('/api/games', { name: 'Mesa', mode: 'offline', character: 'Aren', seats: 2 })).json()) as { game: { slug: string }; character_id: string };
     const g = `?game=${made.game.slug}`;
     const free = (await admin.json<{ seats: { link: string; character_id: string | null }[] }>(`/api/seats${g}`)).seats.filter((s) => !s.character_id);
@@ -426,19 +428,109 @@ describe('la web con cuentas', () => {
     expect(log).toEqual(expect.arrayContaining(['cambió la contraseña de', 'borró la cuenta de', 'dio a bea la partida', 'desactivó a', 'creó la cuenta de']));
   });
 
-  it('el enlace de administración sigue valiendo como rescate, sin cuenta', async () => {
+  it('ya no hay enlace de rescate: /admin?token=… pide cuenta como todo, y no pone ninguna cookie', async () => {
     await start(PUBLIC);
-    const rescue = browser();
-    expect((await rescue.get('/admin?token=otro')).status).toBe(403);
-    await rescue.get(`/admin?token=${PUBLIC.adminToken}`);
-    expect((await rescue.get('/admin/usuarios')).status).toBe(200);
-    expect((await rescue.json<{ ok: boolean }>('/api/admin/users')).ok).toBe(true);
+    const nobody = browser();
+    expect((await nobody.get('/admin?token=lo-que-sea')).headers.get('location')).toBe('/entrar?next=%2Fadmin%3Ftoken%3Dlo-que-sea');
+    expect([...nobody.jar.keys()]).toEqual([]);
+    expect((await nobody.get('/admin/usuarios')).headers.get('location')).toBe('/entrar?next=%2Fadmin%2Fusuarios');
+    expect((await nobody.get('/admin/partidas')).headers.get('location')).toBe('/entrar?next=%2Fadmin%2Fpartidas');
+    await ensureAdmin(new Accounts(db), 'jefa', PASS);
+    const boss = browser();
+    await boss.login('jefa');
+    expect((await boss.get('/admin?token=lo-que-sea')).status).toBe(404);
+    expect(boss.jar.has('tv_admin')).toBe(false);
+  });
+
+  it('el administrador entra en una partida ajena con su PJ «admin», mira y juega con cualquier PJ, y no ocupa más de un asiento', async () => {
+    await start(PUBLIC);
+    await ensureAdmin(new Accounts(db), 'jefa', PASS);
+    const boss = browser(), ana = browser(), bea = browser();
+    await boss.login('jefa');
+    await ana.signUp('ana');
+    await bea.signUp('bea');
+    type Session = { character_id: string | null; can_switch: boolean; role: string; seat: { label: string } | null };
+    type Seats = { seats: { label: string; character_name: string | null; user: string | null }[] };
+    // Partida de Ana sin asientos libres: al abrirla, la administradora recibe un asiento nuevo y su PJ «admin», humano guerrero.
+    const a = (await (await ana.post('/api/games', { name: 'De Ana', mode: 'offline', character: 'Aren', seats: 0 })).json()) as { game: { slug: string }; character_id: string };
+    const ga = `?game=${a.game.slug}`;
+    const page = await boss.get(`/${ga}`);
+    expect(page.status).toBe(200);
+    expect(await page.text()).not.toContain('Te han invitado');
+    const me = await boss.json<Session>(`/api/session${ga}`);
+    expect(me).toMatchObject({ can_switch: true, role: 'admin', seat: { label: 'Administración' } });
+    expect(me.character_id).not.toBeNull();
+    const world = (await games.open(a.game.slug)).world;
+    const pj = world.character(me.character_id!);
+    expect(pj).toMatchObject({ name: 'admin', race_id: 'human', class_id: 'fighter', level: 1 });
+    expect(inventoryDetailed(world, pj.id).map((i) => i.name)).toContain('cota de malla');
+    expect((await boss.json<Seats>(`/api/seats${ga}`)).seats.map((s) => [s.label, s.character_name, s.user])).toEqual([['Anfitrión', 'Aren', 'ana'], ['Administración', 'admin', 'jefa']]);
+    // Con cualquier PJ de la partida: la hoja de Aren y una acción con él. Ana, ligada, no puede con el de la administradora.
+    expect((await boss.get(`/api/sheet${ga}&character=${a.character_id}`)).status).toBe(200);
+    expect((await boss.post(`/api/act${ga}`, { character: a.character_id, text: 'Miro a mi alrededor.' })).status).toBe(200);
+    expect((await boss.post(`/api/act${ga}`, { character: me.character_id, text: 'Miro a mi alrededor.' })).status).toBe(200);
+    expect((await ana.get(`/api/sheet${ga}&character=${me.character_id}`)).status).toBe(403);
+    expect((await ana.post(`/api/act${ga}`, { character: me.character_id, text: 'x' })).status).toBe(403);
+    // Al volver, el mismo asiento y el mismo PJ: nada se duplica.
+    await boss.get(`/${ga}`);
+    expect((await boss.json<Session>(`/api/session${ga}`)).character_id).toBe(me.character_id);
+    expect((await boss.json<Seats>(`/api/seats${ga}`)).seats).toHaveLength(2);
+    expect((await ana.json<GamesList>('/api/games')).games.map((g) => g.slug)).toEqual([a.game.slug]);
+    // Con un asiento libre, lo ocupa en vez de crear otro.
+    const b = (await (await bea.post('/api/games', { name: 'De Bea', mode: 'offline', character: 'Brun', seats: 1 })).json()) as { game: { slug: string } };
+    const gb = `?game=${b.game.slug}`;
+    expect((await boss.get(`/${gb}`)).status).toBe(200);
+    expect((await boss.json<Seats>(`/api/seats${gb}`)).seats.map((s) => [s.label, s.character_name, s.user])).toEqual([['Anfitrión', 'Brun', 'bea'], ['Plaza 2', 'admin', 'jefa']]);
+    // En el panel, la partida de Ana dice quién juega y el detalle lleva a cada usuario.
+    const detail = await boss.json<{ owner: { username: string }; seats: { label: string; character_name: string; user: { username: string } | null }[]; game: { characters: string[] } }>(`/api/admin/games/${a.game.slug}`);
+    expect(detail.owner.username).toBe('ana');
+    expect(detail.seats.map((s) => [s.label, s.character_name, s.user?.username])).toEqual([['Anfitrión', 'Aren', 'ana'], ['Administración', 'admin', 'jefa']]);
+    expect(detail.game.characters).toEqual(expect.arrayContaining(['Aren', 'admin']));
+    const list = (await boss.json<{ games: { slug: string; owner: { username: string } | null; players: { id: string; username: string }[] }[] }>('/api/admin/games')).games;
+    expect(list.find((g) => g.slug === a.game.slug)!.players.map((p) => p.username).sort()).toEqual(['ana', 'jefa']);
+    expect((await boss.get(`/admin/partidas/${a.game.slug}`)).status).toBe(200);
+    expect((await ana.get(`/admin/partidas/${a.game.slug}`)).status).toBe(403);
+    expect((await ana.get(`/api/admin/games/${a.game.slug}`)).status).toBe(403);
+  });
+
+  it('panel: detalle de usuario con sus personajes (ficha, renombrar, borrar) y páginas de usuario y partidas', async () => {
+    await start(PUBLIC);
+    await ensureAdmin(new Accounts(db), 'jefa', PASS);
+    const boss = browser(), ana = browser();
+    await boss.login('jefa');
+    await ana.signUp('ana');
+    const tam = ((await (await ana.post('/api/library', { name: 'Tam', ...ROGUE })).json()) as { character: { id: string } }).character;
+    const anaId = (await boss.json<{ users: { id: string; username: string }[] }>('/api/admin/users')).users.find((u) => u.username === 'ana')!.id;
+    expect((await boss.get(`/admin/usuarios/${anaId}`)).status).toBe(200);
+    expect((await ana.get(`/admin/usuarios/${anaId}`)).status).toBe(403);
+    const detail = await boss.json<{ me: string; characters: { id: string; name: string }[]; options: { races: { id: string; name: string }[] } }>(`/api/admin/users/${anaId}`);
+    expect(detail.characters).toEqual([expect.objectContaining({ id: tam.id, name: 'Tam' })]);
+    expect(detail.options.races.find((r) => r.id === 'elf')?.name).toBe('Elfo');
+    expect(detail.me).not.toBe(anaId);
+    // La ficha: lo que vería al crearlo.
+    const sheet = await boss.json<{ character: { name: string }; preview: { race: string; class_name: string; hp_max: number; equipment: unknown[] } }>(`/api/admin/users/${anaId}/characters/${tam.id}`);
+    expect(sheet.character.name).toBe('Tam');
+    expect(sheet.preview).toMatchObject({ race: 'Elfo', class_name: 'Pícaro' });
+    expect(sheet.preview.hp_max).toBeGreaterThan(0);
+    expect(sheet.preview.equipment.length).toBeGreaterThan(0);
+    // Renombrar: lo ve Ana en su biblioteca; un nombre vacío no vale.
+    expect((await boss.post(`/api/admin/users/${anaId}/characters/${tam.id}`, { name: ' ' })).status).toBe(400);
+    expect((await boss.post(`/api/admin/users/${anaId}/characters/${tam.id}`, { name: 'Tamsin' })).status).toBe(200);
+    expect((await ana.json<{ characters: { name: string }[] }>('/api/library')).characters.map((c) => c.name)).toEqual(['Tamsin']);
+    // Borrar: desaparece de su biblioteca; otra vez, 404. Ana no puede tocar el panel.
+    expect((await ana.del(`/api/admin/users/${anaId}/characters/${tam.id}`)).status).toBe(403);
+    expect((await boss.del(`/api/admin/users/${anaId}/characters/${tam.id}`)).status).toBe(200);
+    expect((await boss.del(`/api/admin/users/${anaId}/characters/${tam.id}`)).status).toBe(404);
+    expect((await ana.json<{ characters: unknown[] }>('/api/library')).characters).toEqual([]);
+    const log = (await boss.json<{ log: { action: string; target: string }[] }>('/api/admin/users')).log;
+    expect(log.map((l) => l.action)).toEqual(expect.arrayContaining(['renombró el personaje Tam (ahora Tamsin) de', 'borró el personaje Tamsin de']));
+    expect((await boss.get('/admin/partidas')).status).toBe(200);
   });
 });
 
 describe('modo open (local)', () => {
   it('sin registrarse se ve todo y se juega, como siempre; con cuenta, también hay biblioteca', async () => {
-    await start({ mode: 'open', adminToken: null, secret: SECRET });
+    await start({ mode: 'open', secret: SECRET });
     const b = browser();
     expect(await (await b.get('/')).text()).toContain('Nueva partida');
     const made = (await (await b.post('/api/games', { name: 'Local', mode: 'offline', character: 'Kel', seats: 0 })).json()) as { ok: boolean; game: { slug: string } };

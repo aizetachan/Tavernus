@@ -13,7 +13,8 @@ import type { AccessOptions } from '../src/adapters/web/access.js';
 import type { MasterLike } from '../src/engine/engine.js';
 import type { LogEventInput } from '../src/ai/tools.js';
 import { spawnItem } from '../src/engine/inventory.js';
-import { bootEngine, fakeTime, readSse } from './helpers.js';
+import { bootEngine, fakeTime, makeAdmin, readSse } from './helpers.js';
+import { memoryDb, type Db } from '../src/db/db.js';
 
 /** Máster offline que retiene la acción `text` hasta que el test la suelta: deja ver acciones a la vez. */
 function holding(text: string) {
@@ -30,11 +31,13 @@ function holding(text: string) {
 let dir: string;
 let games: GameManager;
 let web: WebServer;
+let db: Db;
 let base: string;
 
 async function start(access?: AccessOptions, extra: { masterFor?: MasterFactory; leaveNoticeMs?: number; staleMs?: number; hiddenMs?: number; repeatNoticeMs?: number } = {}) {
   games = new GameManager({ root: join(dir, 'games'), env: { DATA_DIR: join(dir, 'local') }, masterFor: extra.masterFor ?? ((e) => new Master(e, { client: offlineClient() })), engine: { deterministic: false }, log: () => {}, budget: null });
-  web = createWebServer(games, { tickMs: 3_600_000, ...(access ? { access } : {}), ...(extra.leaveNoticeMs !== undefined ? { leaveNoticeMs: extra.leaveNoticeMs } : {}), ...(extra.staleMs !== undefined ? { staleMs: extra.staleMs } : {}), ...(extra.hiddenMs !== undefined ? { hiddenMs: extra.hiddenMs } : {}), ...(extra.repeatNoticeMs !== undefined ? { repeatNoticeMs: extra.repeatNoticeMs } : {}) });
+  db = await memoryDb();
+  web = createWebServer(games, { tickMs: 3_600_000, db, ...(access ? { access } : {}), ...(extra.leaveNoticeMs !== undefined ? { leaveNoticeMs: extra.leaveNoticeMs } : {}), ...(extra.staleMs !== undefined ? { staleMs: extra.staleMs } : {}), ...(extra.hiddenMs !== undefined ? { hiddenMs: extra.hiddenMs } : {}), ...(extra.repeatNoticeMs !== undefined ? { repeatNoticeMs: extra.repeatNoticeMs } : {}) });
   await new Promise<void>((resolve) => web.server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${(web.server.address() as AddressInfo).port}`;
 }
@@ -42,6 +45,7 @@ async function start(access?: AccessOptions, extra: { masterFor?: MasterFactory;
 beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'tavernus-multi-')); });
 afterEach(async () => {
   await web?.stop();
+  await db?.close().catch(() => {});
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -67,7 +71,8 @@ function browser() {
   };
 }
 
-const ACCESS: AccessOptions = { mode: 'invite', adminToken: 'token-de-admin-para-tests', secret: 'secreto-de-tests' };
+const ACCESS: AccessOptions = { mode: 'invite', secret: 'secreto-de-tests' };
+const PASS = 'contraseña-de-pruebas';
 
 describe('invitaciones por asiento', () => {
   it('el enlace liga al personaje; no puede actuar por otro; sin enlace no entra', async () => {
@@ -81,19 +86,21 @@ describe('invitaciones por asiento', () => {
     expect((await host.get('/api/games')).status).toBe(401);
     // En modo invitación no se crea cuenta sin un enlace.
     expect((await host.post('/api/auth/register', { username: 'colado', password: 'contraseña-de-pruebas' })).status).toBe(403);
-    expect((await host.get('/admin?token=otro')).status).toBe(403);
-    // El anfitrión entra con su enlace de administración: ve los asientos (uno por PJ) y añade uno libre.
-    expect((await host.get(`/admin?token=${ACCESS.adminToken}`)).status).toBe(302);
+    // Ya no hay enlace de rescate: /admin?token=… es una página más que pide cuenta.
+    expect((await host.get('/admin?token=otro')).headers.get('location')).toBe('/entrar?next=%2Fadmin%3Ftoken%3Dotro');
+    // El anfitrión entra con su cuenta de administrador: ve los asientos (uno por PJ) y añade uno libre.
+    await makeAdmin(db, 'anfitrion', PASS);
+    expect((await host.post('/api/auth/login', { username: 'anfitrion', password: PASS })).status).toBe(200);
     const created = await games.create({ name: 'Mesa', mode: 'offline', campaign_id: 'demo', character: { name: 'Aren' } });
     const g = `?game=${created.game.slug}`;
     expect((await host.post(`/api/seats${g}`)).status).toBe(200);
     const seats = (await (await host.get(`/api/seats${g}`)).json()) as { seats: { id: string; character_id: string | null; link: string }[] };
     expect(seats.seats.map((s) => s.character_id).sort()).toEqual([created.character_id, 'ch_kael', 'ch_mira', null].sort());
     const free = seats.seats.find((s) => !s.character_id)!;
-    // Admin sin asiento: puede mirar cualquier PJ; con su enlace queda ligado al suyo.
+    // El administrador mira cualquier PJ; con su enlace queda ligado al suyo, pero sigue pudiendo cambiar.
     expect(((await (await host.get(`/api/session${g}`)).json()) as { can_switch: boolean }).can_switch).toBe(true);
     expect((await host.get(seats.seats.find((s) => s.character_id === created.character_id)!.link)).status).toBe(302);
-    expect(((await (await host.get(`/api/session${g}`)).json()) as { character_id: string; can_switch: boolean })).toMatchObject({ character_id: created.character_id, can_switch: false });
+    expect(((await (await host.get(`/api/session${g}`)).json()) as { character_id: string; can_switch: boolean })).toMatchObject({ character_id: created.character_id, can_switch: true });
 
     // El amigo abre su enlace sin cuenta: a registrarse con la invitación; al crear la cuenta, el asiento es suyo.
     const friend = browser();
@@ -160,7 +167,8 @@ describe('invitaciones por asiento', () => {
   it('crear partida por la API reparte asientos y liga al anfitrión a su PJ', async () => {
     await start(ACCESS);
     const host = browser();
-    await host.get(`/admin?token=${ACCESS.adminToken}`);
+    await makeAdmin(db, 'anfitrion', PASS);
+    expect((await host.post('/api/auth/login', { username: 'anfitrion', password: PASS })).status).toBe(200);
     const created = (await (await host.post('/api/games', { name: 'Mesa', mode: 'offline', character: 'Mira', class: 'rogue', seats: 2 })).json()) as { game: { slug: string }; character_id: string };
     const g = `?game=${created.game.slug}`;
     const seats = (await (await host.get(`/api/seats${g}`)).json()) as { seats: { character_id: string | null }[] };

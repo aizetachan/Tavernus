@@ -4,6 +4,8 @@ import { World } from '../src/engine/world.js';
 import { GameClock } from '../src/clock/clock.js';
 import { makeSeed, SEED_REAL_EPOCH_MS } from '../src/data/seed/demo.js';
 import { MemoryRepository } from '../src/persistence/memory.js';
+import { Accounts, ensureAdmin } from '../src/accounts/accounts.js';
+import type { Db } from '../src/db/db.js';
 
 export function fakeTime(startMs = SEED_REAL_EPOCH_MS) {
   let t = startMs;
@@ -90,6 +92,11 @@ export function fightAt(engine: Engine, locationId = 'loc_taberna', spotId = 'sp
  * Crea una cuenta en la web de pruebas (POST /api/auth/register) y devuelve la cookie de sesión («tv_u=…»).
  * Con `invite` («<partida>/<token>» o el enlace /i/…), el asiento queda ligado a la cuenta.
  */
+/** Un usuario administrador en la base de la web, como `npm run admin -- <usuario>` (sin navegador): la única entrada de administración. */
+export async function makeAdmin(db: Db, username = 'admin', password = 'contraseña-de-pruebas'): Promise<void> {
+  await ensureAdmin(new Accounts(db), username, password);
+}
+
 export async function signUp(base: string, username: string, opts: { invite?: string; password?: string; cookie?: string } = {}): Promise<string> {
   const invite = opts.invite?.replace(/^\/i\//, '');
   const r = await fetch(`${base}/api/auth/register`, {

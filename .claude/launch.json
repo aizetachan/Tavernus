@@ -245,7 +245,8 @@
         "MASTER_MODE": "offline",
         "WEB_PORT": "3207",
         "WEB_ACCESS": "invite",
-        "ADMIN_TOKEN": "admin-local-de-pruebas-multijugador",
+        "ADMIN_USER": "admin",
+        "ADMIN_PASSWORD": "admin-local-de-pruebas",
         "AWAY_CARD_MIN": "1",
         "GOOGLE_CLOUD_PROJECT": "",
         "DATA_DIR": "./data/local/multi",
@@ -268,7 +269,8 @@
         "MASTER_MODE": "offline",
         "WEB_PORT": "3217",
         "WEB_ACCESS": "invite",
-        "ADMIN_TOKEN": "admin-local-de-pruebas-entre-jugadores",
+        "ADMIN_USER": "admin",
+        "ADMIN_PASSWORD": "admin-local-de-pruebas",
         "GOOGLE_CLOUD_PROJECT": "",
         "DATA_DIR": "./data/local/party",
         "GAMES_DIR": "./data/local/party/games",
@@ -362,7 +364,9 @@
         "IMAGES": "off",
         "DATABASE_URL": "pglite:./data/local/publico/games/.pgdata",
         "ADMIN_USER": "admin",
-        "ADMIN_PASSWORD": "admin-local-de-pruebas"
+        "ADMIN_PASSWORD": "admin-local-de-pruebas",
+        "SFX": "off",
+        "TTS": "off"
       }
     },
     {
