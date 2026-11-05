@@ -18,7 +18,7 @@
  *   - Lugares: localizaciones conocidas con su estado de descubrimiento.
  *
  * Qué encargos ha «visto» el PJ: los que leyó en el tablón (quests.ts,
- * `boardSeen`: de pie ante él o con /tablon) y los que habló con quien los
+ * `boardSeen`: dijo leerlo ante él, o /tablon) y los que habló con quien los
  * pide. Que estén clavados en la plaza no basta.
  *
  * Cada misión dice de dónde le vino (`origin`: te lo pide X, de oídas, el
@@ -264,7 +264,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   // --- Misiones --------------------------------------------------------------
   const jobs = w.campaign.jobs;
   const onBoard = new Set(activeJobs(w).map((j) => j.id));
-  /** Leídos en el tablón (de pie ante él o con /tablon), con la hora de la primera vez. */
+  /** Leídos en el tablón (dijo leerlo ante él, o /tablon), con la hora de la primera vez. */
   const seenAt = new Map<Id, number>(Object.entries(boardSeen(c)));
   const locName = (id: Id | null | undefined) => (id ? w.locations.get(id)?.name ?? null : null);
 

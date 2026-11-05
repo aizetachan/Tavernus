@@ -440,6 +440,27 @@
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
         "SFX": "off",
         "TTS": "off"
+
+      }
+    },
+    {
+      "name": "tavernus-integracion",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--env-file-if-exists=D:/MyProjects/tavernus/.env",
+        "--import",
+        "tsx",
+        "D:/MyProjects/tavernus/.claude/worktrees/integracion/src/index.ts",
+        "--web"
+      ],
+      "cwd": "D:/MyProjects/tavernus/.claude/worktrees/integracion",
+      "port": 3290,
+      "env": {
+        "WEB_PORT": "3290",
+        "PORT": "3290",
+        "DATA_DIR": "D:/MyProjects/tavernus/.claude/worktrees/integracion/data",
+        "GAMES_DIR": "D:/MyProjects/tavernus/.claude/worktrees/integracion/data/games",
+        "DISCORD_TOKEN": ""
       }
     }
   ]
