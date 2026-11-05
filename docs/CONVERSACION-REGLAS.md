@@ -271,3 +271,32 @@ Sale de las partidas por perfil (PLAYTEST-2026-10-31.md): el charlatán pasó 19
 
 **A vigilar:** sobre las 2.149 líneas de NPC de la tanda, 197 son negativas y 154 no llevan salida. Con el guion nuevo
 deberían ser menos, pero este control puede sumar reintentos: si pasa del 5 % de los turnos, se revisa.
+## v1.4 (04-11): ni por estar cerca, ni en la apertura, ni de dos en dos
+
+La partida del 04-11 (una maga con la carta de Vharn, junto al pozo) aún soltaba misiones sin charla que las produjera:
+Ilse le abría «El agua turbia» en la escena de apertura, mientras le agarraba la muñeca, y al turno siguiente, con el
+jugador negando llevar nada, «Un jarabe para el molino». Y al desenvainar y acercarse a Osric, que estaba junto al
+tablón, entraban en el Diario los tres encargos del tablón. La regla es la misma de v1.2, ahora sin agujeros:
+**una misión sale de una charla con quien la pide que haya llegado a eso, o de leer el tablón; nunca de estar cerca.**
+
+- **El servidor lo comprueba en cada `story_quest` (ask, offer, accept) y `give_quest`** con `npc_id`
+  (`tools.ts`, `askGate`; `talk.ts`, `askBlocked`). Devuelve `too_soon` con el motivo si:
+  - es la **escena de apertura** (la del prólogo, o la de compañero): nadie pide nada en ella;
+  - lo que escribe el jugador **no le habla a ese NPC** en este turno: va con otro, o describe una acción física sin
+    decir nada (`soundsLikeTalk`: desenvainar, acercarse, atacar, esconderse, moverse, coger o registrar algo, sin
+    comillas, pregunta, saludo ni verbo de habla). Desenvainar, acercarse sin que le vea o pelear con él al lado no es
+    hablarle, aunque fueran charlando un momento antes; «Sí, un día largo» en plena charla, sí;
+  - para una misión de la historia, la situación del turno **no es «misión que puede dar»** (no ha preguntado por
+    trabajo o por lo que le pasa, y no llevan un rato hablando). Un encargo improvisado (`give_quest`) vale también si el
+    jugador le pide algo o ya llevan un rato; `accept` (el jugador se ofrece) solo necesita que le hable a él;
+  - **ya le ha pedido una en este turno**: una cada vez, nunca dos de golpe.
+  Si el NPC no está con el actor, el error es el de siempre («la pide X, que no está con el actor»).
+- **La apertura no cuenta como charla** para «llevan un rato hablando»: lo que dicen los NPC en la escena de apertura,
+  una llegada o un gancho (`master_intro`, `master_arrival`, `master_hook`) no suma turnos (`TalkState.talked`).
+- **El servidor tampoco se la saca solo** tras un turno que no le habla: `talking_to.ripe` solo se pone si el turno
+  sonaba a charla (`TalkPlan.talky`, `offersNow`), y el guion no propone «misión que puede dar» por madurez si el
+  jugador está haciendo otra cosa.
+- **El tablón se lee, no se pisa**: los encargos entran en el Diario («Encargo en el Diario») cuando el jugador dice
+  leerlo estando delante («leo los avisos», «me acerco al tablón a ver qué hay», «¿qué pone en el tablón?») o usa
+  `/tablon` (`quests.ts`, `readsBoard`; `Engine.act`). Pasar, pararse delante o acercarse a alguien que está allí ya no
+  lo lee (antes lo hacía el tick con cualquiera parado ante él).

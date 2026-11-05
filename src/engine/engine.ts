@@ -27,7 +27,7 @@ import { encounterChance, parseInfo, parseTrivial, suggestActions, tension, type
 import { answerInfo, infoText, type InfoAnswer } from './info.js';
 import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type RouteCut } from './goto.js';
 import { parseErrand, pendingLine, trivialAction, type Errand } from './errand.js';
-import { atBoard, dropQuest, readBoard } from './quests.js';
+import { atBoard, dropQuest, readBoard, readsBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, plantBeat, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { activeIn, crowdHere, tickSchedule } from './schedule.js';
 import { allIncidents, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, surrender, type LawNotice } from './crime.js';
@@ -947,6 +947,8 @@ export class Engine {
       const late = this.lateHooks.get(c.id);
       if (late) { this.lateHooks.delete(c.id); this.narrateArrival(c, { hooks: late, encounter: null }); }
       this.settleAll(this.gameNow()); // viaje rápido: si la acción (o un tool del master) lo puso en camino, llega ya
+      // Leer el tablón es una acción: quien dice leerlo y está (o ha llegado) ante él apunta sus encargos.
+      if (c.status === 'active' && readsBoard(clean) && atBoard(this.world, c)) this.noteBoard(c, this.nowFor(c));
       this.advanceStory(this.gameNow());
       this.announceDeathStates();
       await this.flush();
@@ -1421,20 +1423,20 @@ export class Engine {
     }
   }
 
-  /** Historia escrita (story.ts): la amenaza que avanza y las misiones de cada PJ; y quien está ante el tablón lo lee. */
+  /**
+   * Historia escrita (story.ts): la amenaza que avanza y las misiones de cada PJ. El tablón no se lee solo por estar
+   * delante: lo lee quien dice leerlo (act) o usa /tablon.
+   */
   private advanceStory(nowG: number): void {
     const out = tickStory(this.world, nowG, this.threatNow(nowG));
     this.emitStory(out);
     // Hechos y reglas del mundo (worldrules.ts): lo que acaba de cambiar dispara las reacciones de los datos.
     this.emitStory(tickWorld(this.world, nowG).story);
-    for (const c of this.world.characters.values()) {
-      if (c.status === 'active' && atBoard(this.world, c)) this.noteBoard(c, this.nowFor(c));
-    }
     // Lo que acaba de pasar en la escena (beats) lo cuenta el máster ya, tras la acción, sin esperar al tick.
     if (out.beats.length) this.fireTimeHooks(nowG);
   }
 
-  /** El PJ lee el tablón (ante él o con /tablon): cada encargo que no había visto entra en su Diario como disponible, con aviso. */
+  /** El PJ lee el tablón (dice leerlo ante él, o /tablon): cada encargo que no había visto entra en su Diario como disponible, con aviso. */
   private noteBoard(c: Character, nowG: number): void {
     const fresh = readBoard(this.world, c, nowG);
     this.emitProgress(c, fresh.map((j) => {

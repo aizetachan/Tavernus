@@ -170,8 +170,10 @@ describe('las misiones llegan con la charla', () => {
     expect(run(engine, c, 'Buenas noches', 'story_quest', { quest_id: 'q_cena_doro', action: 'ask' }).error).toBe('too_soon');
     expect(run(engine, c, 'Buenas noches', 'give_quest', { title: 'Un favor', text: 'Trae leña', npc_id: 'npc_brenna', objective: null, reward: null, heard: null }).error).toBe('too_soon');
     expect(run(engine, c, 'Buenas, ¿en qué puedo ayudar?', 'story_quest', { quest_id: 'q_cena_doro', action: 'ask' }).ok).toBe(true);
-    // Hablado ya, puede sacarla el máster si viene a cuento.
+    // Un encargo improvisado sale de la charla: con un «gracias» aún no; llevando un rato hablando, sí, si viene a cuento.
     await say(engine, time, c, 'npc_brenna', 'Gracias');
+    expect(run(engine, c, 'Cuéntame', 'give_quest', { title: 'Un favor', text: 'Trae leña', npc_id: 'npc_brenna', objective: null, reward: null, heard: null }).error).toBe('too_soon');
+    await say(engine, time, c, 'npc_brenna', '¿Y qué tal va la posada?');
     expect(run(engine, c, 'Cuéntame', 'give_quest', { title: 'Un favor', text: 'Trae leña', npc_id: 'npc_brenna', objective: null, reward: null, heard: null }).ok).toBe(true);
   });
 });

@@ -18,9 +18,9 @@
  * la pide en persona); si le llega de oídas, va sin quien la pide y con
  * `heard` («En el Jabalí se comenta que…»), y así se lee en el Diario.
  *
- * Tablón: un encargo entra en el Diario cuando el PJ lo lee (de pie ante un
+ * Tablón: un encargo entra en el Diario cuando el PJ lo lee (dice leerlo ante un
  * tablón, un punto con la etiqueta `notice`, o con /tablon), no por estar
- * clavado en la plaza: `readBoard` apunta cuándo vio cada uno.
+ * clavado en la plaza ni por pasar o pararse delante: `readBoard` apunta cuándo vio cada uno.
  *
  * Todo vive en propiedades opcionales del personaje, sin tocar model.ts:
  * `given_quests?: GivenQuest[]`, `dropped_quests?: DroppedQuest[]`,
@@ -81,6 +81,12 @@ export interface GiveInput {
  * Registra una misión dada por un NPC. Si ya tiene una con el mismo título y
  * del mismo NPC, la devuelve (`existing`) y, si la había dejado, la retoma.
  */
+/** ¿Tiene ya en curso ese encargo de ese NPC? (dárselo otra vez no abre nada: no hace falta que la charla llegue a eso). */
+export function hasGivenQuest(c: Character, title: string, giverNpcId: Id | null): boolean {
+  const t = normalize(title.trim().replace(/^[«"]|[»"]$/g, ''));
+  return givenQuests(c).some((q) => normalize(q.title) === t && q.giver_npc_id === giverNpcId && q.status === 'active' && droppedAt(c, q.id) === null);
+}
+
 export function giveQuest(world: World, c: Character, input: GiveInput, nowS: number): { ok: true; quest: GivenQuest; existing: boolean } | { ok: false; error: string } {
   const title = input.title.trim().replace(/^[«"]|[»"]$/g, '');
   const text = input.text.trim();
@@ -162,6 +168,31 @@ export function boardSeen(c: Character): Readonly<Record<Id, number>> { return (
 export function atBoard(world: World, c: Character): boolean {
   if (c.transit) return false;
   return world.characterSpot(c)?.tags.includes('notice') ?? false;
+}
+
+/** Lo que nombra un tablón: el tablón, sus avisos, anuncios, carteles o encargos. */
+const BOARD_NOUN = '(tablon|tablones|avisos?|anuncios?|carteles?|pasquines?|bandos?|encargos)';
+/** Leer: leer, mirar, ojear, echar un vistazo, consultar, repasar, ver. */
+const READ_VERB = '(le[eoi]\\w*|leer|mir\\w*|ojea\\w*|vistazo|consult\\w*|repas\\w*|ver|veo)';
+/** Lo que se pregunta al leerlo: qué pone, qué hay, qué piden. */
+const WHAT_SAYS = 'que (pone|hay|dice|dicen|piden)';
+/**
+ * El verbo tiene que ir con el tablón: «leo los avisos», «echo un vistazo al tablón», «me acerco al tablón a ver qué
+ * hay», «¿qué pone en el tablón?». «Miro a Osric junto al tablón» o «me acerco al tablón sin que me vea», no.
+ */
+const BOARD_READS = [
+  new RegExp(`\\b${READ_VERB} (\\S+ )?${BOARD_NOUN}\\b`),
+  new RegExp(`\\b${BOARD_NOUN} (\\S+ ){0,2}(ver|leer|${WHAT_SAYS})\\b`),
+  new RegExp(`\\b${WHAT_SAYS} (\\S+ )?${BOARD_NOUN}\\b`),
+];
+
+/**
+ * ¿Es esta acción leer el tablón? Solo si dice leerlo. Pasar a su lado, pararse junto a él, acercarse a alguien que
+ * está allí o pelear allí no es leerlo: los encargos solo entran en el Diario al leerlo.
+ */
+export function readsBoard(text: string): boolean {
+  const t = normalize(text);
+  return BOARD_READS.some((re) => re.test(t));
 }
 
 /** El PJ lee el tablón: apunta los encargos que no había visto. Devuelve los nuevos para el aviso. */

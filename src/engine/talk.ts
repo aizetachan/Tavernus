@@ -65,6 +65,11 @@ const WAY_OUT_MAX = 3;
 /** CD de una tirada social por lo delicado, según el trato. */
 const SOCIAL_DC: Record<TalkTier, number> = { hostile: 20, wary: 17, stranger: 15, acquaintance: 12, friend: 10, ally: 10 };
 const SOCIAL_SKILLS = new Set(['persuasion', 'deception', 'intimidation']);
+/**
+ * Escenas que cuenta el máster sin que el jugador haya dicho nada (apertura, llegada, gancho): lo que dice en ellas
+ * un NPC no es una charla con el PJ, y no cuenta para que «lleven un rato hablando».
+ */
+const SCENE_TYPES = new Set(['prologue', 'master_intro', 'master_arrival', 'master_hook']);
 
 // ---------------------------------------------------------------------------
 // 1. Señales
@@ -171,6 +176,8 @@ export interface TalkState {
   busy: boolean;
   /** Títulos de lo que puede darle: misiones de la historia disponibles y encargos suyos del tablón. */
   can_offer: string[];
+  /** Llevan un rato hablando: le ha contestado al menos RIPE_TURNS veces en turnos del jugador (la apertura no cuenta), o hablaron otro día. */
+  talked: boolean;
   /** Tiene algo que darle y la charla ya da para sacarlo él solo: se han dicho algo más que un saludo y no acaba de pedirle otra. */
   ripe: boolean;
   /** Títulos de lo que el PJ tiene en curso de él o de los suyos. */
@@ -342,8 +349,10 @@ export function talkState(world: World, events: readonly GameEvent[], pc: Charac
   for (const j of activeJobs(world)) if (j.giver_npc_id === npc.id && !pc.completed_jobs.includes(j.id)) can_offer.push(j.title);
   for (const g of givenQuests(pc)) if (g.status === 'active' && droppedAt(pc, g.id) === null && g.giver_npc_id && close.has(g.giver_npc_id)) pending.push(g.title);
   const tier = talkTier(npc, pc);
-  // Turnos en que ya le ha contestado; lo hablado en otro momento (su memoria) también cuenta como charla previa.
-  const answers = new Set(transcriptOf(events, pc.id, npc.id, TALK_MEMORY_LINES).filter((l) => l.who === 'npc').map((l) => l.game_s)).size;
+  // Turnos del jugador en que ya le ha contestado (lo que dijo en la apertura o en una llegada no es charla con él);
+  // lo hablado en otro momento (su memoria) también cuenta como charla previa.
+  const played = events.filter((e) => !SCENE_TYPES.has(e.action_type));
+  const answers = new Set(transcriptOf(played, pc.id, npc.id, TALK_MEMORY_LINES).filter((l) => l.who === 'npc').map((l) => l.game_s)).size;
   const refused_asks = refusalStreak(events, pc, npc, nowG);
   // Ya se ha negado una vez: lo que tiene para él es justo la salida, no hace falta esperar otro turno.
   const talked = answers >= RIPE_TURNS || refused_asks.length > 0 || mem.some((m) => nowG - m.game_s > RECENT_S);
@@ -358,7 +367,7 @@ export function talkState(world: World, events: readonly GameEvent[], pc: Charac
     crime: npcCrimeLine(world, npc, pc, nowG) !== null,
     recent: recentDeed(events, pc, npc, nowG),
     busy: Boolean(npc.talking_to && npc.talking_to.character_id !== pc.id),
-    can_offer, ripe, pending, locked,
+    can_offer, talked, ripe, pending, locked,
     debt: openDebts(pc).some((d) => d.npc_id === npc.id || d.on_behalf_of === npc.id),
     trades: npc.sells.length > 0 || npc.buys.length > 0,
     terms: termsWith(world, pc, npc, nowG),
@@ -373,7 +382,7 @@ export function talkState(world: World, events: readonly GameEvent[], pc: Charac
 // ---------------------------------------------------------------------------
 
 /** Situaciones que se cumplen, por prioridad (docs/CONVERSACION-REGLAS.md, §2). */
-export function situationsFor(st: TalkState, tx: TextSignals, topics: readonly TalkTopic[]): TalkSituation[] {
+export function situationsFor(st: TalkState, tx: TextSignals, topics: readonly TalkTopic[], talky = true): TalkSituation[] {
   const asks = tx.question || tx.request || tx.trade || topics.length > 0;
   const out: TalkSituation[] = [];
   if (st.crime || st.recent === 'attack') out.push('danger');
@@ -385,8 +394,9 @@ export function situationsFor(st: TalkState, tx: TextSignals, topics: readonly T
   if (tx.asks_work && gives) out.push('offer');
   if (topics.length && (tx.question || tx.lore_word)) out.push('lore');
   if (tx.question || tx.request || (tx.asks_work && !gives)) out.push('question');
-  // Llevan un rato hablando: lo saca él, si no se está despidiendo ni comprando.
-  if (st.ripe && !tx.farewell && !tx.trade && !out.includes('offer')) out.push('offer');
+  // Llevan un rato hablando: lo saca él, si el jugador le está hablando (no peleando, moviéndose o a otra cosa) y no
+  // se despide ni compra.
+  if (st.ripe && talky && !tx.farewell && !tx.trade && !out.includes('offer')) out.push('offer');
   if (tx.greeting) out.push('greeting');
   if (tx.farewell) out.push('farewell');
   if (!out.length) out.push('chat');
@@ -395,7 +405,26 @@ export function situationsFor(st: TalkState, tx: TextSignals, topics: readonly T
 
 /** ¿Es este turno pedirle ya una misión? Sí, si ha llegado a eso o lo declara el máster con la charla empezada. */
 export function offersNow(p: TalkPlan, declared: unknown): boolean {
+  if (p.talky === false) return false;
   return p.situation === 'offer' || p.second === 'offer' || (declared === 'offer' && !p.state.first_meeting && p.state.can_offer.length > 0);
+}
+
+/**
+ * ¿Puede `npcId` pedirle ya algo al actor en este turno? Una misión solo sale de una charla con quien la pide que haya
+ * llegado a eso (docs/CONVERSACION-REGLAS.md, §5): el jugador le habla a él en este turno y la situación es «offer»
+ * (ha preguntado por trabajo o por lo que le pasa, o llevan un rato hablando). Estar cerca, la escena de apertura, un
+ * combate o una acción que no va con él no bastan. `kind`: `story`, una misión de la historia escrita; `free`, un
+ * encargo improvisado (give_quest), que vale también si el jugador le pide algo o ya llevan un rato; `accept`, el
+ * jugador se ofrece o cambia de idea: basta con que le hable a él. null si puede; si no, el motivo.
+ */
+export function askBlocked(p: TalkPlan | null, npcId: Id, kind: 'story' | 'free' | 'accept'): string | null {
+  if (!p || p.npc_id !== npcId) return 'el actor no está hablando con quien la pide en este turno (estar cerca no basta)';
+  if (kind === 'accept') return null;
+  const offer = p.situation === 'offer' || p.second === 'offer';
+  if (offer || (kind === 'free' && (p.text.asks_work || p.text.request || p.state.talked))) return null;
+  return p.state.first_meeting && !p.text.asks_work
+    ? 'es la primera vez que hablan y el actor no ha preguntado por trabajo ni por lo que le pasa'
+    : 'la charla aún no ha llegado a eso: el actor no ha preguntado por trabajo ni por lo que le pasa, y no llevan un rato hablando';
 }
 
 /** Lo que el motor ha decidido para el turno. */
@@ -408,6 +437,8 @@ export interface TalkPlan {
   state: TalkState;
   text: TextSignals;
   topics: TalkTopic[];
+  /** Lo que escribe suena a hablarle (soundsLikeTalk); si no (pelea, se mueve…), no se le pide nada en este turno. */
+  talky?: boolean;
 }
 
 /** ¿Suena a que le habla a alguien? (comillas, saludo, pregunta, verbo de habla). */
@@ -424,16 +455,46 @@ export function talkTarget(world: World, events: readonly GameEvent[], pc: Chara
   return near.length === 1 ? near[0]! : null;
 }
 
+/** Una acción física, no una frase: desenvainar, acercarse, atacar, esconderse, moverse, coger o registrar algo. */
+const PHYSICAL = /\b(desenvain\w*|envain\w*|empun\w*|blando|ataco|atacar|ataca|golpe\w*|apunal\w*|disparo|disparar|lanzo|lanzar|me acerco|acerco|me alejo|me escondo|escondo|me agacho|me muevo|me deslizo|me cuelo|voy|camino|corro|huyo|salto|trepo|entro|salgo|subo|bajo|cojo|agarro|robo|saco|registro|rebusco|forcejeo|sin que me (vea|vean|oiga|oigan)|sin que se (entere|enteren|de cuenta))\b/;
+
+/**
+ * ¿Es este turno hablarle a alguien? Sí si suena a charla (comillas, pregunta, verbo de habla, saludo, despedida o
+ * pedir algo), o si no describe una acción física: «Sí, un día largo» en plena charla es contestarle.
+ * «Desenvaino y me acerco sin que me vea» no: es otra acción, aunque tenga al lado a con quien hablaba.
+ */
+export function soundsLikeTalk(text: string): boolean {
+  const tx = textSignals(text);
+  const t = norm(text);
+  return SPEECH.test(t) || tx.greeting || tx.farewell || tx.question || tx.request || tx.asks_work || !PHYSICAL.test(t);
+}
+
 /** El plan del turno, o null si no es una charla con un NPC. */
 export function talkPlan(world: World, events: readonly GameEvent[], pc: Character, text: string, nowG: number): TalkPlan | null {
   const npc = talkTarget(world, events, pc, text, nowG);
   if (!npc || npc.status !== 'alive' || npc.mute) return null;
+  return planWith(world, events, pc, npc, text, nowG);
+}
+
+/**
+ * El plan de este turno con un NPC concreto, o null si lo que hace el jugador no es hablarle a él: no suena a charla,
+ * o va con otro (le nombra, o habla con otro). Para saber si ese NPC puede pedirle algo ahora (askBlocked).
+ */
+export function talkPlanWith(world: World, events: readonly GameEvent[], pc: Character, npc: Npc, text: string, nowG: number): TalkPlan | null {
+  if (npc.status !== 'alive' || npc.mute || !soundsLikeTalk(text)) return null;
+  const other = npcTarget(world, events, pc, text, nowG);
+  if (other && other.id !== npc.id) return null;
+  return planWith(world, events, pc, npc, text, nowG);
+}
+
+function planWith(world: World, events: readonly GameEvent[], pc: Character, npc: Npc, text: string, nowG: number): TalkPlan {
   const state = talkState(world, events, pc, npc, nowG);
   const tx = textSignals(text);
   const topics = loreTopics(world, npc, text, nowG);
-  const all = situationsFor(state, tx, topics);
+  const talky = soundsLikeTalk(text);
+  const all = situationsFor(state, tx, topics, talky);
   const textual = Object.values(tx).some(Boolean) || topics.length > 0;
-  return { npc_id: npc.id, situation: all[0]!, second: all[1] ?? null, doubtful: all[0] === 'chat' && !textual, state, text: tx, topics };
+  return { npc_id: npc.id, situation: all[0]!, second: all[1] ?? null, doubtful: all[0] === 'chat' && !textual, state, text: tx, topics, talky };
 }
 
 /** ¿Puede ser esta situación, según el estado? (para la que declare el máster). */

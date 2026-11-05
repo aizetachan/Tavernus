@@ -18,7 +18,7 @@ import { advanceNow, advanceStory, clueBlocked, clueReachable, nameFor, openSour
 import { adjustTrust, knowledgeFor, MASTER_TRUST_CHANGES, TRUST_LABEL, trustNotice, trustTier, type TrustResult } from '../engine/trust.js';
 import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
-import { finishQuest, giveQuest } from '../engine/quests.js';
+import { finishQuest, giveQuest, hasGivenQuest } from '../engine/quests.js';
 import { attitudeOf, forcedTurnText, forceNpcTurns, intentOf, lethalBlow, nonLethalSource, npcTurn, resolveAttack, type ForcedTurn } from '../engine/combat.js';
 import { encounterAt, hostilesAt, recentCombatTag } from '../engine/encounter.js';
 import { INCIDENT_KINDS, incidentRejection, npcCrimeLine, pendingIncidents, reactionSentences, readsAsTheft, reportAssault, reportIncident, reportKill, unnarratedReactors, type IncidentKind } from '../engine/crime.js';
@@ -45,7 +45,7 @@ import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
 import { secondPersonSingular } from '../engine/turnwindow.js';
-import { endsTalk, offersNow, talkProblems, talkState, textSignals, TALK_SITUATIONS, withoutRefused, type TalkPlan } from '../engine/talk.js';
+import { askBlocked, endsTalk, offersNow, talkPlanWith, talkProblems, TALK_SITUATIONS, withoutRefused, type TalkPlan } from '../engine/talk.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
@@ -401,8 +401,10 @@ export interface ToolContext {
   talk?: TalkPlan;
   /** Cierres rechazados por no seguir ese guion (talk.ts; uno como mucho). */
   talk_rejections?: number;
-  /** Es la escena de apertura: el actor no se acerca a quien habla (la apertura ya le pone con él). */
+  /** Es la escena de apertura: el actor no se acerca a quien habla (la apertura ya le pone con él), y nadie le pide misiones. */
   intro?: boolean;
+  /** NPC que ya le han pedido una misión o un encargo en esta acción: uno por turno (askGate). */
+  asked?: Set<Id>;
   /** NPC que ya han hecho su turno en esta acción (attack o el motor): uno por NPC (combat.ts). */
   npc_turns?: Set<Id>;
   /** Turnos que ha tenido que hacer el motor porque el máster no los hizo (combat.ts, forceNpcTurns). */
@@ -573,11 +575,22 @@ export function resetRulesIndex(): void {
   rules = null;
 }
 
-const TOO_SOON = 'Es la primera vez que hablan y el actor no ha preguntado por trabajo ni por lo que le pasa: nadie pide un encargo a quien acaba de saludar. Que charlen; se lo pedirá cuando pregunte o lleven un rato.';
-
-/** ¿Pedirle una misión ahora sería soltársela sin conversación previa? */
-function tooSoonToAsk(ctx: ToolContext, npc: Npc): boolean {
-  return talkState(ctx.engine.world, ctx.engine.events.all(), ctx.actor, npc, ctx.nowGameS).first_meeting && !textSignals(ctx.action_text ?? '').asks_work;
+/**
+ * ¿Puede ese NPC pedirle ya una misión (o un encargo) al actor en este turno? Solo en una charla con él que haya
+ * llegado a eso (talk.ts, askBlocked): nunca en la escena de apertura, ni por estar cerca, ni en un turno que no va
+ * con él (un combate, un movimiento, una tirada de otra cosa). Y una por turno: dos de golpe no las pide nadie.
+ * En las tiradas el plan sale de lo que escribió el jugador; en una ronda o charla de grupo, también.
+ * null si puede; si no, la pista para el máster.
+ */
+function askGate(ctx: ToolContext, npc: Npc, kind: 'story' | 'free' | 'accept'): string | null {
+  if (ctx.intro) return 'Es la escena de apertura: nadie pide una misión ni un encargo en ella. Que hablen; saldrá si la charla llega a eso.';
+  // Si no está con el actor, lo dice quien abre la misión (story.ts, quests.ts), con su motivo.
+  const here = ctx.actor.transit ? null : ctx.engine.world.characterSpot(ctx.actor)?.location_id ?? null;
+  if (!here || ctx.engine.world.spots.get(npc.location.id)?.location_id !== here) return null;
+  if (ctx.asked?.has(npc.id)) return 'Ya le ha pedido una en este turno: una cada vez. La otra, si sale, en otra charla.';
+  const p = ctx.action_text?.trim() ? talkPlanWith(ctx.engine.world, ctx.engine.events.all(), ctx.actor, npc, ctx.action_text, ctx.nowGameS) : null;
+  const why = askBlocked(p, npc.id, kind);
+  return why ? `Aún no: ${why}. No la pidas ni la insinúes en este turno; puede contar lo que le preocupa si viene a cuento, y se la pedirá cuando la charla llegue a eso.` : null;
 }
 
 export function executeTool(ctx: ToolContext, name: string, raw: Record<string, unknown>): string {
@@ -1149,13 +1162,20 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     }
     case 'story_quest': {
       const action = s('action') as 'ask' | 'offer' | 'accept' | 'decline' | 'turn_in';
-      if (action === 'ask' || action === 'offer') {
-        const q = storyOf(world)?.quests.find((x) => x.id === s('quest_id'));
-        const giver = q?.giver_npc_id ? world.npcs.get(q.giver_npc_id) : undefined;
-        if (q && giver && questStatus(world, actor, q) === 'available' && tooSoonToAsk(ctx, giver)) return { error: 'too_soon', hint: TOO_SOON };
+      // Abrirla (pedirla, o que el jugador se ofrezca) sale de una charla con quien la da (askGate).
+      const q = storyOf(world)?.quests.find((x) => x.id === s('quest_id'));
+      const giver = q?.giver_npc_id ? world.npcs.get(q.giver_npc_id) : undefined;
+      const opens = action === 'ask' || action === 'offer' || action === 'accept';
+      if (q && giver && opens) {
+        const st = questStatus(world, actor, q);
+        if (st === 'available' || st === 'declined') {
+          const hint = askGate(ctx, giver, action === 'accept' ? 'accept' : 'story');
+          if (hint) return { error: 'too_soon', hint };
+        }
       }
       const r = storyQuestAction(world, actor, s('quest_id'), action, nowGameS);
       if (!r.ok) return { error: r.error };
+      if (q && giver && opens) (ctx.asked ??= new Set()).add(giver.id);
       const told = storyTold(ctx, r.output);
       const hint = action === 'ask' || action === 'offer' || action === 'accept' ? 'Ya está en su Diario, en curso: no preguntes si acepta. Si dice que no, story_quest decline.'
         : action === 'turn_in' ? 'Que quien la recibe le dé la recompensa en la charla.' : 'Queda apuntado que dijo que no; quien la pidió no insiste.';
@@ -1198,10 +1218,12 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         return { error: 'main_quest', hint: 'Eso es lo suyo con el actor (su situación) y ya lo tiene: no abras un encargo nuevo. Que el NPC lo diga en la charla, sin nombrar el Diario.' };
       }
       const asker = world.npcs.get(s('npc_id'));
-      if (asker && tooSoonToAsk(ctx, asker)) return { error: 'too_soon', hint: TOO_SOON };
+      const notYet = asker && !hasGivenQuest(actor, s('title'), asker.id) ? askGate(ctx, asker, 'free') : null;
+      if (notYet) return { error: 'too_soon', hint: notYet };
       const r = giveQuest(world, actor, { title: s('title'), text: s('text'), giver_npc_id: s('npc_id') || null, objective: s('objective') || null, reward: s('reward') || null, heard: input['heard'] == null ? null : s('heard') }, nowGameS);
       if (!r.ok) return { error: 'bad_quest', hint: r.error };
       const q = r.quest;
+      if (asker && !r.existing) (ctx.asked ??= new Set()).add(asker.id);
       if (!r.existing) ctx.progress.push({ kind: 'quest', text: `Nueva misión: «${q.title}». ${q.origin_text}.`, quest: { id: q.id, title: q.title, event: 'open', why: q.origin_text } });
       return { ok: true, quest_id: r.quest.id, existing: r.existing, hint: 'Ya está en su Diario, en curso. No le preguntes si acepta.' };
     }

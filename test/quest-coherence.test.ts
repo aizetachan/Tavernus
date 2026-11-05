@@ -211,7 +211,7 @@ describe('misiones: «Donde lo dejamos»', () => {
 });
 
 describe('misiones: el tablón', () => {
-  it('los encargos entran en el Diario al leer el tablón (de pie ante él), con aviso; no por rotar', async () => {
+  it('los encargos entran en el Diario al leer el tablón (de pie ante él), con aviso; no por rotar, pasar ni pararse delante', async () => {
     const { engine, time } = await boot();
     const c = await newPc(engine, 'Teo');
     await engine.tick();
@@ -221,7 +221,11 @@ describe('misiones: el tablón', () => {
     // Pasar por la plaza no es leerlo.
     await walk(engine, time, c, 'sp_pl_pozo');
     expect(journalOf(engine, c.id).quests.active.filter((q) => q.kind === 'job')).toEqual([]);
+    // Pararse delante tampoco: hay que leerlo (decirlo, o /tablon).
     await walk(engine, time, c, 'sp_pl_tablon');
+    await engine.tick();
+    expect(journalOf(engine, c.id).quests.active.filter((q) => q.kind === 'job')).toEqual([]);
+    await engine.act(c.id, 'Leo los avisos del tablón');
     const jobs = journalOf(engine, c.id).quests.active.filter((q) => q.kind === 'job');
     expect(jobs.map((q) => q.id).sort()).toEqual([...posted].sort());
     expect(jobs.every((q) => q.status === 'available' && q.origin?.kind === 'board')).toBe(true);
@@ -240,6 +244,7 @@ describe('misiones: el tablón', () => {
     const toma = engine.world.campaign.jobs.find((j) => j.id === 'job_toma')!;
     engine.world.campaign.board.active_job_ids = [toma.id];
     await walk(engine, time, c, 'sp_pl_tablon');
+    await engine.command(c.id, '/tablon');
     let q = journalOf(engine, c.id).quests.active.find((x) => x.id === 'job_toma')!;
     expect(q.steps[0]!.text).toBe('Ir al arroyo (El Soto)');
     await walk(engine, time, c, 'sp_cl_arroyo');
