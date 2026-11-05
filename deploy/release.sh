@@ -57,6 +57,13 @@ else
 fi
 [ -f "$REL/dist/index.js" ] || die "la versión no trae dist/index.js (¿falló npm run build?)"
 
+# Desde el 4-11-2026 la web guarda cuentas y partidas en PostgreSQL: sin la base, no arrancaría.
+# Se comprueba antes de cambiar de versión, para no dejar la web caída.
+pg_ok() { if [ "$AS_ROOT" = 1 ]; then runuser -u "$SVC_USER" -- psql -d "$SVC_USER" -tAc 'select 1' >/dev/null 2>&1; else psql -d "$SVC_USER" -tAc 'select 1' >/dev/null 2>&1; fi; }
+if ! command -v psql >/dev/null 2>&1 || ! pg_ok; then
+  die "no hay base de datos PostgreSQL para $SVC_USER. Antes de esta versión: sudo bash $REL/deploy/setup-vps.sh (instala PostgreSQL, crea la base y añade DATABASE_URL; docs/DESPLIEGUE.md, «Base de datos»). La versión anterior sigue en marcha."
+fi
+
 # data/ del repo -> datos del servidor (por si algo usa las rutas por defecto ./data/...).
 rm -rf "$REL/data"
 ln -sfn "$SRV_DATA" "$REL/data"
@@ -68,7 +75,7 @@ if [ "$AS_ROOT" = 1 ]; then
   bash "$REL/deploy/install-ops.sh" "$REL/deploy"
 else
   stale=''
-  for f in lib.sh healthcheck.sh backup-now.sh restore.sh; do
+  for f in lib.sh healthcheck.sh backup-now.sh restore.sh admin-user.sh; do
     tr -d '\r' < "$REL/deploy/$f" | cmp -s - "$OPS_DIR/$f" || stale="$stale $f"
   done
   for u in tavernus-web.service tavernus-health.service tavernus-health.timer tavernus-backup.service tavernus-backup.timer; do

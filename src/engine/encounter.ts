@@ -202,6 +202,15 @@ export function hostilesAt(world: World, locationId: Id, pcs: readonly Character
     && pcs.some((c) => (n.attitude.by_character[c.id] ?? n.attitude.default) === 'hostile'));
 }
 
+/**
+ * ¿Algún evento reciente (`events`: los últimos de la localización) de los últimos COMBAT_WINDOW_S de juego lleva la
+ * etiqueta `combat`? La etiqueta sola no abre combate, pero con un hostil vivo delante basta para que ataque él primero
+ * (tools.ts `fightingHere`, prompt.ts «Turno de los NPC hostiles»), como Engine.recentTags para la escena tensa.
+ */
+export function recentCombatTag(events: readonly GameEvent[], nowGameS: number): boolean {
+  return events.some((e) => nowGameS - e.timestamp_game_s < COMBAT_WINDOW_S && e.tags.includes('combat'));
+}
+
 interface Chain { first: GameEvent; last: GameEvent; npcs: Set<Id>; out: Set<Id>; pvp: boolean; ended: boolean }
 
 /**

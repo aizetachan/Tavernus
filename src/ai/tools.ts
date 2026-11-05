@@ -14,13 +14,13 @@ import { perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
-import { advanceNow, advanceStory, clueBlocked, clueReachable, nameFor, openSources, questStatus, storyOf, storyQuestAction, type StoryOutput } from '../engine/story.js';
+import { advanceNow, advanceStory, clueBlocked, clueReachable, nameFor, openSources, questStatus, storyOf, storyQuestAction, voicedQuest, type StoryOutput } from '../engine/story.js';
 import { adjustTrust, knowledgeFor, MASTER_TRUST_CHANGES, TRUST_LABEL, trustNotice, trustTier, type TrustResult } from '../engine/trust.js';
 import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
 import { finishQuest, giveQuest } from '../engine/quests.js';
 import { attitudeOf, forcedTurnText, forceNpcTurns, intentOf, lethalBlow, nonLethalSource, npcTurn, resolveAttack, type ForcedTurn } from '../engine/combat.js';
-import { encounterAt, hostilesAt } from '../engine/encounter.js';
+import { encounterAt, hostilesAt, recentCombatTag } from '../engine/encounter.js';
 import { INCIDENT_KINDS, incidentRejection, npcCrimeLine, pendingIncidents, reactionSentences, readsAsTheft, reportAssault, reportIncident, reportKill, unnarratedReactors, type IncidentKind } from '../engine/crime.js';
 import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, helplessNpc, isDying, killNpc, knockOutNpc, medicineDc, NPC_DOWN_HINT, reviveNpc, stabilize } from '../engine/death.js';
 import { spendResource } from '../engine/rest.js';
@@ -28,7 +28,7 @@ import { castSpell } from '../engine/levels.js';
 import { ABILITY_ES, armorClass, characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
 import { SOCIAL_SKILLS, socialDcShift } from '../engine/standing.js';
 import { freshTagOptions, tagOptions } from '../engine/worldrules.js';
-import { aEs, descriptorOf, fmtDuration, maskUnknownNames } from '../engine/narrate.js';
+import { aEs, descriptorOf, fmtDuration, maskUnknownNames, nameRe, npcNameForms, unknownNpcsNamed } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
 import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
 import { addScheduledEvent, listSchedule, RECURRENCES } from '../engine/schedule.js';
@@ -36,7 +36,7 @@ import { NPC_TASK_KINDS, orderLine, orderOf, promisedMove, promisedMoveRejection
 import { characterFacts, recordFact } from '../engine/facts.js';
 import type { DialogueLine, LineTo } from '../engine/moments.js';
 import { AUDIENCES, presentIds, type Audience } from '../engine/audience.js';
-import { openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
+import { debtHeldBy, debtTitle, noteDebtTerms, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
 import { inventedPlaces } from '../engine/places.js';
 import { money } from '../engine/money.js';
 import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
@@ -709,6 +709,19 @@ function namedConsumable(ctx: ToolContext, holders: Id[]): { id: Id; item_id: Id
 
 function capFirst(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+/** Lo que un PJ ha leído u oído en la partida (su narración, lo que le dijeron, lo que vio de otros), más `now`. */
+function perceivedBy(engine: Engine, actorId: Id, now: readonly string[]): string {
+  const out = [...now];
+  for (const e of engine.events.all()) {
+    const own = e.actor_id === actorId;
+    if (!own && !e.delivered_to.some((d) => d.character_id === actorId)) continue;
+    out.push(own ? e.narration_private : e.observable ?? '');
+    const lines = e.payload['lines'];
+    if (own && Array.isArray(lines)) for (const l of lines as DialogueLine[]) out.push(l.text);
+  }
+  return out.join('\n');
+}
+
 /** Minúsculas, sin tildes ni signos: para buscar palabras. */
 function norm(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9ñ ]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -747,15 +760,19 @@ function damageByActor(ctx: ToolContext, source: string): boolean {
 }
 
 /**
- * ¿Hay pelea en el sitio del actor? Un combate en curso (encounter.ts) o un
- * golpe en esta misma acción: entonces los NPC hostiles hacen su turno.
+ * ¿Hay pelea en el sitio del actor? Un combate en curso (encounter.ts), un
+ * golpe en esta misma acción, o un hostil vivo con bloque de combate delante
+ * en una escena que el máster ya marca `combat` (`tags`: las de este cierre o
+ * las de los últimos minutos del sitio): entonces los NPC hostiles hacen su
+ * turno. Hostil a secas, sin pelea marcada, no ataca (Brenna enfadada tras la
+ * barra, Garrán de mal humor junto al pozo).
  */
-function fightingHere(ctx: ToolContext): boolean {
+function fightingHere(ctx: ToolContext, tags: readonly string[] = []): boolean {
   if ((ctx.ok_tools ?? []).some((t) => t === 'attack' || t === 'apply_damage')) return true;
   const { engine, actor, nowGameS } = ctx;
   const loc = positionOf(engine.world, actor, nowGameS).location_id;
   if (encounterAt(engine.world, engine.events.recentInLocation(loc, 400), loc, nowGameS) !== null) return true;
-  // Un hostil vivo con bloque de combate delante (como Engine.fightIn): ataca él primero, sin esperar a que le peguen.
+  if (!tags.includes('combat') && !recentCombatTag(engine.events.recentInLocation(loc, 12), nowGameS)) return false;
   const pcs = [actor.id, ...sharedWith(engine, actor.id)].map((id) => engine.world.characters.get(id)).filter((c): c is Character => Boolean(c));
   return hostilesAt(engine.world, loc, pcs).length > 0;
 }
@@ -1165,7 +1182,20 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     case 'give_quest': {
       // Lo que le exige al PJ quien tiene un trato con él (su situación, su deuda) ya está en su Diario: no se duplica.
       if (ctx.talk?.state.terms && s('npc_id') === ctx.talk.npc_id) {
-        return { error: 'main_quest', hint: 'Eso es lo suyo con el actor, y ya está en su Diario (su situación, su deuda): no abras un encargo nuevo. Díselo en la charla y sigue.' };
+        // Lo que pacta para saldar la deuda (partida del 2026-11-05: Garrán acepta que la pague subiendo al Granero) se
+        // apunta en la deuda, con su aviso, y el turno sigue: no es un encargo aparte ni un fallo.
+        const d = debtHeldBy(actor, s('npc_id'));
+        if (d) {
+          const who = npcLabel(world, actor, s('npc_id'));
+          const what = (input['objective'] ? s('objective') : s('text')).replace(/[.\s]+$/, '');
+          const text = `${who} acepta que la saldes así: ${what.charAt(0).toLowerCase()}${what.slice(1)}`;
+          if (noteDebtTerms(world, actor, d, maskUnknownNames(world, actor.id, text), nowGameS)) {
+            const title = debtTitle(world, d, (n) => npcLabel(world, actor, n.id));
+            ctx.progress.push({ kind: 'quest', text: `La misión «${title}» cambia: ${text}.`, quest: { id: d.id, title, event: 'changed', why: text } });
+          }
+          return { ok: true, debt_id: d.id, hint: 'Apuntado en su deuda, no como encargo aparte. Sigue la charla en la ficción: no nombres el Diario ni lo que se apunta.' };
+        }
+        return { error: 'main_quest', hint: 'Eso es lo suyo con el actor (su situación) y ya lo tiene: no abras un encargo nuevo. Que el NPC lo diga en la charla, sin nombrar el Diario.' };
       }
       const asker = world.npcs.get(s('npc_id'));
       if (asker && tooSoonToAsk(ctx, asker)) return { error: 'too_soon', hint: TOO_SOON };
@@ -1644,7 +1674,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // el máster lo cuenta (se reescribe una vez; si aun así no lo nombra, el motor lo añade a la narración).
       // No con una tirada pendiente (el turno acaba al tirar) ni con la amenaza que se abre (la ventana decisiva).
       const decisiveNpc = input['decisive_threat'] ? (input['decisive_npc_id'] ? s('decisive_npc_id') : '*') : null;
-      if (!req && !ctx.intro && decisiveNpc !== '*' && fightingHere(ctx)) {
+      if (!req && !ctx.intro && decisiveNpc !== '*' && fightingHere(ctx, s('tags').split(',').map((t) => t.trim()))) {
         const acted = (ctx.npc_turns ??= new Set());
         if (decisiveNpc) acted.add(decisiveNpc);
         const forced = forceNpcTurns(world, [actor.id, ...sharedWith(engine, actor.id)], acted, ctx.rng, nowGameS);
@@ -1675,8 +1705,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           const group = prev && (prev.character_id === actor.id || prev.with?.includes(actor.id)) ? [prev.character_id, ...(prev.with ?? [])].filter((id) => id !== actor.id) : [];
           const going = prev && (prev.character_id === actor.id || prev.with?.includes(actor.id)) && !prev.reserved;
           // Cerrar el turno con alguien no le abre sus misiones: solo si la charla ha llegado a eso (talk.ts).
-          const ripe = ctx.talk?.npc_id === npc.id && offersNow(ctx.talk, input['talk_situation']);
-          npc.talking_to = { character_id: actor.id, since_game_s: nowGameS, started_game_s: going ? prev.started_game_s ?? prev.since_game_s : nowGameS, ...(group.length ? { with: group } : {}), ...(ripe ? { ripe: true } : {}) };
+          // Y solo la que ha contado en este turno: si habla de otra cosa, el servidor no abre ninguna (story.ts, voicedQuest).
+          const ripe = ctx.talk?.npc_id === npc.id && offersNow(ctx.talk, input['talk_situation'])
+            ? voicedQuest(world, actor, npc, [s('narration_private'), ...parseLines(input['lines'], npc.id, (id) => world.npcs.has(id)).filter((l) => l.speaker === 'npc' && l.npc_id === npc.id).map((l) => l.text)].join('\n'))
+            : null;
+          npc.talking_to = { character_id: actor.id, since_game_s: nowGameS, started_game_s: going ? prev.started_game_s ?? prev.since_game_s : nowGameS, ...(group.length ? { with: group } : {}), ...(ripe ? { ripe } : {}) };
           const note = input['npc_memory_note'] == null ? '' : cleanText(s('npc_memory_note'));
           if (note) {
             const imp = Math.min(3, Math.max(1, Math.round(Number(input['npc_memory_importance']) || 1))) as 1 | 2 | 3;
@@ -1767,6 +1800,14 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
 
 ${forcedTail}` : '');
       const mine = byPc[actor.id] ? masked(byPc[actor.id]!) : '';
+      // Lo que el jugador ha leído u oído hasta ahora, este turno incluido (solo si un botón nombra a quien no conoce).
+      // La narración de este turno, como la lee él: enmascarada. Un nombre que el máster suelta sin cita («esperando a
+      // Ceniza») le llega como «el perro», así que no cuenta como oído.
+      let seen: string | null = null;
+      const perceived = () => (seen ??= perceivedBy(engine, actor.id, [masked(s('narration_private')), mine, ...closingLines.filter((l) => l.speaker === 'npc').map((l) => l.text)]));
+      const heardName = (n: Npc) => npcNameForms(n.name).some((f) => nameRe(f, 'u').test(perceived()));
+      const heardOf = (n: Npc) => heardName(n) || nameRe(descriptorOf(world, n.id), 'iu').test(perceived());
+      const presentHere = (n: Npc) => n.status === 'alive' && world.spot(n.location.id).location_id === here();
       ctx.closed = {
         // Lo dicho que no va citado en la narración (en conversación puede ir vacía) se guarda como citas.
         narration_private: approached + [mine, masked(common)].filter((t) => t.trim()).join('\n\n'),
@@ -1780,9 +1821,14 @@ ${forcedTail}` : '');
           // Ni un rincón que no conoce («Ir a la trampilla» sin haberla encontrado: spots.ts).
           .filter((t) => spotsNamedIn(world, here(), t).every((sp) => knowsSpot(actor, sp)))
           // Ni lo que este NPC ya le ha negado (talk.ts).
-          .filter((t, _i, all) => !ctx.talk || withoutRefused(world, ctx.talk, all).includes(t)).slice(0, 4)
-          // Un nombre que el actor no sabe no se le escapa en los botones: «Preguntar a la tabernera», no «a Brenna».
-          .map((t) => capFirst(maskUnknownNames(world, actor.id, t)))
+          .filter((t, _i, all) => !ctx.talk || withoutRefused(world, ctx.talk, all).includes(t))
+          // Ni alguien de quien el jugador no sabe nada (partida del 2026-11-05): «Preguntar a Brenna por su perro Ceniza»
+          // sin haber oído hablar del perro. Lo que el máster sabe por el contexto no se le adelanta en un botón. Quien tiene
+          // sitio fijo (la tabernera en su barra) se sabe que está; quien no (un perro perdido), solo si se lo han contado.
+          .filter((t) => unknownNpcsNamed(world, actor.id, t).every((n) => heardOf(n) || presentHere(n) || Boolean(n.home_spot_id))).slice(0, 4)
+          // Un nombre que el actor no sabe no se le escapa en los botones: «Preguntar a la tabernera», no «a Brenna». Si ya
+          // lo ha oído («Ceniza no vuelve»), va tal cual: «Preguntar por el perro» le contaría lo que no sabe.
+          .map((t) => capFirst(maskUnknownNames(world, actor.id, t, unknownNpcsNamed(world, actor.id, t).filter((n) => heardName(n)).map((n) => n.id))))
           // Una opción con etiqueta (worldrules.ts), como las de BG3: «[Soldado] Hablarle de tú a tú (Persuasión CD 12)».
           .concat(req ? [] : freshTagOptions(tagOptions(world, actor, (k) => SKILLS[k]?.es ?? k), engine.events.all(), actor.id, nowGameS).slice(0, 1))
           .filter((t, i, all) => all.indexOf(t) === i).slice(-4),

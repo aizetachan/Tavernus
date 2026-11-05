@@ -1,26 +1,26 @@
 /**
- * Acceso a la web sin cuentas (docs/MULTIJUGADOR.md): un enlace de invitación por
- * asiento y una cookie firmada que liga el navegador a ese asiento.
+ * Acceso a la web (docs/MULTIJUGADOR.md, «Cuentas»): cuentas de usuario con sesión en cookie, enlaces de
+ * invitación por asiento y el enlace de administración de rescate.
  *
- *   /i/<partida>/<token>   entra por ese asiento: cookie tv_s_<partida> y a la partida
- *   /admin?token=…         anfitrión: cookie tv_admin y al menú
+ *   /entrar                entrar o registrarse (page-account.ts); la sesión va en la cookie tv_u
+ *   /i/<partida>/<token>   invitación: con sesión, liga ese asiento al usuario; sin ella, pasa por /entrar
+ *   /admin?token=…         rescate: cookie tv_admin, lo ve todo (por si no hay ningún usuario administrador)
  *
- * Cada partida guarda sus asientos en <carpeta>/seats.json: id, token largo, el PJ
- * (o null si está libre) y cuándo se usó. Regenerar el token invalida el enlace y
- * las cookies que se firmaron con él. Modos (WEB_ACCESS):
- *   - open:   como antes, cualquiera juega con cualquier PJ (local, pruebas).
- *   - invite: sin enlace válido solo se ve «pide una invitación»; el menú y la
- *             creación quedan para el anfitrión (ADMIN_TOKEN).
- *   - public: cualquiera entra al menú y crea sus partidas (queda de anfitrión en
- *             ellas); cada navegador ve solo las suyas y aquellas a las que se unió
- *             con un enlace. ADMIN_TOKEN sigue viéndolo todo.
+ * Los usuarios, sesiones, asientos y la biblioteca viven en la base (src/accounts, src/db). Modos (WEB_ACCESS):
+ *   - open:   local. Sin cuenta se juega con cualquier PJ y se ve todo, como siempre; las cuentas funcionan
+ *             si se usan, pero no se piden.
+ *   - invite: hace falta cuenta; solo se registra quien llega con una invitación, y crear partidas es del
+ *             administrador.
+ *   - public: hace falta cuenta; el registro es libre y cada usuario crea sus partidas (queda de dueño).
+ * Las cookies de asiento de antes de las cuentas (tv_s_<partida>) ya no dan acceso fuera de `open`: sirven
+ * para que su dueño, al entrar con su cuenta, se lleve esos asientos (server.ts, `claimLegacySeats`).
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Id } from '../../engine/model.js';
+import type { Seat } from '../../accounts/accounts.js';
 
 export type AccessMode = 'open' | 'invite' | 'public';
 
@@ -34,24 +34,11 @@ export interface AccessOptions {
   secureCookies?: boolean;
 }
 
-export interface Seat {
-  id: string;
-  token: string;
-  /** PJ del asiento; null = libre, quien entre crea el suyo. */
-  character_id: Id | null;
-  /** Para quién es («Anfitrión», «Plaza 2»…), solo para el anfitrión. */
-  label: string;
-  /** Asiento de quien creó la partida: reparte invitaciones y puede borrarla (modo public). */
-  host?: boolean;
-  created_at: string;
-  last_seen_at: string | null;
-}
-
-interface SeatsFile { version: 1; seats: Seat[] }
-
-export const SEATS_FILE = 'seats.json';
 const ADMIN_COOKIE = 'tv_admin';
+export const USER_COOKIE = 'tv_u';
 const COOKIE_MAX_AGE_S = 60 * 60 * 24 * 365;
+/** La de sesión dura lo que la sesión en la base (accounts.ts, SESSION_DAYS). */
+export const SESSION_COOKIE_MAX_AGE_S = 60 * 60 * 24 * 180;
 
 /** Cadena aleatoria apta para URL (base64url). 24 bytes = 32 caracteres. */
 export function randomToken(bytes = 24): string {
@@ -80,49 +67,9 @@ async function persisted(file: string): Promise<string> {
   return v;
 }
 
-/** Asientos de una partida (seats.json en su carpeta). Escrituras en serie por carpeta. */
-export class SeatStore {
-  private chain = new Map<string, Promise<unknown>>();
-
-  async list(dir: string): Promise<Seat[]> {
-    try {
-      const f = JSON.parse(await readFile(join(dir, SEATS_FILE), 'utf8')) as SeatsFile;
-      return Array.isArray(f.seats) ? f.seats : [];
-    } catch { return []; }
-  }
-
-  /** Cambia la lista de asientos con `fn` (en serie: dos entradas a la vez no se pisan). */
-  update<T>(dir: string, fn: (seats: Seat[]) => T): Promise<T> {
-    const prev = this.chain.get(dir) ?? Promise.resolve();
-    const next = prev.then(async () => {
-      const seats = await this.list(dir);
-      const out = fn(seats);
-      await mkdir(dir, { recursive: true });
-      await writeFile(join(dir, SEATS_FILE), JSON.stringify({ version: 1, seats } satisfies SeatsFile, null, 2), 'utf8');
-      return out;
-    });
-    this.chain.set(dir, next.catch(() => undefined));
-    return next;
-  }
-
-  async byToken(dir: string, token: string): Promise<Seat | null> {
-    if (!/^[A-Za-z0-9_-]{20,}$/.test(token)) return null;
-    for (const s of await this.list(dir)) if (safeEqual(s.token, token)) return s;
-    return null;
-  }
-
-  async byId(dir: string, id: string): Promise<Seat | null> {
-    return (await this.list(dir)).find((s) => s.id === id) ?? null;
-  }
-}
-
-export function newSeat(label: string, characterId: Id | null, now: Date, host = false): Seat {
-  return { id: randomToken(6), token: randomToken(), character_id: characterId, label, ...(host ? { host: true } : {}), created_at: now.toISOString(), last_seen_at: null };
-}
-
-/** ¿Es el asiento de quien creó la partida? (Los de antes de `host` se llamaban «Anfitrión».) */
+/** ¿Es el asiento de quien creó la partida? */
 export function isHostSeat(seat: Seat | null): boolean {
-  return Boolean(seat && (seat.host || seat.label === 'Anfitrión'));
+  return Boolean(seat?.host);
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +88,7 @@ function safeEqual(a: string, b: string): boolean {
 export function seatCookieName(slug: string): string { return `tv_s_${slug}`; }
 
 /** La cookie del asiento firma también su token: al regenerarlo, la cookie deja de valer. */
-export function seatCookieValue(secret: string, slug: string, seat: Seat): string {
+export function seatCookieValue(secret: string, slug: string, seat: Pick<Seat, 'id' | 'token'>): string {
   return `${seat.id}.${sign(secret, `seat|${slug}|${seat.id}|${seat.token}`)}`;
 }
 
@@ -185,6 +132,10 @@ export function setCookie(res: ServerResponse, access: AccessOptions, name: stri
   const c = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeS}; HttpOnly; SameSite=Lax${access.secureCookies ? '; Secure' : ''}`;
   const prev = res.getHeader('set-cookie');
   res.setHeader('set-cookie', [...(Array.isArray(prev) ? prev : prev ? [String(prev)] : []), c]);
+}
+
+export function clearCookie(res: ServerResponse, access: AccessOptions, name: string): void {
+  setCookie(res, access, name, '', 0);
 }
 
 export function setAdminCookie(res: ServerResponse, access: AccessOptions): void {

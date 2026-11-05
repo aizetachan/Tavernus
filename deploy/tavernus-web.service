@@ -1,8 +1,8 @@
 [Unit]
 Description=Tavernus: web (máster IA por chat)
 Documentation=file:///opt/tavernus/current/docs/DESPLIEGUE.md
-After=network-online.target
-Wants=network-online.target
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
 # Hasta el primer deploy/push.sh no hay código que arrancar.
 ConditionPathExists=/opt/tavernus/current/dist/index.js
 # Si se relanza 5 veces en 2 minutos, systemd se rinde y healthcheck.sh avisa.

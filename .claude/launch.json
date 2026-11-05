@@ -252,7 +252,8 @@
         "GAMES_DIR": "./data/local/multi/games",
         "ANTHROPIC_API_KEY": "",
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
-        "IMAGES": "off"
+        "IMAGES": "off",
+        "DATABASE_URL": "pglite:./data/local/multi/games/.pgdata"
       }
     },
     {
@@ -273,7 +274,8 @@
         "GAMES_DIR": "./data/local/party/games",
         "ANTHROPIC_API_KEY": "",
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
-        "IMAGES": "off"
+        "IMAGES": "off",
+        "DATABASE_URL": "pglite:./data/local/party/games/.pgdata"
       }
     },
     {
@@ -335,10 +337,17 @@
     },
     {
       "name": "tavernus-web-publico",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "powershell",
       "runtimeArgs": [
-        "run",
-        "web"
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "C:/Users/migue/.claude/hooks/con-tope.ps1",
+        "-GB",
+        "2",
+        "-Comando",
+        "npm run web"
       ],
       "port": 3247,
       "env": {
@@ -350,7 +359,42 @@
         "GAMES_DIR": "./data/local/publico/games",
         "ANTHROPIC_API_KEY": "",
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
-        "IMAGES": "off"
+        "IMAGES": "off",
+        "DATABASE_URL": "pglite:./data/local/publico/games/.pgdata",
+        "ADMIN_USER": "admin",
+        "ADMIN_PASSWORD": "admin-local-de-pruebas"
+      }
+    },
+    {
+      "name": "tavernus-web-publico-haiku",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "C:/Users/migue/.claude/hooks/con-tope.ps1",
+        "-GB",
+        "2",
+        "-Comando",
+        "node --env-file-if-exists=.env --env-file-if-exists=../../../.env --import tsx src/index.ts --web"
+      ],
+      "port": 3248,
+      "env": {
+        "MASTER_MODE": "live",
+        "MASTER_MODEL": "claude-haiku-5-5",
+        "MASTER_EFFORT": "low",
+        "ACTOR_MODEL": "off",
+        "WORLDGEN_MODEL": "claude-haiku-5-5",
+        "WEB_PORT": "3248",
+        "WEB_ACCESS": "public",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/publico",
+        "GAMES_DIR": "./data/local/publico/games",
+        "IMAGES": "off",
+        "DATABASE_URL": "pglite:./data/local/publico/games/.pgdata",
+        "ADMIN_USER": "admin",
+        "ADMIN_PASSWORD": "admin-local-de-pruebas"
       }
     },
     {

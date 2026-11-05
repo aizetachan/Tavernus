@@ -65,6 +65,32 @@ export function debtLine(world: World, d: Debt, nowGameS: number, npcName: (n: N
   return contractArticles([`Debes ${money(world, d.amount)} a ${who}`, dueText(d.due_game_s, nowGameS), pawnName ? `prenda: ${pawnName}` : null].filter(Boolean).join(', '));
 }
 
+/** «Deuda con el regidor» (con quien la tiene; si la cobra otro en su nombre, con el dueño). */
+export function debtTitle(world: World, d: Debt, npcName: (n: Npc) => string): string {
+  const holder = world.npcs.get(d.on_behalf_of ?? d.npc_id);
+  return contractArticles(`Deuda con ${holder ? npcName(holder) : d.npc_id}`);
+}
+
+/** Abierta con este NPC, la cobre él o sea suya. */
+export function debtHeldBy(c: Character, npcId: Id): Debt | undefined {
+  return openDebts(c).find((d) => d.npc_id === npcId || d.on_behalf_of === npcId);
+}
+
+/** Máximo de entradas en el registro de una deuda. */
+const LOG_CAP = 12;
+
+/**
+ * Apunta en la deuda lo que se pacta con quien la cobra («saldarla subiendo al Granero Quemado»), para que el Diario
+ * lo cuente: partida del 2026-11-05, Garrán aceptó el trabajo y la deuda no decía nada. false si ya estaba apuntado.
+ */
+export function noteDebtTerms(world: World, c: Character, d: Debt, text: string, nowGameS: number): boolean {
+  const t = text.replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!t || d.log?.some((x) => x.kind === 'terms' && x.text === t)) return false;
+  d.log = [...(d.log ?? []), { game_s: nowGameS, kind: 'terms' as const, text: t }].slice(-LOG_CAP);
+  world.touch('characters', c.id);
+  return true;
+}
+
 function store(c: Character): Debt[] {
   c.debts ??= [];
   return c.debts;
@@ -178,6 +204,7 @@ export function settleDebt(world: World, c: Character, input: { npc_id: Id; how:
     if (c.coins < paid) return { ok: false, error: `${c.name} tiene ${money(world, c.coins)} y hacen falta ${money(world, paid)}` };
     c.coins -= paid;
     d.amount -= paid;
+    if (d.amount > 0) d.log = [...(d.log ?? []), { game_s: nowGameS, kind: 'paid' as const, text: `Pagas ${money(world, paid)} a cuenta; quedan ${money(world, d.amount)}` }].slice(-LOG_CAP);
   } else d.amount = 0;
   let returned: string | null = null;
   let kept: string | null = null;

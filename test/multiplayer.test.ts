@@ -58,6 +58,12 @@ function browser() {
     get: (path: string, init: RequestInit = {}) => fetch(base + path, { redirect: 'manual', ...init, headers: { cookie: cookie(), ...(init.headers ?? {}) } }).then(keep),
     post: (path: string, body: unknown = {}) => fetch(base + path, { method: 'POST', redirect: 'manual', headers: { cookie: cookie(), 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(keep),
     del: (path: string) => fetch(base + path, { method: 'DELETE', redirect: 'manual', headers: { cookie: cookie() } }).then(keep),
+    /** Crea su cuenta (con la invitación «/i/…» si se da) y queda con la sesión abierta. */
+    signUp: async (username: string, invite?: string) => {
+      const r = await fetch(base + '/api/auth/register', { method: 'POST', redirect: 'manual', headers: { cookie: cookie(), 'content-type': 'application/json' }, body: JSON.stringify({ username, password: 'contraseña-de-pruebas', ...(invite ? { invite: invite.replace(/^\/i\//, '') } : {}) }) }).then(keep);
+      expect(r.status).toBe(200);
+      return (await r.json()) as { ok: boolean; next: string };
+    },
   };
 }
 
@@ -67,9 +73,14 @@ describe('invitaciones por asiento', () => {
   it('el enlace liga al personaje; no puede actuar por otro; sin enlace no entra', async () => {
     await start(ACCESS);
     const host = browser();
-    // Sin enlace: página de invitación y nada de la API.
-    expect(await (await host.get('/')).text()).toContain('por invitación');
-    expect((await host.get('/api/games')).status).toBe(403);
+    // Sin cuenta: a entrar o registrarse, y nada de la API.
+    const root = await host.get('/');
+    expect(root.status).toBe(302);
+    expect(root.headers.get('location')).toBe('/entrar');
+    expect(await (await host.get('/entrar')).text()).toContain('Entra en la taberna');
+    expect((await host.get('/api/games')).status).toBe(401);
+    // En modo invitación no se crea cuenta sin un enlace.
+    expect((await host.post('/api/auth/register', { username: 'colado', password: 'contraseña-de-pruebas' })).status).toBe(403);
     expect((await host.get('/admin?token=otro')).status).toBe(403);
     // El anfitrión entra con su enlace de administración: ve los asientos (uno por PJ) y añade uno libre.
     expect((await host.get(`/admin?token=${ACCESS.adminToken}`)).status).toBe(302);
@@ -84,11 +95,13 @@ describe('invitaciones por asiento', () => {
     expect((await host.get(seats.seats.find((s) => s.character_id === created.character_id)!.link)).status).toBe(302);
     expect(((await (await host.get(`/api/session${g}`)).json()) as { character_id: string; can_switch: boolean })).toMatchObject({ character_id: created.character_id, can_switch: false });
 
-    // El amigo abre su enlace: asiento libre → crea su PJ, junto a Aren.
+    // El amigo abre su enlace sin cuenta: a registrarse con la invitación; al crear la cuenta, el asiento es suyo.
     const friend = browser();
     const join_ = await friend.get(free.link);
     expect(join_.status).toBe(302);
-    expect(join_.headers.get('location')).toBe(`/${g}`);
+    expect(join_.headers.get('location')).toBe(`/entrar?invite=${encodeURIComponent(free.link.slice(3))}`);
+    expect(await (await friend.get(join_.headers.get('location')!)).text()).toContain('Te han invitado a <b>Mesa</b>');
+    expect((await friend.signUp('tor', free.link)).next).toBe(`/${g}`);
     expect(await (await friend.get(`/${g}`)).text()).toContain('Te han invitado');
     const claim = (await (await friend.post(`/api/seat/claim${g}`, { name: 'Tor', class: 'fighter', near: created.character_id })).json()) as { ok: boolean; character_id: string };
     expect(claim.ok).toBe(true);
@@ -109,23 +122,39 @@ describe('invitaciones por asiento', () => {
     }
     expect((await friend.post(`/api/act${g}`, { character: kael, text: 'miro alrededor' })).status).toBe(200);
     expect((await friend.post(`/api/act${g}`, { text: 'espero' })).status).toBe(200); // sin character: el suyo
-    // Ni el menú ni crear partidas ni los asientos.
-    expect((await friend.get('/api/games')).status).toBe(403);
+    // Su menú: solo esta partida, sin crear partidas ni ver los asientos.
+    const mine = (await (await friend.get('/api/games')).json()) as { games: { slug: string; host: boolean }[]; can_create: boolean };
+    expect(mine.games.map((x) => [x.slug, x.host])).toEqual([[created.game.slug, false]]);
+    expect(mine.can_create).toBe(false);
+    expect((await friend.post('/api/games', { name: 'Mía', mode: 'offline', character: 'Tor' })).status).toBe(403);
     expect((await friend.get(`/api/seats${g}`)).status).toBe(403);
-    expect(await (await friend.get('/')).text()).not.toContain('Nueva partida');
 
-    // Enlace inventado o cookie falsificada: fuera.
+    // Enlace inventado, cookie falsificada o sesión inventada: fuera.
     const stranger = browser();
     expect((await stranger.get(`/i/${created.game.slug}/${'x'.repeat(32)}`)).status).toBe(403);
     expect(stranger.jar.size).toBe(0);
     stranger.jar.set(`tv_s_${created.game.slug}`, `${free.id}.firmafalsa`);
-    expect((await stranger.get(`/api/session${g}`)).status).toBe(403);
-    expect(await (await stranger.get(`/${g}`)).text()).toContain('por invitación');
+    expect((await stranger.get(`/api/session${g}`)).status).toBe(401);
+    expect((await stranger.get(`/${g}`)).headers.get('location')).toBe(`/entrar?next=${encodeURIComponent(`/${g}`)}`);
+    stranger.jar.set('tv_u', 'x'.repeat(43));
+    expect((await stranger.get(`/api/session${g}`)).status).toBe(401);
+    // Otro usuario con cuenta pero sin asiento en la partida, ni con el enlace ya usado: no entra.
+    const other = browser();
+    await other.signUp('otro', seats.seats.find((s) => s.character_id === 'ch_mira')!.link);
+    expect((await other.get(free.link)).status).toBe(409);
+    expect((await other.post(`/api/act${g}`, { character: kael, text: 'miro' })).status).toBe(403);
 
-    // Renovar el enlace saca a quien lo usaba.
+    // El asiento sigue a la cuenta, no al navegador: desde otro dispositivo, tras entrar, juega con su PJ.
+    const phone = browser();
+    expect((await phone.post('/api/auth/login', { username: 'Tor', password: 'contraseña-de-pruebas' })).status).toBe(200);
+    expect(((await (await phone.get(`/api/session${g}`)).json()) as { character_id: string }).character_id).toBe(kael);
+
+    // Renovar el enlace no saca a nadie (el asiento es de su cuenta), pero el enlace viejo ya no vale; «Liberar» sí le saca.
     expect((await host.post(`/api/seats/regenerate${g}`, { seat: free.id })).status).toBe(200);
-    expect((await friend.post(`/api/act${g}`, { text: 'miro alrededor' })).status).toBe(403);
     expect((await friend.get(free.link)).status).toBe(403);
+    expect((await friend.post(`/api/act${g}`, { text: 'miro alrededor' })).status).toBe(200);
+    expect((await host.post(`/api/seats/release${g}`, { seat: free.id })).status).toBe(200);
+    expect((await friend.post(`/api/act${g}`, { text: 'miro alrededor' })).status).toBe(403);
   });
 
   it('crear partida por la API reparte asientos y liga al anfitrión a su PJ', async () => {
@@ -159,7 +188,10 @@ describe('invitaciones por asiento', () => {
     await start({ ...ACCESS, mode: 'public' });
     const ana = browser();
     const bea = browser();
-    // Sin enlace: el menú, no la página de invitación.
+    // Sin cuenta, a entrar; con cuenta (registro libre), el menú.
+    expect((await ana.get('/')).headers.get('location')).toBe('/entrar');
+    await ana.signUp('ana');
+    await bea.signUp('bea');
     expect(await (await ana.get('/')).text()).toContain('Nueva partida');
     expect(((await (await ana.get('/api/games')).json()) as { games: unknown[] }).games).toEqual([]);
 

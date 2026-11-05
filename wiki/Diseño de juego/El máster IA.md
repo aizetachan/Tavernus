@@ -91,6 +91,7 @@ Si una tool falla, el motor devuelve el error y el máster lo vuelve a narrar. A
 - El máster propone **2 a 4 botones** cuando la situación lo pide.
 - Salen del personaje: su clase, sus rasgos, lo que lleva en la mano. Un pícaro codicioso verá «registrar el cadáver» antes que «rezar por él».
 - Son **reacciones a lo que acaba de pasar**, no planes a futuro (ajustado tras las pruebas).
+- **No adelantan lo que el jugador no sabe.** Un botón que nombra a alguien de quien no ha oído hablar y que no tiene sitio fijo (un perro perdido) se quita, aunque el máster lo sepa por el contexto. Si se lo acaban de nombrar («Ceniza no vuelve»), el nombre va tal cual: cambiarlo por lo que es («el perro») contaría lo que no sabe. A quien tiene sitio fijo y no conoce, por su oficio: «Preguntar a la tabernera» (desde el 2026-11-05).
 - Siempre se puede escribir otra cosa. Pulsar un botón es lo mismo que escribir su texto.
 
 ## NPC con memoria

@@ -15,7 +15,8 @@ El **Diario** del jugador enseña los pasos dados y el actual, nunca los siguien
 Como en Baldur's Gate 3 (cambia el 2026-10-27, ver [[Modelo Baldur's Gate 3]], [[Revisión partida 2026-10-27]] y [[Decisiones]]). Nada flota sobre nadie y no hay mostrador de aceptar:
 
 1. **Se entra al enterarse.** Quien la da te la pide al hablar con él (una por charla) y entra en el Diario ya activa: aceptar es implícito. Si no quieres, puedes decir que no mientras no hayas empezado, y el Diario lo apunta («No quisimos ayudar a Brenna»). Quien la pidió no insiste; si cambias de idea, se lo dices.
-2. **Lo que oyes es una pista.** Entra en el Diario y te lleva a quien da la misión, sin contar de qué va: «Hemos oído en la barra que Brenna busca a alguien de fiar».
+   - **Solo la que te ha contado.** Si el narrador no la registra, el servidor la abre al cerrar el turno, pero solo la que el personaje ha contado en esa charla; si ha hablado de otra cosa, no entra ninguna. Desde el 2026-11-05: Brenna hablaba de su perro y se abría «La cena del portón», que nadie había pedido.
+2. **Lo que oyes es una pista.** Una línea en el hilo que te lleva a quien da la misión, sin contar de qué va: «Hemos oído en la barra que Brenna busca a alguien de fiar». Si repite otra de la misma persona que aún no te ha pedido nada («la curandera anda buscando a alguien…» dos veces), espera a que te pida la primera. Las que cuentan otra cosa de ella («Brenna lleva días mirando a la puerta») sí se oyen.
 3. **Activa → lista → entregada.** Los pasos se dan por lo que haces; al acabar, la recompensa la da quien la encargó, al hablar con él.
 
 - **Un punto discreto** junto a quien está al final de una pista activa (lo que has oído, el paso en curso, una pista de la principal, a quién entregarla). En el mapa solo sale lo que alguien te ha dicho dónde está. Los iconos y el ✓ de la barra de misiones siguen.
@@ -34,7 +35,7 @@ Como «Find a Cure» en Baldur's Gate 3. Es la situación con la que llega cada 
 | La carta (y quien viaja con él) | **La carta de Vharn** | el sello ([[Ilse]], desde el principio) · el pozo (estar en la plaza) · Vharn ([[Brenna]], tras lo que cuenta Ilse o el perro) · las luces ([[Doro]], al conocerle) · la cadena ([[Hugo]], tras lo que cuenta Ilse) | el Granero Quemado: quién enciende las luces |
 | El hijo del herrero | **Lo que dejó tu padre** | lo que guarda Hugo · lo que vio Brenna · las luces (Doro) | la prueba de quién se llevó la plata |
 | Quien viaja con él | **Lo prometido** | ídem | ídem |
-| La deuda | **Salir de la aldea** | ninguna listada: averiguar qué es la niebla y cómo salir → decidir qué pasa con el ascua → cruzar la niebla | la deuda con el regidor (la cobra [[Garrán]]) va aparte, con su plazo |
+| La deuda | **Salir de la aldea** | ninguna listada: averiguar qué es la niebla y cómo salir → decidir qué pasa con el ascua → cruzar la niebla | la deuda con el regidor (la cobra [[Garrán]]) va aparte, con su plazo; lo que pactas con Garrán para pagarla (subir al Granero Quemado) y los pagos a cuenta quedan en su «Qué ha pasado» |
 
 Ver [[Situaciones iniciales]].
 

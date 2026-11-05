@@ -18,7 +18,7 @@ import { SKILLS, armorClass } from '../engine/rules.js';
 import { activeJobs } from '../engine/progress.js';
 import { contractArticles, descriptorOf, fmtDuration } from '../engine/narrate.js';
 import { attitudeOf, dueNpcTurns } from '../engine/combat.js';
-import { encounterAt, hostilesAt } from '../engine/encounter.js';
+import { encounterAt, hostilesAt, recentCombatTag } from '../engine/encounter.js';
 import { describeHook } from '../engine/hooks.js';
 import { AHEAD_NOTICE_S, aheadBy, justBack, travelBlock } from '../engine/travel.js';
 import { scheduleContext } from '../engine/schedule.js';
@@ -409,12 +409,12 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   // Hechos del mundo (worldfacts.ts) con quién los sabe: lo que se salvó o se condenó vuelve.
   const facts = factsContext(world, actor);
   if (facts) L.push(facts);
-  // Combate en curso (encounter.ts), o un hostil vivo delante que aún no ha pegado (ataca él primero): quién tiene que
-  // actuar en este turno. Si el máster no lo hace, lo hace el servidor.
+  // Combate en curso (encounter.ts), o un hostil vivo delante que aún no ha pegado en una escena ya marcada `combat`
+  // (ataca él primero; tools.ts, fightingHere): quién tiene que actuar en este turno. Si el máster no lo hace, lo hace el servidor.
   const h = engine.sceneHints(actor.id);
   const pcs = [actor.id, ...[...(h?.round?.members ?? []), ...(h?.group?.members ?? []), ...(h?.window?.members ?? [])].map((m) => m.id).filter((id) => id !== actor.id)];
   const pcsHere = pcs.map((id) => world.characters.get(id)).filter((c): c is Character => Boolean(c));
-  if (encounterAt(world, engine.events.recentInLocation(loc.id, 400), loc.id, nowG) || hostilesAt(world, loc.id, pcsHere).length) {
+  if (encounterAt(world, engine.events.recentInLocation(loc.id, 400), loc.id, nowG) || (recentCombatTag(engine.events.recentInLocation(loc.id, 12), nowG) && hostilesAt(world, loc.id, pcsHere).length)) {
     const due = dueNpcTurns(world, pcs, new Set());
     if (due.length) {
       L.push(`## Turno de los NPC hostiles\n${due.map((d) => `- ${actor.knows.includes(d.npc.id) ? d.npc.name : descriptorOf(world, d.npc.id)} [${d.npc.id}] ataca a ${d.target.id === actor.id ? 'el actor' : d.target.name} [${d.target.id}]${(d.npc.stats!.multiattack ?? 1) > 1 ? ` (multiataque ×${d.npc.stats!.multiattack}, en una sola llamada)` : ''}.`).join('\n')}\nEn este turno, después de resolver lo del jugador: un attack por cada uno (attacker_id = el NPC) y nárralo. Si cae o se rinde antes, no ataca. Si no lo haces, el servidor lo resuelve al cerrar y tendrás que reescribir.`);

@@ -85,3 +85,20 @@ export function fightAt(engine: Engine, locationId = 'loc_taberna', spotId = 'sp
   lobo.attitude.default = 'hostile';
   lobo.noncombatant = true;
 }
+
+/**
+ * Crea una cuenta en la web de pruebas (POST /api/auth/register) y devuelve la cookie de sesión («tv_u=…»).
+ * Con `invite` («<partida>/<token>» o el enlace /i/…), el asiento queda ligado a la cuenta.
+ */
+export async function signUp(base: string, username: string, opts: { invite?: string; password?: string; cookie?: string } = {}): Promise<string> {
+  const invite = opts.invite?.replace(/^\/i\//, '');
+  const r = await fetch(`${base}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(opts.cookie ? { cookie: opts.cookie } : {}) },
+    body: JSON.stringify({ username, password: opts.password ?? 'contraseña-de-pruebas', ...(invite ? { invite } : {}) }),
+  });
+  if (r.status !== 200) throw new Error(`registro de ${username}: ${r.status} ${await r.text()}`);
+  const c = r.headers.getSetCookie().find((x) => x.startsWith('tv_u='));
+  if (!c) throw new Error(`registro de ${username}: sin cookie de sesión`);
+  return c.split(';')[0]!;
+}

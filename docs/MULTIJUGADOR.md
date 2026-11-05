@@ -4,7 +4,8 @@ Auditoría del 25 de octubre de 2026. El motor nació multijugador (SPEC §9 y �
 
 ## Resumen
 
-- **Ya se puede jugar con un amigo.** El anfitrión crea la partida y reparte un enlace por asiento. Cada persona entra con el suyo, queda ligada a su personaje (cookie firmada) y no puede actuar por otro. Ve quién más está en línea y dónde («Kael está aquí», «Mira está en camino»). Su cuadro se bloquea mientras tiene una acción en curso, y si va detrás de otro jugador en la cola ve «Esperando a Kael». Con máster real, cada personaje tiene un cupo diario; al agotarlo, sigue jugando en modo offline.
+- **Cuentas (4-11-2026).** Usuario y contraseña, en PostgreSQL: tus partidas y tus personajes te siguen a cualquier dispositivo; los enlaces de invitación ligan el asiento a la cuenta; panel del administrador. Ver «Cuentas».
+- **Ya se puede jugar con un amigo.** El anfitrión crea la partida y reparte un enlace por asiento. Cada persona entra con el suyo, queda ligada a su personaje (con su cuenta, desde el 4-11-2026) y no puede actuar por otro. Ve quién más está en línea y dónde («Kael está aquí», «Mira está en camino»). Su cuadro se bloquea mientras tiene una acción en curso, y si va detrás de otro jugador en la cola ve «Esperando a Kael». Con máster real, cada personaje tiene un cupo diario; al agotarlo, sigue jugando en modo offline.
 - **Lo que más falta para jugar en serio:** que un PJ a 0 PG pueda volver sin ayuda (muerte y reaparición, #23). Quien vuelve ya ve qué pasó mientras no estaba (#19, ver «Al volver»); falta avisarle fuera de la web.
 - **Cómo se probó:** con un guion contra el motor real en offline (dos PJ, acciones a la vez, mismo NPC, mismo objeto, viaje), con tests nuevos (`test/multiplayer.test.ts`) y con dos pestañas del navegador en offline: el anfitrión en `localhost:3207` y el amigo en `127.0.0.1:3207`, para que no compartieran cookies. Hay capturas en la carpeta de notas de la sesión (`multijugador-capturas/`).
 
@@ -48,11 +49,68 @@ Estados: **funciona**, **a medias** (funciona con matices), **fallaba** (corregi
 | **Ventana decisiva con varios jugadores** (§9.3): el orden de llegada decide | Las ventanas son por PJ (`openDecisive`). El orden lo da la cola, pero no hay recurso disputado explícito. | **Deseable**. |
 | **Dificultad según el número de PJ** (§10) | No existe: el máster no escala los encuentros. | **Deseable**. |
 | **Tiempo de juego divergente** (§10) | Resuelto con el reloj propio por PJ (`travel.ts`): al llegar a donde hay otros PJ con una hora anterior, el reloj del que llega se iguala al suyo (`Engine.joinClock`). Nadie espera (27-10-2026). Quien se desconecta queda congelado y al volver se iguala al mundo: ver «Reloj y desconexión». | Hecho. |
-| **Cuentas de verdad** (§11.1, issue #15: identidades, email, OAuth) | Ahora hay identidad ligera por enlace. Sin cuentas: perder el enlace es perder el acceso hasta que el anfitrión lo renueve. | Enlaces: **hecho**. Cuentas: **después**. |
+| **Cuentas de verdad** (§11.1, issue #15: identidades, email, OAuth) | Desde el 4-11-2026, cuentas con usuario y contraseña en PostgreSQL: partidas, asientos y biblioteca de personajes van con la cuenta, no con el navegador (ver «Cuentas»). Sin correo: ni confirmación ni recuperación (la contraseña la cambia el administrador). | Usuario y contraseña: **hecho**. Correo y OAuth: **después**. |
 | **Límite de gasto** (#17) | Hecho, por PJ y día. Falta un tope global por partida o por servidor. | Por PJ: **hecho**. Global: **deseable**. |
 | **Reportar errores con ⚠️** (§11.2) | Era de Discord. En la web no existe. | **Deseable** para jugar con amigos y recoger fallos. |
 
+## Cuentas (4-11-2026)
+
+Lo que lo motivó: Miguel jugó una partida en el móvil y no la veía ni en otro móvil ni en el PC. Las partidas estaban todas en el servidor, pero la identidad era una cookie por navegador (el asiento) y el menú solo listaba las partidas donde ese navegador tenía asiento. Ahora la identidad es una cuenta. Código: `src/accounts/accounts.ts` (usuarios, contraseñas, sesiones, biblioteca, asientos), `src/db/` (PostgreSQL, migraciones, catálogo de partidas), rutas en `src/adapters/web/server.ts` y páginas en `page-account.ts` (entrar), `page-admin.ts` (panel), `page-menu.ts` y `page-access.ts`. Tests: `test/accounts.test.ts`, y los de acceso de `test/multiplayer.test.ts`, `test/chargen.test.ts` y `test/report.test.ts`.
+
+### Modelo de datos (PostgreSQL)
+
+| Tabla | Qué guarda |
+|---|---|
+| `users` | Nombre de usuario (único sin mayúsculas ni tildes: «Miguel» y «miguél» son el mismo), contraseña con scrypt y sal (`scrypt$N$r$p$sal$hash`, de `node:crypto`), si es administrador, si está desactivado, alta, último acceso. |
+| `sessions` | Una por dispositivo con sesión abierta: el sha256 del token de la cookie `tv_u` (la base nunca guarda el token), caducidad (180 días, se alarga al usarla), navegador e IP. Cambiar la contraseña, desactivar o borrar la cuenta las cierra. |
+| `games` | El catálogo de partidas (lo que era `game.json`, que se sigue escribiendo en cada carpeta como copia legible) y su dueño (`owner_id`, o nada). El mundo de cada partida sigue en su carpeta. |
+| `seats` | Los asientos (lo que era `seats.json`): token del enlace, etiqueta, si es el del anfitrión, el PJ en el mundo, el usuario que lo ocupa y la plantilla de la biblioteca de la que salió. Un usuario tiene como mucho un asiento por partida. |
+| `characters` | La biblioteca de personajes de cada usuario: lo mismo que pide el asistente (nombre, raza, clase, trasfondo, características, habilidades, aspecto, gancho, muerte). Es una plantilla: cada partida tiene su copia en el mundo (`games.addCharacter`), que es la que progresa. Editarla o borrarla no toca las copias. |
+| `admin_log` | Lo que se hace desde el panel: quién, qué, a quién y cuándo. |
+
+En el servidor, `pg` contra el PostgreSQL local por socket (`DATABASE_URL`; docs/DESPLIEGUE.md, «Base de datos»). En tests y en local, PGlite (PostgreSQL en WASM dentro del proceso) con el mismo SQL: los tests prueban contra PostgreSQL de verdad, sin servidor ni Docker. La web de los tests que no tocan cuentas no arranca la base: se crea en memoria la primera vez que hace falta.
+
+### Quién ve qué
+
+| Quién | Qué ve |
+|---|---|
+| Sin cuenta (`public`, `invite`) | Solo `/entrar` (entrar o crear cuenta), la wiki y la salud (`/api/health`). Lo demás lleva a `/entrar` (y vuelve después a donde iba) o responde 401. |
+| Usuario | Sus partidas (es dueño o tiene asiento) en el menú, desde cualquier dispositivo. En una partida ajena, 403. Es anfitrión (invitaciones, borrar) de las suyas. |
+| Administrador (usuario con `is_admin`) | Todas las partidas, el panel `/admin/usuarios` y `/admin/estado`. |
+| Enlace `/admin?token=…` | Lo mismo que un administrador, sin cuenta: es la entrada de rescate si no queda ningún administrador. |
+| `open` (local) | Como siempre, sin cuenta: cualquiera ve todo y juega con cualquier PJ. Si te registras, tienes además biblioteca. |
+
+Modos: `public` deja registrarse a cualquiera y cada usuario crea sus partidas (`PUBLIC_GAMES_PER_DAY` sigue limitando las nuevas al día). En `invite` solo se crea cuenta desde un enlace de invitación válido y las partidas las crea el administrador.
+
+### Entrar, registrarse y la pantalla de inicio
+
+- `/entrar`: pestañas «Entrar» y «Crear cuenta». Usuario de 3 a 24 letras, cifras, puntos o guiones; contraseña de 8 o más caracteres. Sin correo ni confirmación. El mismo mensaje si el usuario no existe o la contraseña falla. Diez fallos de un usuario desde una IP le hacen esperar 15 minutos; el registro admite cinco cuentas por IP y hora.
+- Menú con cuenta: dos zonas, **Partidas** (la lista de siempre) y **Personajes** (la biblioteca, con crear, editar y borrar con el asistente de siempre, y en qué partidas juega cada uno). «Nueva partida» pregunta con quién empiezas: uno de la biblioteca o uno nuevo, que se guarda en ella. En el menú de ajustes (⚙): el nombre de la cuenta, «Administración» (si lo eres), «Cambiar contraseña» y «Cerrar sesión».
+- Quien solo ha sido invitado (en `invite`) ve sus partidas pero no «Nueva partida».
+
+### Invitaciones con cuenta
+
+- `/i/<partida>/<token>` con sesión: el asiento queda ligado a tu usuario y vas a la partida. Si el asiento ya es de otra persona, o ya tienes otro en esa partida, 409 con el motivo.
+- Sin sesión: va a `/entrar?invite=<partida>/<token>`, que dice a qué partida te han invitado. Al entrar o crear la cuenta, el asiento se liga y vas a la partida.
+- Asiento libre: eliges un personaje de tu biblioteca (el que tenga un nombre ya usado en esa partida sale apagado) o creas uno con el asistente, que se guarda en tu biblioteca. Lo que la partida no aceptaría (nombre cogido, combinación no válida) no se guarda.
+- El anfitrión, en «Invitaciones», ve de quién es cada asiento. «Renovar» cambia el enlace (el viejo deja de valer para quien aún no lo había usado), pero ya no saca a nadie: el asiento es de su cuenta. Para sacar a alguien, «Liberar»: el asiento se queda sin usuario y su PJ sigue en el mundo.
+
+### Migración de las partidas de antes (nada se borra)
+
+1. Al arrancar, la web importa a la base las partidas que solo tienen carpeta (`game.json` y `seats.json`), sin dueño. Los ficheros se quedan como estaban.
+2. Quien entra con su cuenta (o se la crea) **en el navegador donde jugaba** se lleva sus asientos: cada cookie de asiento antigua (`tv_s_<partida>`) con firma válida liga su asiento a la cuenta si nadie lo tiene, y si es el del anfitrión y la partida no tiene dueño, la partida pasa a ser suya. Esas cookies se borran después. Una cookie falsificada no se lleva nada.
+3. Lo que no reclame nadie lo asigna el administrador en el panel («Asignar a»): la partida pasa a ser de ese usuario y, si no tenía asiento en ella, el del anfitrión también.
+
+Fuera de `open`, las cookies de asiento ya no dan acceso por sí solas: solo sirven para esa migración.
+
+### Administración
+
+- **Primer administrador, sin navegador:** `npm run admin -- <usuario>` (con la misma `DATABASE_URL` y `GAMES_DIR` que la web; en el servidor, `sudo tavernus-admin <usuario>`). Si el usuario existe, lo hace administrador; si no, lo crea y pide la contraseña sin mostrarla. Con `--password`, además le pone una nueva. También `ADMIN_USER` y `ADMIN_PASSWORD` en el entorno, al arrancar.
+- **Panel `/admin/usuarios`** (403 a cualquier otro): usuarios con alta, último acceso, si es administrador o está desactivado y cuántas partidas y personajes tiene. Al abrir uno: su biblioteca (y dónde juega cada personaje) y sus partidas, y cambiar contraseña (cierra sus sesiones), hacer o quitar administrador, desactivar o reactivar, y borrar. Borrar una cuenta borra sus sesiones y su biblioteca; sus partidas quedan sin dueño y sus asientos sin usuario, con el mundo intacto. Debajo, todas las partidas con su dueño y quién juega, con «Asignar a», un formulario para crear una cuenta (útil en `invite`) y lo último que se ha hecho. El servidor nunca se queda sin administrador: no se puede quitar el rol al último, ni desactivarlo, ni borrarlo, y nadie se quita el rol a sí mismo.
+
 ## Lo implementado
+
+Lo que sigue es la identidad por enlace del 25-10-2026, sobre la que se montan las cuentas. Donde dice «cookie del asiento», hoy es la cuenta (salvo en `open` y con el enlace de rescate).
 
 ### (a) Identidad ligera sin cuentas: asientos e invitaciones
 
@@ -313,10 +371,10 @@ Código: `src/engine/death.ts` (caer, salvaciones, muerte, cuerpo, vuelta), `src
 
 ## Cómo jugar con un amigo (resumen; detalle en el README)
 
-1. En el servidor: `ADMIN_TOKEN=<algo largo>` y, detrás de HTTPS, `PUBLIC_URL=https://tu-dominio`. Arranca con `npm run web` (o el servicio); el log dice dónde leer el token de administración, sin escribirlo.
-2. Abre `https://tu-dominio/admin?token=…`, crea la partida con tu personaje y «Plazas para amigos: 1».
-3. En «⚙ → Invitaciones», copia el enlace del asiento libre y pásaselo a tu amigo. Guarda también el tuyo, para entrar desde otro dispositivo.
-4. Tu amigo abre el enlace, crea su personaje («Empezar junto a…» marcado) y ya estáis en el mismo sitio.
+1. En el servidor: PostgreSQL (`DATABASE_URL`, lo deja `setup-vps.sh`), `WEB_ACCESS=public` o `invite` y, detrás de HTTPS, `PUBLIC_URL=https://tu-dominio`. Tu usuario administrador: `sudo tavernus-admin <usuario>`.
+2. Entra en `https://tu-dominio/entrar` con tu cuenta, crea la partida con un personaje de tu biblioteca (o uno nuevo) y un invitado.
+3. En «⚙ → Invitaciones», copia el enlace del asiento libre y pásaselo a tu amigo.
+4. Tu amigo abre el enlace, se crea la cuenta, elige o crea su personaje («Empezar junto a…» marcado) y ya estáis en el mismo sitio. Los dos veis la partida desde cualquier dispositivo con vuestra cuenta.
 
 ## Siguiente, por prioridad
 

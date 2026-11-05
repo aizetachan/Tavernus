@@ -184,11 +184,11 @@ describe('creación por la web', () => {
     const seats = (await (await host.get(`/api/seats${g}`)).json()) as { seats: { character_id: string | null; link: string }[] };
     const free = seats.seats.find((s) => !s.character_id)!;
 
-    // Sin enlace, nada.
-    expect((await browser().post(`/api/character/preview${g}`, { name: 'Tam', ...ROGUE })).status).toBe(403);
+    // Sin cuenta, nada.
+    expect((await browser().post(`/api/character/preview${g}`, { name: 'Tam', ...ROGUE })).status).toBe(401);
 
     const friend = browser();
-    await friend.get(free.link);
+    expect((await friend.post('/api/auth/register', { username: 'tam', password: 'contraseña-de-pruebas', invite: free.link.slice(3) })).status).toBe(200);
     const page = await (await friend.get(`/${g}`)).text();
     expect(page).toContain('tavernusChargen');
     expect(page).toContain('"backgrounds"');
@@ -202,10 +202,16 @@ describe('creación por la web', () => {
     expect((await friend.post(`/api/seat/claim${g}`, { name: 'Tam', ...ROGUE, abilities: { ...ABILITIES, str: 15 } })).status).toBe(400);
     expect(((await (await host.get(`/api/seats${g}`)).json()) as typeof seats).seats.filter((s) => !s.character_id)).toHaveLength(1);
 
+    // Lo que no vale no entra en su biblioteca; un nombre ya cogido, tampoco.
+    expect((await friend.post(`/api/seat/claim${g}`, { name: 'Aren', ...ROGUE })).status).toBe(400);
+    expect(((await (await friend.get('/api/library')).json()) as { characters: unknown[] }).characters).toEqual([]);
     const claim = (await (await friend.post(`/api/seat/claim${g}`, { name: 'Tam', ...ROGUE, near: made.character_id })).json()) as { ok: boolean; character_id: string };
     expect(claim.ok).toBe(true);
     const engine = await games.open(made.game.slug);
     expect(engine.world.character(claim.character_id)).toMatchObject({ background_id: 'criminal', death_mode: 'hardcore', abilities: { ...ABILITIES, dex: 17 } });
     expect(engine.world.characterSpot(engine.world.character(claim.character_id))!.id).toBe(engine.world.characterSpot(engine.world.character(made.character_id))!.id);
+    // Y Tam queda en su biblioteca, completo.
+    const lib = ((await (await friend.get('/api/library')).json()) as { characters: { name: string; background_id: string; death_mode: string; games: { slug: string }[] }[] }).characters;
+    expect(lib).toMatchObject([{ name: 'Tam', background_id: 'criminal', death_mode: 'hardcore', games: [{ slug: made.game.slug }] }]);
   });
 });

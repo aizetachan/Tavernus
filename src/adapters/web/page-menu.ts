@@ -21,7 +21,7 @@ export const MENU = String.raw`<!doctype html>
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   /* Safari en iPhone/iPad amplía la página al tocar un campo con letra de menos de 16 px (y no siempre deshace el zoom): ahí, 16 px. */
   @supports (-webkit-touch-callout: none) { input, textarea, select { font-size: 16px !important; } }
-  /* Estilo B5 (lienzo «Tavernus · Pantalla de partida»): tus partidas como los chats de WhatsApp. A la izquierda
+  /* Estilo B5 (lienzo «Tavernus: Pantalla de partida»): tus partidas como los chats de WhatsApp. A la izquierda
      la lista; a la derecha la partida elegida o la creación de una nueva. En el móvil, la lista a pantalla completa,
      un botón flotante para crear y la creación como una hoja que sube desde abajo. */
   :root {
@@ -154,6 +154,34 @@ export const MENU = String.raw`<!doctype html>
   .menu-pop button.danger { color: #ff9d94; }
   .menu-pop button.danger.armed { background: rgba(255,107,94,.16); }
   .empty { margin: 14px 16px; color: var(--muted); font-size: 14px; }
+  /* Zonas del menú con cuenta (Partidas y Personajes) y la biblioteca de personajes. */
+  .zones { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 0 6px 12px; padding: 4px; border-radius: 12px; background: var(--glass, rgba(255,255,255,.04)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+  .zones[hidden], #new-wrap[hidden], #newchar-wrap[hidden], #fab[hidden], #list[hidden], #chars[hidden] { display: none !important; }
+  .zones button { height: 32px; border-radius: 9px; background: transparent; color: var(--muted); font-size: 14px; font-weight: 600; }
+  .zones button.on { background: var(--accent-tint); color: var(--accent); }
+  .crow { position: relative; display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin-bottom: 8px; border-radius: 14px; background: var(--glass, rgba(255,255,255,.03)); }
+  .crow .ini { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--accent-tint); color: var(--accent); font: 700 18px/1 var(--display); }
+  .crow .tt { flex: 1; min-width: 0; }
+  .crow b { display: block; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .crow small { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
+  .crow .acts { display: flex; gap: 6px; flex: none; }
+  .crow .btn.danger.armed { color: #ff9d94; }
+  .filters.menu .acct-name { margin: 2px 12px 4px; font-size: 14px; font-weight: 600; color: var(--text); }
+  .filters.menu .acct[hidden] { display: none; }
+  #pc-host { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #pc-host[hidden] { display: none; }
+  #pc-host .pc-body { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
+  #pc-host .pc-body button.pick { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bubble); box-shadow: inset 0 0 0 1px var(--line); color: var(--text); text-align: left; }
+  #pc-host .pc-body button.pick:hover:not(:disabled) { box-shadow: inset 0 0 0 1.5px var(--accent); }
+  #pc-host .pc-body button.pick .ini { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 50%; background: var(--accent-tint); color: var(--accent); font: 700 16px/1 var(--display); }
+  #pc-host .pc-body button.pick small { display: block; color: var(--muted); font-size: 12.5px; }
+  #pw { width: min(400px, calc(100vw - 32px)); padding: 22px; border: 0; border-radius: 18px; background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+  #pw::backdrop { background: rgba(0,0,0,.55); }
+  #pw h2 { margin: 0 0 10px; font: 700 18px/1.2 var(--display); }
+  #pw label { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
+  #pw input { display: block; width: 100%; height: 40px; margin-top: 4px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bubble); color: var(--text); font: inherit; }
+  #pw .foot { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+  #pw .error { flex: 1; font-size: 13px; }
   .error { color: #ff9d94; font-size: 14px; }
   #fab { display: none; }
 
@@ -423,6 +451,12 @@ ${CHARGEN_CSS}
     <label class="search"><svg class="i"><use href="#i-search"/></svg><span class="vh">Buscar partidas</span><input id="q" type="text" placeholder="Buscar partidas" autocomplete="off"></label>
     <button id="lists-btn" class="btn ghost sm" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="lists-menu" title="Ajustes: qué partidas ver" aria-label="Ajustes: qué partidas ver"><svg class="i"><use href="#i-gear"/></svg></button>
     <div id="lists-menu" class="filters menu" role="menu" aria-label="Qué partidas ver" hidden>
+      <div class="mh acct" hidden>Tu cuenta</div>
+      <div class="acct-name acct" id="acct-name" hidden></div>
+      <button type="button" role="menuitem" class="acct" data-acct="admin" hidden><span>Administración</span></button>
+      <button type="button" role="menuitem" class="acct" data-acct="password" hidden><span>Cambiar contraseña</span></button>
+      <button type="button" role="menuitem" class="acct" data-acct="logout" hidden><span>Cerrar sesión</span></button>
+      <div class="sep acct" role="separator" hidden></div>
       <div id="status" role="note" hidden></div>
       <div class="sep" role="separator"></div>
       <button type="button" role="menuitemradio" data-list="continue" class="on"><span>Partidas</span><span id="n-continue">0</span></button>
@@ -438,9 +472,15 @@ ${CHARGEN_CSS}
       <button type="button" role="menuitem" class="status-link" hidden onclick="location.href='/admin/estado'"><span>Estado del servidor</span></button>
     </div>
   </div>
+  <div class="zones" id="zones" role="tablist" aria-label="Qué ver" hidden>
+    <button type="button" role="tab" data-zone="games" class="on" aria-selected="true">Partidas</button>
+    <button type="button" role="tab" data-zone="chars" aria-selected="false">Personajes</button>
+  </div>
   <div class="scroll">
     <button type="button" id="resume" class="art" hidden><span class="cap"><span class="eyebrow" id="resume-eyebrow">Continúa tu historia</span><b id="resume-name"></b><span class="go"><span id="resume-meta"></span></span></span></button>
     <div id="list"></div>
+    <div id="chars" hidden></div>
+    <div class="new-wrap" id="newchar-wrap" hidden><button id="open-newchar" class="btn primary sm" type="button"><svg class="i"><use href="#i-plus"/></svg>Nuevo personaje</button></div>
     <div class="new-wrap" id="new-wrap"><button id="open-new" class="btn primary sm" type="button"><svg class="i"><use href="#i-plus"/></svg>Nueva partida</button></div>
     <div class="new-wrap" id="guide-wrap"><a class="btn ghost sm" href="https://github.com/aizetachan/Tavernus/blob/main/docs/GUIA-USUARIO.md" target="_blank" rel="noopener">Cómo se juega</a></div>
   </div>
@@ -473,7 +513,7 @@ ${CHARGEN_CSS}
             <button id="adv-btn" class="sq-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="adv-pop" title="Opciones avanzadas" aria-label="Opciones avanzadas"><svg class="i"><use href="#i-gear"/></svg></button>
             <div id="adv-pop" class="dd-menu pop" role="dialog" aria-label="Opciones avanzadas" hidden>
               <b>Opciones avanzadas</b>
-              <label class="sub">Semilla de dados · vacía: al azar; al grabar se elige una sola<input id="g-seed" type="number" min="0" max="4294967295" step="1" placeholder="p. ej. 1234"></label>
+              <label class="sub">Semilla de dados (vacía: al azar; al grabar se elige una sola)<input id="g-seed" type="number" min="0" max="4294967295" step="1" placeholder="p. ej. 1234"></label>
             </div>
           </div>
         </div>
@@ -487,9 +527,9 @@ ${CHARGEN_CSS}
         <div id="world-opts" hidden>
           <div class="grid2">
             <label class="sub">Tono<select id="g-tone"></select></label>
-            <label class="sub">Semilla del mundo · vacía: al azar<input id="g-wseed" type="number" min="0" max="4294967295" step="1" placeholder="al azar"></label>
+            <label class="sub">Semilla del mundo (vacía: al azar)<input id="g-wseed" type="number" min="0" max="4294967295" step="1" placeholder="al azar"></label>
           </div>
-          <label class="sub">Ambientación · opcional<input id="g-setting" type="text" maxlength="300" placeholder="Fantasía oscura, ciencia ficción, postapocalíptico…"></label>
+          <label class="sub">Ambientación (opcional)<input id="g-setting" type="text" maxlength="300" placeholder="Fantasía oscura, ciencia ficción, postapocalíptico…"></label>
           <p id="world-test" class="note warn" hidden>En offline es un mundo de prueba: la estructura cambia con la semilla, pero nombres y textos son de plantilla. Para un mundo escrito por Claude, elige «Real».</p>
         </div>
         <div class="fld" role="radiogroup" aria-labelledby="lbl-master">
@@ -510,9 +550,22 @@ ${CHARGEN_CSS}
         <button class="btn primary" type="submit">Crear personaje</button>
       </div>
     </form>
+    <div id="pc-host" hidden>
+      <div class="pc-body" id="pc-list"></div>
+      <div class="new-foot"><span class="grow"><span id="pc-error" class="error" role="alert"></span></span><button class="btn ghost sm" type="button" id="pc-back">Atrás</button><button class="btn primary sm" type="button" id="pc-new">Crear uno nuevo</button></div>
+    </div>
     <div id="cg-host" class="cg" hidden></div>
   </section>
 </main>
+<dialog id="pw" aria-labelledby="pw-title">
+  <form method="dialog" id="pw-form">
+    <h2 id="pw-title">Cambiar contraseña</h2>
+    <label>Contraseña actual<input type="password" id="pw-cur" autocomplete="current-password" maxlength="200"></label>
+    <label>Contraseña nueva<input type="password" id="pw-new" autocomplete="new-password" maxlength="200"></label>
+    <label>Repítela<input type="password" id="pw-again" autocomplete="new-password" maxlength="200"></label>
+    <div class="foot"><span class="error" id="pw-err" role="alert"></span><button class="btn ghost sm" type="button" id="pw-cancel">Cancelar</button><button class="btn primary sm" type="submit" id="pw-go">Guardar</button></div>
+  </form>
+</dialog>
 <div id="toast" role="alert" hidden></div>
 <script>
 ${CHARGEN_JS}
@@ -520,6 +573,8 @@ ${CHARGEN_JS}
   var $ = function (id) { return document.getElementById(id); };
   var MODE = { live: 'Máster real', offline: 'Offline', record: 'Grabando', replay: 'Demo' };
   var chargenOptions = null, chargen = null, apiKey = true, modeTouched = false, lists = { continue: [], demos: [], recordings: [] }, tab = 'continue', selected = null, query = '';
+  // Cuenta (null en local sin cuenta), su biblioteca de personajes y qué zona se ve: partidas o personajes.
+  var me = null, library = [], zone = 'games', canCreate = true;
   var mobile = function () { return window.matchMedia('(max-width: 820px)').matches; };
 
   function fmt(iso) {
@@ -576,11 +631,11 @@ ${CHARGEN_JS}
   }
   /** El tipo de máster como bolita de su color; el nombre, al pasar el ratón (y para lectores de pantalla). */
   function badge(g) {
-    var b = el('span', 'badge dot ' + g.mode), t = (MODE[g.mode] || g.mode) + (g.main ? ' · principal' : '');
+    var b = el('span', 'badge dot ' + g.mode), t = (MODE[g.mode] || g.mode) + (g.main ? ', principal' : '');
     b.setAttribute('data-tip', t); b.setAttribute('aria-label', 'Máster: ' + t); b.setAttribute('role', 'img');
     return b;
   }
-  function when(g) { return g.last_opened_at ? 'Jugada ' + ago(g.last_opened_at) : 'Creada ' + ago(g.created_at) + ' · sin jugar'; }
+  function when(g) { return g.last_opened_at ? 'Jugada ' + ago(g.last_opened_at) : 'Creada ' + ago(g.created_at) + ', sin jugar'; }
   /**
    * La taberna es por ahora la imagen de todas las partidas. Se encuadra para que la casa quede en el centro del
    * hueco en cualquier pantalla: la imagen cubre el hueco (y, en las miniaturas, se acerca data-zoom veces) y se
@@ -662,7 +717,7 @@ ${CHARGEN_JS}
     if (g.characters.length) bits.push(g.characters.join(', '));
     if (g.mode === 'record' || g.mode === 'replay') bits.push(g.cache_entries + ' respuestas grabadas');
     if (g.world) bits.push(g.world.template ? 'mundo de plantilla' : 'mundo generado');
-    return bits.join(' · ') || 'Sin personajes todavía';
+    return bits.join('; ') || 'Sin personajes todavía';
   }
 
   /** Borrar pide un segundo clic en 4 s, sin diálogos del navegador. */
@@ -768,8 +823,8 @@ ${CHARGEN_JS}
       hero.innerHTML = '<div class="cap"><span class="eyebrow">Tavernus</span><h2>Rol por chat con un máster de IA</h2></div>';
       p.appendChild(hero);
       var box = el('div', 'intro');
-      box.appendChild(el('p', '', visible().length ? 'Elige una partida de la lista para seguirla, o empieza una nueva.' : EMPTY[tab]));
-      if (tab === 'continue') box.appendChild(button('Nueva partida', 'btn primary', openNew));
+      box.appendChild(el('p', '', visible().length ? (canCreate ? 'Elige una partida de la lista para seguirla, o empieza una nueva.' : 'Elige una partida de la lista para seguirla.') : canCreate ? EMPTY[tab] : 'Aún no estás en ninguna partida. Cuando te inviten, abre el enlace y aparecerá aquí.'));
+      if (tab === 'continue' && canCreate) box.appendChild(button('Nueva partida', 'btn primary', openNew));
       hero.appendChild(box);
       return;
     }
@@ -781,7 +836,7 @@ ${CHARGEN_JS}
     cap.appendChild(el('h2', '', g.name));
     var chips = el('div', 'chips');
     chips.appendChild(el('span', '', when(g)));
-    if (g.world) chips.appendChild(el('span', '', (g.world.template ? 'Mundo de plantilla' : 'Mundo generado') + ' · semilla ' + g.world.seed));
+    if (g.world) chips.appendChild(el('span', '', (g.world.template ? 'Mundo de plantilla' : 'Mundo generado') + ', semilla ' + g.world.seed));
     if (g.mode === 'record' || g.mode === 'replay') chips.appendChild(el('span', '', g.cache_entries + ' respuestas grabadas'));
     cap.appendChild(chips);
     if (g.synopsis) cap.appendChild(el('p', 'synopsis', g.synopsis));
@@ -819,6 +874,8 @@ ${CHARGEN_JS}
     return lists[tab].filter(function (g) { return !q || g.name.toLowerCase().indexOf(q) >= 0 || g.characters.join(' ').toLowerCase().indexOf(q) >= 0; });
   }
   function render() {
+    paintZone();
+    if (zone === 'chars') { renderChars(); return; }
     var box = $('list'), games = visible();
     box.innerHTML = '';
     document.querySelectorAll('.filters [data-list]').forEach(function (b) { var on = b.getAttribute('data-list') === tab; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
@@ -838,7 +895,7 @@ ${CHARGEN_JS}
       art(resume, last);
       $('resume-eyebrow').textContent = lists.continue[0] && last.slug === lists.continue[0].slug ? 'Continúa tu historia' : EYEBROW[tab];
       $('resume-name').textContent = last.name;
-      $('resume-meta').textContent = [MODE[last.mode], when(last)].join(' · ');
+      $('resume-meta').textContent = [MODE[last.mode], when(last)].join(', ');
     }
   }
   /** Ventanitas sin velo (Aspecto, Opciones avanzadas): se abren con su botón y se cierran al pulsar fuera o con Esc. */
@@ -944,6 +1001,12 @@ ${CHARGEN_JS}
       keyWarn();
       chargenOptions = d.options;
       $('no-char').hidden = !d.character_optional;
+      me = d.user || null;
+      canCreate = d.can_create !== false;
+      $('new-wrap').hidden = !canCreate; $('fab').hidden = !canCreate;
+      $('zones').hidden = !me;
+      document.querySelectorAll('.acct').forEach(function (x) { x.hidden = !me || (x.getAttribute('data-acct') === 'admin' && !d.admin); });
+      if (me) $('acct-name').textContent = me.username;
       if (!$('g-tone').options.length) (d.options.tones || []).forEach(function (t) { $('g-tone').add(new Option(t.name, t.id)); });
       var games = d.games;
       lists.continue = games.filter(function (g) { return !g.demo && g.mode !== 'record'; });
@@ -953,9 +1016,154 @@ ${CHARGEN_JS}
       $('n-demos').textContent = lists.demos.length;
       $('n-recordings').textContent = lists.recordings.length;
       render();
-      if (!games.length && !mobile()) openNew();
+      if (me) loadLibrary();
+      try { var note = sessionStorage.getItem('tavernus.notice'); if (note) { sessionStorage.removeItem('tavernus.notice'); toast(note); } } catch (e) {}
+      if (!games.length && !mobile() && canCreate && !me) openNew();
     }).catch(function () { $('list').innerHTML = '<p class="error empty">No hay conexión con el servidor.</p>'; });
   }
+
+  // ---------------------------------------------------------------------------
+  // Personajes: la biblioteca de la cuenta (plantillas; cada partida juega con su copia)
+  // ---------------------------------------------------------------------------
+  function loadLibrary() {
+    return fetch('/api/library').then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) return;
+      library = d.characters;
+      paintSubmit();
+      if (zone === 'chars') render();
+    }).catch(function () {});
+  }
+  function optName(list, id) { var x = (list || []).filter(function (o) { return o.id === id; })[0]; return x ? x.name : ''; }
+  function charWhat(c) {
+    var C = chargenOptions || {};
+    return [optName(C.races, c.race_id), optName(C.classes, c.class_id)].filter(Boolean).join(', ') || 'Personaje';
+  }
+  function paintZone() {
+    document.querySelectorAll('#zones [data-zone]').forEach(function (b) { var on = b.getAttribute('data-zone') === zone; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+    var chars = zone === 'chars';
+    $('list').hidden = chars; $('chars').hidden = !chars; $('newchar-wrap').hidden = !chars;
+    $('new-wrap').hidden = chars || !canCreate; $('fab').hidden = chars || !canCreate;
+    if (chars) $('resume').hidden = true;
+    $('q').placeholder = chars ? 'Buscar personajes' : 'Buscar partidas';
+  }
+  function renderChars() {
+    var box = $('chars'), q = query.trim().toLowerCase();
+    box.innerHTML = '';
+    var list = library.filter(function (c) { return !q || c.name.toLowerCase().indexOf(q) >= 0; });
+    if (!list.length) box.appendChild(el('p', 'empty', q ? 'Ningún personaje coincide.' : 'Aún no tienes personajes. Crea uno y úsalo al empezar una partida o al entrar en una con un enlace.'));
+    list.forEach(function (c) {
+      var r = el('div', 'crow');
+      r.appendChild(el('span', 'ini', c.name.charAt(0).toUpperCase()));
+      var tt = el('span', 'tt');
+      tt.appendChild(el('b', '', c.name));
+      tt.appendChild(el('small', '', charWhat(c)));
+      if (c.games && c.games.length) tt.appendChild(el('small', '', 'Juega en ' + c.games.map(function (g) { return g.name; }).join(', ')));
+      r.appendChild(tt);
+      var acts = el('span', 'acts');
+      acts.appendChild(button('Editar', 'btn ghost sm', function () { editChar(c); }));
+      var timer = null;
+      acts.appendChild(button('Borrar', 'btn ghost sm danger', function (b) {
+        if (!b.classList.contains('armed')) {
+          b.classList.add('armed'); b.textContent = '¿Seguro?';
+          timer = setTimeout(function () { b.classList.remove('armed'); b.textContent = 'Borrar'; }, 4000);
+          return;
+        }
+        clearTimeout(timer); b.disabled = true;
+        fetch('/api/library/' + encodeURIComponent(c.id), { method: 'DELETE' }).then(function (r) { return r.json(); })
+          .then(function (r) { if (!r.ok) toast(r.text); loadLibrary(); }).catch(function () { toast('No hay conexión con el servidor.'); });
+      }));
+      r.appendChild(acts);
+      box.appendChild(r);
+    });
+    // A la derecha, la portada con lo que es la biblioteca.
+    var p = $('pick'); p.innerHTML = ''; backdrop(null);
+    var hero = el('div', 'hero');
+    hero.innerHTML = '<div class="cap"><span class="eyebrow">Tus personajes</span><h2>Llévalos a cualquier partida</h2></div>';
+    var intro = el('div', 'intro');
+    intro.appendChild(el('p', '', 'Cada partida juega con una copia del personaje: lo que le pase allí no cambia el de tu biblioteca, y editarlo aquí no cambia el que ya está jugando.'));
+    intro.appendChild(button('Nuevo personaje', 'btn primary', function () { editChar(null); }));
+    hero.appendChild(intro);
+    p.appendChild(hero);
+  }
+  document.querySelectorAll('#zones [data-zone]').forEach(function (b) {
+    b.addEventListener('click', function () { zone = b.getAttribute('data-zone'); selected = null; render(); });
+  });
+  $('open-newchar').addEventListener('click', function () { editChar(null); });
+
+  /** Crear o editar un personaje de la biblioteca con el mismo asistente, en la hoja de «Nueva partida». */
+  function editChar(c) {
+    if (!chargenOptions) return;
+    chargen = null; // el asistente de la partida se rehace la próxima vez
+    $('new-form').hidden = true; $('pc-host').hidden = true; $('cg-host').hidden = false;
+    $('new').classList.add('cg-on');
+    $('new-title').textContent = c ? 'Editar personaje' : 'Nuevo personaje';
+    $('new').hidden = false; document.body.classList.add('new-open');
+    tavernusChargen($('cg-host'), {
+      options: chargenOptions,
+      previewUrl: '/api/character/preview',
+      confirmLabel: c ? 'Guardar cambios' : 'Guardar personaje',
+      showHook: function () { return true; },
+      initial: c || null,
+      onBack: closeNew,
+      onConfirm: function (p, ui) {
+        fetch(c ? '/api/library/' + encodeURIComponent(c.id) : '/api/library', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(p) })
+          .then(function (r) { return r.json(); })
+          .then(function (r) { if (!r.ok) { ui.fail(r.text); return; } closeNew(); zone = 'chars'; loadLibrary().then(render); toast(c ? 'Personaje guardado.' : 'Personaje creado.'); })
+          .catch(function () { ui.fail('No hay conexión con el servidor.'); });
+      }
+    }).open();
+  }
+
+  /** «Nueva partida» con cuenta: primero, con quién entras (de la biblioteca) o crear uno nuevo. */
+  function paintSubmit() {
+    var b = $('new-form').querySelector('button[type=submit]');
+    b.textContent = me && library.length ? 'Elegir personaje' : 'Crear personaje';
+  }
+  function pickStage() {
+    $('new-form').hidden = true; $('cg-host').hidden = true; $('pc-host').hidden = false;
+    $('new').classList.add('cg-on');
+    $('new-title').textContent = 'Tu personaje';
+    $('pc-error').textContent = '';
+    var box = $('pc-list'); box.innerHTML = '';
+    box.appendChild(el('p', 'lead', 'Elige con quién empiezas. La partida juega con una copia: lo que le pase no cambia tu personaje de la biblioteca.'));
+    library.forEach(function (c) {
+      var b = el('button', 'pick'); b.type = 'button';
+      b.appendChild(el('span', 'ini', c.name.charAt(0).toUpperCase()));
+      var tt = el('span', ''); tt.appendChild(el('b', '', c.name)); tt.appendChild(el('small', '', charWhat(c))); b.appendChild(tt);
+      b.addEventListener('click', function () {
+        box.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+        $('pc-error').textContent = '';
+        createGame({ template_id: c.id }, {
+          busy: function (text, note) { if (note) $('pc-error').textContent = note; },
+          fail: function (text) { $('pc-error').textContent = text; box.querySelectorAll('button').forEach(function (x) { x.disabled = false; }); }
+        });
+      });
+      box.appendChild(b);
+    });
+  }
+  $('pc-back').addEventListener('click', function () { characterStage(false); });
+  $('pc-new').addEventListener('click', function () { startChargen(); });
+
+  // Cuenta: administración, contraseña y cerrar sesión (en el menú de ajustes).
+  document.querySelectorAll('[data-acct]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var a = b.getAttribute('data-acct');
+      listsMenu(false);
+      if (a === 'admin') location.href = '/admin/usuarios';
+      else if (a === 'logout') fetch('/api/auth/logout', { method: 'POST' }).then(function () { location.href = '/entrar'; }, function () { location.href = '/entrar'; });
+      else if (a === 'password') { $('pw-err').textContent = ''; $('pw-form').reset(); $('pw').showModal(); $('pw-cur').focus(); }
+    });
+  });
+  $('pw-cancel').addEventListener('click', function () { $('pw').close(); });
+  $('pw-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    if ($('pw-new').value !== $('pw-again').value) { $('pw-err').textContent = 'Las dos contraseñas no coinciden.'; return; }
+    $('pw-go').disabled = true;
+    fetch('/api/me/password', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ current: $('pw-cur').value, password: $('pw-new').value }) })
+      .then(function (r) { return r.json(); })
+      .then(function (r) { $('pw-go').disabled = false; if (!r.ok) { $('pw-err').textContent = r.text; return; } $('pw').close(); toast('Contraseña cambiada. Las demás sesiones abiertas se han cerrado.'); })
+      .catch(function () { $('pw-go').disabled = false; $('pw-err').textContent = 'No hay conexión con el servidor.'; });
+  });
 
   function mode() { var c = document.querySelector('input[name=mode]:checked'); return c ? c.value : 'live'; }
   function keyWarn() {
@@ -982,6 +1190,7 @@ ${CHARGEN_JS}
   function characterStage(on) {
     $('new-form').hidden = on;
     $('cg-host').hidden = !on;
+    $('pc-host').hidden = true;
     $('new').classList.toggle('cg-on', on);
     $('new-title').textContent = on ? 'Tu personaje' : 'Nueva partida';
   }
@@ -1008,17 +1217,21 @@ ${CHARGEN_JS}
     e.preventDefault();
     $('new-error').textContent = '';
     if (!chargenOptions) { $('new-error').textContent = 'No hay conexión con el servidor.'; return; }
+    if (me && library.length) { pickStage(); return; }
+    startChargen();
+  });
+  function startChargen() {
     if (!chargen) chargen = tavernusChargen($('cg-host'), {
       options: chargenOptions,
       previewUrl: '/api/character/preview',
       confirmLabel: 'Crear y jugar',
       showHook: generated,
-      onBack: function () { characterStage(false); },
+      onBack: function () { if (me && library.length) pickStage(); else characterStage(false); },
       onConfirm: createGame
     });
     characterStage(true);
     chargen.open();
-  });
+  }
   $('no-char').addEventListener('click', function () {
     if (!$('new-form').reportValidity()) return;
     var b = $('no-char'), submit = $('new-form').querySelector('button[type=submit]');
@@ -1033,7 +1246,7 @@ ${CHARGEN_JS}
   /** Crea la partida, con el personaje del asistente si lo hay. */
   function createGame(p, ui) {
     var gen = generated();
-    var body = Object.assign({}, p || {}, { name: $('g-name').value, mode: mode(), character: p ? p.name : '', dice_seed: $('g-seed').value, seats: Math.max(0, Math.min(7, parseInt($('g-seats').value, 10) || 0)) });
+    var body = Object.assign({}, p || {}, { name: $('g-name').value, mode: mode(), character: p && p.name ? p.name : '', dice_seed: $('g-seed').value, seats: Math.max(0, Math.min(7, parseInt($('g-seats').value, 10) || 0)) });
     if (gen) body.world = { seed: $('g-wseed').value, tone: $('g-tone').value, setting: $('g-setting').value };
     // Generar con Claude tarda: el botón lo dice y una nota explica cuánto.
     if (gen) ui.busy('Generando mundo…', mode() === 'offline' ? 'Mundo de prueba, sin API: es un momento.' : 'Claude está escribiendo el lugar, su gente y tu situación inicial. Suele tardar uno o dos minutos.');
@@ -1047,6 +1260,7 @@ ${CHARGEN_JS}
           setTimeout(function () { open(r.game.slug, r.character_id); }, 3500);
           return;
         }
+        if (me && p && !p.template_id) loadLibrary();
         open(r.game.slug, r.character_id);
       })
       .catch(function () { ui.fail('No hay conexión con el servidor.'); });

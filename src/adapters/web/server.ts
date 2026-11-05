@@ -40,16 +40,22 @@
  *   GET|POST /api/illustrate?character=ID  pincel: ilustrar el momento actual (paint.ts)
  *   GET|POST /api/avatar?character=ID  avatar del PJ: versiones, «Otro», «Descríbelo», elegir (avatar.ts)
  *
- * Acceso (access.ts, docs/MULTIJUGADOR.md): en modo `invite` cada persona entra con el enlace de su
- * asiento y queda ligada a ese PJ; el menú, crear partidas y los asientos son del anfitrión. En `open`
- * (local), cualquiera con la página juega con cualquier PJ, como antes.
- *   GET  /i/<partida>/<token>       entra por ese asiento (cookie firmada) y abre la partida
- *   GET  /admin?token=ADMIN_TOKEN   anfitrión: cookie y al menú
+ * Acceso (access.ts, docs/MULTIJUGADOR.md, «Cuentas»): fuera de `open` hace falta cuenta (usuario y
+ * contraseña, src/accounts). Cada partida tiene dueño y sus asientos se ligan a usuarios con el enlace de
+ * invitación; en `invite` solo el administrador crea partidas. En `open` (local), cualquiera con la página
+ * juega con cualquier PJ, como antes.
+ *   GET  /i/<partida>/<token>       invitación: liga ese asiento a tu cuenta (sin cuenta, pasa por /entrar)
+ *   GET  /admin?token=ADMIN_TOKEN   rescate sin cuenta: cookie de administración y al menú
  *   GET  /admin/estado              administrador: versión, conectados, actividad, coste y reportes (page-status.ts)
+ *   GET  /admin/usuarios            administrador: usuarios, sus personajes y partidas (page-admin.ts; /api/admin/…)
+ *   GET  /entrar                    entrar o crear cuenta (page-account.ts); POST /api/auth/register|login|logout
+ *   GET  /api/me, POST /api/me/password   quién soy; cambiar mi contraseña
+ *   GET|POST /api/library, POST|DELETE /api/library/<id>   biblioteca de personajes de la cuenta
+ *   GET  /api/health                salud para deploy/healthcheck.sh (web y base de datos), sin sesión
  *   GET  /invitaciones?game=SLUG    anfitrión: asientos y enlaces
  *   GET  /api/session?game=SLUG     quién soy: anfitrión o jugador, y mi PJ si estoy ligado
- *   GET|POST /api/seats?game=SLUG · POST /api/seats/regenerate   anfitrión: listar, añadir, renovar
- *   POST /api/seat/claim?game=SLUG  asiento libre: crea el PJ del invitado
+ *   GET|POST /api/seats?game=SLUG, POST /api/seats/regenerate|release   anfitrión: listar, añadir, renovar el enlace, liberar
+ *   POST /api/seat/claim?game=SLUG  asiento libre: el PJ del invitado, de su biblioteca ({template_id}) o nuevo
  *   POST /api/character/preview     resumen del asistente de creación: valida y calcula sin crear nada
  * Presencia: SSE «presence» con quién está en línea y dónde respecto a ti; avisos en el hilo al entrar y salir.
  * Una acción a la vez por PJ (409 si ya tiene una en curso) y SSE «queue» si espera a otro PJ del mismo sitio.
@@ -85,8 +91,13 @@ import { noticeOf, webNotice, type WebNotice } from './notice.js';
 import { handlePaintRequest } from './paint.js';
 import { handleAvatarRequest } from './avatar.js';
 import { journeyOf } from '../../engine/travel.js';
-import { accessFromEnv, checkSeatCookie, cookies, isAdmin, isHostSeat, adminTokenMatches, newSeat, randomToken, SeatStore, seatCookieName, seatCookieValue, seatIdOf, setAdminCookie, setCookie, type AccessOptions, type Seat } from './access.js';
+import { accessFromEnv, checkSeatCookie, clearCookie, cookies, isAdmin, isHostSeat, adminTokenMatches, randomToken, seatCookieName, seatCookieValue, seatIdOf, SESSION_COOKIE_MAX_AGE_S, setAdminCookie, setCookie, USER_COOKIE, type AccessOptions } from './access.js';
 import { invitePage, joinPage, seatsPage } from './page-access.js';
+import { accountPage } from './page-account.js';
+import { adminPage } from './page-admin.js';
+import { AccountError, Accounts, ensureAdmin, type CharacterInput, type Seat, type User } from '../../accounts/accounts.js';
+import { describeDbUrl, dbUrlFromEnv, memoryDb, openDb, type Db } from '../../db/db.js';
+import { DbCatalog, ensureGameRow } from '../../db/catalog.js';
 import { PRESENCE_TIMING, PresenceTracker, REPEAT_NOTICE_MS, type PresenceTiming } from './presence.js';
 import { pcLabel, pcName, sayLooksLikeAction } from '../../engine/party.js';
 import { talkingWith } from '../../engine/scene.js';
@@ -246,12 +257,20 @@ export interface WebServerOptions {
   alert?: AlertSender;
   /** Carpeta con la wiki ya construida (dist/wiki, de npm run build; docs/WIKI.md). */
   wikiDir?: string;
+  /**
+   * Base de datos (src/db): cuentas, asientos, biblioteca. Sin ella (tests), una PGlite en memoria que solo
+   * se arranca la primera vez que hace falta y se cierra con `stop`.
+   */
+  db?: Db;
 }
 
 export function createWebServer(games: GameManager, opts: WebServerOptions = {}): WebServer {
   const runtimes = new Map<string, Promise<Runtime>>();
   const access: AccessOptions = opts.access ?? { mode: 'open', adminToken: null, secret: randomToken(32) };
-  const seats = new SeatStore();
+  // Cuentas: con la base que llega o, si no llega, una en memoria al primer uso (así los tests que no las tocan no la arrancan).
+  let ownDb: Promise<Db> | null = null;
+  let accountsP: Promise<Accounts> | null = opts.db ? Promise.resolve(new Accounts(opts.db)) : null;
+  const accountsOf = (): Promise<Accounts> => accountsP ??= (ownDb = memoryDb()).then((db) => new Accounts(db));
   const claiming = new Set<string>();
   // Minutos del entorno para probar con esperas cortas (como AWAY_CARD_MIN); 0 o ausente, el valor de siempre.
   const envMs = (name: string) => { const n = Number(process.env[name]); return n > 0 ? n * 60_000 : undefined; };
@@ -639,7 +658,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
 
   const server = createServer((req, res) => {
     handle(req, res).catch((e) => {
-      if (e instanceof GameError) { if (!res.headersSent) json(res, e.status, { ok: false, text: e.message }); else res.end(); return; }
+      if (e instanceof GameError || e instanceof AccountError) { if (!res.headersSent) json(res, e.status, { ok: false, text: e.message }); else res.end(); return; }
       console.error('[web]', e);
       if (!res.headersSent) json(res, 500, { ok: false, text: 'Error interno del servidor.' });
       else res.end();
@@ -650,57 +669,182 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     const url = new URL(req.url ?? '/', 'http://localhost');
     const slug = url.searchParams.get('game');
 
-    // Enlaces: el del asiento liga este navegador a su PJ; el de administración, al anfitrión.
+    if (req.method === 'GET' && url.pathname.startsWith('/assets/')) { await serveAsset(res, url.pathname.slice('/assets/'.length)); return; }
+    if (req.method === 'GET' && (url.pathname === '/wiki' || url.pathname.startsWith('/wiki/'))) { await serveWiki(res, url.pathname); return; }
+    if (req.method === 'GET' && url.pathname.startsWith('/music/')) { await serveMusic(req, res, url.pathname.slice('/music/'.length)); return; }
+
+    // Salud (deploy/healthcheck.sh): sin sesión; responde 200 si la web y la base contestan.
+    if (req.method === 'GET' && url.pathname === '/api/health') {
+      try {
+        if (opts.db) await opts.db.query('select 1');
+        json(res, 200, { ok: true });
+      } catch {
+        json(res, 503, { ok: false, text: 'La base de datos no responde.' });
+      }
+      return;
+    }
+
+    const open = access.mode === 'open';
+    // Modo public: cualquiera con cuenta crea partidas y manda en las suyas.
+    const pub = access.mode === 'public';
+    const user = await currentUser(req);
+    // El enlace de administración de rescate (sin cuenta): lo ve todo y, como en `open`, se liga a un asiento por cookie.
+    const tokenAdmin = isAdmin(access, req);
+    const byCookie = open || (tokenAdmin && !user);
+    // Las cookies de asiento de antes de las cuentas: al entrar con cuenta, sus asientos pasan a ella.
+    if (user && hasLegacySeatCookies(req)) await claimLegacySeats(req, res, user);
+
+    // Invitación: con sesión, el asiento queda ligado al usuario; sin ella, primero entrar o registrarse.
     const invite = /^\/i\/([a-z0-9][a-z0-9-]{0,59})\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
     if (req.method === 'GET' && invite) {
       const m = await games.get(invite[1]!);
-      const seat = m ? await seats.byToken(games.paths(m).dir, invite[2]!) : null;
+      const seat = m ? await (await accountsOf()).seatByToken(m.slug, invite[2]!) : null;
       if (!m || !seat) { html(res, 403, invitePage('Ese enlace no vale (o lo han renovado). Pide el tuyo a quien organiza la partida.')); return; }
-      setCookie(res, access, seatCookieName(m.slug), seatCookieValue(access.secret, m.slug, seat));
-      res.writeHead(302, { location: `/?game=${encodeURIComponent(m.slug)}` });
-      res.end();
+      if (user) {
+        try { await (await accountsOf()).bindSeat(seat, user.id); } catch (e) {
+          if (e instanceof AccountError) { html(res, e.status, invitePage(e.message)); return; }
+          throw e;
+        }
+      } else if (byCookie) {
+        // Local sin cuenta (o el enlace de administración): como antes, la cookie liga este navegador al asiento.
+        setCookie(res, access, seatCookieName(m.slug), seatCookieValue(access.secret, m.slug, seat));
+      } else {
+        redirect(res, `/entrar?invite=${encodeURIComponent(`${m.slug}/${invite[2]!}`)}`);
+        return;
+      }
+      redirect(res, `/?game=${encodeURIComponent(m.slug)}`);
       return;
     }
     if (req.method === 'GET' && url.pathname === '/admin') {
       if (!adminTokenMatches(access, url.searchParams.get('token'))) { html(res, 403, invitePage('Ese enlace de administración no vale.')); return; }
       setAdminCookie(res, access);
-      res.writeHead(302, { location: '/' });
-      res.end();
+      redirect(res, '/');
       return;
     }
-    if (req.method === 'GET' && url.pathname.startsWith('/assets/')) { await serveAsset(res, url.pathname.slice('/assets/'.length)); return; }
-    if (req.method === 'GET' && (url.pathname === '/wiki' || url.pathname.startsWith('/wiki/'))) { await serveWiki(res, url.pathname); return; }
-    if (req.method === 'GET' && url.pathname.startsWith('/music/')) { await serveMusic(req, res, url.pathname.slice('/music/'.length)); return; }
 
-    const admin = isAdmin(access, req);
-    // Modo public: el menú es de todos y cada uno manda en las partidas que creó.
-    const pub = access.mode === 'public';
+    // Entrar, registrarse y salir.
+    if (req.method === 'GET' && url.pathname === '/entrar') {
+      const next = safeNext(url.searchParams.get('next'));
+      const inv = await inviteOf(url.searchParams.get('invite'));
+      if (user) { redirect(res, inv ? `/i/${inv.slug}/${inv.token}` : next ?? '/'); return; }
+      html(res, 200, accountPage({ mode: access.mode, invite: inv ? { game: inv.name, value: `${inv.slug}/${inv.token}`, free: inv.free } : null, next }));
+      return;
+    }
+    if (req.method === 'POST' && (url.pathname === '/api/auth/register' || url.pathname === '/api/auth/login')) {
+      const body = await readJson(req);
+      const inv = await inviteOf(typeof body['invite'] === 'string' ? body['invite'] : null);
+      const registering = url.pathname === '/api/auth/register';
+      // En `invite`, crear cuenta exige un enlace cuyo asiento aún no sea de nadie: un enlace ya usado no es una llave de registro.
+      if (registering && access.mode === 'invite' && !inv) { json(res, 403, { ok: false, text: 'En este servidor solo se crea cuenta con un enlace de invitación.' }); return; }
+      if (registering && access.mode === 'invite' && inv && !inv.free) { json(res, 403, { ok: false, text: 'Ese enlace ya lo usó otra cuenta. Pide otro a quien organiza la partida (o entra con la tuya, si es la que lo usó).' }); return; }
+      const accounts = await accountsOf();
+      try {
+        const u = registering
+          ? await accounts.register(body['username'], body['password'], { ip: clientIp(req) })
+          : await accounts.authenticate(body['username'], body['password'], clientIp(req));
+        // Si este navegador ya tenía una sesión abierta (otra cuenta, o la misma), se cierra: no quedan sesiones huérfanas.
+        await accounts.endSession(cookies(req)[USER_COOKIE]);
+        await startSession(req, res, u);
+        await claimLegacySeats(req, res, u);
+        let next = safeNext(typeof body['next'] === 'string' ? body['next'] : null) ?? '/';
+        if (inv) {
+          const seat = await accounts.seatByToken(inv.slug, inv.token);
+          if (seat) {
+            try { await accounts.bindSeat(seat, u.id); next = `/?game=${encodeURIComponent(inv.slug)}`; } catch (e) {
+              if (!(e instanceof AccountError)) throw e;
+              json(res, 200, { ok: true, next: '/', text: e.message, user: publicUser(u) });
+              return;
+            }
+          }
+        }
+        json(res, 200, { ok: true, next, user: publicUser(u) });
+      } catch (e) {
+        if (e instanceof AccountError) { json(res, e.status, { ok: false, text: e.message, ...(e.field ? { field: e.field } : {}) }); return; }
+        throw e;
+      }
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
+      const token = cookies(req)[USER_COOKIE];
+      if (token) await (await accountsOf()).endSession(token);
+      clearCookie(res, access, USER_COOKIE);
+      json(res, 200, { ok: true });
+      return;
+    }
+
+    const admin = tokenAdmin || Boolean(user?.is_admin);
+    // Sin cuenta, fuera de `open`, solo se ve entrar o registrarse (y la wiki).
+    if (!user && !admin && !open) {
+      if (req.method === 'GET' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/images/')) {
+        const back = url.pathname + url.search;
+        redirect(res, back === '/' ? '/entrar' : `/entrar?next=${encodeURIComponent(back)}`);
+      } else json(res, 401, { ok: false, text: 'Entra con tu cuenta.' });
+      return;
+    }
+
     const manifest = slug ? await games.get(slug) : null;
-    const seat = manifest ? await seatOf(req, manifest.slug, games.paths(manifest).dir) : null;
-    const allowed = admin || seat !== null;
-    const host = admin || (pub && isHostSeat(seat));
+    const seat = manifest ? await seatFor(req, user, manifest.slug, byCookie) : null;
+    const owner = Boolean(manifest && user && (await (await accountsOf()).ownerOf(manifest.slug)) === user.id);
+    const allowed = admin || owner || seat !== null;
+    const host = admin || owner || (pub && isHostSeat(seat));
+    const canCreate = admin || pub || open;
 
     if (req.method === 'GET' && url.pathname === '/admin/estado') {
       if (!admin) { html(res, 403, invitePage('Esta página es solo para quien administra el servidor.')); return; }
       html(res, 200, await statusHtml());
       return;
     }
-    if (req.method === 'GET' && url.pathname === '/') {
-      if (!slug) {
-        if (admin || pub) { html(res, 200, MENU); return; }
-        // Un invitado que vuelve a la raíz: a su partida, si tiene una.
-        const mine = await anySeatGame(req);
-        if (mine) { res.writeHead(302, { location: `/?game=${encodeURIComponent(mine)}` }); res.end(); return; }
-        html(res, 200, invitePage());
+    if (url.pathname === '/admin/usuarios' || url.pathname.startsWith('/api/admin/')) {
+      if (!admin) {
+        if (url.pathname.startsWith('/api/')) json(res, 403, { ok: false, text: 'Solo para quien administra el servidor.' });
+        else html(res, 403, invitePage('Esta página es solo para quien administra el servidor.'));
         return;
       }
-      if (!manifest) { if (admin || pub) { res.writeHead(302, { location: '/' }); res.end(); } else html(res, 404, invitePage()); return; }
-      if (!allowed) { html(res, 403, invitePage()); return; }
+      if (req.method === 'GET' && url.pathname === '/admin/usuarios') { html(res, 200, adminPage()); return; }
+      await handleAdmin(req, res, url, user);
+      return;
+    }
+    if (url.pathname === '/api/me' || url.pathname === '/api/me/password') {
+      if (req.method === 'GET' && url.pathname === '/api/me') {
+        json(res, 200, { ok: true, access: access.mode, user: user ? publicUser(user) : null, admin, can_create: canCreate });
+        return;
+      }
+      if (!user) { json(res, 401, { ok: false, text: 'Entra con tu cuenta.' }); return; }
+      if (req.method === 'POST' && url.pathname === '/api/me/password') {
+        const body = await readJson(req);
+        try { await (await accountsOf()).changeOwnPassword(user.id, body['current'], body['password'], cookies(req)[USER_COOKIE] ?? ''); } catch (e) {
+          if (e instanceof AccountError) { json(res, e.status, { ok: false, text: e.message, ...(e.field ? { field: e.field } : {}) }); return; }
+          throw e;
+        }
+        json(res, 200, { ok: true });
+        return;
+      }
+      json(res, 404, { ok: false, text: 'No encontrado.' });
+      return;
+    }
+    if (url.pathname === '/api/library' || url.pathname.startsWith('/api/library/')) {
+      if (!user) { json(res, 401, { ok: false, text: 'La biblioteca de personajes es de tu cuenta: entra con ella.' }); return; }
+      await handleLibrary(req, res, url, user);
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/') {
+      if (!slug) {
+        if (!user && open) {
+          // `open` sin cuenta y con una cookie de asiento de invitado: a esa partida, como antes.
+          const mine = await anySeatGame(req);
+          if (mine && !tokenAdmin) { redirect(res, `/?game=${encodeURIComponent(mine)}`); return; }
+        }
+        html(res, 200, MENU);
+        return;
+      }
+      if (!manifest) { redirect(res, '/'); return; }
+      if (!allowed) { html(res, 403, invitePage('No tienes sitio en esta partida. Pide un enlace de invitación a quien la organiza.')); return; }
       if (seat && !seat.character_id) {
         const engine = (await runtime(manifest.slug)).engine;
         html(res, 200, joinPage({
           game: { slug: manifest.slug, name: manifest.name }, options: GameManager.characterOptions(),
           others: [...engine.world.characters.values()].filter((c) => c.status !== 'retired' && c.status !== 'dead').map((c) => ({ id: c.id, name: c.name })),
+          library: user ? (await (await accountsOf()).library(user.id)).map((c) => ({ id: c.id, name: c.name, race_id: c.race_id ?? null, class_id: c.class_id ?? null, taken: engine.characterNameTaken(c.name) })) : null,
         }));
         return;
       }
@@ -709,12 +853,12 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     }
     if (req.method === 'GET' && url.pathname === '/invitaciones') {
       if (!host) { html(res, 403, invitePage()); return; }
-      if (!manifest) { res.writeHead(302, { location: '/' }); res.end(); return; }
+      if (!manifest) { redirect(res, '/'); return; }
       html(res, 200, seatsPage(manifest.slug));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/character/preview') {
-      if (!allowed && !pub) { json(res, 403, { ok: false, text: 'Esta partida es por invitación: entra con tu enlace.' }); return; }
+      if (!canCreate && !user && !(manifest && allowed)) { json(res, 403, { ok: false, text: 'Entra con tu cuenta.' }); return; }
       const input = characterFromBody(await readJson(req), 'name');
       const r = GameManager.previewCharacter(input);
       if (!r.ok) { json(res, 400, { ok: false, text: r.reason, field: r.field }); return; }
@@ -724,24 +868,27 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       return;
     }
     if (url.pathname === '/api/games' || url.pathname.startsWith('/api/games/')) {
-      if (!admin && !pub) { json(res, 403, { ok: false, text: 'Solo quien organiza la partida puede ver y crear partidas.' }); return; }
-      // Borrar o convertir una partida: solo su anfitrión.
+      // Borrar o convertir una partida: solo su dueño (o el administrador).
       if (!(url.pathname === '/api/games' && (req.method === 'GET' || req.method === 'POST')) && !host) {
         json(res, 403, { ok: false, text: 'Solo quien creó la partida puede hacer eso.' });
         return;
       }
-      await handleGames(req, res, url, slug, admin);
+      if (url.pathname === '/api/games' && req.method === 'POST' && !canCreate) {
+        json(res, 403, { ok: false, text: 'En este servidor las partidas las crea quien lo administra. Únete a una con un enlace de invitación.' });
+        return;
+      }
+      await handleGames(req, res, url, slug, admin, user);
       return;
     }
-    if (url.pathname === '/api/seats' || url.pathname === '/api/seats/regenerate') {
+    if (url.pathname === '/api/seats' || url.pathname.startsWith('/api/seats/')) {
       if (!host) { json(res, 403, { ok: false, text: 'Solo quien organiza la partida puede repartir invitaciones.' }); return; }
       if (!manifest) { json(res, 404, { ok: false, text: 'No existe esa partida.' }); return; }
-      await handleSeats(req, res, url, manifest.slug, games.paths(manifest).dir);
+      await handleSeats(req, res, url, manifest.slug);
       return;
     }
     if (url.pathname === '/api/tts/config') { await handleTtsRequest(req, res, url, games); return; }
     if (!allowed && (url.pathname.startsWith('/api/') || url.pathname.startsWith('/images/'))) {
-      json(res, 403, { ok: false, text: 'Esta partida es por invitación: entra con tu enlace.' });
+      json(res, 403, { ok: false, text: 'No tienes sitio en esta partida: entra con tu enlace de invitación.' });
       return;
     }
     if (req.method === 'GET' && url.pathname.startsWith('/images/')) { await serveImage(res, url.pathname.slice('/images/'.length), slug); return; }
@@ -764,6 +911,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         ok: true, access: access.mode, role: host ? 'admin' : 'player', character_id: me, can_switch: !bound,
         game: { slug: manifest.slug, name: manifest.name, mode: manifest.mode },
         seat: seat ? { id: seat.id, label: seat.label } : null,
+        user: user ? publicUser(user) : null,
         budget: me && book ? { ...book.of(me), limit_actions: book.limits.actions, limit_tokens: book.limits.tokens } : null,
       });
       return;
@@ -773,11 +921,17 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const body = await readJson(req);
       claiming.add(seat.id);
       try {
-      const near = body['near'];
-      const id = await games.addCharacter(manifest.slug, `web:${manifest.slug}:${seat.id}`, characterFromBody(body, 'name'), { near: typeof near === 'string' && near ? near : null });
-      await seats.update(games.paths(manifest).dir, (list) => { const s = list.find((x) => x.id === seat.id); if (s) s.character_id = id; });
-      rt.introduce(id);
-      json(res, 200, { ok: true, character_id: id });
+        const picked = await pickCharacter(user, body, 'name', (c) => {
+          if (engine.characterNameTaken(c.name)) throw new AccountError(`Ya hay alguien llamado ${c.name.trim()} en esta partida: cambia el nombre.`, 400, 'name');
+        });
+        const near = body['near'];
+        const id = await games.addCharacter(manifest.slug, `web:${manifest.slug}:${seat.id}`, picked.input, { near: typeof near === 'string' && near ? near : null });
+        await (await accountsOf()).setSeatCharacter(seat.id, id, picked.template_id);
+        rt.introduce(id);
+        json(res, 200, { ok: true, character_id: id });
+      } catch (e) {
+        if (e instanceof AccountError) { json(res, e.status, { ok: false, text: e.message, ...(e.field ? { field: e.field } : {}) }); return; }
+        throw e;
       } finally { claiming.delete(seat.id); }
       return;
     }
@@ -815,7 +969,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       if (round) res.write(`event: round\ndata: ${JSON.stringify(round)}\n\n`);
       const fight = rt.combatFor(id);
       if (fight) res.write(`event: combat\ndata: ${JSON.stringify(fight)}\n\n`);
-      if (seat) void seats.update(games.paths(manifest).dir, (list) => { const s = list.find((x) => x.id === seat.id); if (s) s.last_seen_at = new Date().toISOString(); });
+      if (seat) void accountsOf().then((a) => a.touchSeat(seat.id)).catch(() => {});
       const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
       // «close» de la respuesta: salta al caerse la conexión (tras un proxy, a más tardar al escribir el ping).
       res.on('close', () => { clearInterval(ping); set.delete(res); rt.left(id, tab); });
@@ -993,65 +1147,283 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     });
   }
 
-  /** El asiento de este navegador en la partida, si su cookie es buena (firmada con el token vigente). */
-  async function seatOf(req: IncomingMessage, slug: string, dir: string): Promise<Seat | null> {
+  // -------------------------------------------------------------------------
+  // Cuentas (src/accounts): sesión, asientos, migración de las cookies de antes
+  // -------------------------------------------------------------------------
+
+  /** El usuario de la cookie de sesión, si la hay y vale. Sin cookie no se toca la base. */
+  async function currentUser(req: IncomingMessage): Promise<User | null> {
+    const token = cookies(req)[USER_COOKIE];
+    return token ? (await accountsOf()).sessionUser(token) : null;
+  }
+
+  async function startSession(req: IncomingMessage, res: ServerResponse, u: User): Promise<void> {
+    const token = await (await accountsOf()).createSession(u.id, { userAgent: String(req.headers['user-agent'] ?? ''), ip: clientIp(req) });
+    setCookie(res, access, USER_COOKIE, token, SESSION_COOKIE_MAX_AGE_S);
+  }
+
+  /** El asiento del usuario en la partida; sin cuenta en `open` (o con el enlace de administración), el de la cookie del navegador. */
+  async function seatFor(req: IncomingMessage, user: User | null, slug: string, byCookie: boolean): Promise<Seat | null> {
+    if (user) {
+      const mine = await (await accountsOf()).seatOfUser(slug, user.id);
+      if (mine || access.mode !== 'open') return mine;
+    }
+    return byCookie || access.mode === 'open' ? legacySeat(req, slug) : null;
+  }
+
+  /** El asiento de la cookie antigua del navegador, si su firma es buena (con el token vigente). */
+  async function legacySeat(req: IncomingMessage, slug: string): Promise<Seat | null> {
     const value = cookies(req)[seatCookieName(slug)];
     const id = seatIdOf(value);
-    const seat = id ? await seats.byId(dir, id) : null;
+    if (!id) return null;
+    const seat = await (await accountsOf()).seat(slug, id);
     return checkSeatCookie(access.secret, slug, value, seat) ? seat : null;
   }
 
-  /** Alguna partida en la que este navegador tenga asiento (para quien vuelve a la raíz). */
+  function hasLegacySeatCookies(req: IncomingMessage): boolean {
+    return Object.keys(cookies(req)).some((k) => k.startsWith('tv_s_'));
+  }
+
+  /**
+   * Migración (docs/MULTIJUGADOR.md, «Cuentas»): cada cookie de asiento válida de este navegador liga su asiento
+   * al usuario si nadie lo tiene; si es el del anfitrión y la partida no tiene dueño, la partida pasa a ser suya.
+   * Las cookies se borran después: ya no hacen falta.
+   */
+  async function claimLegacySeats(req: IncomingMessage, res: ServerResponse, user: User): Promise<number> {
+    const accounts = await accountsOf();
+    let n = 0;
+    for (const name of Object.keys(cookies(req))) {
+      if (!name.startsWith('tv_s_')) continue;
+      const slug = name.slice(5);
+      const m = await games.get(slug);
+      const seat = m ? await legacySeat(req, m.slug) : null;
+      if (m && seat && !seat.user_id && !(await accounts.seatOfUser(m.slug, user.id))) {
+        await accounts.bindSeat(seat, user.id).catch(() => null);
+        if (seat.host && !(await accounts.ownerOf(m.slug))) await accounts.setOwner(m.slug, user.id);
+        log(`[cuentas] ${user.username} se lleva su asiento de «${m.slug}»${seat.host ? ' (anfitrión)' : ''}`);
+        n++;
+      }
+      // En `open` la cookie sigue sirviendo a quien juega sin cuenta en este navegador; fuera de `open`, ya no.
+      if (access.mode !== 'open' || (seat && seat.user_id === null)) clearCookie(res, access, name);
+    }
+    return n;
+  }
+
+  /** Alguna partida en la que este navegador tenga asiento por cookie (`open` sin cuenta, al volver a la raíz). */
   async function anySeatGame(req: IncomingMessage): Promise<string | null> {
     for (const name of Object.keys(cookies(req))) {
       if (!name.startsWith('tv_s_')) continue;
       const m = await games.get(name.slice(5));
-      if (m && await seatOf(req, m.slug, games.paths(m).dir)) return m.slug;
+      if (m && await legacySeat(req, m.slug)) return m.slug;
     }
     return null;
   }
 
-  /** Todo PJ de la partida con su asiento (partidas de antes de las invitaciones, o PJ creados por otra vía). */
-  async function ensureSeats(slug: string, dir: string): Promise<Seat[]> {
-    const engine = (await runtime(slug)).engine;
-    const chars = [...engine.world.characters.values()].filter((c) => c.status !== 'retired');
-    const have = await seats.list(dir);
-    if (chars.every((c) => have.some((s) => s.character_id === c.id))) return have;
-    return seats.update(dir, (list) => {
-      for (const c of chars) if (!list.some((s) => s.character_id === c.id)) list.push(newSeat(c.name, c.id, new Date()));
-      return [...list];
-    });
+  /**
+   * «<partida>/<token>» de una invitación pendiente (al registrarse o entrar), si el enlace vale. `free`: el asiento
+   * aún no es de ninguna cuenta (solo entonces sirve para crear una en modo `invite`; a quien ya lo tiene le sirve para entrar).
+   */
+  async function inviteOf(value: string | null): Promise<{ slug: string; token: string; name: string; free: boolean } | null> {
+    const mm = value ? /^([a-z0-9][a-z0-9-]{0,59})\/([A-Za-z0-9_-]{20,})$/.exec(value) : null;
+    if (!mm) return null;
+    const m = await games.get(mm[1]!);
+    const seat = m ? await (await accountsOf()).seatByToken(m.slug, mm[2]!) : null;
+    return m && seat ? { slug: m.slug, token: mm[2]!, name: m.name, free: seat.user_id === null } : null;
   }
 
-  async function handleSeats(req: IncomingMessage, res: ServerResponse, url: URL, slug: string, dir: string): Promise<void> {
+  /**
+   * El personaje con el que se entra en una partida: uno de la biblioteca (`template_id`) o uno nuevo con los
+   * campos del asistente, que con cuenta queda guardado en la biblioteca (salvo `save: false`).
+   */
+  async function pickCharacter(user: User | null, body: Record<string, unknown>, nameKey: string, check: (input: CharacterInput) => void = () => {}): Promise<{ input: CharacterInput; template_id: string | null }> {
+    const accounts = await accountsOf();
+    const tid = typeof body['template_id'] === 'string' ? body['template_id'] : null;
+    if (tid) {
+      if (!user) throw new AccountError('Entra con tu cuenta para usar tus personajes.', 401);
+      const c = await accounts.libraryCharacter(user.id, tid);
+      if (!c) throw new AccountError('No existe ese personaje en tu biblioteca.', 404);
+      const { id, created_at: _c, updated_at: _u, ...input } = c;
+      // Para empezar con otro nombre (el suyo ya está cogido en la partida), sin cambiar la plantilla.
+      const rename = typeof body['rename'] === 'string' ? body['rename'].trim() : '';
+      const out = rename ? { ...input, name: rename } : input;
+      check(out);
+      return { input: out, template_id: id };
+    }
+    const input = characterFromBody(body, nameKey);
+    // Antes de guardarlo en la biblioteca: lo que la partida no aceptaría no se guarda.
+    const valid = GameManager.previewCharacter(input);
+    if (!valid.ok) throw new AccountError(valid.reason, 400, valid.field);
+    check(input);
+    if (user && body['save'] !== false && input.name.trim()) {
+      const saved = await accounts.addCharacter(user.id, input);
+      return { input, template_id: saved.id };
+    }
+    return { input, template_id: null };
+  }
+
+  /** Todo PJ de la partida con su asiento (partidas de antes de las invitaciones, o PJ creados por otra vía). */
+  async function ensureSeats(slug: string): Promise<Seat[]> {
+    const accounts = await accountsOf();
+    const engine = (await runtime(slug)).engine;
+    const chars = [...engine.world.characters.values()].filter((c) => c.status !== 'retired');
+    const have = await accounts.seats(slug);
+    const missing = chars.filter((c) => !have.some((s) => s.character_id === c.id));
+    if (!missing.length) return have;
+    await ensureGameRow(accounts.db, (await games.get(slug))!);
+    for (const c of missing) await accounts.addSeat(slug, { label: c.name, character_id: c.id });
+    return accounts.seats(slug);
+  }
+
+  async function handleSeats(req: IncomingMessage, res: ServerResponse, url: URL, slug: string): Promise<void> {
+    const accounts = await accountsOf();
     if (req.method === 'POST' && url.pathname === '/api/seats') {
-      const n = (await seats.list(dir)).length;
+      const n = (await accounts.seats(slug)).length;
       if (n >= MAX_SEATS) { json(res, 400, { ok: false, text: `Como mucho ${MAX_SEATS} asientos por partida.` }); return; }
-      await seats.update(dir, (list) => { list.push(newSeat(`Plaza ${list.length + 1}`, null, new Date())); });
+      await ensureGameRow(accounts.db, (await games.get(slug))!);
+      await accounts.addSeat(slug, { label: `Plaza ${n + 1}` });
       json(res, 200, { ok: true });
       return;
     }
-    if (req.method === 'POST' && url.pathname === '/api/seats/regenerate') {
+    if (req.method === 'POST' && (url.pathname === '/api/seats/regenerate' || url.pathname === '/api/seats/release')) {
       const body = await readJson(req);
-      const ok = await seats.update(dir, (list) => {
-        const s = list.find((x) => x.id === body['seat']);
-        if (s) s.token = randomToken();
-        return Boolean(s);
-      });
+      const id = typeof body['seat'] === 'string' ? body['seat'] : '';
+      const ok = url.pathname === '/api/seats/regenerate' ? await accounts.regenerateSeat(slug, id) : await accounts.unbindSeat(slug, id);
       json(res, ok ? 200 : 404, ok ? { ok: true } : { ok: false, text: 'No existe ese asiento.' });
       return;
     }
-    if (req.method !== 'GET') { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
+    if (req.method !== 'GET' || url.pathname !== '/api/seats') { json(res, 404, { ok: false, text: 'No encontrado.' }); return; }
     const m = (await games.get(slug))!;
     const rt = await runtime(slug);
-    const list = await ensureSeats(slug, dir);
+    const list = await ensureSeats(slug);
+    const names = new Map((await accounts.listUsers()).filter((u) => list.some((s) => s.user_id === u.id)).map((u) => [u.id, u.username]));
     json(res, 200, {
       ok: true, game: { slug, name: m.name },
       seats: list.map((s) => ({
-        id: s.id, label: s.label, character_id: s.character_id, character_name: s.character_id ? rt.engine.world.characters.get(s.character_id)?.name ?? null : null,
+        id: s.id, label: s.label, host: s.host, character_id: s.character_id, character_name: s.character_id ? rt.engine.world.characters.get(s.character_id)?.name ?? null : null,
+        user: s.user_id ? names.get(s.user_id) ?? null : null,
         link: `/i/${slug}/${s.token}`, last_seen_at: s.last_seen_at, online: s.character_id ? rt.online(s.character_id) : false,
       })),
     });
+  }
+
+  /** Biblioteca de personajes del usuario: GET y POST /api/library, POST y DELETE /api/library/<id>. */
+  async function handleLibrary(req: IncomingMessage, res: ServerResponse, url: URL, user: User): Promise<void> {
+    const accounts = await accountsOf();
+    const id = url.pathname.startsWith('/api/library/') ? decodeURIComponent(url.pathname.slice('/api/library/'.length)) : null;
+    try {
+      if (!id && req.method === 'GET') {
+        json(res, 200, { ok: true, characters: await libraryView(user.id) });
+        return;
+      }
+      if (!id && req.method === 'POST') {
+        json(res, 200, { ok: true, character: await accounts.addCharacter(user.id, characterFromBody(await readJson(req), 'name')) });
+        return;
+      }
+      if (id && req.method === 'POST') {
+        json(res, 200, { ok: true, character: await accounts.updateCharacter(user.id, id, characterFromBody(await readJson(req), 'name')) });
+        return;
+      }
+      if (id && req.method === 'DELETE') {
+        await accounts.deleteCharacter(user.id, id);
+        json(res, 200, { ok: true });
+        return;
+      }
+    } catch (e) {
+      if (e instanceof AccountError) { json(res, e.status, { ok: false, text: e.message, ...(e.field ? { field: e.field } : {}) }); return; }
+      throw e;
+    }
+    json(res, 404, { ok: false, text: 'No encontrado.' });
+  }
+
+  /** La biblioteca con las partidas en las que juega cada personaje (sus copias). */
+  async function libraryView(userId: string): Promise<unknown[]> {
+    const accounts = await accountsOf();
+    const lib = await accounts.library(userId);
+    const playing = await accounts.db.query<{ template_id: string; slug: string; name: string }>(
+      'select s.template_id, g.slug, g.name from seats s join games g on g.slug = s.game_slug where s.user_id = $1 and s.template_id is not null', [userId]);
+    return lib.map((c) => ({ ...c, games: playing.filter((p) => p.template_id === c.id).map((p) => ({ slug: p.slug, name: p.name })) }));
+  }
+
+  /** Panel del administrador (page-admin.ts). */
+  async function handleAdmin(req: IncomingMessage, res: ServerResponse, url: URL, user: User | null): Promise<void> {
+    const accounts = await accountsOf();
+    const who = user ? { id: user.id, name: user.username } : { id: null, name: 'enlace de administración' };
+    try {
+      if (req.method === 'GET' && url.pathname === '/api/admin/users') {
+        json(res, 200, { ok: true, me: user?.id ?? null, users: await accounts.listUsers(), log: await accounts.recentLog(30) });
+        return;
+      }
+      if (req.method === 'POST' && url.pathname === '/api/admin/users') {
+        const body = await readJson(req);
+        const u = await accounts.register(body['username'], body['password']);
+        await accounts.log(who, 'creó la cuenta de', u.username);
+        json(res, 200, { ok: true, user: u });
+        return;
+      }
+      if (req.method === 'GET' && url.pathname === '/api/admin/games') {
+        const owners = await accounts.owners();
+        const seated = await accounts.db.query<{ game_slug: string; username: string }>('select s.game_slug, u.username from seats s join users u on u.id = s.user_id');
+        json(res, 200, {
+          ok: true,
+          games: (await games.list()).map((g) => ({
+            slug: g.slug, name: g.name, mode: g.mode, demo: g.demo, created_at: g.created_at, last_opened_at: g.last_opened_at, characters: g.characters,
+            owner: owners.get(g.slug) ?? null, players: seated.filter((s) => s.game_slug === g.slug).map((s) => s.username),
+          })),
+        });
+        return;
+      }
+      if (req.method === 'POST' && url.pathname === '/api/admin/games/assign') {
+        const body = await readJson(req);
+        const slugIn = typeof body['game'] === 'string' ? body['game'] : '';
+        const m = await games.get(slugIn);
+        if (!m) { json(res, 404, { ok: false, text: 'No existe esa partida.' }); return; }
+        const name = typeof body['user'] === 'string' ? body['user'].trim() : '';
+        const target = name ? await accounts.userByName(name) : null;
+        if (name && !target) { json(res, 404, { ok: false, text: `No existe el usuario «${name}».` }); return; }
+        await ensureGameRow(accounts.db, m);
+        await accounts.assignGame(m.slug, target?.id ?? null);
+        await accounts.log(who, target ? `dio a ${target.username} la partida` : 'dejó sin dueño la partida', m.name, target ? { usuario: target.username, partida: m.slug } : { partida: m.slug });
+        json(res, 200, { ok: true });
+        return;
+      }
+      const um = /^\/api\/admin\/users\/([0-9a-f-]{36})$/.exec(url.pathname);
+      const target = um ? await accounts.user(um[1]!) : null;
+      if (um && !target) { json(res, 404, { ok: false, text: 'No existe ese usuario.' }); return; }
+      if (target && req.method === 'GET') {
+        const mine = await accounts.gamesOf(target.id);
+        const all = new Map((await games.list()).map((g) => [g.slug, g]));
+        json(res, 200, {
+          ok: true, user: target, characters: await libraryView(target.id),
+          games: mine.map((g) => ({ slug: g.slug, name: all.get(g.slug)?.name ?? g.slug, owner: g.owner })),
+        });
+        return;
+      }
+      if (target && req.method === 'POST') {
+        const body = await readJson(req);
+        if (typeof body['password'] === 'string') { await accounts.setPassword(target.id, body['password']); await accounts.log(who, 'cambió la contraseña de', target.username); }
+        if (typeof body['admin'] === 'boolean') {
+          if (!body['admin'] && user?.id === target.id) throw new AccountError('No puedes quitarte el administrador a ti mismo.', 409);
+          await accounts.setAdmin(target.id, body['admin']); await accounts.log(who, body['admin'] ? 'hizo administrador a' : 'quitó el administrador a', target.username);
+        }
+        if (typeof body['disabled'] === 'boolean') {
+          if (body['disabled'] && user?.id === target.id) throw new AccountError('No puedes desactivarte a ti mismo.', 409);
+          await accounts.setDisabled(target.id, body['disabled']); await accounts.log(who, body['disabled'] ? 'desactivó a' : 'reactivó a', target.username);
+        }
+        json(res, 200, { ok: true, user: await accounts.user(target.id) });
+        return;
+      }
+      if (target && req.method === 'DELETE') {
+        if (user?.id === target.id) throw new AccountError('No puedes borrar tu propia cuenta desde aquí.', 409);
+        await accounts.deleteUser(target.id);
+        await accounts.log(who, 'borró la cuenta de', target.username);
+        json(res, 200, { ok: true });
+        return;
+      }
+    } catch (e) {
+      if (e instanceof AccountError) { json(res, e.status, { ok: false, text: e.message, ...(e.field ? { field: e.field } : {}) }); return; }
+      throw e;
+    }
+    json(res, 404, { ok: false, text: 'No encontrado.' });
   }
 
   /** Solo ficheros de la carpeta images/ de la partida, con nombre plano (sin rutas). */
@@ -1120,18 +1492,24 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     res.end(bytes);
   }
 
-  async function handleGames(req: IncomingMessage, res: ServerResponse, url: URL, slug: string | null, admin: boolean): Promise<void> {
+  async function handleGames(req: IncomingMessage, res: ServerResponse, url: URL, slug: string | null, admin: boolean, user: User | null): Promise<void> {
     if (url.pathname === '/api/games' && req.method === 'GET') {
-      // El administrador las ve todas; en modo public, cada navegador las suyas (donde tiene asiento).
+      // El administrador las ve todas (y en `open` sin cuenta, todo el mundo); con cuenta, las suyas y donde tiene asiento.
       const all = await games.list();
+      const seeAll = admin || (access.mode === 'open' && !user);
+      const mine = user ? new Map((await (await accountsOf()).gamesOf(user.id)).map((g) => [g.slug, g.owner])) : new Map<string, boolean>();
+      const accounts = user || seeAll ? await accountsOf() : null;
       const list = [];
       for (const g of all) {
-        if (admin) { list.push({ ...g, host: true }); continue; }
-        const m = await games.get(g.slug);
-        const s = m ? await seatOf(req, m.slug, games.paths(m).dir) : null;
-        if (s) list.push({ ...g, host: isHostSeat(s) });
+        if (seeAll) { list.push({ ...g, host: true, mine: mine.has(g.slug) }); continue; }
+        if (!mine.has(g.slug)) continue;
+        const seat = await accounts!.seatOfUser(g.slug, user!.id);
+        list.push({ ...g, host: mine.get(g.slug) === true || (access.mode === 'public' && isHostSeat(seat)), mine: true });
       }
-      json(res, 200, { games: list, options: GameManager.characterOptions(), api_key: Master.configured('live'), character_optional: admin, admin });
+      json(res, 200, {
+        games: list, options: GameManager.characterOptions(), api_key: Master.configured('live'), character_optional: admin, admin,
+        access: access.mode, user: user ? publicUser(user) : null, can_create: admin || access.mode !== 'invite',
+      });
       return;
     }
     if (url.pathname === '/api/games' && req.method === 'POST') {
@@ -1144,14 +1522,28 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         const since = Date.now() - 24 * 3600 * 1000;
         const today = (await games.list()).filter((g) => Date.parse(g.created_at) >= since).length;
         if (today >= perDay) { json(res, 429, { ok: false, text: 'Hoy ya se han creado muchas partidas en este servidor. Prueba mañana o únete a una con un enlace.' }); return; }
-        if (typeof body['name'] !== 'string' || typeof body['character'] !== 'string' || !(body['character'] as string).trim()) { json(res, 400, { ok: false, text: 'Ponle nombre a tu personaje.' }); return; }
+        if (typeof body['name'] !== 'string' || !(typeof body['template_id'] === 'string' || (typeof body['character'] === 'string' && (body['character'] as string).trim()))) { json(res, 400, { ok: false, text: 'Elige o crea tu personaje.' }); return; }
       }
       const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '');
       const seedRaw = body['dice_seed'];
       const dice_seed = seedRaw === null || seedRaw === undefined || seedRaw === '' ? null : Number(seedRaw);
+      // Personaje: de la biblioteca o nuevo (que con cuenta se guarda en ella). Validado antes de crear nada.
+      let picked: { input: CharacterInput; template_id: string | null } | null = null;
+      try {
+        if (typeof body['template_id'] === 'string' || str('character')) {
+          if (!(typeof body['template_id'] === 'string')) {
+            const check = GameManager.previewCharacter(characterFromBody(body, 'character'));
+            if (!check.ok) { json(res, 400, { ok: false, text: check.reason, field: check.field }); return; }
+          }
+          picked = await pickCharacter(user, body, 'character');
+        }
+      } catch (e) {
+        if (e instanceof AccountError) { json(res, e.status, { ok: false, text: e.message, ...(e.field ? { field: e.field } : {}) }); return; }
+        throw e;
+      }
       const created = await games.create({
         name: str('name'), mode: mode as NewGameMode, dice_seed,
-        character: str('character') ? characterFromBody(body, 'character') : null,
+        character: picked?.input ?? null,
         // Mundo nuevo generado (src/worldgen); lo valida el gestor.
         world: body['world'] && typeof body['world'] === 'object' ? body['world'] as WorldInput : null,
       });
@@ -1161,16 +1553,17 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         rt.engine.setPresence(created.character_id, true);
         rt.introduce(created.character_id);
       }
-      // Asientos: el del anfitrión con su PJ (este navegador queda ligado a él) y plazas libres para invitar.
+      // Dueño y asientos: el del anfitrión con su PJ (ligado a su usuario) y plazas libres para invitar.
+      const accounts = await accountsOf();
       const free = Math.max(0, Math.min(MAX_SEATS - 1, Number.isInteger(body['seats']) ? body['seats'] as number : DEFAULT_FREE_SEATS));
-      const dir = games.paths(created.game).dir;
-      const host = await seats.update(dir, (list) => {
-        const mine = created.character_id ? newSeat('Anfitrión', created.character_id, new Date(), true) : null;
-        if (mine) list.push(mine);
-        for (let i = 0; i < free; i++) list.push(newSeat(`Plaza ${list.length + 1}`, null, new Date()));
-        return mine;
-      });
-      if (host) setCookie(res, access, seatCookieName(created.game.slug), seatCookieValue(access.secret, created.game.slug, host));
+      await ensureGameRow(accounts.db, created.game);
+      if (user) await accounts.setOwner(created.game.slug, user.id);
+      const host = created.character_id
+        ? await accounts.addSeat(created.game.slug, { label: 'Anfitrión', host: true, character_id: created.character_id, user_id: user?.id ?? null, template_id: picked?.template_id ?? null })
+        : null;
+      for (let i = 0; i < free; i++) await accounts.addSeat(created.game.slug, { label: `Plaza ${i + (host ? 2 : 1)}` });
+      // Sin cuenta (`open`): la cookie liga este navegador al PJ del anfitrión, como antes.
+      if (host && !user) setCookie(res, access, seatCookieName(created.game.slug), seatCookieValue(access.secret, created.game.slug, host));
       json(res, 200, { ok: true, game: await games.info(created.game), character_id: created.character_id });
       return;
     }
@@ -1203,6 +1596,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       await closed;
       await games.closeAll();
       stats.flush();
+      if (ownDb) await (await ownDb.catch(() => null))?.close().catch(() => {});
     },
   };
 }
@@ -1214,16 +1608,16 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
 export function accessBanner(access: AccessOptions, base: string, env: NodeJS.ProcessEnv, root: string): string[] {
   const out = [`[web] abre ${base}`, `[web] la wiki, en ${base}/wiki/`];
   if (access.mode === 'open') {
-    out.push('[web] acceso abierto: cualquiera que llegue a esta URL juega con cualquier personaje (WEB_ACCESS=invite o ADMIN_TOKEN para invitaciones)');
+    out.push('[web] acceso abierto: cualquiera que llegue a esta URL juega con cualquier personaje, sin cuenta (WEB_ACCESS=public o invite para cuentas)');
     return out;
   }
   out.push(access.mode === 'public'
-    ? '[web] acceso público: cada navegador crea y ve sus partidas; los enlaces de invitación unen a otras.'
-    : '[web] acceso por invitación.');
+    ? '[web] acceso público: registro libre en /entrar; cada usuario crea y ve sus partidas, y los enlaces de invitación le unen a otras.'
+    : '[web] acceso por invitación: solo se crea cuenta con un enlace de invitación; las partidas las crea el administrador.');
   const where = env['ADMIN_TOKEN']?.trim()
     ? 'la variable ADMIN_TOKEN (en el VPS: sudo grep ^ADMIN_TOKEN /etc/tavernus/env)'
     : `el fichero ${join(root, '.admin-token')}`;
-  out.push(`[web] administración: ${base}/admin?token=<token>. El token está en ${where}; no lo compartas.`);
+  out.push(`[web] administración: entra con un usuario administrador (npm run admin -- <usuario>) y abre ${base}/admin/usuarios. Rescate sin cuenta: ${base}/admin?token=<token>, que está en ${where}; no lo compartas.`);
   return out;
 }
 
@@ -1234,7 +1628,24 @@ export function accessBanner(access: AccessOptions, base: string, env: NodeJS.Pr
 export async function startWeb(games: GameManager, port: number, env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const host = env['WEB_HOST']?.trim() || '127.0.0.1';
   const access = await accessFromEnv(env, games.root, host);
-  const web = createWebServer(games, { access });
+  // La base (src/db): fuera de `open` tiene que ser un PostgreSQL de verdad (DATABASE_URL).
+  const url = dbUrlFromEnv(env, games.root, access.mode);
+  if (!url) throw new Error(`Falta DATABASE_URL: con WEB_ACCESS=${access.mode} la web guarda cuentas y partidas en PostgreSQL (docs/DESPLIEGUE.md, «Base de datos»).`);
+  const db = await openDb(url);
+  console.log(`[web] base de datos: ${describeDbUrl(url)}`);
+  const catalog = new DbCatalog(db, games.root);
+  await catalog.importFolders((m) => console.log(m));
+  games.useCatalog(catalog);
+  const accounts = new Accounts(db);
+  // Primer administrador sin navegador (también: npm run admin -- <usuario>).
+  const adminUser = env['ADMIN_USER']?.trim();
+  if (adminUser) {
+    const r = await ensureAdmin(accounts, adminUser, env['ADMIN_PASSWORD'] || null);
+    console.log(`[web] administrador «${r.user.username}»${r.created ? ' creado' : ''} (ADMIN_USER)`);
+  } else if (access.mode !== 'open' && await accounts.adminCount() === 0) {
+    console.log('[web] aún no hay ningún usuario administrador: créalo con npm run admin -- <usuario> (docs/DESPLIEGUE.md)');
+  }
+  const web = createWebServer(games, { access, db });
   await new Promise<void>((resolve) => web.server.listen(port, host, resolve));
   const base = (env['PUBLIC_URL']?.trim() || `http://localhost:${port}`).replace(/\/+$/, '');
   for (const line of accessBanner(access, base, env, games.root)) console.log(line);
@@ -1243,6 +1654,27 @@ export async function startWeb(games: GameManager, port: number, env: NodeJS.Pro
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);
   });
+  await db.close();
+}
+
+function redirect(res: ServerResponse, location: string): void {
+  res.writeHead(302, { location });
+  res.end();
+}
+
+/** Solo rutas de esta web («/…», no «//otro.sitio»): a dónde volver tras entrar. */
+function safeNext(v: string | null): string | null {
+  return v && /^\/(?!\/)[^\s\\]*$/.test(v) && v.length < 500 ? v : null;
+}
+
+/** La IP de quien llama: tras el proxy (Caddy, túnel), la de X-Forwarded-For; si no, la del socket. */
+function clientIp(req: IncomingMessage): string {
+  const fwd = String(req.headers['x-forwarded-for'] ?? '').split(',')[0]?.trim();
+  return fwd || req.socket.remoteAddress || '';
+}
+
+function publicUser(u: User): { id: string; username: string; is_admin: boolean } {
+  return { id: u.id, username: u.username, is_admin: u.is_admin };
 }
 
 function characterOr404(engine: Engine, id: string | null, res: ServerResponse): Id | null {
