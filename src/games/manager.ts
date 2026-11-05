@@ -33,6 +33,7 @@ import { attachIllustrator, cloudflareFromEnv, imagesEnabled, Illustrator, type 
 import { attachAvatars, avatarsOf, cleanLook } from '../ai/avatar.js';
 import { BudgetBook, budgetFromEnv, BudgetedMaster, type BudgetLimits } from '../ai/budget.js';
 import { offlineClient } from '../ai/offline.js';
+import { FileCatalog, MANIFEST, type GameCatalog } from './catalog.js';
 import type { MasterLike } from '../engine/engine.js';
 
 /**
@@ -52,7 +53,7 @@ async function renameWithRetry(from: string, to: string, attempts = 8): Promise<
   await rm(from, { recursive: true, force: true });
 }
 
-export const MANIFEST = 'game.json';
+export { MANIFEST };
 export const WORLD_FILE = 'world.seed.json';
 export const MAIN_SLUG = 'principal';
 export const INITIAL_DEMO_SLUG = 'demo-inicial';
@@ -160,6 +161,8 @@ export interface GameManagerOptions {
   worldgen?: (opts: GenerateOptions) => Promise<WorldSnapshot>;
   /** Cupo diario del máster real por PJ (src/ai/budget.ts); por defecto, del entorno. null = sin límite. */
   budget?: BudgetLimits | null;
+  /** Dónde viven los manifiestos (catalog.ts): por defecto, el game.json de cada carpeta; la web usa la base. */
+  catalog?: GameCatalog;
 }
 
 export class GameError extends Error {
@@ -195,9 +198,11 @@ export class GameManager {
   private readonly log: (msg: string) => void;
   private readonly engines = new Map<string, Promise<Engine>>();
   private readonly closeListeners = new Set<(slug: string, engine: Engine) => void>();
+  private catalog: GameCatalog;
 
   constructor(opts: GameManagerOptions) {
     this.root = resolve(opts.root);
+    this.catalog = opts.catalog ?? new FileCatalog(this.root);
     this.env = opts.env ?? process.env;
     this.masterFor = opts.masterFor ?? defaultMasterFactory(this.env);
     this.engineOpts = opts.engine ?? {};
@@ -264,14 +269,12 @@ export class GameManager {
 
   async get(slug: string): Promise<GameManifest | null> {
     if (!SLUG.test(slug)) return null;
-    try {
-      const m = JSON.parse(await readFile(join(this.dirOf(slug), MANIFEST), 'utf8')) as GameManifest;
-      return m.slug === slug && isMasterMode(m.mode) ? m : null;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
-      throw e;
-    }
+    const m = await this.catalog.get(slug);
+    return m && m.slug === slug && isMasterMode(m.mode) ? m : null;
   }
+
+  /** Cambia el catálogo (la web pasa a la base al arrancar: src/db/catalog.ts). */
+  useCatalog(catalog: GameCatalog): void { this.catalog = catalog; }
 
   async require(slug: string): Promise<GameManifest> {
     const m = await this.get(slug);
@@ -510,6 +513,7 @@ export class GameManager {
       return { game, character_id: game.character_id };
     } catch (e) {
       await this.close(slug).catch(() => {});
+      await this.catalog.remove(slug).catch(() => {});
       await rm(this.dirOf(slug), { recursive: true, force: true });
       throw e;
     }
@@ -519,6 +523,7 @@ export class GameManager {
   async delete(slug: string): Promise<void> {
     await this.require(slug);
     await this.close(slug);
+    await this.catalog.remove(slug);
     await rm(this.dirOf(slug), { recursive: true, force: true });
   }
 
@@ -569,28 +574,20 @@ export class GameManager {
   }
 
   private async manifests(): Promise<GameManifest[]> {
-    let names: string[];
-    try { names = await readdir(this.root); } catch { return []; }
-    const out: GameManifest[] = [];
-    for (const n of names) {
-      const m = await this.get(n).catch(() => null);
-      if (m) out.push(m);
-    }
-    return out;
+    return (await this.catalog.all()).filter((m) => SLUG.test(m.slug) && isMasterMode(m.mode));
   }
 
   private async freeSlug(base: string): Promise<string> {
     const trimmed = base.slice(0, 52).replace(/-+$/, '') || 'partida';
     for (let i = 1; ; i++) {
       const s = i === 1 ? trimmed : `${trimmed}-${i}`;
-      if (!(await exists(join(this.root, s)))) return s;
+      if (!(await exists(join(this.root, s))) && !(await this.catalog.get(s))) return s;
     }
   }
 
   private async writeManifest(m: GameManifest): Promise<void> {
-    const dir = this.dirOf(m.slug);
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, MANIFEST), JSON.stringify(m, null, 2), 'utf8');
+    this.dirOf(m.slug); // valida el slug
+    await this.catalog.put(m);
   }
 }
 

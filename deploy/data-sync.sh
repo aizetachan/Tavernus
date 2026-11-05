@@ -70,7 +70,7 @@ case $CMD in
     mode=--merge
     case $OPT in --replace) mode='' ;; ''|--merge) ;; *) echo "opción desconocida: $OPT" >&2; exit 1 ;; esac
     [ -d data/games ] || [ -d data/local ] || { echo "no hay data/ que subir" >&2; exit 1; }
-    tar -czf "$TMP/data.tgz" --exclude=data/local/manuals --exclude=data/local/servidor data
+    tar -czf "$TMP/data.tgz" --exclude=data/local/manuals --exclude=data/local/servidor --exclude='.pgdata' data
     echo "[datos] subiendo $(du -h "$TMP/data.tgz" | cut -f1) a $HOST (${mode:-reemplazo total})"
     scp "${SCP_OPTS[@]}" "$TMP/data.tgz" "$HOST:/tmp/tavernus-data-up.tgz"
     ssh -t "${SSH_OPTS[@]}" "$HOST" "$SUDO

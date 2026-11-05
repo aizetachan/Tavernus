@@ -66,12 +66,40 @@ else
 fi
 log "node $(node -v), npm $(npm -v)"
 
+# --- PostgreSQL (cuentas, partidas, asientos y biblioteca; docs/DESPLIEGUE.md, «Base de datos») ------
+# El de la distribución. El servicio entra por el socket Unix como el usuario del sistema tavernus
+# (autenticación peer): no hay contraseña de la base que guardar.
+if ! command -v psql >/dev/null 2>&1; then
+  log "instalando PostgreSQL"
+  apt-get install -y --no-install-recommends postgresql
+fi
+systemctl enable --now postgresql >/dev/null 2>&1 || true
+# Memoria contenida: el VPS es pequeño y la base, también.
+for confd in /etc/postgresql/*/main/conf.d; do
+  [ -d "$confd" ] || continue
+  if [ ! -f "$confd/90-tavernus.conf" ]; then
+    printf '%s
+' '# Tavernus (setup-vps.sh): base pequeña en un VPS pequeño.' 'shared_buffers = 64MB' 'max_connections = 30' 'work_mem = 4MB' > "$confd/90-tavernus.conf"
+    systemctl restart postgresql
+  fi
+done
+log "PostgreSQL $(psql --version | awk '{print $3}')"
+
 # --- Usuario de servicio y carpetas ----------------------------------------------------------
 if ! id "$SVC_USER" >/dev/null 2>&1; then
   log "creando el usuario de servicio $SVC_USER (sin contraseña ni shell)"
   useradd --system --user-group --home-dir "$APP_DIR" --no-create-home --shell /usr/sbin/nologin "$SVC_USER"
 fi
 install -d -o "$SVC_USER" -g "$SVC_USER" -m 755 "$APP_DIR" "$APP_DIR/releases"
+# Rol y base de PostgreSQL con el nombre del usuario del sistema (peer): el servicio entra sin contraseña.
+if ! runuser -u postgres -- psql -tAc "select 1 from pg_roles where rolname = '$SVC_USER'" | grep -q 1; then
+  log "creando el rol $SVC_USER en PostgreSQL"
+  runuser -u postgres -- createuser "$SVC_USER"
+fi
+if ! runuser -u postgres -- psql -tAc "select 1 from pg_database where datname = '$SVC_USER'" | grep -q 1; then
+  log "creando la base $SVC_USER (las tablas las crea la web al arrancar)"
+  runuser -u postgres -- createdb -O "$SVC_USER" "$SVC_USER"
+fi
 install -d -o "$SVC_USER" -g "$SVC_USER" -m 750 "$STATE_DIR" "$SRV_DATA" "$SRV_DATA/games" "$SRV_DATA/local" "$DEPLOY_DIR"
 install -d -o root -g root -m 700 "$BACKUP_DIR" "$HEALTH_DIR"
 install -d -o root -g root -m 755 /etc/tavernus "$OPS_DIR"
@@ -101,6 +129,14 @@ if [ ! -f "$ENV_FILE" ]; then
 else
   log "$ENV_FILE ya existe: no se toca"
   NEW_ENV=0
+fi
+# La base de la web (desde el 4-11-2026): un env de antes no la tiene; se añade sin tocar lo demás.
+if ! grep -q '^DATABASE_URL=' "$ENV_FILE"; then
+  log "añadiendo DATABASE_URL a $ENV_FILE"
+  printf '
+# Base de datos de la web (setup-vps.sh): PostgreSQL local por socket, como el usuario tavernus.
+DATABASE_URL=postgresql:///tavernus?host=/var/run/postgresql
+' >> "$ENV_FILE"
 fi
 chown root:root "$ENV_FILE"; chmod 600 "$ENV_FILE"
 echo "$PROXY" > /etc/tavernus/proxy
@@ -174,5 +210,6 @@ fi
 echo
 log "servidor listo."
 [ "$NEW_ENV" = 1 ] && log "rellena las claves: sudo nano $ENV_FILE   (ANTHROPIC_API_KEY, IMAGES, ALERT_WEBHOOK…)"
-log "ADMIN_TOKEN: sudo grep ^ADMIN_TOKEN $ENV_FILE"
+log "primer administrador, cuando la web ya esté desplegada: sudo tavernus-admin <usuario>"
+log "ADMIN_TOKEN (rescate sin cuenta): sudo grep ^ADMIN_TOKEN $ENV_FILE"
 log "siguiente paso, desde tu ordenador: deploy/push.sh"

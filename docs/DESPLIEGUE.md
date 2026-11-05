@@ -182,6 +182,8 @@ Con B3 y B4, ufw solo necesita SSH abierto. Puedes cerrar 80 y 443 con `sudo ufw
 | Ver cómo va y qué han reportado | `https://<tu-dominio>/admin/estado` (ver «Reportes y página de estado») |
 | Estado del servicio y los temporizadores | `systemctl status tavernus-web` · `systemctl list-timers 'tavernus*'` |
 | Cambiar una variable | `sudo nano /etc/tavernus/env` y `sudo systemctl restart tavernus-web` |
+| Hacer administrador a un usuario (o crearlo) | `sudo tavernus-admin <usuario>`; con `--password`, además le pone contraseña nueva. El panel está en `https://<tu-dominio>/admin/usuarios` |
+| Mirar la base | `sudo -u tavernus psql tavernus` (tablas `users`, `sessions`, `games`, `seats`, `characters`, `admin_log`) |
 | ¿Responde? | `sudo tavernus-health --probe` |
 | Volver a una versión anterior a mano | `ls /opt/tavernus/releases`, luego `sudo ln -sfn /opt/tavernus/releases/<fecha> /opt/tavernus/current && sudo systemctl restart tavernus-web` |
 | Caddy | `sudo journalctl -u caddy -f` · `/etc/caddy/Caddyfile` (lo actualiza `push.sh` desde `deploy/Caddyfile`, con `tavernus-publicar-caddy` si está instalado) |
@@ -252,21 +254,60 @@ como mucho los últimos 30 segundos.
 
 ## 5. Datos y copias (#21)
 
+### Base de datos (PostgreSQL)
+
+Desde el 4 de noviembre de 2026 la web tiene cuentas de usuario (docs/MULTIJUGADOR.md, «Cuentas») y
+guarda en PostgreSQL lo que es de la plataforma: usuarios, sesiones, el catálogo de partidas (lo que
+era `game.json`, que se sigue escribiendo en cada carpeta como copia legible), los asientos (lo que era
+`seats.json`), la biblioteca de personajes y el registro del panel de administración. El mundo de cada
+partida (su estado, eventos, imágenes) sigue en su carpeta de `games/`.
+
+- **Instalación:** `setup-vps.sh` instala el PostgreSQL de la distribución, le pone una configuración
+  de poca memoria (`conf.d/90-tavernus.conf`: 64 MB de `shared_buffers`, 30 conexiones), crea el rol y
+  la base `tavernus` y añade a `/etc/tavernus/env`
+  `DATABASE_URL=postgresql:///tavernus?host=/var/run/postgresql`. La web entra por el socket como el
+  usuario del sistema `tavernus` (autenticación peer): no hay contraseña de la base guardada en ningún
+  sitio, y PostgreSQL no escucha en la red.
+- **Tablas:** las crea la web al arrancar (`src/db/migrations.ts`, una vez cada migración, en la tabla
+  `schema_migrations`). Al arrancar también importa las partidas que solo tienen carpeta (las de antes,
+  o las que sube `data-sync.sh up`): entran sin dueño, con sus asientos.
+- **Primer administrador:** `sudo tavernus-admin <usuario>` (pide la contraseña sin mostrarla). Si el
+  usuario ya existe, solo lo hace administrador. También vale `ADMIN_USER` y `ADMIN_PASSWORD` en el
+  entorno, pero deja la contraseña escrita en el fichero. El enlace `/admin?token=…` sigue siendo la
+  entrada de rescate si no queda ningún administrador.
+- **Sin la base, la web no arranca** en modo `public` o `invite`, y `release.sh` no cambia de versión
+  si no la encuentra (deja la anterior en marcha y dice qué hacer).
+
+**Pasar a cuentas un servidor que ya está en marcha** (como tavernus.com, que tiene partidas sin
+usuarios):
+
+1. Copia de seguridad: `sudo tavernus-backup`.
+2. Desde tu ordenador, `deploy/push.sh --setup` (o, en el servidor, `sudo bash deploy/setup-vps.sh` de
+   la versión nueva): instala PostgreSQL, crea la base y añade `DATABASE_URL`. No toca nada más del
+   entorno ni las partidas.
+3. `deploy/push.sh`: sube la versión. Al arrancar, la web importa todas las partidas de `games/`.
+4. `sudo tavernus-admin <tu-usuario>`: tu cuenta de administrador.
+5. Cada jugador abre la web **en el navegador donde jugaba** y se crea su cuenta: sus asientos pasan a
+   ella y, si era el anfitrión, la partida también. A partir de ahí la ve desde cualquier dispositivo.
+   Lo que no reclame nadie lo asignas tú en `/admin/usuarios` («Asignar a»).
+
 - **Las partidas viven fuera del código**, en `/var/lib/tavernus/data`, con la misma forma que el
   `data/` del repo: `games/` (una carpeta por partida) y `local/` (la partida «principal», el
   índice de reglas `local/rules` y la caché). Subir una versión nunca las toca. El `data/` de cada
   versión es un enlace a esa carpeta.
 - **Copia diaria** a las 04:30 (hora del servidor): `tavernus-backup.timer` deja
   `/var/lib/tavernus/backups/tavernus-data-<fecha>.tar.gz` (permisos 600) y borra las de más de
-  `BACKUP_KEEP_DAYS` días (14). Si el servidor estaba apagado a esa hora, la hace al arrancar. No
+  `BACKUP_KEEP_DAYS` días (14). Lleva también un volcado de la base (`pg_dump`, en
+  `data/db/tavernus.dump` dentro de la copia). Si el servidor estaba apagado a esa hora, la hace al arrancar. No
   copia los PDF de `local/manuals`. Como la web escribe los JSON sin renombrado atómico, la copia
   se hace de una foto aparte y se comprueba que todos los `.json` se leen; si alguno está a medio
   escribir, lo reintenta.
 - **A mano:** `sudo tavernus-backup` hace una copia ahora.
 - **Restaurar:** `sudo tavernus-restore --list`, luego `sudo tavernus-restore --latest` o
   `sudo tavernus-restore <fichero>`. Antes de tocar nada, hace una copia del estado actual y deja
-  la carpeta anterior en `/var/lib/tavernus/data.antes-<fecha>` (se borra a los 14 días). Con
-  `--merge` solo añade las partidas que falten.
+  la carpeta anterior en `/var/lib/tavernus/data.antes-<fecha>` (se borra a los 14 días). Si la
+  copia trae la base, la restaura también (`pg_restore`). Con `--merge` solo añade las partidas que
+  falten y no toca la base: entran en ella al arrancar la web, sin dueño.
 - **Copia fuera del servidor:** las copias diarias están en el mismo disco. De vez en cuando, baja
   la última a tu ordenador con `deploy/data-sync.sh backup` (queda en `data/local/servidor/`), o
   activa las instantáneas del proveedor del VPS.
@@ -292,19 +333,17 @@ deploy/data-sync.sh down --merge   # además añade a tu data/ las partidas que 
 Para abrir la copia bajada sin mezclarla con las tuyas, usa las variables que imprime el script:
 `GAMES_DIR=data/local/servidor/<fecha>/data/games DATA_DIR=data/local/servidor/<fecha>/data/local npm run web`.
 
-Ten en cuenta que en `games/` también van los asientos de cada partida (`seats.json`) y, si no hay
-`SESSION_SECRET` en el entorno, la clave de las cookies (`.session-secret`). setup-vps.sh pone un
-`SESSION_SECRET` precisamente para que un `up --replace` no obligue a todos a volver a entrar con
-su enlace. Los enlaces de invitación de las partidas que subas son los de tu copia local.
+Ten en cuenta que las cuentas, los dueños y los asientos están en la base, no en `games/`: las
+partidas que subas entran sin dueño (con los asientos de su `seats.json`, si lo tienen) y se asignan
+en `/admin/usuarios`. La base local de pruebas (`games/.pgdata`, PGlite) no se sube.
 
 ## 6. Salud y avisos (#22)
 
 `tavernus-health.timer` ejecuta `/usr/local/lib/tavernus/healthcheck.sh` cada minuto:
 
-- Pide `http://127.0.0.1:3000/api/health`. **Esa ruta aún no existe en la web**: hoy responde 400
-  (falta `?game`) o 403 (en modo invitación). En ese caso el script se conforma con que la
-  portada dé 200. Cuando la web tenga `/api/health`, se usará sola, sin tocar nada aquí
-  (`HEALTH_PATH` la cambia).
+- Pide `http://127.0.0.1:3000/api/health`, que responde 200 si la web y su base de datos contestan
+  (503 si la base no). Las versiones de antes del 4-11-2026 no tienen esa ruta: entonces el script
+  se conforma con que la portada dé 200, o 302 hacia `/entrar` (`HEALTH_PATH` cambia la ruta).
 - Si falla **dos veces seguidas**, reinicia `tavernus-web` y avisa. Si sigue mal, reintenta el
   reinicio cada 10 minutos y repite el aviso cada hora. Cuando vuelve a responder, avisa de que ha
   vuelto. El aviso lleva las últimas líneas del registro, con los tokens tapados.
@@ -341,7 +380,12 @@ y `bsd-mailx` con una cuenta SMTP (por ejemplo, una contraseña de aplicación d
   servicio. No está ni estará en el repo: `.env` está en `.gitignore`, `push.sh` no lo sube
   (empaqueta una lista explícita de carpetas) y `deploy/local.env` también se ignora. No copies tu
   `.env` local al servidor: pasa a mano solo las claves que hagan falta.
-- **ADMIN_TOKEN:** quien lo tenga es anfitrión. Al arrancar, la web dice que hay enlace de
+- **Cuentas:** las contraseñas se guardan con scrypt y sal (nunca en claro) y la sesión es un token
+  aleatorio en una cookie HttpOnly (Secure con HTTPS); la base solo guarda su hash. No hay correo ni
+  recuperación: si alguien olvida la contraseña, se la cambias en `/admin/usuarios` (cierra sus
+  sesiones). Diez intentos fallidos de un usuario desde una IP le hacen esperar 15 minutos, y el
+  registro abierto admite cinco cuentas por IP y hora.
+- **ADMIN_TOKEN:** quien lo tenga es administrador sin cuenta (lo ve todo, también el panel de usuarios). Al arrancar, la web dice que hay enlace de
   administración y dónde está el token, pero no lo escribe. Se ve con
   `sudo grep ^ADMIN_TOKEN /etc/tavernus/env`. Las versiones anteriores al 2026-10-27 sí lo
   escribían, así que si el servidor corrió alguna, el token está en journald: rótalo (abajo).

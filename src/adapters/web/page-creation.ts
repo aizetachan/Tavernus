@@ -7,7 +7,8 @@
  * vuelve a validarlo todo al crear.
  *
  * tavernusChargen(root, o) pinta dentro de `root`. `o`: options (el catálogo de
- * GameManager.characterOptions), previewUrl, confirmLabel, showHook() (si se pregunta
+ * GameManager.characterOptions), previewUrl, confirmLabel, initial (personaje de la biblioteca
+ * que se edita: el asistente empieza con sus valores), showHook() (si se pregunta
  * por qué viene), onBack (Atrás en el primer paso; sin él, no hay botón),
  * summaryExtra (nodo que va al final del resumen) y onConfirm(payload, ui), con
  * ui.busy(etiqueta, nota) y ui.fail(texto).
@@ -104,6 +105,18 @@ function tavernusChargen(root, o) {
     { id: 'summary', title: 'Resumen', lead: 'Así entra en el mundo. Si algo no te convence, vuelve atrás.', paint: paintSummary, check: function () { return ''; } }
   ];
   var s = { name: '', look: '', hook: '', race: null, klass: null, bg: null, bgTouched: false, ab: null, abTouched: false, skills: [], death: 'casual' };
+  // Editar un personaje de la biblioteca: el asistente empieza con lo que ya tenía.
+  if (o.initial) {
+    var I = o.initial;
+    s.name = I.name || ''; s.look = I.appearance || ''; s.hook = I.hook || '';
+    s.race = by(C.races, I.race_id) ? I.race_id : null;
+    s.klass = by(C.classes, I.class_id) ? I.class_id : null;
+    s.bg = by(C.backgrounds, I.background_id) ? I.background_id : null; s.bgTouched = Boolean(s.bg);
+    s.ab = I.abilities || null; s.abTouched = Boolean(I.abilities);
+    if (s.klass && !s.ab) s.ab = recommended();
+    if (s.klass && !s.bg) s.bg = klass().background;
+    s.skills = (I.skills || []).slice(); s.death = I.death_mode === 'hardcore' ? 'hardcore' : 'casual';
+  }
   var at = 0, ready = false, previewAsk = 0;
 
   root.innerHTML = '<div class="cg-head"><span class="cg-count"></span><div class="cg-bar"><i></i></div></div>' +
@@ -154,8 +167,8 @@ function tavernusChargen(root, o) {
 
   function paintName() {
     var first = textField('Nombre', s.name, 24, 'Aren', function (v) { s.name = v; });
-    textField('Cómo se ve · opcional; de aquí sale su retrato', s.look, 300, 'Pelo cobrizo trenzado, cicatriz en la ceja', function (v) { s.look = v; });
-    if (o.showHook()) textField('¿Qué le trae aquí? · opcional; si lo dejas vacío, el mundo se lo inventa', s.hook, 400, 'Busca a su hermano, que vino a este pueblo y no volvió', function (v) { s.hook = v; });
+    textField('Cómo se ve (opcional; de aquí sale su retrato)', s.look, 300, 'Pelo cobrizo trenzado, cicatriz en la ceja', function (v) { s.look = v; });
+    if (o.showHook()) textField('¿Qué le trae aquí? (opcional; si lo dejas vacío, el mundo se lo inventa)', s.hook, 400, 'Busca a su hermano, que vino a este pueblo y no volvió', function (v) { s.hook = v; });
     return first;
   }
   function paintRace() { cards('race', C.races, s.race, function (id) { s.race = id; pruneSkills(); }); }
@@ -170,7 +183,7 @@ function tavernusChargen(root, o) {
   function paintBackground() { cards('background', C.backgrounds, s.bg, function (id) { s.bg = id; s.bgTouched = true; pruneSkills(); }, klass().background); }
   function paintAbilities() {
     var r = race(), k = klass();
-    var rec = el('<div class="cg-rec"><span>Recomendado para ' + esc(k.name) + ': ' + C.abilities.map(function (a, i) { return a.short + ' ' + k.recommended[i]; }).join(' · ') + '</span><button type="button" class="btn ghost sm">Usar el recomendado</button></div>');
+    var rec = el('<div class="cg-rec"><span>Recomendado para ' + esc(k.name) + ': ' + C.abilities.map(function (a, i) { return a.short + ' ' + k.recommended[i]; }).join(', ') + '</span><button type="button" class="btn ghost sm">Usar el recomendado</button></div>');
     rec.querySelector('button').addEventListener('click', function () { s.ab = recommended(); s.abTouched = false; fresh(); });
     fields.appendChild(rec);
     var box = el('<div class="cg-abs"><div class="cg-ab top" aria-hidden="true"><span></span><span>Valor</span><span>Raza</span><span>Total</span></div></div>');
@@ -248,7 +261,7 @@ function tavernusChargen(root, o) {
   function drawSheet(p) {
     var look = s.look.trim(), hook = o.showHook() ? s.hook.trim() : '';
     fields.innerHTML =
-      '<div class="cg-who"><b>' + esc(p.name) + '</b><span>' + esc(p.race + ' · ' + p.class_name + ' · ' + p.background) + (p.darkvision ? ' · ve en la oscuridad' : '') + '</span></div>' +
+      '<div class="cg-who"><b>' + esc(p.name) + '</b><span>' + esc(p.race + ', ' + p.class_name + ', ' + p.background + (p.darkvision ? ', ve en la oscuridad' : '')) + '</span></div>' +
       '<div class="cg-tiles four">' + tile('PG', p.hp_max) + tile('CA', p.ac) + tile('Velocidad', p.speed_ft + ' ft') + tile('Percepción', p.passive_perception) + '</div>' +
       '<div class="cg-tiles six">' + p.abilities.map(function (a) { return tile(a.short, a.total, signed(a.modifier)); }).join('') + '</div>' +
       row('Salvaciones', p.saves.map(function (x) { return '<span class="cg-tag' + (x.proficient ? ' on' : '') + '">' + esc(x.name) + ' ' + signed(x.modifier) + '</span>'; }).join('')) +
@@ -275,7 +288,7 @@ function tavernusChargen(root, o) {
   function go(i) {
     at = i;
     var now = STEPS[at];
-    q('.cg-count').textContent = 'Paso ' + (at + 1) + ' de ' + STEPS.length + ' · ' + now.title;
+    q('.cg-count').textContent = 'Paso ' + (at + 1) + ' de ' + STEPS.length + ': ' + now.title;
     q('.cg-bar i').style.width = ((at + 1) / STEPS.length * 100) + '%';
     q('h3').textContent = now.title;
     q('.cg-lead').textContent = now.lead;

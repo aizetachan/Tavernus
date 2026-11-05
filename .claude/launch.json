@@ -252,7 +252,8 @@
         "GAMES_DIR": "./data/local/multi/games",
         "ANTHROPIC_API_KEY": "",
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
-        "IMAGES": "off"
+        "IMAGES": "off",
+        "DATABASE_URL": "pglite:./data/local/multi/games/.pgdata"
       }
     },
     {
@@ -273,7 +274,8 @@
         "GAMES_DIR": "./data/local/party/games",
         "ANTHROPIC_API_KEY": "",
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
-        "IMAGES": "off"
+        "IMAGES": "off",
+        "DATABASE_URL": "pglite:./data/local/party/games/.pgdata"
       }
     },
     {
@@ -335,10 +337,17 @@
     },
     {
       "name": "tavernus-web-publico",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "powershell",
       "runtimeArgs": [
-        "run",
-        "web"
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "C:/Users/migue/.claude/hooks/con-tope.ps1",
+        "-GB",
+        "2",
+        "-Comando",
+        "npm run web"
       ],
       "port": 3247,
       "env": {
@@ -350,7 +359,10 @@
         "GAMES_DIR": "./data/local/publico/games",
         "ANTHROPIC_API_KEY": "",
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
-        "IMAGES": "off"
+        "IMAGES": "off",
+        "DATABASE_URL": "pglite:./data/local/publico/games/.pgdata",
+        "ADMIN_USER": "admin",
+        "ADMIN_PASSWORD": "admin-local-de-pruebas"
       }
     },
     {

@@ -11,6 +11,7 @@ import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
 import { ReportQuota, REPORTS_PER_HOUR, type Report } from '../src/adapters/web/report.js';
 import { costOf, releaseOf, ServiceStats } from '../src/adapters/web/status.js';
 import type { MasterCall } from '../src/engine/engine.js';
+import { signUp } from './helpers.js';
 
 const INVITE: AccessOptions = { mode: 'invite', adminToken: 'token-de-admin-para-los-tests', secret: 'secreto-de-los-tests' };
 
@@ -248,8 +249,8 @@ describe('reportar y /admin/estado en la web', () => {
       expect(r.status).toBe(302);
       return r.headers.get('set-cookie')!.split(';')[0]!;
     };
-    /** Entra por el enlace de un asiento: la cookie de ese navegador. */
-    const enter = async (link: string) => (await fetch(base + link, { redirect: 'manual' })).headers.get('set-cookie')!.split(';')[0]!;
+    /** Crea una cuenta con el enlace de un asiento: la cookie de su sesión. */
+    const enter = (link: string) => signUp(base, 'jugadora', { invite: link });
 
     it('un jugador reporta, solo con su PJ, y no puede abrir la página', async () => {
       await start(INVITE);
@@ -257,13 +258,13 @@ describe('reportar y /admin/estado en la web', () => {
       const { slug, pj, seq } = await played(host);
       const player = await enter(await inviteOf(slug, host, (s) => s.character_id === pj));
 
-      // Sin cookie, o con la de un jugador: 403. Con la de administrador: la página.
-      expect((await fetch(`${base}/admin/estado`)).status).toBe(403);
+      // Sin cuenta, a entrar; con la de un jugador, 403. Con la de administrador: la página.
+      expect((await fetch(`${base}/admin/estado`, { redirect: 'manual' })).headers.get('location')).toBe('/entrar?next=%2Fadmin%2Festado');
       expect((await fetch(`${base}/admin/estado`, { headers: { cookie: player } })).status).toBe(403);
       expect((await fetch(`${base}/admin/estado`, { headers: { cookie: host } })).status).toBe(200);
 
-      // Sin asiento no se reporta; con asiento, solo con su PJ.
-      expect((await postJson(`/api/report?game=${slug}`, { character: pj, seq, text: 'x' })).status).toBe(403);
+      // Sin cuenta no se reporta; con asiento, solo con su PJ.
+      expect((await postJson(`/api/report?game=${slug}`, { character: pj, seq, text: 'x' })).status).toBe(401);
       expect((await postJson(`/api/report?game=${slug}`, { character: 'ch_otro', seq, text: 'x' }, player)).status).toBe(403);
       const ok = await postJson(`/api/report?game=${slug}`, { character: pj, seq, text: 'Algo raro' }, player);
       expect(ok.status).toBe(200);
@@ -282,9 +283,9 @@ describe('reportar y /admin/estado en la web', () => {
 
   it('en modo público, quien crea su partida la manda pero no ve el estado del servidor', async () => {
     await start({ ...INVITE, mode: 'public' });
-    const made = await postJson('/api/games', { name: 'Mía', mode: 'offline', character: 'Ana' });
+    const cookie = await signUp(base, 'ana');
+    const made = await postJson('/api/games', { name: 'Mía', mode: 'offline', character: 'Ana' }, cookie);
     expect(made.status).toBe(200);
-    const cookie = made.headers.get('set-cookie')!.split(';')[0]!;
     expect((await fetch(`${base}/admin/estado`, { headers: { cookie } })).status).toBe(403);
     const d = await (await fetch(`${base}/api/games`, { headers: { cookie } })).json() as { admin: boolean };
     expect(d.admin).toBe(false);

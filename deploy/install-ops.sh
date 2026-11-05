@@ -11,7 +11,7 @@ require_root
 
 # Scripts, sin \r por si el repo se clonó en Windows con autocrlf.
 install -d -m 755 "$OPS_DIR"
-for f in lib.sh healthcheck.sh backup-now.sh restore.sh; do
+for f in lib.sh healthcheck.sh backup-now.sh restore.sh admin-user.sh; do
   tr -d '\r' < "$SRC/$f" > "$OPS_DIR/$f.new"
   chmod 755 "$OPS_DIR/$f.new"
   mv -f "$OPS_DIR/$f.new" "$OPS_DIR/$f"
@@ -19,6 +19,7 @@ done
 ln -sfn "$OPS_DIR/backup-now.sh" /usr/local/bin/tavernus-backup
 ln -sfn "$OPS_DIR/restore.sh" /usr/local/bin/tavernus-restore
 ln -sfn "$OPS_DIR/healthcheck.sh" /usr/local/bin/tavernus-health
+ln -sfn "$OPS_DIR/admin-user.sh" /usr/local/bin/tavernus-admin
 
 # Unidades de systemd.
 for u in tavernus-web.service tavernus-health.service tavernus-health.timer tavernus-backup.service tavernus-backup.timer; do
