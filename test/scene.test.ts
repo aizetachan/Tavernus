@@ -310,6 +310,16 @@ describe('quién lee qué: tres niveles para quien está en la sala', () => {
     expect(toMessage(last(isgral.id), engine).lines?.at(-1)?.to).toBe('Mira');
   });
 
+  it('sin observable ni npc_id en el cierre, el aviso sale del NPC que habla en lines y a quien se dirige le llega la frase', async () => {
+    const { engine, isgral, maikol, last } = await forge();
+    scripted(engine, () => ({ narration_private: 'Brenna mira por encima de tu hombro.', observable: null, npc_id: null, lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'Y tú, ¿qué miras?', to: maikol.id }] }));
+    await engine.act(isgral.id, 'Hablar con Brenna');
+    const d = last(maikol.id);
+    expect(d.event.observable).toBe('Kael habla con Brenna.');
+    expect(d.event.payload['audience_ids']).toEqual([maikol.id]);
+    expect(toMessage(d, engine).lines?.at(-1)).toMatchObject({ speaker: 'npc', text: 'Y tú, ¿qué miras?', to: 'ti' });
+  });
+
   it('algo para todos corta las charlas sueltas de la sala', async () => {
     const { engine, isgral, maikol } = await forge();
     const doro = engine.world.npc('npc_doro');
@@ -410,11 +420,56 @@ describe('ventana de turno: varios a la vez en el mismo sitio', () => {
     expect(seen[kael.id]!.at(-1)).toBe('Le preguntas por el pozo y ella señala la plaza con la barbilla.\n\nBrenna se seca las manos en el delantal y os mira a los dos. «El pozo está en la plaza.» «Aquí se paga antes.»');
     expect(seen[mira.id]!.at(-1)).toMatch(/^Cuentas las monedas sobre la barra: te llega para dos jarras\.\n\nBrenna se seca/);
     expect(seen[mira.id]!.at(-1)).not.toContain('Le preguntas por el pozo');
-    // La línea sin destinatario va a todos; la otra, a Kael.
+    // La línea sin destinatario va a los del turno (no a toda la sala); la otra, a Kael.
     expect(a.event!.payload['lines']).toEqual([
       { speaker: 'npc', npc_id: 'npc_brenna', text: 'El pozo está en la plaza.', to: kael.id },
-      { speaker: 'npc', npc_id: 'npc_brenna', text: 'Aquí se paga antes.', to: 'all' },
+      { speaker: 'npc', npc_id: 'npc_brenna', text: 'Aquí se paga antes.', to: [kael.id, mira.id] },
     ]);
+    expect(a.event!.payload['audience']).toBe('group');
+  });
+
+  it('tres en la sala: la línea sin destinatario de un turno compartido no llega al tercero ni le corta su charla; «present» le da solo lo común', async () => {
+    const { engine, kael, mira } = await bar({ turnWindowMs: 40 });
+    const r = await engine.createCharacter('u_tor', 'Tor', undefined, { place: (c) => { c.location = { type: 'spot', id: 'sp_tab_barra' }; } });
+    if (!r.ok) throw new Error(r.reason);
+    const tor = r.character;
+    tor.connected = true;
+    engine.setPresence(tor.id, true);
+    const doro = engine.world.npc('npc_doro');
+    doro.location = { type: 'spot', id: 'sp_tab_barra' };
+    doro.talking_to = { character_id: tor.id, since_game_s: engine.gameNow() };
+    const seen: Record<string, string[]> = {};
+    engine.onDelivery((d) => { (seen[d.character_id] ??= []).push(d.text); });
+    let present = false;
+    // Dos cierres distintos (el mismo texto dos veces lo rechazaría el control de repeticiones).
+    const { errors } = toolMaster(engine, () => [present ? {
+      narration_private: 'Brenna golpea la barra con el trapo y mira a los dos.',
+      narration_by_pc: { [kael.id]: 'Le insistes por el pozo.', [mira.id]: 'Apilas las monedas.' },
+      npc_id: 'npc_brenna', audience: 'present',
+      lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'Aquí se paga antes de preguntar.' }],
+    } : {
+      narration_private: 'Brenna os mira a los dos.',
+      narration_by_pc: { [kael.id]: 'Le preguntas por el pozo.', [mira.id]: 'Cuentas las monedas.' },
+      npc_id: 'npc_brenna',
+      lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'El pozo está en la plaza.' }],
+    }]);
+    // Tor no manda nada: la ventana se cierra por tiempo con los otros dos.
+    const [a] = await Promise.all([engine.act(kael.id, 'preguntar a Brenna por el pozo'), engine.act(mira.id, 'contar mis monedas')]);
+    expect(a.event!.payload['group']).toEqual([kael.id, mira.id]);
+    expect(a.event!.payload['audience']).toBe('group');
+    expect(a.event!.payload['audience_ids']).not.toContain(tor.id);
+    // Tor lee el aviso de una línea (con los nombres que sabe), sin las frases ni lo de los otros; Doro sigue con él.
+    expect(seen[tor.id]!.at(-1)).toMatch(/habla con/);
+    expect(seen[tor.id]!.join('\n')).not.toContain('pozo');
+    expect(doro.talking_to?.character_id).toBe(tor.id);
+    // Algo para todos (present): Tor lee lo común, nunca la parte en segunda persona de Kael.
+    present = true;
+    engine.world.npc('npc_brenna').talking_to = null; // que la segunda vez vaya otra vez por la ventana, no por la charla de grupo
+    const [b] = await Promise.all([engine.act(kael.id, 'insistirle a Brenna por el pozo'), engine.act(mira.id, 'apilar mis monedas')]);
+    expect(errors).toEqual([]);
+    expect(b.event!.payload['audience']).toBe('present');
+    expect(seen[tor.id]!.at(-1)).toContain('golpea la barra con el trapo y mira a los dos. «Aquí se paga antes de preguntar.»');
+    expect(seen[tor.id]!.at(-1)).not.toContain('Le insistes');
   });
 
   it('dos acciones separadas por más de la ventana van una tras otra, cada una con su llamada', async () => {

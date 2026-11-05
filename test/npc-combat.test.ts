@@ -279,6 +279,19 @@ describe('el turno de los NPC al cerrar (tools)', () => {
     expect(encounterAt(engine.world, engine.events.recentInLocation(loc, 400), loc, engine.gameNow())).toBeNull();
   });
 
+  it('un hostil delante que aún no ha pegado ataca él primero: el máster lo ve en el contexto y el motor fuerza su turno al cerrar', async () => {
+    const { engine, leo, hugo } = await laBarra();
+    hugo.attitude.by_character[leo.id] = 'hostile';
+    const loc = engine.world.spot(hugo.location.id).location_id;
+    // Sin golpe previo no hay encuentro abierto; aun así, Hugo tiene turno.
+    expect(encounterAt(engine.world, engine.events.recentInLocation(loc, 400), loc, engine.gameNow())).toBeNull();
+    expect(actionContext(engine, leo, 'retrocedo hacia la puerta')).toContain('## Turno de los NPC hostiles');
+    const ctx = ctxFor(engine, leo, { action_text: 'retrocedo hacia la puerta' });
+    expect(tool(ctx, 'log_event', close({ narration_private: 'Retrocedes hacia la puerta.' })).error).toMatch(/Turno de los NPC hostiles/);
+    expect((ctx.forced_turns ?? []).map((f) => f.npc_id)).toEqual(['npc_hugo']);
+    expect((ctx.forced_turns ?? [])[0]!.target_id).toBe(leo.id);
+  });
+
   it('el multiataque del bloque SRD va entero en una llamada', async () => {
     const { engine, leo, hugo } = await laBarra();
     leo.hp_max = 200; leo.hp_current = 200;

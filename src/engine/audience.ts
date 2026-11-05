@@ -127,10 +127,12 @@ export function settleAudience(world: World, actor: Character, input: AudienceIn
     : [...new Set([...talkers, ...addressees, ...target])].filter((id) => id !== actor.id);
   if (audience !== 'present') audience = audienceIds.length ? 'group' : 'actor';
 
-  // Hablar con un NPC delante de otros deja siempre su aviso, aunque el máster no lo escriba.
+  // Hablar con un NPC delante de otros deja siempre su aviso, aunque el máster no lo escriba (ni el npc_id del cierre:
+  // vale el primer NPC que habla en lines). Sin aviso, quien está en la charla no recibiría nada (events.ts, textFor).
   let observable = input.observable;
-  if (!observable && audience !== 'present' && many && input.npc_id && world.npcs.has(input.npc_id)) {
-    observable = `${actor.name} habla con ${world.npc(input.npc_id).name}.`;
+  const talkNpc = input.npc_id ?? lines.find((l) => l.speaker === 'npc' && l.npc_id)?.npc_id ?? null;
+  if (!observable && audience !== 'present' && many && talkNpc && world.npcs.has(talkNpc)) {
+    observable = `${actor.name} habla con ${world.npc(talkNpc).name}.`;
   }
   return { audience, audience_ids: audienceIds, lines, observable, interrupted };
 }

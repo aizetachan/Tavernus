@@ -20,7 +20,7 @@ import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
 import { finishQuest, giveQuest } from '../engine/quests.js';
 import { attitudeOf, forcedTurnText, forceNpcTurns, intentOf, lethalBlow, nonLethalSource, npcTurn, resolveAttack, type ForcedTurn } from '../engine/combat.js';
-import { encounterAt } from '../engine/encounter.js';
+import { encounterAt, hostilesAt } from '../engine/encounter.js';
 import { INCIDENT_KINDS, incidentRejection, npcCrimeLine, pendingIncidents, reactionSentences, readsAsTheft, reportAssault, reportIncident, reportKill, unnarratedReactors, type IncidentKind } from '../engine/crime.js';
 import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, helplessNpc, isDying, killNpc, knockOutNpc, medicineDc, NPC_DOWN_HINT, reviveNpc, stabilize } from '../engine/death.js';
 import { spendResource } from '../engine/rest.js';
@@ -754,7 +754,10 @@ function fightingHere(ctx: ToolContext): boolean {
   if ((ctx.ok_tools ?? []).some((t) => t === 'attack' || t === 'apply_damage')) return true;
   const { engine, actor, nowGameS } = ctx;
   const loc = positionOf(engine.world, actor, nowGameS).location_id;
-  return encounterAt(engine.world, engine.events.recentInLocation(loc, 400), loc, nowGameS) !== null;
+  if (encounterAt(engine.world, engine.events.recentInLocation(loc, 400), loc, nowGameS) !== null) return true;
+  // Un hostil vivo con bloque de combate delante (como Engine.fightIn): ataca él primero, sin esperar a que le peguen.
+  const pcs = [actor.id, ...sharedWith(engine, actor.id)].map((id) => engine.world.characters.get(id)).filter((c): c is Character => Boolean(c));
+  return hostilesAt(engine.world, loc, pcs).length > 0;
 }
 
 /**
@@ -1720,9 +1723,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // sin texto suyo: no dice nada). Sin action_text en el contexto (quien llama no lo dice), no se mira.
       const inputs = sharedInputs(engine, actor.id) ?? (ctx.action_text !== undefined ? new Map<string, string | null>([[actor.id, ctx.action_text]]) : null);
       const invented = inputs ? parsedLines.filter((l) => (l.speaker === 'pc' || l.speaker === 'actor') && !saidByPlayer(l.text, inputs.get(l.speaker === 'pc' ? l.character_id! : actor.id))) : [];
-      // En turno compartido, la línea del NPC sin destinatario va a todos.
+      // En turno compartido, la línea del NPC sin destinatario va a los del turno (no a toda la sala: `all` haría el
+      // turno `present` y se lo leería también quien no está en la charla, audience.ts).
       const sharedTurn = sharedIds.length > 0;
-      const closingLines = parsedLines.filter((l) => !invented.includes(l)).map((l) => (sharedTurn && l.speaker === 'npc' && !l.to ? { ...l, to: 'all' as const } : l));
+      const sharedTo = [...new Set(sharedIds)];
+      const closingLines = parsedLines.filter((l) => !invented.includes(l)).map((l) => (sharedTurn && l.speaker === 'npc' && !l.to ? { ...l, to: sharedTo.length === 1 ? sharedTo[0]! : sharedTo } : l));
       // La tercera negativa corta la charla (talk.ts).
       if (ctx.talk && endsTalk(ctx.talk, closingLines)) world.npc(ctx.talk.npc_id).talking_to = null;
       const unsay = (t: string) => invented.reduce((acc, l) => acc.split(`«${l.text}»`).join('').replace(/[ \t]{2,}/g, ' ').trim(), t);

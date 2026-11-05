@@ -140,7 +140,12 @@ describe('presencia en tiempo real (presence.ts)', () => {
     p.close('maikol', 'a');
     vi.advanceTimersByTime(T.hiddenMs - 1000);
     expect(p.online('maikol')).toBe(true);
-    p.open('maikol', 'a'); // vuelve a mirar: EventSource reconecta con el mismo id
+    // Vuelve a mirar: la página late «visible» en el acto y EventSource reconecta (mismo id) unos segundos después.
+    // El corte de antes no cuenta desde cuando se cortó: si lo hiciera, aquí ya se iría y al reabrir volvería a entrar.
+    p.beat('maikol', 'a', true);
+    vi.advanceTimersByTime(3_000);
+    expect(changes).toEqual(['maikol:entra']);
+    p.open('maikol', 'a');
     p.beat('maikol', 'a', true);
     for (let i = 0; i < 20; i++) { vi.advanceTimersByTime(15_000); p.beat('maikol', 'a', true); }
     expect(changes).toEqual(['maikol:entra']);

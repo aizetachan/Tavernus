@@ -193,8 +193,11 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-/** NPC que mantienen vivo el combate: en pie, con bloque de combate, en la localización y hostiles a alguno de esos PJ. */
-function hostilesAt(world: World, locationId: Id, pcs: readonly Character[]): Npc[] {
+/**
+ * NPC que mantienen vivo el combate (o lo empiezan: tools.ts `fightingHere`, prompt.ts «Turno de los NPC hostiles»):
+ * en pie, con bloque de combate, en la localización y hostiles a alguno de esos PJ.
+ */
+export function hostilesAt(world: World, locationId: Id, pcs: readonly Character[]): Npc[] {
   return [...world.npcs.values()].filter((n) => n.status === 'alive' && n.stats && world.spots.get(n.location.id)?.location_id === locationId
     && pcs.some((c) => (n.attitude.by_character[c.id] ?? n.attitude.default) === 'hostile'));
 }

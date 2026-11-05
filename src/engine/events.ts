@@ -191,8 +191,12 @@ export function readerText(world: World, e: GameEvent, characterId: Id, level: P
     const text = common !== null ? [mine ?? '', common].filter((t) => t.trim()).join('\n\n') : e.narration_private;
     return maskUnknownNames(world, characterId, text);
   }
-  // Algo que afecta a todos los presentes (audience.ts): la misma narración para todos.
-  if (viewOf(e, characterId) === 'shared') return maskUnknownNames(world, characterId, e.narration_private);
+  // Algo que afecta a todos los presentes (audience.ts): la misma narración para todos. Si el turno era compartido,
+  // lo común (narration_private lleva además la parte en segunda persona del actor).
+  if (viewOf(e, characterId) === 'shared') {
+    const common = e.payload['narration_common'];
+    return maskUnknownNames(world, characterId, typeof common === 'string' && common.trim() ? common : e.narration_private);
+  }
   const target = e.payload['target_character_id'];
   const own = e.payload['observable_target'];
   let text = level === 'full' && target === characterId && typeof own === 'string' && own.trim() ? own : textFor(e, characterId, level);

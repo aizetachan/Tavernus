@@ -89,6 +89,9 @@ export class PresenceTracker {
     if (!t) return;
     t.seen = this.now();
     t.goneAt = null;
+    // Vuelve a verse con el stream cortado mientras estaba oculta (el móvil lo corta y la página late antes de
+    // que EventSource reconecte): el corte cuenta desde ahora, con su gracia, no desde cuando se cortó.
+    if (visible && t.hiddenSince !== null && !t.streams && t.closedAt !== null) t.closedAt = this.now();
     t.hiddenSince = visible ? null : t.hiddenSince ?? this.now();
     this.check(id);
   }
