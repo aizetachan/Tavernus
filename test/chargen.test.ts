@@ -178,7 +178,11 @@ describe('creación por la web', () => {
     const access: AccessOptions = { mode: 'invite', adminToken: 'token-de-admin-para-tests', secret: 'secreto-de-tests' };
     await start(access);
     const host = browser();
+    // El rescate solo abre la administración: desde ahí se crea la cuenta del anfitrión, administrador, y se entra con ella.
     await host.get(`/admin?token=${access.adminToken}`);
+    const u = ((await (await host.post('/api/admin/users', { username: 'anfitrion', password: 'contraseña-de-pruebas' })).json()) as { user: { id: string } }).user;
+    expect((await host.post(`/api/admin/users/${u.id}`, { admin: true })).status).toBe(200);
+    expect((await host.post('/api/auth/login', { username: 'anfitrion', password: 'contraseña-de-pruebas' })).status).toBe(200);
     const made = (await (await host.post('/api/games', { name: 'Mesa', mode: 'offline', character: 'Aren', seats: 1 })).json()) as { game: { slug: string }; character_id: string };
     const g = `?game=${made.game.slug}`;
     const seats = (await (await host.get(`/api/seats${g}`)).json()) as { seats: { character_id: string | null; link: string }[] };

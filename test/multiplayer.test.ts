@@ -69,6 +69,15 @@ function browser() {
 
 const ACCESS: AccessOptions = { mode: 'invite', adminToken: 'token-de-admin-para-tests', secret: 'secreto-de-tests' };
 
+/** Con la cookie de rescate puesta: se crea su cuenta desde la administración, se nombra administrador y entra con ella. */
+async function adminAccount(b: ReturnType<typeof browser>, username: string): Promise<void> {
+  const r = await b.post('/api/admin/users', { username, password: 'contraseña-de-pruebas' });
+  expect(r.status).toBe(200);
+  const u = ((await r.json()) as { user: { id: string } }).user;
+  expect((await b.post(`/api/admin/users/${u.id}`, { admin: true })).status).toBe(200);
+  expect((await b.post('/api/auth/login', { username, password: 'contraseña-de-pruebas' })).status).toBe(200);
+}
+
 describe('invitaciones por asiento', () => {
   it('el enlace liga al personaje; no puede actuar por otro; sin enlace no entra', async () => {
     await start(ACCESS);
@@ -82,8 +91,15 @@ describe('invitaciones por asiento', () => {
     // En modo invitación no se crea cuenta sin un enlace.
     expect((await host.post('/api/auth/register', { username: 'colado', password: 'contraseña-de-pruebas' })).status).toBe(403);
     expect((await host.get('/admin?token=otro')).status).toBe(403);
-    // El anfitrión entra con su enlace de administración: ve los asientos (uno por PJ) y añade uno libre.
-    expect((await host.get(`/admin?token=${ACCESS.adminToken}`)).status).toBe(302);
+    // El enlace de administración, sin cuenta, solo abre la administración: el menú y la API siguen pidiendo cuenta.
+    const rescue = await host.get(`/admin?token=${ACCESS.adminToken}`);
+    expect(rescue.status).toBe(302);
+    expect(rescue.headers.get('location')).toBe('/admin/usuarios');
+    expect((await host.get('/')).headers.get('location')).toBe('/entrar');
+    expect((await host.get('/api/games')).status).toBe(401);
+    expect((await host.get('/admin/usuarios')).status).toBe(200);
+    // Desde ahí se crea la cuenta del anfitrión, administrador; con ella ve los asientos (uno por PJ) y añade uno libre.
+    await adminAccount(host, 'anfitrion');
     const created = await games.create({ name: 'Mesa', mode: 'offline', campaign_id: 'demo', character: { name: 'Aren' } });
     const g = `?game=${created.game.slug}`;
     expect((await host.post(`/api/seats${g}`)).status).toBe(200);
@@ -161,6 +177,7 @@ describe('invitaciones por asiento', () => {
     await start(ACCESS);
     const host = browser();
     await host.get(`/admin?token=${ACCESS.adminToken}`);
+    await adminAccount(host, 'anfitrion');
     const created = (await (await host.post('/api/games', { name: 'Mesa', mode: 'offline', character: 'Mira', class: 'rogue', seats: 2 })).json()) as { game: { slug: string }; character_id: string };
     const g = `?game=${created.game.slug}`;
     const seats = (await (await host.get(`/api/seats${g}`)).json()) as { seats: { character_id: string | null }[] };

@@ -179,6 +179,15 @@ function browser() {
   return b;
 }
 
+/** Con la cookie de rescate puesta: se crea su cuenta desde la administración, se nombra administrador y entra con ella. */
+async function adminAccount(b: ReturnType<typeof browser>, username: string): Promise<void> {
+  const r = await b.post('/api/admin/users', { username, password: PASS });
+  expect(r.status, await r.clone().text()).toBe(200);
+  const u = ((await r.json()) as { user: { id: string } }).user;
+  expect((await b.post(`/api/admin/users/${u.id}`, { admin: true })).status).toBe(200);
+  expect((await b.login(username)).status).toBe(200);
+}
+
 const PUBLIC: AccessOptions = { mode: 'public', adminToken: 'token-de-admin-para-tests', secret: SECRET };
 type GamesList = { games: { slug: string; host: boolean }[]; user: { username: string } | null; can_create: boolean };
 
@@ -277,6 +286,7 @@ describe('la web con cuentas', () => {
     await start({ ...PUBLIC, mode: 'invite' });
     const admin = browser();
     await admin.get(`/admin?token=${PUBLIC.adminToken}`);
+    await adminAccount(admin, 'jefe');
     const made = (await (await admin.post('/api/games', { name: 'Mesa', mode: 'offline', character: 'Aren', seats: 2 })).json()) as { game: { slug: string }; character_id: string };
     const g = `?game=${made.game.slug}`;
     const free = (await admin.json<{ seats: { link: string; character_id: string | null }[] }>(`/api/seats${g}`)).seats.filter((s) => !s.character_id);
@@ -426,13 +436,26 @@ describe('la web con cuentas', () => {
     expect(log).toEqual(expect.arrayContaining(['cambió la contraseña de', 'borró la cuenta de', 'dio a bea la partida', 'desactivó a', 'creó la cuenta de']));
   });
 
-  it('el enlace de administración sigue valiendo como rescate, sin cuenta', async () => {
+  it('el enlace de administración sigue valiendo como rescate, sin cuenta: solo la administración, y cerrar sesión lo quita', async () => {
     await start(PUBLIC);
     const rescue = browser();
     expect((await rescue.get('/admin?token=otro')).status).toBe(403);
-    await rescue.get(`/admin?token=${PUBLIC.adminToken}`);
+    expect((await rescue.get(`/admin?token=${PUBLIC.adminToken}`)).headers.get('location')).toBe('/admin/usuarios');
     expect((await rescue.get('/admin/usuarios')).status).toBe(200);
+    expect((await rescue.get('/admin/estado')).status).toBe(200);
     expect((await rescue.json<{ ok: boolean }>('/api/admin/users')).ok).toBe(true);
+    // Jugar y ver partidas pide cuenta, también con el rescate.
+    expect((await rescue.get('/')).headers.get('location')).toBe('/entrar');
+    expect((await rescue.get('/api/games')).status).toBe(401);
+    expect((await rescue.post('/api/games', { name: 'Mesa', mode: 'offline', character: 'Aren', seats: 0 })).status).toBe(401);
+    // Desde la administración se crea la cuenta del administrador y se entra con ella: ya ve el menú.
+    await adminAccount(rescue, 'jefe');
+    expect((await rescue.get('/')).status).toBe(200);
+    expect((await rescue.get('/api/games')).status).toBe(200);
+    // Cerrar sesión quita la cuenta y el rescate: vuelta a entrar.
+    expect((await rescue.post('/api/auth/logout')).status).toBe(200);
+    expect(rescue.jar.has('tv_admin')).toBe(false);
+    expect((await rescue.get('/admin/usuarios')).headers.get('location')).toBe('/entrar?next=%2Fadmin%2Fusuarios');
   });
 });
 

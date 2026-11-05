@@ -240,14 +240,23 @@ describe('reportar y /admin/estado en la web', () => {
   });
 
   describe('en modo invitación', () => {
+    /** El enlace del asiento del PJ. El anfitrión, con cuenta, queda ligado a su asiento: lo libera antes para que lo ocupe la jugadora. */
     const inviteOf = async (slug: string, admin: string, pick: (s: { character_id: string | null; link: string }) => boolean) => {
-      const seats = await (await fetch(`${base}/api/seats?game=${slug}`, { headers: { cookie: admin } })).json() as { seats: { character_id: string | null; link: string }[] };
-      return seats.seats.find(pick)!.link;
+      const seats = await (await fetch(`${base}/api/seats?game=${slug}`, { headers: { cookie: admin } })).json() as { seats: { id: string; character_id: string | null; link: string }[] };
+      const seat = seats.seats.find(pick)!;
+      expect((await postJson(`/api/seats/release?game=${slug}`, { seat: seat.id }, admin)).status).toBe(200);
+      return seat.link;
     };
+    /** El enlace de rescate solo abre la administración: desde ahí se crea la cuenta de administrador y se entra con ella (su cookie). */
     const admin = async () => {
       const r = await fetch(`${base}/admin?token=${INVITE.adminToken}`, { redirect: 'manual' });
       expect(r.status).toBe(302);
-      return r.headers.get('set-cookie')!.split(';')[0]!;
+      const rescue = r.headers.get('set-cookie')!.split(';')[0]!;
+      const u = (await (await postJson('/api/admin/users', { username: 'jefe', password: 'contraseña-de-pruebas' }, rescue)).json() as { user: { id: string } }).user;
+      expect((await postJson(`/api/admin/users/${u.id}`, { admin: true }, rescue)).status).toBe(200);
+      const login = await postJson('/api/auth/login', { username: 'jefe', password: 'contraseña-de-pruebas' });
+      expect(login.status).toBe(200);
+      return login.headers.getSetCookie().find((x) => x.startsWith('tv_u='))!.split(';')[0]!;
     };
     /** Crea una cuenta con el enlace de un asiento: la cookie de su sesión. */
     const enter = (link: string) => signUp(base, 'jugadora', { invite: link });

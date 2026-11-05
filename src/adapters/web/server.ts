@@ -91,7 +91,7 @@ import { noticeOf, webNotice, type WebNotice } from './notice.js';
 import { handlePaintRequest } from './paint.js';
 import { handleAvatarRequest } from './avatar.js';
 import { journeyOf } from '../../engine/travel.js';
-import { accessFromEnv, checkSeatCookie, clearCookie, cookies, isAdmin, isHostSeat, adminTokenMatches, randomToken, seatCookieName, seatCookieValue, seatIdOf, SESSION_COOKIE_MAX_AGE_S, setAdminCookie, setCookie, USER_COOKIE, type AccessOptions } from './access.js';
+import { accessFromEnv, checkSeatCookie, clearCookie, cookies, isAdmin, isHostSeat, adminTokenMatches, randomToken, seatCookieName, seatCookieValue, seatIdOf, SESSION_COOKIE_MAX_AGE_S, setAdminCookie, clearAdminCookie, setCookie, USER_COOKIE, type AccessOptions } from './access.js';
 import { invitePage, joinPage, seatsPage } from './page-access.js';
 import { accountPage } from './page-account.js';
 import { adminPage } from './page-admin.js';
@@ -688,9 +688,10 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     // Modo public: cualquiera con cuenta crea partidas y manda en las suyas.
     const pub = access.mode === 'public';
     const user = await currentUser(req);
-    // El enlace de administración de rescate (sin cuenta): lo ve todo y, como en `open`, se liga a un asiento por cookie.
+    // El enlace de administración de rescate (sin cuenta): solo abre la administración (más abajo); jugar pide cuenta.
     const tokenAdmin = isAdmin(access, req);
-    const byCookie = open || (tokenAdmin && !user);
+    // Asientos por cookie de navegador: solo en `open`.
+    const byCookie = open;
     // Las cookies de asiento de antes de las cuentas: al entrar con cuenta, sus asientos pasan a ella.
     if (user && hasLegacySeatCookies(req)) await claimLegacySeats(req, res, user);
 
@@ -706,7 +707,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           throw e;
         }
       } else if (byCookie) {
-        // Local sin cuenta (o el enlace de administración): como antes, la cookie liga este navegador al asiento.
+        // Local sin cuenta: como antes, la cookie liga este navegador al asiento.
         setCookie(res, access, seatCookieName(m.slug), seatCookieValue(access.secret, m.slug, seat));
       } else {
         redirect(res, `/entrar?invite=${encodeURIComponent(`${m.slug}/${invite[2]!}`)}`);
@@ -718,7 +719,8 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     if (req.method === 'GET' && url.pathname === '/admin') {
       if (!adminTokenMatches(access, url.searchParams.get('token'))) { html(res, 403, invitePage('Ese enlace de administración no vale.')); return; }
       setAdminCookie(res, access);
-      redirect(res, '/');
+      // Sin cuenta, el menú manda a entrar: el rescate lleva a la administración, donde se crea o nombra al administrador.
+      redirect(res, user || open ? '/' : '/admin/usuarios');
       return;
     }
 
@@ -768,13 +770,17 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const token = cookies(req)[USER_COOKIE];
       if (token) await (await accountsOf()).endSession(token);
       clearCookie(res, access, USER_COOKIE);
+      // Cerrar sesión deja también el rescate: para volver a entrar hace falta la cuenta (o el enlace otra vez).
+      clearAdminCookie(res, access);
       json(res, 200, { ok: true });
       return;
     }
 
     const admin = tokenAdmin || Boolean(user?.is_admin);
-    // Sin cuenta, fuera de `open`, solo se ve entrar o registrarse (y la wiki).
-    if (!user && !admin && !open) {
+    // Sin cuenta, fuera de `open`, solo se ve entrar o registrarse (y la wiki). El enlace de rescate (cookie tv_admin)
+    // sin cuenta abre solo la administración: desde ahí se crea o se nombra al administrador, y se entra con él.
+    const adminOnly = url.pathname === '/admin/estado' || url.pathname === '/admin/usuarios' || url.pathname.startsWith('/api/admin/');
+    if (!user && !open && !(tokenAdmin && adminOnly)) {
       if (req.method === 'GET' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/images/')) {
         const back = url.pathname + url.search;
         redirect(res, back === '/' ? '/entrar' : `/entrar?next=${encodeURIComponent(back)}`);

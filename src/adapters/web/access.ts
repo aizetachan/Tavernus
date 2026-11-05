@@ -4,7 +4,8 @@
  *
  *   /entrar                entrar o registrarse (page-account.ts); la sesión va en la cookie tv_u
  *   /i/<partida>/<token>   invitación: con sesión, liga ese asiento al usuario; sin ella, pasa por /entrar
- *   /admin?token=…         rescate: cookie tv_admin, lo ve todo (por si no hay ningún usuario administrador)
+ *   /admin?token=…         rescate: cookie tv_admin, abre solo la administración (/admin/usuarios, /admin/estado) sin
+ *                          cuenta, por si no hay ningún usuario administrador; jugar y ver partidas pide cuenta
  *
  * Los usuarios, sesiones, asientos y la biblioteca viven en la base (src/accounts, src/db). Modos (WEB_ACCESS):
  *   - open:   local. Sin cuenta se juega con cualquier PJ y se ve todo, como siempre; las cuentas funcionan
@@ -140,4 +141,8 @@ export function clearCookie(res: ServerResponse, access: AccessOptions, name: st
 
 export function setAdminCookie(res: ServerResponse, access: AccessOptions): void {
   if (access.adminToken) setCookie(res, access, ADMIN_COOKIE, adminCookieValue(access.secret, access.adminToken));
+}
+
+export function clearAdminCookie(res: ServerResponse, access: AccessOptions): void {
+  clearCookie(res, access, ADMIN_COOKIE);
 }

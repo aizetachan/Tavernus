@@ -123,9 +123,11 @@ Con `--remote-build` se compila en el servidor.
    anterior** y te enseña el error. Se guardan las 4 últimas versiones.
 6. **Tus partidas** (opcional): `deploy/data-sync.sh up --replace` sube tu `data/` local tal cual
    (ver «Datos y copias»).
-7. **Entrar como anfitrión.** El enlace de admin es `https://<dominio>/admin?token=<ADMIN_TOKEN>`.
-   El token se ve con `sudo grep ^ADMIN_TOKEN /etc/tavernus/env`. Desde ahí creas la partida y
-   repartes las invitaciones («⚙ → Invitaciones», docs/MULTIJUGADOR.md).
+7. **Entrar como administrador.** Crea tu cuenta de administrador con `sudo tavernus-admin <usuario>`
+   (ver «Base de datos») y entra con ella en `https://<dominio>/entrar`. Desde el menú creas la partida y
+   repartes las invitaciones («⚙ → Invitaciones», docs/MULTIJUGADOR.md). El enlace
+   `https://<dominio>/admin?token=<ADMIN_TOKEN>` (token en `sudo grep ^ADMIN_TOKEN /etc/tavernus/env`) es
+   solo el rescate: sin cuenta abre `/admin/usuarios`, donde puedes crear o nombrar al administrador.
 
 ## 3. Camino B: sin dominio todavía
 
@@ -274,7 +276,8 @@ partida (su estado, eventos, imágenes) sigue en su carpeta de `games/`.
 - **Primer administrador:** `sudo tavernus-admin <usuario>` (pide la contraseña sin mostrarla). Si el
   usuario ya existe, solo lo hace administrador. También vale `ADMIN_USER` y `ADMIN_PASSWORD` en el
   entorno, pero deja la contraseña escrita en el fichero. El enlace `/admin?token=…` sigue siendo la
-  entrada de rescate si no queda ningún administrador.
+  entrada de rescate si no queda ningún administrador: sin cuenta abre solo `/admin/usuarios` y
+  `/admin/estado`; para jugar o ver partidas hace falta la cuenta.
 - **Sin la base, la web no arranca** en modo `public` o `invite`, y `release.sh` no cambia de versión
   si no la encuentra (deja la anterior en marcha y dice qué hacer).
 
