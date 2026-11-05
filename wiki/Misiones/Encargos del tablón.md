@@ -3,7 +3,7 @@ title: "Encargos del tablón"
 description: "Los ocho encargos cortos de Brezal; quién paga, qué pide, dónde se consigue y cuánto da."
 tags: [mision, brezal, encargo]
 ---
-Los encargos son **bucles cortos** para respirar entre misión y misión. Se leen en el tablón de la [[Plaza del Pozo]]: entran en el Diario cuando el personaje se planta ante él (o usa /tablon), no por estar clavados. Cada uno da monedas y **+1 de reputación** con la aldea de Brezal, que cuenta para el logro.
+Los encargos son **bucles cortos** para respirar entre misión y misión. Se leen en el tablón de la [[Plaza del Pozo]]: entran en el Diario cuando el personaje se planta ante él (o usa /tablon), no por estar clavados. Pasan a **en curso** al hablar del encargo con quien lo pide, sin decir «acepto»; tiene que ser hablar de él (lo que pide y algo más de él), no nombrar de pasada una palabra suya: «lo vio el de la leña» no pone en curso «Leña para la posada» (desde el 2026-11-05). Cada uno da monedas y **+1 de reputación** con la aldea de Brezal, que cuenta para el logro.
 
 Hay dos tipos:
 - **Entregar**: llevar tantas unidades de algo a quien paga.

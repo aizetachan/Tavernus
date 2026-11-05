@@ -36,6 +36,7 @@ import { debtLine } from './debts.js';
 import { money } from './money.js';
 import type { Character, GameEvent, Id, Npc } from './model.js';
 import type { DialogueLine } from './moments.js';
+import { keywords, properNameWords, sharedCount, shares } from './keywords.js';
 import { contractArticles, maskUnknownNames, roleLabel } from './narrate.js';
 import { activeJobs } from './progress.js';
 import { rumorsHeardBy, rumorsIn, type Rumor } from './rumors.js';
@@ -189,22 +190,17 @@ export interface Journal {
   places: JournalPlace[];
 }
 
-const STOP = new Set(['para', 'como', 'desde', 'hasta', 'hacia', 'entre', 'sobre', 'sin', 'con', 'una', 'unos', 'unas', 'del', 'los', 'las', 'que', 'por', 'pero', 'cada', 'este', 'esta', 'esto', 'tras', 'ante', 'antes', 'donde', 'quien', 'quién', 'algo', 'nada', 'nadie', 'alguien', 'todo', 'toda', 'más', 'menos', 'otro', 'otra']);
 const DAY_S = GAME_DAY;
 
-const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-/** Palabras con peso de un texto, sin tildes ni plurales simples, para casar textos entre sí. */
-function keywords(s: string): Set<string> {
-  const out = new Set<string>();
-  for (const w of norm(s).match(/[a-zñ]{4,}/g) ?? []) {
-    if (STOP.has(w)) continue;
-    out.add(w.replace(/(es|s)$/, '').slice(0, 6));
-  }
-  return out;
-}
-function shares(a: Set<string>, b: Set<string>): boolean {
-  for (const x of a) if (b.has(x)) return true;
-  return false;
+/**
+ * ¿Habla este turno del encargo? Tiene que nombrar lo que pide (una palabra del título) y algo más de él: «Lo vio
+ * el de la leña» no es hablar de «Leña para la posada» (partida del 2026-11-05). Los nombres propios no cuentan.
+ */
+function talksAboutJob(job: { title: string; text: string }, said: ReadonlySet<string>, skip: ReadonlySet<string>): boolean {
+  const title = keywords(job.title, skip);
+  if (!shares(title, said)) return false;
+  // Un título al que solo le queda una palabra («Ronda hasta el Soto»: el Soto es un sitio) se nombra con esa sola.
+  return title.size <= 1 || sharedCount(new Set([...title, ...keywords(job.text, skip)]), said) >= 2;
 }
 
 const EMPTY_SUMMARY = (): JournalQuest['summary'] => ({ text: '', next: null });
@@ -287,13 +283,14 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   const engagedAt = new Map<Id, number>();
   /** La primera vez que lo habló con quien lo pide, aunque luego lo dejara: desde entonces lo conoce. */
   const toldAt = new Map<Id, number>();
+  const proper = properNameWords(w);
   for (const e of mine) {
     if (e.actor_id !== c.id || !/^master/.test(e.action_type)) continue;
-    const kw = keywords(eventText(e));
+    const kw = keywords(eventText(e), proper);
     for (const j of jobs) {
       if (engagedAt.has(j.id) || (!seenAt.has(j.id) && !onBoard.has(j.id))) continue;
       const giverHere = e.payload['npc_id'] === j.giver_npc_id || (Array.isArray(e.payload['lines']) && (e.payload['lines'] as DialogueLine[]).some((l) => l.npc_id === j.giver_npc_id));
-      if (!giverHere || !shares(keywords(j.title), kw)) continue;
+      if (!giverHere || !talksAboutJob(j, kw, proper)) continue;
       if (!toldAt.has(j.id)) toldAt.set(j.id, e.timestamp_game_s);
       if (e.timestamp_game_s > (droppedAt(c, j.id) ?? -Infinity)) engagedAt.set(j.id, e.timestamp_game_s);
     }
@@ -458,9 +455,15 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
     const steps: JournalStep[] = settled
       ? [{ text: settled.how === 'coins' ? 'Pagada' : settled.how === 'work' ? 'Saldada con trabajo' : `Perdida: ${who} se quedó ${pawnName ?? 'la prenda'}`, done: true }]
       : [{ text: contractArticles(holderNpc ? `Pagar ${money(w, d.amount)} a ${who}, que la cobra en nombre de ${holder} (o saldarla de otro modo)` : `Pagar ${money(w, d.amount)} a ${who} (o saldarla de otro modo)`), done: false }, ...(pawnName ? [{ text: `Recuperar la prenda: ${pawnName}`, done: false }] : [])];
-    const updated = Math.max(d.created_game_s, settled?.game_s ?? 0);
+    const updated = Math.max(d.created_game_s, settled?.game_s ?? 0, ...(d.log ?? []).map((x) => x.game_s));
     const left = d.due_game_s === null ? null : Math.ceil((d.due_game_s - nowS) / DAY_S);
     const debtHistory: JournalChange[] = [{ key: `${d.id}:added`, ...at(d.created_game_s), kind: 'added', text: 'Contraes la deuda', why: cap(d.reason) }];
+    // Lo pactado con quien la cobra y los pagos a cuenta (debts.ts): sin esto, el aviso del hilo no tenía dónde leerse.
+    for (const x of d.log ?? []) {
+      debtHistory.push(x.kind === 'terms'
+        ? { key: `${d.id}:terms:${x.game_s}`, ...at(x.game_s), kind: 'changed', text: masked(cap(x.text)), why: `lo hablaste con ${who}` }
+        : { key: `${d.id}:paid:${x.game_s}`, ...at(x.game_s), kind: 'step', text: `✔ ${cap(x.text)}`, why: null });
+    }
     if (settled) debtHistory.push({ key: `${d.id}:completed`, ...at(settled.game_s), kind: 'completed', text: steps[0]!.text, why: null });
     quests.push({
       id: d.id, kind: 'debt', title: contractArticles(`Deuda con ${holder}`), origin: { kind: 'giver', text: contractArticles(`Se la debes a ${holder}`), where: null }, history: debtHistory, text: settled ? cap(d.reason) : `${debtLine(w, d, nowS, (n) => npcLabel(c, n))}. ${cap(d.reason)}.`,

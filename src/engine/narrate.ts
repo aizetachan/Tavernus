@@ -257,6 +257,13 @@ export function maskUnknownNames(world: World, readerId: Id, text: string, keep:
   return maskNpcNames(world, text, [...reader.knows, ...keep], authored);
 }
 
+/** NPC que el lector no conoce y a los que el texto nombra por su nombre (no por su oficio). */
+export function unknownNpcsNamed(world: World, readerId: Id, text: string): Npc[] {
+  const reader = world.characters.get(readerId);
+  if (!reader) return [];
+  return [...world.npcs.values()].filter((n) => !reader.knows.includes(n.id) && npcNameForms(n.name).some((f) => nameRe(f, 'u').test(text)));
+}
+
 /** Lo mismo con la lista de quienes salen por su nombre dada: todo otro NPC, por su descripción. */
 export function maskNpcNames(world: World, text: string, named: readonly Id[], authored = false): string {
   // Lo citado son palabras de alguien: un nombre dicho en voz alta se oye tal cual.
