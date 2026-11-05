@@ -11,7 +11,7 @@ tags: [diseño, multijugador]
 - **Cuenta:** usuario y contraseña, sin correo. Con ella ves tus partidas (las que creaste y aquellas a las que te uniste) desde el móvil, el PC o donde entres.
 - **Biblioteca de personajes:** cada cuenta guarda sus personajes. Al empezar una partida, o al ocupar un asiento libre, eliges uno de ellos o creas uno nuevo, que se guarda.
 - **Cada partida juega con una copia.** Lo que le pase al personaje en una partida (heridas, nivel, objetos) se queda en esa partida; tu biblioteca guarda el personaje tal como lo creaste. Puedes llevar el mismo personaje a varias partidas, y cada una sigue su propia historia.
-- **Administrador:** ve todas las partidas y gestiona las cuentas (contraseñas, roles, asignar partidas).
+- **Administrador:** una cuenta con ese rol (se crea desde la terminal del servidor; no hay enlaces ni tokens de rescate). Ve todas las partidas y gestiona las cuentas: de cada usuario, sus partidas y sus personajes (ficha, renombrar, borrar); de cada partida, su dueño y quién ocupa cada asiento. Al abrir una partida ajena entra como un jugador más, con un asiento suyo y el personaje que elija (uno de su biblioteca, uno nuevo o el atajo «admin», humano guerrero), y desde el selector de personaje puede mirar y jugar con cualquiera de la partida: es para comprobar los diálogos e intervenir cuando haga falta, no para jugarla.
 
 ## Asientos e invitaciones
 

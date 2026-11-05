@@ -98,7 +98,7 @@ Con `--remote-build` se compila en el servidor.
      (código) y `/var/lib/tavernus/data` (partidas), con sus permisos.
    - Crea 2 GB de swap si hay menos de 2 GB de RAM.
    - Crea `/etc/tavernus/env` (permisos 600, solo root) a partir de `deploy/env.example`, con
-     `ADMIN_TOKEN` y `SESSION_SECRET` al azar y `PUBLIC_URL=https://<dominio>`.
+     `SESSION_SECRET` al azar y `PUBLIC_URL=https://<dominio>`.
    - Configura Caddy para el dominio, con el certificado de Let's Encrypt automático y renovado
      solo.
    - Instala la unidad `tavernus-web.service` y los temporizadores de salud y de copias.
@@ -123,9 +123,11 @@ Con `--remote-build` se compila en el servidor.
    anterior** y te enseña el error. Se guardan las 4 últimas versiones.
 6. **Tus partidas** (opcional): `deploy/data-sync.sh up --replace` sube tu `data/` local tal cual
    (ver «Datos y copias»).
-7. **Entrar como anfitrión.** El enlace de admin es `https://<dominio>/admin?token=<ADMIN_TOKEN>`.
-   El token se ve con `sudo grep ^ADMIN_TOKEN /etc/tavernus/env`. Desde ahí creas la partida y
-   repartes las invitaciones («⚙ → Invitaciones», docs/MULTIJUGADOR.md).
+7. **Entrar como administrador.** Crea tu cuenta de administrador con `sudo tavernus-admin <usuario>`
+   (ver «Base de datos») y entra con ella en `https://<dominio>/entrar`. Desde el menú creas la partida y
+   repartes las invitaciones («⚙ → Invitaciones», docs/MULTIJUGADOR.md), y en «⚙ → Administración»
+   (`/admin/usuarios`) tienes los usuarios y las partidas. No hay otra entrada: ni enlace de rescate ni
+   token. Si te quedas sin administrador, otra vez `sudo tavernus-admin <usuario>`.
 
 ## 3. Camino B: sin dominio todavía
 
@@ -234,8 +236,8 @@ eventos que vivió y el evento entero: narración, tools llamados con su resulta
 contexto que recibió el máster. Un «Algo va mal» adjunta el último evento que vivió el PJ. Entran en la
 copia de cada noche con el resto de la partida y se borran con ella. Cada PJ puede mandar 20 por hora.
 
-**`/admin/estado`** es para quien administra: entra una vez con el enlace `/admin?token=…` y luego
-abre la página, o «Estado del servidor» en los ajustes del menú de partidas. Cualquier otro recibe un
+**`/admin/estado`** es para quien administra: con tu cuenta de administrador abre la página, o
+«Estado del servidor» en los ajustes del menú de partidas. Cualquier otro recibe un
 403, también en modo público quien creó su propia partida. Enseña:
 
 - Desde cuándo está en marcha y la versión: la carpeta de `releases` que está corriendo, o el commit
@@ -271,10 +273,11 @@ partida (su estado, eventos, imágenes) sigue en su carpeta de `games/`.
 - **Tablas:** las crea la web al arrancar (`src/db/migrations.ts`, una vez cada migración, en la tabla
   `schema_migrations`). Al arrancar también importa las partidas que solo tienen carpeta (las de antes,
   o las que sube `data-sync.sh up`): entran sin dueño, con sus asientos.
-- **Primer administrador:** `sudo tavernus-admin <usuario>` (pide la contraseña sin mostrarla). Si el
-  usuario ya existe, solo lo hace administrador. También vale `ADMIN_USER` y `ADMIN_PASSWORD` en el
-  entorno, pero deja la contraseña escrita en el fichero. El enlace `/admin?token=…` sigue siendo la
-  entrada de rescate si no queda ningún administrador.
+- **Primer administrador:** `sudo tavernus-admin <usuario>` (pide la contraseña sin mostrarla; con
+  `ADMIN_PASSWORD` en el entorno del comando no la pide). Si el usuario ya existe, solo lo hace
+  administrador; con `--password` le pone además una nueva. También vale `ADMIN_USER` y `ADMIN_PASSWORD`
+  en `/etc/tavernus/env`, pero deja la contraseña escrita en el fichero. Es la única vía de rescate: no
+  hay enlace ni token de administración (se quitaron el 05-11-2026). En tavernus.com la cuenta es `admin`.
 - **Sin la base, la web no arranca** en modo `public` o `invite`, y `release.sh` no cambia de versión
   si no la encuentra (deja la anterior en marcha y dice qué hacer).
 
@@ -385,30 +388,10 @@ y `bsd-mailx` con una cuenta SMTP (por ejemplo, una contraseña de aplicación d
   recuperación: si alguien olvida la contraseña, se la cambias en `/admin/usuarios` (cierra sus
   sesiones). Diez intentos fallidos de un usuario desde una IP le hacen esperar 15 minutos, y el
   registro abierto admite cinco cuentas por IP y hora.
-- **ADMIN_TOKEN:** quien lo tenga es administrador sin cuenta (lo ve todo, también el panel de usuarios). Al arrancar, la web dice que hay enlace de
-  administración y dónde está el token, pero no lo escribe. Se ve con
-  `sudo grep ^ADMIN_TOKEN /etc/tavernus/env`. Las versiones anteriores al 2026-10-27 sí lo
-  escribían, así que si el servidor corrió alguna, el token está en journald: rótalo (abajo).
-  `IMAGES`, `MASTER_MODEL` y el resto también van por entorno.
-- **Rotar el ADMIN_TOKEN** (si se filtró o estuvo en el registro):
-  1. Genera uno nuevo y ponlo en el fichero de entorno:
-     ```bash
-     NEW=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
-     sudo sed -i "s/^ADMIN_TOKEN=.*/ADMIN_TOKEN=$NEW/" /etc/tavernus/env
-     unset NEW
-     ```
-  2. Reinicia: `sudo systemctl restart tavernus-web`.
-  3. Comprueba que el registro ya no lo escribe:
-     `sudo journalctl -u tavernus-web -n 20 -o cat | grep admin`. Debe salir
-     `admin?token=<token>`, sin el valor.
-  4. Entra con el enlace nuevo, `https://<dominio>/admin?token=<nuevo>`. El viejo da 403, y la
-     cookie de anfitrión de cada navegador deja de valer (sale del token), así que hay que
-     volver a entrar con el enlace. A los jugadores no les afecta: sus enlaces de invitación y
-     sus cookies no dependen de este token.
-  5. Opcional: el token viejo sigue en el journal hasta que se rote, pero ya no sirve. Si quieres
-     quitarlo, `sudo journalctl --rotate && sudo journalctl --vacuum-time=1s` borra **todo** el
-     registro del sistema, no solo el de Tavernus. Si guardaste copias locales del registro
-     (como la de la revisión de partidas), bórralas o tapa el token.
+- **Sin token de administración:** desde el 05-11-2026 no hay enlace `/admin?token=…` ni cookie
+  `tv_admin`: administra quien entra con una cuenta de administrador. Si `/etc/tavernus/env` aún tiene
+  una línea `ADMIN_TOKEN=` de antes, no hace nada: puedes borrarla. `IMAGES`, `MASTER_MODEL` y el resto
+  siguen yendo por entorno.
 - **Red:** la web escucha solo en 127.0.0.1:3000. Desde fuera solo se llega por Caddy (80/443),
   y ufw solo abre SSH, 80 y 443. Caddy añade cabeceras básicas: HSTS, `nosniff`, `X-Frame-Options:
   DENY`, `Referrer-Policy` y `Permissions-Policy` con el micrófono solo para la propia página.

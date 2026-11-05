@@ -3472,7 +3472,9 @@ ${TABLON_JS}
       select.appendChild(o);
     });
     var saved = params.get('character') || store('tavernus.character.' + game);
-    var start = list.some(function (c) { return c.id === saved; }) ? saved : (list[0] && list[0].id);
+    var has = function (id) { return !!id && list.some(function (c) { return c.id === id; }); };
+    // Sin elección guardada, el PJ del asiento (el del administrador recién entrado) antes que el primero de la lista.
+    var start = has(saved) ? saved : has(me.character_id) ? me.character_id : (list[0] && list[0].id);
     if (start) { select.value = start; connect(start); }
   });
 })();

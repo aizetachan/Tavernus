@@ -91,22 +91,20 @@ describe('ActionLog', () => {
 
 describe('aviso de arranque', () => {
   const secret = 'f00dfeedcafe0123456789abcdef';
-  it('en invitación dice dónde está el token, sin escribirlo', () => {
-    const lines = accessBanner({ mode: 'invite', adminToken: secret, secret: 's' }, 'https://tavernus.example', { ADMIN_TOKEN: secret }, '/var/lib/tavernus/data/games');
-    expect(lines.join('\n')).not.toContain(secret);
-    expect(lines.join('\n')).toContain('https://tavernus.example/admin?token=<token>');
-    expect(lines.join('\n')).toContain('sudo grep ^ADMIN_TOKEN /etc/tavernus/env');
+  it('con cuentas dice cómo se entra a administrar, sin ningún token ni enlace de rescate', () => {
+    for (const mode of ['invite', 'public'] as const) {
+      const text = accessBanner({ mode, secret }, 'https://tavernus.example').join('\n');
+      expect(text).not.toContain(secret);
+      expect(text).not.toContain('token');
+      expect(text).toContain('https://tavernus.example/admin/usuarios');
+      expect(text).toContain('tavernus-admin <usuario>');
+    }
   });
 
-  it('sin ADMIN_TOKEN apunta al fichero generado; en público, igual', () => {
-    const lines = accessBanner({ mode: 'public', adminToken: secret, secret: 's' }, 'http://localhost:3000', {}, join('data', 'games'));
-    expect(lines.join('\n')).not.toContain(secret);
-    expect(lines.join('\n')).toContain(join('data', 'games', '.admin-token'));
-  });
-
-  it('abierto: sin enlace de administración', () => {
-    const lines = accessBanner({ mode: 'open', adminToken: null, secret: 's' }, 'http://localhost:3000', {}, 'data/games');
-    expect(lines.join('\n')).not.toContain('admin?token');
+  it('abierto: sin cuentas ni administración', () => {
+    const text = accessBanner({ mode: 'open', secret }, 'http://localhost:3000').join('\n');
+    expect(text).toContain('acceso abierto');
+    expect(text).not.toContain('admin');
   });
 });
 
