@@ -376,7 +376,8 @@ export class Accounts {
 
   /**
    * El administrador da la partida a un usuario (o la deja sin dueño): pasa a ser su dueño y, si el usuario no
-   * tiene ya asiento en ella, el asiento del anfitrión pasa a ser suyo.
+   * tiene ya asiento en ella y el del anfitrión está sin usuario, ese asiento pasa a ser suyo. Si el asiento del
+   * anfitrión ya es de otra cuenta, cambia solo el dueño: nadie pierde su personaje por una asignación.
    */
   async assignGame(slug: string, userId: string | null): Promise<void> {
     await this.db.tx(async (q) => {
@@ -384,7 +385,7 @@ export class Accounts {
       if (!r[0]) throw new AccountError('No existe esa partida.', 404);
       if (!userId) return;
       const [mine] = await q.query('select id from seats where game_slug = $1 and user_id = $2', [slug, userId]);
-      if (!mine) await q.query('update seats set user_id = $2 where id = (select id from seats where game_slug = $1 and is_host order by created_at limit 1)', [slug, userId]);
+      if (!mine) await q.query('update seats set user_id = $2 where user_id is null and id = (select id from seats where game_slug = $1 and is_host order by created_at limit 1)', [slug, userId]);
     });
   }
 

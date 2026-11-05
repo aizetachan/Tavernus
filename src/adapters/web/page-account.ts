@@ -10,8 +10,8 @@ import { PASSWORD_MIN } from '../../accounts/accounts.js';
 
 export interface AccountPageInput {
   mode: AccessMode;
-  /** Invitación pendiente: nombre de la partida y «<partida>/<token>». */
-  invite: { game: string; value: string } | null;
+  /** Invitación pendiente: nombre de la partida, «<partida>/<token>» y si el asiento aún no es de ninguna cuenta. */
+  invite: { game: string; value: string; free: boolean } | null;
   /** A dónde volver tras entrar. */
   next: string | null;
 }
@@ -35,7 +35,8 @@ const CSS = String.raw`
   [hidden] { display: none !important; }`;
 
 export function accountPage(input: AccountPageInput): string {
-  const canRegister = input.mode !== 'invite' || Boolean(input.invite);
+  // En `invite` solo se crea cuenta con un enlace cuyo asiento no sea aún de nadie; con uno ya usado, solo entrar.
+  const canRegister = input.mode !== 'invite' || Boolean(input.invite?.free);
   return HEAD('Entrar — Tavernus', CSS) + String.raw`<div class="box">
   <div class="brand"><img src="/assets/icon-192.png" alt=""><b>Tavernus</b></div>
   <h1 id="title">Entra en la taberna</h1>

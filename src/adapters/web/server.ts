@@ -703,19 +703,23 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const next = safeNext(url.searchParams.get('next'));
       const inv = await inviteOf(url.searchParams.get('invite'));
       if (user) { redirect(res, inv ? `/i/${inv.slug}/${inv.token}` : next ?? '/'); return; }
-      html(res, 200, accountPage({ mode: access.mode, invite: inv ? { game: inv.name, value: `${inv.slug}/${inv.token}` } : null, next }));
+      html(res, 200, accountPage({ mode: access.mode, invite: inv ? { game: inv.name, value: `${inv.slug}/${inv.token}`, free: inv.free } : null, next }));
       return;
     }
     if (req.method === 'POST' && (url.pathname === '/api/auth/register' || url.pathname === '/api/auth/login')) {
       const body = await readJson(req);
       const inv = await inviteOf(typeof body['invite'] === 'string' ? body['invite'] : null);
       const registering = url.pathname === '/api/auth/register';
+      // En `invite`, crear cuenta exige un enlace cuyo asiento aún no sea de nadie: un enlace ya usado no es una llave de registro.
       if (registering && access.mode === 'invite' && !inv) { json(res, 403, { ok: false, text: 'En este servidor solo se crea cuenta con un enlace de invitación.' }); return; }
+      if (registering && access.mode === 'invite' && inv && !inv.free) { json(res, 403, { ok: false, text: 'Ese enlace ya lo usó otra cuenta. Pide otro a quien organiza la partida (o entra con la tuya, si es la que lo usó).' }); return; }
       const accounts = await accountsOf();
       try {
         const u = registering
           ? await accounts.register(body['username'], body['password'], { ip: clientIp(req) })
           : await accounts.authenticate(body['username'], body['password'], clientIp(req));
+        // Si este navegador ya tenía una sesión abierta (otra cuenta, o la misma), se cierra: no quedan sesiones huérfanas.
+        await accounts.endSession(cookies(req)[USER_COOKIE]);
         await startSession(req, res, u);
         await claimLegacySeats(req, res, u);
         let next = safeNext(typeof body['next'] === 'string' ? body['next'] : null) ?? '/';
@@ -1191,13 +1195,16 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     return null;
   }
 
-  /** «<partida>/<token>» de una invitación pendiente (al registrarse o entrar), si el enlace vale. */
-  async function inviteOf(value: string | null): Promise<{ slug: string; token: string; name: string } | null> {
+  /**
+   * «<partida>/<token>» de una invitación pendiente (al registrarse o entrar), si el enlace vale. `free`: el asiento
+   * aún no es de ninguna cuenta (solo entonces sirve para crear una en modo `invite`; a quien ya lo tiene le sirve para entrar).
+   */
+  async function inviteOf(value: string | null): Promise<{ slug: string; token: string; name: string; free: boolean } | null> {
     const mm = value ? /^([a-z0-9][a-z0-9-]{0,59})\/([A-Za-z0-9_-]{20,})$/.exec(value) : null;
     if (!mm) return null;
     const m = await games.get(mm[1]!);
     const seat = m ? await (await accountsOf()).seatByToken(m.slug, mm[2]!) : null;
-    return m && seat ? { slug: m.slug, token: mm[2]!, name: m.name } : null;
+    return m && seat ? { slug: m.slug, token: mm[2]!, name: m.name, free: seat.user_id === null } : null;
   }
 
   /**

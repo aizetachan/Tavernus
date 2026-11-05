@@ -366,6 +366,38 @@
       }
     },
     {
+      "name": "tavernus-web-publico-haiku",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "C:/Users/migue/.claude/hooks/con-tope.ps1",
+        "-GB",
+        "2",
+        "-Comando",
+        "node --env-file-if-exists=.env --env-file-if-exists=../../../.env --import tsx src/index.ts --web"
+      ],
+      "port": 3248,
+      "env": {
+        "MASTER_MODE": "live",
+        "MASTER_MODEL": "claude-haiku-5-5",
+        "MASTER_EFFORT": "low",
+        "ACTOR_MODEL": "off",
+        "WORLDGEN_MODEL": "claude-haiku-5-5",
+        "WEB_PORT": "3248",
+        "WEB_ACCESS": "public",
+        "GOOGLE_CLOUD_PROJECT": "",
+        "DATA_DIR": "./data/local/publico",
+        "GAMES_DIR": "./data/local/publico/games",
+        "IMAGES": "off",
+        "DATABASE_URL": "pglite:./data/local/publico/games/.pgdata",
+        "ADMIN_USER": "admin",
+        "ADMIN_PASSWORD": "admin-local-de-pruebas"
+      }
+    },
+    {
       "name": "tavernus-web-crimen",
       "runtimeExecutable": "npm",
       "runtimeArgs": [

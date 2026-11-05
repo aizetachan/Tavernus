@@ -204,6 +204,12 @@ describe('la web con cuentas', () => {
     expect((await phone.login('MIGUEL')).status).toBe(200);
     expect((await phone.json<GamesList>('/api/games')).games.map((g) => [g.slug, g.host])).toEqual([[made.game.slug, true]]);
     expect((await phone.json<{ character_id: string }>(`/api/session?game=${made.game.slug}`)).character_id).toBe(made.character_id);
+    // Entrar otra vez desde el mismo navegador cierra la sesión que tenía: la cookie vieja deja de valer.
+    const stale = phone.jar.get('tv_u')!;
+    expect((await phone.login('miguel')).status).toBe(200);
+    expect(phone.jar.get('tv_u')).not.toBe(stale);
+    expect((await fetch(`${base}/api/games`, { headers: { cookie: `tv_u=${stale}` } })).status).toBe(401);
+    expect((await phone.get('/api/games')).status).toBe(200);
 
     // Cerrar sesión en el móvil no cierra la del PC.
     expect((await phone.post('/api/auth/logout')).status).toBe(200);
@@ -296,11 +302,20 @@ describe('la web con cuentas', () => {
     // Con su biblioteca vacía, el asistente; el nombre ya cogido no entra.
     expect((await ex.post(`/api/seat/claim${g}`, { name: 'Tam', ...ROGUE })).status).toBe(400);
     expect((await ex.post(`/api/seat/claim${g}`, { name: 'Bo', ...ROGUE })).status).toBe(200);
-    // Ya ocupado: otro usuario con ese enlace no entra; ella sí, aunque abra de nuevo el enlace.
+    // Ya ocupado: ella sí entra aunque abra de nuevo el enlace; pero ese enlace ya no es una llave de registro.
     expect((await ex.get(free[1]!.link)).headers.get('location')).toBe(`/${g}`);
     const late = browser();
-    await late.signUp('tarde', { invite: free[1]!.link.slice(3) }).catch(() => null);
-    expect((await late.json<GamesList>('/api/games')).games).toEqual([]);
+    const refused = await late.post('/api/auth/register', { username: 'tarde', password: PASS, invite: free[1]!.link.slice(3) });
+    expect(refused.status).toBe(403);
+    expect(((await refused.json()) as { text: string }).text).toContain('ya lo usó otra cuenta');
+    expect(late.jar.has('tv_u')).toBe(false);
+    expect(await db.query('select 1 from users where username_key = $1', ['tarde'])).toEqual([]);
+    // La página de entrar con ese enlace no ofrece crear cuenta; con uno libre, sí.
+    expect(await (await late.get(`/entrar?invite=${encodeURIComponent(free[1]!.link.slice(3))}`)).text()).toContain('para crear cuenta necesitas el enlace');
+    // Quien lo usó entra por él con su cuenta desde otro dispositivo y va a la partida.
+    const again = browser();
+    const back = await again.post('/api/auth/login', { username: 'otra-cuenta', password: PASS, invite: free[1]!.link.slice(3) });
+    expect(((await back.json()) as { next: string }).next).toBe(`/${g}`);
     // Y la invitación inventada no deja crear cuenta en modo invite.
     expect((await browser().post('/api/auth/register', { username: 'cuela', password: PASS, invite: `${made.game.slug}/${'x'.repeat(32)}` })).status).toBe(403);
   });
@@ -366,6 +381,17 @@ describe('la web con cuentas', () => {
     const anaId = users.find((u) => u.username === 'ana')!.id;
     const detail = await boss.json<{ characters: { name: string }[]; games: { slug: string; owner: boolean }[] }>(`/api/admin/users/${anaId}`);
     expect(detail).toMatchObject({ characters: [{ name: 'Aren' }], games: [{ slug: a.game.slug, owner: true }] });
+
+    // Asignar la partida a Bea mientras Ana sigue ligada al asiento del anfitrión: cambia el dueño, no el asiento.
+    const aren = (await ana.json<{ character_id: string }>(`/api/session?game=${a.game.slug}`)).character_id;
+    expect(aren).not.toBeNull();
+    expect((await boss.post('/api/admin/games/assign', { game: a.game.slug, user: 'bea' })).status).toBe(200);
+    expect((await ana.json<{ character_id: string | null }>(`/api/session?game=${a.game.slug}`)).character_id).toBe(aren);
+    expect((await bea.json<{ character_id: string | null; role: string }>(`/api/session?game=${a.game.slug}`))).toMatchObject({ character_id: null, role: 'admin' });
+    expect((await ana.json<{ seats: { user: string | null }[] }>(`/api/seats?game=${a.game.slug}`)).seats.map((s) => s.user)).toEqual(['ana']);
+    // De vuelta a Ana (que ya tiene asiento): solo el dueño.
+    expect((await boss.post('/api/admin/games/assign', { game: a.game.slug, user: 'ana' })).status).toBe(200);
+    expect((await ana.json<GamesList>('/api/games')).games.map((g) => [g.slug, g.host])).toEqual([[a.game.slug, true]]);
 
     // Contraseña nueva: su sesión abierta se cierra y entra con la nueva.
     expect((await boss.post(`/api/admin/users/${anaId}`, { password: 'corta' })).status).toBe(400);
