@@ -13,7 +13,7 @@
 
 import type { Engine } from '../../engine/engine.js';
 import type { Character, GameEvent, Id } from '../../engine/model.js';
-import type { DialogueLine } from '../../engine/moments.js';
+import { addressedTo, type DialogueLine } from '../../engine/moments.js';
 import { pcLabel } from '../../engine/party.js';
 import { firstSentence, lastOwnEvent } from '../../engine/prologue.js';
 import { noticeOf, type NoticeTab } from './notice.js';
@@ -95,7 +95,7 @@ function saidIn(engine: Engine, e: GameEvent, reader: Id): AwayCard['said'] {
   const out: AwayCard['said'] = [];
   const say = e.payload['say'] as { to: Id | null } | undefined;
   for (const l of lines) {
-    if (l.speaker === 'npc' && l.npc_id && w.npcs.has(l.npc_id) && (l.to === reader || e.payload['target_character_id'] === reader)) {
+    if (l.speaker === 'npc' && l.npc_id && w.npcs.has(l.npc_id) && (addressedTo(l, reader) || e.payload['target_character_id'] === reader)) {
       const npc = w.npcs.get(l.npc_id)!;
       const known = w.characters.get(reader)?.knows.includes(npc.id) ?? false;
       out.push({ who: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, to_me: true });

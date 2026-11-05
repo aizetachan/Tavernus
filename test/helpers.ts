@@ -73,6 +73,20 @@ export async function bootEngine(time = fakeTime(), opts: Partial<EngineOptions>
 }
 
 /**
+ * Pelea de verdad en la taberna: la marca `tense` y un lobo hostil con estadísticas en la barra.
+ * Las rondas solo se abren con pelea (Engine.fightIn); la marca sola ya no basta. El lobo no hace
+ * turno (`noncombatant`): los tests que lo usan miran las rondas y los cierres, no sus mordiscos
+ * (un hostil delante ya ataca él primero al cerrar, tools.ts `fightingHere`).
+ */
+export function fightAt(engine: Engine, locationId = 'loc_taberna', spotId = 'sp_tab_barra'): void {
+  engine.world.location(locationId).state['tense'] = true;
+  const lobo = engine.world.npc('npc_lobo');
+  lobo.location = { type: 'spot', id: spotId };
+  lobo.attitude.default = 'hostile';
+  lobo.noncombatant = true;
+}
+
+/**
  * Crea una cuenta en la web de pruebas (POST /api/auth/register) y devuelve la cookie de sesión («tv_u=…»).
  * Con `invite` («<partida>/<token>» o el enlace /i/…), el asiento queda ligado a la cuenta.
  */

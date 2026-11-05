@@ -18,13 +18,19 @@ export interface PresenceTiming {
   graceMs: number;
   /** Sin latido durante esto, la pestaña visible deja de contar (stream colgado tras un proxy). */
   staleMs: number;
-  /** Oculta durante esto, deja de contar (cambió de pestaña o de app y no vuelve). */
+  /**
+   * Oculta durante esto, deja de contar (cambió de pestaña o de app y no vuelve). Tiene que ser claramente más
+   * que un vistazo a otra app: en el móvil, apagar la pantalla o contestar un mensaje deja la pestaña oculta
+   * uno o dos minutos y el navegador suele cortarle el stream, sin que nadie se haya ido.
+   */
   hiddenMs: number;
 }
 
 /** Cada cuánto late una pestaña visible (page.ts). */
 export const HEARTBEAT_MS = 15_000;
-export const PRESENCE_TIMING: PresenceTiming = { graceMs: 20_000, staleMs: 3 * HEARTBEAT_MS, hiddenMs: 60_000 };
+export const PRESENCE_TIMING: PresenceTiming = { graceMs: 20_000, staleMs: 3 * HEARTBEAT_MS, hiddenMs: 4 * 60_000 };
+/** Tras un «ha vuelto» anunciado, otro «se ha ido» en este plazo no se anuncia (ni su «ha vuelto»): server.ts. */
+export const REPEAT_NOTICE_MS = 5 * 60_000;
 
 interface Tab {
   /** Streams abiertos de esta pestaña (al reconectar, el nuevo puede abrirse antes de que se cierre el viejo). */
@@ -83,6 +89,9 @@ export class PresenceTracker {
     if (!t) return;
     t.seen = this.now();
     t.goneAt = null;
+    // Vuelve a verse con el stream cortado mientras estaba oculta (el móvil lo corta y la página late antes de
+    // que EventSource reconecte): el corte cuenta desde ahora, con su gracia, no desde cuando se cortó.
+    if (visible && t.hiddenSince !== null && !t.streams && t.closedAt !== null) t.closedAt = this.now();
     t.hiddenSince = visible ? null : t.hiddenSince ?? this.now();
     this.check(id);
   }
@@ -104,7 +113,8 @@ export class PresenceTracker {
   /** Cuándo dejó (o dejará) de contar una pestaña. */
   private lostAt(t: Tab): number {
     const at = [t.hiddenSince !== null ? t.hiddenSince + this.timing.hiddenMs : t.beats ? t.seen + this.timing.staleMs : Infinity];
-    if (!t.streams && t.closedAt !== null) at.push(t.closedAt);
+    // Oculta, el navegador (móvil) le corta el stream aunque siga ahí: manda el tiempo oculta, no el corte.
+    if (!t.streams && t.closedAt !== null && t.hiddenSince === null) at.push(t.closedAt);
     if (t.goneAt !== null) at.push(t.goneAt);
     return Math.min(...at);
   }

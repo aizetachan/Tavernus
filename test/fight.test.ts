@@ -42,10 +42,13 @@ function strike(engine: Engine, attacker: Id, target: Id, seed = 7) {
 const idle: TurnContext = { round: null, busy: [], resolving: [] };
 
 describe('encuentro (encounter.ts)', () => {
-  it('sin eventos de combate no hay combate; uno con la etiqueta lo abre con los PJ del sitio', async () => {
+  it('sin hostilidad no hay combate: la etiqueta combat del máster sola no lo abre; un golpe entre PJ sí, con los PJ del sitio', async () => {
     const { engine, kael, mira, loc } = await bar();
     expect(at(engine, loc)).toBeNull();
     engine.events.emit({ actor_id: kael.id, action_type: 'master', input_text: 'le doy un bofetón a Mira', narration_private: 'Le cruzas la cara.', observable: 'Kael abofetea a Mira.', tags: ['master', 'combat'] });
+    expect(at(engine, loc)).toBeNull();
+    strike(engine, kael.id, mira.id);
+    engine.events.emit({ actor_id: kael.id, action_type: 'master_roll_outcome', narration_private: 'Le das.', observable: null, tags: ['master', 'combat'] });
     const e = at(engine, loc)!;
     expect(e).not.toBeNull();
     expect(e.fighters.map((f) => f.id).sort()).toEqual([kael.id, mira.id].sort());
@@ -70,8 +73,10 @@ describe('encuentro (encounter.ts)', () => {
   it('la ronda cuenta intercambios terminados: el que pide tirada termina al tirar', async () => {
     const { engine, kael, brenna, loc } = await bar();
     engine.events.emit({ actor_id: kael.id, action_type: 'master', narration_private: 'Te lanzas contra Brenna.', observable: null, tags: ['master', 'combat'], payload: { requires_roll: { kind: 'attack', key: 'melee', dc: null, target: brenna.id } } });
-    expect(at(engine, loc)!.exchanges).toBe(0);
+    // Pedir la tirada no abre el combate: lo abre el golpe resuelto.
+    expect(at(engine, loc)).toBeNull();
     strike(engine, kael.id, brenna.id);
+    expect(at(engine, loc)!.exchanges).toBe(0);
     engine.events.emit({ actor_id: kael.id, action_type: 'master_roll_outcome', narration_private: 'Le das.', observable: null, tags: ['master', 'combat'] });
     expect(at(engine, loc)!.exchanges).toBe(1);
   });
@@ -131,8 +136,8 @@ describe('encuentro (encounter.ts)', () => {
   it('solo cuenta a los PJ que están en el sitio', async () => {
     const { engine, kael, mira, loc } = await bar();
     mira.location = { type: 'spot', id: [...engine.world.spots.values()].find((s) => s.location_id !== loc)!.id };
-    engine.events.emit({ actor_id: kael.id, action_type: 'master', narration_private: 'Golpe.', observable: null, tags: ['master', 'combat'] });
-    expect(at(engine, loc)!.fighters.map((f) => f.id)).toEqual([kael.id]);
+    strike(engine, kael.id, engine.world.npc('npc_brenna').id);
+    expect(at(engine, loc)!.fighters.filter((f) => f.kind === 'pc').map((f) => f.id)).toEqual([kael.id]);
   });
 });
 
@@ -141,8 +146,8 @@ describe('vista del combate por jugador (fight.ts)', () => {
     const { engine, kael, mira, brenna, loc } = await bar();
     kael.knows = kael.knows.filter((k) => k !== brenna.id);
     mira.knows = [...new Set([...mira.knows, brenna.id])];
-    engine.events.emit({ actor_id: kael.id, action_type: 'master', narration_private: 'Te lanzas contra Brenna.', observable: null, tags: ['master', 'combat'] });
     strike(engine, kael.id, brenna.id);
+    engine.events.emit({ actor_id: kael.id, action_type: 'master_roll_outcome', narration_private: 'Te lanzas contra Brenna.', observable: null, tags: ['master', 'combat'] });
     const e = at(engine, loc)!;
     const vk = combatView(engine.world, e, kael.id, idle)!;
     const vm = combatView(engine.world, e, mira.id, idle)!;
@@ -160,8 +165,8 @@ describe('vista del combate por jugador (fight.ts)', () => {
   });
 
   it('el turno: te toca, esperando a otro, otro está actuando, el narrador resuelve, caído', async () => {
-    const { engine, time, kael, mira, loc } = await bar();
-    engine.events.emit({ actor_id: kael.id, action_type: 'master', narration_private: 'Golpe.', observable: null, tags: ['master', 'combat'] });
+    const { engine, time, kael, mira, brenna, loc } = await bar();
+    strike(engine, kael.id, brenna.id);
     const e = at(engine, loc)!;
     const turn = (viewer: Id, ctx: TurnContext) => combatView(engine.world, e, viewer, ctx)!.turn;
     const round = { kind: 'round' as const, location_id: loc, n: 2, acted: [kael.id], waiting: [mira.id], deadline_ms: time.now() + 30_000, open: true };

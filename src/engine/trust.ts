@@ -58,12 +58,17 @@ export const TRUST_CHANGES = {
   threat: { delta: -2, talk: false },
   lie_caught: { delta: -2, talk: false },
   witnessed_crime: { delta: -3, talk: false },
+  /**
+   * Se calma: acepta una disculpa, o una persuasión o una intimidación le hace deponer la hostilidad. No mueve la
+   * confianza; la actitud hostil con ese PJ baja a recelosa y el combate con él se acaba (encounter.ts).
+   */
+  calm: { delta: 0, talk: false },
   attacked: { delta: -5, talk: false },
 } as const satisfies Record<string, { delta: number; talk: boolean }>;
 export type TrustChange = keyof typeof TRUST_CHANGES;
 
 /** Las que puede pedir el máster con npc_trust (las demás las aplica el motor solo). */
-export const MASTER_TRUST_CHANGES = ['favor', 'gift', 'flattery', 'insult', 'harass', 'threat', 'lie_caught'] as const satisfies readonly TrustChange[];
+export const MASTER_TRUST_CHANGES = ['favor', 'gift', 'flattery', 'insult', 'harass', 'threat', 'lie_caught', 'calm'] as const satisfies readonly TrustChange[];
 
 /** La adulación con quien no la soporta: resta, sin tope, como un insulto. */
 const FLATTERY_DISLIKED = { delta: -1, talk: false } as const;
@@ -144,6 +149,7 @@ export function adjustTrust(world: World, n: Npc, c: Character, change: TrustCha
     st.talk = { since_game_s: same ? st.talk!.since_game_s : since, gained: gained + delta, last_game_s: nowS };
   }
   st.points += delta;
+  if (change === 'calm' && (n.attitude.by_character[c.id] ?? n.attitude.default) === 'hostile') n.attitude.by_character[c.id] = 'unfriendly';
   world.touch('npcs', n.id);
   return { npc_id: n.id, change, delta, points: st.points, before, after: trustTier(n, c.id) };
 }

@@ -94,7 +94,7 @@ export function npcKnowledge(_world: Engine['world'], n: Npc, pc: Character): st
 export function actorTurn(engine: Engine, pc: Character, closed: LogEventInput, opts: { intro?: boolean; scene?: boolean }): Npc | null {
   if (opts.intro || opts.scene || closed.requires_roll || closed.decisive) return null;
   const h = engine.sceneHints(pc.id);
-  if (h?.group || h?.round) return null;
+  if (h?.group || h?.round || h?.window) return null;
   const speakers = new Set((closed.lines ?? []).filter((l) => l.speaker === 'npc' && l.npc_id).map((l) => l.npc_id!));
   if (speakers.size !== 1) return null;
   const n = engine.world.npcs.get([...speakers][0]!);

@@ -12,6 +12,7 @@ import { positionOf, type Position } from './movement.js';
 import { witnesses } from './perception.js';
 import { maskUnknownNames } from './narrate.js';
 import { secondPerson } from './party.js';
+import { viewOf } from './audience.js';
 import type { World } from './world.js';
 
 export interface EmitInput {
@@ -182,9 +183,20 @@ export function textFor(e: GameEvent, characterId: Id, level: PerceptionLevel): 
  */
 export function readerText(world: World, e: GameEvent, characterId: Id, level: PerceptionLevel): string | null {
   if (characterId === e.actor_id) return textFor(e, characterId, level);
-  // Turno compartido (conversación de grupo o ronda, scene.ts): todos leen la misma narración, escrita para todos.
+  // Turno compartido (grupo, ronda o ventana de turno): cada uno lee lo suyo (narration_by_pc) y lo común; sin eso, la narración entera.
   const group = e.payload['group'];
-  if (Array.isArray(group) && group.includes(characterId)) return maskUnknownNames(world, characterId, e.narration_private);
+  if (Array.isArray(group) && group.includes(characterId)) {
+    const mine = (e.payload['narration_by_pc'] as Record<Id, string> | undefined)?.[characterId];
+    const common = typeof e.payload['narration_common'] === 'string' ? e.payload['narration_common'] : null;
+    const text = common !== null ? [mine ?? '', common].filter((t) => t.trim()).join('\n\n') : e.narration_private;
+    return maskUnknownNames(world, characterId, text);
+  }
+  // Algo que afecta a todos los presentes (audience.ts): la misma narración para todos. Si el turno era compartido,
+  // lo común (narration_private lleva además la parte en segunda persona del actor).
+  if (viewOf(e, characterId) === 'shared') {
+    const common = e.payload['narration_common'];
+    return maskUnknownNames(world, characterId, typeof common === 'string' && common.trim() ? common : e.narration_private);
+  }
   const target = e.payload['target_character_id'];
   const own = e.payload['observable_target'];
   let text = level === 'full' && target === characterId && typeof own === 'string' && own.trim() ? own : textFor(e, characterId, level);

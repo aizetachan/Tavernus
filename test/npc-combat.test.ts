@@ -265,6 +265,39 @@ describe('el turno de los NPC al cerrar (tools)', () => {
     expect(new Set((ctx.forced_turns ?? []).map((f) => f.npc_id))).toEqual(new Set(['npc_hugo', 'npc_doro']));
   });
 
+  it('un robo pillado cerrado con la etiqueta combat no es combate: Hugo no hace turno ni se abre encuentro (partida del 04-11)', async () => {
+    const { engine, leo, hugo } = await laBarra();
+    const ctx = ctxFor(engine, leo, { action_text: 'me acerco con sigilo a la espalda de Hugo y le robo los bolsillos' });
+    // La tirada de Juego de manos falla y el máster lo narra etiquetado «combat» (close() lo pone así), sin golpes.
+    expect(tool(ctx, 'log_event', close({ narration_private: 'Hugo te agarra la muñeca. «¿Qué buscas ahí, chaval?»' }))).toMatchObject({ ok: true });
+    expect(ctx.forced_turns ?? []).toHaveLength(0);
+    expect(hugo.attitude.by_character[leo.id] ?? hugo.attitude.default).not.toBe('hostile');
+    const closed = ctx.closed as unknown as { narration_private: string; tags: string[] };
+    expect(closed.tags).toContain('combat');
+    engine.events.emit({ actor_id: leo.id, action_type: 'master', narration_private: closed.narration_private, observable: null, tags: closed.tags });
+    const loc = engine.world.spot(hugo.location.id).location_id;
+    expect(encounterAt(engine.world, engine.events.recentInLocation(loc, 400), loc, engine.gameNow())).toBeNull();
+  });
+
+  it('un hostil delante que aún no ha pegado ataca él primero en cuanto la escena es combat: el máster lo ve en el contexto y el motor fuerza su turno al cerrar', async () => {
+    const { engine, leo, hugo } = await laBarra();
+    hugo.attitude.by_character[leo.id] = 'hostile';
+    const loc = engine.world.spot(hugo.location.id).location_id;
+    // Hostil a secas, sin pelea marcada: ni turno en el contexto ni turno forzado (Hugo enfadado tras la barra no pega).
+    expect(actionContext(engine, leo, 'retrocedo hacia la puerta')).not.toContain('## Turno de los NPC hostiles');
+    const calm = ctxFor(engine, leo, { action_text: 'le pido perdón' });
+    expect(tool(calm, 'log_event', close({ narration_private: 'Hugo te mira con mala cara.', tags: 'social' }))).toMatchObject({ ok: true });
+    expect(calm.forced_turns ?? []).toHaveLength(0);
+    // El máster narra que se abalanza (etiqueta combat), sin golpe aún: no hay encuentro abierto, pero Hugo ya tiene turno.
+    engine.events.emit({ actor_id: leo.id, action_type: 'master', narration_private: 'Hugo suelta el martillo y se te viene encima.', observable: null, tags: ['master', 'combat'] });
+    expect(encounterAt(engine.world, engine.events.recentInLocation(loc, 400), loc, engine.gameNow())).toBeNull();
+    expect(actionContext(engine, leo, 'retrocedo hacia la puerta')).toContain('## Turno de los NPC hostiles');
+    const ctx = ctxFor(engine, leo, { action_text: 'retrocedo hacia la puerta' });
+    expect(tool(ctx, 'log_event', close({ narration_private: 'Retrocedes hacia la puerta.' })).error).toMatch(/Turno de los NPC hostiles/);
+    expect((ctx.forced_turns ?? []).map((f) => f.npc_id)).toEqual(['npc_hugo']);
+    expect((ctx.forced_turns ?? [])[0]!.target_id).toBe(leo.id);
+  });
+
   it('el multiataque del bloque SRD va entero en una llamada', async () => {
     const { engine, leo, hugo } = await laBarra();
     leo.hp_max = 200; leo.hp_current = 200;

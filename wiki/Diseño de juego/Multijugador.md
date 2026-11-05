@@ -81,12 +81,24 @@ Antes, si un jugador agarraba a otro y se lo llevaba a la taberna, el máster lo
 
 | Situación | Qué pasa |
 |---|---|
-| Dos acciones al máster a la vez | Cola por lugar. La segunda ve «Esperando a Mira…» |
+| Dos acciones al máster a la vez | Si llegan en unos segundos (la **ventana de turno**, 3 s), el máster las resuelve juntas, en una sola respuesta, y cada uno lee lo suyo más lo que hace el mundo. Si el máster ya estaba con otra, la nueva espera: «Esperando a Mira…» |
+| Dos van a por lo mismo | El máster sabe que chocan (el mismo NPC, el mismo objeto, uno sobre el otro) y lo resuelve a la vez, con tiradas si hace falta |
 | Dos acciones en sitios distintos | No se esperan entre sí |
 | Doble clic o dos pestañas del mismo jugador | Se rechaza: «Ya tienes una acción en curso» |
-| Coger el mismo objeto | El primero se lo lleva; el segundo ya no lo encuentra |
+| Coger el mismo objeto | A la vez, lo decide el máster con una tirada. Si no, el primero se lo lleva y el segundo ya no lo encuentra |
+| Alguien intenta algo sobre ti | Lo siguiente que escribas es tu respuesta («me dejo», «me resisto»). Otra cosa espera a que decidas |
 | Hablar con un NPC ocupado | «Esperar turno» o «Unirme a la conversación». En grupo, una sola respuesta para todos |
-| Escena tensa | Rondas: el máster resuelve la ronda entera. Ver [[Combate]] |
+| Pelea con varios | Rondas: el máster resuelve la ronda entera. Ver [[Combate]] |
+
+### Quién lee qué en la sala
+
+| Qué pasa | Quién lo lee entero | El resto de la sala |
+|---|---|---|
+| Lo tuyo (miras, rebuscas, hablas con un NPC a solas) | Tú | Un aviso gris de una línea: «Isgral habla con Hugo en voz baja», con «Unirme a la conversación» |
+| Una charla con un NPC | Los que están en ella y a quien el NPC le habla. Cada frase dice a quién va: «a ti», «a Isgral», «a todos» | El aviso de una línea |
+| Algo que afecta a todos (empieza una pelea, alguien entra, un estruendo, el NPC se vuelve hacia el grupo) | Todos, con la misma narración | Nadie se queda fuera; las charlas sueltas se cortan y el NPC atiende al grupo |
+
+No hay «escuchar» una charla ajena: o te unes (el NPC lo sabe) o lo intentas a escondidas como una acción más.
 
 ## Desconexiones
 

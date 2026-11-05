@@ -44,9 +44,22 @@ export interface DialogueLine {
   npc_id?: Id;
   /** Solo `pc`: qué PJ. */
   character_id?: Id;
-  /** A quién se dirige una línea del NPC en un turno compartido. */
-  to?: Id;
+  /**
+   * A quién se dirige una línea del NPC (docs/MULTIJUGADOR.md, «Quién lee qué»): un PJ, varios o `all` (todos
+   * los PJ presentes). Sin `to`, a quien lleva la charla. Lo valida el motor contra el estado (audience.ts).
+   */
+  to?: LineTo;
   text: string;
+}
+
+/** Destinatario de una línea: un PJ, varios o todos los presentes. */
+export type LineTo = Id | Id[] | 'all';
+
+/** ¿Va esta línea a ese PJ? (por su id, en la lista o a todos). Sin `to`, no se sabe: false. */
+export function addressedTo(l: Pick<DialogueLine, 'to'>, pcId: Id): boolean {
+  const to = l.to;
+  if (!to) return false;
+  return to === 'all' || to === pcId || (Array.isArray(to) && to.includes(pcId));
 }
 
 /** Lo que el clasificador necesita del mundo. */

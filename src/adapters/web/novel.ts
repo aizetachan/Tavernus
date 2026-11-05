@@ -286,24 +286,25 @@ export const NOVEL_STYLE = String.raw`
   .nv-av img.on { opacity: 1; }
   /* Avisos fuera de la ficción (tiradas, progreso, consultas): centrados, discretos. */
   .msg.system { align-self: center; max-width: min(560px, 100%); margin: 8px 0 2px; }
-  .overheard { align-self: flex-start; margin: 10px 0 -4px 42px; font-size: 12px; font-style: italic; color: var(--muted); }
+  /* «Unirme a la conversación» bajo el aviso de una charla ajena (audience.ts). */
+  .actions.join { align-self: center; justify-content: center; margin-top: 2px; }
   .msg.system .body { padding: 8px 12px; border-radius: 14px; font-size: 12.5px; }
-  /* Imágenes del narrador (escena, retrato, objeto…): bajo su avatar, como una foto en el chat. */
-  .msg.scene, .msg.moment { margin: 4px 0 0 42px; animation: nv-in .5s ease-out; }
-  .msg.scene { width: min(560px, calc(100% - 42px)); }
+  /* Toda imagen (la vista del sitio, el retrato, el objeto, el combate, el hallazgo) va dentro de la burbuja de su mensaje, como una foto en WhatsApp. */
+  .msg.scene { margin: 4px 0 0 42px; animation: nv-in .5s ease-out; width: min(560px, calc(100% - 42px)); }
   /* La vista del sitio dentro de la burbuja del narrador que cuenta la llegada, como una foto en un mensaje. */
   /* Con foto: debajo del texto, con el mismo margen abajo que a los lados (4 px); un clic en la foto la amplía.
      Sus esquinas de abajo siguen las de la burbuja (18 − 4 px); las de arriba, más cerradas. */
-  .msg.row.has-place .body { width: min(520px, 100%); padding-bottom: 4px; }
+  .msg.row.has-place .body, .msg.row.has-wide .body { width: min(520px, 100%); padding-bottom: 4px; }
   .place-shot { position: relative; display: block; width: calc(100% + 16px); margin: 8px -8px 0; padding: 0; border: 0; border-radius: 8px 8px 14px 14px; overflow: hidden;
     aspect-ratio: 16 / 9; background: var(--platter); cursor: zoom-in; }
   .place-shot img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
   .place-shot.ready img { opacity: 1; }
   @keyframes nv-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  /* Retrato de un personaje al aparecer: cuadrado y pequeño, encima de su primera frase; la cara al centro. */
-  .moment .shot { position: relative; display: block; width: 220px; aspect-ratio: 4 / 5; padding: 0; border: 0; border-radius: 18px; overflow: hidden; background: var(--platter); cursor: zoom-in; box-shadow: var(--control-shadow); }
-  .moment.item .shot { width: 200px; aspect-ratio: 1; }
-  .moment.portrait { margin-top: 10px; }
+  /* Momentos ilustrados dentro de la burbuja, debajo del texto. Objeto, combate y hallazgo: a todo el ancho, con el margen de la vista del sitio. */
+  .body .moment { position: relative; display: block; margin: 8px -8px 0; animation: nv-in .5s ease-out; }
+  .moment .shot { position: relative; display: block; width: 100%; aspect-ratio: 16 / 9; padding: 0; border: 0; border-radius: 8px 8px 14px 14px; overflow: hidden; background: var(--platter); cursor: zoom-in; }
+  /* Retrato en su primer mensaje: cuadrado y pequeño, con el margen del texto; la cara al centro. */
+  .body .moment.portrait { margin: 8px 0 2px; width: max-content; }
   /* Tirada en directo: el dado y una raya que corre hasta que acaba su sonido; luego, el resultado. */
   .msg.notice .roll-load { display: inline-flex; align-items: center; gap: 8px; vertical-align: middle; }
   .msg.notice .roll-load b { font-weight: inherit; display: inline-block; animation: roll-spin .5s linear infinite; }
@@ -317,8 +318,6 @@ export const NOVEL_STYLE = String.raw`
   .moment.portrait figcaption b { font-size: 11.5px; line-height: 1.25; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .moment.portrait figcaption span { display: block; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .moment.portrait .shot::after { inset: 35% 0 0; }
-  .moment.combat, .moment.discovery { width: min(560px, calc(100% - 42px)); }
-  .moment.combat .shot, .moment.discovery .shot { width: 100%; aspect-ratio: 16 / 9; }
   .moment img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .7s; }
   .moment.ready img { opacity: 1; }
   .moment .shot::after { content: ''; position: absolute; inset: 55% 0 0; background: linear-gradient(transparent, rgba(0,0,0,.65)); pointer-events: none; }
@@ -343,8 +342,8 @@ export const NOVEL_STYLE = String.raw`
   @media (max-width: 820px) {
     .msg.row { max-width: 100%; }
     .nv-av { width: 30px; height: 30px; }
-    .msg.scene, .msg.moment, #log > .actions { margin-left: 38px; }
-    .moment .shot { width: 180px; } .moment.item .shot { width: 160px; } .moment.portrait .shot { width: 96px; }
+    .msg.scene, #log > .actions { margin-left: 38px; }
+    .moment.portrait .shot { width: 96px; }
   }
 `;
 
@@ -711,6 +710,8 @@ export const NOVEL_JS = String.raw`
     if (!last || !main) return;
     if (m.place && main.classList.contains('row')) placeIn(main, m.place);
     last.setAttribute('data-seq', String(m.seq));
+    // Todo lo pintado en este turno lleva su número: es donde entran sus imágenes (momentos) por dentro de la burbuja.
+    for (var te = before ? before.nextElementSibling : log.firstElementChild; te; te = te.nextElementSibling) if (te.classList.contains('msg') && !te.classList.contains('typing')) te.setAttribute('data-turn', String(m.seq));
     // La voz lee la narración y los parlamentos del turno desde la burbuja del narrador.
     var div = main.classList.contains('master') ? main : last;
     if (window.TavernusTTS && !m.notice) {
@@ -720,7 +721,9 @@ export const NOVEL_JS = String.raw`
       while (e) { if (e.classList.contains('row')) rows.push(e); e = e.nextElementSibling; }
       if (TavernusTTS.bindAvatars) TavernusTTS.bindAvatars(rows, div);
     }
-    if (m.moments) m.moments.forEach(function (x) { showMoment(x, m.seq); });
+    var momentsNow = (m.moments || []).concat(momentWait[m.seq] || []);
+    delete momentWait[m.seq];
+    momentsNow.forEach(function (x) { showMoment(x, m.seq); });
     var host = log.lastElementChild;
     if (m.decisive_s) {
       var d = document.createElement('div');
@@ -728,18 +731,21 @@ export const NOVEL_JS = String.raw`
       d.textContent = '⏳ Tienes ' + m.decisive_s + ' segundos para reaccionar. Si no, la amenaza se cumple.';
       (main.querySelector('.col') || main).appendChild(d);
     }
-    if (m.overheard) {
-      // Conversación ajena: «Escuchas» encima y el botón para unirse en cualquier momento.
-      var tag = document.createElement('div');
-      tag.className = 'overheard';
-      tag.textContent = m.overheard.well ? 'Escuchas la conversación con ' + m.overheard.npc : 'Oyes de lejos la conversación con ' + m.overheard.npc;
-      var first = before ? before.nextElementSibling : log.firstElementChild;
-      if (first) log.insertBefore(tag, first);
+    if (m.join) {
+      // Charla ajena en la sala: su aviso de una línea y, debajo, el botón para unirse. Solo el último aviso de esa
+      // charla lleva botón, y el mismo aviso seguido («Isgral habla con Hugo» tres veces) se queda en uno.
+      log.querySelectorAll('.actions.join').forEach(function (old) {
+        if (old.getAttribute('data-npc') !== m.join.npc) return;
+        var prev = old.previousElementSibling;
+        if (prev && prev !== main && prev.classList.contains('notice') && main && prev.textContent === main.textContent && old.nextElementSibling === main) prev.remove();
+        old.remove();
+      });
       var jr = document.createElement('div');
-      jr.className = 'actions party';
+      jr.className = 'actions party join';
+      jr.setAttribute('data-npc', m.join.npc);
       var jb = document.createElement('button');
-      jb.type = 'button'; jb.textContent = m.overheard.join;
-      jb.onclick = function () { jb.classList.add('chosen'); jb.disabled = true; act(m.overheard.join); };
+      jb.type = 'button'; jb.textContent = m.join.label;
+      jb.onclick = function () { jb.classList.add('chosen'); jb.disabled = true; act(m.join.label); };
       jr.appendChild(jb);
       host.parentNode.insertBefore(jr, host.nextSibling);
       if (!live) jb.disabled = true;
@@ -1089,18 +1095,52 @@ export const NOVEL_JS = String.raw`
     if (cast.me.id === p.id) cast.me.avatar = p.src;
     log.querySelectorAll('.nv-av').forEach(function (s) { if (s.getAttribute('data-portrait') === p.id) putPortrait(s, p.src); });
   }
-  /** Imagen de un momento junto a su evento (o al final si el evento ya no está en el hilo). Una vez por clave. */
+  /** Momentos que llegaron (stream) antes que su mensaje: entran en su burbuja cuando se pinta, por número de turno. */
+  var momentWait = {};
+  /**
+   * La burbuja donde va la imagen de un momento del turno seq. Retrato: la del propio NPC si habla en el turno; si no,
+   * y para todo lo demás (objeto, combate, hallazgo, momento a mano), la del narrador. Sin burbujas (un aviso), el propio mensaje.
+   */
+  function momentHost(kind, npcId, seq) {
+    var els = [];
+    log.querySelectorAll('[data-turn="' + Number(seq) + '"]').forEach(function (e) { els.push(e); });
+    if (!els.length) log.querySelectorAll('[data-seq="' + Number(seq) + '"]').forEach(function (e) { els.push(e); });
+    if (!els.length) return null;
+    var rows = els.filter(function (e) { return e.classList.contains('row') && !e.classList.contains('mine'); });
+    var pick = null;
+    if (kind === 'portrait') rows.forEach(function (e) { if (!pick && e.getAttribute('data-who') === 'npc:' + npcId) pick = e; });
+    if (!pick) rows.forEach(function (e) { if (!pick && e.classList.contains('master')) pick = e; });
+    return pick || rows[0] || els[els.length - 1];
+  }
+  /** Mete la figura de un momento al final del cuerpo de su burbuja (a todo el ancho salvo el retrato). */
+  function momentInto(fig, host, kind) {
+    (host.querySelector('.body') || host).appendChild(fig);
+    if (kind !== 'portrait') host.classList.add('has-wide');
+  }
+  /** Quita la figura de un momento que no cargó; la burbuja vuelve a su ancho si no le queda otra imagen ancha. */
+  function momentGone(fig, host) {
+    fig.remove();
+    if (!host.querySelector('.moment:not(.portrait), .place-shot')) host.classList.remove('has-wide');
+  }
+  /** Los textos de la interfaz no se separan con el punto medio: el pie de la imagen lo cambia por una coma. */
+  function momentName(n) { return String(n || '').replace(/\s*[·•]\s*/g, ', '); }
+  /**
+   * Imagen de un momento, dentro de la burbuja de su mensaje (por turno), debajo del texto, con su clic para verla en grande.
+   * Una vez por clave. Si el mensaje aún no está pintado, espera a su turno.
+   */
   function showMoment(x, seq) {
     if (!x || !x.src) return;
     var dup = false;
     log.querySelectorAll('[data-moment]').forEach(function (f) { if (f.getAttribute('data-moment') === x.key) dup = true; });
-    if (dup) return;
+    var waiting = momentWait[seq] || [];
+    if (dup || waiting.some(function (w) { return w.key === x.key; })) return;
+    var host = momentHost(x.kind, x.entity_id, seq);
+    if (!host) { momentWait[seq] = waiting.concat([x]); return; }
     var fig = document.createElement('figure');
-    fig.className = 'msg moment ' + x.kind;
+    fig.className = 'moment ' + x.kind;
     fig.setAttribute('data-moment', x.key);
-    fig.setAttribute('data-for', String(seq));
     fig.innerHTML = '<button type="button" class="shot" title="Ver en grande"><img alt=""><figcaption><b></b><span></span></figcaption></button>';
-    var img = fig.querySelector('img'), name = x.name || '';
+    var img = fig.querySelector('img'), name = momentName(x.name);
     fig.querySelector('figcaption b').textContent = name;
     // Un retrato lleva el oficio de quien sale («tabernera»); el resto, qué clase de momento es.
     var label = (x.kind === 'portrait' && x.role) || MOMENT_LABEL[x.kind] || 'Ilustración';
@@ -1108,23 +1148,11 @@ export const NOVEL_JS = String.raw`
     img.alt = (x.kind === 'portrait' ? 'Retrato' : label) + ': ' + name + (x.kind === 'portrait' && x.role ? ', ' + x.role : '');
     var atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
     img.addEventListener('load', function () { fig.classList.add('ready'); if (atEnd) scroll(); });
-    img.addEventListener('error', function () { fig.remove(); });
+    img.addEventListener('error', function () { momentGone(fig, host); });
     fig.querySelector('.shot').addEventListener('click', function () { openLightbox({ src: x.src, name: name }); });
     img.src = x.src;
-    var host = null;
-    log.querySelectorAll('.msg[data-seq]').forEach(function (d) { if (d.getAttribute('data-seq') === String(seq)) host = d; });
-    if (!host) { log.appendChild(fig); return; }
-    // El retrato de quien aparece va encima de su primera frase de ese turno: primero la cara, luego lo que dice.
-    if (x.kind === 'portrait') {
-      var first = null;
-      for (var e = host; e; e = e.previousElementSibling) {
-        if (e !== host && e.hasAttribute('data-seq')) break;
-        if (e.getAttribute('data-who') === 'npc:' + x.entity_id) first = e;
-      }
-      if (first) { first.parentNode.insertBefore(fig, first); first.classList.remove('cont'); return; }
-    }
-    var ref = host;
-    while (ref.nextElementSibling && ref.nextElementSibling.getAttribute('data-for') === String(seq)) ref = ref.nextElementSibling;
-    ref.parentNode.insertBefore(fig, ref.nextSibling);
+    momentInto(fig, host, x.kind);
+    // La imagen pintada a mano sustituye al marcador «Pintando…» (paint.ts).
+    if (typeof paintDone === 'function' && String(x.key).indexOf('manual:') === 0) paintDone(x.key);
   }
 `;

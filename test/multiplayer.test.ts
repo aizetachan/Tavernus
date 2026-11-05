@@ -7,9 +7,11 @@ import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
 import { BudgetBook, BudgetedMaster, budgetFromEnv, tokensOf } from '../src/ai/budget.js';
 import { GameManager, type MasterFactory } from '../src/games/manager.js';
-import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
+import { createWebServer, toMessage, type WebServer } from '../src/adapters/web/server.js';
+import type { Delivery } from '../src/engine/engine.js';
 import type { AccessOptions } from '../src/adapters/web/access.js';
 import type { MasterLike } from '../src/engine/engine.js';
+import type { LogEventInput } from '../src/ai/tools.js';
 import { spawnItem } from '../src/engine/inventory.js';
 import { bootEngine, fakeTime, readSse } from './helpers.js';
 
@@ -30,9 +32,9 @@ let games: GameManager;
 let web: WebServer;
 let base: string;
 
-async function start(access?: AccessOptions, extra: { masterFor?: MasterFactory; leaveNoticeMs?: number; staleMs?: number; hiddenMs?: number } = {}) {
+async function start(access?: AccessOptions, extra: { masterFor?: MasterFactory; leaveNoticeMs?: number; staleMs?: number; hiddenMs?: number; repeatNoticeMs?: number } = {}) {
   games = new GameManager({ root: join(dir, 'games'), env: { DATA_DIR: join(dir, 'local') }, masterFor: extra.masterFor ?? ((e) => new Master(e, { client: offlineClient() })), engine: { deterministic: false }, log: () => {}, budget: null });
-  web = createWebServer(games, { tickMs: 3_600_000, ...(access ? { access } : {}), ...(extra.leaveNoticeMs !== undefined ? { leaveNoticeMs: extra.leaveNoticeMs } : {}), ...(extra.staleMs !== undefined ? { staleMs: extra.staleMs } : {}), ...(extra.hiddenMs !== undefined ? { hiddenMs: extra.hiddenMs } : {}) });
+  web = createWebServer(games, { tickMs: 3_600_000, ...(access ? { access } : {}), ...(extra.leaveNoticeMs !== undefined ? { leaveNoticeMs: extra.leaveNoticeMs } : {}), ...(extra.staleMs !== undefined ? { staleMs: extra.staleMs } : {}), ...(extra.hiddenMs !== undefined ? { hiddenMs: extra.hiddenMs } : {}), ...(extra.repeatNoticeMs !== undefined ? { repeatNoticeMs: extra.repeatNoticeMs } : {}) });
   await new Promise<void>((resolve) => web.server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${(web.server.address() as AddressInfo).port}`;
 }
@@ -255,7 +257,7 @@ describe('presencia y cola en la web', () => {
   });
 
   it('sin cerrar el stream (colgado tras un proxy u oculta), los demás leen que se ha marchado sin que nadie actúe', async () => {
-    await start(undefined, { leaveNoticeMs: 40, staleMs: 150, hiddenMs: 150 });
+    await start(undefined, { leaveNoticeMs: 40, staleMs: 150, hiddenMs: 150, repeatNoticeMs: 0 });
     const { game, character_id: lia } = await games.create({ name: 'Latido', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
     const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
     // En otro sitio: el aviso es de la web («se ha marchado», «ha vuelto»), no del motor.
@@ -286,8 +288,52 @@ describe('presencia y cola en la web', () => {
     await liaStream.body!.cancel();
   });
 
+  it('histéresis: un vistazo a otra app no avisa; oculta mucho, un «se ha marchado» y un «ha vuelto»; el ciclo seguido no se repite', async () => {
+    await start(undefined, { leaveNoticeMs: 40, staleMs: 60_000, hiddenMs: 400, repeatNoticeMs: 60_000 });
+    const { game, character_id: lia } = await games.create({ name: 'Histéresis', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
+    const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
+    const engine = await games.open(game.slug);
+    engine.world.character(tor).location = { type: 'spot', id: 'sp_tab_barra' };
+    const g = `?game=${game.slug}`;
+    const beat = (state: string) => fetch(`${base}/api/presence${g}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ character: tor, tab: 'tor', state }) });
+    const nap = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const liaStream = await fetch(`${base}/api/stream${g}&character=${lia}`);
+    await readSse(liaStream, (t) => t.includes('event: presence'));
+    const torStream = await fetch(`${base}/api/stream${g}&character=${tor}&tab=tor`);
+    expect(await readSse(liaStream, (t) => t.includes('ha entrado'))).toContain('Tor ha entrado en la partida');
+
+    // Un vistazo: oculta mucho menos que hiddenMs y visible otra vez. Ni aviso ni cambio de estado.
+    await beat('hidden');
+    await nap(120);
+    await beat('visible');
+    const glance = await readSse(liaStream, () => false, 800);
+    expect(glance).not.toContain('se ha marchado');
+    expect(glance).not.toContain('ha vuelto');
+    expect(engine.world.character(tor).away).toBeFalsy();
+
+    // Oculta de verdad: un aviso al irse y otro al volver.
+    await beat('hidden');
+    expect(await readSse(liaStream, (t) => t.includes('se ha marchado'))).toContain('Tor se ha marchado');
+    expect(engine.world.character(tor).away).toBeTruthy();
+    await beat('visible');
+    expect(await readSse(liaStream, (t) => t.includes('ha vuelto'))).toContain('Tor ha vuelto');
+    expect(engine.world.character(tor).away).toBeFalsy();
+
+    // Otro ciclo enseguida: el estado cambia (el circulito, ausente en el motor), pero el texto no se repite.
+    await beat('hidden');
+    const again = await readSse(liaStream, (t) => t.includes('"name":"Tor","online":false'));
+    expect(again).not.toContain('se ha marchado');
+    expect(engine.world.character(tor).away).toBeTruthy();
+    await beat('visible');
+    const back = await readSse(liaStream, (t) => t.includes('"name":"Tor","online":true'));
+    expect(back).not.toContain('ha vuelto');
+    expect(engine.world.character(tor).away).toBeFalsy();
+    await torStream.body!.cancel();
+    await liaStream.body!.cancel();
+  });
+
   it('la pestaña oculta que se ve otra vez: se iguala al mundo y el resumen llega por el stream que ya tenía', async () => {
-    await start(undefined, { leaveNoticeMs: 40, staleMs: 60_000, hiddenMs: 150 });
+    await start(undefined, { leaveNoticeMs: 40, staleMs: 60_000, hiddenMs: 150, repeatNoticeMs: 0 });
     const { game, character_id: lia } = await games.create({ name: 'Oculta', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
     const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
     const engine = await games.open(game.slug);
@@ -516,6 +562,77 @@ describe('varios a la vez en la web', () => {
     // Lia no sabe cómo se llama Brenna: la nombra por su oficio.
     expect(pres).toContain('Tor está aquí, hablando con la tabernera');
     await again.body!.cancel();
+    await liaStream.body!.cancel();
+  });
+
+  it('turno compartido: cada uno ve su parte y la común, la acción del otro como su línea y a quién habla el NPC', async () => {
+    const { engine } = await bootEngine(fakeTime());
+    const kael = engine.world.character('ch_kael');
+    const mira = engine.world.character('ch_mira');
+    mira.location = { type: 'spot', id: kael.location.id };
+    for (const c of [kael, mira]) if (!c.knows.includes('npc_brenna')) c.knows.push('npc_brenna');
+    const got = new Map<string, Delivery>();
+    engine.onDelivery((d) => got.set(d.character_id, d));
+    const common = 'Brenna os mira a los dos.';
+    engine.events.emit({
+      actor_id: kael.id, action_type: 'master', input_text: 'preguntar a Brenna por el pozo', also_to: [mira.id], tags: ['master', 'shared'],
+      narration_private: `Le preguntas por el pozo.\n\n${common}`, observable: null,
+      payload: {
+        group: [kael.id, mira.id], group_inputs: { [kael.id]: 'preguntar a Brenna por el pozo', [mira.id]: 'contar mis monedas' },
+        narration_by_pc: { [kael.id]: 'Le preguntas por el pozo.', [mira.id]: 'Cuentas tus monedas.' }, narration_common: common,
+        lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'En la plaza.', to: kael.id }, { speaker: 'npc', npc_id: 'npc_brenna', text: 'Aquí se paga antes.', to: 'all' }],
+      },
+    });
+    const toKael = toMessage(got.get(kael.id)!, engine);
+    const toMira = toMessage(got.get(mira.id)!, engine);
+    expect(toKael.text).toBe(`Le preguntas por el pozo.\n\n${common}`);
+    expect(toMira.text).toBe(`Cuentas tus monedas.\n\n${common}`);
+    expect(toMira.text).not.toContain('pozo');
+    // Su propia acción como entrada; la del otro, como línea suya delante.
+    expect(toMira.input).toBe('contar mis monedas');
+    expect(toMira.lines!.find((l) => l.speaker === 'pc')).toMatchObject({ id: kael.id, text: 'preguntar a Brenna por el pozo' });
+    // La línea a uno lleva «a ti» o su nombre; la de todos, «a todos» (como en «Quién lee qué en la sala»).
+    expect(toKael.lines!.find((l) => l.text === 'En la plaza.')!.to).toBe('ti');
+    expect(toMira.lines!.find((l) => l.text === 'En la plaza.')!.to).toBe('Kael');
+    expect(toMira.lines!.find((l) => l.text === 'Aquí se paga antes.')!.to).toBe('todos');
+  });
+});
+
+describe('quién lee qué en la web (audience.ts)', () => {
+  it('Tor habla con Brenna: Lia lee un aviso con «Unirme» y ninguna frase; Brenna se vuelve hacia los dos: la misma narración, «a todos»', async () => {
+    await start();
+    const { game, character_id: lia } = await games.create({ name: 'Herrería', mode: 'offline', campaign_id: 'demo', character: { name: 'Lia' } });
+    const tor = await games.addCharacter(game.slug, 'web:test:2', { name: 'Tor' }, { near: lia });
+    const g = `?game=${game.slug}`;
+    const engine = await games.open(game.slug);
+    const brenna = engine.world.npc('npc_brenna');
+    for (const id of [lia, tor]) engine.world.character(id).location = { type: 'spot', id: brenna.location.id };
+    // Máster con guion: lo que toca en cada paso; Brenna pasa a hablar con quien actúa (como tools.ts).
+    let close: Partial<LogEventInput> = {};
+    engine.attachMaster({
+      async resolve(actor) {
+        brenna.talking_to = { character_id: actor.id, since_game_s: engine.nowFor(actor) };
+        return { ok: true, usage: {}, calls: [], context: '', model: 'guion', closed: { narration_private: '', observable: null, observable_vague: null, loudness: 1, tags: ['social'], suggested_actions: [], requires_roll: null, decisive: null, npc_id: brenna.id, ...close } };
+      },
+    });
+    const act = (character: string, text: string) => fetch(`${base}/api/act${g}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ character, text }) }).then((r) => r.json());
+    const liaStream = await fetch(`${base}/api/stream${g}&character=${lia}`);
+    await readSse(liaStream, (t) => t.includes('event: history'));
+
+    close = { narration_private: '«¿Tienes un momento?» Brenna deja el trapo.', observable: 'Tor habla con Brenna en voz baja.', lines: [{ speaker: 'actor', text: '¿Tienes un momento?' }, { speaker: 'npc', npc_id: brenna.id, text: 'Para ti, siempre.' }] };
+    await act(tor, 'Hablar con Brenna');
+    const quiet = await readSse(liaStream, (t) => t.includes('en voz baja'));
+    // Lia no sabe cómo se llama: «la tabernera».
+    expect(quiet).toContain('"notice":{"text":"Tor habla con la tabernera en voz baja"}');
+    expect(quiet).toContain('"join":{"npc":"npc_brenna","label":"Unirme a la conversación con la tabernera"}');
+    expect(quiet).not.toContain('Para ti, siempre');
+
+    close = { narration_private: 'Brenna golpea la barra con el trapo y se vuelve hacia Tor y Lia:', observable: 'Brenna se vuelve hacia todos.', audience: 'present', lines: [{ speaker: 'npc', npc_id: brenna.id, text: 'Fuera de mi barra los dos.', to: 'all' }] };
+    await act(tor, 'Le guiño un ojo a Brenna');
+    const loud = await readSse(liaStream, (t) => t.includes('Fuera de mi barra'));
+    expect(loud).toContain('"to":"todos"');
+    expect(loud).toContain('golpea la barra con el trapo');
+    expect(loud).not.toContain('"join"');
     await liaStream.body!.cancel();
   });
 });

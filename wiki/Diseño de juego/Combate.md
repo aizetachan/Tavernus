@@ -1,14 +1,16 @@
 ---
 title: Combate
-description: "Combate conversacional sin turnos cronometrados, con dados del servidor, NPC que actúan siempre en su turno, golpe no letal, ventanas decisivas y rondas cuando la escena se pone tensa."
+description: "Combate conversacional sin turnos cronometrados, con dados del servidor, NPC que actúan siempre en su turno, golpe no letal, ventanas decisivas y rondas cuando varios pelean a la vez."
 tags: [diseño, mecánicas]
 ---
 > [!abstract] En corto
-> El combate es una conversación, no una cuadrícula de turnos. Empieza de forma natural en la narración, el servidor tira y aplica el daño, y solo en momentos críticos se abre una ventana de respuesta con reloj. Con varios jugadores en una escena tensa, las acciones se juntan en rondas. Desde el 27 de octubre de 2026, los enemigos atacan **en cada turno** aunque el máster se olvide, pegar a alguien hasta tumbarle le deja **inconsciente** y no muerto, y nadie es inmortal.
+> El combate es una conversación, no una cuadrícula de turnos. Empieza de forma natural en la narración, el servidor tira y aplica el daño, y solo en momentos críticos se abre una ventana de respuesta con reloj. Con varios jugadores en una pelea, las acciones se juntan en rondas. Desde el 27 de octubre de 2026, los enemigos atacan **en cada turno** aunque el máster se olvide, pegar a alguien hasta tumbarle le deja **inconsciente** y no muerto, y nadie es inmortal.
 
 ## Cómo empieza
 
 - No hay botón de «empezar combate». Empieza cuando la ficción lo pide.
+- **Solo hay combate con hostilidad de verdad**: un ataque resuelto, daño a alguien o un testigo que se lanza a pelear por un crimen. Un robo pillado, un forcejeo o una amenaza no lo abren: se resuelven con su tirada y la reacción del NPC (agarrarte, gritar, avisar a la guardia). Desde la partida del 4 de noviembre de 2026.
+- **Se acaba en cuanto no queda ningún hostil**: caídos, muertos, idos del sitio o calmados (aceptan una disculpa, se dejan convencer o se amilanan). Unos segundos después del último golpe sale «Fin del combate». Si alguien vuelve a atacar, es otro combate.
 - El máster lo marca por dentro para llevar puntos de golpe, condiciones y quién está implicado.
 - **Sin prisa.** El orden lo dan las respuestas de los jugadores. La iniciativa 5e solo sirve de desempate.
 - Huir es moverse como siempre. Los enemigos pueden perseguirte según su velocidad.
@@ -89,12 +91,12 @@ En un momento crítico (el hacha que cae, el puente que cede), el máster abre u
 
 ## Rondas en escenas tensas
 
-Con dos o más jugadores activos en el mismo sitio y una escena tensa, las acciones entran en **rondas**.
+Con dos o más jugadores activos en el mismo sitio y una pelea de verdad, las acciones entran en **rondas**.
 
-- Escena tensa: combate reciente, una ventana decisiva abierta o un sitio marcado como tenso por la historia (en Brezal, la noche de la Brasa en la plaza).
-- Cuando han actuado todos, o pasan 60 s, el máster resuelve **la ronda entera** en una sola narración.
+- Pelea de verdad: un combate en curso, un enemigo hostil delante o una ventana decisiva abierta. Un sitio tenso por la historia (en Brezal, la noche de la Brasa en la plaza) ya no basta: sin pelea, lo que hacéis a la vez lo junta la **ventana de turno** (ver [[Multijugador]]).
+- Cuando han actuado todos, o pasan 30 s, el máster resuelve **la ronda entera** en una sola respuesta, y cada uno lee lo suyo más lo que hace el mundo.
 - Quien no actuó **duda** y pierde la ronda, sin bloquear a nadie.
-- La interfaz enseña un aviso: «Ronda 2 · faltan Aren y Lys · 0:42».
+- La interfaz enseña un aviso con la ronda, a quién se espera y el tiempo que queda.
 - Una ronda es **una sola llamada al máster**, no una por jugador.
 
 ```mermaid
