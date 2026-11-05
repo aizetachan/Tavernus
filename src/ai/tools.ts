@@ -1739,8 +1739,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const unname = (t: string) => ownLines.reduce((acc, [a, b]) => acc.split(a).join(b), t);
       for (const l of closingLines) if (l.speaker === 'actor') l.text = unname(l.text);
       // Lo que el jugador ha leído u oído hasta ahora, este turno incluido (solo si un botón nombra a quien no conoce).
+      // La narración de este turno, como la lee él: enmascarada. Un nombre que el máster suelta sin cita («esperando a
+      // Ceniza») le llega como «el perro», así que no cuenta como oído.
       let seen: string | null = null;
-      const perceived = () => (seen ??= perceivedBy(engine, actor.id, [s('narration_private'), ...closingLines.filter((l) => l.speaker === 'npc').map((l) => l.text)]));
+      const perceived = () => (seen ??= perceivedBy(engine, actor.id, [masked(s('narration_private')), ...closingLines.filter((l) => l.speaker === 'npc').map((l) => l.text)]));
       const heardName = (n: Npc) => npcNameForms(n.name).some((f) => nameRe(f, 'u').test(perceived()));
       const heardOf = (n: Npc) => heardName(n) || nameRe(descriptorOf(world, n.id), 'iu').test(perceived());
       const presentHere = (n: Npc) => n.status === 'alive' && world.spot(n.location.id).location_id === here();

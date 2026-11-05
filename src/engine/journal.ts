@@ -198,7 +198,9 @@ const DAY_S = GAME_DAY;
  */
 function talksAboutJob(job: { title: string; text: string }, said: ReadonlySet<string>, skip: ReadonlySet<string>): boolean {
   const title = keywords(job.title, skip);
-  return shares(title, said) && sharedCount(new Set([...title, ...keywords(job.text, skip)]), said) >= 2;
+  if (!shares(title, said)) return false;
+  // Un título al que solo le queda una palabra («Ronda hasta el Soto»: el Soto es un sitio) se nombra con esa sola.
+  return title.size <= 1 || sharedCount(new Set([...title, ...keywords(job.text, skip)]), said) >= 2;
 }
 
 const EMPTY_SUMMARY = (): JournalQuest['summary'] => ({ text: '', next: null });

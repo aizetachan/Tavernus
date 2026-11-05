@@ -101,6 +101,18 @@ describe('1. los botones no adelantan lo que el jugador no sabe', () => {
     executeTool(ctx, 'log_event', close({ narration_private: 'Miras la sala.', tags: 'exploration', suggested_actions: 'Hablar con Ilse | Ir a la plaza del pozo' }));
     expect(ctx.closed!.suggested_actions).toEqual(['Hablar con la curandera', 'Ir a la plaza del pozo']);
   });
+
+  it('un nombre que el máster suelta en la narración sin cita no cuenta como oído: el jugador lee «el perro» y el botón no sale', async () => {
+    const { engine, c } = await boot();
+    const ctx = ctxFor(engine, c, 'hablar con Brenna');
+    executeTool(ctx, 'log_event', close({
+      npc_id: 'npc_brenna', narration_private: 'Brenna te mira de reojo y vuelve a la puerta, esperando a Ceniza.',
+      lines: npcSays('npc_brenna', '¿Y tú de dónde vienes, forastero?'), suggested_actions: 'Preguntar por Ceniza | Decir de dónde vienes',
+    }));
+    expect(ctx.closed!.narration_private).toContain('esperando al perro');
+    expect(ctx.closed!.narration_private).not.toContain('Ceniza');
+    expect(ctx.closed!.suggested_actions).toEqual(['Decir de dónde vienes']);
+  });
 });
 
 describe('2. un rumor que repite otro de la misma persona espera', () => {
@@ -133,6 +145,16 @@ describe('3. una misión entra cuando alguien la da', () => {
     // Hablar de él con quien lo pide sí lo pone en curso.
     await say(engine, time, c, 'npc_brenna', '¿Necesitas leña para la posada?', ['Diez leños secos, de los del roble. Te los pago bien.']);
     expect(journalOf(engine, c.id).quests.active.find((q) => q.id === 'job_lena')).toMatchObject({ status: 'active', origin: { text: 'Te lo pide Brenna' } });
+  });
+
+  it('un encargo cuyo título solo deja una palabra («Ronda hasta el Soto»: el Soto es un sitio) entra con esa sola', async () => {
+    const { engine, time, c } = await boot();
+    expect(activeJobs(engine.world).map((j) => j.id)).toContain('job_ronda');
+    const doro = engine.world.npc('npc_doro');
+    c.location = { type: 'spot', id: doro.location.id };
+    engine.world.touch('characters', c.id);
+    await say(engine, time, c, 'npc_doro', '¿Quieres que haga la ronda hasta el Soto?', ['Sí. Ve, mira y vuelve.']);
+    expect(journalOf(engine, c.id).quests.active.find((q) => q.id === 'job_ronda')).toMatchObject({ status: 'active' });
   });
 
   it('el servidor abre la que Brenna ha contado, no la primera de la lista (seq 30-31)', async () => {
