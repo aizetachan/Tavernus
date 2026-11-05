@@ -47,9 +47,9 @@ envget() {
   printf '%s' "${v:-${2:-}}"
 }
 
-# probe: ¿responde la web? 0 = sí. Prueba HEALTH_PATH (/api/health); si la web aún no tiene
-# esa ruta (hoy da 400 «falta ?game», o 403 con acceso por invitación), se conforma con que la
-# portada dé 200 (en modo invitación es la página «pide tu enlace», que también da 200).
+# probe: ¿responde la web? 0 = sí. Prueba HEALTH_PATH (/api/health: la web y su base de datos);
+# si esa ruta no existe (versiones de antes del 4-11-2026: 400, 401, 403 o 404), se conforma con que
+# la portada dé 200 o, con cuentas, 302 hacia /entrar.
 # Deja el motivo en PROBE_DETAIL.
 PROBE_DETAIL=''
 probe() {
@@ -67,5 +67,6 @@ probe() {
     path=/
   fi
   PROBE_DETAIL="GET $path -> $code"
-  [ "$code" = 200 ]
+  # Con cuentas, la portada sin sesión manda a /entrar (302): también es estar viva.
+  [ "$code" = 200 ] || { [ "$path" = / ] && [ "$code" = 302 ]; }
 }

@@ -59,7 +59,7 @@ flowchart TD
 - [[El máster IA]]: cómo narra, sus tools y cuánto cuesta.
 - [[Creatividad del máster]]: lo imposible, los rumores y el Director.
 - [[Mundos generados]]: el catálogo de asentamientos y cómo nace un mundo.
-- [[Multijugador]]: asientos, invitaciones y jugar con amigos.
+- [[Multijugador]]: cuentas, biblioteca de personajes, asientos, invitaciones y jugar con amigos.
 
 **Lo que se ve y se oye**
 - [[Interfaz]]: menú, partida, tablero, mapas y diseño en Figma.

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Restaura las partidas desde una copia de backup-now.sh (o un .tar.gz con una carpeta data/
-# dentro, como el que sube deploy/data-sync.sh). Como root en el servidor.
+# dentro, como el que sube deploy/data-sync.sh). Como root en el servidor. Si la copia trae la base
+# (data/db/tavernus.dump), en modo reemplazo también la restaura; al añadir (--merge) no la toca, y
+# las partidas nuevas entran en la base solas al arrancar la web (sin dueño: se asignan en el panel).
 #
 #   tavernus-restore --list                 copias disponibles
 #   tavernus-restore --latest               la más reciente (reemplaza todo data/)
@@ -75,7 +77,12 @@ else
   mv "$work/data" "$SRV_DATA"
   log "data/ reemplazada; la anterior queda en $before"
   find "$STATE_DIR" -maxdepth 1 -name 'data.antes-*' -mtime +14 -exec rm -rf {} +
+  if [ -f "$SRV_DATA/db/tavernus.dump" ] && command -v pg_restore >/dev/null 2>&1; then
+    log "restaurando la base de datos de la copia"
+    runuser -u postgres -- pg_restore --clean --if-exists --no-owner --role="$SVC_USER" -d "$SVC_USER" "$SRV_DATA/db/tavernus.dump"       || warn "pg_restore avisó de algún error; revisa: sudo journalctl -u $SERVICE -n 50"
+  fi
 fi
+rm -rf "$SRV_DATA/db"
 chown -R "$SVC_USER:$SVC_USER" "$SRV_DATA"
 chmod 750 "$SRV_DATA"
 

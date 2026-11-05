@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Copia comprimida de /var/lib/tavernus/data (partidas, imágenes, índice de reglas) en
+# Copia comprimida de /var/lib/tavernus/data (partidas, imágenes, índice de reglas) y de la base
+# PostgreSQL (cuentas, catálogo, asientos, biblioteca: data/db/tavernus.dump dentro de la copia) en
 # /var/lib/tavernus/backups, y borra las de más de BACKUP_KEEP_DAYS días (14).
 # La lanza tavernus-backup.timer cada noche; a mano: sudo tavernus-backup
 #
@@ -27,7 +28,7 @@ ok=0
 for attempt in 1 2 3; do
   rm -rf "${work:?}/data"
   # Los PDF de manuals/ no se copian: son grandes y el índice de reglas ya está en rules/.
-  tar -C "$STATE_DIR" --exclude='data/local/manuals' -cf - data | tar -C "$work" -xf -
+  tar -C "$STATE_DIR" --exclude='data/local/manuals' --exclude='data/db' --exclude='.pgdata' -cf - data | tar -C "$work" -xf -
   if bad=$(node -e '
     const fs = require("fs"), path = require("path");
     const bad = [];
@@ -44,6 +45,18 @@ for attempt in 1 2 3; do
   sleep 3
 done
 [ "$ok" = 1 ] || warn "algún JSON sigue ilegible tras 3 intentos; se guarda la copia igualmente: $bad"
+
+# La base: un volcado consistente (pg_dump trabaja sobre una foto), junto a las carpetas.
+db=$(envget DATABASE_URL)
+if [ -n "$db" ] && [ "${db#pglite:}" = "$db" ] && command -v pg_dump >/dev/null 2>&1; then
+  install -d -m 700 "$work/data/db"
+  if runuser -u postgres -- pg_dump --format=custom "$SVC_USER" > "$work/data/db/tavernus.dump"; then
+    say "base de datos volcada ($(du -h "$work/data/db/tavernus.dump" | cut -f1))"
+  else
+    warn "no se pudo volcar la base de datos: la copia lleva solo las carpetas"
+    rm -rf "$work/data/db"
+  fi
+fi
 
 tar -C "$work" -czf "$out.part" data
 mv "$out.part" "$out"

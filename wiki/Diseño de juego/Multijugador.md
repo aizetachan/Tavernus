@@ -1,10 +1,17 @@
 ---
 title: Multijugador
-description: "Cómo juegan varias personas en el mismo mundo: asientos e invitaciones, qué ve cada uno, interacción entre jugadores, desconexiones, cupos y lo que falta."
+description: "Cómo juegan varias personas en el mismo mundo: cuentas, asientos e invitaciones, qué ve cada uno, interacción entre jugadores, desconexiones, cupos y lo que falta."
 tags: [diseño, multijugador]
 ---
 > [!abstract] En corto
-> El motor nació multijugador: un mundo compartido, una cola de acciones por lugar y percepción por bandas. La web añade una identidad ligera sin cuentas: el anfitrión reparte un enlace por asiento y cada persona queda ligada a su personaje. Entre jugadores se habla, se da, se sigue y se ayuda sin gastar IA.
+> El motor nació multijugador: un mundo compartido, una cola de acciones por lugar y percepción por bandas. La web tiene cuentas (usuario y contraseña): tus partidas y tus personajes te siguen a cualquier dispositivo. El anfitrión reparte un enlace por asiento y cada persona queda ligada a su personaje con su cuenta. Entre jugadores se habla, se da, se sigue y se ayuda sin gastar IA.
+
+## Cuentas y personajes
+
+- **Cuenta:** usuario y contraseña, sin correo. Con ella ves tus partidas (las que creaste y aquellas a las que te uniste) desde el móvil, el PC o donde entres.
+- **Biblioteca de personajes:** cada cuenta guarda sus personajes. Al empezar una partida, o al ocupar un asiento libre, eliges uno de ellos o creas uno nuevo, que se guarda.
+- **Cada partida juega con una copia.** Lo que le pase al personaje en una partida (heridas, nivel, objetos) se queda en esa partida; tu biblioteca guarda el personaje tal como lo creaste. Puedes llevar el mismo personaje a varias partidas, y cada una sigue su propia historia.
+- **Administrador:** ve todas las partidas y gestiona las cuentas (contraseñas, roles, asignar partidas).
 
 ## Asientos e invitaciones
 
@@ -12,25 +19,24 @@ tags: [diseño, multijugador]
 flowchart LR
   A["Anfitrión crea la partida<br/>con su personaje"] --> S["Se crean asientos:<br/>el suyo + plazas libres"]
   S --> I["⚙ Invitaciones:<br/>un enlace por asiento"]
-  I --> F["El amigo abre su enlace"]
-  F --> P["Crea su personaje<br/>«Empezar junto a…»"]
+  I --> F["El amigo abre su enlace<br/>y entra con su cuenta"]
+  F --> P["Elige o crea su personaje<br/>«Empezar junto a…»"]
   P --> J["Mismo mundo,<br/>mismo sitio"]
 ```
 
-- **Asiento:** un hueco para un jugador, con su enlace y su personaje (o libre).
-- Al crear la partida, «Plazas para amigos» dice cuántos asientos libres se crean (1 por defecto; hasta 8).
-- Abrir el enlace deja al navegador **ligado a ese personaje**. No puede actuar ni mirar por otro.
-- **Renovar** un enlace invalida el anterior y saca a quien lo usaba.
-- Quien entra con asiento libre crea su personaje. «Empezar junto a…» lo pone al lado del anfitrión, ya conocidos, con una situación complementaria.
-- Sin cuentas: perder el enlace es perder el acceso hasta que el anfitrión lo renueve.
+- **Asiento:** un hueco para un jugador, con su enlace, su personaje (o libre) y, desde que alguien lo abre, su cuenta.
+- Al crear la partida, «Invitados» dice cuántos asientos libres se crean (hasta 8).
+- Abrir el enlace con tu cuenta deja **el asiento ligado a ti**, en cualquier dispositivo. No puedes actuar ni mirar por otro.
+- **Renovar** cambia el enlace (el viejo deja de valer); **Liberar** quita el asiento a su jugador, y su personaje sigue en el mundo.
+- Quien entra con asiento libre elige un personaje de su biblioteca o crea uno. «Empezar junto a…» lo pone al lado del anfitrión, ya conocidos, con una situación complementaria.
 
 **Modos de acceso**
 
 | Modo | Para qué |
 |---|---|
-| Invitación | Por defecto en un servidor público. Solo entra quien tiene enlace |
-| Público | Cualquiera entra al menú y crea partidas, en las que queda de anfitrión. Cada navegador ve solo las suyas. Límite de partidas nuevas al día |
-| Abierto | En local, como siempre: cualquiera juega con cualquier personaje |
+| Invitación | Hace falta cuenta, y solo se crea con un enlace de invitación. Las partidas las crea el administrador |
+| Público | Cualquiera se crea una cuenta y crea partidas, en las que queda de anfitrión. Cada uno ve las suyas. Límite de partidas nuevas al día |
+| Abierto | En local, como siempre: sin cuenta, cualquiera juega con cualquier personaje |
 
 ## Qué ve cada uno
 
@@ -116,7 +122,7 @@ El mundo es abierto: el reloj sigue mientras alguien juegue y cada uno entra cua
 | Robo a un durmiente, candados, guardias | Después |
 | Crimen, testigos y ley entre jugadores (el ataque ya es una reacción) | Después |
 | Compañías (alianzas formales) | Después |
-| Cuentas de verdad | Después |
+| Correo y recuperación de contraseña por correo; entrar con Google u otros | Después |
 
 Hecho desde la auditoría: muerte y reaparición. Ver [[Muerte y descanso]].
 

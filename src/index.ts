@@ -25,8 +25,13 @@ import { join } from 'node:path';
 
 async function main(): Promise<void> {
   const env = process.env;
+  if (process.argv.includes('--admin')) {
+    // Primer administrador (o uno más) sin navegador: src/accounts/cli.ts.
+    const { adminCommand } = await import('./accounts/cli.js');
+    process.exit(await adminCommand(process.argv, env));
+  }
   if (process.argv.includes('--web')) {
-    // La web lleva sus propias partidas (JSON por carpeta); el REPL sigue con un motor único.
+    // La web lleva sus propias partidas (catálogo en la base, mundo de cada una en su carpeta); el REPL sigue con un motor único.
     const games = new GameManager({ root: env['GAMES_DIR'] ?? './data/games', env });
     await games.init();
     console.log(`[boot] partidas en ${games.root}`);
