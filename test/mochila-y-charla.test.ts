@@ -139,9 +139,12 @@ describe('las misiones llegan con la charla', () => {
     expect(status(engine, c, 'q_cena_doro')).toBe('available');
     await say(engine, time, c, 'npc_brenna', 'Qué frío hace ahí fuera');
     expect(status(engine, c, 'q_cena_doro')).toBe('available');
-    // Ya le ha contestado dos veces: el guion le toca sacarlo y, si el máster no lo registra, el servidor lo abre.
+    // Ya le ha contestado dos veces: el guion le toca sacarlo. Si habla de otra cosa, no se abre nada (2026-11-05).
     expect(talkPlanFor(engine, c, 'Sí, un día largo')!.situation).toBe('offer');
     await say(engine, time, c, 'npc_brenna', 'Sí, un día largo');
+    expect(status(engine, c, 'q_cena_doro')).toBe('available');
+    // Si lo cuenta y el máster no lo registra, el servidor abre esa.
+    await say(engine, time, c, 'npc_brenna', '¿Algo más?', 'El guardia del portón no ha cenado y no puede dejar su puesto. ¿Le llevas un plato?');
     expect(status(engine, c, 'q_cena_doro')).toBe('active');
     expect(status(engine, c, 'q_perro')).toBe('available');
     // Acaba de pedirle una: no le suelta otra en el turno siguiente.
@@ -155,7 +158,7 @@ describe('las misiones llegan con la charla', () => {
     const c = await newPc(engine, 'rogue');
     const n = engine.world.npc('npc_brenna');
     c.location = { type: 'spot', id: n.location.id };
-    await say(engine, time, c, 'npc_brenna', 'Buenas, ¿tienes algún trabajo para mí?');
+    await say(engine, time, c, 'npc_brenna', 'Buenas, ¿tienes algún trabajo para mí?', 'Sí: llévale la cena al guardia del portón, que no puede dejar su puesto.');
     expect(status(engine, c, 'q_cena_doro')).toBe('active');
   });
 

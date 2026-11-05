@@ -27,7 +27,8 @@
  *   - **Activa** → **lista para entregar** → **entregada**: la recompensa la da
  *     quien la recibe (`turn_in_npc_id`, por defecto quien la dio), al hablar.
  *   Lo que se oye por ahí (`rumor`) es una línea de ambiente en el hilo que dice
- *   a quién buscar, sin contar de qué va; no entra en el Diario. La misión principal (`main_for`) es un problema
+ *   a quién buscar, sin contar de qué va; no entra en el Diario. Uno que repite
+ *   otro de la misma persona aún sin pedir espera a que le pidan la primera. La misión principal (`main_for`) es un problema
  *   con varias pistas: cada paso opcional (`optional`) aparece en el Diario
  *   cuando alguien la menciona o algo la abre (`revealed_by`), se siguen en
  *   cualquier orden y llevan al cierre del acto. Los plazos (`deadline`) van por
@@ -53,6 +54,7 @@ import { attitudeOf } from './combat.js';
 import type { Hook } from './hooks.js';
 import { spawnItem } from './inventory.js';
 import type { Attitude, Character, Clue, ClueSource, Id, Npc, TrustTier } from './model.js';
+import { keywords, properNameWords, sharedCount } from './keywords.js';
 import { roleLabel } from './narrate.js';
 import { addReputation, checkAchievement, grantClue, type ProgressEvent, type QuestChange } from './progress.js';
 import { RUMOR_KINDS, type Rumor, type RumorKind } from './rumors.js';
@@ -837,6 +839,40 @@ export function askedSince(world: World, c: Character, n: Npc, sinceS: number): 
   return (characterStory(c).log ?? []).some((x) => (x.kind === 'open' || x.kind === 'offered' || x.kind === 'declined') && x.game_s >= sinceS && quest(world, x.quest_id)?.giver_npc_id === n.id);
 }
 
+/**
+ * La misión que este NPC acaba de contar en la charla (`said`: lo que dice y la narración del turno), entre las que
+ * puede pedirle al PJ: la que más palabras comparte con su título y su texto, con dos como mínimo, sin contar nombres
+ * propios. null si ha hablado de otra cosa. Así, si el máster no llama a `story_quest ask`, el servidor abre la que
+ * se ha oído y no otra: en la partida del 2026-11-05 Brenna habló de su perro y se abrió «La cena del portón».
+ */
+export function voicedQuest(world: World, c: Character, npc: Npc, said: string): Id | null {
+  const skip = properNameWords(world);
+  const heard = keywords(said, skip);
+  let best: Id | null = null;
+  let most = 1;
+  for (const q of storyOf(world)?.quests ?? []) {
+    if (q.giver_npc_id !== npc.id || questStatus(world, c, q) !== 'available') continue;
+    const n = sharedCount(keywords(`${q.title} ${q.text}`, skip), heard);
+    if (n > most) { best = q.id; most = n; }
+  }
+  return best;
+}
+
+/** Lo que dice un rumor, sin quién ni dónde («junto al pozo», «dicen que»): para ver si dos dicen lo mismo. */
+function rumorWords(world: World, q: StoryQuest): Set<string> {
+  const skip = properNameWords(world);
+  skip.add('dicen');
+  return keywords((q.rumor?.text ?? '').replaceAll('{giver}', ' '), skip);
+}
+
+/** ¿Repite este rumor otro de la misma persona que el PJ ya ha oído y aún no le han pedido? (dos palabras en común) */
+function repeatsRumor(world: World, c: Character, q: StoryQuest): boolean {
+  const st = characterStory(c);
+  const mine = rumorWords(world, q);
+  return (storyOf(world)?.quests ?? []).some((x) => x.id !== q.id && x.giver_npc_id === q.giver_npc_id && st.rumors?.[x.id] !== undefined
+    && questStatus(world, c, x) === 'available' && sharedCount(rumorWords(world, x), mine) >= 2);
+}
+
 /** NPC al final de un paso: con quien hay que estar, a quien dar algo o quien da su pista. */
 function stepNpcs(world: World, cond: StoryCondition): Id[] {
   switch (cond.kind) {
@@ -1045,13 +1081,19 @@ function advanceCharacter(world: World, c: Character, nowS: number, o: StoryOutp
     }
     if (st.declined?.[q.id] !== undefined || whyLocked(world, c, q)) continue;
     const giver = world.npcs.get(q.giver_npc_id!)!;
-    if (talkingWith(giver, c) && giver.talking_to?.ripe && !askedInTalk(world, c, giver)) {
+    // `ripe` es la misión que el NPC acaba de contar en la charla (tools.ts): se abre esa y no la primera de la lista.
+    // `true` (partidas de antes, pruebas): cualquiera de las suyas.
+    const ripe = giver.talking_to?.ripe;
+    if (talkingWith(giver, c) && (ripe === true || ripe === q.id) && !askedInTalk(world, c, giver)) {
       // Pedida en escena, con la charla ya en marcha: entra activa y cuenta ya lo que el PJ haya hecho (llevar el agua encima).
       ask(world, c, q, nowS, o);
       if (!npcDeaths(world, c, q, nowS, o)) progress(world, c, q, nowS, o);
       continue;
     }
-    if (!heard && q.rumor && st.rumors?.[q.id] === undefined && !talkingWith(giver, c) && holds(world, c, q.rumor.where)) {
+    // Un rumor que repite otro de la misma persona aún sin pedir no dice nada nuevo: «la curandera anda buscando a
+    // alguien que no le tenga miedo al agua» y, al momento, «…anda buscando a alguien con buenas piernas» (partida del
+    // 2026-11-05). Ese espera a que le pidan la primera. Uno que cuenta otra cosa de ella («mirando a la puerta»), no.
+    if (!heard && q.rumor && st.rumors?.[q.id] === undefined && !talkingWith(giver, c) && holds(world, c, q.rumor.where) && !repeatsRumor(world, c, q)) {
       heard = true;
       st.rumors = { ...(st.rumors ?? {}), [q.id]: nowS };
       const text = rumorText(world, c, q);
