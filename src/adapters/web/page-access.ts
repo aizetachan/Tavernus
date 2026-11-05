@@ -93,6 +93,8 @@ export interface JoinPageInput {
   others: { id: string; name: string }[];
   /** Biblioteca del usuario (null sin cuenta, en `open`); `taken`: su nombre ya está en la partida. */
   library?: { id: string; name: string; race_id: string | null; class_id: string | null; taken: boolean }[] | null;
+  /** El administrador en una partida ajena: además de su biblioteca, el atajo del PJ por defecto con ese nombre. */
+  admin?: { name: string } | null;
 }
 
 /** Asiento libre: el invitado elige un personaje de su biblioteca o crea uno (que se guarda en ella) y entra. */
@@ -106,12 +108,14 @@ export function joinPage(input: JoinPageInput): string {
   #pick[hidden], #cg[hidden], #cg-lead[hidden] { display: none; }`;
   return HEAD(`${input.game.name} — tu personaje`, css) + String.raw`<div class="box">
   <span class="eyebrow">${esc(input.game.name)}</span>
-  <h1>Te han invitado a la partida</h1>
+  <h1>${input.admin ? 'Entras como administrador' : 'Te han invitado a la partida'}</h1>
   <div id="pick" hidden>
-    <p>Elige con quién entras. La partida juega con una copia: lo que le pase aquí no cambia tu personaje de la biblioteca.</p>
+    <p>${input.admin
+      ? 'Elige con quién entras: uno de tu biblioteca, uno nuevo o el personaje por defecto. Dentro podrás mirar y jugar con cualquier personaje de la partida.'
+      : 'Elige con quién entras. La partida juega con una copia: lo que le pase aquí no cambia tu personaje de la biblioteca.'}</p>
     <div class="lib" id="lib"></div>
     <div id="near-slot"></div>
-    <div class="foot"><span class="error" id="err" role="alert"></span><button class="btn ghost" type="button" id="new">Crear uno nuevo</button></div>
+    <div class="foot"><span class="error" id="err" role="alert"></span>${input.admin ? `<button class="btn ghost" type="button" id="default">Entrar con «${esc(input.admin.name)}»</button>` : ''}<button class="btn ghost" type="button" id="new">Crear uno nuevo</button></div>
   </div>
   <p id="cg-lead" hidden>Crea tu personaje.${input.library ? ' Se guarda también en tu biblioteca, para usarlo en otras partidas.' : ''}</p>
   <div id="cg" class="cg" hidden></div>
@@ -156,13 +160,18 @@ ${CHARGEN_JS}
         claim(p).then(function (r) { if (!r.ok) { ui.fail(r.text); return; } location.href = '/?game=' + slug; });
       }
     };
-    if (D.library && D.library.length) o.onBack = function () { $('cg').hidden = true; $('cg-lead').hidden = true; $('pick').hidden = false; };
+    if ((D.library && D.library.length) || D.admin) o.onBack = function () { $('cg').hidden = true; $('cg-lead').hidden = true; $('pick').hidden = false; };
     tavernusChargen($('cg'), o).open();
   }
-  if (D.library && D.library.length) {
+  if ((D.library && D.library.length) || D.admin) {
     var near = nearControl();
     if (near) $('near-slot').appendChild(near);
-    D.library.forEach(function (c) {
+    // El atajo del administrador: el PJ por defecto (humano, guerrero), sin elegir ni crear nada.
+    if (D.admin) $('default').addEventListener('click', function () {
+      var b = $('default'); b.disabled = true; $('err').textContent = '';
+      claim({ default: true, near: nearValue(near) }).then(function (r) { if (!r.ok) { b.disabled = false; $('err').textContent = r.text; return; } location.href = '/?game=' + slug; });
+    });
+    (D.library || []).forEach(function (c) {
       var b = document.createElement('button'); b.type = 'button';
       var what = [nameOf(D.options.races, c.race_id), nameOf(D.options.classes, c.class_id)].filter(Boolean).join(', ');
       b.innerHTML = '<b>' + esc(c.name) + '</b><small>' + esc(c.taken ? 'Ya hay alguien con ese nombre en esta partida' : what || 'Personaje') + '</small>';

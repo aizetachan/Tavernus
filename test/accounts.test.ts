@@ -451,12 +451,19 @@ describe('la web con cuentas', () => {
     await bea.signUp('bea');
     type Session = { character_id: string | null; can_switch: boolean; role: string; seat: { label: string } | null };
     type Seats = { seats: { label: string; character_name: string | null; user: string | null }[] };
-    // Partida de Ana sin asientos libres: al abrirla, la administradora recibe un asiento nuevo y su PJ «admin», humano guerrero.
+    // Partida de Ana sin asientos libres: al abrirla, la administradora recibe un asiento nuevo y elige con quién entra,
+    // como un invitado: su biblioteca, uno nuevo o el atajo «admin» (humano, guerrero).
     const a = (await (await ana.post('/api/games', { name: 'De Ana', mode: 'offline', character: 'Aren', seats: 0 })).json()) as { game: { slug: string }; character_id: string };
     const ga = `?game=${a.game.slug}`;
     const page = await boss.get(`/${ga}`);
     expect(page.status).toBe(200);
-    expect(await page.text()).not.toContain('Te han invitado');
+    const html = await page.text();
+    expect(html).toContain('Entras como administrador');
+    expect(html).toContain('Entrar con «admin»');
+    expect(await boss.json<Session>(`/api/session${ga}`)).toMatchObject({ character_id: null, can_switch: true, seat: { label: 'Administración' } });
+    // Un usuario normal no tiene el atajo.
+    expect((await ana.post(`/api/seat/claim${ga}`, { default: true })).status).toBe(400);
+    expect((await boss.post(`/api/seat/claim${ga}`, { default: true })).status).toBe(200);
     const me = await boss.json<Session>(`/api/session${ga}`);
     expect(me).toMatchObject({ can_switch: true, role: 'admin', seat: { label: 'Administración' } });
     expect(me.character_id).not.toBeNull();
@@ -476,11 +483,13 @@ describe('la web con cuentas', () => {
     expect((await boss.json<Session>(`/api/session${ga}`)).character_id).toBe(me.character_id);
     expect((await boss.json<Seats>(`/api/seats${ga}`)).seats).toHaveLength(2);
     expect((await ana.json<GamesList>('/api/games')).games.map((g) => g.slug)).toEqual([a.game.slug]);
-    // Con un asiento libre, lo ocupa en vez de crear otro.
+    // Con un asiento libre, lo ocupa en vez de crear otro; y entra con un personaje de su propia biblioteca.
     const b = (await (await bea.post('/api/games', { name: 'De Bea', mode: 'offline', character: 'Brun', seats: 1 })).json()) as { game: { slug: string } };
     const gb = `?game=${b.game.slug}`;
-    expect((await boss.get(`/${gb}`)).status).toBe(200);
-    expect((await boss.json<Seats>(`/api/seats${gb}`)).seats.map((s) => [s.label, s.character_name, s.user])).toEqual([['Anfitrión', 'Brun', 'bea'], ['Plaza 2', 'admin', 'jefa']]);
+    const tam = ((await (await boss.post('/api/library', { name: 'Tam', ...ROGUE })).json()) as { character: { id: string } }).character;
+    expect(await (await boss.get(`/${gb}`)).text()).toContain('Tam');
+    expect((await boss.post(`/api/seat/claim${gb}`, { template_id: tam.id })).status).toBe(200);
+    expect((await boss.json<Seats>(`/api/seats${gb}`)).seats.map((s) => [s.label, s.character_name, s.user])).toEqual([['Anfitrión', 'Brun', 'bea'], ['Plaza 2', 'Tam', 'jefa']]);
     // En el panel, la partida de Ana dice quién juega y el detalle lleva a cada usuario.
     const detail = await boss.json<{ owner: { username: string }; seats: { label: string; character_name: string; user: { username: string } | null }[]; game: { characters: string[] } }>(`/api/admin/games/${a.game.slug}`);
     expect(detail.owner.username).toBe('ana');

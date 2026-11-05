@@ -828,7 +828,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       if (!slug) { html(res, 200, MENU); return; }
       if (!manifest) { redirect(res, '/'); return; }
       if (!allowed) { html(res, 403, invitePage('No tienes sitio en esta partida. Pide un enlace de invitación a quien la organiza.')); return; }
-      // El administrador sin asiento entra como jugador administrador, con su PJ «admin» (abajo, `adminSeat`).
+      // El administrador sin asiento recibe uno (abajo, `adminSeat`) y elige con qué PJ entra, como un invitado.
       if (adminUser && user && !seat && !manifest.demo) seat = await adminSeat(manifest, user);
       if (seat && !seat.character_id) {
         const engine = (await runtime(manifest.slug)).engine;
@@ -836,6 +836,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           game: { slug: manifest.slug, name: manifest.name }, options: GameManager.characterOptions(),
           others: [...engine.world.characters.values()].filter((c) => c.status !== 'retired' && c.status !== 'dead').map((c) => ({ id: c.id, name: c.name })),
           library: user ? (await (await accountsOf()).library(user.id)).map((c) => ({ id: c.id, name: c.name, race_id: c.race_id ?? null, class_id: c.class_id ?? null, taken: engine.characterNameTaken(c.name) })) : null,
+          ...(adminUser ? { admin: { name: adminCharacterName(engine) } } : {}),
         }));
         return;
       }
@@ -913,9 +914,12 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       const body = await readJson(req);
       claiming.add(seat.id);
       try {
-        const picked = await pickCharacter(user, body, 'name', (c) => {
-          if (engine.characterNameTaken(c.name)) throw new AccountError(`Ya hay alguien llamado ${c.name.trim()} en esta partida: cambia el nombre.`, 400, 'name');
-        });
+        // El atajo del administrador: el PJ por defecto «admin» (humano, guerrero), sin pasar por la biblioteca.
+        const picked = adminUser && body['default'] === true
+          ? { input: { name: adminCharacterName(engine), race_id: 'human', class_id: 'fighter', death_mode: 'casual' as const }, template_id: null }
+          : await pickCharacter(user, body, 'name', (c) => {
+            if (engine.characterNameTaken(c.name)) throw new AccountError(`Ya hay alguien llamado ${c.name.trim()} en esta partida: cambia el nombre.`, 400, 'name');
+          });
         const near = body['near'];
         const id = await games.addCharacter(manifest.slug, `web:${manifest.slug}:${seat.id}`, picked.input, { near: typeof near === 'string' && near ? near : null });
         await (await accountsOf()).setSeatCharacter(seat.id, id, picked.template_id);
@@ -1203,27 +1207,24 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
 
   /**
    * El administrador en una partida ajena (docs/MULTIJUGADOR.md, «Administración»): entra como un jugador más,
-   * con un asiento suyo (uno libre o, si no lo hay, uno nuevo, como «Añadir asiento libre») y un PJ por defecto
-   * llamado «admin» (humano, guerrero de nivel 1 con el equipo de su clase), con el que queda ligado. Dentro, el
-   * selector le deja mirar y jugar con cualquier PJ de la partida (`can_switch`).
+   * con un asiento suyo (uno libre o, si no lo hay, uno nuevo, como «Añadir asiento libre»). Con el asiento aún
+   * sin PJ, la página de unirse le deja elegir uno de su biblioteca, crear uno o el atajo «admin» (humano,
+   * guerrero; `/api/seat/claim` con `default`). Dentro, el selector le deja mirar y jugar con cualquier PJ.
    */
   async function adminSeat(manifest: GameManifest, user: User): Promise<Seat> {
     const accounts = await accountsOf();
     await ensureGameRow(accounts.db, manifest);
-    let seat = (await accounts.seats(manifest.slug)).find((s) => !s.user_id && !s.character_id) ?? null;
-    if (!seat) seat = await accounts.addSeat(manifest.slug, { label: 'Administración' });
-    seat = await accounts.bindSeat(seat, user.id);
-    if (!seat.character_id) {
-      const rt = await runtime(manifest.slug);
-      let name = ADMIN_CHARACTER;
-      for (let n = 2; rt.engine.characterNameTaken(name); n++) name = `${ADMIN_CHARACTER} ${n}`;
-      const id = await games.addCharacter(manifest.slug, `web:${manifest.slug}:${seat.id}`, { name, race_id: 'human', class_id: 'fighter', death_mode: 'casual' });
-      await accounts.setSeatCharacter(seat.id, id, null);
-      rt.introduce(id);
-      seat = { ...seat, character_id: id };
-      log(`[cuentas] ${user.username} (administración) entra en «${manifest.slug}» con el PJ ${name}`);
-    }
+    const free = (await accounts.seats(manifest.slug)).find((s) => !s.user_id && !s.character_id) ?? null;
+    const seat = await accounts.bindSeat(free ?? await accounts.addSeat(manifest.slug, { label: 'Administración' }), user.id);
+    log(`[cuentas] ${user.username} (administración) recibe el asiento «${seat.label}» de «${manifest.slug}»`);
     return seat;
+  }
+
+  /** El nombre del PJ por defecto del administrador en esa partida: «admin», o «admin 2» si ya hay uno. */
+  function adminCharacterName(engine: Engine): string {
+    let name = ADMIN_CHARACTER;
+    for (let n = 2; engine.characterNameTaken(name); n++) name = `${ADMIN_CHARACTER} ${n}`;
+    return name;
   }
 
   /**
