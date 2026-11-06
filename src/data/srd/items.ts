@@ -27,62 +27,22 @@
  *   versión del código y no toca las propias de la campaña (`origin: 'custom'`).
  *   Los ids no se borran nunca: una partida vieja puede tener ese objeto.
  *
- * Los campos del modelo 5e (bloque A: categoría, propiedades, rareza,
- * sintonización, bonos, cargas, conjuro) van aquí con los nombres del plan
- * (§2.1-2.2) en `SrdItemDef`, a la espera de que el modelo los adopte; `type`
- * sigue en los valores que el motor ya entiende.
+ * La forma de cada definición es el modelo de objetos 5e (model.ts, bloque A):
+ * `type` es la categoría de reglas y `subtype` la afina; las variantes mágicas
+ * +N llevan `base_id` (su base) y `unidentified` (se ven como la base). La poción
+ * de curación va sin rareza: está en la lista de equipo del SRD y se reconoce.
  */
 
-import type { ItemDef, ItemSize, ItemType } from '../../engine/model.js';
+import type { AmmoType, ItemDef, ItemRarity, ItemSize, ItemSubtype, ItemType, WeaponProperty, WeaponSubtype } from '../../engine/model.js';
 
 /** Sube con cualquier cambio de una definición de este fichero. */
 export const SRD_CATALOG_VERSION = 1;
 
-// ---------------------------------------------------------------------------
-// Campos del modelo 5e (PLAN-OBJETOS §2): provisionales hasta el bloque A
-// ---------------------------------------------------------------------------
-
-export type ItemCategory =
-  | 'weapon' | 'armor' | 'ammunition' | 'gear' | 'tool' | 'focus' | 'consumable' | 'scroll'
-  | 'wand' | 'ring' | 'wondrous' | 'treasure';
-export type WeaponProperty = 'light' | 'heavy' | 'finesse' | 'thrown' | 'two_handed' | 'versatile' | 'reach' | 'loading' | 'ammunition' | 'special';
-export type WeaponSubtype = 'simple_melee' | 'simple_ranged' | 'martial_melee' | 'martial_ranged';
-export type ArmorSubtype = 'light' | 'medium' | 'heavy' | 'shield';
-export type AmmoType = 'arrow' | 'bolt' | 'bullet' | 'needle';
-export type Rarity = 'common' | 'uncommon' | 'rare' | 'very_rare' | 'legendary' | 'artifact';
-
-/** Efecto con estructura: lo aplica el motor (bloque C), el máster lo narra. */
-export type ItemEffect =
-  | { advantage: string }
-  | { disadvantage_to_notice: string };
-
+/** Una definición del catálogo SRD: el modelo de objetos (model.ts, bloque A) con el nombre SRD en inglés. */
 export interface SrdItemDef extends ItemDef {
   origin: 'srd';
-  /** Categoría de reglas (§2.1). `type` queda en los valores viejos hasta el bloque A. */
-  category: ItemCategory;
-  subtype?: string;
   /** Nombre SRD en inglés (también es el primer alias). */
   en: string;
-  // Armas
-  properties?: WeaponProperty[];
-  /** Alcance en pies: [normal, largo] (arrojadizas y a distancia). */
-  range?: [number, number];
-  versatile_damage?: string;
-  ammo_type?: AmmoType;
-  // Armaduras
-  /** Fuerza mínima: −10 pies de velocidad si no llega. */
-  str_min?: number;
-  /** Segundos para ponerse y quitarse la armadura. */
-  don_doff_s?: [number, number];
-  // Magia
-  rarity?: Rarity;
-  /** false, true o una condición («lanzador de conjuros»). */
-  attunement?: boolean | string;
-  bonus?: { attack?: number; damage?: number; ac?: number; saves?: number };
-  charges?: { max: number; recharge: string; at: 'dawn' };
-  effects?: ItemEffect[];
-  /** Pergaminos y varitas. Sin `spell_id` (pergamino), el conjuro va en el ejemplar (`state.spell_id`). */
-  spell?: { level: number; spell_id?: string; save_dc?: number; attack_bonus?: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -103,23 +63,15 @@ function sizeOf(weight: number): ItemSize {
   return 'bulky';
 }
 
-const LEGACY_TYPE: Record<ItemCategory, ItemType> = {
-  weapon: 'weapon', armor: 'armor', ammunition: 'misc', gear: 'misc', tool: 'tool', focus: 'tool',
-  consumable: 'consumable', scroll: 'consumable', wand: 'tool', ring: 'treasure', wondrous: 'treasure', treasure: 'treasure',
-};
+type Extra = Partial<Omit<SrdItemDef, 'id' | 'name' | 'aliases' | 'en' | 'type' | 'value' | 'weight_lb'>>;
 
-type Extra = Partial<Omit<SrdItemDef, 'id' | 'name' | 'aliases' | 'en' | 'category' | 'value' | 'weight_lb'>>;
-
-function def(id: string, name: string, en: string, aliases: string[], category: ItemCategory, value: number, weight_lb: number, extra: Extra = {}): SrdItemDef {
+function def(id: string, name: string, en: string, aliases: string[], type: ItemType, value: number, weight_lb: number, extra: Extra = {}): SrdItemDef {
   const lower = en.toLowerCase();
-  const all = [lower, ...aliases.filter((a) => a.toLowerCase() !== lower)];
-  const type = extra.type ?? (extra.container ? 'container' : LEGACY_TYPE[category]);
   return {
-    id, name, aliases: all, en, category, value, weight_lb,
+    id, name, aliases: [lower, ...aliases.filter((a) => a.toLowerCase() !== lower)], en, type, value, weight_lb,
     size: extra.size ?? sizeOf(weight_lb),
     unique: false, origin: 'srd',
     ...extra,
-    type,
   };
 }
 
@@ -128,23 +80,30 @@ function def(id: string, name: string, en: string, aliases: string[], category: 
 // ---------------------------------------------------------------------------
 
 type Dmg = 'bludgeoning' | 'piercing' | 'slashing';
+type WeaponExtra = Extra & { range?: [number, number]; versatile_damage?: string; ammo_type?: AmmoType };
 
 function weapon(
   id: string, name: string, en: string, aliases: string[], subtype: WeaponSubtype, value: number, weight: number,
-  damage: string, damage_type: Dmg, properties: WeaponProperty[] = [], extra: Extra = {},
+  damage: string, damage_type: Dmg, properties: WeaponProperty[] = [], extra: WeaponExtra = {},
 ): SrdItemDef {
+  const { range, versatile_damage, ammo_type, ...rest } = extra;
   const p = new Set(properties);
   const ranged = subtype.endsWith('ranged');
-  const size: ItemSize = extra.size ?? (p.has('heavy') || p.has('two_handed') || p.has('reach') ? 'large' : p.has('light') ? 'small' : 'medium');
+  const size: ItemSize = rest.size ?? (p.has('heavy') || p.has('two_handed') || p.has('reach') ? 'large' : p.has('light') ? 'small' : 'medium');
   return def(id, name, en, aliases, 'weapon', value, weight, {
-    subtype, properties, size,
+    subtype, size,
     weapon: {
       damage, damage_type,
+      // Las booleanas de siempre (el combate las lee) y la lista 5e entera.
       ...(p.has('finesse') ? { finesse: true } : {}),
       ...(ranged ? { ranged: true } : {}),
       ...(p.has('two_handed') ? { two_handed: true } : {}),
+      properties,
+      ...(range ? { range } : {}),
+      ...(versatile_damage ? { versatile_damage } : {}),
+      ...(ammo_type ? { ammo_type } : {}),
     },
-    ...extra,
+    ...rest,
   });
 }
 
@@ -201,18 +160,18 @@ const WEAPONS: SrdItemDef[] = [
 // Armaduras (12) y escudo
 // ---------------------------------------------------------------------------
 
-const DON: Record<ArmorSubtype, [number, number]> = { light: [60, 60], medium: [300, 60], heavy: [600, 300], shield: [6, 6] };
+/** Segundos para ponerse y quitarse la armadura (SRD: 1, 5 y 10 minutos; quitarse, 1, 1 y 5). */
+const DON: Record<'light' | 'medium' | 'heavy', [number, number]> = { light: [60, 60], medium: [300, 60], heavy: [600, 300] };
 
 function armor(
-  id: string, name: string, en: string, aliases: string[], subtype: Exclude<ArmorSubtype, 'shield'>, value: number, weight: number,
+  id: string, name: string, en: string, aliases: string[], subtype: 'light' | 'medium' | 'heavy', value: number, weight: number,
   ac_base: number, stealth_disadvantage: boolean, str_min?: number,
 ): SrdItemDef {
   const dex_max = subtype === 'light' ? null : subtype === 'medium' ? 2 : 0;
+  const [don_s, doff_s] = DON[subtype];
   return def(id, name, en, aliases, 'armor', value, weight, {
     subtype, size: 'large', equip_slot: 'body',
-    armor: { ac_base, dex_max, stealth_disadvantage },
-    ...(str_min ? { str_min } : {}),
-    don_doff_s: DON[subtype],
+    armor: { ac_base, dex_max, stealth_disadvantage, ...(str_min ? { str_min } : {}), don_s, doff_s },
   });
 }
 
@@ -229,7 +188,7 @@ const ARMORS: SrdItemDef[] = [
   armor('it_cota_malla', 'cota de malla', 'Chain mail', ['malla'], 'heavy', gp(75), 55, 16, true, 13),
   armor('it_armadura_bandas', 'armadura de bandas', 'Splint armor', ['bandas', 'tablillas'], 'heavy', gp(200), 60, 17, true, 15),
   armor('it_armadura_placas', 'armadura de placas', 'Plate armor', ['placas', 'armadura completa'], 'heavy', gp(1500), 65, 18, true, 15),
-  def('it_escudo', 'escudo', 'Shield', ['rodela', 'broquel'], 'armor', gp(10), 6, { subtype: 'shield', size: 'medium', shield_bonus: 2, don_doff_s: DON.shield }),
+  def('it_escudo', 'escudo', 'Shield', ['rodela', 'broquel'], 'armor', gp(10), 6, { subtype: 'shield', size: 'medium', shield_bonus: 2 }),
 ];
 
 // ---------------------------------------------------------------------------
@@ -237,7 +196,7 @@ const ARMORS: SrdItemDef[] = [
 // ---------------------------------------------------------------------------
 
 const ammo = (id: string, name: string, en: string, aliases: string[], ammo_type: AmmoType, packValue: number, packWeight: number, pack: number): SrdItemDef =>
-  def(id, name, en, aliases, 'ammunition', packValue / pack, packWeight / pack, { subtype: ammo_type, ammo_type, size: 'tiny' });
+  def(id, name, en, aliases, 'ammunition', packValue / pack, packWeight / pack, { subtype: ammo_type, size: 'tiny' });
 
 const AMMUNITION: SrdItemDef[] = [
   ammo('it_flechas', 'flecha', 'Arrow', ['flechas', 'arrows'], 'arrow', gp(1), 1, 20),
@@ -250,8 +209,12 @@ const AMMUNITION: SrdItemDef[] = [
 // Equipo de aventurero
 // ---------------------------------------------------------------------------
 
-const g = (id: string, name: string, en: string, aliases: string[], value: number, weight: number, extra: Extra = {}) =>
-  def(id, name, en, aliases, 'gear', value, weight, extra);
+/** Equipo: `gear` con su subtipo (contenedor, luz, ropa o de aventurero) salvo que la entrada diga otro tipo. */
+function g(id: string, name: string, en: string, aliases: string[], value: number, weight: number, extra: Extra & { type?: ItemType } = {}): SrdItemDef {
+  const { type = 'gear', ...rest } = extra;
+  const subtype: ItemSubtype | undefined = rest.subtype ?? (type !== 'gear' ? undefined : rest.container ? 'container' : rest.light_source ? 'light' : 'adventuring');
+  return def(id, name, en, aliases, type, value, weight, { ...rest, ...(subtype ? { subtype } : {}) });
+}
 const box = (slots: number, max_weight_lb: number, max_size: ItemSize) => ({ container: { slots, max_weight_lb, max_size } });
 
 const GEAR: SrdItemDef[] = [
@@ -277,18 +240,18 @@ const GEAR: SrdItemDef[] = [
   g('it_cadena', 'cadena', 'Chain (10 feet)', ['cadenas'], gp(5), 10),
   g('it_tiza', 'tiza', 'Chalk (1 piece)', ['tizas'], cp(1), 0, { size: 'tiny' }),
   g('it_arcon', 'arcón', 'Chest', ['cofre', 'baúl', 'arca', 'arcon'], gp(5), 25, { size: 'large', ...box(30, 300, 'large') }),
-  g('it_equipo_escalada', 'equipo de escalada', 'Climber\'s kit', ['escalada', 'climbers kit'], gp(25), 12, { type: 'tool' }),
-  g('it_ropa_comun', 'ropa común', 'Clothes, common', ['ropa', 'ropas'], sp(5), 3),
-  g('it_disfraz', 'disfraz', 'Clothes, costume', ['ropa de disfraz', 'costume'], gp(5), 4),
-  g('it_ropa_fina', 'ropa fina', 'Clothes, fine', ['ropas finas', 'traje'], gp(15), 6),
-  g('it_ropa_viaje', 'ropa de viaje', 'Clothes, traveler\'s', ['ropa de camino'], gp(2), 4),
+  g('it_equipo_escalada', 'equipo de escalada', 'Climber\'s kit', ['escalada', 'climbers kit'], gp(25), 12, { type: 'tool', subtype: 'kit' }),
+  g('it_ropa_comun', 'ropa común', 'Clothes, common', ['ropa', 'ropas'], sp(5), 3, { subtype: 'clothes' }),
+  g('it_disfraz', 'disfraz', 'Clothes, costume', ['ropa de disfraz', 'costume'], gp(5), 4, { subtype: 'clothes' }),
+  g('it_ropa_fina', 'ropa fina', 'Clothes, fine', ['ropas finas', 'traje'], gp(15), 6, { subtype: 'clothes' }),
+  g('it_ropa_viaje', 'ropa de viaje', 'Clothes, traveler\'s', ['ropa de camino'], gp(2), 4, { subtype: 'clothes' }),
   g('it_palanca', 'palanca', 'Crowbar', ['pata de cabra', 'alzaprima'], gp(2), 5, { type: 'tool', size: 'medium' }),
   g('it_aparejo_pesca', 'aparejo de pesca', 'Fishing tackle', ['caña de pescar', 'caña', 'sedal'], gp(1), 4, { type: 'tool' }),
   g('it_petaca', 'petaca', 'Flask or tankard', ['jarra de metal', 'tankard', 'flask'], cp(2), 1),
   g('it_garfio', 'garfio de escalada', 'Grappling hook', ['garfio', 'gancho'], gp(2), 4, { type: 'tool' }),
   g('it_martillo', 'martillo de herramientas', 'Hammer', ['martillo de carpintero'], gp(1), 3, { type: 'tool' }),
   g('it_almadena', 'almádena', 'Hammer, sledge', ['marro', 'almadena'], gp(2), 10, { type: 'tool' }),
-  g('it_kit_sanador', 'kit de sanador', 'Healer\'s kit', ['botiquín', 'botiquin', 'healers kit'], gp(5), 3, { type: 'tool', description: 'Diez usos: estabiliza a quien está a 0 PG sin tirar Medicina.' }),
+  g('it_kit_sanador', 'kit de sanador', 'Healer\'s kit', ['botiquín', 'botiquin', 'healers kit'], gp(5), 3, { type: 'tool', subtype: 'kit', description: 'Diez usos: estabiliza a quien está a 0 PG sin tirar Medicina.' }),
   g('it_agua_bendita', 'agua bendita', 'Holy water (flask)', ['agua santa'], gp(25), 1, { type: 'consumable', size: 'small', description: 'Se lanza (20 pies): 2d6 radiante a infernales y muertos vivientes.' }),
   g('it_reloj_arena', 'reloj de arena', 'Hourglass', [], gp(25), 1),
   g('it_cepo', 'cepo de caza', 'Hunting trap', ['cepo', 'trampa'], gp(5), 25, { type: 'tool' }),
@@ -304,19 +267,19 @@ const GEAR: SrdItemDef[] = [
   g('it_grilletes', 'grilletes', 'Manacles', ['esposas', 'cadenas de preso'], gp(2), 6),
   g('it_escudilla', 'escudilla de campaña', 'Mess kit', ['escudilla', 'plato'], sp(2), 1),
   g('it_espejo', 'espejo de acero', 'Mirror, steel', ['espejo'], gp(5), 0.5),
-  g('it_aceite', 'frasco de aceite', 'Oil (flask)', ['aceite'], sp(1), 1, { type: 'consumable', description: 'Combustible para la lámpara (6 horas) o, derramado y encendido, 5 de fuego.' }),
+  g('it_aceite', 'frasco de aceite', 'Oil (flask)', ['aceite'], sp(1), 1, { type: 'consumable', subtype: 'oil', description: 'Combustible para la lámpara (6 horas) o, derramado y encendido, 5 de fuego.' }),
   g('it_papel', 'hoja de papel', 'Paper (one sheet)', ['papel'], sp(2), 0, { size: 'tiny' }),
   g('it_pergamino_blanco', 'hoja de pergamino', 'Parchment (one sheet)', ['pergamino en blanco', 'vitela'], sp(1), 0, { size: 'tiny' }),
   g('it_perfume', 'frasco de perfume', 'Perfume (vial)', ['perfume'], gp(5), 0, { size: 'tiny' }),
   g('it_pico_minero', 'pico de minero', 'Pick, miner\'s', ['piqueta'], gp(2), 10, { type: 'tool' }),
   g('it_piton', 'pitón de escalada', 'Piton', ['pitones', 'clavija'], cp(5), 0.25),
-  g('it_veneno', 'vial de veneno', 'Poison, basic (vial)', ['veneno'], gp(100), 0, { type: 'consumable', size: 'tiny', description: 'Untado en un arma (una acción): 1d4 de veneno al golpear, durante 1 minuto.' }),
+  g('it_veneno', 'vial de veneno', 'Poison, basic (vial)', ['veneno'], gp(100), 0, { type: 'consumable', subtype: 'poison', size: 'tiny', description: 'Untado en un arma (una acción): 1d4 de veneno al golpear, durante 1 minuto.' }),
   g('it_pertiga', 'pértiga', 'Pole (10-foot)', ['palo largo', 'pertiga'], cp(5), 7, { size: 'bulky' }),
   g('it_olla', 'olla de hierro', 'Pot, iron', ['olla', 'puchero'], gp(2), 10),
   g('it_bolsa', 'bolsa', 'Pouch', ['bolsita', 'faltriquera'], sp(5), 1, { equip_slot: 'belt', ...box(6, 6, 'tiny') }),
   g('it_carcaj', 'carcaj', 'Quiver', ['aljaba'], gp(1), 1, { equip_slot: 'belt', ...box(1, 2, 'tiny') }),
   g('it_ariete', 'ariete portátil', 'Ram, portable', ['ariete'], gp(4), 35, { type: 'tool' }),
-  g('it_tunica', 'túnica', 'Robes', ['hábito', 'tunica'], gp(1), 4),
+  g('it_tunica', 'túnica', 'Robes', ['hábito', 'tunica'], gp(1), 4, { subtype: 'clothes' }),
   g('it_cuerda', 'cuerda de cáñamo', 'Rope, hempen (50 feet)', ['cuerda', 'soga'], gp(1), 10, { type: 'tool' }),
   g('it_cuerda_seda', 'cuerda de seda', 'Rope, silk (50 feet)', [], gp(10), 5, { type: 'tool' }),
   g('it_saco', 'saco', 'Sack', ['costal', 'talega'], cp(1), 0.5, { size: 'small', ...box(12, 30, 'medium') }),
@@ -341,11 +304,12 @@ const GEAR: SrdItemDef[] = [
 // Focos (arcanos, druídicos, símbolos sagrados) y bolsa de componentes
 // ---------------------------------------------------------------------------
 
-const focus = (id: string, name: string, en: string, aliases: string[], subtype: 'arcane' | 'druidic' | 'holy' | 'component', value: number, weight: number, extra: Extra = {}) =>
-  def(id, name, en, aliases, 'focus', value, weight, { subtype, ...extra });
+/** Foco de lanzamiento; la bolsa de componentes es foco sin subtipo (sirve a cualquier lanzador que use componentes). */
+const focus = (id: string, name: string, en: string, aliases: string[], subtype: 'arcane' | 'druidic' | 'holy' | null, value: number, weight: number, extra: Extra = {}) =>
+  def(id, name, en, aliases, 'focus', value, weight, { ...(subtype ? { subtype } : {}), ...extra });
 
 const FOCI: SrdItemDef[] = [
-  focus('it_bolsa_componentes', 'bolsa de componentes', 'Component pouch', ['componentes'], 'component', gp(25), 2),
+  focus('it_bolsa_componentes', 'bolsa de componentes', 'Component pouch', ['componentes'], null, gp(25), 2),
   focus('it_cristal_arcano', 'cristal arcano', 'Crystal', ['cristal'], 'arcane', gp(10), 1),
   focus('it_orbe', 'orbe', 'Orb', ['esfera'], 'arcane', gp(20), 3),
   focus('it_cetro_arcano', 'cetro arcano', 'Rod', ['cetro'], 'arcane', gp(10), 2),
@@ -411,7 +375,7 @@ const TOOLS: SrdItemDef[] = [
 
 const TACK: SrdItemDef[] = [
   g('it_bocado_brida', 'bocado y brida', 'Bit and bridle', ['brida', 'riendas'], gp(2), 1),
-  g('it_pienso', 'ración de pienso', 'Feed (per day)', ['pienso', 'forraje', 'avena'], cp(5), 10, { type: 'consumable' }),
+  g('it_pienso', 'ración de pienso', 'Feed (per day)', ['pienso', 'forraje', 'avena'], cp(5), 10, { type: 'consumable', subtype: 'food' }),
   g('it_silla_exotica', 'silla de montar exótica', 'Saddle, exotic', [], gp(60), 40),
   g('it_silla_militar', 'silla de montar militar', 'Saddle, military', [], gp(20), 30),
   g('it_albarda', 'albarda', 'Saddle, pack', ['silla de carga'], gp(5), 15),
@@ -442,7 +406,7 @@ const FOOD: SrdItemDef[] = [
 // ---------------------------------------------------------------------------
 
 const trade = (id: string, name: string, en: string, aliases: string[], value: number, weight: number) =>
-  def(id, name, en, aliases, 'treasure', value, weight, { subtype: 'trade', type: 'misc' });
+  def(id, name, en, aliases, 'treasure', value, weight, { subtype: 'trade' });
 
 const TRADE_GOODS: SrdItemDef[] = [
   trade('it_trigo', 'libra de trigo', 'Wheat (1 lb)', ['trigo', 'grano'], cp(1), 1),
@@ -468,21 +432,28 @@ const TRADE_GOODS: SrdItemDef[] = [
 // Objetos mágicos: un primer lote pequeño
 // ---------------------------------------------------------------------------
 
+type PricedRarity = Exclude<ItemRarity, 'artifact'>;
+
 /** Valor de la casa por rareza, en cobre (el SRD no pone precio a la magia). Lo que se gasta, la mitad. */
-export const MAGIC_VALUE: Record<Exclude<Rarity, 'artifact'>, number> = {
+export const MAGIC_VALUE: Record<PricedRarity, number> = {
   common: gp(50), uncommon: gp(250), rare: gp(2500), very_rare: gp(25000), legendary: gp(100000),
 };
-const magicValue = (r: Exclude<Rarity, 'artifact'>, spent = false) => (spent ? MAGIC_VALUE[r] / 2 : MAGIC_VALUE[r]);
+const magicValue = (r: PricedRarity, spent = false) => (spent ? MAGIC_VALUE[r] / 2 : MAGIC_VALUE[r]);
+
+/** Cómo se ve una poción mágica sin identificar. */
+const RED_POTION = { name: 'poción roja', description: 'Un líquido rojo que brilla al agitarlo.' };
 
 const POTIONS: SrdItemDef[] = [
-  def('it_pocion', 'poción de curación', 'Potion of healing', ['poción', 'pocion', 'potion'], 'consumable', gp(50), 0.5, { subtype: 'potion', size: 'small', heals: '2d4+2', rarity: 'common' }),
-  def('it_pocion_mayor', 'poción de curación mayor', 'Potion of greater healing', ['poción mayor', 'pocion mayor'], 'consumable', magicValue('uncommon', true), 0.5, { subtype: 'potion', size: 'small', heals: '4d4+4', rarity: 'uncommon' }),
-  def('it_pocion_superior', 'poción de curación superior', 'Potion of superior healing', ['poción superior', 'pocion superior'], 'consumable', magicValue('rare', true), 0.5, { subtype: 'potion', size: 'small', heals: '8d4+8', rarity: 'rare' }),
-  def('it_pocion_suprema', 'poción de curación suprema', 'Potion of supreme healing', ['poción suprema', 'pocion suprema'], 'consumable', magicValue('very_rare', true), 0.5, { subtype: 'potion', size: 'small', heals: '10d4+20', rarity: 'very_rare' }),
+  // La de curación está en la lista de equipo del SRD (50 po): se compra en cualquier botica y se reconoce a la vista.
+  // Sin rareza a propósito: con ella sería mágica y saldría «sin identificar» hasta un descanso (bloque A).
+  def('it_pocion', 'poción de curación', 'Potion of healing', ['poción', 'pocion', 'potion'], 'consumable', gp(50), 0.5, { subtype: 'potion', size: 'small', heals: '2d4+2' }),
+  def('it_pocion_mayor', 'poción de curación mayor', 'Potion of greater healing', ['poción mayor', 'pocion mayor'], 'consumable', magicValue('uncommon', true), 0.5, { subtype: 'potion', size: 'small', heals: '4d4+4', rarity: 'uncommon', unidentified: RED_POTION }),
+  def('it_pocion_superior', 'poción de curación superior', 'Potion of superior healing', ['poción superior', 'pocion superior'], 'consumable', magicValue('rare', true), 0.5, { subtype: 'potion', size: 'small', heals: '8d4+8', rarity: 'rare', unidentified: RED_POTION }),
+  def('it_pocion_suprema', 'poción de curación suprema', 'Potion of supreme healing', ['poción suprema', 'pocion suprema'], 'consumable', magicValue('very_rare', true), 0.5, { subtype: 'potion', size: 'small', heals: '10d4+20', rarity: 'very_rare', unidentified: RED_POTION }),
 ];
 
 /** Pergamino de conjuro (SRD): rareza, CD y bono de ataque por nivel del conjuro. */
-const SCROLL_TABLE: { level: number; rarity: Exclude<Rarity, 'artifact'>; save_dc: number; attack_bonus: number }[] = [
+const SCROLL_TABLE: { level: number; rarity: PricedRarity; save_dc: number; attack_bonus: number }[] = [
   { level: 0, rarity: 'common', save_dc: 13, attack_bonus: 5 },
   { level: 1, rarity: 'common', save_dc: 13, attack_bonus: 5 },
   { level: 2, rarity: 'uncommon', save_dc: 13, attack_bonus: 5 },
@@ -495,6 +466,7 @@ const SCROLL_TABLE: { level: number; rarity: Exclude<Rarity, 'artifact'>; save_d
   { level: 9, rarity: 'legendary', save_dc: 19, attack_bonus: 11 },
 ];
 
+/** Uno por nivel: el conjuro concreto lo dice el ejemplar (`state.spell_id`), no la definición. */
 const SCROLLS: SrdItemDef[] = SCROLL_TABLE.map((s) => def(
   `it_pergamino_${s.level}`,
   s.level === 0 ? 'pergamino de truco' : `pergamino de conjuro de nivel ${s.level}`,
@@ -503,65 +475,78 @@ const SCROLLS: SrdItemDef[] = SCROLL_TABLE.map((s) => def(
   'scroll', magicValue(s.rarity, true), 0, {
     size: 'tiny', rarity: s.rarity,
     spell: { level: s.level, save_dc: s.save_dc, attack_bonus: s.attack_bonus },
+    unidentified: { name: 'pergamino escrito', description: 'Un pergamino enrollado, con letra apretada y un sello de cera.' },
     description: 'Se lee para lanzar el conjuro escrito (el del ejemplar) sin componentes; se gasta. Si el conjuro es de nivel mayor del que puedes lanzar, prueba de tu característica de lanzamiento (CD 10 + nivel).',
   },
 ));
 
-const PLUS_RARITY: Record<1 | 2 | 3, { weapon: Exclude<Rarity, 'artifact'>; armor: Exclude<Rarity, 'artifact'>; shield: Exclude<Rarity, 'artifact'> }> = {
+const PLUS_RARITY: Record<1 | 2 | 3, Record<'weapon' | 'armor' | 'shield', PricedRarity>> = {
   1: { weapon: 'uncommon', armor: 'rare', shield: 'uncommon' },
   2: { weapon: 'rare', armor: 'very_rare', shield: 'rare' },
   3: { weapon: 'very_rare', armor: 'legendary', shield: 'very_rare' },
 };
 
-/** Una variante mágica +N de un objeto del catálogo: mismo bloque, con su bono. Id `<base>_<N>`. */
+/**
+ * Una variante mágica +N de un objeto del catálogo: el mismo bloque con su bono (el +N lo suma el motor, bloque C;
+ * la CA base y el `shield_bonus` no cambian). Id `<base>_<N>`, `base_id` la base; sin identificar se ve como la base.
+ */
 function plus(base: SrdItemDef, n: 1 | 2 | 3): SrdItemDef {
-  const kind = base.category === 'armor' ? (base.subtype === 'shield' ? 'shield' : 'armor') : 'weapon';
+  const kind = base.type === 'armor' ? (base.subtype === 'shield' ? 'shield' : 'armor') : 'weapon';
   const rarity = PLUS_RARITY[n][kind];
-  const spent = base.category === 'ammunition';
-  const value = spent ? magicValue(rarity, true) / 10 : base.value + magicValue(rarity);
+  const value = base.type === 'ammunition' ? magicValue(rarity, true) / 10 : base.value + magicValue(rarity);
   const bonus = kind === 'weapon' ? { attack: n, damage: n } : { ac: n };
   return {
     ...structuredClone(base),
     id: `${base.id}_${n}`,
+    base_id: base.id,
     name: `${base.name} +${n}`,
     en: `${base.en} +${n}`,
-    aliases: [`${base.en.toLowerCase()} +${n}`, ...base.aliases.slice(1).map((a) => `${a} +${n}`), `${base.name} mágica`, `${base.name} mágico`],
+    aliases: [`${base.en.toLowerCase()} +${n}`, ...base.aliases.slice(1).map((a) => `${a} +${n}`)],
     value, rarity, bonus,
+    unidentified: { name: base.name },
   };
 }
 
 const byId = (list: SrdItemDef[], id: string) => list.find((d) => d.id === id)!;
+const PLUS_N = [1, 2, 3] as const;
 
 const MAGIC_ARMS: SrdItemDef[] = [
-  ...['it_daga', 'it_espada_larga', 'it_maza', 'it_arco_largo'].flatMap((id) => ([1, 2, 3] as const).map((n) => plus(byId(WEAPONS, id), n))),
-  ...['it_armadura_cuero', 'it_cota_malla', 'it_escudo'].flatMap((id) => ([1, 2, 3] as const).map((n) => plus(byId(ARMORS, id), n))),
-  ...['it_flechas', 'it_virotes'].flatMap((id) => ([1, 2, 3] as const).map((n) => plus(byId(AMMUNITION, id), n))),
+  ...['it_daga', 'it_espada_larga', 'it_maza', 'it_arco_largo'].flatMap((id) => PLUS_N.map((n) => plus(byId(WEAPONS, id), n))),
+  ...['it_armadura_cuero', 'it_cota_malla', 'it_escudo'].flatMap((id) => PLUS_N.map((n) => plus(byId(ARMORS, id), n))),
+  ...['it_flechas', 'it_virotes'].flatMap((id) => PLUS_N.map((n) => plus(byId(AMMUNITION, id), n))),
 ];
 
 const WONDROUS: SrdItemDef[] = [
   def('it_anillo_proteccion', 'anillo de protección', 'Ring of protection', ['anillo'], 'ring', magicValue('rare'), 0, {
-    size: 'tiny', equip_slot: 'ring1', rarity: 'rare', attunement: true, bonus: { ac: 1, saves: 1 },
+    size: 'tiny', equip_slot: 'ring1', rarity: 'rare', attunement: true, bonus: { ac: 1 }, effects: [{ kind: 'save_bonus', value: 1 }],
+    unidentified: { name: 'anillo de plata', description: 'Un aro de plata lisa, sin piedra.' },
     description: '+1 a la CA y a las tiradas de salvación mientras lo llevas sintonizado.',
   }),
   def('it_capa_proteccion', 'capa de protección', 'Cloak of protection', ['capa'], 'wondrous', magicValue('uncommon'), 1, {
-    equip_slot: 'neck', rarity: 'uncommon', attunement: true, bonus: { ac: 1, saves: 1 },
+    equip_slot: 'neck', rarity: 'uncommon', attunement: true, bonus: { ac: 1 }, effects: [{ kind: 'save_bonus', value: 1 }],
+    unidentified: { name: 'capa de lana', description: 'Una capa de lana gruesa, de buena hechura.' },
     description: '+1 a la CA y a las tiradas de salvación mientras la llevas sintonizada.',
   }),
   def('it_bolsa_contencion', 'bolsa de contención', 'Bag of holding', ['bolsa mágica'], 'wondrous', magicValue('uncommon'), 15, {
     size: 'medium', rarity: 'uncommon', container: { slots: 60, max_weight_lb: 500, max_size: 'medium' },
+    unidentified: { name: 'bolsa de tela', description: 'Una bolsa de tela de unos dos pies, más pesada de lo que parece.' },
     description: 'Por dentro es mucho más grande: hasta 500 libras y 64 pies cúbicos, y siempre pesa 15. Rota o del revés, lo de dentro se pierde en el plano astral.',
   }),
   def('it_varita_proyectiles', 'varita de proyectiles mágicos', 'Wand of magic missiles', ['varita'], 'wand', magicValue('uncommon'), 1, {
-    size: 'small', rarity: 'uncommon', charges: { max: 7, recharge: '1d6+1', at: 'dawn' },
+    size: 'small', rarity: 'uncommon', charges: { max: 7, recharge: { amount: '1d6+1', at: 'dawn' }, destroy_on_empty: true },
     spell: { level: 1, spell_id: 'magic_missile' },
+    unidentified: { name: 'varita de madera oscura' },
     description: 'Siete cargas: lanza proyectil mágico (1 carga por nivel del conjuro, hasta 3). Recupera 1d6+1 al alba; si se gasta la última, 1d20 y con un 1 se deshace en cenizas.',
   }),
   def('it_botas_elficas', 'botas élficas', 'Boots of elvenkind', ['botas', 'botas elficas'], 'wondrous', magicValue('uncommon'), 1, {
-    equip_slot: 'feet', rarity: 'uncommon', effects: [{ advantage: 'stealth' }],
+    equip_slot: 'feet', rarity: 'uncommon', effects: [{ kind: 'advantage', on: 'stealth' }, { kind: 'note', text: 'Los pasos no hacen ruido.' }],
+    unidentified: { name: 'botas de cuero blando' },
     description: 'Tus pasos no hacen ruido: ventaja en Sigilo para moverte en silencio.',
   }),
   def('it_capa_elfica', 'capa élfica', 'Cloak of elvenkind', ['capa', 'capa elfica'], 'wondrous', magicValue('uncommon'), 1, {
-    equip_slot: 'neck', rarity: 'uncommon', attunement: true, effects: [{ advantage: 'stealth' }, { disadvantage_to_notice: 'perception' }],
+    equip_slot: 'neck', rarity: 'uncommon', attunement: true,
+    effects: [{ kind: 'advantage', on: 'stealth' }, { kind: 'note', text: 'Con la capucha puesta, quien te busca con la vista tiene desventaja en Percepción.' }],
+    unidentified: { name: 'capa gris con capucha' },
     description: 'Con la capucha puesta, ventaja en Sigilo para esconderte, y quien te busca con la vista tiene desventaja.',
   }),
 ];
@@ -579,8 +564,8 @@ export const SRD_ITEMS: readonly SrdItemDef[] = [
 export const SRD_ITEM_IDS: ReadonlySet<string> = new Set(SRD_ITEMS.map((d) => d.id));
 
 /** Lo que se compra y se vende en cualquier pueblo: nada mágico ni de mercancía al por mayor. */
-export function isMundane(d: Pick<SrdItemDef, 'rarity'> & Partial<Pick<SrdItemDef, 'category'>>): boolean {
-  return !d.rarity || (d.rarity === 'common' && d.category !== 'scroll');
+export function isMundane(d: Pick<ItemDef, 'rarity'>): boolean {
+  return !d.rarity;
 }
 
 // ---------------------------------------------------------------------------
@@ -674,15 +659,19 @@ export const GENRE_NAMES: Readonly<Record<string, Partial<Record<Exclude<Catalog
   it_pocion_suprema: { scifi: ['nanorregenerador', ['nanos']], postapoc: ['suero de laboratorio', ['suero']] },
 };
 
-/** El nombre de un objeto del catálogo en un género (el del SRD si no hay variante). */
+/** El nombre de un objeto del catálogo en un género (el del SRD si no hay variante). Las +N, con el de su base. */
 function inGenre(d: SrdItemDef, genre: CatalogGenre): SrdItemDef {
-  const base = d.id.replace(/_[123]$/, '');
-  const n = d.id !== base ? Number(d.id.at(-1)) : 0;
+  const base = d.base_id ?? d.id;
   const v = genre === 'fantasy' ? undefined : GENRE_NAMES[base]?.[genre];
   if (!v) return structuredClone(d);
   const [name, aliases] = v;
-  const suffix = n ? ` +${n}` : '';
-  return { ...structuredClone(d), name: name + suffix, aliases: [d.aliases[0]!, ...aliases.map((a) => a + suffix)] };
+  const suffix = d.base_id ? d.name.slice(d.name.lastIndexOf(' ')) : '';
+  return {
+    ...structuredClone(d),
+    name: name + suffix,
+    aliases: [d.aliases[0]!, ...aliases.map((a) => a + suffix)],
+    ...(d.base_id && d.unidentified ? { unidentified: { ...d.unidentified, name } } : {}),
+  };
 }
 
 const BY_GENRE = new Map<CatalogGenre, readonly SrdItemDef[]>();

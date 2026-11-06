@@ -12,6 +12,7 @@ import { GENRE_NAMES, SRD_CATALOG_VERSION, SRD_ITEMS, SRD_MOUNTS, SRD_VEHICLES, 
 import { spellById } from '../src/data/srd/spells.js';
 import { makeSeed } from '../src/data/seed/demo.js';
 import { rollExpr } from '../src/engine/dice.js';
+import { ITEM_TYPES, itemDefErrors } from '../src/engine/items.js';
 import { Engine } from '../src/engine/engine.js';
 import type { ItemDef, WorldSnapshot } from '../src/engine/model.js';
 import { MemoryRepository } from '../src/persistence/memory.js';
@@ -99,36 +100,39 @@ const GEAR: [string, number, number][] = [
   ['Ale (mug)', 4, 1], ['Saddle, riding', 10 * GP, 25], ['Feed (per day)', 5, 10], ['Silk (1 sq. yd.)', 10 * GP, 1],
 ];
 
-const TYPES = new Set(['weapon', 'armor', 'consumable', 'tool', 'quest', 'treasure', 'misc', 'container']);
+const TYPES = new Set<string>(ITEM_TYPES);
 const SIZES = new Set(['tiny', 'small', 'medium', 'large', 'bulky']);
 
 describe('el catálogo SRD', () => {
   it('las 37 armas, con precio, peso, daño y propiedades del SRD', () => {
-    const weapons = SRD_ITEMS.filter((d) => d.category === 'weapon' && !d.rarity);
+    const weapons = SRD_ITEMS.filter((d) => d.type === 'weapon' && !d.rarity);
     expect(weapons).toHaveLength(37);
     const count = (s: string) => weapons.filter((d) => d.subtype === s).length;
     expect([count('simple_melee'), count('simple_ranged'), count('martial_melee'), count('martial_ranged')]).toEqual([10, 4, 18, 5]);
     for (const [name, value, weight, damage, type, props, range] of WEAPONS) {
       const d = en(name);
       expect({ value: d.value, weight: d.weight_lb, damage: d.weapon?.damage, type: d.weapon?.damage_type }, name).toEqual({ value, weight, damage, type });
-      expect([...(d.properties ?? [])].sort(), name).toEqual([...props].sort());
-      expect(d.range, name).toEqual(range);
+      expect([...(d.weapon!.properties ?? [])].sort(), name).toEqual([...props].sort());
+      expect(d.weapon!.range, name).toEqual(range);
       // Lo que el motor ya lee (sutil, a distancia, a dos manos) sale de las propiedades.
       expect(!!d.weapon!.finesse, name).toBe(props.includes('finesse'));
       expect(!!d.weapon!.two_handed, name).toBe(props.includes('two_handed'));
       expect(!!d.weapon!.ranged, name).toBe(d.subtype!.endsWith('ranged'));
-      if (props.includes('versatile')) expect(d.versatile_damage, name).toMatch(/^1d(8|10)$/);
-      if (props.includes('ammunition')) expect(d.ammo_type, name).toBeTruthy();
+      if (props.includes('versatile')) expect(d.weapon!.versatile_damage, name).toMatch(/^1d(8|10)$/);
+      if (props.includes('ammunition')) expect(d.weapon!.ammo_type, name).toBeTruthy();
     }
   });
 
   it('las 12 armaduras y el escudo, con CA, tope de DES, Sigilo y fuerza del SRD', () => {
-    const armors = SRD_ITEMS.filter((d) => d.category === 'armor' && !d.rarity);
+    const armors = SRD_ITEMS.filter((d) => d.type === 'armor' && !d.rarity);
     expect(armors).toHaveLength(13);
     for (const [name, value, weight, ac, dexMax, stealth, strMin] of ARMORS) {
       const d = en(name);
-      expect({ value: d.value, weight: d.weight_lb, armor: d.armor, str: d.str_min, slot: d.equip_slot }, name)
-        .toEqual({ value, weight, armor: { ac_base: ac, dex_max: dexMax, stealth_disadvantage: stealth }, str: strMin, slot: 'body' });
+      expect({ value: d.value, weight: d.weight_lb, ac: d.armor?.ac_base, dex: d.armor?.dex_max, stealth: d.armor?.stealth_disadvantage, str: d.armor?.str_min, slot: d.equip_slot }, name)
+        .toEqual({ value, weight, ac, dex: dexMax, stealth, str: strMin, slot: 'body' });
+      // Ponerse y quitarse: 1, 5 y 10 minutos; quitarse, 1, 1 y 5.
+      const don = { light: [60, 60], medium: [300, 60], heavy: [600, 300] }[d.subtype as 'light'];
+      expect([d.armor?.don_s, d.armor?.doff_s], name).toEqual(don);
     }
     const shield = en('Shield');
     expect({ value: shield.value, weight: shield.weight_lb, bonus: shield.shield_bonus }).toEqual({ value: 10 * GP, weight: 6, bonus: 2 });
@@ -140,14 +144,15 @@ describe('el catálogo SRD', () => {
     expect(en('Sling bullet').value * 20).toBeCloseTo(4);
     expect(en('Blowgun needle').value * 50).toBeCloseTo(100);
     // Cada arma de munición tiene la suya en el catálogo.
-    const ammoTypes = new Set(SRD_ITEMS.filter((d) => d.category === 'ammunition').map((d) => d.ammo_type));
-    for (const w of SRD_ITEMS.filter((d) => d.ammo_type && d.category === 'weapon')) expect(ammoTypes.has(w.ammo_type), w.en).toBe(true);
+    const ammoTypes = new Set<string | undefined>(SRD_ITEMS.filter((d) => d.type === 'ammunition').map((d) => d.subtype));
+    for (const w of SRD_ITEMS.filter((d) => d.weapon?.ammo_type)) expect(ammoTypes.has(w.weapon!.ammo_type), w.en).toBe(true);
   });
 
   it('el equipo, las herramientas, la comida y las mercancías, a precio y peso del SRD', () => {
     for (const [name, value, weight] of GEAR) expect([en(name).value, en(name).weight_lb], name).toEqual([value, weight]);
-    expect(SRD_ITEMS.filter((d) => d.category === 'gear').length).toBeGreaterThanOrEqual(80);
-    expect(SRD_ITEMS.filter((d) => d.category === 'tool').length).toBe(35);
+    expect(SRD_ITEMS.filter((d) => d.type === 'gear').length).toBeGreaterThanOrEqual(60);
+    const tools = (sub: string) => SRD_ITEMS.filter((d) => d.type === 'tool' && d.subtype === sub).length;
+    expect([tools('artisan'), tools('gaming'), tools('instrument')]).toEqual([17, 2, 10]);
     expect(SRD_ITEMS.filter((d) => d.subtype === 'trade')).toHaveLength(17);
     expect(SRD_MOUNTS).toHaveLength(8);
     expect(SRD_VEHICLES).toHaveLength(11);
@@ -156,21 +161,24 @@ describe('el catálogo SRD', () => {
   it('el lote mágico: pociones, pergaminos por nivel, +1/+2/+3, anillo, capas, bolsa, varita y botas', () => {
     expect(['Potion of healing', 'Potion of greater healing', 'Potion of superior healing', 'Potion of supreme healing'].map((n) => en(n).heals))
       .toEqual(['2d4+2', '4d4+4', '8d4+8', '10d4+20']);
-    const scrolls = SRD_ITEMS.filter((d) => d.category === 'scroll');
+    const scrolls = SRD_ITEMS.filter((d) => d.type === 'scroll');
     expect(scrolls.map((d) => d.spell!.level)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(scrolls.map((d) => d.spell!.save_dc)).toEqual([13, 13, 13, 15, 15, 17, 17, 18, 18, 19]);
     expect(scrolls.map((d) => d.spell!.attack_bonus)).toEqual([5, 5, 5, 7, 7, 9, 9, 10, 10, 11]);
-    expect(en('Longsword +2')).toMatchObject({ rarity: 'rare', bonus: { attack: 2, damage: 2 }, weapon: { damage: '1d8' } });
-    expect(en('Chain mail +1')).toMatchObject({ rarity: 'rare', bonus: { ac: 1 }, armor: { ac_base: 16 } });
+    expect(en('Longsword +2')).toMatchObject({ rarity: 'rare', bonus: { attack: 2, damage: 2 }, weapon: { damage: '1d8' }, base_id: 'it_espada_larga', unidentified: { name: 'espada larga' } });
+    expect(en('Chain mail +1')).toMatchObject({ rarity: 'rare', bonus: { ac: 1 }, armor: { ac_base: 16 }, base_id: 'it_cota_malla' });
     expect(en('Shield +3')).toMatchObject({ rarity: 'very_rare', bonus: { ac: 3 }, shield_bonus: 2 });
     expect(en('Arrow +1')).toMatchObject({ rarity: 'uncommon', bonus: { attack: 1, damage: 1 } });
-    expect(en('Ring of protection')).toMatchObject({ rarity: 'rare', attunement: true, bonus: { ac: 1, saves: 1 } });
-    expect(en('Cloak of protection')).toMatchObject({ rarity: 'uncommon', attunement: true, bonus: { ac: 1, saves: 1 } });
+    expect(en('Ring of protection')).toMatchObject({ rarity: 'rare', attunement: true, bonus: { ac: 1 }, effects: [{ kind: 'save_bonus', value: 1 }] });
+    expect(en('Cloak of protection')).toMatchObject({ rarity: 'uncommon', attunement: true, bonus: { ac: 1 }, effects: [{ kind: 'save_bonus', value: 1 }] });
     expect(en('Bag of holding')).toMatchObject({ weight_lb: 15, container: { max_weight_lb: 500 } });
-    expect(en('Wand of magic missiles')).toMatchObject({ charges: { max: 7, recharge: '1d6+1', at: 'dawn' }, spell: { spell_id: 'magic_missile' } });
+    expect(en('Wand of magic missiles')).toMatchObject({ charges: { max: 7, recharge: { amount: '1d6+1', at: 'dawn' }, destroy_on_empty: true }, spell: { spell_id: 'magic_missile' } });
     expect(spellById(en('Wand of magic missiles').spell!.spell_id!)).toBeTruthy();
     expect(en('Boots of elvenkind').attunement).toBeUndefined();
     expect(en('Cloak of elvenkind').attunement).toBe(true);
+    expect(en('Boots of elvenkind').effects).toContainEqual({ kind: 'advantage', on: 'stealth' });
+    // La poción de curación se compra y se reconoce: sin rareza (no sale «sin identificar»).
+    expect(en('Potion of healing').rarity).toBeUndefined();
   });
 
   it('todas las definiciones validan, en los tres géneros', () => {
@@ -182,6 +190,8 @@ describe('el catálogo SRD', () => {
       expect(names.filter((n, i) => names.indexOf(n) !== i), `${genre}: nombres repetidos`).toEqual([]);
       for (const d of list as (ItemDef & Partial<SrdItemDef>)[]) {
         const tag = `${genre} ${d.id}`;
+        // La validación del modelo (bloque A): subtipos, propiedades, alcance, munición, magia con rareza, conjuros.
+        expect(itemDefErrors(d, (id) => !!spellById(id)), tag).toEqual([]);
         expect(d.id, tag).toMatch(/^it_[a-z0-9_]+$/);
         expect(d.name.trim(), tag).not.toBe('');
         expect(d.name, tag).toBe(d.name.trim());
@@ -191,15 +201,15 @@ describe('el catálogo SRD', () => {
         expect(Number.isFinite(d.weight_lb) && d.weight_lb >= 0, tag).toBe(true);
         expect(d.aliases.every((a) => a.trim() !== ''), tag).toBe(true);
         if (d.weapon) expect(() => rollExpr(d.weapon!.damage), tag).not.toThrow();
-        if (d.versatile_damage) expect(() => rollExpr(d.versatile_damage!), tag).not.toThrow();
+        if (d.weapon?.versatile_damage) expect(() => rollExpr(d.weapon!.versatile_damage!), tag).not.toThrow();
         if (d.heals) expect(() => rollExpr(d.heals!), tag).not.toThrow();
-        if (d.range) expect(d.range[0] <= d.range[1], tag).toBe(true);
         if (d.container) expect(d.container.slots > 0 && d.container.max_weight_lb > 0, tag).toBe(true);
         if (d.type === 'armor' && !d.shield_bonus) expect(d.armor, tag).toBeTruthy();
         if (d.origin === 'srd') {
           // El nombre SRD en inglés va de primer alias (el máster y el jugador lo buscan así).
           expect(d.aliases[0], tag).toBe(d.en!.toLowerCase());
-          if (d.category === 'scroll' || d.category === 'wand' || d.category === 'ring' || d.category === 'wondrous' || d.bonus) expect(d.rarity, tag).toBeTruthy();
+          if (['scroll', 'wand', 'ring', 'wondrous'].includes(d.type) || d.bonus) expect(d.rarity, tag).toBeTruthy();
+          if (d.rarity && d.rarity !== 'common') expect(d.unidentified?.name, tag).toBeTruthy();
         }
       }
     }
@@ -212,7 +222,7 @@ describe('el catálogo SRD', () => {
       'it_libro_conjuros', 'it_bolsa_componentes', 'it_simbolo_sagrado', 'it_laud', 'it_noche_posada', 'it_llave_cuarto'];
     const ids = new Set(CATALOG.map((d) => d.id));
     for (const id of old) expect(ids.has(id), id).toBe(true);
-    for (const d of TRADE_ITEMS) expect((d as Partial<SrdItemDef>).rarity ?? 'common', d.id).toBe('common');
+    for (const d of TRADE_ITEMS) expect(d.rarity, d.id).toBeUndefined();
     // Las cosas de la casa no pisan ids del SRD.
     const srd = new Set(SRD_ITEMS.map((d) => d.id));
     for (const d of COMMON_ITEMS) expect(srd.has(d.id), d.id).toBe(false);
@@ -226,7 +236,7 @@ describe('el catálogo SRD', () => {
     expect(scifi.name).toBe('pistola de rayos');
     expect(scifi.weapon).toEqual(fantasy.weapon);
     expect(scifi.aliases[0]).toBe('light crossbow');
-    expect(srdCatalog('postapoc').find((d) => d.id === 'it_espada_larga_2')!.name).toBe('machete largo +2');
+    expect(srdCatalog('postapoc').find((d) => d.id === 'it_espada_larga_2')).toMatchObject({ name: 'machete largo +2', unidentified: { name: 'machete largo' } });
     // Sin variante, el nombre del SRD.
     expect(srdCatalog('scifi').find((d) => d.id === 'it_abaco')!.name).toBe('ábaco');
   });
