@@ -151,6 +151,8 @@ describe('acercamiento automático', () => {
     expect(t.error).toBe('not_reachable');
     expect(t.detail).toMatchObject({ go_to: 'sp_tab_barra', distance_m: 6 });
     expect(t.hint).toContain('move_to sp_tab_barra');
+    // La daga es arrojadiza (20/60 pies, itemrules.ts): con ella en la mano llega a 6 m. Sin arma, cuerpo a cuerpo.
+    engine.world.itemInstance('ii_kael_daga').location = { type: 'container', id: 'ii_kael_mochila' };
     const a = run(ctx, 'attack', { attacker_id: 'ch_kael', target_id: 'npc_brenna', advantage: 'none' });
     expect(a.error).toBe('not_reachable');
     expect(a.detail).toMatchObject({ go_to: 'sp_tab_barra', distance_m: 6 });

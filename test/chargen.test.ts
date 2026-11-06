@@ -82,8 +82,9 @@ describe('validación de lo elegido (chargen)', () => {
         return inPack.reduce((a, i) => a + i.quantity, 0);
       };
       for (const e of p.preview.equipment) {
-        const def = [...engine.world.itemDefs.values()].find((d) => d.name === e.name)!;
-        expect(has(def.id), `${where}: ${e.name}`).toBe(e.quantity);
+        // Puede haber más de una definición con el mismo nombre (el anillo de sello del ajuar y el del noble): todas cuentan.
+        const defs = [...engine.world.itemDefs.values()].filter((d) => d.name === e.name);
+        expect(defs.reduce((a, d) => a + has(d.id), 0), `${where}: ${e.name}`).toBe(e.quantity);
       }
     }
   });

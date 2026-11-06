@@ -54,6 +54,8 @@ describe('el ajuar de Brezal', () => {
       expect(n.outfitted, n.id).toBe(OUTFIT_VERSION);
       if (n.mute) { expect(carried(engine, n.id), n.id).toEqual([]); continue; }
       if (!n.stats) continue;
+      // Un niño no lleva bolsa (`purse: false`): sus cosas, sueltas encima.
+      if (kitOf(n).purse === false) { expect(carried(engine, n.id).length, n.id).toBeGreaterThan(0); continue; }
       const purse = purseOf(engine, n.id);
       expect(purse, `${n.id} lleva bolsa`).toBeDefined();
       // Algo más que la bolsa: cosas de su oficio.

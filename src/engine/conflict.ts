@@ -101,6 +101,8 @@ export function isBig(def: ItemDef): boolean { return BIG.has(def.size); }
 export function carriedOn(world: World, inst: ItemInstance): CarriedOn {
   const on = inst.state['on'];
   if (typeof on === 'string' && (CARRIED_ON as readonly string[]).includes(on)) return on as CarriedOn;
+  // Lo que el ajuar o la campaña le ponen puesto (outfit.ts, `state.worn`: la ropa, el anillo de sello de Osric).
+  if (inst.state['worn'] === true) return 'worn';
   const h = holderOf(world, inst);
   if (h?.via) return isBig(world.itemDef(h.via.item_id)) ? 'pack' : 'inside';
   const def = world.itemDef(inst.item_id);
