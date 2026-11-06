@@ -6,6 +6,8 @@
 import { abilityModifier, proficiencyBonus, rollD20, type Advantage, type CheckResult, type Rng } from './dice.js';
 import type { Character } from './model.js';
 import { effectsOf } from './levels.js';
+import { combineAdvantage, gearAdvantage, itemAcBonus, itemSaveBonus } from './itemrules.js';
+import type { World } from './world.js';
 
 export type Ability = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 
@@ -71,9 +73,16 @@ export function modifierFor(c: Character, kind: CheckKind, key: string): { modif
   }
 }
 
-export function characterCheck(c: Character, kind: CheckKind, key: string, dc: number | null, advantage: Advantage, rng?: Rng): CheckResult & { label: string } {
+/**
+ * Tirada del PJ. Con `world`, cuenta su equipo (itemrules.ts): desventaja en
+ * FUE y DES con armadura sin competencia, en Sigilo con la armadura que la
+ * impone, y el bono de los objetos de protección a las salvaciones.
+ */
+export function characterCheck(c: Character, kind: CheckKind, key: string, dc: number | null, advantage: Advantage, rng?: Rng, world?: World): CheckResult & { label: string } {
   const { modifier, label } = modifierFor(c, kind, key);
-  return { ...rollD20(modifier, dc, advantage, rng), label };
+  if (!world) return { ...rollD20(modifier, dc, advantage, rng), label };
+  const extra = kind === 'save' ? itemSaveBonus(world, c) : 0;
+  return { ...rollD20(modifier + extra, dc, combineAdvantage(advantage, gearAdvantage(world, c, kind, key)), rng), label };
 }
 
 /** Clase de Armadura (SPEC §4.2): armadura equipada + DES (con tope) + escudo en mano, y lo que sumen los rasgos de clase. */
@@ -90,6 +99,8 @@ export function armorClass(world: { itemsIn: (p: { type: 'character'; id: string
   for (const which of ['main', 'off', 'both'] as const) {
     for (const i of world.itemsIn({ type: 'character', id: c.id, slot: { kind: 'hand', which } })) ac += world.itemDef(i.item_id).shield_bonus ?? 0;
   }
+  // Los bonos mágicos (armadura +1, anillo de protección): solo con el mundo entero, no en la vista previa de la creación.
+  if ('itemInstances' in world) ac += itemAcBonus(world as World, c);
   return ac;
 }
 

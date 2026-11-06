@@ -20,7 +20,8 @@ import type { Character, Id, Npc } from './model.js';
 import { damageCharacter, helplessNpc, killNpc, knockOutNpc, npcCanAct, worldNow } from './death.js';
 import { reportAssault, reportKill, startedBy } from './crime.js';
 import { armorClass } from './rules.js';
-import { rangedStyleBonus } from './levels.js';
+import { attackProfile, combineAdvantage, damageAfterResistance, reachCheck, spendAmmo, throwWeapon } from './itemrules.js';
+import { distance } from './movement.js';
 import { adjustTrust } from './trust.js';
 import type { World } from './world.js';
 
@@ -51,6 +52,11 @@ export function weaponOf(world: World, c: Character): { name: string; damage: st
   return { name: 'puños', damage: '1', damage_type: 'bludgeoning', finesse: false, ranged: false };
 }
 
+/** Dónde está quien pelea: el punto del PJ o del NPC. */
+function spotOf(world: World, x: Combatant) {
+  return x.kind === 'character' ? world.characterSpot(x.c) : world.spots.get(x.n.location.id) ?? null;
+}
+
 export interface AttackOutcome {
   attacker: string;
   target: string;
@@ -77,6 +83,10 @@ export interface AttackOutcome {
   helpless?: boolean;
   /** Turno de un NPC con multiataque: cada golpe (los campos de arriba suman el daño y dan el estado final). */
   attacks?: AttackOutcome[];
+  /** Lo que ha puesto el equipo del PJ (itemrules.ts): sin competencia, alcance largo, munición, arma arrojada… */
+  notes?: string[];
+  /** Munición que le queda tras el disparo. */
+  ammo_left?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +125,7 @@ export function lethalBlow(intent: string | null | undefined, damageType: string
  * `autoHit`: el objetivo no se defiende (un PJ que se deja, reactions.ts): impacta sin tirada de ataque; el daño se tira.
  * `intent`: lo que escribió el jugador que ataca, para saber si el golpe a 0 PG mata (lethalBlow).
  */
-export function resolveAttack(world: World, attackerId: Id, targetId: Id, advantage: Advantage = 'none', rng?: Rng, nowGameS?: number, opts: { autoHit?: boolean; intent?: string | null } = {}): AttackOutcome | { error: string } {
+export function resolveAttack(world: World, attackerId: Id, targetId: Id, advantage: Advantage = 'none', rng?: Rng, nowGameS?: number, opts: { autoHit?: boolean; intent?: string | null; /** 'off': con la otra mano (dos armas ligeras). */ hand?: 'main' | 'off' } = {}): AttackOutcome | { error: string } {
   const a = combatant(world, attackerId);
   const t = combatant(world, targetId);
   if (!a || !t) return { error: 'atacante u objetivo desconocido' };
@@ -130,13 +140,26 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
   // Un NPC inconsciente o atado no se defiende: el golpe entra solo.
   const helpless = t.kind === 'npc' && helplessNpc(t.n);
 
-  // Ataque.
+  // Ataque. El del PJ sale de su arma (itemrules.ts): competencia, propiedades, munición y magia.
   let bonus: number; let dmgExpr: string; let dmgType: string; let weaponName: string; let dmgMod = 0;
+  const notes: string[] = [];
+  let fire: (() => void) | null = null; let ammoLeft: number | undefined;
   if (a.kind === 'character') {
-    const w = weaponOf(world, a.c);
-    const str = abilityModifier(a.c.abilities.str), dex = abilityModifier(a.c.abilities.dex);
-    const mod = w.ranged ? dex : w.finesse ? Math.max(str, dex) : str;
-    bonus = mod + proficiencyBonus(a.c.level) + (w.ranged ? rangedStyleBonus(a.c) : 0); dmgExpr = w.damage; dmgType = w.damage_type; weaponName = w.name; dmgMod = mod;
+    const from = spotOf(world, a), to = spotOf(world, t);
+    const same = !from || !to || from.id === to.id;
+    if (!same && from!.location_id !== to!.location_id) return { error: `${nameOfCombatant(t)} no está en este sitio: no le alcanza` };
+    const p = attackProfile(world, a.c, { hand: opts.hand ?? 'main', mode: same ? 'melee' : 'ranged' });
+    if ('error' in p) return { error: p.error };
+    const reach = reachCheck(p, same, same ? 0 : distance(from!, to!));
+    if (!reach.ok) return { error: `${nameOfCombatant(t)} está ${reach.reason}${same ? '' : `: que se acerque (move_to ${to!.id}) o use un arma a distancia`}` };
+    if (p.needs_ammo && !p.ammo) return { error: `${a.c.name} no lleva munición para ${p.name}: no puede disparar` };
+    advantage = combineAdvantage(advantage, p.advantage, reach.advantage);
+    notes.push(...p.notes, ...(reach.note ? [reach.note] : []));
+    bonus = p.attack_bonus + (p.proficient ? proficiencyBonus(a.c.level) : 0); dmgExpr = p.damage; dmgType = p.damage_type; weaponName = p.name; dmgMod = p.damage_mod;
+    // El disparo gasta munición (la mitad se recupera del suelo) y el arma arrojada cae junto al objetivo, dé o no.
+    const target = to?.id ?? null;
+    if (p.ammo) { const ammo = p.ammo; fire = () => { const r = spendAmmo(world, ammo, target); ammoLeft = r.left; if (r.recoverable) notes.push('la flecha (o el virote) queda en el suelo, junto al objetivo: se puede recoger'); }; }
+    else if (p.thrown && p.instance_id && target) { const id = p.instance_id; fire = () => { throwWeapon(world, world.itemInstance(id), target); notes.push(`${p.name} queda en el suelo, junto al objetivo`); }; }
   } else {
     bonus = a.n.stats!.attack_bonus; dmgExpr = a.n.stats!.damage; dmgType = a.n.stats!.damage_type; weaponName = a.n.stats!.attack_name;
   }
@@ -145,6 +168,7 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
     ? { total: ac, success: true, natural: undefined, breakdown: `sin tirada: ${helpless ? 'está a su merced' : 'no se defiende'} (CA ${ac})` }
     : rollD20(bonus, ac, advantage, rng);
   const hit = roll.success === true;
+  fire?.();
   let damage = 0; let dmgBreakdown = '—';
   if (hit) {
     const crit = roll.natural === 20;
@@ -162,6 +186,8 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
   let targetHp = ''; let down = false; let dead = false; let xp = 0; let failures = 0; let murder = false; let ko = false;
   if (t.kind === 'character') {
     const c = t.c;
+    // Resistencia o inmunidad por lo que lleva o se ha tomado (itemrules.ts).
+    if (hit) { const kept = damageAfterResistance(world, c, damage, dmgType); if (kept !== damage) { notes.push(kept ? `resiste el daño ${dmgType}: la mitad` : `inmune al daño ${dmgType}`); damage = kept; } }
     if (hit) {
       const r = damageCharacter(world, c, damage, { crit: roll.natural === 20, cause: `${nameOfCombatant(a)} (${weaponName})`, ...(nowGameS === undefined ? {} : { nowGameS }), ...(nonLethal ? { nonLethal } : {}), ...(rng ? { rng } : {}) });
       down = r.down; dead = r.died; failures = r.failures;
@@ -209,6 +235,8 @@ export function resolveAttack(world: World, attackerId: Id, targetId: Id, advant
     ...(ko ? { knocked_out: true } : {}),
     ...(helpless ? { helpless: true } : {}),
     ...(failures ? { death_save_failures: failures } : {}),
+    ...(notes.length ? { notes } : {}),
+    ...(ammoLeft !== undefined ? { ammo_left: ammoLeft } : {}),
   };
 }
 

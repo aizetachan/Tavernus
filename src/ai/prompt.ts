@@ -49,6 +49,7 @@ import { currencyOf, money } from '../engine/money.js';
 import { priceFor } from '../engine/standing.js';
 import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
 import { socialOutcomeLine, talkPlan, talkScript, type TalkPlan } from '../engine/talk.js';
+import { gearLines } from '../engine/itemrules.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
 const LENGTH_ES = { short: 'uno o dos párrafos cortos de narración, unas 60-90 palabras sin contar lo que se dice; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
@@ -433,6 +434,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     `${actor.race} ${actor.class_name} nivel ${actor.level}. PG ${actor.hp_current}/${actor.hp_max}${actor.hp_temp ? ` (+${actor.hp_temp} temp)` : ''}. CA ${armorClass(world, actor)}. Estado: ${actor.status}${actor.conditions.length ? `; condiciones: ${actor.conditions.map((x) => x.name).join(', ')}` : ''}.${downLine(actor)} Modo de muerte: ${actor.death_mode}.`,
     `Dados de golpe: ${hitDiceLeft(actor)}/${actor.level} (d${actor.hit_die}).${resourceLines(actor).length ? ` Recursos (spend_resource; espacios con cast_spell): ${resourceLines(actor).join('; ')}.` : ''}`,
     ...abilitiesForMaster(actor),
+    // Sintonía, armadura sin competencia, cargas (itemrules.ts): lo aplica el motor, el máster lo narra.
+    ...gearLines(world, actor),
     // Raza, clase, trasfondo y lo que ha ganado con lo que hace (standing.ts).
     tagsLine(world, actor),
     `FUE ${actor.abilities.str} DES ${actor.abilities.dex} CON ${actor.abilities.con} INT ${actor.abilities.int} SAB ${actor.abilities.wis} CAR ${actor.abilities.cha}. Competente en: ${skills.join(', ') || 'nada'}.`,

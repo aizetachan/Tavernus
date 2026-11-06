@@ -1319,7 +1319,7 @@ export class Engine {
       let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean; damage: number; ko?: boolean } | undefined;
       if (pending.roll.kind === 'attack' && pending.roll.target) {
         // Lo que escribió el jugador decide si el golpe a 0 PG mata o deja inconsciente (combat.ts, lethalBlow).
-        const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c), { intent: pending.text });
+        const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c), { intent: pending.text, hand: pending.roll.key === 'off_hand' ? 'off' : 'main' });
         if ('error' in atk) return { ok: false, text: atk.error };
         attack = { target_id: pending.roll.target, hit: atk.hit, down: Boolean(atk.target_down), dead: Boolean(atk.target_dead), damage: atk.damage, ...(atk.knocked_out ? { ko: true } : {}) };
         result = {
@@ -1329,7 +1329,7 @@ export class Engine {
         };
         roll = attackRoll(c.id, pending.roll.target, atk);
       } else {
-        result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage);
+        result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage, undefined, this.world);
         roll = checkRoll(c.id, result);
       }
       if (helper) roll.note = `con la ayuda de ${pcName(this.world, c.id, helper)}`;
@@ -3124,7 +3124,7 @@ export class Engine {
       if (!t) return null;
       if (t.status === 'dead') return { ok: false, text: `${t.name} está muerto: ya no hay nada que atender. Volverá por su cuenta.` };
       if (!isDying(t)) return { ok: false, text: t.hp_current > 0 ? `${t.name} no está malherido de muerte.` : `${t.name} ya está estable.` };
-      const roll = characterCheck(c, 'skill', 'medicine', 10, 'none', this.rng);
+      const roll = characterCheck(c, 'skill', 'medicine', 10, 'none', this.rng, this.world);
       const shown = `🎲 Medicina: ${roll.breakdown.replace(/ vs CD \d+$/, '')} → ${roll.success ? 'éxito' : 'fallo'}`;
       if (roll.success) stabilize(this.world, t, nowG, c.name, `estabilizado por ${c.name}`, this.rng);
       const r = this.emitTrivial(c, text, 'tend', 'death',
@@ -3547,7 +3547,7 @@ export class Engine {
       const skill = /^(registr|rebusc)/.test(lower) ? 'investigation' : 'perception';
       const hidden = searchableSpots(this.world, c);
       const dc = hidden.length ? Math.min(...hidden.map((s) => s.dc_to_find ?? 10)) : 15;
-      const check = characterCheck(c, 'skill', skill, dc, 'none', this.rng);
+      const check = characterCheck(c, 'skill', skill, dc, 'none', this.rng, this.world);
       const found = hidden.filter((s) => check.total >= (s.dc_to_find ?? 10) && discoverSpot(this.world, c, s));
       const priv = `${check.breakdown}\n${found.length ? `Encuentras ${listEs(found.map((s) => s.name))}.` : 'Buscas a conciencia, pero no encuentras nada fuera de lo normal.'}`;
       return this.emitPrivate(c, text, 'search', priv, `${c.name} busca algo por los rincones.`);
