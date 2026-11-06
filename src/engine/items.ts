@@ -156,11 +156,19 @@ export function bonusText(def: ItemDef): string[] {
   ];
 }
 
-/** El conjuro de un pergamino o varita: «proyectil mágico (nivel 1)». */
-export function spellText(def: ItemDef): string | null {
+/** El conjuro de un pergamino, varita o bastón: el de la definición o, si no lo fija, el del ejemplar. */
+export function spellIdOf(def: ItemDef, inst?: ItemInstance): string | null {
   if (!def.spell) return null;
-  const sp = spellById(def.spell.spell_id);
-  return `${sp?.name ?? def.spell.spell_id} (${def.spell.level === 0 ? 'truco' : `nivel ${def.spell.level}`})`;
+  return def.spell.spell_id ?? (typeof inst?.state.spell_id === 'string' ? inst.state.spell_id : null);
+}
+
+/** El conjuro de un pergamino o varita: «proyectil mágico (nivel 1)»; sin conjuro concreto, solo el nivel. */
+export function spellText(def: ItemDef, inst?: ItemInstance): string | null {
+  if (!def.spell) return null;
+  const id = spellIdOf(def, inst);
+  const level = def.spell.level === 0 ? 'truco' : `nivel ${def.spell.level}`;
+  if (!id) return `un conjuro de ${level}`;
+  return `${spellById(id)?.name ?? id} (${level})`;
 }
 
 export function chargesText(def: ItemDef, inst: ItemInstance): string | null {
@@ -184,7 +192,7 @@ export function magicView(def: ItemDef, inst: ItemInstance, viewerId: Id | null,
     ...(def.bonus ? { bonus: bonusText(def) } : {}),
     ...(def.charges ? { charges: chargesText(def, inst) } : {}),
     ...(def.effects?.length ? { effects: def.effects.map(effectText) } : {}),
-    ...(def.spell ? { spell: spellText(def) } : {}),
+    ...(def.spell ? { spell: spellText(def, inst) } : {}),
     ...(def.cursed && attuned ? { cursed: def.cursed.description ?? (def.cursed.effects?.map(effectText).join('; ') || 'maldito') } : {}),
   };
 }
@@ -268,7 +276,8 @@ export function itemDefErrors(d: ItemDef, spellExists: (id: string) => boolean):
   }
   if (d.duration_s !== undefined && !d.effect) errs.push(`${d.id}: duration_s sin effect.`);
   if (d.spell) {
-    if (!spellExists(d.spell.spell_id)) errs.push(`${d.id}: el conjuro ${d.spell.spell_id} no está en el catálogo.`);
+    if (d.spell.spell_id === undefined) { if (d.type !== 'scroll') errs.push(`${d.id}: solo un pergamino puede dejar el conjuro al ejemplar (spell.spell_id).`); }
+    else if (!spellExists(d.spell.spell_id)) errs.push(`${d.id}: el conjuro ${d.spell.spell_id} no está en el catálogo.`);
     if (!(Number.isInteger(d.spell.level) && d.spell.level >= 0 && d.spell.level <= 9)) errs.push(`${d.id}: el nivel del conjuro va de 0 a 9.`);
   }
   if (d.type === 'ammunition' && !d.subtype) errs.push(`${d.id}: munición sin subtipo (arrow, bolt…).`);

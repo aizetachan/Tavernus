@@ -160,6 +160,13 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
     if (st.attuned_to && def && !needsAttunement(def)) errs.push(`${i.id}: sintonizado, pero ${def.id} no pide sintonía.`);
     if (st.charges !== undefined && !(def?.charges && Number.isInteger(st.charges) && st.charges >= 0 && st.charges <= def.charges.max)) errs.push(`${i.id}: cargas ${String(st.charges)} fuera de lo que admite ${i.item_id}.`);
     if (st.owner_id !== undefined && !isWho(st.owner_id)) errs.push(`${i.id}: su dueño ${String(st.owner_id)} no existe.`);
+    if (st.spell_id !== undefined && def) {
+      // El conjuro del ejemplar: solo si la definición no lo fija, existe y es del nivel del pergamino.
+      const sp = typeof st.spell_id === 'string' ? spellById(st.spell_id) : undefined;
+      if (!def.spell || def.spell.spell_id !== undefined) errs.push(`${i.id}: lleva spell_id, pero ${def.id} no deja el conjuro al ejemplar.`);
+      else if (!sp) errs.push(`${i.id}: el conjuro ${String(st.spell_id)} no está en el catálogo.`);
+      else if (sp.level !== def.spell.level) errs.push(`${i.id}: ${sp.id} es de nivel ${sp.level} y el pergamino de nivel ${def.spell.level}.`);
+    }
     if (!(i.quantity > 0)) errs.push(`${i.id}: cantidad no positiva.`);
     const at = i.location;
     const ok = at.type === 'spot' ? spots.has(at.id) : at.type === 'npc' ? npcs.has(at.id) : at.type === 'container' ? insts.has(at.id) : at.type === 'character' ? chars.has(at.id) : snap.vehicles.some((v) => v.id === at.id);

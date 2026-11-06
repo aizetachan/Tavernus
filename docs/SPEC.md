@@ -426,7 +426,7 @@ bloque C del plan; el modelo solo dice qué es cada cosa y qué ve cada personaj
 | `effects[]` | Efectos con estructura mientras se lleva: `resist`, `immune`, `condition_immunity`, `advantage`, `disadvantage`, `speed`, `light`, `darkvision`, `save_bonus`, `ability_score`, `condition`, `note` (solo narrativo). Los aplica el motor; el máster los narra |
 | `cursed` | `{ effects?, description? }`: no se quita ni se deja de sintonizar; no se ve hasta que alguien lo sintoniza |
 | `unidentified` | Cómo se ve sin identificar (`name`, `description`); sin él, un nombre genérico por tipo («anillo», «arma») |
-| `spell` | Pergamino, varita o bastón: `spell_id` (de `src/data/srd/spells.ts`), `level`, y `save_dc`/`attack_bonus` si no los de la tabla |
+| `spell` | Pergamino, varita o bastón: `spell_id` (de `src/data/srd/spells.ts`), `level`, y `save_dc`/`attack_bonus` si no los de la tabla. Un pergamino puede no fijar `spell_id` (el pergamino de nivel N del SRD): el conjuro va entonces en el ejemplar (`state.spell_id`), de ese nivel |
 | `effect`, `duration_s` | Lo que hace al usarlo (poción) y cuánto dura |
 | `unique` | Un solo ejemplar en el mundo |
 | `origin` | `srd` / `custom` |

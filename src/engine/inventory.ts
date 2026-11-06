@@ -506,7 +506,7 @@ function packItem(world: World, i: ItemInstance, viewerId: Id): PackItem {
     }
     const left = chargesLeft(d, i);
     if (left !== null && d.charges) { props.push(chargesText(d, i)!); magic.charges = { left, max: d.charges.max }; }
-    const sp = spellText(d);
+    const sp = spellText(d, i);
     if (sp) props.push(`conjuro: ${sp}`);
     for (const e of d.effects ?? []) props.push(effectText(e));
     if (d.effect) props.push(`al usarlo: ${effectText(d.effect)}${d.duration_s ? ` durante ${fmtDuration(d.duration_s)}` : ''}`);

@@ -12,7 +12,7 @@ import { MemoryRepository } from '../src/persistence/memory.js';
 import { executeTool, type ToolContext } from '../src/ai/tools.js';
 import { seededRng } from '../src/engine/dice.js';
 import { inventoryDetailed, inventoryView, packView, spawnItem } from '../src/engine/inventory.js';
-import { armorCategory, baseIdOf, chargesLeft, fillItemDefFrom, isIdentifiedBy, itemDefErrors, itemName, normalizeItemDef, weaponCategory, weaponProperties } from '../src/engine/items.js';
+import { armorCategory, baseIdOf, chargesLeft, fillItemDefFrom, isIdentifiedBy, itemDefErrors, itemName, normalizeItemDef, spellText, weaponCategory, weaponProperties } from '../src/engine/items.js';
 import { validateSnapshot } from '../src/worldgen/validate.js';
 import type { ItemDef, ItemInstance, WorldSnapshot } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
@@ -106,6 +106,28 @@ describe('modelo de objetos: validación', () => {
     expect(errs({ type: 'ammunition' }).join()).toMatch(/munición sin subtipo/);
     expect(errs({ duration_s: 60 }).join()).toMatch(/duration_s sin effect/);
     expect(errs({ rarity: 'mythic' as never }).join()).toMatch(/rareza/);
+  });
+
+  it('pergamino de nivel N: el conjuro va en el ejemplar, existe y es de ese nivel', () => {
+    const PERG = def({ id: 'it_perg1', name: 'pergamino de conjuro (nivel 1)', type: 'scroll', rarity: 'common', spell: { level: 1, save_dc: 13, attack_bonus: 5 } });
+    expect(itemDefErrors(PERG, spells)).toEqual([]);
+    expect(itemDefErrors({ ...PERG, type: 'wand' }, spells).join()).toMatch(/solo un pergamino/);
+    expect(spellText(PERG, inst(PERG.id, { spell_id: 'magic_missile' }))).toBe('Proyectil mágico (nivel 1)');
+    expect(spellText(PERG, inst(PERG.id))).toBe('un conjuro de nivel 1');
+    const snap = makeSeed();
+    snap.item_defs.push(PERG, VARITA);
+    const at = { type: 'spot' as const, id: 'sp_tab_barra' };
+    snap.item_instances.push(
+      { id: 'ii_ok', item_id: PERG.id, quantity: 1, location: at, state: { spell_id: 'magic_missile' } },
+      { id: 'ii_nivel', item_id: PERG.id, quantity: 1, location: at, state: { spell_id: 'dispel_magic' } },
+      { id: 'ii_nada', item_id: PERG.id, quantity: 1, location: at, state: { spell_id: 'no_existe' } },
+      { id: 'ii_fijo', item_id: VARITA.id, quantity: 1, location: at, state: { spell_id: 'magic_missile' } },
+    );
+    const errs = validateSnapshot(snap).join('\n');
+    expect(errs).not.toMatch(/ii_ok/);
+    expect(errs).toMatch(/ii_nivel: dispel_magic es de nivel 3 y el pergamino de nivel 1/);
+    expect(errs).toMatch(/ii_nada: el conjuro no_existe no está/);
+    expect(errs).toMatch(/ii_fijo: lleva spell_id, pero it_varita_prueba no deja el conjuro/);
   });
 
   it('base_id: la variante dice de qué arma SRD sale; si la base está en la partida, es del mismo tipo', () => {
