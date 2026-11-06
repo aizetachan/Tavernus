@@ -469,7 +469,7 @@ export interface Character {
   darkvision: boolean;
   /** Multiplicador de condiciones (cargado, exhausto…). 1 = normal. */
   condition_speed_factor: number;
-  coins: number;
+  // El dinero no es un campo: vive en sus bolsas (`state.coins`) y se cuenta con money.ts `coinsOf`.
   decisive: DecisiveWindow | null;
   xp: number;
   last_seen_event_id: Id | null;
@@ -914,8 +914,12 @@ export interface ItemDef {
   cursed?: { effects?: ItemEffect[]; description?: string };
   /** Cómo se ve sin identificar («espada larga», «poción azul»); sin él, un nombre genérico por tipo. */
   unidentified?: { name: string; description?: string };
-  /** Pergamino, varita o bastón: el conjuro (id de src/data/srd/spells.ts) y su nivel. CD y ataque, si no los de la tabla. */
-  spell?: { spell_id: string; level: number; save_dc?: number; attack_bonus?: number };
+  /**
+   * Pergamino, varita o bastón: el conjuro (id de src/data/srd/spells.ts) y su nivel. CD y ataque, si no los de la
+   * tabla. Un pergamino puede no fijar el conjuro (el pergamino de nivel N del SRD): entonces va en el ejemplar
+   * (`ItemState.spell_id`), que ha de ser de ese nivel.
+   */
+  spell?: { spell_id?: string; level: number; save_dc?: number; attack_bonus?: number };
   /** Consumible con efecto al usarlo (poción), y cuánto dura en segundos de juego. */
   effect?: ItemEffect;
   duration_s?: number;
@@ -956,6 +960,8 @@ export interface ItemState {
   lit?: boolean;
   /** De quién es (tiendas, robos). */
   owner_id?: Id;
+  /** El conjuro de este pergamino, si su definición no lo fija (`ItemDef.spell` sin `spell_id`). */
+  spell_id?: string;
 }
 
 /** Un ejemplar concreto en el mundo. Siempre en exactamente un `location`. */

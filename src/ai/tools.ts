@@ -8,7 +8,7 @@ import type { Engine } from '../engine/engine.js';
 import type { World } from '../engine/world.js';
 import { rollD20, rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
 import { carrierOf, consumeItem, inventoryDetailed, inventoryView, itemView, npcCarryList, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
-import type { Character, Id, Npc, Placement, ReactionKind } from '../engine/model.js';
+import type { Character, Id, ItemInstance, Npc, Placement, ReactionKind } from '../engine/model.js';
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
 import { perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
@@ -38,7 +38,7 @@ import type { DialogueLine, LineTo } from '../engine/moments.js';
 import { AUDIENCES, presentIds, type Audience } from '../engine/audience.js';
 import { debtHeldBy, debtTitle, noteDebtTerms, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
 import { inventedPlaces } from '../engine/places.js';
-import { money } from '../engine/money.js';
+import { addToPurse, coinsAt, coinsOf, money, pay, receive, takeFromPurse } from '../engine/money.js';
 import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
 import { coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, servedRejection, servedWithoutPay, stolenRejection, stolenWithoutTool, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
@@ -179,6 +179,11 @@ export const MASTER_TOOLS: Tool[] = [
   }),
   tool('settle_debt', 'Salda (o rebaja) la deuda del actor con un NPC: coins paga con sus monedas (amount o todo), work la da por pagada con un trabajo ya hecho, forfeit la da por perdida y el NPC se queda la prenda. Al saldarla, la prenda vuelve al actor.', {
     npc_id: str('ID del NPC'), how: enm([...SETTLE_HOW], 'coins (paga), work (trabajo hecho), forfeit (pierde la prenda)'), amount: nnum('Solo coins: lo que paga, en la moneda más pequeña (cobre); null = todo'),
+  }),
+  tool('take_coins', 'Saca monedas de una bolsa sin llevarse la bolsa: robar parte del dinero de la bolsa de un NPC (o de otro jugador, solo en el desenlace de su reacción), coger unas monedas de una bolsa del suelo o de un cofre, o pasar dinero de una bolsa suya a otra (esconderlo). Para llevarse la bolsa entera, transfer_item. Sin este tool las monedas no se han movido.', {
+    instance_id: str('ID de la bolsa (o lo que tenga monedas dentro)'),
+    amount: nnum('Cuántas, en la moneda más pequeña (cobre); null = todo lo que haya'),
+    to_instance_id: nstr('Solo para pasarlas a otra bolsa suya concreta (la escondida); null = a su bolsa más a mano'),
   }),
   tool('give_coins', 'El actor da monedas a un NPC sin deuda ni compra: propina, soborno, limosna, un pago sin precio. Si hay deuda, settle_debt; si está en su lista, buy_item. Sin este tool las monedas no se han movido.', {
     npc_id: str('ID del NPC'), amount: num('Lo que da, en la moneda más pequeña (cobre)'), reason: str('Por qué, en pocas palabras'),
@@ -335,7 +340,7 @@ export const MASTER_TOOLS: Tool[] = [
 /** Tools que cambian el mundo: si fallan, eso no ha ocurrido y no se puede narrar (master.ts). */
 export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story', 'story_quest',
-  'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
+  'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'take_coins', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
   'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident', 'npc_trust', 'restrain_npc',
 ]);
 
@@ -807,6 +812,10 @@ function lootGuard(ctx: ToolContext, instanceId: Id): Record<string, unknown> | 
   if (!inst) return null;
   const holder = [...w.characters.values()].find((o) => o.id !== ctx.actor.id && w.itemsCarriedBy(o.id).some((i) => i.id === inst.id));
   if (holder && holder.status === 'unconscious') return { error: 'not_allowed', hint: `${holder.name} es otro jugador y está vivo: sin su consentimiento no se le quita nada (que te lo dé cuando despierte).` };
+  // Despierto, decide él (reactions.ts): quitarle algo (su bolsa) solo en el desenlace de su reacción, si la acepta o pierde la tirada.
+  if (holder && holder.status === 'active' && !ctx.engine.reactionWon(ctx.actor.id, holder.id)) {
+    return { error: 'needs_reaction', hint: `${pcName(w, ctx.actor.id, holder)} es otro jugador: no se le quita nada sin que lo decida él. Pide request_reaction (kind other, actor_skill sleight_of_hand, target_skills perception); si gana, transfer_item o take_coins en el desenlace.` };
+  }
   return null;
 }
 
@@ -839,7 +848,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const pos = positionOf(world, c, nowGameS);
       const pub = { id: c.id, name: c.name, race: c.race, class_name: c.class_name, appearance: c.appearance, status: c.status, spot_id: pos.spot_id, hands: inv.hands, equipped: inv.equipped, conditions: c.conditions.map((x) => x.name), hp_hint: c.hp_current >= c.hp_max ? 'ileso' : c.hp_current > c.hp_max / 2 ? 'herido' : 'malherido' };
       if (c.id !== actor.id) return pub;
-      return { ...pub, level: c.level, abilities: c.abilities, hp: `${c.hp_current}/${c.hp_max}`, proficiencies: c.proficiencies, inventory: inventoryDetailed(world, c.id).map(({ item_id, ...x }) => (x.unidentified ? x : { item_id, ...x })), coins: c.coins, encumbrance: inv.encumbrance.level, backstory: c.backstory, facts: characterFacts(c).map((f) => f.text) };
+      return { ...pub, level: c.level, abilities: c.abilities, hp: `${c.hp_current}/${c.hp_max}`, proficiencies: c.proficiencies, inventory: inventoryDetailed(world, c.id).map(({ item_id, ...x }) => (x.unidentified ? x : { item_id, ...x })), coins: coinsOf(world, c.id), encumbrance: inv.encumbrance.level, backstory: c.backstory, facts: characterFacts(c).map((f) => f.text) };
     }
     case 'get_npc': {
       const n = world.npc(s('npc_id'));
@@ -1098,7 +1107,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!r.ok) return { error: r.error.code, detail: r.error, ...(r.error.code === 'no_space' && r.error.fits ? { hint: `Caben ${r.error.fits}: repite con quantity ${r.error.fits} si es lo que quiere.` } : {}) };
       // Darle algo a un NPC es un regalo (o una entrega): sube su confianza, con el tope de la charla.
       if (toType === 'npc') { const n = world.npc(s('to_id')); if (n.status === 'alive') trustProgress(ctx, adjustTrust(world, n, actor, 'gift', nowGameS)); }
-      return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity, ...(r.coins ? { coins_found: money(world, r.coins), hint_coins: `Dentro había ${money(world, r.coins)}: ya están en las monedas del actor. Dilo con esa cifra exacta.` } : {}), ...(stolen ? crimeNote(ctx) : {}) };
+      return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity, ...(r.coins ? { coins_found: money(world, r.coins), hint_coins: `Dentro hay ${money(world, r.coins)}: siguen en ${world.itemDef(r.moved.item_id).name}, que ahora lleva el actor (y cuentan en su dinero). Dilo con esa cifra exacta.` } : {}), ...(stolen ? crimeNote(ctx) : {}) };
     }
     case 'report_incident': {
       const kind = s('kind') as IncidentKind;
@@ -1269,7 +1278,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (s('how') !== 'forfeit') { const miss = reachNpc(ctx, npc); if (miss) return miss; }
       const r = settleDebt(world, actor, { npc_id: npc.id, how: s('how'), amount: input['amount'] }, nowGameS);
       if (!r.ok) return { error: r.error };
-      return { ok: true, paid: r.paid, remaining: r.remaining, settled: r.settled, returned: r.returned, kept_by_npc: r.kept, coins_left: actor.coins };
+      return { ok: true, paid: r.paid, remaining: r.remaining, settled: r.settled, returned: r.returned, kept_by_npc: r.kept, coins_left: coinsOf(world, actor.id) };
     }
     case 'give_coins': {
       const npc = world.npc(s('npc_id'));
@@ -1277,10 +1286,47 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (miss) return miss;
       const amount = Math.floor(Number(input['amount']));
       if (!(amount > 0)) return { error: 'amount debe ser mayor que cero' };
-      if (amount > actor.coins) return { error: 'not_enough_coins', hint: `Solo lleva ${money(world, actor.coins)}: narra que no le llega.` };
-      actor.coins -= amount;
-      world.touch('characters', actor.id);
-      return { ok: true, paid: money(world, amount), to: npc.name, coins_left: actor.coins };
+      // De su bolsa a la del NPC (money.ts): lo que se da se puede volver a robar.
+      const p = pay(world, actor.id, amount, npc.id);
+      if (!p.ok) return { error: 'not_enough_coins', hint: `Solo lleva ${money(world, p.have)}: narra que no le llega.` };
+      return { ok: true, paid: money(world, amount), to: npc.name, coins_left: coinsOf(world, actor.id) };
+    }
+    case 'take_coins': {
+      const purse = world.itemInstances.get(s('instance_id'));
+      if (!purse) return { error: 'not_found', hint: `${s('instance_id')} no existe: usa el ID de la bolsa que da el contexto o get_npc.` };
+      const name = world.itemDef(purse.item_id).name;
+      const inside = coinsAt(purse);
+      if (!inside) return { error: 'empty', hint: `En ${name} no hay monedas: narra que está vacía.` };
+      const mine = world.characterSpot(actor)?.id;
+      const at = world.spotOfItem(purse);
+      if (!mine || at?.id !== mine) return { error: 'not_reachable', hint: at ? `${name} está en ${at.name}: move_to ${at.id} primero; hasta que llegue, no ha ocurrido.` : `${name} no está al alcance.` };
+      const guard = lootGuard(ctx, purse.id);
+      if (guard) return guard;
+      const holder = carrierOf(world, purse.location);
+      const toId = input['to_instance_id'] ? s('to_instance_id') : '';
+      let into: ItemInstance | null = null;
+      if (toId && toId !== 'null') {
+        const box = world.itemInstances.get(toId);
+        if (!box || !world.itemsCarriedBy(actor.id).some((i) => i.id === box.id)) return { error: 'not_carried', hint: 'to_instance_id tiene que ser una bolsa (o algo con monedas) que lleve el actor.' };
+        if (box.id === purse.id) return { error: 'same_purse', hint: 'Es la misma bolsa: no se mueve nada.' };
+        into = box;
+      }
+      if (holder?.type === 'character' && holder.id === actor.id && !into) return { error: 'own_purse', hint: 'Ya es suya: para pasar monedas a otra bolsa suya (esconderlas), di to_instance_id; para pagar, give_coins o buy_item.' };
+      // Otro jugador: lootGuard ya exige su reacción (aceptada o perdida). A un NPC, como quitarle la bolsa.
+      const victim = holder?.type === 'npc' ? world.npcs.get(holder.id) : undefined;
+      if (victim) { const miss = reachNpc(ctx, victim); if (miss) return miss; }
+      // Como quitarle la bolsa (transfer_item): un robo, salvo que la tirada lo haya hecho sin que se note; al inconsciente, siempre.
+      const stolen = Boolean(victim && ((victim.status === 'alive' && readsAsTheft(ctx.action_text) && !['exito_justo', 'exito_claro', 'critico'].includes(ctx.roll_category ?? '')) || victim.status === 'unconscious'));
+      const want = input['amount'] == null ? inside : Math.floor(Number(input['amount']));
+      if (!(want > 0)) return { error: 'amount debe ser mayor que cero, o null para todo lo que haya' };
+      const took = takeFromPurse(world, purse, want);
+      if (into) addToPurse(world, into, took); else receive(world, actor.id, took);
+      if (stolen) reportIncident(world, { kind: 'theft', perpetrator_id: actor.id, victim_id: victim!.id }, nowGameS);
+      return {
+        ok: true, took: money(world, took), left_in_purse: inside - took > 0 ? money(world, inside - took) : 'nada', coins_now: money(world, coinsOf(world, actor.id)),
+        hint: took < want ? `Solo había ${money(world, inside)}: se lleva eso. Dilo con esa cifra exacta.` : 'Dilo con esa cifra exacta.',
+        ...(into ? { into: world.itemDef(into.item_id).name } : {}), ...(stolen ? crimeNote(ctx) : {}),
+      };
     }
     case 'request_reaction': {
       if (engine.inReactionOutcome(actor.id)) return { error: 'Esto ya es el desenlace de una reacción: narra lo que ha pasado; no pidas otra.' };

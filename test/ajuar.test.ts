@@ -1,8 +1,8 @@
 /**
  * Ajuar de los NPC (src/engine/outfit.ts). Partida «Humo y ceniza» (VPS, 2026-11): el PJ le robó a Garrán «la
  * bolsa de cuero» con buenas tiradas y la bolsa no existía. Ahora toda persona lleva al empezar algo real que
- * robar o encontrar: una bolsa con monedas, cosas de su oficio y su arma; y las monedas de la bolsa pasan al PJ
- * que la coge. Sin API.
+ * robar o encontrar: una bolsa con monedas, cosas de su oficio y su arma; y quien coge la bolsa lleva su dinero
+ * dentro (money.ts). Sin API.
  */
 import { describe, expect, it } from 'vitest';
 import { authoredSeed } from '../src/data/campaigns/index.js';
@@ -19,6 +19,7 @@ import { makeSeed } from '../src/data/seed/demo.js';
 import type { Character, ItemInstance, WorldSnapshot } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
 
+import { coinsOf } from '../src/engine/money.js';
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 
 async function boot(seed: WorldSnapshot = authoredSeed('brezal', { now: new Date(EPOCH) }), repo = new MemoryRepository()) {
@@ -98,18 +99,19 @@ describe('el ajuar de Brezal', () => {
 });
 
 describe('robar la bolsa', () => {
-  it('quitarle la bolsa a Garrán: las monedas pasan al PJ, la bolsa queda vacía y, si se nota, es un robo', async () => {
+  it('quitarle la bolsa a Garrán: el PJ lleva la bolsa con el dinero dentro y, si se nota, es un robo', async () => {
     const { engine } = await boot();
     const c = await newPc(engine, 'Nia');
     engine.world.npc('npc_garran').location = { type: 'spot', id: c.location.id };
-    const before = c.coins;
+    const before = coinsOf(engine.world, c.id);
     const ctx = ctxFor(engine, c, { action_text: 'le robo la bolsa a Garrán', roll_category: 'fallo' });
     const r = tool(ctx, 'transfer_item', { instance_id: 'ii_garran_bolsa', to_type: 'character', to_id: c.id, slot: 'hand_off' });
     expect(r.ok).toBe(true);
     expect(r['coins_found']).toBe('4 de oro y 3 de plata');
-    expect(c.coins).toBe(before + 430);
+    expect(coinsOf(engine.world, c.id)).toBe(before + 430);
     const bolsa = engine.world.itemInstance('ii_garran_bolsa');
-    expect(bolsa.state['coins']).toBeUndefined();
+    // El dinero se queda en la bolsa (money.ts): cuenta en el del PJ mientras la lleve.
+    expect(bolsa.state['coins']).toBe(430);
     // Lo de dentro viaja con la bolsa.
     expect(carrierOf(engine.world, engine.world.itemInstance('ii_garran_esparto').location)).toEqual({ type: 'character', id: c.id });
     expect(allIncidents(engine.world).some((i) => i.kind === 'theft' && i.victim_id === 'npc_garran')).toBe(true);
@@ -134,11 +136,11 @@ describe('robar la bolsa', () => {
     const coins = Number(purse.state['coins']);
     killNpc(engine.world, hugo, engine.gameNow(), null, 'un mal golpe');
     expect(purse.location).toEqual({ type: 'spot', id: c.location.id });
-    const before = c.coins;
+    const before = coinsOf(engine.world, c.id);
     // Las manos del guerrero van ocupadas: la bolsa, al bolsillo.
     const r = transferItem(engine.world, purse.id, { type: 'character', id: c.id, slot: { kind: 'pocket' } });
     expect(r.ok && r.coins).toBe(coins);
-    expect(c.coins).toBe(before + coins);
+    expect(coinsOf(engine.world, c.id)).toBe(before + coins);
   });
 
   it('lo robado no se repone al volver a arrancar', async () => {

@@ -13,6 +13,7 @@
 import type { ItemDef, MasterConfig, WorldSnapshot } from '../../engine/model.js';
 import { CATALOG } from '../catalog.js';
 import type { NpcRoutine, ScheduledEvent } from '../../engine/schedule.js';
+import { kitItemDef } from '../../engine/outfit.js';
 
 /** Instante real de arranque del reloj: fijo para que los tests sean deterministas. */
 export const SEED_REAL_EPOCH_MS = Date.UTC(2026, 8, 1, 10, 0, 0);
@@ -225,9 +226,14 @@ const SEED: WorldSnapshot = {
   item_defs: [
     ...structuredClone(CATALOG as ItemDef[]),
     { id: 'it_llave_vharn', name: 'llave vieja con el sello de Vharn', aliases: ['llave', 'llave de vharn', 'key'], type: 'quest', size: 'tiny', weight_lb: 0.1, value: 0, unique: true, origin: 'custom' },
+    // La bolsa de los PJ (bloque D): la del ajuar (outfit.ts).
+    kitItemDef('purse', 'fantasy'),
     { id: 'it_espada_mira', name: 'espada de Mira', aliases: ['espada', 'sword'], type: 'weapon', size: 'medium', weight_lb: 3, value: 3000, unique: true, weapon: { damage: '1d8', damage_type: 'slashing' }, origin: 'custom' },
   ],
   item_instances: [
+    // El dinero de cada PJ va en su bolsa (money.ts): 15 de oro al cinto.
+    { id: 'ii_kael_bolsa', item_id: 'it_kit_purse', quantity: 1, location: { type: 'character', id: 'ch_kael', slot: { kind: 'equipped', slot: 'belt' } }, state: { coins: 1500 } },
+    { id: 'ii_mira_bolsa', item_id: 'it_kit_purse', quantity: 1, location: { type: 'character', id: 'ch_mira', slot: { kind: 'equipped', slot: 'belt' } }, state: { coins: 1500 } },
     { id: 'ii_kael_mochila', item_id: 'it_mochila', quantity: 1, location: { type: 'character', id: 'ch_kael', slot: { kind: 'equipped', slot: 'back' } }, state: {} },
     { id: 'ii_kael_daga', item_id: 'it_daga', quantity: 1, location: { type: 'character', id: 'ch_kael', slot: { kind: 'hand', which: 'main' } }, state: {} },
     { id: 'ii_kael_cuerda', item_id: 'it_cuerda', quantity: 1, location: { type: 'container', id: 'ii_kael_mochila' }, state: {} },
@@ -266,6 +272,6 @@ function ch(id: string, user_id: string, name: string, spot: string, abilities: 
     clues: [] as string[], completed_jobs: [] as string[], achievements: [] as { id: string; game_s: number }[],
     location: { type: 'spot' as const, id: spot },
     transit: null, status: 'active' as const, speed_ft: 30, abilities, passive_perception: passive,
-    darkvision: false, condition_speed_factor: 1, coins: 1500, last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
+    darkvision: false, condition_speed_factor: 1, last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
   };
 }

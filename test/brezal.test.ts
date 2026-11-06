@@ -23,6 +23,7 @@ import { GameManager } from '../src/games/manager.js';
 import type { Character, WorldSnapshot } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
 
+import { coinsOf } from '../src/engine/money.js';
 /** El mundo nace un 22 de octubre a mediodía real; en el juego, a las 18:00 del día 0. */
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 const H = 3600;
@@ -280,10 +281,10 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'sacar' }).ok).toBe(true);
     expect(engine.world.npc('npc_ceniza').location.id).toBe('sp_tab_chimenea');
     expect(stepOf(engine, c, 'q_perro')!.status).toBe('ready');
-    const coins = c.coins;
+    const coins = coinsOf(engine.world, c.id);
     await talkTo(engine, time, c, 'npc_brenna');
     expect(done(c)).toContain('q_perro');
-    expect(c.coins).toBe(coins + 100);
+    expect(coinsOf(engine.world, c.id)).toBe(coins + 100);
     expect(engine.world.npc('npc_brenna').attitude.by_character[c.id]).toBe('friendly');
 
     // --- Acto I: La cena del portón (presenta a Doro) y Lo que vio Doro ---
@@ -393,7 +394,7 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(stepOf(engine, c, 'q_final_templar')!.current!.id).toBe('pozo');
     await walk(engine, time, c, 'sp_pl_pozo');
     expect(stepOf(engine, c, 'q_final_templar')!.current!.id).toBe('templar');
-    const before = c.coins;
+    const before = coinsOf(engine.world, c.id);
     const rep = c.reputation['fac_brezal'] ?? 0;
     // Como en una acción del máster: lo que devuelve el tool va al progreso de la acción, y el final, en público.
     const actx = ctxFor(engine, c);
@@ -401,7 +402,7 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(actx.progress.some((e) => e.text.includes('Misión cumplida: «Templar el ascua»'))).toBe(true);
     expect(actx.progress.some((e) => e.public?.includes('ascua de Ysolde se apagó') && e.public.includes('Fen'))).toBe(true);
     expect(done(c)).toContain('q_final_templar');
-    expect(c.coins).toBe(before + 1000);
+    expect(coinsOf(engine.world, c.id)).toBe(before + 1000);
     expect(c.reputation['fac_brezal']).toBe(rep + 3);
     expect(engine.world.spot('sp_pl_pozo').state['templado']).toBe(true);
     expect(engine.world.npc('npc_ysolde').location.id).toBe('sp_ru_capilla');
