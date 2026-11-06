@@ -15,6 +15,7 @@ import type { Denomination } from './money.js';
 
 import type { Ability } from './rules.js';
 import type { StoryCondition } from './story.js';
+import type { WorldQuest } from './story.js';
 
 export type Id = string;
 
@@ -1174,4 +1175,6 @@ export interface WorldSnapshot {
   item_defs: ItemDef[];
   item_instances: ItemInstance[];
   resource_nodes: ResourceNode[];
+  /** Misiones creadas en la partida (story.ts, addWorldQuest): una fila por misión. Las de la campaña escrita, no. */
+  quests?: WorldQuest[];
 }

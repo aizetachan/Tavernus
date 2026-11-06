@@ -7,10 +7,13 @@ import type {
   Campaign, CarrySlot, Character, Exit, Id, ItemDef, ItemInstance, Location, Npc,
   Placement, Region, ResourceNode, Spot, Vehicle, WorldSnapshot, Zone,
 } from './model.js';
+import type { WorldQuest } from './story.js';
 
 export type Collection =
   | 'campaign' | 'regions' | 'zones' | 'locations' | 'spots' | 'exits'
-  | 'characters' | 'npcs' | 'vehicles' | 'item_defs' | 'item_instances' | 'resource_nodes';
+  | 'characters' | 'npcs' | 'vehicles' | 'item_defs' | 'item_instances' | 'resource_nodes'
+  /** Misiones creadas en la partida (story.ts). */
+  | 'quests';
 
 export interface ChangeListener {
   (change: { collection: Collection; id: Id; doc: unknown | null }): void;
@@ -29,6 +32,8 @@ export class World {
   readonly itemDefs = new Map<Id, ItemDef>();
   readonly itemInstances = new Map<Id, ItemInstance>();
   readonly resourceNodes = new Map<Id, ResourceNode>();
+  /** Misiones creadas en la partida (story.ts, addWorldQuest). */
+  readonly quests = new Map<Id, WorldQuest>();
 
   private listeners: ChangeListener[] = [];
 
@@ -45,6 +50,7 @@ export class World {
     for (const d of snapshot.item_defs) this.itemDefs.set(d.id, d);
     for (const i of snapshot.item_instances) this.itemInstances.set(i.id, i);
     for (const n of snapshot.resource_nodes) this.resourceNodes.set(n.id, n);
+    for (const q of snapshot.quests ?? []) this.quests.set(q.id, q);
     this.validate();
   }
 
@@ -82,6 +88,7 @@ export class World {
       case 'item_defs': return this.itemDefs;
       case 'item_instances': return this.itemInstances;
       case 'resource_nodes': return this.resourceNodes;
+      case 'quests': return this.quests;
       case 'campaign': throw new Error('campaign is not a map');
     }
   }
@@ -191,6 +198,7 @@ export class World {
       item_defs: [...this.itemDefs.values()],
       item_instances: [...this.itemInstances.values()],
       resource_nodes: [...this.resourceNodes.values()],
+      ...(this.quests.size ? { quests: [...this.quests.values()] } : {}),
     };
   }
 

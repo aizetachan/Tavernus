@@ -450,7 +450,64 @@ export function finalsMissedBy(world: World, c: Character, sinceGameS: number): 
 }
 
 export function storyOf(world: World): Story | null {
-  return (world.campaign as typeof world.campaign & StoryCampaign).story ?? null;
+  const base = (world.campaign as typeof world.campaign & StoryCampaign).story ?? null;
+  return world.quests?.size ? withWorldQuests(world, base) : base;
+}
+
+// --- Misiones creadas en la partida (colección `quests` del mundo) -------------
+
+/** Misión creada en una partida (no en la campaña escrita): por el máster, la IA de un mundo o una plantilla. */
+export type WorldQuest = StoryQuest & {
+  source: 'master' | 'ia' | 'template';
+  created_game_s: number;
+  /** Versión de la definición: sube si se corrige. */
+  rev: number;
+};
+
+const merged = new WeakMap<World, { base: Story | null; key: string; story: Story }>();
+
+/** La historia de la campaña con las misiones de la partida detrás (en caché mientras no cambien). */
+function withWorldQuests(world: World, base: Story | null): Story {
+  const key = [...world.quests.values()].map((q) => `${q.id}@${q.rev}`).join(',');
+  const hit = merged.get(world);
+  if (hit && hit.base === base && hit.key === key) return hit.story;
+  const story: Story = { ...(base ?? { escalation: [] }), quests: [...(base?.quests ?? []), ...world.quests.values()] };
+  merged.set(world, { base, key, story });
+  return story;
+}
+
+/** Lo que existe en el mundo, para validar una misión nueva. */
+export function worldRefs(world: World): StoryRefs {
+  return {
+    spot: (id) => world.spots.has(id), location: (id) => world.locations.has(id), npc: (id) => world.npcs.has(id), item: (id) => world.itemDefs.has(id),
+    clue: (id) => world.campaign.clues.some((x) => x.id === id), job: (id) => world.campaign.jobs.some((x) => x.id === id), exit: (id) => world.exits.has(id),
+    // Como en worldgen/validate.ts: una pista sin sitio solo la da su gente; con fuentes, quien está en todas.
+    clueNpcs: (id) => {
+      const x = world.campaign.clues.find((k) => k.id === id);
+      if (!x) return [];
+      if (x.sources?.length) return x.sources.every((s) => s.npc_id && s.npc_id === x.sources![0]!.npc_id) ? [x.sources[0]!.npc_id!] : [];
+      return !x.location_ids?.length ? x.npc_ids ?? [] : [];
+    },
+  };
+}
+
+/**
+ * Añade (o corrige, con la misma id) una misión creada en la partida. Pasa por el mismo validador que las escritas,
+ * casos límite incluidos; si falla, no entra y se devuelven los errores (a la IA, para que corrija). Se guarda como
+ * un documento de la colección `quests` del mundo (en PostgreSQL, una fila por misión).
+ */
+export function addWorldQuest(world: World, q: StoryQuest, meta: { source: WorldQuest['source']; game_s: number }): { ok: true; quest: WorldQuest } | { ok: false; errors: string[] } {
+  const base = (world.campaign as typeof world.campaign & StoryCampaign).story ?? null;
+  if (base?.quests.some((x) => x.id === q.id)) return { ok: false, errors: [`la misión ${q.id} ya existe en la historia de la campaña.`] };
+  const prev = world.quests.get(q.id);
+  const others = [...(base?.quests ?? []), ...[...world.quests.values()].filter((x) => x.id !== q.id)];
+  const errs = validateStory({ quests: [...others, q], escalation: base?.escalation ?? [] }, worldRefs(world))
+    .filter((e) => e.startsWith(`misión ${q.id}`) || e.startsWith(`historia: la misión ${q.id}`));
+  if (errs.length) return { ok: false, errors: errs };
+  const wq: WorldQuest = { ...structuredClone(q), source: meta.source, created_game_s: prev?.created_game_s ?? meta.game_s, rev: (prev?.rev ?? 0) + 1 };
+  world.quests.set(wq.id, wq);
+  world.touch('quests', wq.id);
+  return { ok: true, quest: wq };
 }
 
 function stateOf(world: World): StoryState {
