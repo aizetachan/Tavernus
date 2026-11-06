@@ -698,4 +698,8 @@ const ESCALATION: StoryEscalation[] = [
   },
 ];
 
-export const STORY: Story = { quests: QUESTS, escalation: ESCALATION };
+/**
+ * Paquete de contenido versionado: las partidas de Brezal usan siempre este (syncStoryPack, al abrirlas). Sube la
+ * versión al cambiar misiones. 2: misiones por fases (el perro, la cadena y Tobías).
+ */
+export const STORY: Story = { pack: 'brezal', version: 2, quests: QUESTS, escalation: ESCALATION };
