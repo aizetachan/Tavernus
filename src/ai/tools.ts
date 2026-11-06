@@ -7,7 +7,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { Engine } from '../engine/engine.js';
 import type { World } from '../engine/world.js';
 import { rollD20, rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
-import { carrierOf, consumeItem, inventoryDetailed, inventoryView, npcCarryList, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
+import { carrierOf, consumeItem, inventoryDetailed, inventoryView, itemView, npcCarryList, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
 import type { Character, Id, Npc, Placement, ReactionKind } from '../engine/model.js';
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
 import { perceive, witnesses } from '../engine/perception.js';
@@ -837,7 +837,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const pos = positionOf(world, c, nowGameS);
       const pub = { id: c.id, name: c.name, race: c.race, class_name: c.class_name, appearance: c.appearance, status: c.status, spot_id: pos.spot_id, hands: inv.hands, equipped: inv.equipped, conditions: c.conditions.map((x) => x.name), hp_hint: c.hp_current >= c.hp_max ? 'ileso' : c.hp_current > c.hp_max / 2 ? 'herido' : 'malherido' };
       if (c.id !== actor.id) return pub;
-      return { ...pub, level: c.level, abilities: c.abilities, hp: `${c.hp_current}/${c.hp_max}`, proficiencies: c.proficiencies, inventory: inventoryDetailed(world, c.id), coins: c.coins, encumbrance: inv.encumbrance.level, backstory: c.backstory, facts: characterFacts(c).map((f) => f.text) };
+      return { ...pub, level: c.level, abilities: c.abilities, hp: `${c.hp_current}/${c.hp_max}`, proficiencies: c.proficiencies, inventory: inventoryDetailed(world, c.id).map(({ item_id, ...x }) => (x.unidentified ? x : { item_id, ...x })), coins: c.coins, encumbrance: inv.encumbrance.level, backstory: c.backstory, facts: characterFacts(c).map((f) => f.text) };
     }
     case 'get_npc': {
       const n = world.npc(s('npc_id'));
@@ -858,9 +858,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       };
     }
     case 'get_item': {
-      const i = world.itemInstance(s('instance_id'));
-      const d = world.itemDef(i.item_id);
-      return { instance_id: i.id, item_id: d.id, name: d.name, type: d.type, size: d.size, weight_lb: d.weight_lb, quantity: i.quantity, state: i.state, location: i.location, container: d.container ?? null };
+      return itemView(world, s('instance_id'), actor.id);
     }
     case 'who_is_here': {
       const pos = positionOf(world, actor, nowGameS);
