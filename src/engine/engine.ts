@@ -3969,6 +3969,21 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   if (seed?.campaign.death_rules?.respawn_points && !camp2.death_rules?.respawn_points) { camp2.death_rules = { ...camp2.death_rules, respawn_points: structuredClone(seed.campaign.death_rules.respawn_points) }; changed = true; }
   // Partidas de antes de las costumbres de la campaña escrita.
   if (seed?.campaign.customs && !camp2.customs) { camp2.customs = [...seed.campaign.customs]; changed = true; }
+  // Partidas de antes de los hechos y reglas del mundo (worldrules.ts): reglas, etiquetas y vida diaria de la
+  // campaña escrita, y cómo reacciona cada NPC a las etiquetas. La primera pasada solo mira: nada salta por lo de antes.
+  if (seed) {
+    type Rules = { reactions?: unknown[]; tags?: unknown[]; chatter?: unknown[] };
+    const mine = camp2 as typeof camp2 & Rules;
+    const theirs = seed.campaign as typeof seed.campaign & Rules;
+    for (const k of ['reactions', 'tags', 'chatter'] as const) {
+      if (theirs[k] && mine[k] === undefined) { mine[k] = structuredClone(theirs[k]); changed = true; }
+    }
+    for (const n of snapshot.npcs) {
+      const sn = seed.npcs.find((x) => x.id === n.id);
+      if (sn?.tag_reactions && n.tag_reactions === undefined) { n.tag_reactions = structuredClone(sn.tag_reactions); changed = true; }
+      if (sn?.mute && n.mute === undefined) { n.mute = true; changed = true; }
+    }
+  }
   // Partidas de antes de las monedas de oro, plata y cobre (money.ts): la campaña escrita trae sus monedas y sus
   // precios nuevos (una cerveza a 4 de cobre, no a 30); se toman de la semilla una vez. El dinero de cada PJ ya
   // estaba en cobre: no se toca, solo se enseña y se pesa en monedas (1700 → 17 de oro).
