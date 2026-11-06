@@ -170,9 +170,9 @@ generadas una vez por entidad y guardadas como asset; clientes web y PWA sobre e
   a hechos de lore y a entidades con resolución.
 - **Memoria que se consolida**: las crónicas largas se resumen periódicamente con un modelo barato
   para que el contexto de escena no crezca con los meses.
-- **Almacén por etapas**: JSON por partida (por defecto; desde el 6-11-2026 con guardado atómico y el
-  contexto del máster aparte del registro) y, detrás de `WORLD_STORE=pg`, **PostgreSQL con documentos
-  JSONB**: la misma base que ya usa la plataforma en producción, con la partida (`world_id`) en cada fila
+- **Almacén por etapas**: JSON por partida (hasta el 6-11-2026; desde entonces con guardado atómico y el
+  contexto del máster aparte del registro, y como escape con `WORLD_STORE=json`) y, por defecto desde el
+  6-11-2026, **PostgreSQL con documentos JSONB** (las partidas de antes, en JSON, se conservan obsoletas): la misma base que ya usa la plataforma en producción, con la partida (`world_id`) en cada fila
   (`world_entities`, `world_events`, `world_tickers`), un documento por entidad y sin columnas por campo
   (docs/PLAN-OBJETOS.md §8). Sustituye al SQLite por partida que preveía este plan: con PostgreSQL ya en
   producción y con copia diaria, una sola base es más sencilla que un fichero por mundo, y permite
@@ -294,8 +294,8 @@ Pendiente de cierre:
 
 - **Objetivo**: ver el mundo y sostenerlo cuando crece.
 - **Entregables**: imágenes por entidad generadas una vez desde la descripción guardada y servidas
-  como asset (proveedor por decidir); el mundo en PostgreSQL con JSONB (hecho detrás de `WORLD_STORE=pg`
-  el 6-11-2026, con migración desde JSON; falta activarlo en el servidor) y búsqueda de texto;
+  como asset (proveedor por decidir); el mundo en PostgreSQL con JSONB (hecho el 6-11-2026 y por
+  defecto; las partidas de antes quedan obsoletas, con paso a mano desde JSON) y búsqueda de texto;
   panel de administración como observabilidad (spec §13: bandeja de reportes, explorador de eventos con
   prompt exacto y reproducción, métricas, decisiones del Director pendientes); métricas de coste por
   partida y por jugador.
@@ -338,7 +338,7 @@ espaciado y con 2 peticiones a la vez como mucho. Si falla, o se agota la cuota 
 |---|---|---|
 | Modelo de la beta: **Haiku 5.5 a esfuerzo bajo** (31-10). Es el único que cabe en el objetivo de coste: 0,27 céntimos por acción medidos en 10 partidas de Brezal (docs/PLAYTEST-2026-10-31.md; la medición costó unos 9,25 $). Decidido por coste, no por calidad: no se ha comparado con otros modelos | Queda abierto si Sonnet 5.5 o un modelo mixto compensan | Tras arreglar lo que frena las partidas, con una comparación corta |
 | Proveedor de imágenes | Por evaluar; una imagen por entidad, nunca por turno | Fase 4 |
-| ~~SQLite por partida~~ El mundo en PostgreSQL con JSONB | Hecho detrás de `WORLD_STORE=pg` (6-11-2026); JSON sigue por defecto | Activarlo en el servidor cuando las partidas duren días, haya más de un proceso o el panel pida consultas entre partidas (PLAN-OBJETOS §8.3) |
+| ~~SQLite por partida~~ El mundo en PostgreSQL con JSONB | Hecho y por defecto (6-11-2026); `WORLD_STORE=json` como escape; las partidas de antes se conservan obsoletas | Decidido por Miguel el 6-11-2026 (PLAN-OBJETOS §8.4) |
 | Reglas para ambientaciones no fantásticas | SRD como núcleo con paquete generado (plan), Fate o Cypher como alternativa | Fase 1 fija el núcleo; revisar tras fase 2 |
 | Director automático o en borrador | Borrador hasta validar aciertos | Fase 3 |
 | Cuánto pregenerar | Vecinos inmediatos durante el viaje; medir latencia | Fase 2 |

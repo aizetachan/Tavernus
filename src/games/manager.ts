@@ -2,8 +2,8 @@
  * Gestor de partidas para la web. Una partida es una carpeta
  * <root>/<slug>/ con un manifiesto (game.json) y, normalmente, dentro:
  *
- *   data/          persistencia JSON del motor (JsonFileRepository); con WORLD_STORE=pg el mundo va en la base
- *                  (worlds.ts) y esta carpeta solo guarda lo de antes
+ *   data/          con WORLD_STORE=json, el mundo en JSON (JsonFileRepository). Con `pg` (por defecto) el mundo va
+ *                  en la base (worlds.ts) y aquí solo queda el de antes: la partida está obsoleta (`GameInfo.obsolete`)
  *   master-cache/  respuestas del máster (record | replay; src/ai/cache.ts)
  *   initial/       copia del estado recién creado (grabaciones y demos), para reiniciar
  *   recorded/      la partida grabada tal como quedó al convertirla en demo
@@ -101,6 +101,11 @@ export interface GameInfo {
   synopsis: string | null;
   /** La última vista de un sitio pintada en la partida, para el menú (null si aún no hay ninguna). */
   cover: string | null;
+  /**
+   * Partida de antes de guardar el mundo en la base (WORLD_STORE=pg, worlds.ts): se conserva y se lista, con sus
+   * PJ y su última narración, pero no se abre. Las demos nunca lo son: vuelven a su foto de arranque.
+   */
+  obsolete: boolean;
 }
 
 export interface CreateGameInput {
@@ -314,7 +319,17 @@ export class GameManager {
       world: m.world ? { seed: m.world.seed, tone: m.world.tone, template: m.world.model === 'offline' } : null,
       synopsis: await this.worlds.synopsis(this.worldRef(m)).catch(() => null),
       cover: await coverOf(join(p.dir, 'images'), m.slug),
+      obsolete: !open && await this.isObsolete(m),
     };
+  }
+
+  /** Ver `GameInfo.obsolete`. */
+  async isObsolete(m: GameManifest): Promise<boolean> {
+    return !m.demo && await this.worlds.obsolete(this.worldRef(m)).catch(() => false);
+  }
+
+  private obsoleteError(m: GameManifest): GameError {
+    return new GameError(`«${m.name}» es de antes de que el mundo se guardara en la base: se conserva tal como quedó, pero ya no se puede seguir jugando.`, 409);
   }
 
   isOpen(slug: string): boolean { return this.engines.has(slug); }
@@ -355,7 +370,10 @@ export class GameManager {
     const seed = m.world ? JSON.parse(await readFile(join(p.dir, m.world.file), 'utf8')) as WorldSnapshot
       : isAuthoredCampaign(m.campaign_id) ? authoredSeed(m.campaign_id, { now: this.now() }) : makeSeed();
     const ref = this.worldRef(m);
-    await this.worlds.prepare(ref);
+    // Una partida de antes no se abre; una demo de antes empieza desde su foto de arranque (o de la semilla, si no tiene).
+    if (await this.isObsolete(m)) throw this.obsoleteError(m);
+    if (m.demo && await this.worlds.obsolete(ref)) await this.restoreInitial(m);
+    await this.worlds.prepare(ref, { ignoreLegacy: m.demo });
     const engine = await Engine.boot({
       pauseOnBoot: true,
       ...this.engineOpts,
@@ -538,6 +556,7 @@ export class GameManager {
     if (m.mode !== 'record') throw new GameError('Solo las grabaciones (modo grabar) se pueden convertir en demo.');
     const p = this.paths(m);
     if (!inside(p.dir, p.data) || !inside(p.dir, p.cache)) throw new GameError('Esta partida guarda sus datos fuera de su carpeta; no se puede convertir en demo.');
+    if (!this.isOpen(slug) && await this.isObsolete(m)) throw this.obsoleteError(m);
     await this.close(slug);
     await this.worlds.move(this.worldRef(m), this.worldRef(m, 'recorded'));
     await this.restoreInitial(m);

@@ -271,6 +271,8 @@ ${CHARGEN_CSS}
   input:focus, select:focus { border-color: rgba(230,183,90,.6); }
   .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .synopsis { margin: 2px 0 0; max-width: 620px; font-size: 15px; line-height: 1.5; color: #d9d3c8; text-shadow: 0 1px 10px rgba(0,0,0,.6); }
+  /* Partida obsoleta (de antes de guardar el mundo en la base): en lugar de «Continuar», por qué no se abre. */
+  .obsolete-note { margin: 0; max-width: 460px; font-size: 14px; line-height: 1.5; color: #d9d3c8; text-shadow: 0 1px 10px rgba(0,0,0,.6); }
   .meta-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .avs { display: flex; align-items: center; }
   .avs span { display: grid; place-items: center; width: 30px; height: 30px; margin-left: -6px; border-radius: 50%; background: #22262a; border: 2px solid var(--chat); box-shadow: inset 0 0 0 1.5px currentColor; font-size: 12px; font-weight: 600; }
@@ -575,6 +577,9 @@ ${CHARGEN_JS}
   var chargenOptions = null, chargen = null, apiKey = true, modeTouched = false, lists = { continue: [], demos: [], recordings: [] }, tab = 'continue', selected = null, query = '';
   // Cuenta (null en local sin cuenta), su biblioteca de personajes y qué zona se ve: partidas o personajes.
   var me = null, library = [], zone = 'games', canCreate = true;
+  /** Partidas de antes de guardar el mundo en la base: se listan, pero no se abren (GameInfo.obsolete). */
+  var obsolete = {};
+  var OBSOLETE = 'Esta partida es de antes de que el mundo se guardara en la base: se conserva tal como quedó, pero ya no se puede seguir jugando.';
   var mobile = function () { return window.matchMedia('(max-width: 820px)').matches; };
 
   function fmt(iso) {
@@ -607,6 +612,7 @@ ${CHARGEN_JS}
   function day(iso) { try { return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return iso; } }
   /** Entrar en una partida: la madera se vuelve tecnología y se funde a negro; luego, la página de la partida (que aparece desde negro). */
   function open(slug, character) {
+    if (obsolete[slug]) { toast(OBSOLETE); return; }
     var url = '/?game=' + encodeURIComponent(slug) + (character ? '&character=' + encodeURIComponent(character) : '');
     if (document.body.classList.contains('leaving')) return;
     document.body.classList.add('leaving');
@@ -714,6 +720,7 @@ ${CHARGEN_JS}
   window.addEventListener('resize', function () { clearTimeout(fitTimer); fitTimer = setTimeout(function () { document.querySelectorAll('.art').forEach(fitArt); }, 100); });
   function summary(g) {
     var bits = [];
+    if (g.obsolete) bits.push('Obsoleta');
     if (g.characters.length) bits.push(g.characters.join(', '));
     if (g.mode === 'record' || g.mode === 'replay') bits.push(g.cache_entries + ' respuestas grabadas');
     if (g.world) bits.push(g.world.template ? 'mundo de plantilla' : 'mundo generado');
@@ -737,6 +744,8 @@ ${CHARGEN_JS}
   function extras(g, cls) {
     // Partidas a las que te uniste con un enlace: solo se abren (las gestiona quien las creó).
     if (g.host === false) return [];
+    // Obsoleta: solo se puede borrar (no se abre, ni se invita, ni se convierte en demo).
+    if (g.obsolete) return [deleteButton(g, cls + ' danger')];
     if (tab === 'demos') return [
       button('Jugar desde el principio', cls, function (b) {
         b.disabled = true;
@@ -795,7 +804,7 @@ ${CHARGEN_JS}
     // Móvil: «Continuar» en cada partida, a la derecha de los tres puntos; tocar la fila la enseña arriba.
     var play = el('button', 'ib play'); play.type = 'button'; play.setAttribute('aria-label', 'Continuar ' + g.name); play.innerHTML = icon('i-play');
     play.addEventListener('click', function (ev) { ev.stopPropagation(); open(g.slug); });
-    r.appendChild(play);
+    if (!g.obsolete) r.appendChild(play);
     var go = function () { selected = g.slug; closeNew(); render(); };
     r.addEventListener('click', go);
     r.addEventListener('dblclick', function () { open(g.slug); });
@@ -838,6 +847,7 @@ ${CHARGEN_JS}
     chips.appendChild(el('span', '', when(g)));
     if (g.world) chips.appendChild(el('span', '', (g.world.template ? 'Mundo de plantilla' : 'Mundo generado') + ', semilla ' + g.world.seed));
     if (g.mode === 'record' || g.mode === 'replay') chips.appendChild(el('span', '', g.cache_entries + ' respuestas grabadas'));
+    if (g.obsolete) chips.appendChild(el('span', '', 'Obsoleta'));
     cap.appendChild(chips);
     if (g.synopsis) cap.appendChild(el('p', 'synopsis', g.synopsis));
     else if (tab === 'continue') cap.appendChild(el('p', 'synopsis', g.characters.length ? 'Tu grupo te espera donde lo dejasteis.' : 'La partida está lista: entra y crea tu personaje.'));
@@ -845,9 +855,12 @@ ${CHARGEN_JS}
     p.appendChild(hero2);
     var body = el('div', 'body');
     var cta = el('div', 'cta');
-    var go = el('button', 'btn primary'); go.type = 'button'; go.innerHTML = icon('i-play') + CTA[tab];
-    go.addEventListener('click', function () { open(g.slug); });
-    cta.appendChild(go);
+    if (g.obsolete) cta.appendChild(el('p', 'obsolete-note', OBSOLETE));
+    else {
+      var go = el('button', 'btn primary'); go.type = 'button'; go.innerHTML = icon('i-play') + CTA[tab];
+      go.addEventListener('click', function () { open(g.slug); });
+      cta.appendChild(go);
+    }
     // Ajustes de la partida: un botón redondo con su menú (de momento, borrar; en demos y grabaciones, sus extras).
     var wrap = el('span', 'gear-wrap');
     var gear = el('button', 'ib gear'); gear.type = 'button'; gear.innerHTML = icon('i-gear');
@@ -1009,6 +1022,8 @@ ${CHARGEN_JS}
       if (me) $('acct-name').textContent = me.username;
       if (!$('g-tone').options.length) (d.options.tones || []).forEach(function (t) { $('g-tone').add(new Option(t.name, t.id)); });
       var games = d.games;
+      obsolete = {};
+      games.forEach(function (g) { if (g.obsolete) obsolete[g.slug] = true; });
       lists.continue = games.filter(function (g) { return !g.demo && g.mode !== 'record'; });
       lists.demos = games.filter(function (g) { return g.demo; });
       lists.recordings = games.filter(function (g) { return !g.demo && g.mode === 'record'; });

@@ -5,8 +5,9 @@
  *     Abre con un menú de partidas (src/games/manager.ts) en GAMES_DIR (./data/games); la
  *     primera vez, la partida de DATA_DIR pasa a ser «principal» con el modo de MASTER_MODE.
  *   - Sin --web: REPL local en la terminal (fase 1 sin cliente).
- *   - Con GOOGLE_CLOUD_PROJECT: persistencia en Firestore; con WORLD_STORE=pg, en PostgreSQL (DATABASE_URL);
- *     si no, ficheros JSON en DATA_DIR (./data/local). En la web, WORLD_STORE vale para todas las partidas.
+ *   - Con GOOGLE_CLOUD_PROJECT: persistencia en Firestore; si no, en PostgreSQL (DATABASE_URL; WORLD_STORE=pg, por
+ *     defecto), o con WORLD_STORE=json en ficheros JSON en DATA_DIR (./data/local). En la web, WORLD_STORE vale para
+ *     todas las partidas; las que solo tienen su mundo en JSON quedan obsoletas con `pg` (src/games/worlds.ts).
  *   - MASTER_MODE=live|record|replay|offline: máster real, grabado, reproducido o sin API (src/ai/mode.ts).
  *   - IMAGES=on: ilustración de cada localización al pisarla por primera vez (Pollinations; src/ai/illustrate.ts).
  */
@@ -40,7 +41,7 @@ async function main(): Promise<void> {
     process.exit(await worldStoreCommand(process.argv, env));
   }
   if (process.argv.includes('--web')) {
-    // La web lleva sus propias partidas (catálogo en la base, mundo de cada una en su carpeta); el REPL sigue con un motor único.
+    // La web lleva sus propias partidas (catálogo y mundos en la base); el REPL sigue con un motor único.
     const games = new GameManager({ root: env['GAMES_DIR'] ?? './data/games', env });
     await games.init();
     console.log(`[boot] partidas en ${games.root}`);
@@ -51,8 +52,9 @@ async function main(): Promise<void> {
 
   const dataDir = env['DATA_DIR'] ?? './data/local';
   const campaignId = env['CAMPAIGN_ID'] ?? 'demo';
-  // WORLD_STORE=pg: el mundo en PostgreSQL (DATABASE_URL, o PGlite en DATA_DIR/.pgdata), con la clave de la campaña.
-  const store = worldStoreFromEnv(env);
+  // WORLD_STORE=pg (por defecto): el mundo en PostgreSQL (DATABASE_URL, o PGlite en DATA_DIR/.pgdata), con la clave
+  // de la campaña. Un mundo de antes en DATA_DIR, en JSON, no se abre (worlds.ts): WORLD_STORE=json para seguirlo.
+  const store = env['GOOGLE_CLOUD_PROJECT'] ? 'firestore' : worldStoreFromEnv(env);
   const db = store === 'pg' ? await openDb(dbUrlFromEnv(env, dataDir, 'open')!) : null;
   if (db) {
     const ref = { key: campaignId, dir: dataDir, campaignId };

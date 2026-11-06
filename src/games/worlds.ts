@@ -1,11 +1,12 @@
 /**
- * Dónde guarda cada partida su mundo (WORLD_STORE): en su carpeta de datos, en JSON (por defecto, como siempre),
- * o en la base PostgreSQL de la plataforma (`pg`, src/persistence/pg.ts). El gestor de partidas (manager.ts) no
- * sabe cuál: arranca, copia, mueve y borra mundos a través de esto.
+ * Dónde guarda cada partida su mundo (WORLD_STORE): en la base PostgreSQL de la plataforma (`pg`, por defecto
+ * desde el 6-11-2026; src/persistence/pg.ts) o en su carpeta de datos, en JSON (`json`, el escape: como antes).
+ * El gestor de partidas (manager.ts) no sabe cuál: arranca, copia, mueve y borra mundos a través de esto.
  *
- * Con `pg`, los dos conviven: una partida que aún no está en la base y sí tiene su mundo en la carpeta se pasa a
- * la base la primera vez que hace falta (sin tocar los ficheros, que se quedan como estaban). El paso entero, y la
- * vuelta, con scripts/world-store.ts.
+ * Con `pg`, una partida de antes (su mundo solo en su carpeta, en JSON) queda **obsoleta**: se conserva tal como
+ * está y sale en el menú, pero no se pasa sola a la base ni se puede abrir (`obsolete`, `prepare`). Quien quiera
+ * seguirla la pasa a mano (`npm run world-store -- to-pg`, src/games/world-cli.ts) o vuelve a WORLD_STORE=json.
+ * Las fotos de arranque de las demos (`slug/initial`, `slug/recorded`) sí pasan solas: son la demo, no lo jugado.
  */
 
 import { cp, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
@@ -25,8 +26,13 @@ export interface WorldRef { key: string; dir: string; campaignId: Id }
 export interface WorldStore {
   readonly kind: WorldStoreKind;
   repo(ref: WorldRef): Repository;
-  /** Antes de arrancar la partida. */
-  prepare(ref: WorldRef): Promise<void>;
+  /**
+   * Antes de arrancar la partida. Con un mundo obsoleto falla (ObsoleteWorldError), salvo con `ignoreLegacy`: entonces
+   * arranca como si no lo hubiera (las demos, que empiezan de su foto o de la semilla).
+   */
+  prepare(ref: WorldRef, opts?: { ignoreLegacy?: boolean }): Promise<void>;
+  /** Si el mundo es de antes y este almacén ya no lo juega: está solo en su carpeta, en JSON (con `pg`). */
+  obsolete(ref: WorldRef): Promise<boolean>;
   /** Nombres de los PJ en juego (no retirados), o null si aún no hay mundo guardado. */
   characters(ref: WorldRef): Promise<string[] | null>;
   synopsis(ref: WorldRef): Promise<string | null>;
@@ -40,12 +46,24 @@ export interface WorldStore {
   removeGame(slug: string): Promise<void>;
 }
 
-/** WORLD_STORE: `json` (por defecto) o `pg`. */
+/** WORLD_STORE: `pg` (por defecto) o `json`. */
 export function worldStoreFromEnv(env: NodeJS.ProcessEnv): WorldStoreKind {
   const v = (env['WORLD_STORE'] ?? '').trim().toLowerCase();
-  if (!v || v === 'json') return 'json';
-  if (v === 'pg' || v === 'postgres' || v === 'postgresql') return 'pg';
-  throw new Error(`WORLD_STORE no válido: «${v}» (json | pg).`);
+  if (!v || v === 'pg' || v === 'postgres' || v === 'postgresql') return 'pg';
+  if (v === 'json') return 'json';
+  throw new Error(`WORLD_STORE no válido: «${v}» (pg | json).`);
+}
+
+/** Arrancar una partida de antes con WORLD_STORE=pg (arriba). */
+export class ObsoleteWorldError extends Error {
+  constructor(readonly ref: WorldRef) {
+    super(`El mundo «${ref.key}» es de antes de guardarse en la base: sigue en ${ref.dir}, pero ya no se juega (npm run world-store -- to-pg para pasarlo, o WORLD_STORE=json).`);
+  }
+}
+
+/** Si la carpeta tiene un mundo guardado en JSON. */
+export function hasJsonWorld(ref: WorldRef): Promise<boolean> {
+  return exists(join(ref.dir, `${ref.campaignId}.world.json`));
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -70,6 +88,7 @@ export class JsonWorldStore implements WorldStore {
   readonly kind = 'json' as const;
   repo(ref: WorldRef): Repository { return new JsonFileRepository(ref.dir); }
   async prepare(): Promise<void> {}
+  async obsolete(): Promise<boolean> { return false; }
   async characters(ref: WorldRef): Promise<string[] | null> {
     try {
       const snap = JSON.parse(await readFile(join(ref.dir, `${ref.campaignId}.world.json`), 'utf8')) as WorldSnapshot;
@@ -91,25 +110,39 @@ export class JsonWorldStore implements WorldStore {
   async removeGame(): Promise<void> {}
 }
 
-/** El mundo en la base de la plataforma (pg.ts). La carpeta de datos solo se lee, para pasar partidas de antes. */
+/**
+ * El mundo en la base de la plataforma (pg.ts). La carpeta de datos solo se lee: para listar las partidas de antes
+ * (obsoletas) y para pasar a la base las fotos de arranque de las demos.
+ */
 export class PgWorldStore implements WorldStore {
   readonly kind = 'pg' as const;
   constructor(private readonly db: Db, private readonly log: (m: string) => void = (m) => console.log(m)) {}
 
   repo(ref: WorldRef): Repository { return new PgRepository(this.db, ref.key); }
 
-  prepare(ref: WorldRef): Promise<void> { return this.adopt(ref).then(() => undefined); }
+  /** Sin esta comprobación, el motor arrancaría de la semilla un mundo nuevo encima de la partida de antes y la escondería. */
+  async prepare(ref: WorldRef, opts: { ignoreLegacy?: boolean } = {}): Promise<void> {
+    if (!opts.ignoreLegacy && await this.obsolete(ref)) throw new ObsoleteWorldError(ref);
+  }
+
+  async obsolete(ref: WorldRef): Promise<boolean> {
+    return !(await hasWorld(this.db, ref.key)) && await hasJsonWorld(ref);
+  }
+
+  /** Las fotos de las demos (clave «slug/…»), no el mundo de una partida. */
+  private static photo(ref: WorldRef): boolean { return ref.key.includes('/'); }
 
   /**
-   * Si el mundo aún no está en la base y sí en su carpeta (una partida de antes de WORLD_STORE=pg), lo pasa a la
-   * base. Los ficheros no se tocan. Devuelve si hay mundo en la base.
+   * Si hay mundo en la base. Una foto de demo que aún está solo en su carpeta (de antes de WORLD_STORE=pg) pasa a la
+   * base, sin tocar los ficheros; el mundo de una partida, no (queda obsoleto: arriba).
    */
   private async adopt(ref: WorldRef): Promise<boolean> {
     if (await hasWorld(this.db, ref.key)) return true;
+    if (!PgWorldStore.photo(ref)) return false;
     const w = readJsonWorld(ref.dir, ref.campaignId);
     if (!w) return false;
     const r = await importWorld(this.db, ref.key, w);
-    this.log(`[mundos] «${ref.key}» pasa de ${ref.dir} a la base: ${r.entities} entidades, ${r.events} eventos${r.skipped ? ` (${r.skipped} con seq repetido, fuera)` : ''}`);
+    this.log(`[mundos] la foto «${ref.key}» pasa de ${ref.dir} a la base: ${r.entities} entidades, ${r.events} eventos${r.skipped ? ` (${r.skipped} con seq repetido, fuera)` : ''}`);
     return true;
   }
 
@@ -137,7 +170,7 @@ export class PgWorldStore implements WorldStore {
     await copyWorld(this.db, from.key, to.key);
   }
 
-  /** La copia en disco de antes, si la hay, va con él: si no, volvería a la base al arrancar como si fuera nueva. */
+  /** La copia en disco de antes, si la hay, va con él: si no, el sitio de origen seguiría pareciendo una partida de antes. */
   async move(from: WorldRef, to: WorldRef): Promise<void> {
     await this.adopt(from);
     await moveWorld(this.db, from.key, to.key);

@@ -1,6 +1,8 @@
 /**
- * Pasar mundos de partida entre ficheros JSON y la base (WORLD_STORE=pg; docs/DESPLIEGUE.md, «El mundo en la
- * base»). Nunca escribe en la carpeta de origen; `to-json` no pisa una carpeta con mundo sin `--force`.
+ * Pasar mundos de partida entre ficheros JSON y la base (WORLD_STORE; docs/DESPLIEGUE.md, «El mundo de las
+ * partidas en la base»). Nunca escribe en la carpeta de origen; `to-json` no pisa una carpeta con mundo sin `--force`.
+ * Con la base por defecto, las partidas de antes quedan obsoletas (worlds.ts) y no se pasan solas: `to-pg` con
+ * `--key <slug>` vuelve jugable una; `games` las pasaría todas (no se usa al desplegar).
  *
  *   npm run world-store -- to-pg <carpeta-de-datos> [--campaign <id>] [--key <world_id>]
  *   npm run world-store -- to-json <world_id> <carpeta-de-datos> [--force]

@@ -11,14 +11,15 @@ import { Engine, type MasterLike } from '../src/engine/engine.js';
 import { makeSeed } from '../src/data/seed/demo.js';
 import { memoryDb, type Db } from '../src/db/db.js';
 import { JsonFileRepository, readJsonWorld, writeJsonWorld } from '../src/persistence/jsonfile.js';
-import { exportWorld, importWorld, PgRepository } from '../src/persistence/pg.js';
+import { exportWorld, hasWorld, importWorld, PgRepository } from '../src/persistence/pg.js';
+import { createItem } from '../src/engine/conflict.js';
 import { splitDiagnostics } from '../src/persistence/diagnostics.js';
 import { journalOf } from '../src/engine/journal.js';
 import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
 import { recordClient } from '../src/ai/cache.js';
 import { GameManager, type MasterFactory } from '../src/games/manager.js';
-import { PgWorldStore, worldStoreFromEnv } from '../src/games/worlds.js';
+import { ObsoleteWorldError, PgWorldStore, worldStoreFromEnv } from '../src/games/worlds.js';
 import { compareWorlds, worldStoreCommand } from '../src/games/world-cli.js';
 import { fakeTime } from './helpers.js';
 
@@ -135,6 +136,26 @@ describe('PgRepository', () => {
     expect(doc[0]!.doc.location).toEqual({ type: 'spot', id: 'sp_tab_barra' });
   });
 
+  it('un objeto creado al robar (createItem) llega a la base con su definición, y vuelve al arrancar', async () => {
+    const time = fakeTime();
+    const engine = await Engine.boot({ repo: new PgRepository(db, 'robo'), campaignId: 'demo', seed: makeSeed(), now: time.now, deterministic: false });
+    await engine.flush();
+    const npc = [...engine.world.npcs.values()][0]!;
+    const r = createItem(engine.world, npc, { name: 'anillo de cobre' });
+    expect(r.ok && r.created).toBe(true);
+    if (!r.ok) return;
+    await engine.flush();
+    const rows = await db.query<{ collection: string; id: string; doc: { name?: string; origin?: string; item_id?: string } }>(
+      `select collection, id, doc from world_entities where world_id = 'robo' and ((collection = 'item_defs' and id = $1) or (collection = 'item_instances' and id = $2))`,
+      [r.inst.item_id, r.inst.id]);
+    const def = rows.find((x) => x.collection === 'item_defs');
+    expect(def?.doc).toMatchObject({ name: 'anillo de cobre', origin: 'custom' });
+    expect(rows.find((x) => x.collection === 'item_instances')?.doc.item_id).toBe(r.inst.item_id);
+    const again = await Engine.boot({ repo: new PgRepository(db, 'robo'), campaignId: 'demo', now: time.now, deterministic: false });
+    expect(again.world.itemDefs.get(r.inst.item_id)?.name).toBe('anillo de cobre');
+    expect(again.world.itemInstances.get(r.inst.id)?.location).toEqual({ type: 'npc', id: npc.id });
+  });
+
   it('un cambio en la campaña reescribe solo las claves que cambiaron', async () => {
     const repo = new PgRepository(db, 'campana');
     const seed = makeSeed();
@@ -189,9 +210,10 @@ const noApi: MasterFactory = (engine, game, paths, rng) => {
 };
 
 describe('WORLD_STORE=pg en el gestor de partidas', () => {
-  it('lee la variable', () => {
-    expect(worldStoreFromEnv({})).toBe('json');
+  it('lee la variable: la base por defecto, JSON como escape', () => {
+    expect(worldStoreFromEnv({})).toBe('pg');
     expect(worldStoreFromEnv({ WORLD_STORE: 'pg' })).toBe('pg');
+    expect(worldStoreFromEnv({ WORLD_STORE: 'JSON' })).toBe('json');
     expect(() => worldStoreFromEnv({ WORLD_STORE: 'sqlite' })).toThrow(/WORLD_STORE/);
   });
 
@@ -227,28 +249,72 @@ describe('WORLD_STORE=pg en el gestor de partidas', () => {
     } finally { await games.closeAll(); }
   });
 
-  it('una partida de antes (en su carpeta) pasa a la base al abrirla, sin tocar sus ficheros', async () => {
+  it('una partida de antes (solo en su carpeta) queda obsoleta: se lista, no se abre y sus ficheros no se tocan', async () => {
     const dir = await tmp();
     const root = join(dir, 'games');
-    const before = new GameManager({ root, env: { DATA_DIR: join(dir, 'local') }, masterFor: noApi, engine: { deterministic: false }, log: () => {} });
+    const opts = { root, env: { DATA_DIR: join(dir, 'local') }, masterFor: noApi, engine: { deterministic: false }, log: () => {} };
+    const before = new GameManager(opts);
     const { game, character_id } = await before.create({ name: 'De antes', mode: 'offline', character: { name: 'Odo' } });
     await (await before.open(game.slug)).act(character_id!, 'me acerco a la barra');
     const seq = (await before.open(game.slug)).events.lastSeq;
     await before.closeAll();
     const p = before.paths(game);
-    const mtime = (await stat(join(p.data, `${game.campaign_id}.world.json`))).mtimeMs;
+    const file = join(p.data, `${game.campaign_id}.world.json`);
+    const mtime = (await stat(file)).mtimeMs;
 
-    const after = new GameManager({ root, env: { DATA_DIR: join(dir, 'local') }, masterFor: noApi, engine: { deterministic: false }, log: () => {} });
+    const after = new GameManager(opts);
     after.useWorldStore(new PgWorldStore(db, () => {}));
     try {
-      expect((await after.info(game)).characters).toContain('Odo');
+      const info = await after.info(game);
+      expect(info.obsolete).toBe(true);
+      expect(info.characters).toContain('Odo');
+      expect((await after.list()).find((g) => g.slug === game.slug)?.obsolete).toBe(true);
+      await expect(after.open(game.slug)).rejects.toMatchObject({ status: 409 });
+      await expect(after.addCharacter(game.slug, 'web:x', { name: 'Ivo' })).rejects.toThrow(/ya no se puede seguir jugando/);
+      expect(after.isOpen(game.slug)).toBe(false);
+      // Ni el almacén deja arrancarla por su cuenta: crearía un mundo nuevo encima y escondería la partida.
+      await expect(after.worldStore.prepare({ key: game.slug, dir: p.data, campaignId: game.campaign_id })).rejects.toBeInstanceOf(ObsoleteWorldError);
+      expect(await hasWorld(db, game.slug)).toBe(false);
+      expect((await stat(file)).mtimeMs).toBe(mtime);
+
+      // El escape: con WORLD_STORE=json se sigue jugando como antes.
+      const json = new GameManager(opts);
+      expect((await json.info(game)).obsolete).toBe(false);
+      expect((await json.open(game.slug)).events.lastSeq).toBe(seq);
+      await json.closeAll();
+
+      // Y pasarla a mano a la base (npm run world-store -- to-pg) la vuelve jugable.
+      await importWorld(db, game.slug, readJsonWorld(p.data, game.campaign_id)!);
+      expect((await after.info(game)).obsolete).toBe(false);
+      expect((await after.open(game.slug)).events.lastSeq).toBe(seq);
+    } finally { await after.closeAll(); }
+  });
+
+  it('una demo de antes no queda obsoleta: vuelve a su foto de arranque, que pasa a la base', async () => {
+    const dir = await tmp();
+    const root = join(dir, 'games');
+    const opts = { root, env: { DATA_DIR: join(dir, 'local') }, masterFor: noApi, engine: { deterministic: false }, log: () => {} };
+    const before = new GameManager(opts);
+    const { game, character_id } = await before.create({ name: 'Demo de antes', mode: 'record', character: { name: 'Lia' } });
+    await (await before.open(game.slug)).act(character_id!, 'me acerco a la barra');
+    await before.convertToDemo(game.slug);
+    const visit = await before.open(game.slug);
+    await visit.act(character_id!, 'me acerco a la barra');
+    await visit.act(character_id!, 'miro alrededor');
+    const played = visit.events.lastSeq;
+    await before.closeAll();
+
+    const after = new GameManager(opts);
+    after.useWorldStore(new PgWorldStore(db, () => {}));
+    try {
+      const demo = await after.require(game.slug);
+      expect(demo.demo).toBe(true);
+      expect((await after.info(demo)).obsolete).toBe(false);
       const engine = await after.open(game.slug);
-      expect(engine.events.lastSeq).toBe(seq);
       expect(engine.world.characters.has(character_id!)).toBe(true);
-      await engine.act(character_id!, 'miro alrededor');
-      await engine.flush();
-      expect((await stat(join(p.data, `${game.campaign_id}.world.json`))).mtimeMs).toBe(mtime);
-      expect((await exportWorld(db, game.slug))!.events.at(-1)!.seq).toBe(seq + 1);
+      expect(engine.events.lastSeq).toBeLessThan(played);
+      expect(await hasWorld(db, game.slug)).toBe(true);
+      expect(await hasWorld(db, `${game.slug}/initial`)).toBe(true);
     } finally { await after.closeAll(); }
   });
 });
