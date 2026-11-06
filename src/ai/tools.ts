@@ -1925,7 +1925,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         }
       }
       // Charla con un NPC: el guion del motor (talk.ts). Que conteste si le toca, que no nombre misiones cerradas, la longitud. Se reescribe una vez.
-      if (ctx.talk && (ctx.talk_rejections ?? 0) < 1) {
+      // Si el máster cierra con otro NPC presente que el que supuso el motor (no le nombró y tenía a otro al lado), el
+      // guion de ese turno no era para él: no se le pide nada a quien no ha hablado.
+      const otherNpc = input['npc_id'] != null && world.npcs.has(s('npc_id')) && ctx.talk && s('npc_id') !== ctx.talk.npc_id && world.spots.get(world.npc(s('npc_id')).location.id)?.location_id === here();
+      if (ctx.talk && !otherNpc && (ctx.talk_rejections ?? 0) < 1) {
         const plan = ctx.talk;
         const npc = world.npcs.get(plan.npc_id);
         const talkLines = parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id));
