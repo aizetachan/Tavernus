@@ -51,39 +51,23 @@ Los [[Encargos del tablón]] y la granja dan bucles aún más cortos.
 
 ## Cómo se encadenan
 
-```mermaid
-flowchart TB
-  subgraph A1["Acto I · Lo que trae el agua"]
-    AGUA["El agua turbia"]
-    CENA["La cena del portón"]
-    PERRO["Ceniza se ha perdido"]
-    DORO["Lo que vio Doro"]
-  end
-  subgraph A2["Acto II · Lo que esconde Brezal"]
-    SOTANO["Bajo el Jabalí"]
-    CADENA["La cadena de hierro frío"]
-    TOBIAS["El hijo del molinero"]
-    GRANERO["El Granero Quemado"]
-  end
-  subgraph A3["Acto III · La noche de la Brasa"]
-    FA["A · Templar el ascua"]
-    FB["B · La verdad en el pozo"]
-    FC["C · Que arda Vharn"]
-  end
-  CENA --> DORO
-  AGUA --> CADENA
-  PERRO --> SOTANO
-  PERRO --> GRANERO
-  DORO --> TOBIAS
-  DORO --> GRANERO
-  CADENA --> FA
-  GRANERO --> FA
-  SOTANO --> FB
-  GRANERO -->|"pista de Ysolde"| FB
-  GRANERO -->|"pista de Ysolde"| FC
-```
+Qué misión abre cuál, quién la pide y dónde, y el nivel que hace falta. Sale de los datos de la historia, no se dibuja a mano: el detalle y la tabla, en [[Mapa de misiones]].
 
-Las flechas son los requisitos: la misión anterior cumplida. Además, el acto II pide nivel 2 y el acto III, nivel 3. Cada página de acto lo detalla.
+![[Mapa de misiones.svg]]
+
+Las flechas son los requisitos: la misión anterior cumplida (discontinua si basta una de varias). Además, el acto II pide nivel 2 y el acto III, nivel 3. Cada página de acto lo detalla.
+
+## Misiones por fases
+
+Desde el 2026-11-06, una misión puede ir **por fases**, como las de los juegos de rol en línea: cada fase tiene uno o más objetivos que se cumplen **en cualquier orden**, y al cerrarse todos se abre la siguiente. El Diario pone cada fase como encabezado.
+
+- **Fases secundarias.** No hacen falta para cumplir la misión: se abren cuando pasa algo (el perro sale herido) y dan su recompensa.
+- **El objetivo es cómo queda el mundo**, no cómo se consigue: «Ceniza fuera de la madriguera y vivo». Cualquier forma que lo deje así vale, también una que se le ocurra al jugador.
+- **Vías.** Las formas que el mundo conoce de lograr un objetivo: pelear, colarse, convencer, saber algo, llevar el objeto justo, pedir ayuda a alguien que se fía de ti, un conjuro, pagar o dar un rodeo. Cada una pide algo de verdad (una tirada, un objeto, confianza, una hora) y deja sus consecuencias. En el Diario salen como **formas que conocemos**, en primera persona: «Hal dice que la loba le tiene miedo al fuego». Las que aún no conoces no salen hasta que alguien te las cuenta o algo te las enseña.
+- **Fallar no cierra la misión.** Una tirada fallada deja una complicación («la loba despertó y Ceniza se llevó un mordisco») y la misión sigue por otra vía. En el Diario sale tachada.
+- **Desenlaces.** Al cumplirla, el final depende de cómo quedó el mundo y de la vía: no es lo mismo sacar al perro sin que la loba se entere que ahuyentarla con fuego hacia los Corrales. Cada desenlace tiene su línea en el Diario y su recompensa, y lo que deja (un hecho del mundo) puede volver más tarde.
+
+Van ya por fases [[Acto I · Lo que trae el agua#Ceniza se ha perdido|Ceniza se ha perdido]], [[Acto II · Lo que esconde Brezal#La cadena de hierro frío|La cadena de hierro frío]] y [[Acto II · Lo que esconde Brezal#El hijo del molinero|El hijo del molinero]]. Las demás siguen como una lista de pasos. Ver [[El narrador]].
 
 ## Cómo se gana
 
@@ -135,6 +119,7 @@ Las monedas van en cobre: 1 de oro = 10 de plata = 100 de cobre.
 
 ## Más páginas
 
+- [[Mapa de misiones]]: qué misión abre cuál, quién la pide y con qué nivel.
 - [[Pistas]]: las 11 pistas, dónde están y qué revelan.
 - [[Encargos del tablón]]: los trabajos cortos.
 - [[Situaciones iniciales]]: cómo empieza cada personaje.
