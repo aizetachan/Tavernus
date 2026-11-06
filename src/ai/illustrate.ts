@@ -96,11 +96,11 @@ export interface SceneInput {
 }
 
 /** Qué muestra la imagen. Las de índices antiguos no lo llevan: son escenas. `manual`: el pincel del jugador (src/ai/paint.ts). */
-export type ImageKind = 'scene' | 'portrait' | 'item' | 'combat' | 'discovery' | 'manual';
+export type ImageKind = 'scene' | 'portrait' | 'talk' | 'item' | 'combat' | 'discovery' | 'manual';
 export type EntityKind = Exclude<ImageKind, 'scene'>;
 
-/** Orden en la cola: retrato > objeto = pincel (lo espera el jugador) > escena. */
-export const PRIORITY: Record<ImageKind, number> = { portrait: 3, item: 2, manual: 2, scene: 1, combat: 1, discovery: 1 };
+/** Orden en la cola: retrato (avatar) > charla = objeto = pincel (lo espera el jugador) > escena. */
+export const PRIORITY: Record<ImageKind, number> = { portrait: 3, talk: 2, item: 2, manual: 2, scene: 1, combat: 1, discovery: 1 };
 
 export interface SceneImage {
   key: string;
@@ -194,6 +194,14 @@ const ITEM_EN: Record<string, string> = {
   weapon: 'weapon', armor: 'armor', consumable: 'consumable', tool: 'tool', quest: 'curious object', treasure: 'treasure', misc: 'object', container: 'container',
 };
 
+/**
+ * La charla con un NPC, vista por quien le habla: él en su sitio, de medio cuerpo, mirando al espectador. Sin el PJ en
+ * la imagen, así vale para cualquiera que hable con él.
+ */
+export function talkPrompt(p: { place: string; who: string; light: LightLevel }, style: string): string {
+  return [p.place, `${clip(p.who)}, mid-conversation, looking at the viewer`, 'medium shot from the point of view of the person talking to them', LIGHT_EN[p.light], style, 'no text, no watermark'].filter(Boolean).join('. ');
+}
+
 /** El objeto en la mano: nombre y tipo del catálogo. */
 export function itemPrompt(p: { name: string; type: string }, style: string): string {
   return [`${p.name} (${ITEM_EN[p.type] ?? 'object'})`, 'a single object held in a hand, close-up still life, dark background', style, 'no text, no watermark'].join('. ');
@@ -219,7 +227,7 @@ export function entityKey(kind: EntityKind, entityId: Id, seed: number): string 
 
 /** Tamaño en Pollinations (Cloudflare siempre devuelve 1024x1024). */
 const SIZE: Record<EntityKind, { width: number; height: number }> = {
-  portrait: { width: 512, height: 640 }, item: { width: 512, height: 512 }, combat: { width: 768, height: 512 }, discovery: { width: 768, height: 512 }, manual: { width: 768, height: 512 },
+  portrait: { width: 512, height: 640 }, talk: { width: 768, height: 512 }, item: { width: 512, height: 512 }, combat: { width: 768, height: 512 }, discovery: { width: 768, height: 512 }, manual: { width: 768, height: 512 },
 };
 
 export function pollinationsUrl(prompt: string, seed: number, opts: { width?: number; height?: number; nologo?: boolean } = {}): string {
@@ -731,7 +739,16 @@ export function entityOf(engine: Engine, m: MomentNotice['moment'], e: GameEvent
   const style = styleBible(w.campaign);
   switch (m.kind) {
     case 'scene': return null;
-    case 'portrait': return portraitOf(engine, m.entity_id, e.location_id);
+    case 'talk': {
+      // Una por NPC (sirve a todos los que hablen con él), en el sitio de la primera charla.
+      const npc = w.npcs.get(m.entity_id);
+      const loc = w.locations.get(e.location_id);
+      if (!npc || !loc) return null;
+      return {
+        kind: 'talk', entity_id: npc.id, name: npc.name, location_id: loc.id, asset_ids: [npc.id],
+        prompt: talkPrompt({ place: placeOf(loc), who: `${npc.name}, ${npc.role}: ${npc.description}`, light: lightAt(engine.clock, loc, e.timestamp_game_s) }, style),
+      };
+    }
     case 'item': {
       const def = w.itemDefs.get(m.entity_id);
       return def && itemIllustrable(def) ? { kind: 'item', entity_id: def.id, name: def.name, location_id: e.location_id, prompt: itemPrompt({ name: def.name, type: def.type }, style) } : null;
@@ -769,8 +786,8 @@ export function entityOf(engine: Engine, m: MomentNotice['moment'], e: GameEvent
 
 /**
  * Engancha un ilustrador al motor: cada primera llegada de un PJ a una localización
- * encola su escena, y cada momento significativo su retrato, objeto o escena. En el
- * primer encuentro con un NPC también se hace el retrato del PJ (para el diálogo).
+ * encola su escena, y cada momento significativo su imagen (charla, objeto o escena). En la
+ * primera charla con un NPC también se hacen su retrato y el del PJ, sin mostrarlos: son los avatares del diálogo.
  */
 export function attachIllustrator(engine: Engine, illustrator: Illustrator): Illustrator {
   attached.set(engine, illustrator);
@@ -783,9 +800,11 @@ export function attachIllustrator(engine: Engine, illustrator: Illustrator): Ill
     const input = entityOf(engine, moment, event);
     if (!input) return;
     void illustrator.illustrateEntity(input, { character_id: moment.character_id, event_seq: event.seq, moment_key: moment.key });
-    if (moment.kind === 'portrait') {
-      const pc = portraitOf(engine, moment.character_id, event.location_id);
-      if (pc) void illustrator.illustrateEntity(pc);
+    if (moment.kind === 'talk') {
+      for (const id of [moment.entity_id, moment.character_id]) {
+        const p = portraitOf(engine, id, event.location_id);
+        if (p) void illustrator.illustrateEntity(p);
+      }
     }
   });
   return illustrator;

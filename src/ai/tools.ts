@@ -40,7 +40,7 @@ import { debtHeldBy, debtTitle, noteDebtTerms, openDebts, pawnItem, setDebt, set
 import { inventedPlaces } from '../engine/places.js';
 import { money } from '../engine/money.js';
 import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
-import { coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
+import { coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, servedRejection, servedWithoutPay, stolenRejection, stolenWithoutTool, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
@@ -387,6 +387,8 @@ export interface ToolContext {
   receive_rejections?: number;
   /** Cierres rechazados por mover un objeto del actor solo de palabra (uno como mucho). */
   moved_rejections?: number;
+  stolen_rejections?: number;
+  served_rejections?: number;
   /** Cierres rechazados por dar monedas por pagadas sin moverlas (closecheck.ts; uno como mucho). */
   coins_rejections?: number;
   /** El PJ ha atacado en esta acción con el tool attack (el de un NPC no cuenta). */
@@ -1649,6 +1651,24 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (verb) {
           ctx.moved_rejections = (ctx.moved_rejections ?? 0) + 1;
           return { error: movedRejection(verb) };
+        }
+      }
+      // Robar solo de palabra (la bolsa que no existe «cae a tu mano»): se reescribe una vez.
+      if ((ctx.stolen_rejections ?? 0) < 1) {
+        const took = stolenWithoutTool({ action: ctx.action_text ?? '', narration: s('narration_private'), okTools: ctx.ok_tools ?? [], pendingRoll: req !== null });
+        if (took) {
+          ctx.stolen_rejections = (ctx.stolen_rejections ?? 0) + 1;
+          return { error: stolenRejection(took) };
+        }
+      }
+      // Servir lo que se vende sin cobrarlo ni fiarlo (la jarra delante y nadie paga): se reescribe una vez.
+      if ((ctx.served_rejections ?? 0) < 1) {
+        const tagged = s('tags').split(/[,\s]+/).includes('trade');
+        const trade = tagged || ctx.talk?.situation === 'trade' || ctx.talk?.second === 'trade';
+        const served = servedWithoutPay({ narration: s('narration_private'), lines: parseLines(input['lines'], null, (id) => world.npcs.has(id)), okTools: ctx.ok_tools ?? [], trade, pendingRoll: req !== null });
+        if (served) {
+          ctx.served_rejections = (ctx.served_rejections ?? 0) + 1;
+          return { error: servedRejection(served) };
         }
       }
       // Monedas pagadas solo de palabra (pone 200 sobre la mesa y sigue con sus 200): se reescribe una vez.
