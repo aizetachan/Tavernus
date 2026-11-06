@@ -346,8 +346,10 @@ export class Engine {
       await opts.repo.saveSnapshot(snapshot);
     }
     const migrated = migrate(snapshot, opts.seed);
+    // El registro entero, sin el contexto del máster (diagnostics.ts): el historial, el diario, el prólogo y las
+    // transcripciones lo leen desde el principio. El punto de control (lastSeq) evita repetir un seq perdido.
     const past = await opts.repo.loadEvents(opts.campaignId, 0);
-    const lastSeq = past.reduce((m, e) => Math.max(m, e.seq), 0);
+    const lastSeq = past.reduce((m, e) => Math.max(m, e.seq), (await opts.repo.lastSeq?.(opts.campaignId)) ?? 0);
     const engine = new Engine(snapshot, opts, lastSeq);
     // Al cargar no hay nadie conectado (aunque se guardara así): lo dirá su presencia (una pestaña) o su primera
     // acción. Sin dormir a nadie: si no vuelve, el velo llega con setConnected cuando el adaptador lo dé por ido.
@@ -831,11 +833,13 @@ export class Engine {
   }
 
   async flush(): Promise<void> {
-    if (this.pending.size === 0) { await (this.repo as { settled?: () => Promise<void> }).settled?.(); return; }
+    if (this.pending.size === 0) { await this.repo.settled?.(); return; }
     const changes = [...this.pending.values()];
     this.pending.clear();
     await this.repo.write(this.world.campaign.id, changes);
     if (this.repo.flush) await this.repo.flush(this.world.snapshot());
+    // Y los eventos, que se escriben sin esperar: tras un flush, todo lo emitido está guardado.
+    await this.repo.settled?.();
   }
 
   // -------------------------------------------------------------------------
