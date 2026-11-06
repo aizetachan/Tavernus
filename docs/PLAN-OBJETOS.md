@@ -322,6 +322,53 @@ cada vez más vacías». Uno de ellos se ha quedado con una casa vacía de la pl
 - **Esto cambia PLAN.md §4**, que preveía SQLite por partida en la fase 4. Con PostgreSQL ya en producción, una
   sola base con JSONB es más sencilla que un fichero SQLite por mundo.
 
+### 8.4 Hecho (6-11-2026): G0 y G
+
+**G0, en el JSON** (`src/persistence/jsonfile.ts`):
+
+- **Guardado atómico:** el mundo y los tickers se escriben en un temporal y se renombran encima, en fila (dos
+  guardados seguidos ya no se pisan; antes, dos tickers guardados a la vez podían perder uno). Un temporal que
+  quedó de un corte se borra al cargar.
+- **Punto de control y lo que de verdad hace falta al arrancar.** Revisado qué lee el registro pasado: no solo
+  los momentos y las tiradas pendientes. El hilo de cada PJ al reconectar (`server.ts`), el diario
+  (`journal.ts`), el prólogo y el «mientras no estabas» (`prologue.ts`, `whileaway.ts`), las transcripciones
+  con cada NPC (`actor.ts`, `prompt.ts`), la comprobación de lo que el PJ ha percibido (`tools.ts`) y el
+  informe leen el registro **desde el principio de la partida**. Recortarlo por una ventana de horas cambiaría
+  la partida al reiniciar (el prólogo se repetiría, el hilo y el diario se acortarían, los NPC olvidarían
+  conversaciones). Lo que el juego no lee nunca es el contexto que vio el máster (`payload.master.context`):
+  5,9 de los 7,6 MB del registro de las partidas del 31-10. Así que:
+  - el contexto va aparte, en `<id>.context.jsonl`, y no se carga al arrancar ni queda en memoria
+    (`src/persistence/diagnostics.ts`); las herramientas de análisis lo recuperan (`readEventsSync`, que usa
+    `scripts/judge.ts`). Las partidas de antes se leen igual (se quita al cargar);
+  - el mundo guarda el punto de control (`_log.seq`, el último evento escrito): el motor sigue numerando desde
+    ahí aunque se pierda el final del registro, y una última línea a medias se descarta sin romper el arranque;
+  - el arranque lee unos 2 KB por evento en vez de unos 10. Una ventana de verdad pide antes que esos
+    consumidores lean del estado del mundo y no del registro: queda para cuando las partidas duren semanas.
+- Tests: `test/persistence-checkpoint.test.ts` (una partida larga arranca igual que seguía, desde el formato
+  nuevo y desde el de antes).
+
+**G, el mundo en PostgreSQL** (`src/persistence/pg.ts`, `src/games/worlds.ts`), detrás de `WORLD_STORE=pg`
+(por defecto, JSON). Cambios sobre §8.2:
+
+- La clave de cada fila es `world_id`, la partida (su slug), no `campaign_id`: varias partidas son de la misma
+  campaña («brezal»). La foto de arranque y lo grabado de una demo son `<slug>/initial` y `<slug>/recorded`.
+- `world_entities` lleva además `ord`, el orden de entrada: el mundo en memoria itera en ese orden y cargarlo
+  en otro cambiaría qué NPC o qué objeto va primero. JSONB no conserva el orden de las claves dentro de cada
+  documento (sí el de los arrays); los tests comparan sin él.
+- La capa no conoce el modelo: guarda cada array del snapshot como colección, sin tocar sus campos. Una
+  colección nueva no pide migración.
+- La campaña va en una fila por cada clave de primer nivel (`collection = '_campaign'`): la historia escrita
+  (unos 50 KB en Brezal) no se reescribe cada vez que cambia el estado de la historia, un hecho o un rumor; solo
+  las claves que cambiaron. Lo pidió la sesión de misiones, que además guardará las misiones creadas en partida
+  en su propia colección (`quests`), sin cambiar nada aquí.
+- `world_events` guarda el evento entero, con el contexto; al cargar, la base lo quita (`#-`) y no lo manda.
+- Convivencia: con `pg`, una partida que solo está en su carpeta pasa a la base al abrirla, sin tocar los
+  ficheros. Paso entero y vuelta: `npm run world-store -- to-pg | to-json | check | games`
+  (`src/games/world-cli.ts`; en el servidor, `node dist/index.js --world-store …`). Cómo activarlo:
+  docs/DESPLIEGUE.md, «El mundo de las partidas en la base». No está activado.
+- Tests: `test/persistence-pg.test.ts` (el mismo mundo en JSON y en PGlite, guardados por lotes, el gestor de
+  partidas entero con la base, el paso de partidas).
+
 ---
 
 ## 9. Pruebas y coste

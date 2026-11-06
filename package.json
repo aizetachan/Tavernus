@@ -17,6 +17,7 @@
     "dev": "node --env-file-if-exists=.env --import tsx src/index.ts",
     "web": "node --env-file-if-exists=.env --import tsx src/index.ts --web",
     "admin": "node --env-file-if-exists=.env dist/index.js --admin",
+    "world-store": "node --env-file-if-exists=.env --import tsx src/index.ts --world-store",
     "web:watch": "node --watch --watch-preserve-output --env-file-if-exists=.env --import tsx src/index.ts --web",
     "web:offline": "node --import tsx scripts/web.ts offline",
     "web:haiku": "node --import tsx scripts/web.ts haiku",

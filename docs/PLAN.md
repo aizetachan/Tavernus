@@ -170,9 +170,14 @@ generadas una vez por entidad y guardadas como asset; clientes web y PWA sobre e
   a hechos de lore y a entidades con resolución.
 - **Memoria que se consolida**: las crónicas largas se resumen periódicamente con un modelo barato
   para que el contexto de escena no crezca con los meses.
-- **Almacén por etapas**: JSON por partida hoy (vale para demo y pruebas); SQLite por partida en la
-  fase 4 (consultable, indexado, búsqueda de texto para `lookup`, un fichero por mundo); Firestore
-  o Postgres para el online (spec §14), decidido con datos de uso.
+- **Almacén por etapas**: JSON por partida (por defecto; desde el 6-11-2026 con guardado atómico y el
+  contexto del máster aparte del registro) y, detrás de `WORLD_STORE=pg`, **PostgreSQL con documentos
+  JSONB**: la misma base que ya usa la plataforma en producción, con la partida (`world_id`) en cada fila
+  (`world_entities`, `world_events`, `world_tickers`), un documento por entidad y sin columnas por campo
+  (docs/PLAN-OBJETOS.md §8). Sustituye al SQLite por partida que preveía este plan: con PostgreSQL ya en
+  producción y con copia diaria, una sola base es más sencilla que un fichero por mundo, y permite
+  consultas entre partidas para el panel. El motor sigue teniendo el mundo en memoria: la base no está en
+  el camino de una acción. La búsqueda de texto para `lookup`, si hace falta, irá sobre esa base.
 
 La jerarquía de la spec §3.2 (región, zona, localización, punto) se mantiene; hoy el modelo solo
 tiene localización y punto, y la fase 2 añade región y zona.
@@ -289,7 +294,8 @@ Pendiente de cierre:
 
 - **Objetivo**: ver el mundo y sostenerlo cuando crece.
 - **Entregables**: imágenes por entidad generadas una vez desde la descripción guardada y servidas
-  como asset (proveedor por decidir); SQLite por partida con migración desde JSON y búsqueda de texto;
+  como asset (proveedor por decidir); el mundo en PostgreSQL con JSONB (hecho detrás de `WORLD_STORE=pg`
+  el 6-11-2026, con migración desde JSON; falta activarlo en el servidor) y búsqueda de texto;
   panel de administración como observabilidad (spec §13: bandeja de reportes, explorador de eventos con
   prompt exacto y reproducción, métricas, decisiones del Director pendientes); métricas de coste por
   partida y por jugador.
@@ -332,7 +338,7 @@ espaciado y con 2 peticiones a la vez como mucho. Si falla, o se agota la cuota 
 |---|---|---|
 | Modelo de la beta: **Haiku 5.5 a esfuerzo bajo** (31-10). Es el único que cabe en el objetivo de coste: 0,27 céntimos por acción medidos en 10 partidas de Brezal (docs/PLAYTEST-2026-10-31.md; la medición costó unos 9,25 $). Decidido por coste, no por calidad: no se ha comparado con otros modelos | Queda abierto si Sonnet 5.5 o un modelo mixto compensan | Tras arreglar lo que frena las partidas, con una comparación corta |
 | Proveedor de imágenes | Por evaluar; una imagen por entidad, nunca por turno | Fase 4 |
-| SQLite por partida | Sí en fase 4, salvo que el JSON aguante | Fase 4 |
+| ~~SQLite por partida~~ El mundo en PostgreSQL con JSONB | Hecho detrás de `WORLD_STORE=pg` (6-11-2026); JSON sigue por defecto | Activarlo en el servidor cuando las partidas duren días, haya más de un proceso o el panel pida consultas entre partidas (PLAN-OBJETOS §8.3) |
 | Reglas para ambientaciones no fantásticas | SRD como núcleo con paquete generado (plan), Fate o Cypher como alternativa | Fase 1 fija el núcleo; revisar tras fase 2 |
 | Director automático o en borrador | Borrador hasta validar aciertos | Fase 3 |
 | Cuánto pregenerar | Vecinos inmediatos durante el viaje; medir latencia | Fase 2 |
@@ -355,8 +361,8 @@ espaciado y con 2 peticiones a la vez como mucho. Si falla, o se agota la cuota 
 - **§12.1 orden de construcción**: las fases 1 y 2 de la spec están hechas; su fase 3 (sociedad) pasa
   a la fase 5 de este plan, por detrás de generación y mundo vivo, porque el producto cambia de "una
   campaña escrita" a "mundos generados".
-- **§14 stack**: se añade SQLite por partida como etapa intermedia antes de Firestore o Postgres; la
-  VM sigue siendo el destino del proceso.
+- **§14 stack**: el mundo de cada partida puede ir en el PostgreSQL de la plataforma como documentos JSONB
+  (en vez de SQLite por partida, que se descartó el 6-11-2026); la VM sigue siendo el destino del proceso.
 - **§7 tools**: el contrato real está en `src/ai/tools.ts` (29 tools) y se amplía con
   `request_generation` y los del Director; `search_lore` se materializa como `lookup_rule` más la
   consulta de hechos de lore de la fase 2.

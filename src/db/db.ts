@@ -1,7 +1,8 @@
 /**
  * Base de datos de la web (docs/BASE-DE-DATOS.md): PostgreSQL. Guarda lo que es de la plataforma y no del
  * mundo de una partida: usuarios, sesiones, el catálogo de partidas, los asientos, la biblioteca de
- * personajes y el registro del administrador. El mundo de cada partida sigue en su carpeta (jsonfile.ts).
+ * personajes y el registro del administrador. El mundo de cada partida va en su carpeta (jsonfile.ts) o, con
+ * WORLD_STORE=pg, aquí mismo, en documentos JSONB (src/persistence/pg.ts, migración 2).
  *
  * Dos conductores con el mismo SQL:
  *   - `pg` (node-postgres) contra un servidor PostgreSQL: producción. DATABASE_URL=postgresql://…
