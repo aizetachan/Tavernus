@@ -23,6 +23,8 @@ import type { ChatterDef } from '../../engine/chatter.js';
 import type { TagDef } from '../../engine/model.js';
 import type { WorldRule } from '../../engine/worldrules.js';
 import type { EncounterTable } from '../../engine/travel.js';
+import { attendExtras, extraNpc, extraSpotAt, slotForHour, type ExtraDef } from '../../engine/extras.js';
+import { genreOf } from '../../worldgen/catalog.js';
 
 /** Un punto tal como se escribe: la localización la pone la que lo contiene; lo demás tiene valor por defecto. */
 export type AuthoredSpot = Pick<Spot, 'id' | 'name' | 'aliases' | 'description' | 'x' | 'y' | 'tags'>
@@ -52,6 +54,9 @@ export type AuthoredNpc = Omit<Npc, 'location' | 'status' | 'memory' | 'talking_
   /** Con quién se lleva bien o mal, para el análisis. No va al motor. */
   ties?: string;
 };
+
+/** Un vecino de relleno (extras.ts, docs/PLAN-NPC-RELLENO.md): ficha corta; lo demás, de la plantilla de su oficio. */
+export type AuthoredExtra = ExtraDef;
 
 /** Un ejemplar en el mundo: en el suelo de un punto, en manos de un NPC o dentro de otro ejemplar. */
 export interface AuthoredInstance {
@@ -95,6 +100,8 @@ export interface AuthoredCampaign {
   locations: AuthoredLocation[];
   exits: { id: Id; from: Id; to: Id; distance_m: number; terrain_multiplier?: number; state?: Record<string, unknown> }[];
   npcs: AuthoredNpc[];
+  /** Vecinos de relleno: gente de paso con oficio y horario, sin peso en la historia. */
+  extras?: AuthoredExtra[];
   vehicles: Vehicle[];
   item_defs: ItemDef[];
   items: AuthoredInstance[];
@@ -144,6 +151,12 @@ export function expandAuthored(a: AuthoredCampaign, now: Date): WorldSnapshot {
     attitude: { default: attitude, by_character: {} },
     ...(routine ? { routine: { ...routine } } : {}),
   }));
+  // Relleno: cada ficha con la plantilla de su oficio, en el punto de su franja a la hora en que nace el mundo, y
+  // en los eventos a los que va (sale de su multitud).
+  const genre = genreOf(c.setting ?? '');
+  const slot = slotForHour(a.start_hour, c.calendar);
+  for (const x of a.extras ?? []) npcs.push(extraNpc(x, genre, extraSpotAt(x, slot)));
+  attendExtras(campaign.schedule, a.extras ?? []);
 
   return {
     campaign: campaign as Campaign,

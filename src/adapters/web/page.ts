@@ -10,6 +10,7 @@ import { HEARTBEAT_MS } from './presence.js';
 import { FIGHT_SCRIPT, FIGHT_STYLE } from './fight.js';
 import { AWAY_JS, AWAY_STYLE } from './whileaway.js';
 import { TABLON_JS, TABLON_STYLE } from './tablon.js';
+import { SHOP_JS, SHOP_STYLE } from './tienda.js';
 
 /** El modo Decir vuelve solo a Hacer tras este rato sin escribir ni decir nada (revisión de la partida del 2026-10-26, n.º 9). */
 export const SAY_IDLE_MS = 30_000;
@@ -144,6 +145,10 @@ export const PAGE = String.raw`<!doctype html>
   #board .token.vague { opacity: .7; } #board .token.hint { opacity: .4; }
   #board .token.vague .ring, #board .token.hint .ring { stroke-dasharray: 3 2; }
   #board .token .face { opacity: 0; transition: opacity .2s; } #board .token .face.on { opacity: 1; }
+  /* Vecinos de relleno (extras.ts): más pequeños y apagados, para que destaquen los que importan. */
+  #board .token.extra { opacity: .92; } #board .token.extra.vague { opacity: .6; } #board .token.extra.hint { opacity: .35; }
+  #board .token.slide { transition: transform .9s ease-in-out; }
+  @media (prefers-reduced-motion: reduce) { #board .token.slide { transition: none; } }
   #board .route { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; pointer-events: none; }
   #board .exit { cursor: pointer; }
   #board .exit .path { stroke: #e9e4da; stroke-width: 1.6; stroke-dasharray: 5 3; }
@@ -527,6 +532,17 @@ export const PAGE = String.raw`<!doctype html>
   #journal .steps li.done .dot { background: var(--ok); box-shadow: none; color: #0d2a26; }
   #journal .steps li.now { color: var(--text); font-weight: 600; }
   #journal .steps li.now .dot { background: var(--accent); box-shadow: none; }
+  /* Misiones por fases: la fase como encabezado, las formas que conocemos bajo su objetivo y el desenlace. */
+  #journal .steps li.ph { display: block; padding: 10px 0 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); border-top: 0; }
+  #journal .steps li.ph small { margin-left: 6px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  #journal .steps .ways { margin: 4px 0 0; padding: 0; list-style: none; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+  #journal .steps .ways li { display: block; padding: 2px 0 2px 12px; border: 0; position: relative; }
+  #journal .steps .ways li::before { content: ''; position: absolute; left: 0; top: 9px; width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
+  #journal .steps .ways li.used { color: var(--ok); }
+  #journal .steps .ways li.failed { text-decoration: line-through; opacity: .7; }
+  #journal .outc { margin: 0 0 8px; padding: 8px 10px; border-left: 2px solid var(--accent); font-size: 13px; }
+  #journal .outc b { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  #journal .qb .rw span { display: block; }
   #journal .paths b, #journal .mem b { display: block; margin: 8px 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
   #journal .paths ol { margin: 0 0 8px; padding-left: 18px; color: var(--muted); }
   #journal .paths li { padding: 2px 0; }
@@ -773,6 +789,7 @@ ${PAINT_STYLE}
 ${FIGHT_STYLE}
 ${AWAY_STYLE}
 ${TABLON_STYLE}
+${SHOP_STYLE}
   /* B5 sobre los módulos (novel, tts, sfx, voz, pincel, avatar): mismas piezas, otra piel. */
   .msg.row { gap: 8px; margin-top: 8px; max-width: min(760px, 100%); }
   .msg.scene { width: min(640px, calc(100% - 42px)); }
@@ -1184,6 +1201,7 @@ ${TABLON_STYLE}
     <div class="pane" data-pane="map"><div id="map"></div><p class="none">Aún no hay mapa de la zona.</p></div>
     <div id="near"></div>
     <div id="quest"></div>
+    <div id="shop-side"></div>
     <div id="tablon-side"></div>
   </div>
 </aside>
@@ -1386,6 +1404,7 @@ ${PAINT_JS}
 ${FIGHT_SCRIPT}
 ${AWAY_JS}
 ${TABLON_JS}
+${SHOP_JS}
   /** Cada mensaje del stream entra en el hilo tipo chat (novel.ts): avatar, burbuja, botones e imágenes. */
   function renderMessage(m, live, animate) {
     // Irse o volver: aviso de sistema, sin puntos del narrador ni turno (el propio no tiene texto).
@@ -2184,7 +2203,9 @@ ${TABLON_JS}
   }
   var LIGHT = { day: 'de día', twilight: 'penumbra', night_moon: 'noche con luna', night_dark: 'noche cerrada' };
   var DARK = { day: 0, twilight: 0.16, night_moon: 0.38, night_dark: 0.58 };
-  var RING = { actor: '#d9a35b', character: '#9cb08a', npc: '#c97b5a' };
+  var RING = { actor: '#d9a35b', character: '#9cb08a', npc: '#c97b5a', extra: '#bdb2a3' };
+  /** Dónde estaba cada ficha en el último tablero (px), para deslizarla al sitio nuevo; y de qué sitio era. */
+  var boardPos = {}, boardPosLoc = null;
   var GROUND = {
     void: { base: '#15110d' }, wood: { base: '#6a4f35', line: '#4f3a26' }, stone: { base: '#55504a', line: '#3f3b36' },
     cobble: { base: '#5f5850', dot: '#4a443e' }, grass: { base: '#46542f', dot: '#3a4727' }, dirt: { base: '#7a6243', dot: '#665136' },
@@ -2386,11 +2407,18 @@ ${TABLON_JS}
     var me = { kind: 'actor', level: 'full', label: b.actor.name, id: b.actor.id, avatar: b.actor.avatar };
     if (!b.actor.transit) push(b.actor.spot_id, me);
     b.presences.forEach(function (p) { if (!p.moving) push(p.spot_id, p); });
-    var clips = 0;
+    // Más de tres vecinos de relleno en un punto (la cena): una sola ficha con el número.
+    Object.keys(tokens).forEach(function (sid) {
+      var ex = tokens[sid].filter(function (t) { return t.extra; });
+      if (ex.length <= 3) return;
+      tokens[sid] = tokens[sid].filter(function (t) { return !t.extra; }).concat([{ kind: 'npc', extra: true, level: 'full', group: ex.length, label: ex.length + ' vecinos' }]);
+    });
+    var clips = 0, placed = {};
     // Con retrato, la cara dentro del aro; debajo queda la inicial, que es lo que se ve hasta que carga (o si falla).
     var token = function (t, x, y) {
-      var ring = RING[t.kind], letter = t.level === 'full' ? initial(t.label) : '?';
-      var rr = t.level === 'hint' ? tokR * 0.75 : tokR, ringR = rr - Math.max(1.5, rr * 0.14);
+      var ring = t.extra ? RING.extra : RING[t.kind], letter = t.group ? String(t.group) : t.level === 'full' ? initial(t.label) : '?';
+      var rr = (t.level === 'hint' ? tokR * 0.75 : tokR) * (t.extra ? 0.7 : 1), ringR = rr - Math.max(1.5, rr * 0.14);
+      if (t.id) placed[t.id] = [x, y];
       var face = '';
       if (t.avatar && t.level === 'full') {
         var cid = 'tk-' + (++clips);
@@ -2398,7 +2426,7 @@ ${TABLON_JS}
           '<image class="face' + (tokenFaces[t.avatar] ? ' on' : '') + '" href="' + escapeHtml(t.avatar) + '" x="' + r1(x - ringR) + '" y="' + r1(y - ringR) + '" width="' + r1(ringR * 2) + '" height="' + r1(ringR * 2) +
           '" preserveAspectRatio="xMidYMid slice" clip-path="url(#' + cid + ')"/>';
       }
-      return '<g class="token ' + t.kind + ' ' + t.level + (face ? ' has-face' : '') + '"' + (t.id ? ' data-id="' + escapeHtml(t.id) + '"' : '') + '><circle class="disc" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr) + '"/>' +
+      return '<g class="token ' + t.kind + ' ' + t.level + (t.extra ? ' extra' : '') + (face ? ' has-face' : '') + '"' + (t.id ? ' data-id="' + escapeHtml(t.id) + '"' : '') + '><circle class="disc" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr) + '"/>' +
         '<text x="' + r1(x) + '" y="' + r1(y) + '" fill="' + ring + '" font-size="' + r1(rr * 0.95) + '">' + escapeHtml(letter) + '</text>' + face +
         '<circle class="ring" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(ringR) + '" fill="none" stroke="' + ring + '" stroke-width="' + r1(Math.max(2, rr * 0.26)) + '"/>' +
         (t.kind === 'actor' ? '<circle cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr + 2.5) + '" fill="none" stroke="' + ring + '" stroke-opacity=".45" stroke-width="2"/>' : '') + leadDot(t, x, y, rr) + '</g>';
@@ -2414,7 +2442,11 @@ ${TABLON_JS}
       // El tablero solo nombra personajes: el nombre del punto no se pinta (sale en el tooltip y en «Cerca de ti»).
       o.push('<circle class="hit" cx="' + r1(px) + '" cy="' + r1(py) + '" r="' + r1(markR) + '"><title>' + escapeHtml(sp.name) + '</title></circle>');
       if (ts.length) {
-        var who = ts.map(function (t) { return t.kind === 'actor' ? 'tú' : t.label + (t.away ? ' (ausente)' : '') + (t.talking_with ? (t.talking_with === 'tú' ? ' (contigo)' : ' (con ' + t.talking_with.replace(/^tú y /, 'contigo y ') + ')') : ''); }).join(', ');
+        // Los vecinos de relleno, juntos al final: con más de uno, «y 2 vecinos».
+        var ex = ts.filter(function (t) { return t.extra; }), nEx = ex.reduce(function (n, t) { return n + (t.group || 1); }, 0);
+        var who = ts.filter(function (t) { return !t.extra; }).map(function (t) { return t.kind === 'actor' ? 'tú' : t.label + (t.away ? ' (ausente)' : '') + (t.talking_with ? (t.talking_with === 'tú' ? ' (contigo)' : ' (con ' + t.talking_with.replace(/^tú y /, 'contigo y ') + ')') : ''); });
+        if (nEx) who.push(nEx === 1 ? ex[0].label : nEx + ' vecinos');
+        who = who.join(', ');
         if (who.length > 40) who = who.slice(0, 39) + '…';
         o.push('<text class="who" x="' + r1(px) + '" y="' + r1(py + markR + 10) + '">' + escapeHtml(who) + '</text>');
       }
@@ -2429,13 +2461,25 @@ ${TABLON_JS}
     if (b.actor.transit) o.push(token(me, X(b.actor.x), Y(b.actor.y)));
     o.push('</svg>');
 
-    var where = '<div class="where"><b>' + escapeHtml(b.location.name) + '</b><span>· ' + escapeHtml(LIGHT[b.location.light] || b.location.light) +
-      (b.actor.transit ? ' · de camino a ' + escapeHtml(b.actor.transit.destination_name) : '') + '</span>' +
+    var where = '<div class="where"><b>' + escapeHtml(b.location.name) + '</b><span>' + escapeHtml(LIGHT[b.location.light] || b.location.light) +
+      (b.actor.transit ? ', de camino a ' + escapeHtml(b.actor.transit.destination_name) : '') + '</span>' +
       '<button type="button" data-toggle-big title="' + (big ? 'Volver al panel (Esc)' : 'Ver el tablero en grande') + '">' + (big ? 'Cerrar' : 'Ampliar') + '</button></div>';
     var legend = '<div class="legend"><span><i style="border-color:' + RING.actor + '"></i>tú</span><span><i style="border-color:' + RING.character + '"></i>personaje</span>' +
-      '<span><i style="border-color:' + RING.npc + '"></i>PNJ</span><span>? lo intuyes</span><span>pasa el ratón para ver qué hay</span>' +
+      '<span><i style="border-color:' + RING.npc + '"></i>PNJ</span><span><i style="border-color:' + RING.extra + '"></i>vecino</span><span>? lo intuyes</span><span>pasa el ratón para ver qué hay</span>' +
       '<span>casilla ' + String(cm).replace('.', ',') + ' m</span></div>';
     board.innerHTML = where + o.join('') + legend + '<div class="tip"></div>';
+    // Quien cambia de punto en el mismo sitio se desliza desde donde estaba (sin saltos).
+    if (boardPosLoc === b.location.id) {
+      board.querySelectorAll('g.token[data-id]').forEach(function (g) {
+        var id = g.getAttribute('data-id'), was = boardPos[id], now = placed[id];
+        if (!was || !now || (Math.abs(was[0] - now[0]) < 1 && Math.abs(was[1] - now[1]) < 1)) return;
+        g.style.transform = 'translate(' + r1(was[0] - now[0]) + 'px,' + r1(was[1] - now[1]) + 'px)';
+        g.getBoundingClientRect();
+        g.classList.add('slide');
+        g.style.transform = '';
+      });
+    }
+    boardPos = placed; boardPosLoc = b.location.id;
     board.querySelectorAll('.token image.face:not(.on)').forEach(function (img) {
       img.addEventListener('load', function () { tokenFaces[img.getAttribute('href')] = true; img.classList.add('on'); });
       img.addEventListener('error', function () { img.remove(); });
@@ -2873,11 +2917,17 @@ ${TABLON_JS}
     if (next && LIVE[q.status]) h += '<div class="now"><svg class="i"><use href="#i-arrow"/></svg><span><small>Qué toca ahora</small>' + escapeHtml(next) + '</span></div>';
     if (q.declinable) h += answerHtml(q.id);
     if (LIVE[q.status]) h += progressHtml(q);
+    if (q.outcome) h += '<div class="outc"><b>Cómo acabó</b>' + escapeHtml(q.outcome.title) + '. ' + escapeHtml(q.outcome.text) + '</div>';
     if (q.steps.length > 1) {
-      var marked = false;
+      var marked = false, phase = null;
       h += '<ol class="steps">' + q.steps.map(function (st) {
-        var now = !st.done && !marked && LIVE[q.status]; if (now) marked = true;
-        return '<li class="' + (st.done ? 'done' : now ? 'now' : '') + '"><span class="dot">' + (st.done ? '<svg class="i"><use href="#i-check"/></svg>' : now ? '<svg class="i"><use href="#i-arrow"/></svg>' : '') + '</span><span>' + escapeHtml(st.text) + '</span></li>';
+        var now = !st.done && !marked && !st.secondary && LIVE[q.status]; if (now) marked = true;
+        // Misiones por fases: un encabezado al cambiar de fase y, bajo cada objetivo pendiente, las formas que conocemos.
+        var head = st.phase && st.phase !== phase ? '<li class="ph">' + escapeHtml(st.phase) + (st.secondary ? '<small>(opcional)</small>' : '') + '</li>' : '';
+        if (st.phase) phase = st.phase;
+        var ways = st.ways && st.ways.length && (!st.done || st.ways.some(function (x) { return x.used; }))
+          ? '<ul class="ways">' + st.ways.filter(function (x) { return !st.done || x.used; }).map(function (x) { return '<li class="' + (x.used ? 'used' : x.failed ? 'failed' : '') + '">' + escapeHtml(x.text) + '</li>'; }).join('') + '</ul>' : '';
+        return head + '<li class="' + (st.done ? 'done' : now ? 'now' : '') + '"><span class="dot">' + (st.done ? '<svg class="i"><use href="#i-check"/></svg>' : now ? '<svg class="i"><use href="#i-arrow"/></svg>' : '') + '</span><span>' + escapeHtml(st.text) + ways + '</span></li>';
       }).join('') + '</ol>';
     }
     if (o && o.text && q.kind !== 'lead') h += '<div class="orig"><b>Cómo nos llegó:</b> ' + escapeHtml(o.text) + (o.where ? ' <span>(' + escapeHtml(o.where) + ')</span>' : '') + '</div>';
@@ -2888,8 +2938,8 @@ ${TABLON_JS}
         return '<li class="' + x.kind + (unseenKeys.indexOf(x.key) >= 0 ? ' unseen' : '') + '"><span class="t" title="' + escapeHtml(x.when) + '">' + escapeHtml(x.short || x.when) + '</span><span>' + escapeHtml(x.text) + (x.why ? '<small>' + escapeHtml(x.why) + '</small>' : '') + '</span></li>';
       }).join('') + '</ul></details>';
     }
-    var foot = [q.reward ? 'Recompensa: ' + q.reward : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean).join(' · ');
-    if (foot) h += '<div class="rw">' + escapeHtml(foot) + '</div>';
+    var foot = [q.reward ? 'Recompensa: ' + q.reward : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean);
+    if (foot.length) h += '<div class="rw">' + foot.map(function (x) { return '<span>' + escapeHtml(x) + '</span>'; }).join('') + '</div>';
     var acts = '';
     if (LIVE[q.status]) acts += tracked ? '<span class="qact on" aria-current="true"><svg class="i"><use href="#i-star"/></svg>Siguiéndola en el panel</span>'
       : '<button type="button" class="qact" data-track="' + escapeHtml(q.id) + '"><svg class="i"><use href="#i-star"/></svg>Seguir en el panel</button>';
@@ -3071,7 +3121,7 @@ ${TABLON_JS}
     mapEl.innerHTML = ''; mapData = null; document.body.classList.remove('map-big');
     journalEl.innerHTML = ''; journalData = null; setJournalNew(false);
     showScene(null);
-    $('card').innerHTML = ''; $('sheet').innerHTML = ''; $('pack').innerHTML = ''; $('near').innerHTML = ''; $('quest').innerHTML = '';
+    $('card').innerHTML = ''; $('sheet').innerHTML = ''; $('pack').innerHTML = ''; $('near').innerHTML = ''; $('quest').innerHTML = ''; $('shop-side').innerHTML = '';
     sheetData = null;
     var dot = $('scene-dot'); dot.removeAttribute('data-src'); dot.innerHTML = '<svg class="i"><use href="#i-pin"/></svg>';
     renderParty();
@@ -3100,11 +3150,13 @@ ${TABLON_JS}
       inChat(function () {
         liveUnread(m);
         if (window.TavernusSfx) TavernusSfx.cue(m.sfx);
-        loadBoard(); loadScene();
+        loadBoard(); loadScene(); loadShop();
         return renderMessage(m, true, true);
       });
     });
     stream.addEventListener('sheet', loadSheet);
+    stream.addEventListener('board', function () { loadBoard(); });
+    stream.addEventListener('sheet', loadShop);
     stream.addEventListener('moment', function (e) { var x = JSON.parse(e.data); showMoment(x, x.seq); });
     stream.addEventListener('portrait', function (e) {
       var p = JSON.parse(e.data);
@@ -3127,6 +3179,7 @@ ${TABLON_JS}
     loadScene();
     loadJournal();
     loadTablon();
+    loadShop();
     input.focus();
   }
 
@@ -3323,7 +3376,7 @@ ${TABLON_JS}
   var cube = $('cube'), cubeMenu = $('cube-menu'), drawer = $('drawer'), drawerKey = null;
   var DR_TITLE = { sheet: 'Hoja', journal: 'Diario', tablon: 'Tablón', pack: 'Mochila', side: 'Tablero y mapa' };
   /** En el móvil, «Tablero» del modal se lleva del panel el tablero, el mapa, la gente cerca y la misión, y al cerrar los devuelve. */
-  var SIDE_PARTS = ['.views', '.pane[data-pane="board"]', '.pane[data-pane="map"]', '#near', '#quest', '#tablon-side'];
+  var SIDE_PARTS = ['.views', '.pane[data-pane="board"]', '.pane[data-pane="map"]', '#near', '#quest', '#shop-side', '#tablon-side'];
   function moveSide(toDrawer) {
     var dest = toDrawer ? document.querySelector('[data-drpane="side"]') : document.querySelector('#side .side-scroll');
     SIDE_PARTS.forEach(function (sel) { var el = document.querySelector(sel); if (el && el.parentNode !== dest) dest.appendChild(el); });

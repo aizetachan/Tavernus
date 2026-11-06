@@ -13,7 +13,9 @@
 
 import type { Denomination } from './money.js';
 
+import type { Ability } from './rules.js';
 import type { StoryCondition } from './story.js';
+import type { WorldQuest } from './story.js';
 
 export type Id = string;
 
@@ -92,6 +94,11 @@ export interface Campaign {
   /** Procedencia: cómo y con qué se generó este mundo. */
   generation?: GenerationInfo;
   /**
+   * Versión del catálogo SRD de objetos con que se guardó la partida (src/data/srd/items.ts).
+   * Al arrancar, `syncCatalog` (src/data/catalog.ts) pone las definiciones SRD a la del código.
+   */
+  catalog_version?: number;
+  /**
    * Situaciones iniciales aún sin dueño: la de cada PJ anunciado al generar y alguna de reserva.
    * Campañas escritas: `for_classes` la reserva a esas clases (ids SRD) y `keep` la deja en la bolsa para el siguiente.
    */
@@ -105,7 +112,7 @@ export interface Campaign {
 }
 
 /** Tipos de incidente que el motor reconoce (crime.ts), de menos a más grave. */
-export type IncidentKind = 'insult' | 'theft' | 'assault' | 'armed_assault' | 'desecration' | 'murder';
+export type IncidentKind = 'insult' | 'theft_attempt' | 'theft' | 'assault' | 'armed_assault' | 'desecration' | 'murder';
 
 /**
  * La ley de una campaña (crime.ts). Datos de campaña: el motor no sabe quién
@@ -463,7 +470,7 @@ export interface Character {
   darkvision: boolean;
   /** Multiplicador de condiciones (cargado, exhausto…). 1 = normal. */
   condition_speed_factor: number;
-  coins: number;
+  // El dinero no es un campo: vive en sus bolsas (`state.coins`) y se cuenta con money.ts `coinsOf`.
   decisive: DecisiveWindow | null;
   xp: number;
   last_seen_event_id: Id | null;
@@ -510,6 +517,11 @@ export interface Character {
   infamy?: number;
   /** Etiquetas ganadas con lo que ha hecho (standing.ts): *asesino*, *salvó a Ceniza*. Las de raza, clase y trasfondo salen de la ficha. */
   tags?: EarnedTag[];
+  /**
+   * Va a escondidas (conflict.ts): el total de su última tirada de Sigilo que salió bien, cuándo y dónde. Contra la
+   * Percepción pasiva de cada NPC dice quién no le ha visto acercarse; caduca al moverse de punto o con el tiempo.
+   */
+  sneak?: { total: number; game_s: number; spot_id: Id } | null;
 }
 
 /** Una etiqueta ganada (standing.ts): cuál, cuándo, por qué y el hecho que la dio (quien lo sabe, sabe la etiqueta). */
@@ -686,6 +698,11 @@ export interface Npc {
   /** Confianza en cada PJ (trust.ts): puntos y lo ganado en la última charla. */
   trust?: Record<Id, NpcTrust>;
   memory: NpcMemory[];
+  /**
+   * PJ cuyo nombre sabe este NPC (docs/CONVERSACION-FLUJO.md, capa 2): se le presentaron hablando con él. Los que le
+   * conocen por su situación (`situation.knows`, recíproco) no hace falta apuntarlos. Estado de partida.
+   */
+  knows_name_of?: Id[];
   /** Cola de conversación (SPEC §9.6): con quién habla ahora. */
   talking_to: { character_id: Id; since_game_s: number; /** Otros PJ unidos a la charla (scene.ts). */ with?: Id[]; /** Turno guardado para quien esperaba: aún no ha hablado. */ reserved?: boolean; /** Cuándo empezó esta charla (`since_game_s` se renueva en cada turno). */ started_game_s?: number; /** La charla ya da para pedirle una misión (talk.ts) y el NPC ha contado esta (story.ts, `voicedQuest`); `true`, cualquiera de las suyas (partidas de antes). */ ripe?: boolean | Id } | null;
   /** Su casa (datos de campaña): el máster sabe dónde vive y no se la inventa en otro sitio (prompt.ts, homeLine). */
@@ -693,6 +710,11 @@ export interface Npc {
   /** Comercio (SPEC §5.6): qué compra y a qué precio; qué vende. */
   buys: { item_id: Id; price: number }[];
   sells: { item_id: Id; price: number }[];
+  /**
+   * Tienda (shop.ts): vende de existencias reales, en contenedores fijos suyos (`state.owner_id`) de esos puntos, y
+   * compra con el dinero de su bolsa. Sin campo, comercia como siempre (`sells`, sin existencias contadas).
+   */
+  shop?: NpcShop;
   /** Bloque de combate SRD simplificado (SPEC §3.3). null = no combate. */
   stats: NpcStats | null;
   /** Actitud por PJ; `default` para quien no conoce. */
@@ -709,8 +731,76 @@ export interface Npc {
   opinion?: Record<Id, OpinionEntry>;
   /** Cómo reacciona a las etiquetas del PJ (standing.ts). Datos de campaña. */
   tag_reactions?: TagReaction[];
+  /**
+   * Nivel del NPC (docs/PLAN-NPC-RELLENO.md). Sin campo, principal: personaje de la historia. `extra`: vecino de
+   * relleno, montado desde una plantilla de oficio (extras.ts), sin secretos ni misiones, con un guion corto.
+   */
+  tier?: 'extra';
+  /** Guion corto del relleno (extras.ts): solo con `tier: 'extra'`. Datos de campaña. */
+  script?: ExtraScript;
   /** No habla (un animal): ni comenta al pasar ni cuenta noticias, aunque vea lo que pasa (chatter.ts, worldrules.ts). */
   mute?: boolean;
+  /**
+   * Ajuar (outfit.ts): qué lleva encima por su oficio (`KITS`: 'guard', 'healer', 'noble', 'animal'…). Datos de campaña;
+   * sin campo, sale de `role`.
+   */
+  kit?: string;
+  /** Lo que lleva en la bolsa (outfit.ts): sin campo, la riqueza de su ajuar. Datos de campaña. */
+  wealth?: 'none' | 'poor' | 'modest' | 'comfortable' | 'rich';
+  /**
+   * Ya tiene su ajuar (outfit.ts): no se le vuelve a dar, aunque le roben. El número es la versión del ajuar
+   * (`OUTFIT_VERSION`); `true`, la 1. Estado de partida.
+   */
+  outfitted?: boolean | number;
+  /** Es un niño (datos): ante un robo o un empujón llora y corre a por los suyos, no reacciona como un adulto (conflict.ts). */
+  child?: boolean;
+  /** Atletismo o Acrobacias para las tiradas enfrentadas (conflict.ts). Sin campo, sale de su ataque: `attack_bonus − 2`. */
+  contest?: number;
+  /** En guardia con cada PJ (conflict.ts): le pilló, o casi, o le empujó. Mientras dure no se le puede hurtar. Estado de partida. */
+  guard?: Record<Id, NpcGuard>;
+  /** Careo abierto con cada PJ (conflict.ts): le ha pillado y le exige algo. Estado de partida. */
+  confront?: Record<Id, NpcConfront>;
+}
+
+/** Un NPC en guardia con un PJ: desde cuándo, hasta cuándo y por qué («le pilló metiéndole la mano»). */
+export interface NpcGuard { since_game_s: number; until_game_s: number; reason: string }
+
+/** Lo que hizo el PJ contra un NPC (conflict.ts). */
+export type ConflictKind = 'steal' | 'snatch' | 'shove' | 'grab' | 'touch';
+
+/** Un careo: el NPC ha pillado al PJ y le exige que lo arregle (devolverlo, disculparse, pagar). */
+export interface NpcConfront {
+  kind: ConflictKind;
+  /** Lo que intentó quitarle (si lo tiene ya el PJ, se lo exige). */
+  instance_id: Id | null;
+  since_game_s: number;
+  /** CD de convencerle (Persuasión o Engaño). */
+  dc: number;
+  /** Ya lo ha intentado convencer en este careo. */
+  argued?: boolean;
+  /** Ya es delito (le agarró de la muñeca): arreglarlo evita la pelea, no el incidente. */
+  crime?: boolean;
+}
+
+/**
+ * La tienda de un NPC (shop.ts, PLAN-OBJETOS §6.2). Datos de campaña, salvo `last_restock_day` (estado de partida).
+ * Las existencias no van aquí: son ejemplares en contenedores fijos con `state.owner_id` igual al NPC, en
+ * `stock_spot_ids`. Coger de ellos sin pagar es robo (crime.ts).
+ */
+export interface NpcShop {
+  /** El local: donde hay que estar para comprarle. */
+  location_id: Id;
+  /** Puntos con sus estantes (los contenedores fijos con sus existencias). */
+  stock_spot_ids: Id[];
+  /** `none`: no repone (solo lo que le venden); `daily`: cada día, hasta `restock_max` de cada cosa que vende. */
+  restock: 'none' | 'daily';
+  restock_max?: number;
+  /** Horas en que atiende, [abre, cierra) en hora del día (9, 19). Sin campo, siempre que esté. */
+  hours?: [number, number];
+  /** Compra lo que no está en `buys` a esta parte de su valor (0.5: la mitad). Sin campo, solo lo de `buys`. */
+  buys_any?: number;
+  /** Último día de juego en que repuso. */
+  last_restock_day?: number;
 }
 
 /** Opinión de un NPC con un PJ: de −100 a 100, con los últimos motivos; y las etiquetas a las que ya ha reaccionado. */
@@ -734,6 +824,51 @@ export interface NpcBond {
   npc_id: Id;
   kind: 'kin' | 'friend' | 'patron' | 'rival';
   reaction?: 'fight' | 'mourn';
+}
+
+/** Carácter del relleno: cómo suena su guion. */
+export type ExtraTemper = 'seco' | 'con prisa' | 'receloso' | 'parlanchín' | 'tímido';
+/** Lo que su papel le hace contestar: dónde está algo, a qué hora es algo, lo que vende, o nada. */
+export type ExtraService = 'directions' | 'hours' | 'sell' | 'none';
+
+/**
+ * Frases de un vecino de relleno, varias por hueco del guion; el motor elige una con la semilla. Huecos con
+ * `{item}`, `{price}`, `{where}`, `{refer}`, `{news}`, `{fame}`, que pone el motor.
+ */
+export interface ExtraLines {
+  /** Abrir charla o saludo: «¿Qué quieres?». */
+  greet: string[];
+  /** Lo que su papel le hace contestar: «{where}», «{item} a {price}». */
+  service: string[];
+  /** Lo que no sabe: «De eso no sé nada. Pregunta a {refer}.» */
+  dunno: string[];
+  /** No quiere más charla: «Tengo faena.» */
+  brush: string[];
+  /** Le conoce de oídas: «Tú eres el que {fame}.» */
+  known: string[];
+  /** Un hecho reciente que sabe: «{news}. Quién lo iba a decir.» */
+  news: string[];
+  /** Peligro o le amenazan: «¡Doro! ¡Aquí!». */
+  scared: string[];
+  /** Le ha pillado robando: «¡Al ladrón!». */
+  accuse: string[];
+  /** Le tiene miedo al PJ: «Déjame en paz.» */
+  afraid: string[];
+  bye: string[];
+}
+
+/** El guion corto de un vecino de relleno (extras.ts): su oficio, su carácter, lo que sirve, sus frases y a quién remite. */
+export interface ExtraScript {
+  trade: Id;
+  temper: ExtraTemper;
+  service: ExtraService;
+  lines: ExtraLines;
+  /** A quién remite lo que no sabe: NPC que existen. */
+  refer_to: Id[];
+  /** Su historia breve, en dos o tres frases (para el máster si se le pregunta por él y para la wiki). */
+  story: string;
+  /** Puntos por los que se mueve dentro de su franja (paseos, fase 2). */
+  wander?: Id[];
 }
 
 export interface NpcDeath {
@@ -799,13 +934,68 @@ export interface Vehicle {
 // ---------------------------------------------------------------------------
 
 export type ItemSize = 'tiny' | 'small' | 'medium' | 'large' | 'bulky';
-export type ItemType = 'weapon' | 'armor' | 'consumable' | 'tool' | 'quest' | 'treasure' | 'misc' | 'container';
+/**
+ * Categoría de reglas del objeto (SPEC §5.1, PLAN-OBJETOS §2.1). `misc`, `container`, `quest` y `treasure` siguen
+ * valiendo para lo que no es nada de lo demás; `subtype` afina (tabla `SUBTYPES` en items.ts).
+ */
+export type ItemType =
+  | 'weapon' | 'armor' | 'ammunition' | 'gear' | 'tool' | 'focus' | 'consumable'
+  | 'scroll' | 'wand' | 'rod' | 'staff' | 'ring' | 'wondrous'
+  | 'treasure' | 'coin' | 'quest' | 'container' | 'misc';
+
+export type WeaponSubtype = 'simple_melee' | 'simple_ranged' | 'martial_melee' | 'martial_ranged';
+export type ArmorSubtype = 'light' | 'medium' | 'heavy' | 'shield';
+export type AmmoType = 'arrow' | 'bolt' | 'bullet' | 'needle';
+export type GearSubtype = 'adventuring' | 'clothes' | 'light' | 'container';
+export type ToolSubtype = 'artisan' | 'kit' | 'gaming' | 'instrument' | 'vehicle';
+export type FocusSubtype = 'arcane' | 'druidic' | 'holy';
+export type ConsumableSubtype = 'food' | 'drink' | 'potion' | 'poison' | 'oil';
+export type TreasureSubtype = 'gem' | 'art' | 'trade';
+export type ItemSubtype = WeaponSubtype | ArmorSubtype | AmmoType | GearSubtype | ToolSubtype | FocusSubtype | ConsumableSubtype | TreasureSubtype;
+
+/** Propiedades de arma del SRD. */
+export type WeaponProperty = 'light' | 'heavy' | 'finesse' | 'thrown' | 'two_handed' | 'versatile' | 'reach' | 'loading' | 'ammunition' | 'special';
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'very_rare' | 'legendary' | 'artifact';
+/** Cuándo se recargan las cargas de un objeto. */
+export type RechargeAt = 'dawn' | 'dusk' | 'short_rest' | 'long_rest';
+
+/**
+ * Efecto de un objeto, con estructura: lo aplica el motor y el máster lo narra, nunca al revés. Los tipos de daño
+ * y las condiciones van con las claves en inglés de siempre (`weapon.damage_type`, `conditions`).
+ */
+export type ItemEffect =
+  | { kind: 'resist'; damage_type: string }
+  | { kind: 'immune'; damage_type: string }
+  | { kind: 'condition_immunity'; condition: string }
+  /** `on`: una habilidad ('stealth'), una característica ('dex'), 'saves' o 'initiative'. */
+  | { kind: 'advantage'; on: string }
+  | { kind: 'disadvantage'; on: string }
+  | { kind: 'speed'; ft: number }
+  | { kind: 'light'; radius_ft: number }
+  | { kind: 'darkvision'; ft: number }
+  | { kind: 'save_bonus'; value: number }
+  /** Fija la puntuación de una característica (si la del personaje es menor). */
+  | { kind: 'ability_score'; ability: Ability; value: number }
+  /** Deja al personaje con una condición mientras dura (la poción de invisibilidad). */
+  | { kind: 'condition'; condition: string }
+  /** Solo narrativo: el motor no lo aplica. */
+  | { kind: 'note'; text: string };
+
+/** Condición para sintonizar un objeto: clases (ids de clase) o ser lanzador de conjuros. */
+export interface AttunementReq { classes?: string[]; spellcaster?: boolean; note?: string }
 
 export interface ItemDef {
   id: Id;
   name: string;
   aliases: string[];
   type: ItemType;
+  /** Afina la categoría: `simple_melee`, `heavy`, `arrow`, `potion`… (qué vale para cada tipo: `SUBTYPES`). */
+  subtype?: ItemSubtype;
+  /**
+   * La definición SRD de la que sale una variante («espada larga +1» → `it_espada_larga`; la pistola de rayos que usa
+   * el bloque de la ballesta ligera). Sin él, la propia `id`. Las competencias con armas concretas comparan `base_id ?? id`.
+   */
+  base_id?: Id;
   size: ItemSize;
   weight_lb: number;
   value: number;
@@ -814,11 +1004,45 @@ export interface ItemDef {
   container?: { slots: number; max_weight_lb: number; max_size: ItemSize; fixed?: boolean };
   /** Si es equipable: slot que ocupa. */
   equip_slot?: EquipSlot;
-  /** Armadura (SPEC §5.1): CA base y tope de DES (null = sin tope). */
-  armor?: { ac_base: number; dex_max: number | null; stealth_disadvantage: boolean };
+  /**
+   * Armadura (SPEC §5.1): CA base y tope de DES (null = sin tope). Su categoría (ligera, intermedia, pesada) es
+   * `subtype`; `str_min`, la Fuerza que pide; `don_s` y `doff_s`, lo que se tarda en ponerla y quitarla.
+   */
+  armor?: { ac_base: number; dex_max: number | null; stealth_disadvantage: boolean; str_min?: number; don_s?: number; doff_s?: number };
   /** Escudo: bonus a la CA cuando va en la mano. */
   shield_bonus?: number;
-  weapon?: { damage: string; damage_type: string; finesse?: boolean; ranged?: boolean; two_handed?: boolean };
+  /**
+   * Arma. `finesse`, `ranged` y `two_handed` son las de siempre (el combate las lee); `properties` es la lista 5e
+   * entera (migrate la rellena desde las booleanas). `range`: alcance normal y largo en pies (arrojadiza o munición);
+   * `versatile_damage`: el daño a dos manos; `ammo_type`: la munición que gasta.
+   */
+  weapon?: {
+    damage: string; damage_type: string; finesse?: boolean; ranged?: boolean; two_handed?: boolean;
+    properties?: WeaponProperty[]; range?: [number, number]; versatile_damage?: string; ammo_type?: AmmoType;
+  };
+  /** Objeto mágico: con rareza hay que identificarlo para saber qué es (`ItemState.identified_by`). */
+  rarity?: ItemRarity;
+  /** Pide sintonía: `true` o una condición (clases, lanzador de conjuros). Sin sintonizar no da nada. */
+  attunement?: boolean | AttunementReq;
+  /** Bonos mágicos: el +1, +2 o +3. */
+  bonus?: { attack?: number; damage?: number; ac?: number; save_dc?: number; spell_attack?: number };
+  /** Cargas: máximo, cómo se recargan («1d6+1» al alba) y si se destruye al gastar la última (1 en 1d20, SRD). */
+  charges?: { max: number; recharge?: { amount: string; at: RechargeAt }; destroy_on_empty?: boolean };
+  /** Lo que da mientras se lleva (y, si pide sintonía, sintonizado). */
+  effects?: ItemEffect[];
+  /** Maldito (presencia = maldito): no se puede quitar ni dejar de sintonizar. Se descubre al sintonizarlo. */
+  cursed?: { effects?: ItemEffect[]; description?: string };
+  /** Cómo se ve sin identificar («espada larga», «poción azul»); sin él, un nombre genérico por tipo. */
+  unidentified?: { name: string; description?: string };
+  /**
+   * Pergamino, varita o bastón: el conjuro (id de src/data/srd/spells.ts) y su nivel. CD y ataque, si no los de la
+   * tabla. Un pergamino puede no fijar el conjuro (el pergamino de nivel N del SRD): entonces va en el ejemplar
+   * (`ItemState.spell_id`), que ha de ser de ese nivel.
+   */
+  spell?: { spell_id?: string; level: number; save_dc?: number; attack_bonus?: number };
+  /** Consumible con efecto al usarlo (poción), y cuánto dura en segundos de juego. */
+  effect?: ItemEffect;
+  duration_s?: number;
   /** Fuente de luz cuando `state.lit === true` (antorcha, farol). */
   light_source?: boolean;
   /**
@@ -839,13 +1063,36 @@ export interface ItemDef {
   origin: 'srd' | 'custom';
 }
 
+/**
+ * Lo que cambia de un ejemplar en la partida (la definición no cambia). Admite claves libres, como siempre.
+ */
+export interface ItemState {
+  [key: string]: unknown;
+  /** Quién sabe qué es (PJ). Un objeto mágico sin identificar se ve con `ItemDef.unidentified`. */
+  identified_by?: Id[];
+  /** A quién está sintonizado. */
+  attuned_to?: Id | null;
+  /** Cargas que le quedan; si falta y la definición tiene `charges`, está lleno. */
+  charges?: number;
+  /** Dinero dentro (bolsas), en cobre. */
+  coins?: number;
+  /** Encendida (antorchas, faroles). */
+  lit?: boolean;
+  /** De quién es (tiendas, robos). */
+  owner_id?: Id;
+  /** El conjuro de este pergamino, si su definición no lo fija (`ItemDef.spell` sin `spell_id`). */
+  spell_id?: string;
+  /** Lo lleva puesto un NPC (su ropa, el guante, las botas: outfit.ts). Deja de estarlo al cambiar de sitio. */
+  worn?: boolean;
+}
+
 /** Un ejemplar concreto en el mundo. Siempre en exactamente un `location`. */
 export interface ItemInstance {
   id: Id;
   item_id: Id;
   quantity: number;
   location: Placement;
-  state: Record<string, unknown>;
+  state: ItemState;
 }
 
 // ---------------------------------------------------------------------------
@@ -928,4 +1175,6 @@ export interface WorldSnapshot {
   item_defs: ItemDef[];
   item_instances: ItemInstance[];
   resource_nodes: ResourceNode[];
+  /** Misiones creadas en la partida (story.ts, addWorldQuest): una fila por misión. Las de la campaña escrita, no. */
+  quests?: WorldQuest[];
 }

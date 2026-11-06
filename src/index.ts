@@ -5,7 +5,9 @@
  *     Abre con un menú de partidas (src/games/manager.ts) en GAMES_DIR (./data/games); la
  *     primera vez, la partida de DATA_DIR pasa a ser «principal» con el modo de MASTER_MODE.
  *   - Sin --web: REPL local en la terminal (fase 1 sin cliente).
- *   - Con GOOGLE_CLOUD_PROJECT: persistencia en Firestore; si no, ficheros JSON en DATA_DIR (./data/local).
+ *   - Con GOOGLE_CLOUD_PROJECT: persistencia en Firestore; si no, en PostgreSQL (DATABASE_URL; WORLD_STORE=pg, por
+ *     defecto), o con WORLD_STORE=json en ficheros JSON en DATA_DIR (./data/local). En la web, WORLD_STORE vale para
+ *     todas las partidas; las que solo tienen su mundo en JSON quedan obsoletas con `pg` (src/games/worlds.ts).
  *   - MASTER_MODE=live|record|replay|offline: máster real, grabado, reproducido o sin API (src/ai/mode.ts).
  *   - IMAGES=on: ilustración de cada localización al pisarla por primera vez (Pollinations; src/ai/illustrate.ts).
  */
@@ -15,6 +17,9 @@ import { makeSeed } from './data/seed/demo.js';
 import type { Repository } from './persistence/repository.js';
 import { JsonFileRepository } from './persistence/jsonfile.js';
 import { FirestoreRepository } from './persistence/firestore.js';
+import { PgRepository } from './persistence/pg.js';
+import { PgWorldStore, worldStoreFromEnv } from './games/worlds.js';
+import { dbUrlFromEnv, openDb } from './db/db.js';
 import { startRepl } from './adapters/repl.js';
 import { startWeb } from './adapters/web/server.js';
 import { Master } from './ai/master.js';
@@ -30,8 +35,13 @@ async function main(): Promise<void> {
     const { adminCommand } = await import('./accounts/cli.js');
     process.exit(await adminCommand(process.argv, env));
   }
+  if (process.argv.includes('--world-store')) {
+    // Pasar mundos de partida entre ficheros JSON y la base (WORLD_STORE=pg): src/games/world-cli.ts.
+    const { worldStoreCommand } = await import('./games/world-cli.js');
+    process.exit(await worldStoreCommand(process.argv, env));
+  }
   if (process.argv.includes('--web')) {
-    // La web lleva sus propias partidas (catálogo en la base, mundo de cada una en su carpeta); el REPL sigue con un motor único.
+    // La web lleva sus propias partidas (catálogo y mundos en la base); el REPL sigue con un motor único.
     const games = new GameManager({ root: env['GAMES_DIR'] ?? './data/games', env });
     await games.init();
     console.log(`[boot] partidas en ${games.root}`);
@@ -40,12 +50,22 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  const dataDir = env['DATA_DIR'] ?? './data/local';
+  const campaignId = env['CAMPAIGN_ID'] ?? 'demo';
+  // WORLD_STORE=pg (por defecto): el mundo en PostgreSQL (DATABASE_URL, o PGlite en DATA_DIR/.pgdata), con la clave
+  // de la campaña. Un mundo de antes en DATA_DIR, en JSON, no se abre (worlds.ts): WORLD_STORE=json para seguirlo.
+  const store = env['GOOGLE_CLOUD_PROJECT'] ? 'firestore' : worldStoreFromEnv(env);
+  const db = store === 'pg' ? await openDb(dbUrlFromEnv(env, dataDir, 'open')!) : null;
+  if (db) {
+    const ref = { key: campaignId, dir: dataDir, campaignId };
+    await new PgWorldStore(db).prepare(ref);
+  }
   const repo: Repository = env['GOOGLE_CLOUD_PROJECT']
     ? new FirestoreRepository(env['GOOGLE_CLOUD_PROJECT'])
-    : new JsonFileRepository(env['DATA_DIR'] ?? './data/local');
-  console.log(`[boot] persistencia: ${env['GOOGLE_CLOUD_PROJECT'] ? 'firestore' : 'json'}`);
+    : db ? new PgRepository(db, campaignId) : new JsonFileRepository(dataDir);
+  console.log(`[boot] persistencia: ${env['GOOGLE_CLOUD_PROJECT'] ? 'firestore' : db ? `postgresql (${db.kind})` : 'json'}`);
 
-  const engine = await Engine.boot({ repo, campaignId: env['CAMPAIGN_ID'] ?? 'demo', seed: makeSeed() });
+  const engine = await Engine.boot({ repo, campaignId, seed: makeSeed() });
   console.log(`[boot] ${engine.world.campaign.name} — ${engine.clock.format(engine.gameNow())} — ${engine.world.characters.size} PJs, ${engine.events.lastSeq} eventos`);
   const mode = masterModeFromEnv(env);
   if (Master.configured(mode)) {

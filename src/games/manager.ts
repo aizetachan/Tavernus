@@ -2,7 +2,8 @@
  * Gestor de partidas para la web. Una partida es una carpeta
  * <root>/<slug>/ con un manifiesto (game.json) y, normalmente, dentro:
  *
- *   data/          persistencia JSON del motor (JsonFileRepository)
+ *   data/          con WORLD_STORE=json, el mundo en JSON (JsonFileRepository). Con `pg` (por defecto) el mundo va
+ *                  en la base (worlds.ts) y aquí solo queda el de antes: la partida está obsoleta (`GameInfo.obsolete`)
  *   master-cache/  respuestas del máster (record | replay; src/ai/cache.ts)
  *   initial/       copia del estado recién creado (grabaciones y demos), para reiniciar
  *   recorded/      la partida grabada tal como quedó al convertirla en demo
@@ -14,7 +15,7 @@
  * Los motores se arrancan bajo demanda y se quedan abiertos hasta `close`.
  */
 
-import { cp, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { chargenCatalog, previewCharacter, type ChargenCatalog } from '../engine/chargen.js';
 import { Engine, type CharacterSpec, type EngineOptions } from '../engine/engine.js';
@@ -24,8 +25,8 @@ import { makeSeed } from '../data/seed/demo.js';
 import { authoredSeed, isAuthoredCampaign } from '../data/campaigns/index.js';
 import { chatterWriter } from '../ai/chatter-writer.js';
 import { CLASSES, RACES } from '../data/srd/index.js';
-import { JsonFileRepository } from '../persistence/jsonfile.js';
-import { CATALOG } from '../worldgen/fill.js';
+import { JsonWorldStore, worldKey, type WorldRef, type WorldStore } from './worlds.js';
+import { CATALOG } from '../data/catalog.js';
 import { claimSituation, generateSeed, TONES, type GenerateOptions, type Tone } from '../worldgen/index.js';
 import { Master, noCredit } from '../ai/master.js';
 import { isMasterMode, masterCacheDir, masterModeFromEnv, masterOptionsFor, type MasterMode } from '../ai/mode.js';
@@ -35,23 +36,9 @@ import { BudgetBook, budgetFromEnv, BudgetedMaster, type BudgetLimits } from '..
 import { offlineClient } from '../ai/offline.js';
 import { FileCatalog, MANIFEST, type GameCatalog } from './catalog.js';
 import type { MasterLike } from '../engine/engine.js';
+import { synopsisOf, clipSynopsis } from './synopsis.js';
 
-/**
- * En Windows, renombrar una carpeta falla con EPERM/EBUSY mientras algún
- * descriptor de ficheros recién cerrado sigue vivo unos milisegundos.
- * Reintenta con esperas cortas y, si no hay manera, copia y borra.
- */
-async function renameWithRetry(from: string, to: string, attempts = 8): Promise<void> {
-  for (let i = 0; i < attempts; i++) {
-    try { await rename(from, to); return; } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code;
-      if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'ENOTEMPTY') throw e;
-      await new Promise((r) => setTimeout(r, 50 * (i + 1)));
-    }
-  }
-  await cp(from, to, { recursive: true });
-  await rm(from, { recursive: true, force: true });
-}
+export { synopsisOf, clipSynopsis };
 
 export { MANIFEST };
 export const WORLD_FILE = 'world.seed.json';
@@ -114,6 +101,11 @@ export interface GameInfo {
   synopsis: string | null;
   /** La última vista de un sitio pintada en la partida, para el menú (null si aún no hay ninguna). */
   cover: string | null;
+  /**
+   * Partida de antes de guardar el mundo en la base (WORLD_STORE=pg, worlds.ts): se conserva y se lista, con sus
+   * PJ y su última narración, pero no se abre. Las demos nunca lo son: vuelven a su foto de arranque.
+   */
+  obsolete: boolean;
 }
 
 export interface CreateGameInput {
@@ -199,6 +191,8 @@ export class GameManager {
   private readonly engines = new Map<string, Promise<Engine>>();
   private readonly closeListeners = new Set<(slug: string, engine: Engine) => void>();
   private catalog: GameCatalog;
+  /** Dónde va el mundo de cada partida: su carpeta (JSON) o la base (WORLD_STORE=pg, worlds.ts). */
+  private worlds: WorldStore = new JsonWorldStore();
 
   constructor(opts: GameManagerOptions) {
     this.root = resolve(opts.root);
@@ -276,6 +270,18 @@ export class GameManager {
   /** Cambia el catálogo (la web pasa a la base al arrancar: src/db/catalog.ts). */
   useCatalog(catalog: GameCatalog): void { this.catalog = catalog; }
 
+  /** Cambia dónde se guarda el mundo de las partidas (la web, con WORLD_STORE=pg: worlds.ts). */
+  useWorldStore(worlds: WorldStore): void { this.worlds = worlds; }
+
+  get worldStore(): WorldStore { return this.worlds; }
+
+  /** El mundo de una partida: el suyo, su foto de arranque (grabaciones) o lo grabado (demos). */
+  private worldRef(m: GameManifest, which: 'data' | 'initial' | 'recorded' = 'data'): WorldRef {
+    const p = this.paths(m);
+    const dir = which === 'data' ? p.data : which === 'initial' ? (p.initial ?? join(p.dir, 'initial')) : join(p.dir, 'recorded');
+    return { key: worldKey(m.slug, which), dir, campaignId: m.campaign_id };
+  }
+
   async require(slug: string): Promise<GameManifest> {
     const m = await this.get(slug);
     if (!m) throw new GameError(`No existe la partida «${slug}».`, 404);
@@ -303,20 +309,27 @@ export class GameManager {
       const engine = await this.engines.get(m.slug)!.catch(() => null);
       if (engine) characters = [...engine.world.characters.values()].filter((c) => c.status !== 'retired').map((c) => c.name);
     } else {
-      try {
-        const snap = JSON.parse(await readFile(join(p.data, `${m.campaign_id}.world.json`), 'utf8')) as WorldSnapshot;
-        characters = snap.characters.filter((c) => c.status !== 'retired').map((c) => c.name);
-      } catch { /* aún sin arrancar: la semilla */
-        characters = m.world || isAuthoredCampaign(m.campaign_id) ? [] : makeSeed().characters.map((c) => c.name);
-      }
+      // Aún sin arrancar: la semilla.
+      characters = await this.worlds.characters(this.worldRef(m)).catch(() => null)
+        ?? (m.world || isAuthoredCampaign(m.campaign_id) ? [] : makeSeed().characters.map((c) => c.name));
     }
     return {
       slug: m.slug, name: m.name, created_at: m.created_at, last_opened_at: m.last_opened_at, mode: m.mode, demo: m.demo, main: m.main,
       dice_seed: m.dice_seed, characters, cache_entries: m.mode === 'record' || m.mode === 'replay' ? await countJson(p.cache) : 0, open,
       world: m.world ? { seed: m.world.seed, tone: m.world.tone, template: m.world.model === 'offline' } : null,
-      synopsis: await synopsisOf(join(p.data, `${m.campaign_id}.events.jsonl`)),
+      synopsis: await this.worlds.synopsis(this.worldRef(m)).catch(() => null),
       cover: await coverOf(join(p.dir, 'images'), m.slug),
+      obsolete: !open && await this.isObsolete(m),
     };
+  }
+
+  /** Ver `GameInfo.obsolete`. */
+  async isObsolete(m: GameManifest): Promise<boolean> {
+    return !m.demo && await this.worlds.obsolete(this.worldRef(m)).catch(() => false);
+  }
+
+  private obsoleteError(m: GameManifest): GameError {
+    return new GameError(`«${m.name}» es de antes de que el mundo se guardara en la base: se conserva tal como quedó, pero ya no se puede seguir jugando.`, 409);
   }
 
   isOpen(slug: string): boolean { return this.engines.has(slug); }
@@ -356,10 +369,15 @@ export class GameManager {
     // Mundo generado (guardado junto a la partida), campaña escrita (src/data/campaigns) o la semilla de pruebas.
     const seed = m.world ? JSON.parse(await readFile(join(p.dir, m.world.file), 'utf8')) as WorldSnapshot
       : isAuthoredCampaign(m.campaign_id) ? authoredSeed(m.campaign_id, { now: this.now() }) : makeSeed();
+    const ref = this.worldRef(m);
+    // Una partida de antes no se abre; una demo de antes empieza desde su foto de arranque (o de la semilla, si no tiene).
+    if (await this.isObsolete(m)) throw this.obsoleteError(m);
+    if (m.demo && await this.worlds.obsolete(ref)) await this.restoreInitial(m);
+    await this.worlds.prepare(ref, { ignoreLegacy: m.demo });
     const engine = await Engine.boot({
       pauseOnBoot: true,
       ...this.engineOpts,
-      repo: new JsonFileRepository(p.data), campaignId: m.campaign_id,
+      repo: this.worlds.repo(ref), campaignId: m.campaign_id,
       ...(m.campaign_id === seed.campaign.id ? { seed } : {}),
       ...(m.dice_seed !== null ? { rng: seededRng(m.dice_seed) } : {}),
     });
@@ -377,7 +395,7 @@ export class GameManager {
     }
     m.last_opened_at = this.now().toISOString();
     await this.writeManifest(m);
-    this.log(`[partidas] abierta «${m.slug}» (${m.mode}${master ? '' : ', sin máster: narración plana'}${master && this.budget && (m.mode === 'live' || m.mode === 'record') ? `, cupo ${this.budget.actions || '∞'} acciones${this.budget.tokens ? ` / ${this.budget.tokens} tokens` : ''} por PJ y día` : ''}${imagesEnabled(this.env, m.mode) ? `, ilustraciones con ${cloudflareFromEnv(this.env) ? 'Cloudflare (reserva: Pollinations)' : 'Pollinations'}` : ''}) en ${p.data}`);
+    this.log(`[partidas] abierta «${m.slug}» (${m.mode}${master ? '' : ', sin máster: narración plana'}${master && this.budget && (m.mode === 'live' || m.mode === 'record') ? `, cupo ${this.budget.actions || '∞'} acciones${this.budget.tokens ? ` / ${this.budget.tokens} tokens` : ''} por PJ y día` : ''}${imagesEnabled(this.env, m.mode) ? `, ilustraciones con ${cloudflareFromEnv(this.env) ? 'Cloudflare (reserva: Pollinations)' : 'Pollinations'}` : ''}) en ${this.worlds.kind === 'pg' ? `la base («${ref.key}»)` : p.data}`);
     return engine;
   }
 
@@ -502,8 +520,7 @@ export class GameManager {
       await engine.flush();
       if (input.mode === 'record') {
         // Foto del arranque: la demo empezará desde aquí, con el mismo personaje.
-        const p = this.paths(game);
-        await cp(p.data, join(p.dir, 'initial'), { recursive: true });
+        await this.worlds.copy(this.worldRef(game), this.worldRef(game, 'initial'));
         game.initial_dir = 'initial';
       }
       game.last_opened_at = this.now().toISOString();
@@ -515,6 +532,7 @@ export class GameManager {
       await this.close(slug).catch(() => {});
       await this.catalog.remove(slug).catch(() => {});
       await rm(this.dirOf(slug), { recursive: true, force: true });
+      await this.worlds.removeGame(slug).catch(() => {});
       throw e;
     }
   }
@@ -525,6 +543,7 @@ export class GameManager {
     await this.close(slug);
     await this.catalog.remove(slug);
     await rm(this.dirOf(slug), { recursive: true, force: true });
+    await this.worlds.removeGame(slug);
   }
 
   /**
@@ -537,10 +556,9 @@ export class GameManager {
     if (m.mode !== 'record') throw new GameError('Solo las grabaciones (modo grabar) se pueden convertir en demo.');
     const p = this.paths(m);
     if (!inside(p.dir, p.data) || !inside(p.dir, p.cache)) throw new GameError('Esta partida guarda sus datos fuera de su carpeta; no se puede convertir en demo.');
+    if (!this.isOpen(slug) && await this.isObsolete(m)) throw this.obsoleteError(m);
     await this.close(slug);
-    const recorded = join(p.dir, 'recorded');
-    await rm(recorded, { recursive: true, force: true });
-    if (await exists(p.data)) await renameWithRetry(p.data, recorded);
+    await this.worlds.move(this.worldRef(m), this.worldRef(m, 'recorded'));
     await this.restoreInitial(m);
     m.mode = 'replay';
     m.demo = true;
@@ -555,7 +573,7 @@ export class GameManager {
     const p = this.paths(m);
     if (!inside(p.dir, p.data)) throw new GameError('Esta demo guarda sus datos fuera de su carpeta.');
     await this.close(slug);
-    await rm(p.data, { recursive: true, force: true });
+    await this.worlds.remove(this.worldRef(m));
     await this.restoreInitial(m);
     return m;
   }
@@ -564,7 +582,7 @@ export class GameManager {
 
   private async restoreInitial(m: GameManifest): Promise<void> {
     const p = this.paths(m);
-    if (p.initial && await exists(p.initial)) await cp(p.initial, p.data, { recursive: true });
+    if (p.initial && await this.worlds.exists(this.worldRef(m, 'initial'))) await this.worlds.copy(this.worldRef(m, 'initial'), this.worldRef(m));
     else await mkdir(p.data, { recursive: true }); // sin foto: arranca de la semilla
   }
 
@@ -646,53 +664,3 @@ async function countJson(dir: string): Promise<number> {
   try { return (await readdir(dir)).filter((f) => f.endsWith('.json')).length; } catch { return 0; }
 }
 
-/** Hasta dónde se lee del final del registro de eventos para la sinopsis (no hace falta el fichero entero). */
-const SYNOPSIS_TAIL_BYTES = 96 * 1024;
-const SYNOPSIS_MAX_CHARS = 260;
-
-/**
- * Sinopsis para el menú sin abrir la partida (abrirla cambiaría su «jugada hace…»): la última narración del
- * máster del registro de eventos, recortada a una o dos frases. Si aún no hay narración, la última que haya.
- */
-export async function synopsisOf(eventsFile: string): Promise<string | null> {
-  let text: string;
-  try {
-    const fh = await openFile(eventsFile, 'r');
-    try {
-      const { size } = await fh.stat();
-      const start = Math.max(0, size - SYNOPSIS_TAIL_BYTES);
-      const buf = Buffer.alloc(size - start);
-      await fh.read(buf, 0, buf.length, start);
-      text = buf.toString('utf8');
-      if (start > 0) text = text.slice(text.indexOf('\n') + 1);
-    } finally { await fh.close(); }
-  } catch { return null; }
-  let fallback: string | null = null;
-  const lines = text.split('\n');
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i]!.trim();
-    if (!line) continue;
-    let ev: { action_type?: string; narration_private?: string | null };
-    try { ev = JSON.parse(line) as typeof ev; } catch { continue; }
-    const n = typeof ev.narration_private === 'string' ? ev.narration_private.trim() : '';
-    if (!n) continue;
-    if (ev.action_type === 'master') return clipSynopsis(n);
-    fallback ??= n;
-  }
-  return fallback ? clipSynopsis(fallback) : null;
-}
-
-/** Una o dos frases enteras hasta SYNOPSIS_MAX_CHARS; si una sola ya se pasa, se corta en una palabra con «…». */
-export function clipSynopsis(text: string): string {
-  const flat = text.replace(/\s+/g, ' ').trim();
-  if (flat.length <= SYNOPSIS_MAX_CHARS) return flat;
-  const sentences = flat.match(/[^.!?…]+[.!?…]+[»"”]?\s*/g) ?? [];
-  let out = '';
-  for (const sen of sentences) {
-    if ((out + sen).trim().length > SYNOPSIS_MAX_CHARS) break;
-    out += sen;
-  }
-  if (out.trim()) return out.trim();
-  const cut = flat.slice(0, SYNOPSIS_MAX_CHARS);
-  return cut.slice(0, Math.max(cut.lastIndexOf(' '), 40)).replace(/[,;:\s]+$/, '') + '…';
-}

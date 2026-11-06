@@ -8,7 +8,8 @@ import { GAME_DAY } from '../clock/clock.js';
 import { consumeItem, spawnItem, transferItem } from './inventory.js';
 import { refusesService } from './crime.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
-import { money } from './money.js';
+import { coinsOf, money, pay, receive } from './money.js';
+import { buyPrice, listPrice, putInStock, shopClosed, shopReach, stockCount, takeFromStock } from './shop.js';
 import { priceFor } from './standing.js';
 import { discoverSpot } from './spots.js';
 import type { World } from './world.js';
@@ -75,7 +76,7 @@ export function completeJob(world: World, c: Character, jobId: Id, npcId: Id | n
     }
   }
   c.completed_jobs.push(jobId);
-  c.coins += job.reward_coins;
+  receive(world, c.id, job.reward_coins);
   const rep = addReputation(world, c, world.campaign.achievement.faction_id, job.reward_reputation);
   const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${money(world, job.reward_coins)}. Reputación en Brezal: ${rep}.`, quest: { id: job.id, title: job.title, event: 'done', why: `se lo ${job.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${giver.name} · +${money(world, job.reward_coins)}` } }];
   const ach = checkAchievement(world, c);
@@ -166,41 +167,71 @@ export function activeJobs(world: World): Job[] {
   return world.campaign.board.active_job_ids.map((id) => world.campaign.jobs.find((j) => j.id === id)).filter((j): j is Job => Boolean(j));
 }
 
-/** Venta a un NPC: el precio lo fija su lista. */
-export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id, quantity?: number): { ok: true; item: string; quantity: number; total: number } | { ok: false; reason: string } {
+/**
+ * Venta a un NPC: el precio lo fija su lista. Con tienda (shop.ts), también compra lo que no está en su lista si la
+ * tienda lo dice (`buys_any`), lo pone en sus estantes y paga de su bolsa: si no le llega, no compra.
+ */
+export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id, quantity?: number, nowG?: number): { ok: true; item: string; quantity: number; total: number } | { ok: false; reason: string } {
   const npc = world.npc(npcId);
-  if (world.characterSpot(c)?.id !== npc.location.id) return { ok: false, reason: `${npc.name} no está aquí` };
+  const reach = npc.shop ? shopReach(world, npc, c) : world.characterSpot(c)?.id !== npc.location.id ? `${npc.name} no está aquí` : null;
+  if (reach) return { ok: false, reason: reach };
+  const closed = npc.shop ? shopClosed(npc, nowG) : null;
+  if (closed) return { ok: false, reason: closed };
   // Quien sabe lo que ha hecho no trata con él (crime.ts).
   const no = refusesService(world, npc, c);
   if (no) return { ok: false, reason: no };
   const inst = world.itemInstances.get(instanceId);
   if (!inst) return { ok: false, reason: 'ese objeto no existe' };
-  const offer = npc.buys.find((b) => b.item_id === inst.item_id);
-  if (!offer) return { ok: false, reason: `${npc.name} no compra ${world.itemDef(inst.item_id).name}` };
+  if (!world.itemsCarriedBy(c.id).some((i) => i.id === inst.id)) return { ok: false, reason: 'eso no lo llevas encima' };
+  // Una bolsa con dinero dentro (money.ts) no se vende llena: el dinero iría con ella.
+  if (typeof inst.state['coins'] === 'number' && inst.state['coins'] > 0) return { ok: false, reason: `primero saca el dinero de ${world.itemDef(inst.item_id).name}` };
+  const base = npc.shop ? buyPrice(world, npc, inst.item_id) : npc.buys.find((b) => b.item_id === inst.item_id)?.price ?? null;
+  if (base === null) return { ok: false, reason: `${npc.name} no compra ${world.itemDef(inst.item_id).name}` };
   const q = quantity ?? inst.quantity;
-  const r = transferItem(world, inst.id, { type: 'npc', id: npc.id }, q);
-  if (!r.ok) return { ok: false, reason: r.error.code };
+  if (!Number.isInteger(q) || q < 1 || q > inst.quantity) return { ok: false, reason: 'cantidad no válida' };
   // Lo que piensa de él cambia el precio (standing.ts).
-  const total = priceFor(npc, c.id, offer.price, 'sell') * q;
-  c.coins += total;
-  world.touch('characters', c.id);
+  const total = priceFor(npc, c.id, base, 'sell') * q;
+  if (npc.shop) {
+    // La tienda paga de su bolsa (money.ts): si no le llega, no compra.
+    const cash = coinsOf(world, npc.id);
+    if (cash < total) return { ok: false, reason: `a ${npc.name} no le llega: pide ${money(world, total)} y solo tiene ${money(world, cash)}` };
+    if (!putInStock(world, npc, inst, q)) return { ok: false, reason: `a ${npc.name} no le cabe en la tienda` };
+    pay(world, npc.id, total, c.id);
+  } else {
+    const r = transferItem(world, inst.id, { type: 'npc', id: npc.id }, q);
+    if (!r.ok) return { ok: false, reason: r.error.code };
+    receive(world, c.id, total);
+  }
   return { ok: true, item: world.itemDef(inst.item_id).name, quantity: q, total };
 }
 
-export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, quantity: number): { ok: true; item: string; quantity: number; total: number; unlocked: string[] } | { ok: false; reason: string } {
+/**
+ * Compra a un NPC. Con tienda (shop.ts): hay que estar en su local, en su horario, y sale de sus existencias (sin
+ * existencias, no le queda); lo pagado va a su bolsa. Sin tienda, como siempre: lo de su lista.
+ */
+export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, quantity: number, nowG?: number): { ok: true; item: string; quantity: number; total: number; unlocked: string[] } | { ok: false; reason: string } {
   const npc = world.npc(npcId);
-  if (world.characterSpot(c)?.id !== npc.location.id) return { ok: false, reason: `${npc.name} no está aquí` };
+  const reach = npc.shop ? shopReach(world, npc, c) : world.characterSpot(c)?.id !== npc.location.id ? `${npc.name} no está aquí` : null;
+  if (reach) return { ok: false, reason: reach };
+  const def = world.itemDefs.get(itemId);
+  if (!def) return { ok: false, reason: `${npc.name} no vende eso` };
   const offer = npc.sells.find((s) => s.item_id === itemId);
-  if (!offer) return { ok: false, reason: `${npc.name} no vende eso` };
+  const stocked = npc.shop && !def.service ? stockCount(world, npc, itemId) : 0;
+  if (!offer && !stocked) return { ok: false, reason: npc.shop ? `a ${npc.name} no le queda ${def.name}` : `${npc.name} no vende eso` };
+  const closed = npc.shop ? shopClosed(npc, nowG) : null;
+  if (closed) return { ok: false, reason: closed };
   // Ni le vende ni le aloja quien sabe lo que ha hecho (crime.ts).
   const no = refusesService(world, npc, c);
   if (no) return { ok: false, reason: no };
   const q = Math.max(1, Math.floor(quantity));
-  const total = priceFor(npc, c.id, offer.price, 'buy') * q;
-  if (c.coins < total) return { ok: false, reason: `faltan ${money(world, total - c.coins)}` };
+  if (npc.shop && !def.service && stocked < q) return { ok: false, reason: stocked ? `a ${npc.name} solo le ${stocked === 1 ? 'queda 1' : `quedan ${stocked}`} de ${def.name}` : `a ${npc.name} no le queda ${def.name}` };
+  const total = priceFor(npc, c.id, npc.shop ? listPrice(world, npc, itemId) : offer!.price, 'buy') * q;
+  const have = coinsOf(world, c.id);
+  if (have < total) return { ok: false, reason: `faltan ${money(world, total - have)}` };
   const r = deliverGoods(world, c, npc, itemId, q);
   if (!r.ok) return r;
-  c.coins -= total; world.touch('characters', c.id);
+  // El dinero pasa de su bolsa a la del vendedor (money.ts).
+  pay(world, c.id, total, npc.id);
   return { ok: true, item: r.item, quantity: q, total, unlocked: r.unlocked };
 }
 
@@ -211,6 +242,11 @@ export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, qu
  */
 export function deliverGoods(world: World, c: Character, npc: Npc, itemId: Id, q: number): { ok: true; item: string; unlocked: string[] } | { ok: false; reason: string } {
   const def = world.itemDef(itemId);
+  // Una tienda (shop.ts) da de sus existencias: no se crea nada.
+  if (npc.shop && !def.service) {
+    const r = takeFromStock(world, npc, c, itemId, q);
+    return r.ok ? { ok: true, item: def.name, unlocked: [] } : r;
+  }
   const give = def.service ? world.itemDef(def.service.gives_item_id) : def;
   const targets: Placement[] = give.size === 'bulky'
     ? [{ type: 'character', id: c.id, slot: { kind: 'hand', which: 'both' } }]

@@ -96,6 +96,7 @@ import { accountPage } from './page-account.js';
 import { adminPage } from './page-admin.js';
 import { AccountError, Accounts, ensureAdmin, type CharacterInput, type Seat, type User } from '../../accounts/accounts.js';
 import { describeDbUrl, dbUrlFromEnv, memoryDb, openDb, type Db } from '../../db/db.js';
+import { PgWorldStore, worldStoreFromEnv } from '../../games/worlds.js';
 import { DbCatalog, ensureGameRow } from '../../db/catalog.js';
 import { PRESENCE_TIMING, PresenceTracker, REPEAT_NOTICE_MS, type PresenceTiming } from './presence.js';
 import { pcLabel, pcName, sayLooksLikeAction } from '../../engine/party.js';
@@ -108,6 +109,7 @@ import { combatView, type CombatEnd, type CombatView, type TurnContext } from '.
 import { ActionLog, presenceLine, reportLine } from './servicelog.js';
 import { AWAY_CARD_MS, awayCard, awayCardEmpty, awayFor, awayText, unreadFrom, type AwayCard } from './whileaway.js';
 import { tablonView } from './tablon.js';
+import { shopView } from './tienda.js';
 import { activeJobs } from '../../engine/progress.js';
 import { boardSeen } from '../../engine/quests.js';
 import { listReports, REPORT_MAX_TEXT, reportOf, ReportQuota, saveReport } from './report.js';
@@ -383,7 +385,10 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     }) ?? (() => {});
     // La hoja se refresca cuando cambia algo del PJ o de los ítems.
     let sheetTimer: NodeJS.Timeout | null = null;
+    // Un NPC cambia de sitio sin aviso (el relleno, extras.ts): el tablero se vuelve a pedir, sin línea en el chat.
+    let boardTimer: NodeJS.Timeout | null = null;
     const offChange = engine.world.onChange((ch) => {
+      if (ch.collection === 'npcs' && !boardTimer) boardTimer = setTimeout(() => { boardTimer = null; for (const id of streams.keys()) send(id, 'board', {}); }, 500);
       // Rumores (campaña) y memoria de los NPC: el diario también los recoge.
       if (ch.collection === 'campaign' || ch.collection === 'npcs') for (const id of streams.keys()) notifyJournal(id);
       if (ch.collection === 'characters' || ch.collection === 'npcs') scheduleFights();
@@ -652,6 +657,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         if (fightTimer) clearTimeout(fightTimer);
         for (const t of offlineTimers.values()) clearTimeout(t);
         if (sheetTimer) clearTimeout(sheetTimer);
+        if (boardTimer) clearTimeout(boardTimer);
         for (const t of journalTimers.values()) clearTimeout(t);
         for (const set of streams.values()) for (const res of set) res.end();
         streams.clear();
@@ -995,6 +1001,11 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       json(res, 200, { image: img ? sceneView(img, slug) : null });
       return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/shop') {
+      const id = characterOr404(engine, characterParam, res);
+      if (id) json(res, 200, shopView(engine, id));
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/sheet') {
       const id = characterOr404(engine, characterParam, res);
       if (id) { const s = sheetView(engine, id); json(res, 200, { ...s, pack: withItemArt(engine, s.pack, id, slug) }); }
@@ -1094,6 +1105,16 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           if (!inst || !dest) { json(res, 400, { ok: false, text: '¿Adónde lo llevas?' }); return; }
           const r = await engine.moveItem(id, inst, dest);
           json(res, 200, { ok: r.ok, text: r.text });
+          return;
+        }
+        // Comprar con el botón de la tienda (tienda.ts): el atajo determinista del motor, sin máster.
+        case '/api/shop/buy': {
+          const npc = typeof body['npc'] === 'string' ? body['npc'] : '';
+          const item = typeof body['item'] === 'string' ? body['item'] : '';
+          const q = Number.isInteger(body['quantity']) ? Math.max(1, Math.min(20, body['quantity'] as number)) : 1;
+          if (!npc || !item) { json(res, 400, { ok: false, text: '¿Qué compras?' }); return; }
+          if (!rt.begin(id)) { json(res, 409, { ok: false, text: 'Ya tienes una acción en curso: espera a que el narrador responda.' }); return; }
+          try { json(res, 200, reply(await rt.actions.track(id, 'shop_buy', () => engine.shopBuy(id, npc, item, q), refused))); } finally { rt.end(id); }
           return;
         }
         case '/api/command': {
@@ -1374,7 +1395,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         json(res, 200, {
           ok: true,
           games: (await games.list()).map((g) => ({
-            slug: g.slug, name: g.name, mode: g.mode, demo: g.demo, created_at: g.created_at, last_opened_at: g.last_opened_at, characters: g.characters,
+            slug: g.slug, name: g.name, mode: g.mode, demo: g.demo, obsolete: g.obsolete, created_at: g.created_at, last_opened_at: g.last_opened_at, characters: g.characters,
             owner: owners.get(g.slug) ?? null, players: seated.filter((s) => s.game_slug === g.slug).map((s) => ({ id: s.id, username: s.username })),
           })),
         });
@@ -1386,18 +1407,19 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         const m = await games.get(gm[1]!);
         if (!m) { json(res, 404, { ok: false, text: 'No existe esa partida.' }); return; }
         const info = await games.info(m);
-        const rt = await runtime(m.slug);
-        const list = await ensureSeats(m.slug);
+        // Una partida obsoleta (de antes de guardar el mundo en la base) no se abre: sus asientos, como están.
+        const rt = info.obsolete ? null : await runtime(m.slug);
+        const list = rt ? await ensureSeats(m.slug) : await accounts.seats(m.slug);
         const names = new Map((await accounts.listUsers()).map((u) => [u.id, u.username]));
         json(res, 200, {
           ok: true,
-          game: { slug: m.slug, name: m.name, mode: m.mode, demo: m.demo, campaign_id: m.campaign_id, created_at: m.created_at, last_opened_at: m.last_opened_at, characters: info.characters },
+          game: { slug: m.slug, name: m.name, mode: m.mode, demo: m.demo, obsolete: info.obsolete, campaign_id: m.campaign_id, created_at: m.created_at, last_opened_at: m.last_opened_at, characters: info.characters },
           owner: (await accounts.owners()).get(m.slug) ?? null,
           seats: list.map((s) => ({
             id: s.id, label: s.label, host: s.host, character_id: s.character_id,
-            character_name: s.character_id ? rt.engine.world.characters.get(s.character_id)?.name ?? null : null,
+            character_name: s.character_id ? rt?.engine.world.characters.get(s.character_id)?.name ?? null : null,
             user: s.user_id ? { id: s.user_id, username: names.get(s.user_id) ?? '?' } : null,
-            last_seen_at: s.last_seen_at, online: s.character_id ? rt.online(s.character_id) : false,
+            last_seen_at: s.last_seen_at, online: s.character_id && rt ? rt.online(s.character_id) : false,
           })),
         });
         return;
@@ -1689,6 +1711,14 @@ export async function startWeb(games: GameManager, port: number, env: NodeJS.Pro
   const catalog = new DbCatalog(db, games.root);
   await catalog.importFolders((m) => console.log(m));
   games.useCatalog(catalog);
+  // El mundo de cada partida: en esta misma base (WORLD_STORE=pg, por defecto) o en su carpeta (json; src/games/worlds.ts).
+  if (worldStoreFromEnv(env) === 'pg') {
+    games.useWorldStore(new PgWorldStore(db));
+    const old = (await games.list()).filter((g) => g.obsolete).length;
+    console.log(`[web] mundos de las partidas: en la base (WORLD_STORE=pg)${old ? `; ${old} de antes, en JSON, se conservan como obsoletas (no se abren)` : ''}`);
+  } else {
+    console.log('[web] mundos de las partidas: en su carpeta, en JSON (WORLD_STORE=json)');
+  }
   const accounts = new Accounts(db);
   // Primer administrador sin navegador (también: npm run admin -- <usuario>).
   const adminUser = env['ADMIN_USER']?.trim();
@@ -2003,8 +2033,8 @@ function withImages(m: WebMessage, ill: Illustrator | null, slug: string, engine
     out.moments = m.moments.map((x) => {
       const img = x.kind === 'scene' ? null : ill.entityImage(x.kind, x.entity_id);
       if (!img) return x;
-      // Retrato de un NPC: el nombre con que habla en el turno (nombre y apellidos, si los tiene) y su oficio.
-      const npc = x.kind === 'portrait' ? engine?.world.npcs.get(x.entity_id) : undefined;
+      // La charla con un NPC: el nombre con que habla en el turno (nombre y apellidos, si los tiene) y su oficio.
+      const npc = x.kind === 'talk' ? engine?.world.npcs.get(x.entity_id) : undefined;
       if (!npc) return { ...x, name: img.name, src: imageSrc(img, slug) };
       const said = m.lines?.find((l) => l.id === x.entity_id)?.name;
       return { ...x, name: said || npc.name, role: npc.role_short?.replace(/^(el|la|los|las)\s+/i, '') || npc.role, src: imageSrc(img, slug) };

@@ -19,12 +19,12 @@ import type { TickerState } from '../clock/clock.js';
 import type { Change, Repository } from './repository.js';
 
 const COLLECTIONS: Exclude<Collection, 'campaign'>[] = [
-  'regions', 'zones', 'locations', 'spots', 'exits', 'characters', 'npcs', 'vehicles', 'item_defs', 'item_instances', 'resource_nodes',
+  'regions', 'zones', 'locations', 'spots', 'exits', 'characters', 'npcs', 'vehicles', 'item_defs', 'item_instances', 'resource_nodes', 'quests',
 ];
 
 const SNAPSHOT_KEYS: Record<Exclude<Collection, 'campaign'>, keyof Omit<WorldSnapshot, 'campaign'>> = {
   regions: 'regions', zones: 'zones', locations: 'locations', spots: 'spots', exits: 'exits', characters: 'characters',
-  npcs: 'npcs', vehicles: 'vehicles', item_defs: 'item_defs', item_instances: 'item_instances', resource_nodes: 'resource_nodes',
+  npcs: 'npcs', vehicles: 'vehicles', item_defs: 'item_defs', item_instances: 'item_instances', resource_nodes: 'resource_nodes', quests: 'quests',
 };
 
 const BATCH_LIMIT = 450;
@@ -54,7 +54,7 @@ export class FirestoreRepository implements Repository {
     const ref = this.campaignRef(snapshot.campaign.id);
     const writes: ((b: WriteBatch) => void)[] = [(b) => b.set(ref, clean(snapshot.campaign))];
     for (const col of COLLECTIONS) {
-      for (const doc of snapshot[SNAPSHOT_KEYS[col]] as { id: Id }[]) {
+      for (const doc of (snapshot[SNAPSHOT_KEYS[col]] ?? []) as { id: Id }[]) {
         writes.push((b) => b.set(ref.collection(col).doc(doc.id), clean(doc)));
       }
     }

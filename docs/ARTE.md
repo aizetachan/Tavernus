@@ -124,6 +124,12 @@ sirve JPEG para todo y PNG solo para objetos.
 Sin activo escrito, el motor decide qué merece imagen (`src/engine/moments.ts`) y el ilustrador escribe el
 prompt desde los datos (`entityOf` en `src/ai/illustrate.ts`), nunca desde la narración del turno:
 
+- **Charla** (desde el 06-11): la primera vez que un PJ habla con un NPC sale una imagen grande, como la del
+  sitio o la del objeto: el NPC en su sitio, de medio cuerpo, mirando a quien le habla («… mid-conversation,
+  looking at the viewer. medium shot from the point of view of the person talking to them»). Sin el PJ en la
+  imagen, así hay una por NPC y vale para todos. Antes salía su retrato pequeño y cuadrado dentro de la burbuja;
+  ya no sale en el hilo (tampoco en partidas viejas). El retrato se sigue haciendo, pero solo es el avatar
+  redondo junto a sus frases. Mientras se pinta, el marcador «Pintando…» hace de hueco.
 - **Descubrimiento:** lo hallado de cerca y en primer plano; el sitio va al final, como fondo desenfocado
   («Close-up of …. blurred background: Plaza del Pozo (exterior)»). Si empezara por el sitio, el modelo
   volvería a pintar la vista del lugar.
@@ -131,7 +137,7 @@ prompt desde los datos (`entityOf` en `src/ai/illustrate.ts`), nunca desde la na
   - Una pista se pinta con lo que dice su campo `image` en los datos («un cubo de madera con agua turbia y un
     poso de ceniza gris…»). Si no lo tiene, con su título.
   - **Pistas oídas:** si llega mientras el PJ habla con un NPC (lo que cuenta Ilse o Hugo), no hay
-    descubrimiento, solo el retrato de quien habla si aún no lo tenía. Una pista con `image` es algo que se ve
+    descubrimiento, solo la imagen de la charla con quien habla si aún no la tenía. Una pista con `image` es algo que se ve
     y sigue siendo hallazgo aunque llegue hablando.
 - **Combate:** «el PJ contra su rival», y el rival es siempre el otro. Cuando un NPC golpea al PJ, el rival es
   quien golpea, y la pareja comparte imagen: el primer golpe entre los dos da una sola, lo dé quien lo dé. Si el
@@ -234,6 +240,19 @@ registro de Notion.
 | Mapa de la región | 1 | `mapa/region.jpg` | hecho (la web aún no lo enseña) |
 | Salvapantallas del menú | 7 | `public/salvapantallas-N.jpg` | hechos |
 | Fondos de plano | 19 | `plano/<loc_id>.jpg` | 5 hechos; faltan 14 (ver «Fondos pintados») |
+
+### Pendiente: la tienda del buhonero (2026-11-06)
+
+Brezal tiene un lugar y un vecino nuevos (PLAN-OBJETOS §6; `docs/BREZAL.md` §2.5 y §2.6). Hace falta:
+
+| Activo | Fichero | Qué pintar |
+|---|---|---|
+| Vista de localización | `vista/loc_tienda.jpg` | Interior de una casa de una pieza en penumbra: estantes de tabla con más huecos que género, cada cosa con un papelito de precio; un mostrador hecho con una puerta vieja sobre dos barriles, con una balanza de platillos y una libreta; al fondo, una cortina de saco. Luz cálida de una vela sobre el mostrador; por la puerta abierta, la plaza gris y la rueda de un carro verde. |
+| Fondo de plano | `plano/loc_tienda.jpg` | El mismo local visto desde arriba, para el tablero (ver «Fondos pintados»). |
+| Retrato | `retrato/npc_lucio.jpg` | Lucio Cendal, buhonero de cincuenta años, flaco, con sombrero de ala ancha y un chaleco de muchos bolsillos y una cinta métrica colgada del cuello; sonrisa de vendedor y ojos cansados. |
+| Objetos | `objeto/png/<item_id>.png` | `it_aceite`, `it_farol`, `it_saco`, `it_odre`, `it_garfio`, `it_tiza`, `it_sal_valcruz`, `it_llaves_cendal` y, con cuidado, `it_tapa_cuna`: una tapa redonda de hierro negro, del tamaño de una mano, con escarcha en el borde aunque esté junto al fuego; el sello de Vharn, por dentro, no se ve. Mientras no estén, se pintan solos la primera vez que se ven (`illustrate`). |
+
+El carro del buhonero (`sp_pl_carro`) es un punto de la plaza: no necesita vista propia. Si se rehace la vista de la plaza, que salga a un lado, verde y sin mula.
 
 Los iconos del tablero no hacen falta por ahora: el tablero dibuja muebles y fichas como vectores desde los
 datos. Si se quieren pintados, es una issue aparte que también toca el dibujo del tablero.

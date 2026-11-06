@@ -19,6 +19,7 @@ import { liveClient, type MasterClient, type ToolCallRecord } from '../src/ai/ma
 import { costUsd, usd, type TokenUsage } from './bench-prices.js';
 import { dealWithoutState, outcomeMismatch, rollCategory, ROLL_CATEGORY } from '../src/engine/closecheck.js';
 import type { AutoplayRun, GameSummary, PlayerTurn } from './autoplay.js';
+import { readEventsSync } from '../src/persistence/jsonfile.js';
 
 // ---------------------------------------------------------------------------
 // Tipos de error
@@ -410,8 +411,8 @@ interface LoadedGame { slug: string; events: GameEvent[]; state: WorldSnapshot |
 export function loadGame(dir: string, characterId?: string): LoadedGame {
   const manifest = JSON.parse(readFileSync(join(dir, 'game.json'), 'utf8')) as { slug: string; campaign_id: string; data_dir: string; character_id: string | null };
   const data = resolve(dir, manifest.data_dir);
-  const evFile = join(data, `${manifest.campaign_id}.events.jsonl`);
-  const events = existsSync(evFile) ? readFileSync(evFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as GameEvent) : [];
+  // Con el contexto del máster de vuelta: desde la G0 va aparte, en <id>.context.jsonl (src/persistence/jsonfile.ts).
+  const events = readEventsSync(data, manifest.campaign_id);
   const wFile = join(data, `${manifest.campaign_id}.world.json`);
   const state = existsSync(wFile) ? JSON.parse(readFileSync(wFile, 'utf8')) as WorldSnapshot : null;
   const id = characterId ?? manifest.character_id ?? events.find((e) => e.payload['master'])?.actor_id ?? '';

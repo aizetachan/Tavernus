@@ -26,7 +26,16 @@ Cada cambio es un cambio en git; para que salga en la web, commit y despliegue.
 Lo que entiende el generador:
 
 - **Cabecera YAML**: `title`, `description` (sale debajo del título y en el buscador), `aliases` (otros
-  nombres por los que se enlaza) y `tags`. Las demás claves se ignoran.
+  nombres por los que se enlaza), `tags` y `npc`. Las demás claves se ignoran.
+- **`npc: npc_hugo`** en una ficha de personaje: su sección «Lleva encima» no se escribe a mano. Al construir,
+  `src/wiki/carries.ts` la rellena con una tabla de lo que lleva ese NPC al empezar una partida de Brezal (la
+  campaña escrita con el ajuar aplicado): qué, dónde (puesto, al cinto, en la bolsa, encima), el dinero o la
+  descripción, y si lo pone la historia o el ajuar. Si la ficha no tiene la sección, se añade antes de
+  «Relaciones». Un `npc` que no existe en los datos rompe la construcción.
+- **El mapa de misiones** tampoco se dibuja a mano: `npm run wiki:misiones` (`src/wiki/questmap.ts`) lo saca de la
+  historia de Brezal (qué misión abre cuál, quién la pide y dónde, el nivel y si va por fases) y escribe
+  `wiki/Imágenes/Mapa de misiones.svg` y la tabla de «Todas las misiones» en `wiki/Misiones/Mapa de misiones.md`.
+  Al cambiar una misión, vuelve a lanzarlo: `test/questmap.test.ts` falla si no están al día.
 - **Enlaces** `[[Página]]`, `[[Página|texto]]`, `[[Página#Sección]]`, `[[Página#Sección|texto]]` y
   `[[#Sección]]`. Se resuelven por nombre de fichero, por alias y, para los `index.md`, por el nombre de
   su carpeta, sin distinguir mayúsculas ni acentos. Dentro de una tabla, `\|` como en Obsidian.

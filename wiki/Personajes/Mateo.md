@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: molinero
 lugar: "[[El molino]]"
 actitud: amistoso
+npc: npc_mateo
 ---
 
 > [!ficha] Mateo
@@ -61,6 +62,10 @@ Vende en el mercado de la plaza, de 9:00 a 13:00. Ver [[Vida del pueblo]].
 - **Compra:** trucha (20) y leña (15).
 
 Precios en monedas. Ver [[Objetos]].
+
+## Lleva encima
+
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

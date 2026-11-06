@@ -28,6 +28,7 @@ import type { Character } from '../src/engine/model.js';
 import type { DialogueLine } from '../src/engine/moments.js';
 import { fakeTime } from './helpers.js';
 
+import { setCoins } from '../src/engine/money.js';
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 
 /** Brezal con un pícaro en la situación de la deuda: empieza en el Jabalí, con Garrán en su mesa. */
@@ -161,8 +162,9 @@ describe('3. una misión entra cuando alguien la da', () => {
     const { engine, time, c } = await boot();
     await say(engine, time, c, 'npc_brenna', 'hablar con Brenna', BRENNA_SALUDO);
     await say(engine, time, c, 'npc_brenna', 'dame una jarra de cerveza', ['Cuatro de cobre. Y no la bebas de un trago.']);
-    expect(talkPlanFor(engine, c, '¿Por qué miras la puerta, Brenna?')!.state.ripe).toBe(true);
-    await say(engine, time, c, 'npc_brenna', '¿Por qué miras la puerta, Brenna?', BRENNA_PERRO);
+    // Madura, pero solo sale si el jugador muestra interés: preguntarle qué le pasa lo es (CONVERSACION-FLUJO).
+    expect(talkPlanFor(engine, c, '¿Qué te pasa, Brenna? No dejas de mirar la puerta')!.state.ripe).toBe(true);
+    await say(engine, time, c, 'npc_brenna', '¿Qué te pasa, Brenna? No dejas de mirar la puerta', BRENNA_PERRO);
     expect(status(engine, c, 'q_cena_doro')).toBe('available');
     expect(status(engine, c, 'q_perro')).toBe('active');
     expect(characterStory(c).origins!['q_perro']).toMatchObject({ kind: 'giver', text: 'Brenna nos lo pidió' });
@@ -208,7 +210,7 @@ describe('4. lo que se pacta con quien cobra la deuda queda en la deuda', () => 
 
   it('un pago a cuenta también queda en el historial', async () => {
     const { engine, c } = await boot();
-    c.coins = 500;
+    setCoins(engine.world, c.id, 500);
     const r = settleDebt(engine.world, c, { npc_id: 'npc_garran', how: 'coins', amount: 100 }, engine.gameNow());
     expect(r).toMatchObject({ ok: true, settled: false, remaining: 200 });
     expect(openDebts(c)).toHaveLength(1);

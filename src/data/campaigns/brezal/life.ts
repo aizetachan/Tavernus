@@ -37,7 +37,7 @@ export const SCHEDULE: ScheduledEvent[] = [
     id: 'se_cena', title: 'la cena del Jabalí', location_id: 'loc_taberna', spot_id: 'sp_tab_barra',
     start_h: 19, duration_min: 2 * 60, recurrence: 'daily',
     description: 'Cena en el Jabalí: guiso, pan gris y cerveza. Hugo y Doro beben juntos; los vecinos hablan de la tos, de los lobos, de las luces del granero y, sobre todo, de la niebla. La mejor hora para oír Brezal entero.',
-    npc_ids: ['npc_hugo'], crowd: [{ label: 'vecinos', count: 10 }],
+    npc_ids: ['npc_hugo', 'npc_lucio'], crowd: [{ label: 'vecinos', count: 10 }],
     effects: { noise: 0.55, state: { cena: 'olor a guiso y la sala llena' } },
     loudness: 3,
     start_text: 'Se llena el Jabalí: huele a guiso, se arrastran bancos y alguien pide la primera ronda a gritos.',
@@ -95,6 +95,8 @@ export const RUMORS: AuthoredRumor[] = [
   { id: 'rm_cerco_doro', kind: 'rumor', name: 'El diezmo corto', hint: 'Doro, el guardia, repite que su tío dice que la niebla es «el castigo por cobrar poco diezmo»', where: null, location_id: 'loc_lindero', days: 30 },
   { id: 'rm_cerco_garran', kind: 'rumor', name: 'Deudores sin salida', hint: 'Garrán, el alguacil, se ríe de la niebla: «Los deudores no pueden huir. Mejor»', where: null, location_id: 'loc_plaza', days: 30 },
   { id: 'rm_cerco_mateo', kind: 'rumor', name: 'El grano que no llega', hint: 'Mateo, el molinero, dice que desde que bajó la niebla «el grano no llega ni sale» y vende la harina que queda', where: 'el molino', location_id: 'loc_molino', days: 30 },
+  { id: 'rm_mula_lucio', kind: 'rumor', name: 'La mula del forastero', hint: 'la mula del buhonero se metió en la niebla el primer día y salió por donde entró; Garrán se la quedó «a cuenta del diezmo del forastero»', where: null, location_id: 'loc_plaza', days: 30 },
+  { id: 'rm_cerco_lucio', kind: 'rumor', name: 'Ni la sal', hint: 'Lucio, el buhonero de la plaza, repite a quien entra en su tienda que en el valle «no entra nada, ni la sal»: lo que se le acaba no vuelve, y por eso no rebaja nada', where: 'la tienda del buhonero', location_id: 'loc_tienda', days: 30 },
   { id: 'rm_cerco_ursula', kind: 'person', name: 'Pol, al otro lado', hint: 'Úrsula, la viuda de los Corrales, dice que su hijo Pol salió al mercado de Valcruz la víspera de que bajara la niebla y está al otro lado', where: 'el camino de Valcruz, al otro lado de la niebla', location_id: 'loc_corrales', days: 30 },
 ];
 
@@ -114,16 +116,17 @@ export const HOOKS: AuthoredHook[] = [
 /** Encuentros de camino por tipo de zona: el máster pone el detalle. Toda la demo es aldea. */
 export const ENCOUNTERS: EncounterTable = {
   town: [
-    { id: 'vecino', weight: 2, when: 'day', teaser: 'Un vecino con la cara gris de tos te para a mitad de camino.',
-      what: 'Un vecino de Brezal (concreto: oficio, algo que lleva) te para para preguntar si eres «el que viene a arreglar lo del agua» o si sabes algo de la niebla. Si encaja, trae uno de los rumores que corren.' },
+    // Los encuentros con gente los protagoniza un vecino de relleno de verdad (extras.ts): `{extra}` es quién.
+    { id: 'vecino', weight: 2, when: 'day', extra: true, teaser: 'Alguien del pueblo, con la cara gris de tos, te para a mitad de camino.',
+      what: '{extra} te para para preguntar si eres «el que viene a arreglar lo del agua» o si sabes algo de la niebla. Habla como vecino de relleno: dos frases, nada de la historia, y sigue a lo suyo. Si encaja, trae uno de los rumores que corren.' },
     { id: 'garran_ronda', weight: 1, teaser: 'Unas botas pesadas se paran detrás de ti.',
       what: 'Garrán hace la ronda y se fija en el PJ: pregunta adónde va, recuerda deudas, insinúa que el regidor paga bien a quien va al granero a «apagar las luces». No pelea en público si no le provocan.' },
     { id: 'ceniza_cae', weight: 1, when: 'night', teaser: 'Empieza a caer algo blando del cielo. No es nieve.',
       what: 'Cae ceniza fina sobre Brezal durante unos minutos; no se va con el viento, la niebla la devuelve. Alguien cierra contraventanas; un perro aúlla hacia el granero.' },
     { id: 'lobo', weight: 1, night_weight: 2, teaser: 'Un crujido entre las cercas, muy cerca del camino.',
       what: 'Un lobo flaco, con ceniza en el lomo, sigue al PJ a distancia entre las cercas. Ataca solo si el PJ está herido o solo de noche; huye ante el fuego.' },
-    { id: 'buhonero', weight: 1, when: 'day', teaser: 'Un hombre con un fardo a la espalda te mira como quien busca un comprador.',
-      what: 'Un buhonero de fuera, atrapado por la niebla, vende barato lo que le queda (algo concreto y pequeño) o pregunta si alguien ha encontrado la manera de salir. Está asustado y lo disimula mal.' },
+    { id: 'cargado', weight: 1, when: 'day', extra: true, teaser: 'Alguien viene por el camino con un fardo a la espalda.',
+      what: '{extra} va cargado (lo que lleva de verdad, ni un objeto más) y pregunta si alguien ha encontrado la manera de salir de la niebla. Está asustado y lo disimula mal. Dos frases, y sigue su camino.' },
     { id: 'huellas', weight: 1, teaser: 'En el barro del camino hay algo que te hace agacharte.',
       what: 'Huellas recientes: botas pequeñas que van hacia el Soto (Tobías) y, encima, las de un lobo enorme. Si el PJ sigue el rastro, lleva al arroyo y al granero.' },
   ],

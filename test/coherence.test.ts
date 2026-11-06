@@ -16,6 +16,7 @@ import { migrateRentableRooms, ROOM_KEY_ITEM_ID, ROOM_NIGHT_ITEM_ID } from '../s
 import { SEED_REAL_EPOCH_MS } from '../src/data/seed/demo.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
+import { coinsOf, setCoins } from '../src/engine/money.js';
 type Params = Anthropic.Beta.MessageCreateParamsNonStreaming;
 
 function msg(content: Anthropic.Beta.BetaContentBlock[]): Anthropic.Beta.BetaMessage {
@@ -65,7 +66,7 @@ async function innWorld(): Promise<{ engine: Engine; time: ReturnType<typeof fak
   if (!r.ok) throw new Error('sin PJ');
   const c = r.character;
   c.location = { type: 'spot', id: 'sp_inn_puerta' };
-  c.coins = 1500;
+  setCoins(engine.world, c.id, 1500);
   return { engine, time, snap };
 }
 
@@ -150,6 +151,8 @@ describe('acercamiento automático', () => {
     expect(t.error).toBe('not_reachable');
     expect(t.detail).toMatchObject({ go_to: 'sp_tab_barra', distance_m: 6 });
     expect(t.hint).toContain('move_to sp_tab_barra');
+    // La daga es arrojadiza (20/60 pies, itemrules.ts): con ella en la mano llega a 6 m. Sin arma, cuerpo a cuerpo.
+    engine.world.itemInstance('ii_kael_daga').location = { type: 'container', id: 'ii_kael_mochila' };
     const a = run(ctx, 'attack', { attacker_id: 'ch_kael', target_id: 'npc_brenna', advantage: 'none' });
     expect(a.error).toBe('not_reachable');
     expect(a.detail).toMatchObject({ go_to: 'sp_tab_barra', distance_m: 6 });
@@ -217,7 +220,7 @@ describe('deudas y prendas', () => {
     const { engine } = await bootEngine();
     const ctx = ctxFor(engine);
     const kael = ctx.actor;
-    kael.coins = 300;
+    setCoins(engine.world, kael.id, 300);
     expect(run(ctx, 'set_debt', { npc_id: 'npc_brenna', amount: 1000, reason: 'la cuenta de la taberna', due_in_hours: 24 })).toMatchObject({ ok: true, owes: '10 de oro' });
     expect(run(ctx, 'pawn_item', { npc_id: 'npc_brenna', instance_id: 'ii_kael_daga', for_item_id: null, amount: null, reason: 'fianza', due_in_hours: null })).toMatchObject({ ok: true, pawned: 'daga', owes: '10 de oro' });
     expect(engine.world.itemInstance('ii_kael_daga').location).toEqual({ type: 'npc', id: 'npc_brenna' });
@@ -301,7 +304,7 @@ describe('cuarto alquilable en mundos generados', () => {
     // Compra desde la puerta: el motor la acerca a la barra.
     const b = run(ctx, 'buy_item', { character_id: c.id, npc_id: 'npc_innkeeper', item_id: ROOM_NIGHT_ITEM_ID, quantity: 1 });
     expect(b).toMatchObject({ ok: true, bought: 'noche de posada (llave del cuarto) ×1', total: 20 });
-    expect(c.coins).toBe(1480);
+    expect(coinsOf(engine.world, c.id)).toBe(1480);
     expect(w.itemsCarriedBy(c.id).some((i) => i.item_id === ROOM_KEY_ITEM_ID)).toBe(true);
     expect(w.itemsCarriedBy(c.id).some((i) => i.item_id === ROOM_NIGHT_ITEM_ID)).toBe(false);
     expect(room.state['unlocked_for']).toEqual([c.id]);
@@ -317,7 +320,7 @@ describe('cuarto alquilable en mundos generados', () => {
     const { engine } = await innWorld();
     const w = engine.world;
     const c = [...w.characters.values()][0]!;
-    c.coins = 0;
+    setCoins(engine.world, c.id, 0);
     const weapon = w.itemsCarriedBy(c.id).find((i) => w.itemDef(i.item_id).weapon)!;
     const ctx = ctxFor(engine, c.id);
     const r = run(ctx, 'pawn_item', { npc_id: 'npc_innkeeper', instance_id: weapon.id, for_item_id: ROOM_NIGHT_ITEM_ID, amount: null, reason: 'fianza por una noche', due_in_hours: 10 });

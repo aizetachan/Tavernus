@@ -31,6 +31,7 @@ import { SKILLS } from '../src/engine/rules.js';
 import type { Character, GameEvent, Npc } from '../src/engine/model.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
+import { coinsOf } from '../src/engine/money.js';
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 
 async function boot() {
@@ -262,10 +263,10 @@ describe('Ceniza vuelve a casa (Brezal)', () => {
   it('el precio, la CD social y el nivel de confianza salen de la opinión', async () => {
     const { engine, c, brenna } = await devolverCeniza();
     const beer = brenna.sells[0]!;
-    const before = c.coins;
+    const before = coinsOf(engine.world, c.id);
     const r = buyFromNpc(engine.world, c, 'npc_brenna', beer.item_id, 1);
     expect(r.ok).toBe(true);
-    expect(before - c.coins).toBe(priceFor(brenna, c.id, beer.price, 'buy'));
+    expect(before - coinsOf(engine.world, c.id)).toBe(priceFor(brenna, c.id, beer.price, 'buy'));
     expect(socialDcShift(brenna, c.id)).toBe(-2);
     // El máster pide Persuasión CD 15 con Brenna: el servidor la deja en 13.
     const ctx = ctxFor(engine, c);
@@ -490,5 +491,70 @@ describe('comentarios sin plantillas: el escritor barato', () => {
     await engine.tick();
     expect(calls).toBe(1);
     expect(chatterSets(w).find((x) => x.id === 'ia')!.texts).toEqual(['Qué frío hace hoy', 'Otra vez niebla']);
+  });
+});
+
+describe('arreglos de la revisión', () => {
+  it('lo que bajó el crimen no se suma al umbral: Brenna, amistosa por Ceniza, no acaba hostil por ver un golpe', async () => {
+    const { engine } = await boot();
+    const c = await newPc(engine, 'Aren');
+    const w = engine.world;
+    const brenna = w.npc('npc_brenna');
+    changeOpinion(w, brenna, c, 10, 'nos devolvió a Ceniza', engine.gameNow());
+    expect(brenna.attitude.by_character[c.id]).toBe('friendly');
+    // Lo que hace crime.ts con quien ve una agresión.
+    brenna.attitude.by_character[c.id] = 'unfriendly';
+    changeOpinion(w, brenna, c, -5, 'le vio golpear', engine.gameNow());
+    expect(brenna.attitude.by_character[c.id]).toBe('unfriendly');
+    // Por debajo de −40, la opinión sola sí deja hostil.
+    for (let i = 0; i < 5; i++) changeOpinion(w, brenna, c, -10, 'le odia', engine.gameNow());
+    expect(opinionOf(brenna, c.id)).toBe(-45);
+    expect(brenna.attitude.by_character[c.id]).toBe('hostile');
+  });
+
+  it('con buena opinión se compra más barato, pero nadie paga más que su lista: sin dinero infinito comprando y vendiendo', async () => {
+    const { engine } = await boot();
+    const c = await newPc(engine, 'Aren');
+    const w = engine.world;
+    const [hal, brenna] = [w.npc('npc_hal'), w.npc('npc_brenna')];
+    changeOpinion(w, hal, c, 10, 'amigo', engine.gameNow());
+    changeOpinion(w, brenna, c, 10, 'amiga', engine.gameNow());
+    // El pescado: Hal lo vende a 6, Brenna lo compra a 5.
+    expect(priceFor(hal, c.id, 6, 'buy')).toBe(5);
+    expect(priceFor(brenna, c.id, 5, 'sell')).toBe(5);
+    for (let i = 0; i < 4; i++) changeOpinion(w, brenna, c, 10, 'más amiga', engine.gameNow());
+    expect(priceFor(brenna, c.id, 5, 'sell')).toBe(5);
+    // Quien no te quiere te paga menos.
+    for (let i = 0; i < 7; i++) changeOpinion(w, hal, c, -10, 'enemigo', engine.gameNow());
+    expect(priceFor(hal, c.id, 10, 'sell')).toBe(8);
+  });
+
+  it('una partida guardada de antes recibe las reglas, las etiquetas, la vida diaria y las reacciones de cada NPC', async () => {
+    const time = fakeTime(EPOCH);
+    const seed = authoredSeed('brezal', { now: new Date(EPOCH) });
+    const old = structuredClone(seed);
+    const camp = old.campaign as typeof old.campaign & { reactions?: unknown; tags?: unknown; chatter?: unknown };
+    delete camp.reactions; delete camp.tags; delete camp.chatter;
+    for (const n of old.npcs) { delete n.tag_reactions; delete n.mute; }
+    const repo = new MemoryRepository();
+    await repo.saveSnapshot(old);
+    const engine = await Engine.boot({ repo, campaignId: 'brezal', seed, now: time.now, deterministic: true, fastTravel: false, rng: () => 0.99 });
+    const c2 = engine.world.campaign as typeof engine.world.campaign & { reactions?: WorldRule[]; tags?: unknown[]; chatter?: unknown[] };
+    expect(c2.reactions?.some((r) => r.id === 'ceniza_vuelve')).toBe(true);
+    expect(c2.tags?.length).toBeGreaterThan(0);
+    expect(c2.chatter?.length).toBeGreaterThan(0);
+    expect(engine.world.npc('npc_doro').tag_reactions?.some((r) => r.tag === 'trasfondo:soldier')).toBe(true);
+    expect(engine.world.npc('npc_ceniza').mute).toBe(true);
+  });
+
+  it('con cuatro sugerencias del máster, la opción con etiqueta ocupa el sitio de la última, no el de la primera', async () => {
+    const { engine } = await boot();
+    const c = await newPc(engine, 'Brann', { class_id: 'fighter', race_id: 'dwarf', background_id: 'soldier' });
+    hold(engine, engine.world.npc('npc_doro'), 'sp_pl_porton');
+    put('sp_pl_porton', c);
+    await engine.tick();
+    const ctx = ctxFor(engine, c);
+    expect(tool(ctx, 'log_event', close({ narration_private: 'El guardia te mira.', suggested_actions: 'Uno | Dos | Tres | Cuatro', npc_id: 'npc_doro' })).error).toBeUndefined();
+    expect(ctx.closed?.suggested_actions).toEqual(['Uno', 'Dos', 'Tres', '[Soldado] Hablarle de tú a tú, entre soldados (Persuasión CD 12)']);
   });
 });

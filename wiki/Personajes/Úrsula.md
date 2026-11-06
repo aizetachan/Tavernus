@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: granjera
 lugar: "[[Los Corrales]]"
 actitud: neutral
+npc: npc_ursula
 ---
 
 > [!ficha] Úrsula
@@ -61,6 +62,10 @@ Vende huevos en el mercado de la plaza, de 9:00 a 13:00. Ver [[Vida del pueblo]]
 - **Compra:** leña (20) y bayas (4).
 
 Precios en monedas. Ver [[Objetos]].
+
+## Lleva encima
+
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

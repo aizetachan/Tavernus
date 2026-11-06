@@ -204,7 +204,7 @@ describe('misiones: «Donde lo dejamos»', () => {
     await engine.tick();
     const text = recapTemplate(engine, c, lastOwnEvent(engine, c.id)!, 1);
     // «Ceniza» es también el nombre del perro: dentro del título no se cambia por «el perro».
-    expect(text).toContain('«Ceniza se ha perdido»: buscar el rastro del perro en el Soto.');
+    expect(text).toContain('«Ceniza se ha perdido»: averiguar dónde se ha metido el perro.');
     // La principal, con el acto en curso.
     expect(text).toContain('Salir de la aldea: averiguar qué es la niebla y cómo salir; quedan 3 días');
   });

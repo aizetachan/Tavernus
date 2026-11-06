@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: cazador
 lugar: "[[El Soto]]"
 actitud: neutral
+npc: npc_hal
 ---
 
 > [!ficha] Hal
@@ -57,6 +58,10 @@ Es el único que tose antes de llegar a una puerta. Si llega sin toser, trae una
 - **Compra:** piel de lobo (150), flecha (4) y jarra de cerveza (20).
 
 Precios en monedas. Ver [[Objetos]].
+
+## Lleva encima
+
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

@@ -16,6 +16,7 @@ import { spawnItem } from '../src/engine/inventory.js';
 import { bootEngine, fakeTime, makeAdmin, readSse } from './helpers.js';
 import { memoryDb, type Db } from '../src/db/db.js';
 
+import { coinsOf } from '../src/engine/money.js';
 /** Máster offline que retiene la acción `text` hasta que el test la suelta: deja ver acciones a la vez. */
 function holding(text: string) {
   let started!: () => void, release!: () => void;
@@ -517,9 +518,9 @@ describe('entre jugadores en la web', () => {
     const id = /"offer":\{"id":"([^"]+)","label":"2 de plata y 5 de cobre","open":true\}/.exec(got)?.[1];
     expect(id).toBeTruthy();
     const engine = await games.open(game.slug);
-    const before = engine.world.character(lia).coins;
+    const before = coinsOf(engine.world, lia);
     expect((await post('/api/offer', { character: lia, offer: id, accept: true })).ok).toBe(true);
-    expect(engine.world.character(lia).coins).toBe(before + 25);
+    expect(coinsOf(engine.world, lia)).toBe(before + 25);
     await liaStream.body!.cancel();
   });
 

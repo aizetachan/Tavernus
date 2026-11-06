@@ -38,24 +38,27 @@
 
 import { GAME_DAY, GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
 import type { Character, Id, IncidentKind, LawRules, Npc, NpcBond, Spot, Wanted } from './model.js';
+import { coinsOf, pay } from './money.js';
 import { descriptorOf, fmtDuration } from './narrate.js';
 import { orderOf, setNpcOrder } from './npcorders.js';
 import type { Rumor } from './rumors.js';
 import { crowdHere, routineOf } from './schedule.js';
 import { stabilize } from './death.js';
 import { opinionRefusal } from './standing.js';
+import { adjustTrust } from './trust.js';
+import { isDwelling } from './perception.js';
 import type { World } from './world.js';
 
 export type { IncidentKind } from './model.js';
 
-export const INCIDENT_KINDS: readonly IncidentKind[] = ['insult', 'theft', 'assault', 'armed_assault', 'desecration', 'murder'];
+export const INCIDENT_KINDS: readonly IncidentKind[] = ['insult', 'theft_attempt', 'theft', 'assault', 'armed_assault', 'desecration', 'murder'];
 /** Gravedad de cada tipo (1-5). Desde 2, hay alto, buscado y rumor. */
-export const SEVERITY: Record<IncidentKind, number> = { insult: 1, theft: 2, assault: 2, armed_assault: 3, desecration: 3, murder: 5 };
-export const KIND_ES: Record<IncidentKind, string> = { insult: 'insulto', theft: 'robo', assault: 'agresión', armed_assault: 'agresión con arma', desecration: 'profanar un cadáver', murder: 'muerte' };
+export const SEVERITY: Record<IncidentKind, number> = { insult: 1, theft_attempt: 2, theft: 2, assault: 2, armed_assault: 3, desecration: 3, murder: 5 };
+export const KIND_ES: Record<IncidentKind, string> = { insult: 'insulto', theft_attempt: 'intento de robo', theft: 'robo', assault: 'agresión', armed_assault: 'agresión con arma', desecration: 'profanar un cadáver', murder: 'muerte' };
 
 /** Multas por defecto (monedas) y horas de calabozo por defecto, si la campaña no dice otra cosa. */
-export const DEFAULT_FINES: Record<IncidentKind, number> = { insult: 0, theft: 50, assault: 30, armed_assault: 100, desecration: 100, murder: 0 };
-export const DEFAULT_JAIL_HOURS: Record<IncidentKind, number> = { insult: 0, theft: 0, assault: 0, armed_assault: 8, desecration: 8, murder: 24 };
+export const DEFAULT_FINES: Record<IncidentKind, number> = { insult: 0, theft_attempt: 30, theft: 50, assault: 30, armed_assault: 100, desecration: 100, murder: 0 };
+export const DEFAULT_JAIL_HOURS: Record<IncidentKind, number> = { insult: 0, theft_attempt: 0, theft: 0, assault: 0, armed_assault: 8, desecration: 8, murder: 24 };
 
 /** Lo violento, que sube de gravedad dentro del mismo incidente. */
 const VIOLENT: readonly IncidentKind[] = ['assault', 'armed_assault', 'murder'];
@@ -75,7 +78,7 @@ export const SEEN_S = 12 * GAME_HOUR;
 /** Papel de un NPC ante un incidente. */
 export type CrimeRole = 'victim' | 'authority' | 'kin' | 'owner' | 'commoner';
 /** Lo que hace en el acto. */
-export type CrimeResponse = 'arrest' | 'fight' | 'alert' | 'flee' | 'shout' | 'refuse' | 'mourn' | 'watch';
+export type CrimeResponse = 'arrest' | 'fight' | 'seize' | 'alert' | 'flee' | 'shout' | 'refuse' | 'mourn' | 'watch';
 /** Cómo queda con el autor. */
 export type CrimeStance = 'outraged' | 'hostile' | 'afraid' | 'mourning' | 'wary';
 
@@ -130,6 +133,8 @@ export interface IncidentInput {
   /** Dónde; sin él, donde está el autor. */
   spot_id?: Id | null;
   weapon?: string | null;
+  /** La víctima lo ve aunque no esté en el punto (le quitan algo de encima). false: solo si está allí (su tienda, shop.ts). */
+  victim_present?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +217,7 @@ export function deedText(i: Pick<Incident, 'kind' | 'victim_name' | 'weapon'>): 
     case 'murder': return `mató ${al(v)}`;
     case 'armed_assault': return `atacó ${al(v)}${i.weapon ? ` (${i.weapon})` : ' con un arma'}`;
     case 'assault': return `golpeó ${al(v)}`;
+    case 'theft_attempt': return `intentó robarle ${al(v)}`;
     case 'theft': return `le robó ${al(v)}`;
     case 'desecration': return `registró el cadáver ${del_(v)}`;
     case 'insult': return `insultó ${al(v)}`;
@@ -230,6 +236,7 @@ function deedYou(i: Incident): string {
     case 'murder': return `has matado ${al(v)}`;
     case 'armed_assault': return `has atacado ${al(v)}`;
     case 'assault': return `has golpeado ${al(v)}`;
+    case 'theft_attempt': return `has intentado robarle ${al(v)}`;
     case 'theft': return `le has robado ${al(v)}`;
     case 'desecration': return `has registrado el cadáver ${del_(v)}`;
     case 'insult': return `has insultado ${al(v)}`;
@@ -243,6 +250,7 @@ function deedWas(i: Incident): string {
     case 'murder': return `mataba ${al(v)}`;
     case 'armed_assault': return `atacaba ${al(v)}${i.weapon ? ` (${i.weapon})` : ' con un arma'}`;
     case 'assault': return `golpeaba ${al(v)}`;
+    case 'theft_attempt': return `intentaba robarle ${al(v)}`;
     case 'theft': return `le robaba ${al(v)}`;
     case 'desecration': return `registraba el cadáver ${del_(v)}`;
     case 'insult': return `insultaba ${al(v)}`;
@@ -265,6 +273,7 @@ const STANCE_ES: Record<CrimeStance, string> = {
 const RESPONSE_ES: Record<CrimeResponse, string> = {
   arrest: 'da el alto y le detiene',
   fight: 'se lanza contra él',
+  seize: 'le agarra de la muñeca y le exige que se lo devuelva',
   alert: 'corre a avisar a la autoridad',
   flee: 'huye',
   shout: 'grita y se aparta',
@@ -289,11 +298,29 @@ export function witnessesAt(world: World, spot: Spot, kind: IncidentKind, exclud
     if (n.status !== 'alive' || exclude.includes(n.id)) return false;
     const s = world.spots.get(n.location.id);
     if (!s || s.location_id !== spot.location_id) return false;
-    if (loud(kind) || s.id === spot.id) return true;
+    if (s.id === spot.id) return true;
+    // En casa, con la puerta cerrada (perception.ts, isDwelling): lo violento se oye; lo callado, no.
+    if ((isDwelling(s) || isDwelling(spot)) && !loud(kind)) return false;
+    if (loud(kind)) return true;
     const link = spot.links.find((l) => l.to_spot_id === s.id) ?? s.links.find((l) => l.to_spot_id === spot.id);
     if (link?.blocks_sight) return false;
     return Math.hypot(s.x - spot.x, s.y - spot.y) <= NEAR_M;
   });
+}
+
+/** Quién es un NPC ante un conflicto (docs/CONFLICTOS-NPC.md §9): qué hace cuando le toca reaccionar. */
+export type ConflictProfile = 'child' | 'authority' | 'owner' | 'fighter' | 'brave' | 'timid' | 'common';
+
+/** El perfil, de los datos: el primero que cumple, de niño a gente corriente. */
+export function npcProfile(world: World, n: Npc, locationId: Id): ConflictProfile {
+  if (n.child || n.kit === 'child') return 'child';
+  if (isEnforcer(world, n.id)) return 'authority';
+  if (isOwner(world, n.id, locationId)) return 'owner';
+  if (n.stats && !n.noncombatant) return 'fighter';
+  const temper = lawOf(world).temperament?.[n.id];
+  if (temper === 'brave') return 'brave';
+  if (temper === 'timid') return 'timid';
+  return 'common';
 }
 
 function roleOf(world: World, n: Npc, i: Incident): CrimeRole {
@@ -315,8 +342,16 @@ function reactionOf(world: World, n: Npc, i: Incident, how: Knower['how'], alert
     return { role, response: 'watch', stance: 'wary' };
   }
   switch (role) {
-    case 'victim':
-      return { role, response: n.stats && i.kind !== 'theft' ? 'fight' : 'shout', stance: 'hostile' };
+    case 'victim': {
+      if (i.kind !== 'theft' && i.kind !== 'theft_attempt') return { role, response: n.stats ? 'fight' : 'shout', stance: 'hostile' };
+      // A quien le roban (o se lo intentan) reacciona según quién es (docs/CONFLICTOS-NPC.md §9).
+      const p = npcProfile(world, n, i.location_id);
+      if (p === 'authority') return { role: 'authority', response: 'arrest', stance: 'outraged' };
+      if (p === 'child' || p === 'timid') return { role, response: present ? 'flee' : 'watch', stance: 'afraid' };
+      if (p === 'fighter') return { role, response: 'seize', stance: 'hostile' };
+      if (p === 'brave') return { role, response: 'shout', stance: 'hostile' };
+      return { role, response: !authorityKnows && !alertTaken ? 'alert' : 'shout', stance: 'hostile' };
+    }
     case 'authority':
       return { role, response: 'arrest', stance: 'outraged' };
     case 'kin': {
@@ -422,6 +457,10 @@ function learn(world: World, i: Incident, n: Npc, how: Knower['how'], from: Id |
     if (to) k.to = to.id; else k.response = 'shout';
   }
   if (prev) Object.assign(prev, k); else i.knowers.push(k);
+  // Quien lo ve con sus ojos se fía menos del autor (trust.ts), una vez por incidente. La víctima ya lo paga en
+  // conflict.ts y las muertes, en death.ts.
+  const pc = world.characters.get(i.perpetrator_id);
+  if (!prev && how === 'saw' && pc && n.id !== i.victim_id && i.kind !== 'murder' && i.severity >= 2) adjustTrust(world, n, pc, 'witnessed_crime', nowG);
   applyKnower(world, i, n, prev ?? k, nowG);
   return prev ?? k;
 }
@@ -482,7 +521,7 @@ function rumorName(i: Incident): string {
   switch (i.kind) {
     case 'murder': return `la muerte ${del_(v)}`;
     case 'desecration': return `el cadáver ${del_(v)}`;
-    case 'theft': return `el robo ${al(v)}`;
+    case 'theft': case 'theft_attempt': return `el robo ${al(v)}`;
     default: return `lo que le hicieron ${al(v)}`;
   }
 }
@@ -540,7 +579,7 @@ export function reportIncident(world: World, input: IncidentInput, nowG: number)
   i.crowd = crowdHere(world, spot.location_id, nowG) ?? i.crowd;
   // Quien lo ve, en este orden: víctima, autoridad, allegados, dueños, el resto (así el primero que puede, corre a avisar).
   const seen = witnessesAt(world, spot, input.kind, [c.id]);
-  if (victim && victim.status === 'alive' && !seen.includes(victim)) seen.unshift(victim);
+  if (victim && victim.status === 'alive' && input.victim_present !== false && !seen.includes(victim)) seen.unshift(victim);
   const order: CrimeRole[] = ['victim', 'authority', 'kin', 'owner', 'commoner'];
   seen.sort((a, b) => order.indexOf(roleOf(world, a, i!)) - order.indexOf(roleOf(world, b, i!)));
   for (const n of seen) learn(world, i, n, 'saw', null, nowG);
@@ -689,7 +728,7 @@ function sentenceFor(world: World, c: Character): { kind: 'fine' | 'jail'; fine:
   if (!worst) return { kind: 'fine', fine: 0, hours: 0 };
   const hours = law.jail_hours?.[worst.kind] ?? DEFAULT_JAIL_HOURS[worst.kind];
   const fine = law.fines?.[worst.kind] ?? DEFAULT_FINES[worst.kind];
-  if (jailSpot(world) && (hours > 0 || c.coins < fine)) return { kind: 'jail', fine: 0, hours: Math.max(hours, 8) };
+  if (jailSpot(world) && (hours > 0 || coinsOf(world, c.id) < fine)) return { kind: 'jail', fine: 0, hours: Math.max(hours, 8) };
   return { kind: 'fine', fine, hours: 0 };
 }
 
@@ -733,8 +772,9 @@ export function surrender(world: World, c: Character, nowG: number, nowC: number
     settle(world, c);
     return { kind: 'jail', paid: 0, until_game_s: j?.until ?? null, spot_id: j?.spot.id ?? null, by, reason };
   }
-  const paid = Math.min(c.coins, s.fine);
-  c.coins -= paid;
+  // La multa sale de sus bolsas (money.ts) y no va a nadie.
+  const paid = Math.min(coinsOf(world, c.id), s.fine);
+  pay(world, c.id, paid);
   settle(world, c);
   return { kind: 'fine', paid, until_game_s: null, spot_id: null, by, reason };
 }
@@ -937,6 +977,7 @@ export function reactionSentences(world: World, i: Incident, you: boolean, reade
     switch (k.response) {
       case 'arrest': out.push(`${name} se planta delante de ${p}: «¡Alto! Quedas detenido.»`); break;
       case 'fight': out.push(`${name} se lanza contra ${p}.`); break;
+      case 'seize': out.push(you ? `${name} te agarra de la muñeca: «Suelta eso. Ahora.»` : `${name} agarra de la muñeca a ${p} y le exige que lo suelte.`); break;
       case 'alert': out.push(`${name} sale corriendo a avisar ${al(k.to && world.npcs.has(k.to) ? label(world, k.to, reader) : 'la autoridad')}.`); break;
       case 'flee': out.push(`${name} huye de allí.`); break;
       case 'shout': out.push(`${name} grita pidiendo ayuda y se aparta.`); break;
@@ -967,7 +1008,7 @@ export function reactorRefs(world: World, i: Incident): { npc_id: Id; refs: stri
   return presentReactors(world, i).map(({ npc, knower }) => ({
     npc_id: npc.id,
     refs: [npc.name, descriptorOf(world, npc.id), ...npc.role.split(/\s+y\s+|,\s*/).map((r) => r.trim())].filter((r) => r.length > 2),
-    must: knower.response === 'arrest' || knower.response === 'fight',
+    must: knower.response === 'arrest' || knower.response === 'fight' || knower.response === 'seize',
   }));
 }
 

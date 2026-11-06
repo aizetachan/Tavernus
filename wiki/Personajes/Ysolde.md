@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: mujer del ascua
 lugar: "[[El Granero Quemado]]"
 actitud: desconfiada
+npc: npc_ysolde
 ---
 
 > [!ficha] Ysolde
@@ -61,6 +62,10 @@ Justicia para su casa: que el valle confiese quién prendió el fuego y lo pague
 - **Compra:** ración (60) y el libro de cuentas de Vharn (3.000).
 
 Precios en monedas. Ver [[Objetos]].
+
+## Lleva encima
+
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

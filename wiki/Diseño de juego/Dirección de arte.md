@@ -77,9 +77,9 @@ Todo en JPEG.
 ## Cuándo aparece cada imagen
 
 - **Vista:** la primera vez que un personaje pisa un lugar. Cambia al moverse.
-- **Retrato:** al conocer a un NPC.
+- **Charla:** la primera vez que hablas con un NPC, una imagen grande de él en su sitio, mirándote, como la del sitio o la del objeto. Su retrato ya no sale en el chat: solo es el avatar redondo junto a sus frases.
 - **Objeto:** al cogerlo, comprarlo o examinarlo. Los servicios (la noche de posada) y lo que los datos marcan `illustrate: false` no se pintan.
-- **Descubrimiento:** al encontrar un punto oculto o una pista. Se pinta lo hallado de cerca, y el sitio solo de fondo. Las pistas que se *oyen* (lo que cuenta un NPC) no dan descubrimiento, solo el retrato de quien habla.
+- **Descubrimiento:** al encontrar un punto oculto o una pista. Se pinta lo hallado de cerca, y el sitio solo de fondo. Las pistas que se *oyen* (lo que cuenta un NPC) no dan descubrimiento, solo la imagen de la charla con quien habla.
 - **Combate:** el primer golpe entre el personaje y un rival, o cuando alguien cae. El rival es siempre el otro, también cuando es el NPC quien golpea.
 - **Avatar del personaje:** al crearlo, con su raza, clase y aspecto. Se pueden pedir otras versiones.
 - **Pincel:** cuando el jugador lo pide.

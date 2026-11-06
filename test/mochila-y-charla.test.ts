@@ -139,12 +139,15 @@ describe('las misiones llegan con la charla', () => {
     expect(status(engine, c, 'q_cena_doro')).toBe('available');
     await say(engine, time, c, 'npc_brenna', 'Qué frío hace ahí fuera');
     expect(status(engine, c, 'q_cena_doro')).toBe('available');
-    // Ya le ha contestado dos veces: el guion le toca sacarlo. Si habla de otra cosa, no se abre nada (2026-11-05).
-    expect(talkPlanFor(engine, c, 'Sí, un día largo')!.situation).toBe('offer');
+    // Ya le ha contestado dos veces: está madura, pero solo la insinúa y espera a que muestre interés
+    // (CONVERSACION-FLUJO, decisión de Miguel del 06-11). Si habla de otra cosa, no se abre nada.
+    const ripe = talkPlanFor(engine, c, 'Sí, un día largo')!;
+    expect(ripe.state.ripe).toBe(true);
+    expect(ripe.situation).not.toBe('offer');
     await say(engine, time, c, 'npc_brenna', 'Sí, un día largo');
     expect(status(engine, c, 'q_cena_doro')).toBe('available');
-    // Si lo cuenta y el máster no lo registra, el servidor abre esa.
-    await say(engine, time, c, 'npc_brenna', '¿Algo más?', 'El guardia del portón no ha cenado y no puede dejar su puesto. ¿Le llevas un plato?');
+    // Muestra interés: si lo cuenta y el máster no lo registra, el servidor abre esa.
+    await say(engine, time, c, 'npc_brenna', 'Si necesitas algo, te ayudo', 'El guardia del portón no ha cenado y no puede dejar su puesto. ¿Le llevas un plato?');
     expect(status(engine, c, 'q_cena_doro')).toBe('active');
     expect(status(engine, c, 'q_perro')).toBe('available');
     // Acaba de pedirle una: no le suelta otra en el turno siguiente.

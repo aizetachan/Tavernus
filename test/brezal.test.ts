@@ -23,11 +23,12 @@ import { GameManager } from '../src/games/manager.js';
 import type { Character, WorldSnapshot } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
 
+import { coinsOf } from '../src/engine/money.js';
 /** El mundo nace un 22 de octubre a mediodía real; en el juego, a las 18:00 del día 0. */
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 const H = 3600;
 /** Los diez lugares de la demo sellada (la taberna con su sótano). */
-const PLAYABLE = ['loc_taberna', 'loc_sotano', 'loc_plaza', 'loc_herreria', 'loc_casona', 'loc_curandera', 'loc_molino', 'loc_corrales', 'loc_claro', 'loc_ruinas', 'loc_lindero'];
+const PLAYABLE = ['loc_taberna', 'loc_sotano', 'loc_plaza', 'loc_herreria', 'loc_casona', 'loc_curandera', 'loc_molino', 'loc_corrales', 'loc_claro', 'loc_ruinas', 'loc_lindero', 'loc_tienda'];
 
 async function boot(): Promise<{ engine: Engine; time: ReturnType<typeof fakeTime> }> {
   const time = fakeTime(EPOCH);
@@ -102,7 +103,7 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(isAuthoredCampaign('brezal')).toBe(true);
     expect(isAuthoredCampaign('demo')).toBe(false);
     const c = snap.campaign as WorldSnapshot['campaign'] & { schedule: unknown[]; rumors: { id: string }[]; hooks: unknown[]; encounters: Record<string, unknown[]> };
-    // Diez lugares (la taberna con su sótano) en una sola zona; al otro lado del Cerco, un camino sellado.
+    // Once lugares (la taberna con su sótano, y la tienda del buhonero) en una sola zona; al otro lado del Cerco, un camino sellado.
     const playable = snap.locations.filter((l) => l.zone_id === 'zn_brezal');
     expect(playable.map((l) => l.id).sort()).toEqual([...PLAYABLE].sort());
     expect(snap.locations.filter((l) => l.zone_id !== 'zn_brezal').map((l) => l.id)).toEqual(['loc_valcruz']);
@@ -115,8 +116,10 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(snap.locations.find((l) => l.id === 'loc_ruinas')!.name).toBe('El Granero Quemado');
     expect(snap.spots.find((s) => s.id === 'sp_cs_cueva')!.location_id).toBe('loc_claro');
     expect(snap.spots.find((s) => s.id === 'sp_cs_mojon')!.location_id).toBe('loc_lindero');
-    const people = snap.npcs.filter((n) => n.attitude.default !== 'hostile' && n.stats?.attack_name !== 'mordisco' && n.role !== 'perro');
-    expect(people.length).toBe(11);
+    // Las personas con historia; los vecinos de relleno (sin secreto, docs/PLAN-NPC-RELLENO.md) van aparte.
+    const people = snap.npcs.filter((n) => n.attitude.default !== 'hostile' && n.stats?.attack_name !== 'mordisco' && n.role !== 'perro' && n.tier !== 'extra');
+    expect(people.length).toBe(12);
+    expect(snap.npcs.filter((n) => n.tier === 'extra')).toHaveLength(12);
     expect(people.some((n) => n.id === 'npc_ursula' && n.location.id === 'sp_co_gallinero')).toBe(true);
     for (const n of people) {
       expect(n.secret, n.id).not.toBe('');
@@ -133,8 +136,8 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(c.situations).toHaveLength(5);
     expect(c.situations!.map((s) => s.situation.clock_days)).toEqual([3, 3, 3, 3, 3]);
     expect(c.schedule.length).toBeGreaterThanOrEqual(5);
-    // Lo que dice cada vecino del Cerco: nueve rumores de partida.
-    expect(c.rumors.filter((r) => r.id.startsWith('rm_cerco_'))).toHaveLength(9);
+    // Lo que dice cada vecino del Cerco: diez rumores de partida (con el del buhonero).
+    expect(c.rumors.filter((r) => r.id.startsWith('rm_cerco_'))).toHaveLength(10);
     expect(c.hooks.length).toBeGreaterThan(0);
     expect(Object.keys(c.encounters)).toEqual(['town']);
     const story = (snap.campaign as unknown as { story: { quests: { id: string; act: number; exclusive?: string }[]; escalation: { id: string; after_hours: number }[] } }).story;
@@ -230,14 +233,14 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(go('salgo hacia Camino de Valcruz')).toBeNull();
   });
 
-  it('un personaje recorre a pie los diez lugares; al otro lado del Cerco no se llega', async () => {
+  it('un personaje recorre a pie los once lugares; al otro lado del Cerco no se llega', async () => {
     const { engine, time } = await boot();
     const c = await newPc(engine, 'Erro', 'rogue');
     c.abilities.str = 18; // las monedas pesan (50 por libra): que pueda con todo lo que va a llevar
     // La trampilla está oculta y el pasadizo del Granero cerrado: se descubre una y se lleva la llave del otro.
     expect(tool(engine, c, 'discover_spot', { character_id: c.id, spot_id: 'sp_tab_trampilla' }).error).toBeUndefined();
     engine.world.itemInstances.set('ii_test_llave', { id: 'ii_test_llave', item_id: 'it_llave_vharn', quantity: 1, location: { type: 'character', id: c.id, slot: { kind: 'pocket' } }, state: {} });
-    const route = ['sp_so_cajas', 'sp_tab_puerta', 'sp_pl_pozo', 'sp_he_fragua', 'sp_ca_torre', 'sp_cu_caldero', 'sp_mo_tejado', 'sp_co_gallinero', 'sp_cl_roble', 'sp_cs_cueva', 'sp_ru_cripta', 'sp_ru_patio', 'sp_li_barricada', 'sp_cs_mojon', 'sp_pl_tablon'];
+    const route = ['sp_so_cajas', 'sp_tab_puerta', 'sp_pl_pozo', 'sp_he_fragua', 'sp_ca_torre', 'sp_cu_caldero', 'sp_mo_tejado', 'sp_co_gallinero', 'sp_cl_roble', 'sp_cs_cueva', 'sp_ru_cripta', 'sp_ru_patio', 'sp_li_barricada', 'sp_cs_mojon', 'sp_pl_tablon', 'sp_ti_mostrador'];
     for (const s of route) await walk(engine, time, c, s);
     const visited = [...engine.world.locations.values()].filter((l) => l.discovery[c.id] === 'visited').map((l) => l.id);
     expect(visited.sort()).toEqual([...PLAYABLE].sort());
@@ -274,16 +277,22 @@ describe('Brezal sellada: la campaña escrita', () => {
     accept('q_perro');
     engine.world.npc('npc_brenna').talking_to = null;
     await walk(engine, time, c, 'sp_cl_sendero');
+    // Por fases: primero el rastro (en el Soto se conoce la vía de rastrear), luego la madriguera.
+    expect(stepOf(engine, c, 'q_perro')!.current!.id).toBe('rastro');
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'sacar', way_id: 'sigilo', why: null, failed: false }).error).toMatch(/ahora se puede dar rastro/);
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'rastro', way_id: 'rastrear', why: null, failed: false }).ok).toBe(true);
     expect(stepOf(engine, c, 'q_perro')!.current!.id).toBe('lobera');
     await walk(engine, time, c, 'sp_cs_cueva');
-    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'rastro' }).error).toMatch(/paso en curso/);
-    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'sacar' }).ok).toBe(true);
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'rastro' }).error).toMatch(/ahora se puede dar sacar/);
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'sacar', way_id: 'sigilo', why: 'Nos colamos mientras la loba dormía', failed: false }).ok).toBe(true);
     expect(engine.world.npc('npc_ceniza').location.id).toBe('sp_tab_chimenea');
     expect(stepOf(engine, c, 'q_perro')!.status).toBe('ready');
-    const coins = c.coins;
+    const coins = coinsOf(engine.world, c.id);
     await talkTo(engine, time, c, 'npc_brenna');
     expect(done(c)).toContain('q_perro');
-    expect(c.coins).toBe(coins + 100);
+    // Desenlace «sin que la loba se entere»: 100 de la misión y 20 más.
+    expect(characterStory(c).outcomes?.['q_perro']).toBe('sin_enterarse');
+    expect(coinsOf(engine.world, c.id)).toBe(coins + 120);
     expect(engine.world.npc('npc_brenna').attitude.by_character[c.id]).toBe('friendly');
 
     // --- Acto I: La cena del portón (presenta a Doro) y Lo que vio Doro ---
@@ -393,7 +402,7 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(stepOf(engine, c, 'q_final_templar')!.current!.id).toBe('pozo');
     await walk(engine, time, c, 'sp_pl_pozo');
     expect(stepOf(engine, c, 'q_final_templar')!.current!.id).toBe('templar');
-    const before = c.coins;
+    const before = coinsOf(engine.world, c.id);
     const rep = c.reputation['fac_brezal'] ?? 0;
     // Como en una acción del máster: lo que devuelve el tool va al progreso de la acción, y el final, en público.
     const actx = ctxFor(engine, c);
@@ -401,7 +410,7 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(actx.progress.some((e) => e.text.includes('Misión cumplida: «Templar el ascua»'))).toBe(true);
     expect(actx.progress.some((e) => e.public?.includes('ascua de Ysolde se apagó') && e.public.includes('Fen'))).toBe(true);
     expect(done(c)).toContain('q_final_templar');
-    expect(c.coins).toBe(before + 1000);
+    expect(coinsOf(engine.world, c.id)).toBe(before + 1000);
     expect(c.reputation['fac_brezal']).toBe(rep + 3);
     expect(engine.world.spot('sp_pl_pozo').state['templado']).toBe(true);
     expect(engine.world.npc('npc_ysolde').location.id).toBe('sp_ru_capilla');

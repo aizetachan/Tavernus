@@ -73,6 +73,13 @@ export interface Perceived {
  * `loudness` 0–1 escala el radio de audición (0.2 susurro, 1 conversación, 5 grito
  * se expresa como hearing_base × loudness; por eso admite > 1).
  */
+/**
+ * Casas (docs/PLAN-NPC-RELLENO.md): un punto con esta etiqueta es por dentro, con la puerta cerrada. Quien está dentro
+ * no se ve ni se oye desde fuera, ni ve lo de fuera; solo quien está en el mismo punto. Es donde duerme el relleno.
+ */
+export const DWELLING_TAG = 'dwelling';
+export function isDwelling(s: Pick<Spot, 'tags'>): boolean { return s.tags.includes(DWELLING_TAG); }
+
 export function perceive(world: World, clock: GameClock, observer: Character, at: Position, nowGameS: number, loudness = 1): Perceived {
   const obsPos = positionOf(world, observer, nowGameS);
   if (obsPos.location_id !== at.location_id) return { level: 'none', sight: 'none', sound: 'none', distance_m: null };
@@ -81,6 +88,7 @@ export function perceive(world: World, clock: GameClock, observer: Character, at
 
   const obsSpot = world.spot(obsPos.spot_id);
   const actSpot = world.spot(at.spot_id);
+  if (obsSpot.id !== actSpot.id && (isDwelling(obsSpot) || isDwelling(actSpot))) return { level: 'none', sight: 'none', sound: 'none', distance_m: d };
   const link = obsSpot.id === actSpot.id ? { blocks_sight: false, muffles: 0 } : linkBetween(obsSpot, actSpot);
 
   // Un punto oculto no descubierto no se ve; sí se oye.

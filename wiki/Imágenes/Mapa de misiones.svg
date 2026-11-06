@@ -1,0 +1,193 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1750 1206" width="1750" height="1206" font-family="Georgia, 'Times New Roman', serif">
+<title>Brezal: mapa de misiones</title>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b9ad94"/></marker></defs>
+<rect width="1750" height="1206" fill="#1c1a16"/>
+<text x="28" y="32" font-size="18" fill="#efe6d2" font-weight="bold">Brezal: mapa de misiones</text>
+<text x="28" y="68" font-size="12" fill="#b9ad94" letter-spacing="1">PRINCIPALES (SEGÚN LA SITUACIÓN)</text>
+<text x="384" y="68" font-size="12" fill="#b9ad94" letter-spacing="1">DESDE EL PRINCIPIO</text>
+<text x="740" y="68" font-size="12" fill="#b9ad94" letter-spacing="1">TRAS UNA MISIÓN</text>
+<text x="1096" y="68" font-size="12" fill="#b9ad94" letter-spacing="1">TRAS DOS MISIONES</text>
+<text x="1452" y="68" font-size="12" fill="#b9ad94" letter-spacing="1">TRAS TRES MISIONES</text>
+<path d="M654,258 C695,258 695,258 736,258" fill="none" stroke="#b9ad94" stroke-width="1.6" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M654,374 C695,374 695,374 736,374" fill="none" stroke="#b9ad94" stroke-width="1.6" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M654,142 C695,142 695,142 736,142" fill="none" stroke="#b9ad94" stroke-width="1.6" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M1010,258 C1051,258 1051,142 1092,142" fill="none" stroke="#b9ad94" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M1010,258 C1051,258 1051,258 1092,258" fill="none" stroke="#b9ad94" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M654,374 C873,374 873,258 1092,258" fill="none" stroke="#b9ad94" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M1010,142 C1229,142 1229,142 1448,142" fill="none" stroke="#b9ad94" stroke-width="1.6" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M1366,258 C1407,258 1407,142 1448,142" fill="none" stroke="#b9ad94" stroke-width="1.6" marker-end="url(#arrow)" opacity="0.85"/>
+<path d="M1010,374 C1051,374 1051,374 1092,374" fill="none" stroke="#b9ad94" stroke-width="1.6" marker-end="url(#arrow)" opacity="0.85"/>
+<g transform="translate(384,92)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#6fae8a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#6fae8a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">El agua turbia</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto I. Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Ilse</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En las hierbas colgadas (Casa de las hierbas)</text>
+</g>
+<g transform="translate(384,208)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#6fae8a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#6fae8a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">La cena del portón</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto I. Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Brenna</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En la barra (Taberna del Jabalí)</text>
+</g>
+<g transform="translate(384,324)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#6fae8a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#6fae8a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Ceniza se ha perdido</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto I. Nivel 2 (desde 1)</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Brenna</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En la barra (Taberna del Jabalí)</text>
+<text x="16" y="88" font-size="10.5" fill="#6fae8a">2 fases + 1 secundaria, 13 vías, 5 desenlaces</text>
+</g>
+<g transform="translate(384,440)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#6fae8a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#6fae8a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Un jarabe para el molino</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto I. Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Ilse</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En las hierbas colgadas (Casa de las hierbas)</text>
+</g>
+<g transform="translate(384,556)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#6fae8a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#6fae8a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">La reja del molino</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto I. Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Mateo</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En las muelas (El molino)</text>
+</g>
+<g transform="translate(384,672)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#6fae8a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#6fae8a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">La ronda de los Corrales</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto I. Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Doro</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En el portón norte (Plaza del Pozo)</text>
+</g>
+<g transform="translate(384,788)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#6fae8a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#6fae8a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Lo que no cuesta no sana</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto I. Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Úrsula</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En el gallinero (Los Corrales)</text>
+</g>
+<g transform="translate(384,904)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#6fae8a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#6fae8a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Una jarra para el cazador</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto I. Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Hal</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En la piedra grande (El Soto)</text>
+</g>
+<g transform="translate(740,208)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#6fae8a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#6fae8a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Lo que vio Doro</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto I. Nivel 2 (desde 1)</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Doro</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En el portón norte (Plaza del Pozo)</text>
+</g>
+<g transform="translate(740,324)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#d29a4a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#d29a4a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Bajo el Jabalí</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto II. Nivel 3 (desde 2)</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Brenna</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En la barra (Taberna del Jabalí)</text>
+</g>
+<g transform="translate(740,92)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#d29a4a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#d29a4a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">La cadena de hierro frío</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto II. Nivel 3 (desde 2)</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Ilse</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En las hierbas colgadas (Casa de las hierbas)</text>
+<text x="16" y="88" font-size="10.5" fill="#d29a4a">2 fases, 3 vías, 4 desenlaces</text>
+</g>
+<g transform="translate(1096,92)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#d29a4a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#d29a4a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">El hijo del molinero</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto II. Nivel 3 (desde 2)</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Mateo</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En las muelas (El molino)</text>
+<text x="16" y="88" font-size="10.5" fill="#d29a4a">2 fases + 1 secundaria, 8 vías, 4 desenlaces</text>
+</g>
+<g transform="translate(1096,208)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#d29a4a" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#d29a4a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">El Granero Quemado</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto II. Nivel 3 (desde 2)</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Hal</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En la piedra grande (El Soto)</text>
+</g>
+<g transform="translate(1452,92)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#c8605a" stroke-width="2.4"/>
+<rect width="6" height="100" rx="3" fill="#c8605a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Templar el ascua</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto III. Nivel 4 (desde 3)</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Ilse</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En las hierbas colgadas (Casa de las hierbas)</text>
+<text x="16" y="88" font-size="10.5" fill="#c8605a">final excluyente</text>
+</g>
+<g transform="translate(1096,324)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#c8605a" stroke-width="2.4"/>
+<rect width="6" height="100" rx="3" fill="#c8605a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">La verdad en el pozo</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto III. Nivel 4 (desde 3)</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Brenna</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En la barra (Taberna del Jabalí)</text>
+<text x="16" y="88" font-size="10.5" fill="#c8605a">final excluyente</text>
+</g>
+<g transform="translate(384,1020)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#c8605a" stroke-width="2.4"/>
+<rect width="6" height="100" rx="3" fill="#c8605a"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Que arda Vharn</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Acto III. Nivel 4 (desde 3)</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">Lo pide Ysolde</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">En el pajar hundido (El Granero Quemado)</text>
+<text x="16" y="88" font-size="10.5" fill="#c8605a">final excluyente</text>
+</g>
+<g transform="translate(28,92)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#8f8ad6" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#8f8ad6"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">La carta de Vharn</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">La tiene desde el principio</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">Según la situación inicial</text>
+</g>
+<g transform="translate(28,208)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#8f8ad6" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#8f8ad6"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Lo que dejó tu padre</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">La tiene desde el principio</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">Según la situación inicial</text>
+</g>
+<g transform="translate(28,324)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#8f8ad6" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#8f8ad6"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Lo prometido</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">La tiene desde el principio</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">Según la situación inicial</text>
+</g>
+<g transform="translate(28,440)">
+<rect width="270" height="100" rx="8" fill="#2a2620" stroke="#8f8ad6" stroke-width="1.4"/>
+<rect width="6" height="100" rx="3" fill="#8f8ad6"/>
+<text x="16" y="21" font-size="13.5" font-weight="bold" fill="#efe6d2">Salir de la aldea</text>
+<text x="16" y="39" font-size="11" fill="#cfc4ad">Nivel 1</text>
+<text x="16" y="55" font-size="11" fill="#cfc4ad">La tiene desde el principio</text>
+<text x="16" y="70" font-size="11" fill="#cfc4ad">Según la situación inicial</text>
+</g>
+<rect x="28" y="1144" width="12" height="12" rx="2" fill="#8f8ad6"/><text x="46" y="1154" font-size="12" fill="#cfc4ad">Principal</text>
+<rect x="138" y="1144" width="12" height="12" rx="2" fill="#6fae8a"/><text x="156" y="1154" font-size="12" fill="#cfc4ad">Acto I</text>
+<rect x="228" y="1144" width="12" height="12" rx="2" fill="#d29a4a"/><text x="246" y="1154" font-size="12" fill="#cfc4ad">Acto II</text>
+<rect x="323" y="1144" width="12" height="12" rx="2" fill="#c8605a"/><text x="341" y="1154" font-size="12" fill="#cfc4ad">Acto III</text>
+<line x1="428" y1="1150" x2="468" y2="1150" stroke="#b9ad94" stroke-width="1.6" marker-end="url(#arrow)"/><text x="476" y="1154" font-size="12" fill="#cfc4ad">hace falta para abrirla</text>
+<line x1="638" y1="1150" x2="678" y2="1150" stroke="#b9ad94" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arrow)"/><text x="686" y="1154" font-size="12" fill="#cfc4ad">basta una de ellas</text>
+<text x="28" y="1180" font-size="11" fill="#8f856f">Generado de los datos de la historia (src/wiki/questmap.ts). El nivel entre paréntesis es el mínimo para que te la pidan.</text>
+</svg>

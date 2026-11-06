@@ -76,6 +76,22 @@ export const REACTIONS: WorldRule[] = [
     when: { on: 'incident', kind: 'theft' },
     then: [{ kind: 'tag', tag: 'ladron', why: 'le vieron robarle a {victim}' }, { kind: 'opinion', npc_id: 'witnesses', delta: -5, why: 'le vio robar' }],
   },
+  // --- Cómo sacaron a Ceniza (vías de «Ceniza se ha perdido»): lo que vuelve después ---
+  {
+    id: 'loba_matada', note: 'Matar a la loba para sacar al perro: Hal la conocía («la de la montaña»).',
+    when: { on: 'state', cond: { kind: 'way', quest_id: 'q_perro', step_id: 'sacar', way_id: 'matar' } },
+    then: [
+      { kind: 'opinion', npc_id: 'npc_hal', delta: -5, why: 'mató a la loba de la montaña' },
+      { kind: 'topic', npc_id: 'npc_hal', days: 5, text: 'Han matado a la loba de ceniza. Hal la conocía desde cachorra: no lo dice, pero se le nota.' },
+    ],
+  },
+  {
+    id: 'loba_ahuyentada', note: 'Ahuyentar a la loba con fuego: baja hacia los Corrales (y los lobos atacan igual, esc_lobos).',
+    when: { on: 'state', cond: { kind: 'way', quest_id: 'q_perro', step_id: 'sacar', way_id: 'fuego' } },
+    then: [
+      { kind: 'topic', npc_id: 'npc_ursula', days: 4, text: 'Dicen que la loba de ceniza bajó del Soto huyendo de una antorcha. Úrsula duerme con la horca al lado de la cama.' },
+    ],
+  },
   // --- Ceniza vuelve a casa ---
   {
     id: 'ceniza_vuelve', note: 'Devolver el perro a Brenna: +10, la etiqueta, el hecho y el pueblo comentándolo.',

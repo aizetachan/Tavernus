@@ -25,6 +25,7 @@ import { makeSeed } from '../src/data/seed/demo.js';
 import type { Character, GameEvent, Npc } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
 
+import { coinsOf } from '../src/engine/money.js';
 /** El mundo nace a las 18:00 del día 0; la cena del Jabalí empieza a las 19:00. */
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 
@@ -99,8 +100,9 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     const [inc] = allIncidents(engine.world);
     expect(inc).toMatchObject({ perpetrator_id: leo.id, victim_id: 'npc_hugo', location_id: 'loc_taberna', spot_id: 'sp_tab_barra' });
     expect(['assault', 'armed_assault']).toContain(inc!.kind);
-    // La cena: la gente sin nombre también lo ha visto.
-    expect(inc!.crowd).toMatch(/diez vecinos/);
+    // La cena: la gente sin nombre también lo ha visto. Son seis: los otros cuatro de antes son ahora vecinos de
+    // relleno con nombre (docs/PLAN-NPC-RELLENO.md), testigos como cualquier NPC.
+    expect(inc!.crowd).toMatch(/seis vecinos/);
     expect(Object.fromEntries(inc!.knowers.map((k) => [k.npc_id, [k.role, k.response]]))).toMatchObject({
       npc_hugo: ['victim', 'fight'], npc_brenna: ['owner', 'refuse'], npc_garran: ['authority', 'arrest'],
     });
@@ -143,7 +145,7 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     expect(incident.observable).toMatch(/^⚖ Lo han visto: Leodhin mató a Hugo\./);
     expect(incident.observable).toMatch(/Garrán se planta delante de Leodhin: «¡Alto! Quedas detenido\.»/);
     expect(incident.observable).toMatch(/Brenna retrocede sin quitarle ojo: no piensa atender a Leodhin\./);
-    expect(incident.observable).toMatch(/Unos diez vecinos gritan y se apartan/);
+    expect(incident.observable).toMatch(/Unos seis vecinos gritan y se apartan/);
     // Para él, con los nombres que sabe: no sabe cómo se llaman el herrero ni el alguacil.
     expect(incident.payload['observable_target']).toMatch(/^⚖ Te han visto: has matado al herrero\. El alguacil se planta delante de ti.*Desde ahora te buscan\./);
     expect(arrest.narration_private).toMatch(/^El alguacil se te planta delante: .*Te acusa de esto: Leodhin mató al herrero en la barra/);
@@ -196,10 +198,10 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
   it('seq 96-98: Brenna no le alquila la habitación y no puede dormir con un alto encima', async () => {
     const { engine, leo } = await laBarra();
     tool(ctxFor(engine, leo), 'apply_damage', { target_id: 'npc_hugo', amount: 40, damage_type: 'force', source: 'Proyectil mágico de Leodhin' });
-    const coins = leo.coins;
+    const coins = coinsOf(engine.world, leo.id);
     const room = tool(ctxFor(engine, leo), 'buy_item', { character_id: leo.id, npc_id: 'npc_brenna', item_id: 'it_noche_posada', quantity: 1 });
     expect(room.error).toMatch(/Brenna no quiere tratos con Leodhin: sabe que mató a Hugo/);
-    expect(leo.coins).toBe(coins);
+    expect(coinsOf(engine.world, leo.id)).toBe(coins);
     const sleep = await engine.act(leo.id, 'dormir');
     expect(sleep).toMatchObject({ ok: false, text: expect.stringMatching(/Te están deteniendo/) });
   });

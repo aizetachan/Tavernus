@@ -28,6 +28,7 @@ import { talkersOf } from '../../engine/scene.js';
 import { questLeads } from '../../engine/story.js';
 import { knownSpots } from '../../engine/spots.js';
 import { pcName } from '../../engine/party.js';
+import { isExtra } from '../../engine/extras.js';
 
 /** «Aren» o «tú y Aren»: quién habla con ese NPC, visto por el lector. */
 function talkingLabel(engine: Engine, readerId: Id, npcId: Id): { talking_with?: string } {
@@ -86,6 +87,8 @@ export interface BoardPresence {
   avatar?: string;
   /** NPC: una pista activa del lector lleva a él (story.ts, `questLeads`): la web le pone un punto discreto. */
   lead?: boolean;
+  /** NPC de relleno (extras.ts): ficha más pequeña y apagada; nunca lleva marca de misión. */
+  extra?: boolean;
 }
 
 export interface BoardState {
@@ -202,7 +205,7 @@ export function boardState(engine: Engine, characterId: Id, opts: BoardOptions =
       asleep: false, moving: false,
       ...(p.level === 'full' ? talkingLabel(engine, c.id, n.id) : {}),
       ...avatar(n.id, p.level),
-      ...(leads.has(n.id) && p.level !== 'hint' ? { lead: true } : {}),
+      ...(isExtra(n) ? { extra: true } : leads.has(n.id) && p.level !== 'hint' ? { lead: true } : {}),
     });
   }
 

@@ -39,7 +39,7 @@ const DEAL = /\b((?:en|como|de) (?:prenda|fianza)|acept\w* (?:la|tu|su|el|esa|es
 /** Lo que niega, rechaza, pregunta u ofrece: no cierra nada. */
 const NOT_CLOSED = /\b(no|ni|nunca|jamas|sin|niega\w*|rechaza\w*|tampoco|nadie|nada|ofreces|ofrece|propones|propone|pides|pide|preguntas|pregunta|quieres|quiere|si|tal vez|quiza\w*|podria\w*|espera\w*|piensa\w*|pesando|ya tengo|ya guarda|sigue\w*|hablamos|al contado|algo|quien|cualquiera|cada uno)\b/;
 /** Tools que dejan estado de un trato. */
-export const DEAL_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'transfer_item', 'buy_item', 'sell_item', 'complete_job']);
+export const DEAL_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'take_coins', 'transfer_item', 'buy_item', 'sell_item', 'complete_job']);
 
 /**
  * Frases que dan un trato por cerrado sin tool que lo respalde. Mira lo que
@@ -76,7 +76,7 @@ export const DEAL_REJECTION = 'Has narrado un trato sin registrarlo: usa set_deb
 // ---------------------------------------------------------------------------
 
 /** Tools que mueven las monedas del actor. */
-export const COIN_TOOLS = new Set(['give_coins', 'settle_debt', 'buy_item', 'sell_item', 'set_debt', 'pawn_item', 'complete_job']);
+export const COIN_TOOLS = new Set(['give_coins', 'take_coins', 'settle_debt', 'buy_item', 'sell_item', 'set_debt', 'pawn_item', 'complete_job']);
 const COIN = String.raw`(?:monedas?|cobres?|platas?|oros?)`;
 /** El actor las suelta («dejas las monedas sobre la mesa», «le das diez de plata», «pagas la cuenta»). */
 const HANDS_COINS = new RegExp(String.raw`(?<!\bte )\b(dejas|pones|sueltas|entregas|das|pagas|tiendes|deslizas|empujas|pasas)\b[^,]{0,40}\b${COIN}\b|\b(pagas|saldas)\b`);
@@ -104,6 +104,102 @@ export function coinsWithoutTool(input: { action: string; narration: string; okT
 
 export function coinsRejection(phrase: string): string {
   return `La narración da monedas por pagadas («${phrase}») y en este turno no se ha movido ninguna: lo que no pasa por un tool no ha ocurrido. Usa give_coins (propina, soborno, un pago sin precio), settle_debt (una deuda) o buy_item (algo de su lista), o narra que no llega a pagar. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Robos y lo que se sirve, solo de palabra
+// ---------------------------------------------------------------------------
+
+/** El jugador quiere quitarle algo a alguien («robarle la bolsa», «birlar la llave», «le quito el cuchillo»). */
+const WANTS_THEFT = /\b(?:robar\w*|robo|roba|birl\w*|hurt\w*|sis\w*|mang\w*|quitarle|le quito|cortar(?:le)? la bolsa)\b/;
+/** La narración lo da por hecho: el objeto ya está en su mano, su manga o su bolsillo. */
+const TELLS_TAKEN = /\b(?:(?:cae|queda|esta)\w* (?:\w+ ){0,2}(?:a|en) tu (?:mano|palma|manga|bolsillo)|(?:te (?:lo|la|los|las) )?(?:guardas|escondes|metes)\b[^.;:]{0,30}\b(?:manga|bolsillo|cinto|mochila|zurron)|escondid[oa] (?:bajo|en) (?:la|tu) manga|(?:lo|la) sacas (?:del|de su)|se suelta del cinto|ya es tuy[oa]|te haces con)\b/;
+/** Tools que mueven objetos o monedas de verdad. */
+const MOVE_TOOLS = new Set(['transfer_item', 'take_coins', 'give_coins', 'spawn_item', 'buy_item', 'sell_item', 'pawn_item']);
+
+/**
+ * El jugador roba algo y la narración lo da por conseguido sin que nada haya cambiado de manos: o el objeto está en
+ * lo que lleva el otro y había que moverlo con transfer_item, o no existe (la bolsa de Garrán, partida «Humo y
+ * ceniza», 05-11). Devuelve la frase que lo da por hecho, o null. Con una tirada pendiente, todavía no ha pasado.
+ */
+export function stolenWithoutTool(input: { action: string; narration: string; okTools: readonly string[]; pendingRoll?: boolean }): string | null {
+  if (input.pendingRoll || input.okTools.some((t) => MOVE_TOOLS.has(t))) return null;
+  if (!WANTS_THEFT.test(norm(input.action).replace(/«[^»]*»/g, ' '))) return null;
+  for (const c of clauses(norm(input.narration).replace(/«[^»]*»/g, ' . '))) {
+    const m = TELLS_TAKEN.exec(c);
+    // Lo niega o lo deja en intento justo antes («no cae a tu mano»); un «sin tirar de la correa» de un robo limpio no.
+    if (m && !/\b(no|ni|nunca|nada|nadie|intentas|si)\b[^,]{0,25}$/.test(c.slice(0, m.index))) return m[0];
+  }
+  return null;
+}
+
+export function stolenRejection(phrase: string): string {
+  return `La narración da algo por robado («${phrase}») y en este turno no ha cambiado nada de manos. Robarle a alguien lo decide el servidor con conflict_act: con instance_id si está en lo que lleva («Lleva:» en el contexto) o, si no está en los datos y es razonable que lo lleve, con new_item_name; si no es razonable, cuenta que no lo encuentra. Reescribe log_event.`;
+}
+
+/** El NPC entrega algo a quien se lo pide («te la pone delante», «te sirve», «te tiende la jarra»). */
+const SERVES = /\b(?:te (?:lo |la |los |las )?(?:pone|planta|deja|sirve|tiende|alarga|acerca|pasa|da|entrega|empuja)\b|te (?:pone|sirve|deja|planta) (?:delante|en la barra|en la mesa))/;
+
+/**
+ * En un trato (comercio), el NPC sirve o entrega lo que vende y nadie lo cobra ni lo apunta: la cerveza de Brenna
+ * («Cuatro de cobre», y te la pone delante) sin buy_item ni set_debt, y el jugador se va sin pagar sin que pase
+ * nada. Lo que se sirve se cobra al servirlo (buy_item) o se fía (set_debt). Devuelve la frase, o null.
+ */
+export function servedWithoutPay(input: { narration: string; lines?: readonly DialogueLine[]; okTools: readonly string[]; trade: boolean; pendingRoll?: boolean }): string | null {
+  if (!input.trade || input.pendingRoll || input.okTools.some((t) => DEAL_TOOLS.has(t))) return null;
+  const said = (input.lines ?? []).filter((l) => l.speaker === 'npc').map((l) => l.text);
+  for (const c of clauses(norm([input.narration.replace(/«[^»]*»/g, ' . '), ...said].join(' . ')))) {
+    if (/\b(no|ni|nunca|sin|si|cuando|antes|primero|cuanto)\b/.test(c)) continue;
+    const m = SERVES.exec(c);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+export function servedRejection(phrase: string): string {
+  return `El NPC entrega lo que vende («${phrase}») y nadie lo cobra: lo que se sirve se paga al servirlo con buy_item (de su lista «Vende») o se fía con set_debt si no puede o no quiere pagar ahora. Si todavía no se lo da (solo dice el precio), cuéntalo así. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Efecto mágico narrado sin que el motor lo aplique (PLAN-OBJETOS §4.11)
+// ---------------------------------------------------------------------------
+
+/** Tools que aplican el efecto de un objeto mágico. */
+export const MAGIC_TOOLS = new Set(['use_item', 'use_scroll', 'cast_spell', 'heal', 'attune_item', 'add_condition']);
+
+/** Lo que el actor lleva que se puede usar con magia: solo eso se vigila, para no confundir un pergamino mágico con una carta. */
+export interface MagicAtHand { scroll: boolean; potion: boolean; charged: boolean; attunable: boolean }
+
+const MAGIC_PATTERNS: { kind: keyof MagicAtHand; re: RegExp }[] = [
+  { kind: 'scroll', re: /\b(lees|lee|recitas|recita|pronuncias|pronuncia|activas|activa)\b[^,.;]{0,40}\bpergamino\b|\bpergamino\b[^,.;]{0,30}\b(arde|se deshace|se consume|se convierte en ceniza|se desvanece|brilla)\b/ },
+  { kind: 'potion', re: /\b(bebes|te bebes|bebe|se bebe|apuras|apura|tragas|traga|vacias|vacia)\b[^,.;]{0,40}\b(pocion|elixir|frasco|frasquito|vial|redoma|brebaje)\b/ },
+  { kind: 'charged', re: /\b(la varita|la vara|el baston|el anillo|el amuleto|el cetro)\b[^,.;]{0,30}\b(escupe|lanza|dispara|suelta|despide|se activa|descarga|chisporrotea)\b|\b(agitas|agita|apuntas|apunta|activas|activa|blandes|blande)\b[^,.;]{0,30}\b(varita|vara|cetro)\b/ },
+  { kind: 'attunable', re: /\b(te sintonizas|se sintoniza|sintonizas|quedas sintonizad[oa]|queda sintonizad[oa]|te vinculas con|se vincula con)\b/ },
+];
+/** Lo que no llega a ocurrir: niega, se queda en intento u ocurre en otro momento. */
+const MAGIC_NOT_DONE = /\b(no|ni|nunca|sin|si|quieres|intentas|piensas|vas a|antes de|tampoco|podrias|podria|seria|guardas|guarda)\b/;
+
+/**
+ * La narración cuenta que un objeto mágico hace efecto (bebe la poción y se vuelve invisible, lee el pergamino,
+ * la varita escupe dardos, queda sintonizado) y en el turno no ha pasado por su tool: el motor no lo ha aplicado.
+ * Solo se mira lo que el actor tiene a mano (`atHand`). Las palabras entre «» no cuentan.
+ */
+export function magicWithoutTool(input: { narration: string; okTools: readonly string[]; atHand: MagicAtHand; pendingRoll?: boolean }): string | null {
+  if (input.pendingRoll || input.okTools.some((t) => MAGIC_TOOLS.has(t))) return null;
+  const acts = norm(input.narration).replace(/«[^»]*»/g, ' . ');
+  for (const c of clauses(acts)) {
+    if (MAGIC_NOT_DONE.test(c)) continue;
+    for (const { kind, re } of MAGIC_PATTERNS) {
+      if (!input.atHand[kind]) continue;
+      const m = re.exec(c);
+      if (m) return m[0];
+    }
+  }
+  return null;
+}
+
+export function magicRejection(phrase: string): string {
+  return `La narración da por hecho un efecto mágico («${phrase}») que el motor no ha aplicado: lo que no pasa por un tool no ha ocurrido. Usa use_item (poción, varita, objeto con cargas), use_scroll (pergamino), attune_item (sintonizarse o identificar) o cast_spell, y narra lo que devuelva; o narra que no llega a usarlo. Reescribe log_event.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -719,4 +815,56 @@ export function confirmedNames(ids: readonly string[], npcs: readonly NamedNpc[]
 /** NPC que el jugador nombró al escribir: lo sabe (o lo da por sabido) y no se le tapa en la respuesta. */
 export function namedByPlayer(npcs: readonly NamedNpc[], playerText: string | null | undefined): string[] {
   return playerText ? npcs.filter((n) => named(playerText, n.name)).map((n) => n.id) : [];
+}
+
+// ---------------------------------------------------------------------------
+// Acciones conflictivas (conflict.ts, docs/CONFLICTOS-NPC.md §11)
+// ---------------------------------------------------------------------------
+
+const CONFLICT_ROLLS = new Set(['sleight_of_hand', 'athletics', 'acrobatics']);
+/** Lo suyo con el actor (deudas, encargos) o comercio: no es reaccionar a lo que acaba de hacerle. */
+const OFF_TOPIC = /\b(deuda|debes|me debes|tu cuenta|la cuenta|el plazo|cobrar\w*|encargo|trabajo para|te pongo|cuesta|vale \d+)\b/;
+
+export interface ConflictCloseInput {
+  /** Lo que el motor leyó antes del máster (conflict.ts, conflictPlan). */
+  plan: { kind: string; npc_id: string; verdict: { possible: boolean } | null } | null;
+  /** El máster ha llamado a conflict_act en este turno, y si se podía. */
+  called: boolean;
+  possible: boolean | null;
+  req: { kind: string; key: string } | null;
+  narration: string;
+  lines: readonly DialogueLine[];
+  /** El NPC que tiene que reaccionar (conflict_act lo resolvió en el acto) y cómo se le nombra. */
+  reacts: { name: string; refs: readonly string[] } | null;
+  actionText: string | null;
+  /** Es la continuación de una tirada: lo ha resuelto el motor y aquí solo se cuenta. */
+  rolling: boolean;
+}
+
+/**
+ * ¿Se salta el cierre una acción conflictiva? Sin conflict_act no hay tirada
+ * contra el NPC ni robo; lo que no se puede no lleva tirada; y cuando el NPC
+ * reacciona, la narración le nombra y su primera frase no va de deudas,
+ * encargos ni comercio. Devuelve el motivo para reescribir, o null.
+ */
+export function conflictCloseProblems(i: ConflictCloseInput): string | null {
+  if (i.rolling) return null;
+  const rollsAgainst = Boolean(i.req && i.req.kind === 'skill' && CONFLICT_ROLLS.has(i.req.key));
+  if (i.plan && !i.called) {
+    if (i.plan.verdict && !i.plan.verdict.possible) {
+      return i.req ? 'Lo que intenta el actor NO SE PUEDE (lo dice el bloque «Acción conflictiva»): sin tirada. Cuenta qué lo impide y cierra sin requires_roll.' : null;
+    }
+    return `El actor intenta algo contra un NPC (${i.plan.kind}): lo decide el servidor. Llama antes a conflict_act (npc_id "${i.plan.npc_id}", kind "${i.plan.kind}") y cierra sin requires_roll; la tirada, si la hay, la pone el servidor.`;
+  }
+  if (!i.called && rollsAgainst && i.actionText && /\b(rob\w*|birl\w*|hurt\w*|quit\w*|arranc\w*|arrebat\w*|empuj\w*|agarr\w*|sujet\w*)/.test(i.actionText.toLowerCase())) {
+    return 'Una tirada de Juego de manos o Atletismo contra un NPC (robarle, empujarle, agarrarle) la decide el servidor: llama a conflict_act y cierra sin requires_roll.';
+  }
+  if (i.reacts) {
+    const said = i.lines.filter((l) => l.speaker === 'npc').map((l) => l.text).join(' ');
+    const all = `${i.narration} ${said}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const named = i.reacts.refs.some((r) => all.includes(r.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^(el|la|los|las) /, '')));
+    if (!named) return `Lo ha resuelto el servidor y ${i.reacts.name} reacciona: cuéntalo (nómbrale y di lo que hace, como en «reaction» de conflict_act). Reescribe log_event.`;
+    if (OFF_TOPIC.test(said.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''))) return `${i.reacts.name} acaba de pillar al actor: su primera frase es la reacción a eso, no deudas, encargos ni precios. Reescribe sus líneas.`;
+  }
+  return null;
 }

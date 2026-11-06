@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: regidor
 lugar: "[[La casona]]"
 actitud: neutral
+npc: npc_osric
 ---
 
 > [!ficha] Osric Malvez
@@ -59,6 +60,10 @@ No dice «diezmo», dice «ofrenda de vecindad». Ver [[Costumbres#Saludos y man
 | Día (6-14) | La mesa del despacho, [[La casona]] |
 | Tarde (14-20) | El tablón, [[Plaza del Pozo]] |
 | Noche (20-6) | La alcoba de arriba, [[La casona]] |
+
+## Lleva encima
+
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

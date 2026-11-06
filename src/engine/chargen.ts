@@ -6,7 +6,8 @@
  * traer cualquier cosa que venga en un JSON.
  */
 
-import { ABILITIES, BACKGROUNDS, CLASSES, RACES, STANDARD_ARRAY, backgroundById, classById, raceById, type BackgroundDef, type ClassDef, type RaceDef } from '../data/srd/index.js';
+import { ABILITIES, BACKGROUNDS, CLASSES, RACES, STANDARD_ARRAY, backgroundById, classById, raceById, type BackgroundDef, type ClassDef, type RaceDef, type StartingItem } from '../data/srd/index.js';
+import { pcGearDef } from '../data/srd/gear.js';
 import { CREATION_STEPS, DEATH_MODE_TEXT } from './creation.js';
 import { abilityModifier } from './dice.js';
 import type { CharacterSpec } from './engine.js';
@@ -70,8 +71,8 @@ export function resolveCharacterSpec(spec?: Partial<CharacterSpec>): { ok: true;
 
 const fixedSkills = (race: RaceDef, background: BackgroundDef) => [...new Set([...background.skills, ...race.skills])];
 
-/** El PJ recién nacido: derivados y lo de su clase. Falta colocarlo en el mundo y darle el equipo. */
-export function newCharacter(id: Id, userId: Id, name: string, r: ResolvedSpec, start: { spot_id: Id; coins: number }): Character {
+/** El PJ recién nacido: derivados y lo de su clase. Falta colocarlo en el mundo y darle el equipo y su bolsa con el dinero (money.ts). */
+export function newCharacter(id: Id, userId: Id, name: string, r: ResolvedSpec, start: { spot_id: Id }): Character {
   const abilities = Object.fromEntries(ABILITIES.map((a) => [a, r.base[a] + (r.race.ability_bonus[a] ?? 0)])) as Record<Ability, number>;
   const hp = r.klass.hit_die + abilityModifier(abilities.con);
   const c: Character = {
@@ -86,12 +87,33 @@ export function newCharacter(id: Id, userId: Id, name: string, r: ResolvedSpec, 
     location: { type: 'spot', id: start.spot_id },
     transit: null, status: 'active', speed_ft: r.race.speed_ft,
     abilities, passive_perception: 10, darkvision: r.race.darkvision, condition_speed_factor: 1,
-    coins: start.coins, last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
+    last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
   };
   // Lo de su clase (levels.ts): conjuros, pericia, estilo… con sus valores por defecto.
   initClass(c);
   c.passive_perception = passivePerception(c);
   return c;
+}
+
+/**
+ * Todo lo que lleva un PJ al empezar, en orden de colocación: el equipo de su clase, su ropa y lo de su trasfondo
+ * (PLAN-OBJETOS §7). Lo que la clase ya da no se repite (el clérigo acólito, un solo símbolo sagrado). La ropa pide el
+ * cuerpo después de la armadura: si la clase lleva armadura, la ropa acaba en la mochila (engine.ts, `createCharacter`).
+ */
+export function startingEquipment(klass: ClassDef, background: BackgroundDef): (StartingItem & { from: 'class' | 'background' })[] {
+  const out: (StartingItem & { from: 'class' | 'background' })[] = klass.equipment.map((e) => ({ ...e, from: 'class' as const }));
+  const have = new Set(out.map((e) => e.item_id));
+  for (const e of [{ item_id: background.clothes, slot: 'body' as const }, ...background.equipment]) {
+    if (have.has(e.item_id)) continue;
+    have.add(e.item_id);
+    out.push({ ...e, from: 'background' });
+  }
+  return out;
+}
+
+/** La definición de un objeto del equipo inicial: la de la partida o, si no la tiene, la de trasfondo y ropa (gear.ts). */
+export function startingItemDef(id: string, defs: ReadonlyMap<string, ItemDef>): ItemDef | undefined {
+  return defs.get(id) ?? pcGearDef(id);
 }
 
 export interface CharacterPreview {
@@ -101,7 +123,8 @@ export interface CharacterPreview {
   saves: { id: Ability; name: string; modifier: number; proficient: boolean }[];
   /** Solo en las que es competente. */
   skills: { id: string; name: string; modifier: number }[];
-  equipment: { name: string; quantity: number }[];
+  /** Lo que lleva al empezar: `class`, el equipo de su clase; `background`, su ropa y lo de su trasfondo. */
+  equipment: { name: string; quantity: number; from: 'class' | 'background' }[];
 }
 
 /** El resumen antes de confirmar, con los mismos cálculos que `createCharacter`. `defs`: catálogo de objetos de la partida. */
@@ -112,9 +135,11 @@ export function previewCharacter(name: string, spec: Partial<CharacterSpec> | un
   const r = resolveCharacterSpec(spec);
   if (!r.ok) return r;
   const { race, klass, background, death_mode } = r.resolved;
-  const c = newCharacter('preview', 'preview', clean, r.resolved, { spot_id: 'preview', coins: 0 });
+  const c = newCharacter('preview', 'preview', clean, r.resolved, { spot_id: 'preview' });
   const byId = new Map(defs.map((d) => [d.id, d]));
+  // La CA, con el equipo de la clase (el trasfondo no da armadura ni escudo, y la ropa no cuenta).
   const owned = klass.equipment.filter((e) => byId.has(e.item_id));
+  const kit = startingEquipment(klass, background).flatMap((e) => { const d = startingItemDef(e.item_id, byId); return d ? [{ e, d }] : []; });
   return {
     ok: true,
     preview: {
@@ -127,7 +152,7 @@ export function previewCharacter(name: string, spec: Partial<CharacterSpec> | un
       abilities: ABILITIES.map((a) => ({ id: a, short: ABILITY_SHORT[a], total: c.abilities[a], modifier: abilityModifier(c.abilities[a]) })),
       saves: ABILITIES.map((a) => ({ id: a, name: ABILITY_ES[a], modifier: saveModifier(c, a), proficient: c.proficiencies.saves.includes(a) })),
       skills: c.proficiencies.skills.map((s) => ({ id: s, name: SKILLS[s]!.es, modifier: skillModifier(c, s) })),
-      equipment: owned.map((e) => ({ name: byId.get(e.item_id)!.name, quantity: e.quantity ?? 1 })),
+      equipment: kit.map(({ e, d }) => ({ name: d.name, quantity: e.quantity ?? 1, from: e.from })),
     },
   };
 }
