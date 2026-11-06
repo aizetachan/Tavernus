@@ -1058,8 +1058,11 @@ export function talkProblems(p: TalkPlan, input: { lines: readonly DialogueLine[
   }
   if (input.pendingRoll) return out;
   const said = input.lines.filter((l) => l.speaker === 'npc' && (!l.npc_id || l.npc_id === p.npc_id)).map((l) => l.text).join(' ');
-  const answers: TalkSituation[] = ['question', 'lore', 'offer', 'trade', 'errand', 'greeting'];
-  if (answers.includes(plan.situation) && !said.trim()) out.push(`${input.npcName} no dice nada y le toca contestar (${SITUATION_ES[plan.situation]}): pon su respuesta en lines.`);
+  // El comercio no: servir ya es contestar al pedido (el cobro lo mira servedWithoutPay, closecheck.ts).
+  const answers: TalkSituation[] = ['question', 'lore', 'offer', 'errand', 'greeting'];
+  // Lo que dice entre comillas en la narración también es contestar («Brenna te mira. «¿Qué va a ser?»»).
+  const quoted = /«[^»]{2,}»/.test(input.narration);
+  if (answers.includes(plan.situation) && !said.trim() && !quoted) out.push(`${input.npcName} no dice nada y le toca contestar (${SITUATION_ES[plan.situation]}): pon su respuesta en lines.`);
   const t = norm(`${said} ${input.narration}`);
   const leaked = p.state.locked.filter((title) => names(t, title));
   if (leaked.length) out.push(`Nombras ${quote(leaked)}, una misión que el actor aún no puede coger: quítala.`);

@@ -237,7 +237,8 @@ describe('memoria y cola de conversación de NPC', () => {
     const { engine } = await bootEngine(time);
     const { client, requests } = fakeClient([
       msg([logEvent('Brenna asiente.', 'Kael habla con Brenna.', { npc_id: 'npc_brenna', npc_memory_note: 'Kael preguntó por el incendio de Vharn y dijo venir del sur.', npc_memory_importance: 2, lines: [{ speaker: 'npc', npc_id: 'npc_brenna', text: 'Eso fue hace mucho.' }] })]),
-      msg([logEvent('Brenna te sirve.', null, { npc_id: 'npc_brenna', npc_memory_note: 'Pidió una cerveza.', npc_memory_importance: 1 })]),
+      // Servir sin cobrar se rechaza (objetos reales, 06-11): aquí solo dice el precio.
+      msg([logEvent('Brenna te dice lo que cuesta y va a por la jarra.', null, { npc_id: 'npc_brenna', npc_memory_note: 'Pidió una cerveza.', npc_memory_importance: 1 })]),
       msg([logEvent('Brenna te mira.', null)]),
     ]);
     engine.attachMaster(new Master(engine, { client }));
