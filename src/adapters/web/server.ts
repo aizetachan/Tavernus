@@ -96,6 +96,7 @@ import { accountPage } from './page-account.js';
 import { adminPage } from './page-admin.js';
 import { AccountError, Accounts, ensureAdmin, type CharacterInput, type Seat, type User } from '../../accounts/accounts.js';
 import { describeDbUrl, dbUrlFromEnv, memoryDb, openDb, type Db } from '../../db/db.js';
+import { PgWorldStore, worldStoreFromEnv } from '../../games/worlds.js';
 import { DbCatalog, ensureGameRow } from '../../db/catalog.js';
 import { PRESENCE_TIMING, PresenceTracker, REPEAT_NOTICE_MS, type PresenceTiming } from './presence.js';
 import { pcLabel, pcName, sayLooksLikeAction } from '../../engine/party.js';
@@ -1705,6 +1706,11 @@ export async function startWeb(games: GameManager, port: number, env: NodeJS.Pro
   const catalog = new DbCatalog(db, games.root);
   await catalog.importFolders((m) => console.log(m));
   games.useCatalog(catalog);
+  // El mundo de cada partida: en su carpeta (JSON, por defecto) o en esta misma base (WORLD_STORE=pg, src/games/worlds.ts).
+  if (worldStoreFromEnv(env) === 'pg') {
+    games.useWorldStore(new PgWorldStore(db));
+    console.log('[web] mundos de las partidas: en la base (WORLD_STORE=pg); las de antes pasan de su carpeta al abrirlas');
+  }
   const accounts = new Accounts(db);
   // Primer administrador sin navegador (también: npm run admin -- <usuario>).
   const adminUser = env['ADMIN_USER']?.trim();
