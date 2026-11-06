@@ -57,7 +57,7 @@ import { World } from './world.js';
 import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, NPC_DOWN_HINT, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, wakeNpcs, type DeathSave } from './death.js';
 import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
-import { migrateExtras } from './extras.js';
+import { migrateExtras, placeExtraAt } from './extras.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
 import { compactSnapshot, syncCatalog } from '../data/catalog.js';
 import { outfitNpcs } from './outfit.js';
@@ -601,6 +601,8 @@ export class Engine {
         else if (crossesLocations(c.transit)) encounter = rollTravelEncounter(this.world, this.clock, c.transit, this.rng);
         if (encounter && !behind) met.set(c.id, { enc: encounter, destination: c.transit.destination_spot_id });
         if (encounter) stopAtEncounter(this.world, c, encounter);
+        // Un vecino de relleno sale al camino (travel.ts, `extra`): se queda allí media hora y luego vuelve a lo suyo.
+        if (encounter?.extra_id && !behind) placeExtraAt(this.world, this.world.npc(encounter.extra_id), encounter.waypoint_spot_id, encounter.at_game_s);
         settleAt = c.transit.arrives_game_s;
         setAhead(c, settleAt, nowGameS);
       }

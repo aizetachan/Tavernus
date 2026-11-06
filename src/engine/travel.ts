@@ -37,7 +37,7 @@
 
 import type { GameClock } from '../clock/clock.js';
 import type { Rng } from './dice.js';
-import type { Character, Exit, Id, Location, Pace, Spot, Transit } from './model.js';
+import type { Character, Exit, Id, Location, Npc, Pace, Spot, Transit } from './model.js';
 import { fmtDuration } from './narrate.js';
 import type { World } from './world.js';
 
@@ -52,6 +52,11 @@ export interface EncounterEntry {
   when?: 'day' | 'night';
   /** Peso de noche multiplicado por esto (por defecto 1). */
   night_weight?: number;
+  /**
+   * Lo protagoniza un vecino de relleno de verdad (extras.ts): el motor elige uno libre, lo pone en el camino y
+   * cambia `{extra}` de `what` por quién es. Sin ninguno libre, esta entrada no sale.
+   */
+  extra?: boolean;
 }
 
 /** `campaign.encounters`: tabla por tipo de zona (`zone.kind`); `'*'` vale para cualquiera. */
@@ -72,6 +77,8 @@ export interface TravelEncounter {
   /** Lo que queda hasta el destino. */
   remaining_m: number;
   remaining_s: number;
+  /** El vecino de relleno del encuentro (`entry.extra`). */
+  extra_id?: Id;
 }
 
 /** Viaje a medias por un encuentro. Se borra al llegar a cualquier sitio que no sea un punto de camino. */
@@ -364,8 +371,11 @@ export function rollTravelEncounter(world: World, clock: GameClock, t: Transit, 
   if (roll >= chance) return null;
   const leg = t.legs[leg_index]!;
   const at = leg.ends_game_s - leg.duration_s / 2;
-  const entry = pickEntry(encounterTable(world, zone_kind), isNight(clock, at), rng);
+  // Los encuentros con un vecino de relleno solo salen si hay alguno libre (no en casa, sin orden, sin charla).
+  const free = freeExtras(world);
+  const entry = pickEntry(encounterTable(world, zone_kind).filter((e) => !e.extra || free.length), isNight(clock, at), rng);
   if (!entry) return null;
+  const extra = entry.extra ? free[Math.floor(rng() * free.length)] : undefined;
   const after = t.legs.slice(leg_index + 1).reduce((a, l) => a + l.distance_m, 0);
   return {
     entry, chance, roll, zone_kind,
@@ -376,7 +386,21 @@ export function rollTravelEncounter(world: World, clock: GameClock, t: Transit, 
     at_game_s: at,
     remaining_m: Math.round(leg.distance_m / 2 + after),
     remaining_s: t.arrives_game_s - at,
+    ...(extra ? { extra_id: extra.id } : {}),
   };
+}
+
+/** Vecinos de relleno que pueden salir al camino: vivos, despiertos, fuera de casa, sin orden ni charla. */
+function freeExtras(world: World): Npc[] {
+  return [...world.npcs.values()].filter((n) => n.tier === 'extra' && n.status === 'alive' && !n.down && !n.bound && !n.talking_to
+    && !(n as Npc & { order?: unknown }).order && !world.spot(n.location.id).tags.includes('dwelling'));
+}
+
+/** `what` del encuentro con el vecino de relleno dentro: «Benito [npc_x_benito], labrador: …». */
+export function encounterWhat(world: World, e: TravelEncounter): string {
+  const n = e.extra_id ? world.npcs.get(e.extra_id) : undefined;
+  if (!n) return e.entry.what;
+  return e.entry.what.replace(/\{extra\}/g, `${n.name} [${n.id}], ${n.role} (${n.description.split(/(?<=\.)\s/)[0] ?? ''})`);
 }
 
 // ---------------------------------------------------------------------------
@@ -499,7 +523,7 @@ export function travelBlock(world: World, clock: GameClock, h: TravelHint): stri
   return [
     '## Encuentro en el camino',
     `Iba de ${origin.name} hacia ${destSpot.name} (${dest.name}) y se ha parado a medio camino, en ${world.locationOfSpot(e.waypoint_spot_id).name}. Le quedan ${e.remaining_m} m, unos ${fmtDuration(e.remaining_s)} de juego. Son las ${clock.format(e.at_game_s).slice(-5)}.`,
-    `Qué es: ${e.entry.what}`,
+    `Qué es: ${encounterWhat(world, e)}`,
     `Ya ha leído: «${e.entry.teaser ?? 'Algo te hace parar.'}». Esto NO es una llegada normal: haz que el encuentro ocurra ahora delante de él, concreto y acorde con la zona y la hora, y deja que reaccione (no decidas por él). Gente u objetos nuevos, con tools.`,
     'Cuando la escena lo permita, incluye «Continuar el viaje» entre las acciones sugeridas: lo resuelve el servidor y llega al destino. No lo muevas tú. Si prefiere volver, «Salir hacia ' + origin.name + '».',
   ].join('\n');

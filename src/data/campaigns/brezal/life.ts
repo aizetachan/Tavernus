@@ -116,16 +116,17 @@ export const HOOKS: AuthoredHook[] = [
 /** Encuentros de camino por tipo de zona: el máster pone el detalle. Toda la demo es aldea. */
 export const ENCOUNTERS: EncounterTable = {
   town: [
-    { id: 'vecino', weight: 2, when: 'day', teaser: 'Un vecino con la cara gris de tos te para a mitad de camino.',
-      what: 'Un vecino de Brezal (concreto: oficio, algo que lleva) te para para preguntar si eres «el que viene a arreglar lo del agua» o si sabes algo de la niebla. Si encaja, trae uno de los rumores que corren.' },
+    // Los encuentros con gente los protagoniza un vecino de relleno de verdad (extras.ts): `{extra}` es quién.
+    { id: 'vecino', weight: 2, when: 'day', extra: true, teaser: 'Alguien del pueblo, con la cara gris de tos, te para a mitad de camino.',
+      what: '{extra} te para para preguntar si eres «el que viene a arreglar lo del agua» o si sabes algo de la niebla. Habla como vecino de relleno: dos frases, nada de la historia, y sigue a lo suyo. Si encaja, trae uno de los rumores que corren.' },
     { id: 'garran_ronda', weight: 1, teaser: 'Unas botas pesadas se paran detrás de ti.',
       what: 'Garrán hace la ronda y se fija en el PJ: pregunta adónde va, recuerda deudas, insinúa que el regidor paga bien a quien va al granero a «apagar las luces». No pelea en público si no le provocan.' },
     { id: 'ceniza_cae', weight: 1, when: 'night', teaser: 'Empieza a caer algo blando del cielo. No es nieve.',
       what: 'Cae ceniza fina sobre Brezal durante unos minutos; no se va con el viento, la niebla la devuelve. Alguien cierra contraventanas; un perro aúlla hacia el granero.' },
     { id: 'lobo', weight: 1, night_weight: 2, teaser: 'Un crujido entre las cercas, muy cerca del camino.',
       what: 'Un lobo flaco, con ceniza en el lomo, sigue al PJ a distancia entre las cercas. Ataca solo si el PJ está herido o solo de noche; huye ante el fuego.' },
-    { id: 'buhonero', weight: 1, when: 'day', teaser: 'Un hombre con un fardo a la espalda te mira como quien busca un comprador.',
-      what: 'Un buhonero de fuera, atrapado por la niebla, vende barato lo que le queda (algo concreto y pequeño) o pregunta si alguien ha encontrado la manera de salir. Está asustado y lo disimula mal.' },
+    { id: 'cargado', weight: 1, when: 'day', extra: true, teaser: 'Alguien viene por el camino con un fardo a la espalda.',
+      what: '{extra} va cargado (lo que lleva de verdad, ni un objeto más) y pregunta si alguien ha encontrado la manera de salir de la niebla. Está asustado y lo disimula mal. Dos frases, y sigue su camino.' },
     { id: 'huellas', weight: 1, teaser: 'En el barro del camino hay algo que te hace agacharte.',
       what: 'Huellas recientes: botas pequeñas que van hacia el Soto (Tobías) y, encima, las de un lobo enorme. Si el PJ sigue el rastro, lleva al arroyo y al granero.' },
   ],

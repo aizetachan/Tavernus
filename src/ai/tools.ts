@@ -11,6 +11,8 @@ import { carrierOf, consumeItem, inventoryDetailed, inventoryView, itemView, npc
 import type { Character, Id, ItemInstance, Npc, Placement, ReactionKind } from '../engine/model.js';
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
 import { isDwelling, perceive, witnesses } from '../engine/perception.js';
+import { isExtra } from '../engine/extras.js';
+import { inventedPeople, inventedRejection, nameVocabulary, playerWords, rolesFor } from '../engine/invented.js';
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
@@ -28,7 +30,7 @@ import { spendResource } from '../engine/rest.js';
 import { castSpell, spellStats } from '../engine/levels.js';
 import { applyItemEffect, damageAfterResistance, gearLines, armorBlocksSpells, attackProfile, attune, canAttune, castFromCharges, copyCost, copyScroll, endAttunement, identify, reachCheck, spellItemBonus, spendCharges, useScroll, type ItemCast } from '../engine/itemrules.js';
 import { isIdentifiedBy } from '../engine/items.js';
-import { setAhead } from '../engine/travel.js';
+import { isWaypoint, setAhead } from '../engine/travel.js';
 import { ABILITY_ES, armorClass, characterCheck, normalizeSkill, skillModifier, SKILLS, type CheckKind } from '../engine/rules.js';
 import { SOCIAL_SKILLS, socialDcShift } from '../engine/standing.js';
 import { freshTagOptions, tagOptions } from '../engine/worldrules.js';
@@ -422,6 +424,8 @@ export interface ToolContext {
   repeat_rejections?: number;
   /** Cierres rechazados por narrar que el actor recibe algo de otro jugador sin oferta (closecheck.ts; uno como mucho). */
   receive_rejections?: number;
+  /** Gente inventada (invented.ts): reescrituras pedidas. */
+  invented_rejections?: number;
   /** Cierres rechazados por mover un objeto del actor solo de palabra (uno como mucho). */
   moved_rejections?: number;
   stolen_rejections?: number;
@@ -957,6 +961,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         talking_to: n.talking_to ? (world.characters.get(n.talking_to.character_id)?.name ?? null) : null,
         order: orderLine(world, n, nowGameS),
         carries: npcCarryList(world, n.id),
+        // Relleno (extras.ts): su guion corto; no guarda secretos ni da misiones.
+        ...(isExtra(n) ? { tier: 'extra', script: { trade: n.script.trade, temper: n.script.temper, service: n.script.service, story: n.script.story, refer_to: n.script.refer_to, rule: 'vecino de relleno: dos frases como mucho, no sabe nada de la historia, no da misiones; lo que no sabe, lo remite' } } : {}),
         ...(n.death ? { death: { at: engine.clock.format(n.death.died_game_s), by: n.death.by_name, cause: n.death.cause } } : {}),
       };
     }
@@ -979,7 +985,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (ns.location_id !== pos.location_id || n.status !== 'alive') continue;
         const p = perceive(world, engine.clock, actor, { spot_id: ns.id, next_spot_id: null, progress: 0, x: ns.x, y: ns.y, location_id: ns.location_id }, nowGameS);
         if (p.level === 'none') continue;
-        out.push({ id: n.id, name: p.sight === 'full' ? n.name : '(figura)', role: n.role, level: p.level, spot_id: ns.id, distance_m: Math.round(p.distance_m ?? 0) });
+        out.push({ id: n.id, name: p.sight === 'full' ? n.name : '(figura)', role: n.role, level: p.level, spot_id: ns.id, distance_m: Math.round(p.distance_m ?? 0), ...(isExtra(n) ? { tier: 'extra' } : {}) });
       }
       // Los muertos siguen ahí: su cuerpo no desaparece de la escena.
       for (const sp of world.spotsOf(pos.location_id)) {
@@ -1969,6 +1975,23 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (got.length) {
           ctx.receive_rejections = (ctx.receive_rejections ?? 0) + 1;
           return { error: receivedRejection(got) };
+        }
+      }
+      // Gente que no existe y habla, o a la que se manda al actor («un labrador te contesta», «pregúntale a Tomás»):
+      // se reescribe una vez (invented.ts). En un encuentro de camino se puede sacar gente nueva: ahí no se mira.
+      if ((ctx.invented_rejections ?? 0) < 1 && !isWaypoint(world.spot(positionOf(world, actor, nowGameS).spot_id))) {
+        const npcLines = parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id)).filter((l) => l.speaker !== 'actor').map((l) => l.text);
+        const hits = inventedPeople({
+          texts: [s('narration_private'), input['observable'] == null ? '' : s('observable')],
+          lines: npcLines,
+          suggestions: input['suggested_actions'] == null ? [] : s('suggested_actions').split('|'),
+          ...rolesFor(world, here()),
+          vocabulary: nameVocabulary(world, playerWords(actor, ctx.action_text)),
+        });
+        if (hits.length) {
+          ctx.invented_rejections = (ctx.invented_rejections ?? 0) + 1;
+          const people = [...world.npcs.values()].filter((n) => n.status === 'alive' && world.spots.get(n.location.id)?.location_id === here());
+          return { error: inventedRejection(hits, people.map((n) => `${actor.knows.includes(n.id) ? n.name : descriptorOf(world, n.id)} [${n.id}], ${n.role}`)) };
         }
       }
       // Mover algo suyo solo de palabra («lo guardas en la mochila» y sigue en la mano): se reescribe una vez.

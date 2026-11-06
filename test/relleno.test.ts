@@ -17,6 +17,12 @@ import type { Character, ItemInstance, WorldSnapshot } from '../src/engine/model
 import { MemoryRepository } from '../src/persistence/memory.js';
 import { validateSnapshot } from '../src/worldgen/validate.js';
 import { fakeTime } from './helpers.js';
+import { boardState } from '../src/adapters/web/board.js';
+import { actionContext, systemPrompt } from '../src/ai/prompt.js';
+import { extraSpotNow, extraStagger, EXTRA_STAGGER_S } from '../src/engine/schedule.js';
+import { placeExtraAt } from '../src/engine/extras.js';
+import { encounterTable, encounterWhat } from '../src/engine/travel.js';
+import { inventedPeople } from '../src/engine/invented.js';
 
 /** El mundo nace a las 18:00 del día 0 de juego. */
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
@@ -73,7 +79,7 @@ describe('relleno: montaje desde la plantilla de su oficio', () => {
     expect(marta.noncombatant).toBe(true);
     expect(marta.stats?.hp).toBe(4);
     expect(marta.home_spot_id).toBe('sp_pl_casas');
-    expect(marta.kit).toBe('commoner');
+    expect(marta.kit).toBe('baker');
     expect(marta.wealth).toBe('modest');
     // El oficio con otras palabras y el género.
     expect(extras.find((n) => n.id === 'npc_x_ines')!.role).toBe('zagala');
@@ -163,9 +169,9 @@ describe('relleno: horario', () => {
     expect(spotOf(engine, 'npc_x_anselmo')).toBe('sp_li_barricada');
     expect(spotOf(engine, 'npc_x_ramiro')).toBe('sp_li_barricada');
     expect(spotOf(engine, 'npc_x_benito')).toBe('sp_pl_casas');
-    // 23:30: Anselmo vuelve al portón.
+    // 23:30: Anselmo vuelve a su ronda (pasea entre el portón y la barricada).
     await at(engine, time, 1, 23.5);
-    expect(spotOf(engine, 'npc_x_anselmo')).toBe('sp_pl_porton');
+    expect(['sp_pl_porton', 'sp_li_barricada']).toContain(spotOf(engine, 'npc_x_anselmo'));
   });
 });
 
@@ -178,7 +184,8 @@ describe('relleno: las casas no se ven desde fuera', () => {
     const now = engine.gameNow();
     expect(spotOf(engine, 'npc_x_marta')).toBe('sp_pl_casas');
     expect(perceive(engine.world, engine.clock, pc, posAt(engine, 'sp_pl_casas'), now).level).toBe('none');
-    // who_is_here no la trae; al portón (Anselmo) sí se le ve.
+    // who_is_here no la trae; al de la ronda, en el portón, sí se le ve.
+    engine.world.npc('npc_x_anselmo').location = { type: 'spot', id: 'sp_pl_porton' };
     const here = tool(engine, pc, 'who_is_here', { unused: null }) as unknown as { id: string }[];
     expect(here.map((x) => x.id)).not.toContain('npc_x_marta');
     expect(here.map((x) => x.id)).toContain('npc_x_anselmo');
@@ -289,5 +296,195 @@ describe('relleno: partidas empezadas antes', () => {
     const cena3 = allScheduled(w3).find((e) => e.id === 'se_cena')!;
     expect(cena3.npc_ids.filter((id) => id === 'npc_x_benito')).toHaveLength(1);
     expect(cena3.crowd[0]!.count).toBe(6);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 2: minimapa, contexto del máster, horario escalonado, paseos, encuentros y gente inventada
+// ---------------------------------------------------------------------------
+
+function closeWith(over: Record<string, unknown>): Record<string, unknown> {
+  return {
+    narration_private: 'Asientes.', observable: null, observable_vague: null, loudness: 1, tags: 'social', suggested_actions: '',
+    requires_roll_kind: null, requires_roll_key: null, requires_roll_dc: null, requires_roll_advantage: null, requires_roll_target: null,
+    decisive_threat: null, decisive_npc_id: null, npc_id: null, npc_memory_note: null, npc_memory_importance: null,
+    names_learned: null, places_learned: null, introduces_self: false, target_character_id: null, observable_target: null, lines: null, ...over,
+  };
+}
+
+describe('relleno, fase 2: minimapa', () => {
+  it('el tablero trae a la panadera como vecino de relleno, por su oficio y sin marca de misión', async () => {
+    const { engine, time } = await boot();
+    await at(engine, time, 1, 7);
+    const pc = await newPc(engine, 'Pillin');
+    pc.location = { type: 'spot', id: 'sp_pl_pozo' };
+    const b = boardState(engine, pc.id);
+    const marta = b.presences.find((p) => p.id === 'npc_x_marta')!;
+    expect(marta).toMatchObject({ kind: 'npc', extra: true, spot_id: 'sp_pl_horno', label: 'la panadera' });
+    expect(marta.lead).toBeUndefined();
+    // Los principales no llevan la marca.
+    expect(b.presences.find((p) => p.id === 'npc_garran')?.extra).toBeUndefined();
+    // Los de las casas no salen.
+    expect(b.presences.some((p) => p.id === 'npc_x_anselmo')).toBe(false);
+  });
+
+  it('el relleno va y viene sin dejar avisos ni líneas en el chat', async () => {
+    const { engine, time } = await boot();
+    const from = engine.events.all().at(-1)?.seq ?? 0;
+    await at(engine, time, 1, 7);
+    await at(engine, time, 1, 16);
+    await at(engine, time, 1, 23.5);
+    const moves = engine.events.all().filter((e) => e.seq > from && e.action_type === 'npc_move');
+    expect(moves.some((e) => String(e.payload['npc_id']).startsWith('npc_x_'))).toBe(false);
+    // Los principales siguen avisando.
+    expect(moves.some((e) => e.payload['npc_id'] === 'npc_doro')).toBe(true);
+  });
+});
+
+describe('relleno, fase 2: horario escalonado y paseos', () => {
+  it('cada vecino cambia de franja a su hora, entre 40 minutos antes y 40 después; con la misma semilla, la misma hora', () => {
+    const seed = seedNow();
+    const ss = seed.npcs.filter(isExtra).map((n) => extraStagger(n));
+    for (const s of ss) expect(Math.abs(s)).toBeLessThanOrEqual(EXTRA_STAGGER_S);
+    expect(new Set(ss).size).toBeGreaterThan(5);
+    expect(extraStagger({ id: 'npc_x_marta' })).toBe(extraStagger({ id: 'npc_x_marta' }));
+  });
+
+  it('a las 14:00 no se ha movido todo el pueblo a la vez; a las 14:45, sí', async () => {
+    const { engine, time } = await boot();
+    // Los que cambian de punto por la tarde y no pasean.
+    const changing = ['npc_x_fermina', 'npc_x_ciro', 'npc_x_gil', 'npc_x_remedios', 'npc_x_ines', 'npc_x_herminia', 'npc_x_ramiro', 'npc_x_anselmo'];
+    const afternoon = (id: string) => {
+      const r = (engine.world.npc(id) as unknown as { routine: { day?: string; afternoon?: string } }).routine;
+      return r.afternoon ?? r.day;
+    };
+    await at(engine, time, 1, 13.25);
+    expect(changing.filter((id) => spotOf(engine, id) === afternoon(id))).toEqual([]);
+    await at(engine, time, 1, 14);
+    expect(changing.filter((id) => spotOf(engine, id) === afternoon(id)).length).toBeLessThan(changing.length);
+    await at(engine, time, 1, 14.75);
+    for (const id of changing) expect(spotOf(engine, id), id).toBe(afternoon(id));
+  });
+
+  it('Pía pasea entre el pozo, el tablón y el callejón por la mañana, y nunca sale de ellos', async () => {
+    const { engine, time } = await boot();
+    const seen = new Set<string>();
+    for (const h of [7, 7.5, 8, 8.5]) {
+      await at(engine, time, 1, h);
+      seen.add(spotOf(engine, 'npc_x_pia'));
+      expect(extraSpotNow(engine.world, engine.world.npc('npc_x_pia'), engine.gameNow())).toBe(spotOf(engine, 'npc_x_pia'));
+    }
+    expect(seen.size).toBeGreaterThan(1);
+    for (const s of seen) expect(['sp_pl_pozo', 'sp_pl_tablon', 'sp_pl_callejon']).toContain(s);
+  });
+
+  it('un vecino puesto en un sitio (un encuentro de camino) no pasea ni sigue su horario mientras dura', async () => {
+    const { engine, time } = await boot();
+    await at(engine, time, 1, 7);
+    const pia = engine.world.npc('npc_x_pia');
+    expect(placeExtraAt(engine.world, pia, 'sp_pl_taberna', engine.gameNow())).toBe(true);
+    await at(engine, time, 1, 7.4);
+    expect(spotOf(engine, 'npc_x_pia')).toBe('sp_pl_taberna');
+  });
+});
+
+describe('relleno, fase 2: contexto del máster', () => {
+  it('cada vecino presente va en una línea, sin su historia entera, con su guion y lo que lleva', async () => {
+    const { engine, time } = await boot();
+    await at(engine, time, 1, 7);
+    const pc = await newPc(engine, 'Pillin');
+    pc.location = { type: 'spot', id: 'sp_pl_pozo' };
+    const ctx = actionContext(engine, pc, 'miro alrededor');
+    expect(ctx).toMatch(/## Gente de relleno aquí \(solo existen estos/);
+    expect(ctx).toMatch(/- la panadera \[npc_x_marta\] \(el actor no sabe su nombre, que es Marta\), en el horno/);
+    expect(ctx).toMatch(/Guion: seco; sirve para: vende lo suyo; lo que no sabe, lo remite a /);
+    expect(ctx).toMatch(/Vende: pan gris \[it_pan_gris\]/);
+    expect(ctx).toMatch(/\[ii_marta_pan\]/);
+    // Su historia no: solo el aspecto.
+    expect(ctx).not.toContain('comen y se van');
+    // Y no va en «Presentes» con la ficha entera.
+    expect(ctx).not.toMatch(/- NPC la panadera \[npc_x_marta\]/);
+  });
+
+  it('el prompt de sistema lleva la regla GENTE', () => {
+    expect(systemPrompt(seedNow().campaign)).toMatch(/GENTE: solo existen las personas del contexto/);
+  });
+
+  it('who_is_here y get_npc dicen que es de relleno', async () => {
+    const { engine, time } = await boot();
+    await at(engine, time, 1, 7);
+    const pc = await newPc(engine, 'Pillin');
+    pc.location = { type: 'spot', id: 'sp_pl_pozo' };
+    const here = tool(engine, pc, 'who_is_here', { unused: null }) as unknown as { id: string; tier?: string }[];
+    expect(here.find((x) => x.id === 'npc_x_marta')?.tier).toBe('extra');
+    expect(here.find((x) => x.id === 'npc_garran')?.tier).toBeUndefined();
+    const marta = tool(engine, pc, 'get_npc', { npc_id: 'npc_x_marta' });
+    expect(marta['tier']).toBe('extra');
+    expect((marta['script'] as { trade: string }).trade).toBe('baker');
+  });
+});
+
+describe('relleno, fase 2: encuentros de camino', () => {
+  it('el vecino del camino de Brezal es un vecino de relleno de verdad', async () => {
+    const { engine, time } = await boot();
+    await at(engine, time, 1, 10);
+    const entry = encounterTable(engine.world, 'town').find((e) => e.id === 'vecino')!;
+    expect(entry.extra).toBe(true);
+    const enc = { entry, chance: 1, roll: 0, zone_kind: 'town', exit_id: 'x', waypoint_spot_id: 'sp_pl_pozo', origin_spot_id: 'sp_pl_pozo', destination_spot_id: 'sp_mo_puerta', at_game_s: engine.gameNow(), remaining_m: 10, remaining_s: 10, extra_id: 'npc_x_benito' };
+    expect(encounterWhat(engine.world, enc)).toMatch(/^Benito \[npc_x_benito\], labrador \(Manos agrietadas/);
+    expect(encounterWhat(engine.world, enc)).not.toContain('{extra}');
+  });
+});
+
+describe('relleno, fase 2: gente inventada', () => {
+  /** El turno 89 de «Humo y ceniza» (VPS, día 1, 19:03). */
+  const SEQ_89 = 'Preguntas a los vecinos qué es la cena del Jabalí. Un labrador de manos agrietadas te contesta sin levantar la vista del plato: guiso, pan gris y cerveza, cada noche mientras dure la niebla. Una mujer de chal al fondo mira hacia la puerta, como quien espera a alguien que no llega.';
+
+  async function tavernAt(h: number) {
+    const { engine, time } = await boot();
+    await at(engine, time, 1, h);
+    const pc = await newPc(engine, 'Pillin');
+    pc.location = { type: 'spot', id: 'sp_tab_barra' };
+    const ctx: ToolContext = { engine, actor: pc, nowGameS: engine.nowFor(pc), rng: seededRng(3), closed: null, rolls: [], progress: [], action_text: 'preguntar a los parroquianos qué es la cena del jabalí' };
+    const log = (over: Record<string, unknown>) => JSON.parse(executeTool(ctx, 'log_event', closeWith(over))) as { ok?: boolean; error?: string };
+    return { engine, pc, ctx, log };
+  }
+
+  it('fuera de la cena, «un labrador te contesta» se rechaza una vez, con quién hay de verdad', async () => {
+    const { log } = await tavernAt(22.5);
+    const r = log({ narration_private: SEQ_89 });
+    expect(r.error).toMatch(/Gente que no existe: «un labrador» que habla/);
+    expect(r.error).toMatch(/Aquí están: .*Brenna|Aquí están: .*tabernera/);
+    // Una sola vez.
+    expect(log({ narration_private: SEQ_89 }).ok).toBe(true);
+  });
+
+  it('en la cena, con Benito delante, la misma narración pasa', async () => {
+    const { engine, log } = await tavernAt(19.5);
+    expect(engine.world.spot(spotOf(engine, 'npc_x_benito')).location_id).toBe('loc_taberna');
+    expect(log({ narration_private: SEQ_89 }).error ?? '').not.toMatch(/Gente que no existe/);
+  });
+
+  it('mandar al actor a alguien que no existe se rechaza: «un labrador» sin labrador, «el alcalde», «Tomás»', () => {
+    const vocabulary = new Set(['brenna', 'doro', 'jabali']);
+    const base = { texts: [''], lines: [] as string[], presentRoles: ['tabernera', 'guardia'], allRoles: ['tabernera', 'guardia', 'herrero', 'labrador'], vocabulary };
+    expect(inventedPeople({ ...base, suggestions: ['Preguntar a un labrador de la taberna'] })).toEqual([{ kind: 'referral', text: 'un labrador' }]);
+    expect(inventedPeople({ ...base, suggestions: ['Preguntar al herrero'] })).toEqual([]);
+    expect(inventedPeople({ ...base, suggestions: ['Preguntar al alcalde'] })).toEqual([{ kind: 'referral', text: 'el alcalde' }]);
+    expect(inventedPeople({ ...base, lines: ['Ya que lo preguntas. El de la puerta, Tomás, no ha cenado.'], suggestions: [] })).toEqual([{ kind: 'name', text: 'Tomás' }]);
+  });
+
+  it('el fondo sin cara pasa: la sala llena, alguien que ríe, una mujer que mira, la multitud que murmura', () => {
+    const vocabulary = new Set(['brenna']);
+    expect(inventedPeople({
+      texts: ['La sala está llena de vecinos; alguien ríe al fondo. Una mujer de chal mira hacia la puerta. Unos vecinos murmuran que eso es cosa de Brenna.'],
+      lines: [], suggestions: ['Hablar con Brenna'], presentRoles: ['tabernera'], allRoles: ['tabernera'], vocabulary,
+    })).toEqual([]);
+  });
+
+  it('los nombres que salen en los datos no son inventos', async () => {
+    const { log } = await tavernAt(22.5);
+    const r = log({ narration_private: 'Brenna asiente.', lines: [{ speaker: 'npc_brenna', text: 'Eso pregúntaselo a Ilse, la de las hierbas.', to: 'all' }], npc_id: 'npc_brenna' });
+    expect(r.error ?? '').not.toMatch(/Gente que no existe/);
   });
 });

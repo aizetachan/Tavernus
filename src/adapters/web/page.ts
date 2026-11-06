@@ -145,6 +145,10 @@ export const PAGE = String.raw`<!doctype html>
   #board .token.vague { opacity: .7; } #board .token.hint { opacity: .4; }
   #board .token.vague .ring, #board .token.hint .ring { stroke-dasharray: 3 2; }
   #board .token .face { opacity: 0; transition: opacity .2s; } #board .token .face.on { opacity: 1; }
+  /* Vecinos de relleno (extras.ts): más pequeños y apagados, para que destaquen los que importan. */
+  #board .token.extra { opacity: .92; } #board .token.extra.vague { opacity: .6; } #board .token.extra.hint { opacity: .35; }
+  #board .token.slide { transition: transform .9s ease-in-out; }
+  @media (prefers-reduced-motion: reduce) { #board .token.slide { transition: none; } }
   #board .route { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; pointer-events: none; }
   #board .exit { cursor: pointer; }
   #board .exit .path { stroke: #e9e4da; stroke-width: 1.6; stroke-dasharray: 5 3; }
@@ -2188,7 +2192,9 @@ ${SHOP_JS}
   }
   var LIGHT = { day: 'de día', twilight: 'penumbra', night_moon: 'noche con luna', night_dark: 'noche cerrada' };
   var DARK = { day: 0, twilight: 0.16, night_moon: 0.38, night_dark: 0.58 };
-  var RING = { actor: '#d9a35b', character: '#9cb08a', npc: '#c97b5a' };
+  var RING = { actor: '#d9a35b', character: '#9cb08a', npc: '#c97b5a', extra: '#bdb2a3' };
+  /** Dónde estaba cada ficha en el último tablero (px), para deslizarla al sitio nuevo; y de qué sitio era. */
+  var boardPos = {}, boardPosLoc = null;
   var GROUND = {
     void: { base: '#15110d' }, wood: { base: '#6a4f35', line: '#4f3a26' }, stone: { base: '#55504a', line: '#3f3b36' },
     cobble: { base: '#5f5850', dot: '#4a443e' }, grass: { base: '#46542f', dot: '#3a4727' }, dirt: { base: '#7a6243', dot: '#665136' },
@@ -2390,11 +2396,18 @@ ${SHOP_JS}
     var me = { kind: 'actor', level: 'full', label: b.actor.name, id: b.actor.id, avatar: b.actor.avatar };
     if (!b.actor.transit) push(b.actor.spot_id, me);
     b.presences.forEach(function (p) { if (!p.moving) push(p.spot_id, p); });
-    var clips = 0;
+    // Más de tres vecinos de relleno en un punto (la cena): una sola ficha con el número.
+    Object.keys(tokens).forEach(function (sid) {
+      var ex = tokens[sid].filter(function (t) { return t.extra; });
+      if (ex.length <= 3) return;
+      tokens[sid] = tokens[sid].filter(function (t) { return !t.extra; }).concat([{ kind: 'npc', extra: true, level: 'full', group: ex.length, label: ex.length + ' vecinos' }]);
+    });
+    var clips = 0, placed = {};
     // Con retrato, la cara dentro del aro; debajo queda la inicial, que es lo que se ve hasta que carga (o si falla).
     var token = function (t, x, y) {
-      var ring = RING[t.kind], letter = t.level === 'full' ? initial(t.label) : '?';
-      var rr = t.level === 'hint' ? tokR * 0.75 : tokR, ringR = rr - Math.max(1.5, rr * 0.14);
+      var ring = t.extra ? RING.extra : RING[t.kind], letter = t.group ? String(t.group) : t.level === 'full' ? initial(t.label) : '?';
+      var rr = (t.level === 'hint' ? tokR * 0.75 : tokR) * (t.extra ? 0.7 : 1), ringR = rr - Math.max(1.5, rr * 0.14);
+      if (t.id) placed[t.id] = [x, y];
       var face = '';
       if (t.avatar && t.level === 'full') {
         var cid = 'tk-' + (++clips);
@@ -2402,7 +2415,7 @@ ${SHOP_JS}
           '<image class="face' + (tokenFaces[t.avatar] ? ' on' : '') + '" href="' + escapeHtml(t.avatar) + '" x="' + r1(x - ringR) + '" y="' + r1(y - ringR) + '" width="' + r1(ringR * 2) + '" height="' + r1(ringR * 2) +
           '" preserveAspectRatio="xMidYMid slice" clip-path="url(#' + cid + ')"/>';
       }
-      return '<g class="token ' + t.kind + ' ' + t.level + (face ? ' has-face' : '') + '"' + (t.id ? ' data-id="' + escapeHtml(t.id) + '"' : '') + '><circle class="disc" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr) + '"/>' +
+      return '<g class="token ' + t.kind + ' ' + t.level + (t.extra ? ' extra' : '') + (face ? ' has-face' : '') + '"' + (t.id ? ' data-id="' + escapeHtml(t.id) + '"' : '') + '><circle class="disc" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr) + '"/>' +
         '<text x="' + r1(x) + '" y="' + r1(y) + '" fill="' + ring + '" font-size="' + r1(rr * 0.95) + '">' + escapeHtml(letter) + '</text>' + face +
         '<circle class="ring" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(ringR) + '" fill="none" stroke="' + ring + '" stroke-width="' + r1(Math.max(2, rr * 0.26)) + '"/>' +
         (t.kind === 'actor' ? '<circle cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + r1(rr + 2.5) + '" fill="none" stroke="' + ring + '" stroke-opacity=".45" stroke-width="2"/>' : '') + leadDot(t, x, y, rr) + '</g>';
@@ -2418,7 +2431,11 @@ ${SHOP_JS}
       // El tablero solo nombra personajes: el nombre del punto no se pinta (sale en el tooltip y en «Cerca de ti»).
       o.push('<circle class="hit" cx="' + r1(px) + '" cy="' + r1(py) + '" r="' + r1(markR) + '"><title>' + escapeHtml(sp.name) + '</title></circle>');
       if (ts.length) {
-        var who = ts.map(function (t) { return t.kind === 'actor' ? 'tú' : t.label + (t.away ? ' (ausente)' : '') + (t.talking_with ? (t.talking_with === 'tú' ? ' (contigo)' : ' (con ' + t.talking_with.replace(/^tú y /, 'contigo y ') + ')') : ''); }).join(', ');
+        // Los vecinos de relleno, juntos al final: con más de uno, «y 2 vecinos».
+        var ex = ts.filter(function (t) { return t.extra; }), nEx = ex.reduce(function (n, t) { return n + (t.group || 1); }, 0);
+        var who = ts.filter(function (t) { return !t.extra; }).map(function (t) { return t.kind === 'actor' ? 'tú' : t.label + (t.away ? ' (ausente)' : '') + (t.talking_with ? (t.talking_with === 'tú' ? ' (contigo)' : ' (con ' + t.talking_with.replace(/^tú y /, 'contigo y ') + ')') : ''); });
+        if (nEx) who.push(nEx === 1 ? ex[0].label : nEx + ' vecinos');
+        who = who.join(', ');
         if (who.length > 40) who = who.slice(0, 39) + '…';
         o.push('<text class="who" x="' + r1(px) + '" y="' + r1(py + markR + 10) + '">' + escapeHtml(who) + '</text>');
       }
@@ -2433,13 +2450,25 @@ ${SHOP_JS}
     if (b.actor.transit) o.push(token(me, X(b.actor.x), Y(b.actor.y)));
     o.push('</svg>');
 
-    var where = '<div class="where"><b>' + escapeHtml(b.location.name) + '</b><span>· ' + escapeHtml(LIGHT[b.location.light] || b.location.light) +
-      (b.actor.transit ? ' · de camino a ' + escapeHtml(b.actor.transit.destination_name) : '') + '</span>' +
+    var where = '<div class="where"><b>' + escapeHtml(b.location.name) + '</b><span>' + escapeHtml(LIGHT[b.location.light] || b.location.light) +
+      (b.actor.transit ? ', de camino a ' + escapeHtml(b.actor.transit.destination_name) : '') + '</span>' +
       '<button type="button" data-toggle-big title="' + (big ? 'Volver al panel (Esc)' : 'Ver el tablero en grande') + '">' + (big ? 'Cerrar' : 'Ampliar') + '</button></div>';
     var legend = '<div class="legend"><span><i style="border-color:' + RING.actor + '"></i>tú</span><span><i style="border-color:' + RING.character + '"></i>personaje</span>' +
-      '<span><i style="border-color:' + RING.npc + '"></i>PNJ</span><span>? lo intuyes</span><span>pasa el ratón para ver qué hay</span>' +
+      '<span><i style="border-color:' + RING.npc + '"></i>PNJ</span><span><i style="border-color:' + RING.extra + '"></i>vecino</span><span>? lo intuyes</span><span>pasa el ratón para ver qué hay</span>' +
       '<span>casilla ' + String(cm).replace('.', ',') + ' m</span></div>';
     board.innerHTML = where + o.join('') + legend + '<div class="tip"></div>';
+    // Quien cambia de punto en el mismo sitio se desliza desde donde estaba (sin saltos).
+    if (boardPosLoc === b.location.id) {
+      board.querySelectorAll('g.token[data-id]').forEach(function (g) {
+        var id = g.getAttribute('data-id'), was = boardPos[id], now = placed[id];
+        if (!was || !now || (Math.abs(was[0] - now[0]) < 1 && Math.abs(was[1] - now[1]) < 1)) return;
+        g.style.transform = 'translate(' + r1(was[0] - now[0]) + 'px,' + r1(was[1] - now[1]) + 'px)';
+        g.getBoundingClientRect();
+        g.classList.add('slide');
+        g.style.transform = '';
+      });
+    }
+    boardPos = placed; boardPosLoc = b.location.id;
     board.querySelectorAll('.token image.face:not(.on)').forEach(function (img) {
       img.addEventListener('load', function () { tokenFaces[img.getAttribute('href')] = true; img.classList.add('on'); });
       img.addEventListener('error', function () { img.remove(); });
@@ -3109,6 +3138,7 @@ ${SHOP_JS}
       });
     });
     stream.addEventListener('sheet', loadSheet);
+    stream.addEventListener('board', function () { loadBoard(); });
     stream.addEventListener('sheet', loadShop);
     stream.addEventListener('moment', function (e) { var x = JSON.parse(e.data); showMoment(x, x.seq); });
     stream.addEventListener('portrait', function (e) {

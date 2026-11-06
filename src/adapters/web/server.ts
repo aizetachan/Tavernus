@@ -385,7 +385,10 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     }) ?? (() => {});
     // La hoja se refresca cuando cambia algo del PJ o de los ítems.
     let sheetTimer: NodeJS.Timeout | null = null;
+    // Un NPC cambia de sitio sin aviso (el relleno, extras.ts): el tablero se vuelve a pedir, sin línea en el chat.
+    let boardTimer: NodeJS.Timeout | null = null;
     const offChange = engine.world.onChange((ch) => {
+      if (ch.collection === 'npcs' && !boardTimer) boardTimer = setTimeout(() => { boardTimer = null; for (const id of streams.keys()) send(id, 'board', {}); }, 500);
       // Rumores (campaña) y memoria de los NPC: el diario también los recoge.
       if (ch.collection === 'campaign' || ch.collection === 'npcs') for (const id of streams.keys()) notifyJournal(id);
       if (ch.collection === 'characters' || ch.collection === 'npcs') scheduleFights();
@@ -654,6 +657,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         if (fightTimer) clearTimeout(fightTimer);
         for (const t of offlineTimers.values()) clearTimeout(t);
         if (sheetTimer) clearTimeout(sheetTimer);
+        if (boardTimer) clearTimeout(boardTimer);
         for (const t of journalTimers.values()) clearTimeout(t);
         for (const set of streams.values()) for (const res of set) res.end();
         streams.clear();
