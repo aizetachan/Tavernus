@@ -12,7 +12,7 @@ import { GENRE_NAMES, SRD_CATALOG_VERSION, SRD_ITEMS, SRD_MOUNTS, SRD_VEHICLES, 
 import { spellById } from '../src/data/srd/spells.js';
 import { makeSeed } from '../src/data/seed/demo.js';
 import { rollExpr } from '../src/engine/dice.js';
-import { ITEM_TYPES, itemDefErrors } from '../src/engine/items.js';
+import { ITEM_TYPES, itemDefErrors, normalizeItemDef } from '../src/engine/items.js';
 import { Engine } from '../src/engine/engine.js';
 import type { ItemDef, WorldSnapshot } from '../src/engine/model.js';
 import { MemoryRepository } from '../src/persistence/memory.js';
@@ -192,6 +192,8 @@ describe('el catálogo SRD', () => {
         const tag = `${genre} ${d.id}`;
         // La validación del modelo (bloque A): subtipos, propiedades, alcance, munición, magia con rareza, conjuros.
         expect(itemDefErrors(d, (id) => !!spellById(id)), tag).toEqual([]);
+        // Ya en la forma que deja migrate: si no, cada arranque la «cambiaría» y la partida la guardaría.
+        expect(normalizeItemDef(structuredClone(d)), tag).toBe(false);
         expect(d.id, tag).toMatch(/^it_[a-z0-9_]+$/);
         expect(d.name.trim(), tag).not.toBe('');
         expect(d.name, tag).toBe(d.name.trim());

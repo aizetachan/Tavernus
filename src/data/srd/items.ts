@@ -34,6 +34,7 @@
  */
 
 import type { AmmoType, ItemDef, ItemRarity, ItemSize, ItemSubtype, ItemType, WeaponProperty, WeaponSubtype } from '../../engine/model.js';
+import { WEAPON_PROPERTIES } from '../../engine/items.js';
 
 /** Sube con cualquier cambio de una definición de este fichero. */
 export const SRD_CATALOG_VERSION = 1;
@@ -98,7 +99,8 @@ function weapon(
       ...(p.has('finesse') ? { finesse: true } : {}),
       ...(ranged ? { ranged: true } : {}),
       ...(p.has('two_handed') ? { two_handed: true } : {}),
-      properties,
+      // En el orden de WEAPON_PROPERTIES, el que deja normalizeItemDef (si no, cada arranque la «cambiaría»).
+      properties: WEAPON_PROPERTIES.filter((x) => p.has(x)),
       ...(range ? { range } : {}),
       ...(versatile_damage ? { versatile_damage } : {}),
       ...(ammo_type ? { ammo_type } : {}),
