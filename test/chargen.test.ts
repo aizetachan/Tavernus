@@ -142,8 +142,9 @@ describe('creación por la web', () => {
     expect(p.abilities.find((a) => a.id === 'dex')).toMatchObject({ total: 17, modifier: 3 });
     expect(p.saves.filter((s) => s.proficient).map((s) => s.id)).toEqual(['dex', 'int']);
     expect(p.skills.map((s) => s.id).sort()).toEqual(['acrobatics', 'athletics', 'deception', 'insight', 'investigation', 'perception', 'stealth']);
-    expect(p.equipment).toContainEqual({ name: 'armadura de cuero', quantity: 1 });
-    expect(p.equipment).toContainEqual({ name: 'daga', quantity: 2 });
+    expect(p.equipment).toContainEqual({ name: 'armadura de cuero', quantity: 1, from: 'class' });
+    expect(p.equipment).toContainEqual({ name: 'daga', quantity: 2, from: 'class' });
+    expect(p.equipment).toContainEqual({ name: 'palanca', quantity: 1, from: 'background' });
     expect((await games.list())).toHaveLength(0);
 
     for (const [body, field] of [

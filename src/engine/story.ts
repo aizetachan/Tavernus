@@ -59,7 +59,7 @@ import { roleLabel } from './narrate.js';
 import { addReputation, checkAchievement, grantClue, type ProgressEvent, type QuestChange } from './progress.js';
 import { RUMOR_KINDS, type Rumor, type RumorKind } from './rumors.js';
 import type { NpcRoutine, ScheduledEvent } from './schedule.js';
-import { money } from './money.js';
+import { money, receive } from './money.js';
 import { hasTag, opinionOf } from './standing.js';
 import { hasFact } from './worldfacts.js';
 import { adjustTrust, TRUST_LABEL, TRUST_THRESHOLD, trustAtLeast, type TrustChange, type TrustResult, trustNotice } from './trust.js';
@@ -1142,7 +1142,7 @@ function complete(world: World, c: Character, q: StoryQuest, nowS: number, o: St
   st.done.push(q.id);
   const r = q.reward;
   const bits: string[] = [];
-  if (r.coins) { c.coins += r.coins; bits.push(`+${money(world, r.coins)}`); }
+  if (r.coins) { receive(world, c.id, r.coins); bits.push(`+${money(world, r.coins)}`); }
   if (r.xp) { c.xp += r.xp; bits.push(`+${r.xp} PX`); }
   if (r.reputation) bits.push(`reputación en ${world.campaign.factions.find((f) => f.id === world.campaign.achievement.faction_id)?.name ?? 'la aldea'}: ${addReputation(world, c, world.campaign.achievement.faction_id, r.reputation)}`);
   if (r.item_id && world.itemDefs.has(r.item_id)) {

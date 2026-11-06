@@ -12,7 +12,7 @@ import type { Engine } from './engine.js';
 import { attackProfile } from './itemrules.js';
 import { isDying, isStable } from './death.js';
 import { debtLine, openDebts } from './debts.js';
-import { money } from './money.js';
+import { coinsAt, coinsOf, money, pursesOf } from './money.js';
 import { abilityModifier, proficiencyBonus } from './dice.js';
 import type { InfoIntent } from './fastpath.js';
 import { RULE_TERMS } from './fastpath.js';
@@ -108,7 +108,11 @@ export function answerInfo(engine: Engine, c: Character, intent: InfoIntent): In
     case 'coins': {
       const now = engine.nowFor(c);
       const debts = openDebts(c).map((d) => debtLine(w, d, now, (n) => npcLabel(c, n)));
-      return { title: 'Monedas', lines: [c.coins > 0 ? `Llevas ${money(w, c.coins)}.` : 'No llevas ni una moneda.', ...debts.map((d) => `${d}.`)] };
+      const total = coinsOf(w, c.id);
+      // Con más de una bolsa, cuánto hay en cada una (la escondida en la mochila también).
+      const purses = pursesOf(w, c.id).filter((p) => coinsAt(p) > 0);
+      const each = purses.length > 1 ? purses.map((p) => `En ${w.itemDef(p.item_id).name}${p.location.type === 'container' ? ` (dentro de ${w.itemDef(w.itemInstance(p.location.id).item_id).name})` : ''}: ${money(w, coinsAt(p))}.`) : [];
+      return { title: 'Monedas', lines: [total > 0 ? `Llevas ${money(w, total)}.` : 'No llevas ni una moneda.', ...each, ...debts.map((d) => `${d}.`)] };
     }
     case 'hp': {
       const state = c.status === 'dead' ? 'Muerto.'

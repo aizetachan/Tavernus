@@ -38,10 +38,19 @@ export interface ClassDef {
   /** Competencia con armaduras y escudo (SRD). */
   armor: ArmorProficiency[];
   /** Equipo inicial: ids del catálogo y dónde va. */
-  equipment: { item_id: string; quantity?: number; slot: 'hand_main' | 'hand_off' | 'body' | 'back' | 'pack' | 'pocket' }[];
+  equipment: StartingItem[];
 }
 
-export interface BackgroundDef { id: string; name: string; description: string; skills: string[] }
+/** Un objeto del equipo inicial y dónde va (`ring`: puesto en un dedo). */
+export interface StartingItem { item_id: string; quantity?: number; slot: 'hand_main' | 'hand_off' | 'body' | 'back' | 'pack' | 'pocket' | 'ring' }
+
+export interface BackgroundDef {
+  id: string; name: string; description: string; skills: string[];
+  /** La ropa que lleva puesta (src/data/srd/gear.ts): en el cuerpo, o en la mochila si la clase lleva armadura. */
+  clothes: string;
+  /** Lo que lleva por su trasfondo, además del equipo de la clase (gear.ts). La bolsa con el dinero va aparte (bloque D). */
+  equipment: StartingItem[];
+}
 
 export const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8] as const;
 export const ABILITIES: Ability[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
@@ -76,12 +85,18 @@ export const CLASSES: ClassDef[] = [
 ];
 
 export const BACKGROUNDS: BackgroundDef[] = [
-  { id: 'acolyte', name: 'Acólito', description: 'Criado en un templo. Perspicacia, Religión.', skills: ['insight', 'religion'] },
-  { id: 'criminal', name: 'Criminal', description: 'Sabes cómo se hacen las cosas fuera de la ley. Engaño, Sigilo.', skills: ['deception', 'stealth'] },
-  { id: 'folk-hero', name: 'Héroe del pueblo', description: 'La gente sencilla te recuerda. Trato con animales, Supervivencia.', skills: ['animal_handling', 'survival'] },
-  { id: 'noble', name: 'Noble', description: 'Nombre, tierras y deudas. Historia, Persuasión.', skills: ['history', 'persuasion'] },
-  { id: 'sage', name: 'Erudito', description: 'Años entre libros. Arcanos, Historia.', skills: ['arcana', 'history'] },
-  { id: 'soldier', name: 'Soldado', description: 'Has servido y has visto. Atletismo, Intimidación.', skills: ['athletics', 'intimidation'] },
+  { id: 'acolyte', name: 'Acólito', description: 'Criado en un templo. Perspicacia, Religión.', skills: ['insight', 'religion'],
+    clothes: 'it_ropa_viaje', equipment: [{ item_id: 'it_simbolo_sagrado', slot: 'pocket' }, { item_id: 'it_libro_oraciones', slot: 'pack' }, { item_id: 'it_incienso', quantity: 5, slot: 'pack' }, { item_id: 'it_vestiduras', slot: 'pack' }] },
+  { id: 'criminal', name: 'Criminal', description: 'Sabes cómo se hacen las cosas fuera de la ley. Engaño, Sigilo.', skills: ['deception', 'stealth'],
+    clothes: 'it_ropa_oscura', equipment: [{ item_id: 'it_palanca', slot: 'pack' }] },
+  { id: 'folk-hero', name: 'Héroe del pueblo', description: 'La gente sencilla te recuerda. Trato con animales, Supervivencia.', skills: ['animal_handling', 'survival'],
+    clothes: 'it_ropa_viaje', equipment: [{ item_id: 'it_herramientas_carpintero', slot: 'pack' }, { item_id: 'it_pala', slot: 'pack' }, { item_id: 'it_olla_hierro', slot: 'pack' }] },
+  { id: 'noble', name: 'Noble', description: 'Nombre, tierras y deudas. Historia, Persuasión.', skills: ['history', 'persuasion'],
+    clothes: 'it_ropa_fina', equipment: [{ item_id: 'it_anillo_sello_pj', slot: 'ring' }, { item_id: 'it_pergamino_linaje', slot: 'pack' }] },
+  { id: 'sage', name: 'Erudito', description: 'Años entre libros. Arcanos, Historia.', skills: ['arcana', 'history'],
+    clothes: 'it_ropa_viaje', equipment: [{ item_id: 'it_tinta', slot: 'pack' }, { item_id: 'it_pluma', slot: 'pack' }, { item_id: 'it_cuchillo_pequeno', slot: 'pocket' }, { item_id: 'it_carta_colega', slot: 'pack' }] },
+  { id: 'soldier', name: 'Soldado', description: 'Has servido y has visto. Atletismo, Intimidación.', skills: ['athletics', 'intimidation'],
+    clothes: 'it_ropa_viaje', equipment: [{ item_id: 'it_insignia', slot: 'pocket' }, { item_id: 'it_trofeo', slot: 'pack' }, { item_id: 'it_dados', slot: 'pocket' }] },
 ];
 
 /**

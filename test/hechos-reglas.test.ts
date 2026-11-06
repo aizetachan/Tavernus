@@ -31,6 +31,7 @@ import { SKILLS } from '../src/engine/rules.js';
 import type { Character, GameEvent, Npc } from '../src/engine/model.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
+import { coinsOf } from '../src/engine/money.js';
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 
 async function boot() {
@@ -262,10 +263,10 @@ describe('Ceniza vuelve a casa (Brezal)', () => {
   it('el precio, la CD social y el nivel de confianza salen de la opinión', async () => {
     const { engine, c, brenna } = await devolverCeniza();
     const beer = brenna.sells[0]!;
-    const before = c.coins;
+    const before = coinsOf(engine.world, c.id);
     const r = buyFromNpc(engine.world, c, 'npc_brenna', beer.item_id, 1);
     expect(r.ok).toBe(true);
-    expect(before - c.coins).toBe(priceFor(brenna, c.id, beer.price, 'buy'));
+    expect(before - coinsOf(engine.world, c.id)).toBe(priceFor(brenna, c.id, beer.price, 'buy'));
     expect(socialDcShift(brenna, c.id)).toBe(-2);
     // El máster pide Persuasión CD 15 con Brenna: el servidor la deja en 13.
     const ctx = ctxFor(engine, c);

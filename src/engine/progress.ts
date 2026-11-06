@@ -8,7 +8,7 @@ import { GAME_DAY } from '../clock/clock.js';
 import { consumeItem, spawnItem, transferItem } from './inventory.js';
 import { refusesService } from './crime.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
-import { money } from './money.js';
+import { coinsOf, money, pay, receive } from './money.js';
 import { priceFor } from './standing.js';
 import { discoverSpot } from './spots.js';
 import type { World } from './world.js';
@@ -75,7 +75,7 @@ export function completeJob(world: World, c: Character, jobId: Id, npcId: Id | n
     }
   }
   c.completed_jobs.push(jobId);
-  c.coins += job.reward_coins;
+  receive(world, c.id, job.reward_coins);
   const rep = addReputation(world, c, world.campaign.achievement.faction_id, job.reward_reputation);
   const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${money(world, job.reward_coins)}. Reputación en Brezal: ${rep}.`, quest: { id: job.id, title: job.title, event: 'done', why: `se lo ${job.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${giver.name} · +${money(world, job.reward_coins)}` } }];
   const ach = checkAchievement(world, c);
@@ -182,8 +182,7 @@ export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id,
   if (!r.ok) return { ok: false, reason: r.error.code };
   // Lo que piensa de él cambia el precio (standing.ts).
   const total = priceFor(npc, c.id, offer.price, 'sell') * q;
-  c.coins += total;
-  world.touch('characters', c.id);
+  receive(world, c.id, total);
   return { ok: true, item: world.itemDef(inst.item_id).name, quantity: q, total };
 }
 
@@ -197,10 +196,12 @@ export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, qu
   if (no) return { ok: false, reason: no };
   const q = Math.max(1, Math.floor(quantity));
   const total = priceFor(npc, c.id, offer.price, 'buy') * q;
-  if (c.coins < total) return { ok: false, reason: `faltan ${money(world, total - c.coins)}` };
+  const have = coinsOf(world, c.id);
+  if (have < total) return { ok: false, reason: `faltan ${money(world, total - have)}` };
   const r = deliverGoods(world, c, npc, itemId, q);
   if (!r.ok) return r;
-  c.coins -= total; world.touch('characters', c.id);
+  // El dinero pasa de su bolsa a la del vendedor (money.ts).
+  pay(world, c.id, total, npc.id);
   return { ok: true, item: r.item, quantity: q, total, unlocked: r.unlocked };
 }
 

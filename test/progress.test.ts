@@ -5,6 +5,7 @@ import { spawnItem } from '../src/engine/inventory.js';
 import { skillModifier } from '../src/engine/rules.js';
 import { bootEngine, fakeTime, freshWorld } from './helpers.js';
 
+import { coinsOf, setCoins } from '../src/engine/money.js';
 describe('progreso de la demo', () => {
   it('el tablón arranca con 3 encargos y rota cada día de juego', async () => {
     const time = fakeTime();
@@ -59,10 +60,10 @@ describe('progreso de la demo', () => {
     expect(completeJob(world, kael, jobId, 'npc_brenna')).toMatchObject({ ok: false, reason: 'Brenna no está aquí' });
     kael.location = { type: 'spot', id: 'sp_tab_barra' };
     expect(completeJob(world, kael, jobId, 'npc_doro')).toMatchObject({ ok: false });
-    const coins = kael.coins;
+    const coins = coinsOf(world, kael.id);
     const r = completeJob(world, kael, jobId, 'npc_brenna');
     expect(r).toMatchObject({ ok: true });
-    expect(kael.coins).toBe(coins + 60);
+    expect(coinsOf(world, kael.id)).toBe(coins + 60);
     expect(kael.reputation['fac_brezal']).toBe(1);
     expect(world.itemsCarriedBy(kael.id).filter((i) => i.item_id === 'it_madera').reduce((a, i) => a + i.quantity, 0)).toBe(0);
     expect(world.itemsIn({ type: 'npc', id: 'npc_brenna' }).reduce((a, i) => a + i.quantity, 0)).toBe(10);
@@ -87,13 +88,13 @@ describe('progreso de la demo', () => {
     spawnItem(world, 'it_madera', 3, { type: 'container', id: 'ii_kael_mochila' });
     const wood = world.itemsCarriedBy(kael.id).find((i) => i.item_id === 'it_madera')!;
     expect(sellToNpc(world, kael, 'npc_doro', wood.id)).toMatchObject({ ok: false });
-    const coins = kael.coins;
+    const coins = coinsOf(world, kael.id);
     expect(sellToNpc(world, kael, 'npc_brenna', wood.id, 2)).toEqual({ ok: true, item: 'leña', quantity: 2, total: 6 });
-    expect(kael.coins).toBe(coins + 6);
+    expect(coinsOf(world, kael.id)).toBe(coins + 6);
     expect(buyFromNpc(world, kael, 'npc_brenna', 'it_cerveza', 1)).toEqual({ ok: true, item: 'jarra de cerveza', quantity: 1, total: 4, unlocked: [] });
-    expect(kael.coins).toBe(coins + 2);
+    expect(coinsOf(world, kael.id)).toBe(coins + 2);
     expect(buyFromNpc(world, kael, 'npc_brenna', 'it_daga', 1)).toMatchObject({ ok: false });
-    kael.coins = 1;
+    setCoins(world, kael.id, 1);
     expect(buyFromNpc(world, kael, 'npc_brenna', 'it_cerveza', 1)).toMatchObject({ ok: false, reason: 'faltan 3 de cobre' });
   });
 });

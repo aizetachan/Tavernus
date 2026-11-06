@@ -87,6 +87,8 @@ Nada es infinito. El servidor decide si algo cabe; el máster solo lo narra.
 - **Carga por Fuerza.** Máximo Fuerza × 15 libras. Cargado, vas más lento; muy cargado, además con desventaja.
 - **Las monedas pesan.** 50 monedas son 1 libra, cuente lo que cuente cada una: 15 de oro pesan lo mismo que 15 de cobre.
 - **Oro, plata y cobre.** 1 de oro = 10 de plata = 100 de cobre. Se empieza con 1 de oro y 5 de plata. Una cerveza vale 4 de cobre, una noche de posada 2 de plata y una espada corta 10 de oro. Ver [[Decisiones]].
+- **El dinero va en tu bolsa.** Empiezas con una bolsa de cuero al cinto y tu dinero dentro. Puedes llevar más de una (una escondida en la mochila) y pasar monedas de una a otra. Pagar saca de la bolsa más a mano; cobrar mete en ella. Si te roban la bolsa, te roban lo que hay dentro; si mueres, cae con tu cuerpo.
+- **Robar dinero.** Se puede robar la bolsa entera o solo unas monedas de dentro, a un vecino o a otro jugador. A otro jugador nunca sin que lo decida él: le llega la petición y la acepta o se resiste con su tirada (Juego de manos contra su Percepción). Ver [[Multijugador]].
 - Un objeto está siempre **en un solo sitio**. Moverlo es atómico: nunca se duplica ni desaparece.
 - Si algo no cabe, el máster lo dice en ficción: «no te cabe, ¿sueltas algo o lo llevas en la mano?».
 
@@ -94,12 +96,16 @@ Nada es infinito. El servidor decide si algo cabe; el máster solo lo narra.
 
 Toda persona lleva algo real que se le puede robar o que se encuentra al registrarla. Nadie se lo inventa a mitad de partida:
 
-- **Una bolsa de cuero al cinto con unas monedas.** Cuántas depende de su oficio: el regidor lleva oro; el cazador, unos cobres. Si coges la bolsa, su dinero pasa a tus monedas.
+- **Una bolsa de cuero al cinto con unas monedas.** Cuántas depende de su oficio: el regidor lleva oro; el cazador, unos cobres. Si coges la bolsa, te llevas su dinero dentro; también puedes sacar solo unas monedas. Lo que pagas a un vecino va a su bolsa.
 - **Dentro, dos o tres cosas de su oficio.** La tabernera, un manojo de llaves; la curandera, hierbas secas y vendas; el herrero, clavos y yesca; el guardia, un silbato; el regidor, un anillo de sello.
 - **Su arma, si es de pelear.** La maza del alguacil, la lanza del guardia, el arco del cazador. Quien no pelea no la lleva a la vista.
-- Los animales no llevan nada.
+- **Su ropa, puesta.** El mandil del herrero, la sobreveste del guardia, la capa de buen paño del regidor. Se puede describir, manchar o quitar.
+- **Lo que la historia nombra.** En Brezal, la jarra con muesca de [[Brenna]], el guante con el ascua de [[Ysolde]], la cuerda trenzada de [[Úrsula]], las botas nuevas de [[Doro]] y los anillos de [[Osric Malvez]] son objetos de verdad. El martillo engrasado de [[La herrería]] cuelga en la fragua.
+- Los niños no llevan bolsa ni dinero, solo sus cosas. Los animales no llevan nada.
 
-Robar la bolsa o sacar algo de ella es robarle a esa persona: si alguien lo ve, es un robo, con sus testigos (ver [[#Crimen, testigos y ley]]). Lo que le quitas no vuelve a aparecer. Lo mismo vale para los mundos generados: la regla sale del oficio de cada uno, no de una lista escrita para Brezal.
+Lo que lleva cada uno sale en su ficha, en «Lleva encima», generado de los datos del juego.
+
+Robar la bolsa o sacar algo de ella es robarle a esa persona: si alguien lo ve, es un robo, con sus testigos (ver [[#Crimen, testigos y ley]]). Lo que le quitas no vuelve a aparecer. Lo mismo vale para los mundos generados: la regla sale del oficio de cada uno, no de una lista escrita para Brezal. Allí, además, cada persona lleva un objeto propio que inventa el generador (un relicario, una carta arrugada).
 
 ## Reglas de los objetos
 

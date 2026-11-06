@@ -12,7 +12,7 @@ import { MemoryRepository } from '../src/persistence/memory.js';
 import { executeTool, type ToolContext } from '../src/ai/tools.js';
 import { seededRng } from '../src/engine/dice.js';
 import { inventoryDetailed, inventoryView, packView, spawnItem } from '../src/engine/inventory.js';
-import { armorCategory, baseIdOf, chargesLeft, fillItemDefFrom, isIdentifiedBy, itemDefErrors, itemName, normalizeItemDef, weaponCategory, weaponProperties } from '../src/engine/items.js';
+import { armorCategory, baseIdOf, chargesLeft, fillItemDefFrom, isIdentifiedBy, itemDefErrors, itemName, normalizeItemDef, spellText, weaponCategory, weaponProperties } from '../src/engine/items.js';
 import { validateSnapshot } from '../src/worldgen/validate.js';
 import type { ItemDef, ItemInstance, WorldSnapshot } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
@@ -108,6 +108,28 @@ describe('modelo de objetos: validación', () => {
     expect(errs({ rarity: 'mythic' as never }).join()).toMatch(/rareza/);
   });
 
+  it('pergamino de nivel N: el conjuro va en el ejemplar, existe y es de ese nivel', () => {
+    const PERG = def({ id: 'it_perg1', name: 'pergamino de conjuro (nivel 1)', type: 'scroll', rarity: 'common', spell: { level: 1, save_dc: 13, attack_bonus: 5 } });
+    expect(itemDefErrors(PERG, spells)).toEqual([]);
+    expect(itemDefErrors({ ...PERG, type: 'wand' }, spells).join()).toMatch(/solo un pergamino/);
+    expect(spellText(PERG, inst(PERG.id, { spell_id: 'magic_missile' }))).toBe('Proyectil mágico (nivel 1)');
+    expect(spellText(PERG, inst(PERG.id))).toBe('un conjuro de nivel 1');
+    const snap = makeSeed();
+    snap.item_defs.push(PERG, VARITA);
+    const at = { type: 'spot' as const, id: 'sp_tab_barra' };
+    snap.item_instances.push(
+      { id: 'ii_ok', item_id: PERG.id, quantity: 1, location: at, state: { spell_id: 'magic_missile' } },
+      { id: 'ii_nivel', item_id: PERG.id, quantity: 1, location: at, state: { spell_id: 'dispel_magic' } },
+      { id: 'ii_nada', item_id: PERG.id, quantity: 1, location: at, state: { spell_id: 'no_existe' } },
+      { id: 'ii_fijo', item_id: VARITA.id, quantity: 1, location: at, state: { spell_id: 'magic_missile' } },
+    );
+    const errs = validateSnapshot(snap).join('\n');
+    expect(errs).not.toMatch(/ii_ok/);
+    expect(errs).toMatch(/ii_nivel: dispel_magic es de nivel 3 y el pergamino de nivel 1/);
+    expect(errs).toMatch(/ii_nada: el conjuro no_existe no está/);
+    expect(errs).toMatch(/ii_fijo: lleva spell_id, pero it_varita_prueba no deja el conjuro/);
+  });
+
   it('base_id: la variante dice de qué arma SRD sale; si la base está en la partida, es del mismo tipo', () => {
     expect(baseIdOf(ESPADA)).toBe(ESPADA.id);
     expect(baseIdOf({ ...ESPADA, base_id: 'it_daga' })).toBe('it_daga');
@@ -138,49 +160,66 @@ describe('modelo de objetos: validación', () => {
 
 describe('modelo de objetos: migración de partidas guardadas', () => {
   const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
+  /**
+   * Objetos propios de la prueba (`origin: 'custom'`), para que la sincronización del catálogo SRD (bloque B) no los
+   * toque y aquí se pruebe solo el relleno desde la semilla y la deducción de los datos, traiga lo que traiga makeSeed().
+   */
+  const c = (d: Partial<ItemDef> & Pick<ItemDef, 'id' | 'name' | 'type'>): ItemDef => def({ origin: 'custom', ...d });
+  const OLD: ItemDef[] = [
+    c({ id: 'it_t_daga', name: 'daga vieja', type: 'weapon', weapon: { damage: '1d4', damage_type: 'piercing', finesse: true } }),
+    c({ id: 'it_t_antorcha', name: 'antorcha vieja', type: 'misc', light_source: true }),
+    c({ id: 'it_t_malla', name: 'malla vieja', type: 'armor', size: 'large', armor: { ac_base: 16, dex_max: 0, stealth_disadvantage: true } }),
+    c({ id: 'it_t_cuero', name: 'cuero viejo', type: 'armor', size: 'large', armor: { ac_base: 11, dex_max: null, stealth_disadvantage: false } }),
+    c({ id: 'it_t_escamas', name: 'escamas viejas', type: 'armor', size: 'large', armor: { ac_base: 14, dex_max: 2, stealth_disadvantage: true } }),
+    c({ id: 'it_t_arco', name: 'arco viejo', type: 'weapon', size: 'large', weapon: { damage: '1d6', damage_type: 'piercing', ranged: true, two_handed: true } }),
+    c({ id: 'it_t_escudo', name: 'escudo viejo', type: 'armor', size: 'medium', shield_bonus: 2 }),
+    c({ id: 'it_t_mochila', name: 'mochila vieja', type: 'container', size: 'medium', container: { slots: 20, max_weight_lb: 60, max_size: 'medium' } }),
+  ];
   /** Una partida guardada con los tipos viejos y sin nada del modelo nuevo; la semilla de hoy ya lo trae. */
-  async function bootOld(): Promise<{ engine: Engine; saved: WorldSnapshot }> {
+  async function bootOld(): Promise<{ engine: Engine; seed: WorldSnapshot }> {
     const saved = makeSeed();
     const seed = makeSeed();
+    saved.item_defs.push(...structuredClone(OLD));
+    seed.item_defs.push(...structuredClone(OLD));
     const sd = (id: string) => seed.item_defs.find((d) => d.id === id)!;
-    Object.assign(sd('it_daga'), { subtype: 'simple_melee' });
-    sd('it_daga').weapon!.properties = ['finesse', 'light', 'thrown'];
-    sd('it_daga').weapon!.range = [20, 60];
-    Object.assign(sd('it_antorcha'), { type: 'gear', subtype: 'light' });
-    Object.assign(sd('it_cota_malla'), { subtype: 'heavy' });
-    sd('it_cota_malla').armor!.str_min = 13;
+    Object.assign(sd('it_t_daga'), { subtype: 'simple_melee' });
+    sd('it_t_daga').weapon!.properties = ['finesse', 'light', 'thrown'];
+    sd('it_t_daga').weapon!.range = [20, 60];
+    Object.assign(sd('it_t_antorcha'), { type: 'gear', subtype: 'light' });
+    Object.assign(sd('it_t_malla'), { subtype: 'heavy' });
+    sd('it_t_malla').armor!.str_min = 13;
     // Lo que la partida ya tiene no lo pisa la semilla.
-    Object.assign(sd('it_mochila'), { type: 'gear', subtype: 'container' });
-    saved.item_defs.find((d) => d.id === 'it_mochila')!.subtype = 'adventuring';
+    Object.assign(sd('it_t_mochila'), { type: 'gear', subtype: 'container' });
+    saved.item_defs.find((d) => d.id === 'it_t_mochila')!.subtype = 'adventuring';
     const repo = new MemoryRepository();
     await repo.saveSnapshot(saved);
     const time = fakeTime(EPOCH);
     const engine = await Engine.boot({ repo, campaignId: saved.campaign.id, seed, now: time.now, deterministic: true, fastTravel: false });
-    return { engine, saved };
+    return { engine, seed };
   }
 
   it('rellena lo que la semilla trae, deduce lo que sale de los datos y no pisa nada', async () => {
     const { engine } = await bootOld();
     const d = (id: string) => engine.world.itemDef(id);
-    expect(d('it_daga')).toMatchObject({ subtype: 'simple_melee', weapon: { finesse: true, properties: ['finesse', 'light', 'thrown'], range: [20, 60] } });
+    // La lista de propiedades queda en el orden de WEAPON_PROPERTIES (normalizeItemDef), venga como venga.
+    expect(d('it_t_daga')).toMatchObject({ subtype: 'simple_melee', weapon: { finesse: true, properties: ['light', 'finesse', 'thrown'], range: [20, 60] } });
     // Tipo viejo genérico → el de la semilla.
-    expect(d('it_antorcha')).toMatchObject({ type: 'gear', subtype: 'light' });
-    expect(d('it_cota_malla')).toMatchObject({ subtype: 'heavy', armor: { str_min: 13 } });
-    // Deducido de sus datos, sin semilla: la armadura de cuero es ligera; el arco, a dos manos.
-    expect(d('it_armadura_cuero').subtype).toBe('light');
-    expect(d('it_cota_escamas').subtype).toBe('medium');
-    expect(d('it_arco_corto').weapon!.properties).toEqual(['two_handed']);
+    expect(d('it_t_antorcha')).toMatchObject({ type: 'gear', subtype: 'light' });
+    expect(d('it_t_malla')).toMatchObject({ subtype: 'heavy', armor: { str_min: 13 } });
+    // Deducido de sus datos, sin semilla: el cuero es ligera; las escamas, intermedia; el arco, a dos manos.
+    expect(d('it_t_cuero').subtype).toBe('light');
+    expect(d('it_t_escamas').subtype).toBe('medium');
+    expect(d('it_t_arco').weapon!.properties).toEqual(['two_handed']);
     // El escudo no es armadura de cuerpo: su subtipo lo pone el catálogo, no la deducción.
-    expect(d('it_escudo').subtype).toBeUndefined();
+    expect(d('it_t_escudo').subtype).toBeUndefined();
     // Lo que ya tenía la partida se queda (pero el tipo genérico viejo sí pasa al de la semilla).
-    expect(d('it_mochila')).toMatchObject({ type: 'gear', subtype: 'adventuring' });
+    expect(d('it_t_mochila')).toMatchObject({ type: 'gear', subtype: 'adventuring' });
     // Y el mundo migrado sigue validando.
     expect(validateSnapshot(engine.world.snapshot())).toEqual([]);
   });
 
   it('es idempotente: una segunda pasada no cambia nada', async () => {
-    const { engine } = await bootOld();
-    const seed = makeSeed();
+    const { engine, seed } = await bootOld();
     for (const d of engine.world.itemDefs.values()) {
       const before = JSON.stringify(d);
       const sd = seed.item_defs.find((x) => x.id === d.id);
