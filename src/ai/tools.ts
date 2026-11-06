@@ -2213,7 +2213,9 @@ ${forcedTail}` : '');
           .map((t) => capFirst(maskUnknownNames(world, actor.id, t, unknownNpcsNamed(world, actor.id, t).filter((n) => heardName(n)).map((n) => n.id))))
           // Una opción con etiqueta (worldrules.ts), como las de BG3: «[Soldado] Hablarle de tú a tú (Persuasión CD 12)».
           .concat(req ? [] : freshTagOptions(tagOptions(world, actor, (k) => SKILLS[k]?.es ?? k), engine.events.all(), actor.id, nowGameS).slice(0, 1))
-          .filter((t, i, all) => all.indexOf(t) === i).slice(-4)
+          .filter((t, i, all) => all.indexOf(t) === i)
+          // Con cinco, la opción con etiqueta ocupa el sitio de la última del máster, no el de la primera.
+          .filter((_, i, all) => all.length <= 4 || i < 3 || i === all.length - 1)
           // Un careo abierto (conflict.ts): los botones son arreglarlo o huir.
           .filter(() => !confrontOf(world, actor, nowGameS))
           .concat(req ? [] : confrontButtons(world, actor, nowGameS)),

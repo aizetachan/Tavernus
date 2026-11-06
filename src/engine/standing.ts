@@ -74,7 +74,11 @@ export function changeOpinion(world: World, n: Npc, c: Character, delta: number,
   const steps = opinionBand(to) - opinionBand(from);
   if (steps) {
     const cur = n.attitude.by_character[c.id] ?? n.attitude.default;
-    const next = BY_RANK[Math.max(0, Math.min(4, RANK[cur] + steps))]!;
+    let rank = Math.max(0, Math.min(4, RANK[cur] + steps));
+    // Bajando, la opinión sola solo deja hostil por debajo de −40: lo que ya bajó otro sistema (el crimen) no se
+    // suma al umbral hasta volver a alguien hostil (y meterlo en el combate).
+    if (steps < 0 && opinionBand(to) > -2) rank = Math.max(rank, Math.min(RANK[cur], RANK.unfriendly));
+    const next = BY_RANK[rank]!;
     if (next !== cur) { n.attitude.by_character[c.id] = next; attitude = { from: cur, to: next }; }
   }
   world.touch('npcs', n.id);
@@ -112,11 +116,15 @@ export function socialDcShift(n: Npc, characterId: Id): number {
   return steps === 0 ? 0 : -steps;
 }
 
-/** Factor de precio por la opinión: ≥ +40, un 20 % menos; ≥ +10, un 10 %; ≤ −10, un 20 % más. Al venderle, al revés. */
+/**
+ * Factor de precio por la opinión: ≥ +40, un 20 % menos; ≥ +10, un 10 %; ≤ −10, un 20 % más. Al venderle, quien no
+ * te quiere te paga un 20 % menos, pero nadie paga más que su lista: si no, comprar barato a uno y vender caro a
+ * otro daría dinero sin fin.
+ */
 export function priceFactor(n: Npc, characterId: Id, mode: 'buy' | 'sell'): number {
   const v = opinionOf(n, characterId);
   const f = v >= OPINION_THRESHOLDS.allied ? 0.8 : v >= OPINION_THRESHOLDS.friendly ? 0.9 : v <= OPINION_THRESHOLDS.wary ? 1.2 : 1;
-  return mode === 'buy' ? f : 2 - f;
+  return mode === 'buy' ? f : Math.min(1, 2 - f);
 }
 
 /** El precio para este PJ (en la moneda más pequeña), nunca menos de 1 si costaba algo. */
