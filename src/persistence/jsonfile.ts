@@ -8,8 +8,8 @@ import { joinDiagnostics, splitDiagnostics } from './diagnostics.js';
 import type { WorldDump } from './pg.js';
 
 /**
- * Persistencia en ficheros JSON en disco: la de siempre en local y en el VPS (WORLD_STORE=json, por defecto).
- * La otra es PostgreSQL (pg.ts, WORLD_STORE=pg). En la carpeta de datos de cada partida:
+ * Persistencia en ficheros JSON en disco: la de antes del 6-11-2026, hoy el escape (WORLD_STORE=json). La de
+ * por defecto es PostgreSQL (pg.ts, WORLD_STORE=pg). En la carpeta de datos de cada partida:
  *
  *   <id>.world.json     el mundo entero, reescrito en cada guardado. Se escribe en un temporal y se renombra:
  *                       un corte a mitad deja el anterior, nunca uno roto. Lleva el punto de control del

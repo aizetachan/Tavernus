@@ -1391,7 +1391,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         json(res, 200, {
           ok: true,
           games: (await games.list()).map((g) => ({
-            slug: g.slug, name: g.name, mode: g.mode, demo: g.demo, created_at: g.created_at, last_opened_at: g.last_opened_at, characters: g.characters,
+            slug: g.slug, name: g.name, mode: g.mode, demo: g.demo, obsolete: g.obsolete, created_at: g.created_at, last_opened_at: g.last_opened_at, characters: g.characters,
             owner: owners.get(g.slug) ?? null, players: seated.filter((s) => s.game_slug === g.slug).map((s) => ({ id: s.id, username: s.username })),
           })),
         });
@@ -1403,18 +1403,19 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         const m = await games.get(gm[1]!);
         if (!m) { json(res, 404, { ok: false, text: 'No existe esa partida.' }); return; }
         const info = await games.info(m);
-        const rt = await runtime(m.slug);
-        const list = await ensureSeats(m.slug);
+        // Una partida obsoleta (de antes de guardar el mundo en la base) no se abre: sus asientos, como están.
+        const rt = info.obsolete ? null : await runtime(m.slug);
+        const list = rt ? await ensureSeats(m.slug) : await accounts.seats(m.slug);
         const names = new Map((await accounts.listUsers()).map((u) => [u.id, u.username]));
         json(res, 200, {
           ok: true,
-          game: { slug: m.slug, name: m.name, mode: m.mode, demo: m.demo, campaign_id: m.campaign_id, created_at: m.created_at, last_opened_at: m.last_opened_at, characters: info.characters },
+          game: { slug: m.slug, name: m.name, mode: m.mode, demo: m.demo, obsolete: info.obsolete, campaign_id: m.campaign_id, created_at: m.created_at, last_opened_at: m.last_opened_at, characters: info.characters },
           owner: (await accounts.owners()).get(m.slug) ?? null,
           seats: list.map((s) => ({
             id: s.id, label: s.label, host: s.host, character_id: s.character_id,
-            character_name: s.character_id ? rt.engine.world.characters.get(s.character_id)?.name ?? null : null,
+            character_name: s.character_id ? rt?.engine.world.characters.get(s.character_id)?.name ?? null : null,
             user: s.user_id ? { id: s.user_id, username: names.get(s.user_id) ?? '?' } : null,
-            last_seen_at: s.last_seen_at, online: s.character_id ? rt.online(s.character_id) : false,
+            last_seen_at: s.last_seen_at, online: s.character_id && rt ? rt.online(s.character_id) : false,
           })),
         });
         return;
@@ -1706,10 +1707,13 @@ export async function startWeb(games: GameManager, port: number, env: NodeJS.Pro
   const catalog = new DbCatalog(db, games.root);
   await catalog.importFolders((m) => console.log(m));
   games.useCatalog(catalog);
-  // El mundo de cada partida: en su carpeta (JSON, por defecto) o en esta misma base (WORLD_STORE=pg, src/games/worlds.ts).
+  // El mundo de cada partida: en esta misma base (WORLD_STORE=pg, por defecto) o en su carpeta (json; src/games/worlds.ts).
   if (worldStoreFromEnv(env) === 'pg') {
     games.useWorldStore(new PgWorldStore(db));
-    console.log('[web] mundos de las partidas: en la base (WORLD_STORE=pg); las de antes pasan de su carpeta al abrirlas');
+    const old = (await games.list()).filter((g) => g.obsolete).length;
+    console.log(`[web] mundos de las partidas: en la base (WORLD_STORE=pg)${old ? `; ${old} de antes, en JSON, se conservan como obsoletas (no se abren)` : ''}`);
+  } else {
+    console.log('[web] mundos de las partidas: en su carpeta, en JSON (WORLD_STORE=json)');
   }
   const accounts = new Accounts(db);
   // Primer administrador sin navegador (también: npm run admin -- <usuario>).

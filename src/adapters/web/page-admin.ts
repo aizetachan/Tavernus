@@ -222,9 +222,9 @@ export function adminPage(): string {
         var h = '<table><thead><tr><th>Partida</th><th class="hide-sm">Máster</th><th>Dueño</th><th>Juegan</th><th class="hide-sm">Última vez</th><th></th></tr></thead><tbody>';
         list.forEach(function (g) {
           h += '<tr class="u"><td><b>' + gameLink(g) + '</b><div class="muted">' + esc(g.characters.join(', ') || 'sin personajes') + '</div></td>' +
-            '<td class="hide-sm">' + esc(MODE[g.mode] || g.mode) + (g.demo ? ' (demo)' : '') + '</td><td>' + userLink(g.owner) + '</td>' +
+            '<td class="hide-sm">' + esc(MODE[g.mode] || g.mode) + (g.demo ? ' (demo)' : '') + (g.obsolete ? '<span class="tag off">obsoleta</span>' : '') + '</td><td>' + userLink(g.owner) + '</td>' +
             '<td>' + (g.players.length ? g.players.map(userLink).join(', ') : '<span class="muted">nadie con cuenta</span>') + '</td>' +
-            '<td class="hide-sm">' + esc(day(g.last_opened_at || g.created_at)) + '</td><td class="num">' + playLink(g.slug) + '</td></tr>';
+            '<td class="hide-sm">' + esc(day(g.last_opened_at || g.created_at)) + '</td><td class="num">' + (g.obsolete ? '' : playLink(g.slug)) + '</td></tr>';
         });
         $('list').innerHTML = h + '</tbody></table>';
       }
@@ -240,10 +240,12 @@ export function adminPage(): string {
       if (!d.ok) return fail(d.text);
       var g = d.game;
       document.title = g.name + ' — Administración — Tavernus';
-      var h = '<a class="back" href="/admin/partidas">← Partidas</a><h1>' + esc(g.name) + (g.demo ? '<span class="tag host">demo</span>' : '') + '</h1>' +
+      var h = '<a class="back" href="/admin/partidas">← Partidas</a><h1>' + esc(g.name) + (g.demo ? '<span class="tag host">demo</span>' : '') + (g.obsolete ? '<span class="tag off">obsoleta</span>' : '') + '</h1>' +
         '<dl class="info"><dt>Máster</dt><dd>' + esc(MODE[g.mode] || g.mode) + '</dd><dt>Creada</dt><dd>' + esc(day(g.created_at)) + '</dd><dt>Última vez</dt><dd>' + esc(day(g.last_opened_at)) + '</dd>' +
         '<dt>Personajes</dt><dd>' + esc(g.characters.join(', ') || 'ninguno') + '</dd></dl>' +
-        '<div class="actions">' + playLink(g.slug, 'Abrir la partida') + '<a class="btn ghost sm" href="/invitaciones?game=' + encodeURIComponent(g.slug) + '">Invitaciones</a></div>';
+        (g.obsolete
+          ? '<p class="muted">Partida de antes de que el mundo se guardara en la base: se conserva tal como quedó, en su carpeta, pero ya no se abre.</p>'
+          : '<div class="actions">' + playLink(g.slug, 'Abrir la partida') + '<a class="btn ghost sm" href="/invitaciones?game=' + encodeURIComponent(g.slug) + '">Invitaciones</a></div>');
       h += '<h2>Dueño</h2><p>' + (d.owner ? userLink(d.owner) : '<span class="muted">Sin dueño.</span>') + '</p>' +
         '<div class="row-form"><input type="text" id="assign" placeholder="Usuario" aria-label="Usuario al que asignar la partida"><button class="btn ghost sm" id="assign-go">Asignar a este usuario</button><span class="error" id="assign-err" role="alert"></span></div>';
       h += '<h2>Asientos</h2>';

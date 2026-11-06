@@ -261,9 +261,9 @@ como mucho los últimos 30 segundos.
 Desde el 4 de noviembre de 2026 la web tiene cuentas de usuario (docs/MULTIJUGADOR.md, «Cuentas») y
 guarda en PostgreSQL lo que es de la plataforma: usuarios, sesiones, el catálogo de partidas (lo que
 era `game.json`, que se sigue escribiendo en cada carpeta como copia legible), los asientos (lo que era
-`seats.json`), la biblioteca de personajes y el registro del panel de administración. El mundo de cada
-partida (su estado, eventos, imágenes) sigue en su carpeta de `games/`, salvo que se active
-`WORLD_STORE=pg` (abajo, «El mundo de las partidas en la base»).
+`seats.json`), la biblioteca de personajes y el registro del panel de administración. Desde el 6 de
+noviembre de 2026, también el mundo de cada partida (estado, eventos y tickers; abajo, «El mundo de las
+partidas en la base»). Las imágenes, la caché del máster y `budget.json` siguen en su carpeta de `games/`.
 
 - **Instalación:** `setup-vps.sh` instala el PostgreSQL de la distribución, le pone una configuración
   de poca memoria (`conf.d/90-tavernus.conf`: 64 MB de `shared_buffers`, 30 conexiones), crea el rol y
@@ -282,43 +282,46 @@ partida (su estado, eventos, imágenes) sigue en su carpeta de `games/`, salvo q
 - **Sin la base, la web no arranca** en modo `public` o `invite`, y `release.sh` no cambia de versión
   si no la encuentra (deja la anterior en marcha y dice qué hacer).
 
-### El mundo de las partidas en la base (`WORLD_STORE=pg`)
+### El mundo de las partidas en la base (`WORLD_STORE`)
 
-Desde el 6 de noviembre de 2026 el mundo de cada partida (estado, registro de eventos y tickers) puede ir
-en la misma base PostgreSQL, en vez de en los ficheros JSON de su carpeta (docs/PLAN-OBJETOS.md §8). **No
-está activado en el servidor**: por defecto (`WORLD_STORE` sin poner, o `json`) todo sigue como antes. Las
-imágenes, la caché del máster y `budget.json` siguen en la carpeta de la partida en los dos casos.
+Desde el 6 de noviembre de 2026 el mundo de cada partida (estado, registro de eventos y tickers) va **por
+defecto** en la misma base PostgreSQL, no en los ficheros JSON de su carpeta (docs/PLAN-OBJETOS.md §8).
+`WORLD_STORE` sin poner, o `pg`, es la base; `WORLD_STORE=json` vuelve a los ficheros, como antes (el escape).
+Las imágenes, la caché del máster y `budget.json` siguen en la carpeta de la partida en los dos casos.
 
-- **Qué guarda:** tres tablas (migración 2 de `src/db/migrations.ts`, la crea la web al arrancar aunque no se
-  use): `world_entities` (un documento JSONB por entidad: NPC, objeto, punto…), `world_events` (el registro)
-  y `world_tickers`. Cada guardado es una transacción con solo lo que cambió (unos KB), en vez de reescribir
-  el `world.json` entero. `world_id` es el nombre de la partida (`<slug>`, y `<slug>/initial` y
+- **Qué guarda:** tres tablas (migración 2 de `src/db/migrations.ts`, la crea la web al arrancar):
+  `world_entities` (un documento JSONB por entidad: NPC, objeto, definición de objeto, punto…; también los
+  objetos que se crean en partida, como los que lleva encima un NPC al que se le roba), `world_events` (el
+  registro) y `world_tickers`. Cada guardado es una transacción con solo lo que cambió (unos KB), en vez de
+  reescribir el `world.json` entero. `world_id` es el nombre de la partida (`<slug>`, y `<slug>/initial` y
   `<slug>/recorded` para la foto de arranque y lo grabado de las demos).
-- **Convivencia:** con `pg` activado, una partida que aún no está en la base y sí tiene su mundo en la
-  carpeta pasa a la base sola la primera vez que se abre. Sus ficheros no se tocan; desde ese momento ya no
-  se actualizan (son la copia de antes). Volver a `json` sin pasar antes las partidas de la base a sus
-  carpetas (abajo, `to-json`) las dejaría como estaban el día del paso.
+- **Las partidas de antes quedan obsoletas.** Una partida cuyo mundo está solo en su carpeta, en JSON (todas
+  las de antes de este cambio, y las que suba `data-sync.sh up`), no se pasa a la base ni se borra: su
+  carpeta se queda como está. En el menú y en el panel (`/admin/partidas`) sale marcada «obsoleta», con sus
+  personajes y su última narración, y solo se puede borrar: no se abre, no se invita a nadie ni se convierte
+  en demo. Abrirla por su enlace da un error 409 que lo explica. El arranque de la web dice cuántas hay.
+- **Las demos no:** una demo de antes empieza desde su foto de arranque (`initial/`, que pasa sola a la base
+  la primera vez) o, si no tiene, desde la semilla, como al pulsar «Jugar desde el principio». Lo que se
+  hubiera jugado en ella se queda en su carpeta.
+- **Seguir una partida de antes**, si alguna vez hace falta: pasarla a mano con `to-pg` (abajo) y deja de ser
+  obsoleta; o volver toda la web a `WORLD_STORE=json`.
 - **Copias:** van en el `pg_dump` diario de `tavernus-backup` y se restauran con `tavernus-restore`, como
-  el resto de la base. Las partidas en la base no necesitan la comprobación de JSON a medio escribir.
+  el resto de la base. Las carpetas de las partidas obsoletas siguen en la copia de `data/` de siempre.
 
-**Activarlo en el servidor** (cuando se decida; no se ha hecho):
+**Qué cambia en el VPS al desplegar esta versión** (no se ha hecho; lo hace quien despliega):
 
-1. Copia de seguridad: `sudo tavernus-backup`.
-2. Pasar todas las partidas a la base, con la web en marcha o parada (no escribe en las carpetas; una
-   partida que ya esté en la base no se toca). Compara cada una después de pasarla:
+1. **Variable:** ninguna. Sin `WORLD_STORE` en `/etc/tavernus/env`, la web ya usa la base. Si alguien la
+   puso a `json` para probar, hay que quitarla.
+2. **Migración:** la crea la web sola al arrancar (la 2, tres tablas vacías). No hay que pasar ninguna partida.
+3. **Antes:** `sudo tavernus-backup`, como en cada versión.
+4. **Al arrancar:** la web dice `[web] mundos de las partidas: en la base (WORLD_STORE=pg); N de antes, en
+   JSON, se conservan como obsoletas (no se abren)`, y cada partida, al abrirse, «en la base («slug»)». Las
+   partidas que se creen desde entonces van a la base; las de antes salen marcadas en el menú.
+5. **Si algo va mal:** `WORLD_STORE=json` en `/etc/tavernus/env` y `sudo systemctl restart tavernus`: las
+   partidas de antes vuelven a abrirse como siempre, y las creadas en la base dejan de verse jugables (siguen
+   en la base; se sacan a su carpeta con `to-json`).
 
-   ```bash
-   cd /opt/tavernus/current
-   sudo runuser -u tavernus -- env DATABASE_URL="$(sudo grep ^DATABASE_URL= /etc/tavernus/env | cut -d= -f2-)"      node dist/index.js --world-store games /var/lib/tavernus/data/games
-   ```
-
-   Lo que se juegue entre este paso y el reinicio del 4 se pierde de la base (la partida ya está en ella y no
-   se vuelve a pasar); para no perder nada, para la web antes (`sudo systemctl stop tavernus`).
-3. Añadir `WORLD_STORE=pg` a `/etc/tavernus/env`.
-4. `sudo systemctl restart tavernus`. El arranque dice
-   `[web] mundos de las partidas: en la base (WORLD_STORE=pg)` y cada partida, al abrirse, «en la base».
-
-**Volver a JSON:** para la web, saca cada partida de la base a su carpeta y quita `WORLD_STORE`:
+**Sacar una partida de la base a su carpeta** (para volver a JSON sin perderla):
 
 ```bash
 node dist/index.js --world-store to-json <slug> /var/lib/tavernus/data/games/<slug>/data --force
@@ -329,10 +332,10 @@ la base es `DATABASE_URL` o `--db <url>`; sin ninguna, el PGlite local de `GAMES
 
 | Orden | Qué hace |
 |---|---|
-| `to-pg <carpeta-de-datos> [--campaign <id>] [--key <world_id>]` | Pasa un mundo a la base (sustituye el que hubiera con esa clave) y lo compara |
+| `to-pg <carpeta-de-datos> [--campaign <id>] [--key <world_id>]` | Pasa un mundo a la base (sustituye el que hubiera con esa clave) y lo compara. Con `--key <slug>`, una partida obsoleta vuelve a ser jugable |
 | `check <carpeta-de-datos> [--campaign <id>] [--key <world_id>]` | Compara la carpeta con la base, sin escribir |
 | `to-json <world_id> <carpeta> [--force]` | Saca un mundo de la base a una carpeta; no pisa una con mundo sin `--force` |
-| `games [GAMES_DIR]` | Pasa todas las partidas del catálogo (su mundo, foto de arranque y lo grabado) que aún no estén |
+| `games [GAMES_DIR]` | Pasa todas las partidas del catálogo (su mundo, foto de arranque y lo grabado) que aún no estén. **No se usa al desplegar**: las de antes se quedan obsoletas (decisión del 6-11-2026) |
 
 **Pasar a cuentas un servidor que ya está en marcha** (como tavernus.com, que tiene partidas sin
 usuarios):

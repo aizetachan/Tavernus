@@ -347,8 +347,9 @@ cada vez más vacías». Uno de ellos se ha quedado con una casa vacía de la pl
 - Tests: `test/persistence-checkpoint.test.ts` (una partida larga arranca igual que seguía, desde el formato
   nuevo y desde el de antes).
 
-**G, el mundo en PostgreSQL** (`src/persistence/pg.ts`, `src/games/worlds.ts`), detrás de `WORLD_STORE=pg`
-(por defecto, JSON). Cambios sobre §8.2:
+**G, el mundo en PostgreSQL** (`src/persistence/pg.ts`, `src/games/worlds.ts`), por defecto desde el 6-11-2026
+(decisión de Miguel: «las partidas viejas que se conserven pero quedan obsoletas»); `WORLD_STORE=json` vuelve a
+los ficheros. Cambios sobre §8.2:
 
 - La clave de cada fila es `world_id`, la partida (su slug), no `campaign_id`: varias partidas son de la misma
   campaña («brezal»). La foto de arranque y lo grabado de una demo son `<slug>/initial` y `<slug>/recorded`.
@@ -362,12 +363,19 @@ cada vez más vacías». Uno de ellos se ha quedado con una casa vacía de la pl
   las claves que cambiaron. Lo pidió la sesión de misiones, que además guardará las misiones creadas en partida
   en su propia colección (`quests`), sin cambiar nada aquí.
 - `world_events` guarda el evento entero, con el contexto; al cargar, la base lo quita (`#-`) y no lo manda.
-- Convivencia: con `pg`, una partida que solo está en su carpeta pasa a la base al abrirla, sin tocar los
-  ficheros. Paso entero y vuelta: `npm run world-store -- to-pg | to-json | check | games`
-  (`src/games/world-cli.ts`; en el servidor, `node dist/index.js --world-store …`). Cómo activarlo:
-  docs/DESPLIEGUE.md, «El mundo de las partidas en la base». No está activado.
+- Las partidas de antes (su mundo solo en su carpeta, en JSON) quedan **obsoletas**: no se pasan a la base ni se
+  borran; se listan marcadas («obsoleta», `GameInfo.obsolete`), con sus PJ y su última narración, y solo se pueden
+  borrar. No se abren ni para leer: arrancar el motor escribe (catálogo, reloj, rutinas de los NPC), y un modo de
+  solo lectura pediría un almacén que no guarde y una vista sin entrada. `PgWorldStore.prepare` se niega a
+  arrancarlas (si no, el motor crearía de la semilla un mundo nuevo encima y la partida desaparecería del menú).
+  Las demos no: empiezan de su foto de arranque, que sí pasa sola a la base.
+- Paso a mano y vuelta: `npm run world-store -- to-pg | to-json | check | games`
+  (`src/games/world-cli.ts`; en el servidor, `node dist/index.js --world-store …`); `to-pg --key <slug>` vuelve
+  jugable una partida obsoleta. Qué cambia en el VPS: docs/DESPLIEGUE.md, «El mundo de las partidas en la base».
+- Los objetos creados en partida (`createItem` al robar, conflict.ts) van a `world_entities` como cualquier
+  definición (`collection = 'item_defs'`, `origin: 'custom'`): pasan por `touch` y no hace falta tabla propia.
 - Tests: `test/persistence-pg.test.ts` (el mismo mundo en JSON y en PGlite, guardados por lotes, el gestor de
-  partidas entero con la base, el paso de partidas).
+  partidas entero con la base, partidas y demos de antes, el objeto creado al robar, el paso de partidas).
 
 ---
 
