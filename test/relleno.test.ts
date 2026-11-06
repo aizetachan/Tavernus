@@ -81,6 +81,8 @@ describe('relleno: montaje desde la plantilla de su oficio', () => {
     expect(extras.find((n) => n.id === 'npc_x_anselmo')!.kit).toBe('guard');
     // Una niña es más frágil.
     expect(extras.find((n) => n.id === 'npc_x_pia')!.stats?.hp).toBe(2);
+    // Sin bolsa: el kit de niño del ajuar (outfit.ts) lleva sus cosas sueltas.
+    expect(extras.find((n) => n.id === 'npc_x_pia')!.kit).toBe('child');
     // Fermina y Ramiro, matrimonio (crime.ts: quien hace daño a uno se las ve con el otro).
     expect(extras.find((n) => n.id === 'npc_x_fermina')!.bonds).toEqual([{ npc_id: 'npc_x_ramiro', kind: 'kin' }]);
   });

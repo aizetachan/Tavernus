@@ -138,7 +138,7 @@ export const TRADES: Record<TradeId, TradeDef> = {
     },
   }),
   child: T('child', { fantasy: { m: 'niño', f: 'niña' } }, {
-    kit: 'commoner', wealth: 'none', hp: 2, perception: 13, temper: 'parlanchín', service: 'directions',
+    kit: 'child', wealth: 'none', hp: 2, perception: 13, temper: 'parlanchín', service: 'directions',
     motivation: 'Jugar y enterarse de todo.',
     lines: {
       greet: ['¿Tú quién eres?', '¡Hala, qué pinta!'],
