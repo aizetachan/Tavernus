@@ -210,8 +210,8 @@ describe('modelo de objetos: migración de partidas guardadas', () => {
     expect(d('it_t_cuero').subtype).toBe('light');
     expect(d('it_t_escamas').subtype).toBe('medium');
     expect(d('it_t_arco').weapon!.properties).toEqual(['two_handed']);
-    // El escudo no es armadura de cuerpo: su subtipo lo pone el catálogo, no la deducción.
-    expect(d('it_t_escudo').subtype).toBeUndefined();
+    // El escudo se deduce de su bono: subtipo `shield` (la tabla de PLAN-OBJETOS §2.1).
+    expect(d('it_t_escudo').subtype).toBe('shield');
     // Lo que ya tenía la partida se queda (pero el tipo genérico viejo sí pasa al de la semilla).
     expect(d('it_t_mochila')).toMatchObject({ type: 'gear', subtype: 'adventuring' });
     // Y el mundo migrado sigue validando.
@@ -240,7 +240,9 @@ describe('modelo de objetos: lo que ven el máster y la mochila', () => {
     const pocket = { type: 'character' as const, id: kael.id, slot: { kind: 'pocket' as const } };
     const ids: Record<string, string> = {};
     for (const d of MAGIC) {
-      const r = spawnItem(engine.world, d.id, 1, pocket);
+      // Lo menudo, al bolsillo; lo mediano (la espada +1) no cabe ahí: a la mochila.
+      let r = spawnItem(engine.world, d.id, 1, pocket);
+      if (!r.ok) r = spawnItem(engine.world, d.id, 1, { type: 'container', id: 'ii_kael_mochila' });
       if (!r.ok) throw new Error(JSON.stringify(r.error));
       ids[d.id] = r.moved.id;
     }
