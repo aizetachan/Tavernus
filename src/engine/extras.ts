@@ -290,6 +290,10 @@ export function extraProblems(snap: WorldSnapshot): string[] {
   const npcs = new Map(snap.npcs.map((n) => [n.id, n]));
   const spots = new Set(snap.spots.map((s) => s.id));
   const principals = new Set(snap.npcs.filter((n) => n.tier !== 'extra').map((n) => norm(n.name)));
+  // Palabras de los sitios: un oficio que las lleva («criada de la casona») hace que «voy a la casona» se lea como
+  // hablar con alguien (fastpath.ts, mentionsSomeone) y no como ir.
+  const placeWords = new Set([...snap.locations.map((l) => l.name), ...snap.spots.flatMap((s) => [s.name, ...s.aliases])]
+    .flatMap((t) => norm(t).split(/[^a-z0-9ñ]+/)).filter((w) => w.length > 3));
   const perSpot = new Map<string, Id[]>();
   for (const n of snap.npcs) {
     if (n.tier !== 'extra') continue;
@@ -304,6 +308,8 @@ export function extraProblems(snap: WorldSnapshot): string[] {
     for (const id of s.wander ?? []) if (!spots.has(id)) errs.push(`relleno ${n.id}: el punto ${id} de sus paseos no existe.`);
     if (!n.home_spot_id || !spots.has(n.home_spot_id)) errs.push(`relleno ${n.id}: necesita una casa (home_spot_id) que exista.`);
     if (principals.has(norm(n.name))) errs.push(`relleno ${n.id}: se llama como un personaje principal (${n.name}).`);
+    const clash = norm(n.role).split(/[^a-z0-9ñ]+/).filter((w) => placeWords.has(w));
+    if (clash.length) errs.push(`relleno ${n.id}: su oficio («${n.role}») nombra un sitio (${clash.join(', ')}); «voy a…» se leería como hablar con él. Usa otras palabras.`);
     const r = (n as Npc & { routine?: NpcRoutine }).routine ?? {};
     for (const slot of ['day', 'afternoon', 'night'] as const) {
       const at = (slot === 'afternoon' ? r.afternoon ?? r.day : r[slot]) ?? n.home_spot_id;

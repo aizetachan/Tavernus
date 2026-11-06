@@ -61,6 +61,14 @@ async function laBarra(opts: { crowd?: boolean; doro?: boolean } = {}) {
   hold(engine, brenna, opts.crowd ? 'sp_tab_barra' : 'sp_he_fragua');
   hold(engine, garran, opts.crowd ? 'sp_tab_barra' : 'sp_pl_tablon');
   hold(engine, doro, opts.doro ? 'sp_tab_barra' : 'sp_pl_porton');
+  // A las 19:20 es la cena: sin `crowd`, quien más acude (los vecinos de relleno, el buhonero) se queda en casa. Si
+  // no, uno corre a avisar a la autoridad y Doro, amigo de Hugo, entra en la pelea (crime.ts): ya no estarían solos.
+  if (!opts.crowd) {
+    for (const n of engine.world.npcs.values()) {
+      if ([hugo, brenna, garran, doro].includes(n) || n.status !== 'alive' || engine.world.spot(n.location.id).location_id !== 'loc_taberna') continue;
+      hold(engine, n, n.home_spot_id && engine.world.spot(n.home_spot_id).location_id !== 'loc_taberna' ? n.home_spot_id : 'sp_pl_pozo');
+    }
+  }
   // El máster offline, con dados con semilla (los ataques de los NPC los tira él).
   engine.attachMaster(new Master(engine, { client: offlineClient(), rng: seededRng(11) }));
   return { engine, time, leo, hugo, brenna, garran, doro };

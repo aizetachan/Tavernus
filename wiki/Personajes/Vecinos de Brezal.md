@@ -22,8 +22,8 @@ Al hablarles contestan poco: un par de frases frías y, a la segunda pregunta qu
 | Gil | Leñero | El sendero, [[El Soto]] | La puerta de la taberna | En casa | La cena del Jabalí, 19:00 | Vende leña a 3 de cobre |
 | Inés | Zagala | El redil, [[Los Corrales]] | El sendero, [[El Soto]] | La casa de la granja | | Remite a [[Úrsula]] |
 | Pía | Niña | El pozo | El callejón de las hierbas | En casa | El mercado, 9:00 | Dice dónde está algo, mal y corriendo |
-| Herminia | Criada de la casona | El zaguán, [[La casona]] | El pozo | El banco de espera, [[La casona]] | | Dice cuándo recibe el regidor |
-| Damián | Viejo del Jabalí | La chimenea, [[Taberna del Jabalí]] | La chimenea | En casa | La cena del Jabalí, 19:00 | Repite lo de las luces del granero |
+| Herminia | Criada | El zaguán, [[La casona]] | El pozo | El banco de espera, [[La casona]] | | Dice cuándo recibe el regidor |
+| Damián | Parroquiano | La chimenea, [[Taberna del Jabalí]] | La chimenea | En casa | La cena del Jabalí, 19:00 | Repite lo de las luces del granero |
 | Ramiro | Hortelano | El camino del molino | El camino de los corrales | En casa | La prueba de la niebla, 22:00 | Remite a [[Hal]] |
 
 «En casa» es en las casas del callejón, en la [[Plaza del Pozo]]: por dentro y con la puerta cerrada. Desde fuera no se ve ni se oye a quien está dentro, y no se entra sin la llave (la llevan Marta y Fermina).
