@@ -149,15 +149,13 @@ describe('PgRepository', () => {
     expect(rewritten).toEqual(['name']);
     // Y se carga entera, con sus claves.
     expect((await repo.loadSnapshot('demo'))!.campaign).toEqual(JSON.parse(JSON.stringify(changed)));
-    // Una clave que desaparece se borra.
+    // Una clave que desaparece se borra; también desde otro repositorio que acaba de cargar el mundo.
     const { name: _n, ...without } = changed;
     void _n;
-    await new PgRepository(db, 'campana').loadSnapshot('demo').then(async () => {
-      const r2 = new PgRepository(db, 'campana');
-      await r2.loadSnapshot('demo');
-      await r2.write('demo', [{ collection: 'campaign', id: seed.campaign.id, doc: without }]);
-      expect('name' in (await r2.loadSnapshot('demo'))!.campaign).toBe(false);
-    });
+    const r2 = new PgRepository(db, 'campana');
+    await r2.loadSnapshot('demo');
+    await r2.write('demo', [{ collection: 'campaign', id: seed.campaign.id, doc: without }]);
+    expect('name' in (await r2.loadSnapshot('demo'))!.campaign).toBe(false);
   });
 
   it('las bajas se borran, el orden de las entidades se conserva y una transacción fallida no deja nada', async () => {
