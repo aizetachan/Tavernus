@@ -29,7 +29,7 @@ En la fachada, un cartel de tabla escrito a carbón: «SE VENDE DE TODO. SE COMP
 - **La puerta**: con una campanilla de latón que suena cada vez que alguien entra.
 - **El mostrador**: una balanza de platillos, una libreta abierta y un platillo con monedas de cobre para el cambio. Aquí atiende Lucio.
 - **Los estantes**: lo que le queda, cada cosa con un papelito de precio. Hay más huecos que género.
-- **La trastienda** (cerrada con llave): un cuarto estrecho con un catre, un baúl de viaje y un arcón con cerradura. Aquí duerme Lucio y aquí guarda lo caro. La abre su **manojo de llaves**, que lleva en la bolsa.
+- **La trastienda** (cerrada con llave): un cuarto estrecho con un catre, un baúl de viaje y un arcón con cerradura. Aquí duerme Lucio y aquí guarda lo caro: la sal. La abre su **manojo de llaves**, que lleva en la bolsa.
 - **El carro del buhonero** (fuera, en la plaza): las varas en el suelo, una lona atada y un arcón clavado a la caja con un candado nuevo. En el costado, medio borrado: «Cendal, de Valcruz. Agujas, sal y lo que haga falta».
 
 ## Qué vende
@@ -50,18 +50,21 @@ Todo son existencias contadas: lo que se compra sale de sus estantes y no vuelve
 | Farol con capucha | 1 | 6 de oro | estantes |
 | Saco | 3 | 2 de cobre | el carro |
 | Odre | 2 | 2 de plata y 5 de cobre | el carro |
-| Poción de curación | 1 | 30 de oro | la trastienda |
-| Pergamino de curar heridas | 1 | 30 de oro | la trastienda |
+| Saquete de sal de Valcruz | 2 | 3 de oro | la trastienda |
 
-Lo de la trastienda también se compra desde el mostrador: él va a buscarlo.
+Lo de la trastienda también se compra desde el mostrador: él va a buscarlo. La sal es lo más caro que tiene: en un valle donde ya no entra, vale más que la plata.
+
+No vende nada mágico. Lo único raro que tiene no está a la venta: lo lleva encima. Ver [[Lucio Cendal]].
 
 **Compra** pieles de lobo (1 de oro y 2 de plata), cuerda (6 de plata), antorchas (1 de cobre) y casi cualquier cosa a la mitad de lo que vale, **con el dinero de su bolsa**: si no le llega, no compra. Lo que compra va a sus estantes, y desde ese momento está a la venta.
 
 El precio cambia con lo que piense de ti, como con todos. Ver [[Objetos]] y [[Mecánicas]].
 
-## Comprar en la web
+## Comprar
 
-Estando en la tienda, el panel lateral enseña lo que le queda, con cuántos y a qué precio, y un botón **Comprar**. Comprar con el botón no pasa por el narrador: es inmediato y no gasta nada. Si quieres regatear, díselo en el chat: eso sí lo lleva el narrador, con una tirada de Persuasión.
+Se compra **hablándole**, como a cualquier vecino: «le pido una cuerda a Lucio». Lo lleva el narrador, y es la única manera de regatear (Persuasión).
+
+Para no gastar narrador en una cuerda, estando en la tienda el panel lateral trae el botón **Ver lo que vende**. Pone en el chat una burbuja de tienda con lo que le queda, cuántos y a qué precio, y un botón **Comprar** en cada cosa. Comprar desde la burbuja es inmediato y no pasa por el narrador. La burbuja se pone al día sola mientras sigas en la tienda.
 
 ## Robar en la tienda
 
@@ -79,5 +82,5 @@ Corre aquí su rumor: en el valle «no entra nada, ni la sal».
 
 - [[Plaza del Pozo]]: de la puerta a la puerta de la tienda, 3 m.
 
-> [!warning]- Spoiler: lo que sabe Lucio
-> Un día antes de llegar a Brezal, en el camino, se cruzó con una mujer joven con capucha que llevaba un cuenco de barro caliente envuelto en trapos y le preguntó si el granero de los Vharn seguía en pie. Era [[Ysolde]], con el ascua. Lo cuenta a un amigo.
+> [!warning]- Spoiler: lo que esconde Lucio
+> No vino a vender: vino detrás de [[Ysolde]], a la que los carboneros del sur llamaban Tizne, con un encargo de la carbonera que la crio. Bajo el chaleco lleva la tapa de hierro frío del cuenco de cuna que guarda [[Ilse]]. Ver [[Lucio Cendal#En la historia]].

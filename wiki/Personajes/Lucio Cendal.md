@@ -1,6 +1,6 @@
 ---
 title: Lucio Cendal
-description: "El buhonero de Valcruz atrapado por la niebla. Vende en la plaza lo que le queda y compra lo que le sirva para salir."
+description: "El buhonero de Valcruz atrapado por la niebla. Vende en la plaza lo que le queda y carga con un encargo de una muerta para la última de los Vharn."
 tags: [personaje, brezal]
 rol: buhonero
 lugar: "[[La tienda del buhonero]]"
@@ -20,20 +20,27 @@ actitud: neutral
 
 ## Quién es
 
-Cincuenta años, flaco, con un sombrero de ala ancha, un chaleco de muchos bolsillos y una cinta métrica colgada del cuello como otros llevan un crucifijo. Habla deprisa y con gracia, de usted a todo el mundo, y a cada frase le pone un precio. Toca las cosas que vende como si las fuera a echar de menos.
+Cincuenta años, flaco, con un sombrero de ala ancha, un chaleco de muchos bolsillos y una cinta métrica colgada del cuello como otros llevan un crucifijo. Habla deprisa y con gracia, de usted a todo el mundo, y a cada frase le pone un precio.
 
-Cuando le preguntan por la niebla se ríe un poco tarde y cambia de tema hacia lo bien que se conserva la sal. Silba siempre la misma tonada de camino, y la corta en cuanto se da cuenta.
+Toca las cosas que vende como si las fuera a echar de menos, y las vuelve a dejar torcidas para que se note que alguien las ha mirado. Cuando le preguntan por la niebla se ríe un poco tarde y cambia de tema hacia lo bien que se conserva la sal.
+
+Silba siempre la misma tonada de camino y la corta en cuanto se da cuenta. Es la rima de corro de los niños del valle, y él no es del valle. Ver [[Costumbres]].
+
+Se lleva la mano al chaleco, a la altura del corazón, cuando alguien nombra el granero.
 
 ## Trasfondo
 
-Es buhonero de Valcruz. Llegó a Brezal con su carro, a vender agujas, sal y cacharros, la víspera de que bajara [[El Cerco de Ceniza]]. El primer día su mula se espantó y se metió en la niebla: no volvió. El carro sigue en la plaza, con las varas en el suelo.
+Es buhonero de Valcruz. Llegó a Brezal con su carro, a vender agujas, sal y cacharros, la víspera de que bajara [[El Cerco de Ceniza]]. El primer día su mula se espantó y se metió en la niebla. Salió por donde entró, como todo, y [[Garrán]] se la quedó «a cuenta del diezmo del forastero». El carro sigue en la plaza, con las varas en el suelo.
 
 Se ha quedado con una casa vacía de la [[Plaza del Pozo]] y la ha abierto como tienda. Lleva la cuenta de lo que le queda en una libreta, con la fecha del día de la niebla subrayada dos veces.
+
+Cada otoño, desde hace veinte años, sube con el carro por los montes del sur a vender sal y agujas a los carboneros. De ellos aprendió la tonada.
 
 ## Qué quiere
 
 - Salir del valle con el carro y con algo que vender al otro lado.
-- Mientras tanto, no malvender lo que le queda: cada cosa que vende es una que ya no tendrá.
+- No malvender lo que le queda: cada cosa que vende es una que ya no tendrá.
+- Quitarse de encima un encargo que le pesa más que el carro.
 
 ## Horario
 
@@ -43,27 +50,29 @@ Se ha quedado con una casa vacía de la [[Plaza del Pozo]] y la ha abierto como 
 | Tarde (14-20) | El mostrador |
 | Noche (20-6) | La trastienda, con la puerta cerrada con llave |
 
-Atiende de 9:00 a 19:00. Fuera de esa hora, aunque esté en el mostrador, no vende ni compra.
+Atiende de 9:00 a 19:00. Fuera de esa hora, aunque esté en el mostrador, no vende ni compra. A las 19:00 cierra y se va a la cena del [[Taberna del Jabalí|Jabalí]], donde Brenna le da de cenar a cambio de sal. Ver [[Vida del pueblo]].
 
 ## Comercio
 
-Tiene tienda de verdad: vende de **existencias contadas** y no repone, porque el valle está sellado. Lo que hay, y a qué precio, está en [[La tienda del buhonero#Qué vende]].
+Se le compra hablándole, como a cualquiera. Tiene tienda de verdad: vende de **existencias contadas** y no repone, porque el valle está sellado. Lo que hay, y a qué precio, está en [[La tienda del buhonero#Qué vende]].
 
 - **Compra** pieles de lobo, cuerda, antorchas y casi cualquier cosa a la mitad de lo que vale, con el dinero de su bolsa. Si no le llega, no compra.
 - Coger algo de sus estantes o de su carro sin pagar es un robo.
+- No vende nada mágico.
 
 ## Lleva encima
 
-Una bolsa de cuero con 6 de oro, lo que ha ido cobrando; dentro, su **manojo de llaves**, que abre la trastienda. El resto lo pone el ajuar de mercader: una libreta de cuentas, una llave y un pañuelo.
+Una bolsa de cuero con 6 de oro, lo que ha ido cobrando; dentro, su **manojo de llaves**, que abre la trastienda. Bajo el chaleco, una **tapa de hierro negro** que no vende. El ajuar de mercader le añade una libreta de cuentas, una llave y un pañuelo.
 
 Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
 
 ## Relaciones
 
-- [[Garrán]]: le cobra el diezmo doble «por forastero» y le apunta en un libro aparte. Lucio le tiene miedo y le odia.
+- [[Garrán]]: le cobra el diezmo doble «por forastero», le apunta en un libro aparte y le quitó la mula.
 - [[Úrsula]]: le pregunta cada mañana por su hijo Pol. Lucio le contesta siempre lo mismo, con paciencia.
 - [[Brenna]]: le da la cena a cambio de sal.
-- [[Hal]]: le vende pieles.
+- [[Hal]]: le vende pieles, y le mira raro cuando silba la tonada de los carboneros.
+- [[Ysolde]]: le da miedo. Le da más miedo no cumplir el encargo de una muerta.
 
 ## Lo que dice de la niebla
 
@@ -71,11 +80,17 @@ Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carg
 
 ## En la historia
 
-Lo que cuenta depende de cuánto se fíe de ti. A un extraño, de dónde viene, de su mula y de lo que vende. A un conocido, que en Valcruz conoció a **Pol**, el hijo de [[Úrsula]], que le dijo que volvía al pueblo al día siguiente; y que Garrán le cobra el doble. Lo de abajo es de amigo y de aliado. Ver [[Mecánicas#Confianza: lo que te cuenta cada uno|Confianza]].
+Lo que cuenta depende de cuánto se fíe de ti. Ver [[Mecánicas#Confianza: lo que te cuenta cada uno|Confianza]].
 
-> [!warning]- Spoiler: lo que vio en el camino
-> Un día antes de llegar a Brezal se cruzó con una mujer joven con capucha que llevaba un cuenco de barro tapado y envuelto en trapos, caliente aunque hacía frío. Le preguntó si el granero de los Vharn seguía en pie y no quiso subir al carro. Era [[Ysolde]], que volvía con el ascua.
+- **A un extraño**: de dónde viene, lo de su mula y lo que vende.
+- **A un conocido**: que en Valcruz conoció a **Pol**, el hijo de [[Úrsula]], que le dijo que volvía al pueblo al día siguiente. Que cada otoño sube a vender a los carboneros del sur. Que Garrán le cobra el doble.
+- **A un amigo y a un aliado**: lo de abajo.
+
+> [!warning]- Spoiler: el encargo
+> No vino a Brezal a vender. Entre los carboneros del sur vivía una muchacha con la cara quemada a la que llamaban Tizne: [[Ysolde]]. Se fue al valle con un cuenco de barro caliente envuelto en trapos, y Lucio salió detrás con un encargo para ella. Se la cruzó en el camino un día antes de llegar. Le preguntó si el granero de los Vharn seguía en pie y no quiso subir al carro. Al día siguiente bajó la niebla.
 >
-> En la trastienda guarda un pergamino que compró a un fraile y no sabe leer, y una poción de curación: lo único que no vende barato.
+> El encargo era de la carbonera vieja que la crio, la que había servido en Vharn y era dueña del guante, muerta el invierno pasado. Le dio una **tapa redonda de hierro negro**, fría aunque esté al fuego, con el sello de Vharn por dentro: «Dásela a la cría cuando vuelva al valle. Es la tapa de su cuenco de cuna. Que no lo abra sin ella».
 >
-> A un aliado le cuenta que ha probado a salir dos veces, de noche, con el carro vacío y una cuerda atada a la barricada, y las dos ha vuelto por donde entró. A quien abra el Cerco le da lo que tenga en la trastienda a cambio de salir el primero.
+> Es la tapa del cuenco del ascua de cuna que guarda [[Ilse]], y que a Ilse le falta. Se entibia junto al pozo y hiela la mano cerca del granero. Lucio no sabe lo que significa. Se la da a un aliado que le ayude a dársela a Tizne, o que le saque del valle.
+>
+> No sabe nada del incendio de hace veinte años ni quién lo prendió.

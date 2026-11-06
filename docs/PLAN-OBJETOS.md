@@ -189,8 +189,9 @@ de los NPC.
 ## 6. Bloque E: el buhonero de Brezal y su tienda
 
 > **Hecho (2026-11-06, rama `claude/objetos-e-tienda-f7d117`).** La mecánica está en `src/engine/shop.ts`. El
-> buhonero es **Lucio Cendal** (`npc_lucio`), el mismo Lucio de los NPC de relleno; su gancho es de historia (Pol y
-> el cuenco de Ysolde), no un encargo. Las existencias van en contenedores fijos con `state.owner_id` (el dueño en
+> buhonero es **Lucio Cendal** (`npc_lucio`), el mismo Lucio de los NPC de relleno, con secreto del lore: trae para
+> Ysolde la tapa de hierro frío de su cuenco de cuna, lo único mágico de la tienda, y no está a la venta (Miguel: magia
+> poca, enigmática y del lore). Se compra hablándole; la burbuja de tienda del chat compra sin máster. Las existencias van en contenedores fijos con `state.owner_id` (el dueño en
 > el estante, no en cada objeto). Detalle en `docs/BREZAL.md` §2.6 y en la wiki (`wiki/El mundo/Brezal/La tienda del buhonero.md`).
 
 ### 6.1 En la historia

@@ -43,6 +43,7 @@ Su casa es la única del valle que conserva la marca del dintel, y la única sin
 > - La noche del incendio no estaba en la capilla. Había bajado al Soto a atender un parto, lejos de su casa. (No vive en el Soto: su casa está al fondo del callejón de las hierbas, junto a la plaza). Cuando volvió, el cielo estaba rojo. Lleva veinte años pagándolo con la misa.
 > - Sabe que las palabras para templar el ascua están repartidas en la rima de corro, la canción de amasar y una nana. Por eso no ha dejado que se pierdan.
 > - Cuando nacía un hijo de Vharn, la sacerdotisa encendía un ascua pequeña en un cuenco de barro y la guardaba hasta la muerte de ese hijo. Ilse aún tiene el cuenco de la niña, frío. Nadie se lo ha devuelto, y por eso sospecha que vive.
+> - Al cuenco le falta su tapa de hierro frío: se la llevó una criada de Vharn la noche del incendio. Sin ella, dice, «el ascua no duerme». La tapa la tiene [[Lucio Cendal]].
 > - Toda su vida ha predicado que los muertos duermen junto al fuego. Ya no sabe si dormían o estaban presos. Solo se lo dirá a quien le pida ayuda para templar el ascua.
 > - Recuerda el nombre de cuna de [[Osric Malvez]].
 

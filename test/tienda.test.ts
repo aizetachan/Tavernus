@@ -58,7 +58,24 @@ describe('la tienda del buhonero en Brezal', () => {
     expect(carrierOf(engine.world, engine.world.itemInstance('ii_cendal_llaves').location)).toEqual({ type: 'npc', id: 'npc_lucio' });
     expect(coinsOf(engine.world, a.id)).toBe(600);
     expect(stockCount(engine.world, a, 'it_cuerda')).toBe(2);
-    expect(stockCount(engine.world, a, 'it_pocion')).toBe(1);
+    expect(stockCount(engine.world, a, 'it_sal')).toBe(2);
+  });
+
+  it('lo mágico es poco y del lore: la tapa del cuenco de cuna la lleva Lucio encima y no está a la venta', async () => {
+    const { engine } = await boot();
+    const c = await newPc(engine, 'Nia');
+    const a = engine.world.npc('npc_lucio');
+    setCoins(engine.world, c.id, 10_000);
+    const tapa = engine.world.itemInstance('ii_cendal_tapa');
+    expect(carrierOf(engine.world, tapa.location)).toEqual({ type: 'npc', id: 'npc_lucio' });
+    expect(engine.world.itemDef('it_tapa_cuna').rarity).toBe('uncommon');
+    // En la tienda no hay nada mágico: ni pociones ni pergaminos.
+    expect(stockOf(engine.world, a).filter((i) => engine.world.itemDef(i.item_id).rarity)).toEqual([]);
+    expect(shopLines(engine.world, a, c).map((l) => l.item_id)).not.toContain('it_tapa_cuna');
+    expect(buyFromNpc(engine.world, c, a.id, 'it_tapa_cuna', 1, OPEN)).toMatchObject({ ok: false });
+    // Su secreto de aliado la nombra; el de Ilse, que al cuenco le falta la tapa.
+    expect(a.knowledge!.find((k) => k.tier === 'ally')!.text).toMatch(/tapa redonda de hierro negro/);
+    expect(engine.world.npc('npc_ilse').knowledge!.find((k) => k.tier === 'ally')!.text).toMatch(/le falta su tapa de hierro frío/);
   });
 
   it('comprar baja las existencias y no crea nada; lo pagado va a su bolsa', async () => {
@@ -88,8 +105,8 @@ describe('la tienda del buhonero en Brezal', () => {
     expect(buyFromNpc(engine.world, c, a.id, 'it_garfio', 1, OPEN).ok).toBe(true);
     expect(buyFromNpc(engine.world, c, a.id, 'it_garfio', 1, OPEN)).toEqual({ ok: false, reason: 'a Lucio Cendal no le queda garfio de abordaje' });
     // Lo de la trastienda también se vende desde el mostrador (sin entrar).
-    expect(buyFromNpc(engine.world, c, a.id, 'it_pocion', 1, OPEN).ok).toBe(true);
-    expect(stockCount(engine.world, a, 'it_pocion')).toBe(0);
+    expect(buyFromNpc(engine.world, c, a.id, 'it_sal', 1, OPEN).ok).toBe(true);
+    expect(stockCount(engine.world, a, 'it_sal')).toBe(1);
     // La vista de la tienda ya no lo enseña.
     expect(shopLines(engine.world, a, c).map((l) => l.item_id)).not.toContain('it_garfio');
   });
