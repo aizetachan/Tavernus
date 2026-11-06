@@ -17,6 +17,7 @@ import {
   storyQuestAction, validateStory, type StoryQuest, type StoryRefs,
 } from '../src/engine/story.js';
 import { setFact } from '../src/engine/worldfacts.js';
+import { journalOf } from '../src/engine/journal.js';
 import type { Character } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
 
@@ -183,6 +184,35 @@ describe('misiones por fases: fases, vías y desenlaces', () => {
     mark(engine, c, 't_c');
     expect(questStatus(w, c, q)).toBe('done');
     expect(characterStory(c).outcomes?.['q_prueba']).toBe('normal');
+  });
+
+  it('Brezal: «Ceniza se ha perdido» en el Diario, con su fase, las formas que conocemos, la fallida y el desenlace', async () => {
+    const { engine, c, time } = await setup([]);
+    const w = engine.world;
+    const brenna = w.npc('npc_brenna');
+    brenna.location = { type: 'spot', id: w.characterSpot(c)!.id };
+    expect(storyQuestAction(w, c, 'q_perro', 'accept', now(engine, c)).ok).toBe(true);
+    // Ya en el Soto (Hal estaba en su piedra): se conocen rastrear, preguntar a Hal y el aullido.
+    let j = journalOf(engine, c.id);
+    let perro = j.quests.active.find((q) => q.id === 'q_perro')!;
+    expect(perro.steps[0]).toMatchObject({ phase: 'Encontrar el rastro', done: false });
+    expect(perro.steps[0]!.ways!.map((x) => x.text)).toEqual(expect.arrayContaining(['En el barro del Soto se puede seguir el rastro.']));
+    // Rastrear sale mal: tachada en el Diario. Hal lo cuenta.
+    expect(advanceStory(w, c, 'q_perro', 'rastro', now(engine, c), null, { way_id: 'rastrear', failed: true }).ok).toBe(true);
+    expect(advanceStory(w, c, 'q_perro', 'rastro', now(engine, c), null, { way_id: 'hal' }).ok).toBe(true);
+    j = journalOf(engine, c.id);
+    perro = j.quests.active.find((q) => q.id === 'q_perro')!;
+    expect(perro.steps[0]!.ways!.find((x) => x.text.startsWith('En el barro'))).toMatchObject({ failed: true });
+    expect(perro.steps.map((s) => s.phase)).toEqual(['Encontrar el rastro', 'Sacarlo de la madriguera', 'Sacarlo de la madriguera', undefined]); // y volver con Brenna
+    expect(perro.history.some((x) => x.kind === 'changed' && x.text.startsWith('Perdimos el rastro'))).toBe(true);
+    // El máster: la fase, la meta y las vías (la del fuego ya se conoce: conocemos a Hal).
+    const ctx = storyContext(w, c, now(engine, c))!;
+    expect(ctx).toContain('Fase en curso: «Sacarlo de la madriguera» (2 de 2)');
+    expect(ctx).toContain('[fuego]');
+    // El cebo sale mal: Ceniza herido, se abre «La pata de Ceniza».
+    expect(advanceStory(w, c, 'q_perro', 'sacar', now(engine, c), null, { way_id: 'cebo', failed: true }).ok).toBe(true);
+    expect(characterStory(c).phases_open).toContain('q_perro/pata');
+    void time;
   });
 
   it('el validador pide al menos dos vías, una que no sea pelear, que cada vía pida algo y un desenlace por defecto al final', async () => {

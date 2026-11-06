@@ -532,6 +532,17 @@ export const PAGE = String.raw`<!doctype html>
   #journal .steps li.done .dot { background: var(--ok); box-shadow: none; color: #0d2a26; }
   #journal .steps li.now { color: var(--text); font-weight: 600; }
   #journal .steps li.now .dot { background: var(--accent); box-shadow: none; }
+  /* Misiones por fases: la fase como encabezado, las formas que conocemos bajo su objetivo y el desenlace. */
+  #journal .steps li.ph { display: block; padding: 10px 0 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); border-top: 0; }
+  #journal .steps li.ph small { margin-left: 6px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  #journal .steps .ways { margin: 4px 0 0; padding: 0; list-style: none; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+  #journal .steps .ways li { display: block; padding: 2px 0 2px 12px; border: 0; position: relative; }
+  #journal .steps .ways li::before { content: ''; position: absolute; left: 0; top: 9px; width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
+  #journal .steps .ways li.used { color: var(--ok); }
+  #journal .steps .ways li.failed { text-decoration: line-through; opacity: .7; }
+  #journal .outc { margin: 0 0 8px; padding: 8px 10px; border-left: 2px solid var(--accent); font-size: 13px; }
+  #journal .outc b { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  #journal .qb .rw span { display: block; }
   #journal .paths b, #journal .mem b { display: block; margin: 8px 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
   #journal .paths ol { margin: 0 0 8px; padding-left: 18px; color: var(--muted); }
   #journal .paths li { padding: 2px 0; }
@@ -2906,11 +2917,17 @@ ${SHOP_JS}
     if (next && LIVE[q.status]) h += '<div class="now"><svg class="i"><use href="#i-arrow"/></svg><span><small>Qué toca ahora</small>' + escapeHtml(next) + '</span></div>';
     if (q.declinable) h += answerHtml(q.id);
     if (LIVE[q.status]) h += progressHtml(q);
+    if (q.outcome) h += '<div class="outc"><b>Cómo acabó</b>' + escapeHtml(q.outcome.title) + '. ' + escapeHtml(q.outcome.text) + '</div>';
     if (q.steps.length > 1) {
-      var marked = false;
+      var marked = false, phase = null;
       h += '<ol class="steps">' + q.steps.map(function (st) {
-        var now = !st.done && !marked && LIVE[q.status]; if (now) marked = true;
-        return '<li class="' + (st.done ? 'done' : now ? 'now' : '') + '"><span class="dot">' + (st.done ? '<svg class="i"><use href="#i-check"/></svg>' : now ? '<svg class="i"><use href="#i-arrow"/></svg>' : '') + '</span><span>' + escapeHtml(st.text) + '</span></li>';
+        var now = !st.done && !marked && !st.secondary && LIVE[q.status]; if (now) marked = true;
+        // Misiones por fases: un encabezado al cambiar de fase y, bajo cada objetivo pendiente, las formas que conocemos.
+        var head = st.phase && st.phase !== phase ? '<li class="ph">' + escapeHtml(st.phase) + (st.secondary ? '<small>(opcional)</small>' : '') + '</li>' : '';
+        if (st.phase) phase = st.phase;
+        var ways = st.ways && st.ways.length && (!st.done || st.ways.some(function (x) { return x.used; }))
+          ? '<ul class="ways">' + st.ways.filter(function (x) { return !st.done || x.used; }).map(function (x) { return '<li class="' + (x.used ? 'used' : x.failed ? 'failed' : '') + '">' + escapeHtml(x.text) + '</li>'; }).join('') + '</ul>' : '';
+        return head + '<li class="' + (st.done ? 'done' : now ? 'now' : '') + '"><span class="dot">' + (st.done ? '<svg class="i"><use href="#i-check"/></svg>' : now ? '<svg class="i"><use href="#i-arrow"/></svg>' : '') + '</span><span>' + escapeHtml(st.text) + ways + '</span></li>';
       }).join('') + '</ol>';
     }
     if (o && o.text && q.kind !== 'lead') h += '<div class="orig"><b>Cómo nos llegó:</b> ' + escapeHtml(o.text) + (o.where ? ' <span>(' + escapeHtml(o.where) + ')</span>' : '') + '</div>';
@@ -2921,8 +2938,8 @@ ${SHOP_JS}
         return '<li class="' + x.kind + (unseenKeys.indexOf(x.key) >= 0 ? ' unseen' : '') + '"><span class="t" title="' + escapeHtml(x.when) + '">' + escapeHtml(x.short || x.when) + '</span><span>' + escapeHtml(x.text) + (x.why ? '<small>' + escapeHtml(x.why) + '</small>' : '') + '</span></li>';
       }).join('') + '</ul></details>';
     }
-    var foot = [q.reward ? 'Recompensa: ' + q.reward : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean).join(' · ');
-    if (foot) h += '<div class="rw">' + escapeHtml(foot) + '</div>';
+    var foot = [q.reward ? 'Recompensa: ' + q.reward : '', q.completed ? 'Completada: ' + q.completed : ''].filter(Boolean);
+    if (foot.length) h += '<div class="rw">' + foot.map(function (x) { return '<span>' + escapeHtml(x) + '</span>'; }).join('') + '</div>';
     var acts = '';
     if (LIVE[q.status]) acts += tracked ? '<span class="qact on" aria-current="true"><svg class="i"><use href="#i-star"/></svg>Siguiéndola en el panel</span>'
       : '<button type="button" class="qact" data-track="' + escapeHtml(q.id) + '"><svg class="i"><use href="#i-star"/></svg>Seguir en el panel</button>';

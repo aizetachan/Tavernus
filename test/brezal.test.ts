@@ -277,16 +277,22 @@ describe('Brezal sellada: la campaña escrita', () => {
     accept('q_perro');
     engine.world.npc('npc_brenna').talking_to = null;
     await walk(engine, time, c, 'sp_cl_sendero');
+    // Por fases: primero el rastro (en el Soto se conoce la vía de rastrear), luego la madriguera.
+    expect(stepOf(engine, c, 'q_perro')!.current!.id).toBe('rastro');
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'sacar', way_id: 'sigilo', why: null, failed: false }).error).toMatch(/ahora se puede dar rastro/);
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'rastro', way_id: 'rastrear', why: null, failed: false }).ok).toBe(true);
     expect(stepOf(engine, c, 'q_perro')!.current!.id).toBe('lobera');
     await walk(engine, time, c, 'sp_cs_cueva');
-    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'rastro' }).error).toMatch(/paso en curso/);
-    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'sacar' }).ok).toBe(true);
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'rastro' }).error).toMatch(/ahora se puede dar sacar/);
+    expect(tool(engine, c, 'advance_story', { quest_id: 'q_perro', step_id: 'sacar', way_id: 'sigilo', why: 'Nos colamos mientras la loba dormía', failed: false }).ok).toBe(true);
     expect(engine.world.npc('npc_ceniza').location.id).toBe('sp_tab_chimenea');
     expect(stepOf(engine, c, 'q_perro')!.status).toBe('ready');
     const coins = coinsOf(engine.world, c.id);
     await talkTo(engine, time, c, 'npc_brenna');
     expect(done(c)).toContain('q_perro');
-    expect(coinsOf(engine.world, c.id)).toBe(coins + 100);
+    // Desenlace «sin que la loba se entere»: 100 de la misión y 20 más.
+    expect(characterStory(c).outcomes?.['q_perro']).toBe('sin_enterarse');
+    expect(coinsOf(engine.world, c.id)).toBe(coins + 120);
     expect(engine.world.npc('npc_brenna').attitude.by_character[c.id]).toBe('friendly');
 
     // --- Acto I: La cena del portón (presenta a Doro) y Lo que vio Doro ---
