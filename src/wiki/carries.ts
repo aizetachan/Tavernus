@@ -18,7 +18,7 @@ import { coinsIn, isWorn, outfitNpcs } from '../engine/outfit.js';
 export type CarriesFn = (npcId: Id) => string | null;
 
 const MECHANICS = 'Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].';
-const GENERATED = '*Sale de los datos del juego al construir la wiki: lo de «el ajuar» se lo da su oficio (src/engine/outfit.ts); lo de «la historia», la campaña (src/data/campaigns/brezal/items.ts).*';
+const GENERATED = '*Sale de los datos del juego: lo que pone «el ajuar» se lo da su oficio; lo que pone «la historia», esta campaña. Es lo que lleva al empezar la partida.*';
 
 const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
 

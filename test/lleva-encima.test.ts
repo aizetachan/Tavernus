@@ -104,7 +104,9 @@ describe('el PJ lleva lo de su clase, su ropa y lo de su trasfondo', () => {
     const bg = r.preview.equipment.filter((e) => e.from === 'background').map((e) => e.name);
     expect(bg).toEqual(['ropa de viaje', 'insignia de rango', 'trofeo de un enemigo', 'dados de hueso']);
     expect(r.preview.equipment.find((e) => e.name === 'cota de malla')?.from).toBe('class');
-    expect(r.preview.ac).toBe(18);
+    // La ropa no cuenta para la CA: la misma que con cualquier otro trasfondo.
+    const other = previewCharacter('Ana', { class_id: 'fighter', background_id: 'sage' }, CATALOG);
+    expect(other.ok && other.preview.ac).toBe(r.preview.ac);
   });
 });
 
@@ -135,7 +137,7 @@ describe('el ajuar: niños sin bolsa, ropa puesta y versión', () => {
     const list = npcCarryList(engine.world, 'npc_hugo').join('; ');
     expect(list).toContain('viste mandil de cuero [ii_kit_hugo_apron]');
     const mandil = carried(engine, 'npc_hugo').find(isWorn)!;
-    const moved = transferItem(engine.world, mandil.id, 1, { type: 'spot', id: engine.world.npc('npc_hugo').location.id });
+    const moved = transferItem(engine.world, mandil.id, { type: 'spot', id: engine.world.npc('npc_hugo').location.id });
     expect(moved.ok).toBe(true);
     expect(isWorn(engine.world.itemInstance(mandil.id))).toBe(false);
   });
