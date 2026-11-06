@@ -95,15 +95,71 @@ const QUESTS: StoryQuest[] = [
     text: 'A Brenna se le ha perdido Ceniza, su perro: pardo, una oreja rota. Lo vieron por el Soto, detrás de un olor. Paga a quien se lo traiga.',
     notes: 'El perro está en la madriguera al pie del roble del Soto, acorralado por la loba de ceniza (hostil, dura para un nivel 1: que el PJ piense antes de pelear; tampoco ella puede salir del valle). Se puede sacar ahuyentándola con fuego, colándose (Sigilo CD 13 mientras duerme), llevando encima ceniza del granero (no ataca a quien la lleva) o matándola. Ceniza vuelve solo al Jabalí; la recompensa, al hablar luego con Brenna, que se ablanda mucho.',
     rumor: { text: 'en el Jabalí dicen que {giver} lleva días con mala cara, mirando a la puerta', where: at('loc_taberna') },
+    // Por fases (story.ts, «Fases, vías y desenlaces»): el rastro, la madriguera y, si el perro sale herido, su pata.
+    phases: [
+      { id: 'rastro', title: 'Encontrar el rastro', journal: 'Ya sabemos dónde está Ceniza: en una madriguera al pie del roble del Soto.' },
+      { id: 'madriguera', title: 'Sacarlo de la madriguera' },
+      { id: 'pata', title: 'La pata de Ceniza', secondary: true, opens_when: { kind: 'fact', id: 'ceniza_herido' },
+        journal: 'Ilse le miró la pata a Ceniza antes de que volviera con Brenna.' },
+    ],
     steps: [
-      { id: 'rastro', text: 'Buscar el rastro del perro en el Soto', done_when: at('loc_claro'),
-        on_done: [{ kind: 'tell', text: 'En el barro del Soto, entre botas, hay huellas de perro que van hacia el pie del roble, y al lado otras enormes, de lobo.' }] },
-      { id: 'lobera', text: 'Encontrar a Ceniza en la madriguera', done_when: { kind: 'visit', spot_id: 'sp_cs_cueva' } },
-      { id: 'sacar', text: 'Sacarlo de la madriguera', done_when: { kind: 'any', of: [
-        { kind: 'narrative', how: 'cuando el PJ saque al perro de la madriguera: ahuyentando a la loba (fuego, Intimidación CD 15), colándose sin que le vea (Sigilo CD 13), llevando ceniza del granero encima, o con la loba muerta' },
+      { id: 'rastro', phase: 'rastro', text: 'Averiguar dónde se ha metido el perro', done_when: { kind: 'any', of: [
+        { kind: 'narrative', how: 'cuando el PJ sepa dónde está el perro: por el rastro, por Hal o por el aullido' },
+        { kind: 'visit', spot_id: 'sp_cs_cueva' },
+      ] },
+        on_done: [{ kind: 'reveal_spot', spot_id: 'sp_cs_cueva' }, { kind: 'tell', text: 'En el barro del Soto, entre botas, hay huellas de perro que van hacia el pie del roble, y al lado otras enormes, de lobo.' }],
+        ways: [
+          { id: 'rastrear', kind: 'lore', text: 'En el barro del Soto se puede seguir el rastro.', how: 'seguir las huellas en el Soto (Supervivencia CD 12)', revealed_by: at('loc_claro'),
+            check: { skill: 'Supervivencia', dc: 12 }, on_fail: { text: 'Perdimos el rastro entre las raíces y se nos fue una hora; desde el fondo del Soto llegó un aullido.' } },
+          { id: 'hal', kind: 'help', text: 'Brenna dice que Hal, el cazador, conoce el Soto mejor que nadie.', how: 'preguntar a Hal en la piedra del Soto: sabe dónde está la madriguera', requires: { kind: 'talk', npc_id: 'npc_hal' },
+            on_done: [{ kind: 'know_npc', npc_id: 'npc_hal' }] },
+          { id: 'aullido', kind: 'detour', text: 'De noche, en el Soto, se oye aullar hacia el roble.', how: 'esperar a la noche en el Soto: el aullido lleva a la madriguera', requires: at('loc_claro') },
+        ] },
+      { id: 'lobera', phase: 'madriguera', text: 'Llegar a la madriguera al pie del roble', done_when: { kind: 'visit', spot_id: 'sp_cs_cueva' } },
+      { id: 'sacar', phase: 'madriguera', text: 'Sacar a Ceniza de la madriguera', done_when: { kind: 'any', of: [
+        { kind: 'narrative', how: 'cuando el PJ saque al perro de la madriguera, por una de sus vías o de otra forma que lo consiga' },
         { kind: 'npc_status', npc_id: 'npc_loba', status: 'dead' },
       ] },
-        on_done: [{ kind: 'npc_move', npc_id: 'npc_ceniza', spot_id: 'sp_tab_chimenea' }, { kind: 'tell', text: 'Ceniza sale disparado de entre las raíces, cojeando, hacia el pueblo. Sabe el camino a casa mejor que tú.' }] },
+        on_done: [{ kind: 'npc_move', npc_id: 'npc_ceniza', spot_id: 'sp_tab_chimenea' }, { kind: 'tell', text: 'Ceniza sale disparado de entre las raíces, cojeando, hacia el pueblo. Sabe el camino a casa mejor que tú.' }],
+        ways: [
+          { id: 'fuego', kind: 'item', text: 'Hal dice que la loba le tiene miedo al fuego.', how: 'ahuyentar a la loba con una antorcha encendida (Intimidación CD 15): huye hacia los Corrales',
+            revealed_by: { kind: 'knows', npc_id: 'npc_hal' }, requires: { kind: 'carry', item_id: 'it_antorcha' }, check: { skill: 'Intimidación', dc: 15 }, facts: ['loba_suelta'],
+            on_fail: { text: 'La loba no se arredró ante el fuego y embistió: Ceniza se llevó un mordisco en la pata.', facts: ['ceniza_herido'] } },
+          { id: 'sigilo', kind: 'stealth', text: 'De noche la loba duerme: se puede entrar sin despertarla.', how: 'colarse de noche mientras duerme (Sigilo CD 13)', check: { skill: 'Sigilo', dc: 13 },
+            on_fail: { text: 'Pisamos una rama: la loba despertó y Ceniza se llevó un mordisco en la pata al salir.', facts: ['ceniza_herido'] } },
+          { id: 'ceniza', kind: 'item', text: 'La loba no ataca a quien huele a la Brasa: a quien lleva ceniza del granero.', how: 'entrar con la bolsa de ceniza del granero encima: la loba os deja pasar (y es una pista de lo que pasa en el valle)',
+            revealed_by: { kind: 'any', of: [{ kind: 'knows', npc_id: 'npc_ilse' }, { kind: 'carry', item_id: 'it_bolsa_ceniza' }] }, requires: { kind: 'carry', item_id: 'it_bolsa_ceniza' }, facts: ['loba_olio_la_brasa'] },
+          { id: 'cebo', kind: 'item', text: 'Con algo de comer se puede distraer a la loba.', how: 'tirarle una ración lejos de la boca (Trato con animales CD 12)',
+            requires: { kind: 'carry', item_id: 'it_racion' }, check: { skill: 'Trato con animales', dc: 12 },
+            on_fail: { text: 'La loba ni miró la comida y se lanzó: Ceniza se llevó un mordisco en la pata.', facts: ['ceniza_herido'] } },
+          { id: 'matar', kind: 'force', text: 'Se puede pelear con la loba: es grande y dura.', how: 'matar a la loba (peligrosa para nivel 1)', done_when: { kind: 'npc_status', npc_id: 'npc_loba', status: 'dead' }, facts: ['loba_muerta'] },
+          { id: 'hal_distrae', kind: 'help', text: 'Hal podría distraer a la loba si se fía de nosotros.', how: 'traer a Hal al Soto si es amigo del PJ: él la distrae mientras sacan al perro',
+            revealed_by: { kind: 'knows', npc_id: 'npc_hal' }, requires: { kind: 'trust', npc_id: 'npc_hal', at_least: 'friend' }, on_done: [{ kind: 'trust', npc_id: 'npc_hal', change: 'favor' }] },
+          { id: 'magia', kind: 'magic', text: 'Con un conjuro (dormirla, distraerla, hablarle) no haría falta pelear.', how: '*Dormir*, *Luces danzantes* o *Hablar con los animales*, según la lista del PJ',
+            requires: { kind: 'any', of: ['wizard', 'sorcerer', 'druid', 'bard', 'warlock', 'cleric'].map((id) => ({ kind: 'tag' as const, tag: `clase:${id}` })) } },
+        ] },
+      { id: 'curar', phase: 'pata', text: 'Que alguien le mire la pata a Ceniza', done_when: { kind: 'narrative', how: 'cuando le curen la pata al perro: Ilse, Medicina o una poción' },
+        on_done: [{ kind: 'know_npc', npc_id: 'npc_ilse' }],
+        ways: [
+          { id: 'ilse', kind: 'help', text: 'Ilse, la curandera, cura a cualquier bicho que le lleven.', how: 'llevar a Ceniza a Ilse: lo cura y pide «algo pequeño», como siempre', requires: { kind: 'talk', npc_id: 'npc_ilse' } },
+          { id: 'medicina', kind: 'lore', text: 'Una pata abierta se puede limpiar y vendar.', how: 'curarle la pata uno mismo (Medicina CD 12)', check: { skill: 'Medicina', dc: 12 } },
+          { id: 'pocion', kind: 'item', text: 'Una poción de curación también vale para un perro.', how: 'darle una poción de curación', requires: { kind: 'carry', item_id: 'it_pocion' } },
+        ] },
+    ],
+    outcomes: [
+      { id: 'curado', title: 'Ceniza en casa y con la pata curada', when: { kind: 'phase', quest_id: 'q_perro', phase_id: 'pata' },
+        journal: 'Brenna vio la pata vendada de Ceniza y se le escapó una sonrisa: «Hay quien no se lo habría mirado».', reward: { reputation: 1 },
+        on_complete: [{ kind: 'trust', npc_id: 'npc_brenna', at_least: 'friend' }] },
+      { id: 'loba_muerta', title: 'Ceniza en casa y la loba muerta', when: { kind: 'npc_status', npc_id: 'npc_loba', status: 'dead' },
+        journal: 'La loba de ceniza no volverá a bajar a los Corrales. Hal no dijo nada, pero la conocía.' },
+      { id: 'loba_lejos', title: 'Ceniza en casa y la loba lejos', when: { kind: 'way', quest_id: 'q_perro', step_id: 'sacar', way_id: 'fuego' },
+        journal: 'La loba huyó del fuego monte abajo, hacia los Corrales. Úrsula no va a dormir tranquila.' },
+      { id: 'sin_enterarse', title: 'Ceniza en casa sin que la loba se entere', when: { kind: 'any', of: [
+        { kind: 'way', quest_id: 'q_perro', step_id: 'sacar', way_id: 'sigilo' }, { kind: 'way', quest_id: 'q_perro', step_id: 'sacar', way_id: 'ceniza' },
+        { kind: 'way', quest_id: 'q_perro', step_id: 'sacar', way_id: 'magia' }, { kind: 'way', quest_id: 'q_perro', step_id: 'sacar', way_id: 'hal_distrae' },
+      ] },
+        journal: 'Sacamos a Ceniza sin que la loba se enterara: ni sangre, ni ruido.', reward: { coins: 20 } },
+      { id: 'en_casa', title: 'Ceniza en casa', journal: 'Ceniza volvió a su sitio junto a la chimenea del Jabalí.' },
     ],
     reward: { coins: 100, reputation: 2, xp: 150 },
     // Brenna se ablanda por la opinión (+10, regla `ceniza_vuelve` en reactions.ts), no a mano.
@@ -244,16 +300,46 @@ const QUESTS: StoryQuest[] = [
     requires: { kind: 'quest', quest_id: 'q_agua' },
     text: 'Ilse dice que un fuego de la Brasa solo se templa con hierro frío, y que el único que queda lo forjó el maestro de Hugo, el herrero.',
     notes: 'Hugo guarda los eslabones bajo la losa suelta (oculta, CD 13; él la enseña si confía: discover_spot). El regidor le ha ordenado fundirlos. Ayudarle con su deuda con Osric (set_debt/settle_debt con Garrán, o enfrentarse a Garrán) lo gana del todo. Al llevar los eslabones a Ilse, ella enseña las palabras que templan el ascua.',
+    // Por fases: dar con el hierro (hablar con Hugo y conseguir los eslabones, en cualquier orden) y aprender el rito.
+    phases: [
+      { id: 'hierro', title: 'Dar con el hierro frío', journal: 'Tenemos los eslabones de hierro frío del maestro de Hugo.' },
+      { id: 'rito', title: 'Aprender el rito' },
+    ],
     steps: [
-      { id: 'hugo', text: 'Preguntar al herrero por la cadena de su maestro', done_when: { kind: 'all', of: [{ kind: 'clue', clue_id: 'clue_hugo' }, { kind: 'talk', npc_id: 'npc_hugo' }] } },
-      { id: 'eslabones', text: 'Conseguir los eslabones de hierro frío', done_when: { kind: 'carry', item_id: 'it_cadena_fria' } },
-      { id: 'rito', text: 'Llevarle los eslabones a Ilse para aprender el rito', done_when: { kind: 'all', of: [{ kind: 'carry', item_id: 'it_cadena_fria' }, { kind: 'talk', npc_id: 'npc_ilse' }] },
+      { id: 'hugo', phase: 'hierro', text: 'Preguntar al herrero por la cadena de su maestro', done_when: { kind: 'any', of: [
+        { kind: 'all', of: [{ kind: 'clue', clue_id: 'clue_hugo' }, { kind: 'talk', npc_id: 'npc_hugo' }] },
+        { kind: 'carry', item_id: 'it_cadena_fria' },
+      ] } },
+      { id: 'eslabones', phase: 'hierro', text: 'Conseguir los eslabones de hierro frío', done_when: { kind: 'carry', item_id: 'it_cadena_fria' },
+        ways: [
+          { id: 'confianza', kind: 'help', text: 'Si Hugo se fía de nosotros, los sacará él mismo de donde los guarda.', how: 'ganarse a Hugo (amigo): saca los eslabones de la losa y se los da',
+            requires: { kind: 'trust', npc_id: 'npc_hugo', at_least: 'friend' } },
+          { id: 'losa', kind: 'stealth', text: 'Hugo los guarda bajo una losa suelta de la herrería.', how: 'buscar la losa y sacarlos sin que Hugo mire (Investigación CD 13, luego Juego de manos)',
+            revealed_by: { kind: 'any', of: [{ kind: 'clue', clue_id: 'clue_hugo' }, { kind: 'discovered', spot_id: 'sp_he_losa' }] }, check: { skill: 'Investigación', dc: 13 }, facts: ['eslabones_sin_permiso'],
+            on_fail: { text: 'Hugo nos pilló hurgando bajo su losa.', effects: [{ kind: 'trust', npc_id: 'npc_hugo', change: 'caught_stealing' }], facts: ['hugo_pillo_la_losa'] } },
+          { id: 'garran', kind: 'word', text: 'Garrán tiene orden del regidor de fundirlos: si se echa atrás, Hugo no tendrá que hacerlo.', how: 'plantar cara a Garrán (Persuasión o Intimidación CD 15): Hugo, agradecido, os da los eslabones',
+            revealed_by: { kind: 'clue', clue_id: 'clue_hugo' }, check: { skill: 'Persuasión', dc: 15 }, facts: ['garran_plantado'],
+            on_done: [{ kind: 'trust', npc_id: 'npc_hugo', at_least: 'friend' }],
+            on_fail: { text: 'Garrán se nos rio en la cara y ahora vigila la herrería.', facts: ['garran_vigila_herreria'] } },
+        ] },
+      { id: 'rito', phase: 'rito', text: 'Llevarle los eslabones a Ilse para aprender el rito', done_when: { kind: 'all', of: [{ kind: 'carry', item_id: 'it_cadena_fria' }, { kind: 'talk', npc_id: 'npc_ilse' }] },
         on_done: [{ kind: 'tell', text: 'Ilse pasa los dedos por los eslabones fríos y te hace repetir, tres veces, unas palabras en una lengua vieja. «Se dicen con el hierro frío en la mano y el ascua bajo el agua del pozo. Sin soltarlo, aunque queme».' }] },
+    ],
+    outcomes: [
+      { id: 'garran', title: 'Garrán se fue sin su hierro', when: { kind: 'way', quest_id: 'q_cadena', step_id: 'eslabones', way_id: 'garran' },
+        journal: 'Plantamos cara a Garrán y Hugo no tuvo que fundir la cadena de su maestro.', reward: { reputation: 1 },
+        on_complete: [{ kind: 'attitude', npc_id: 'npc_hugo', attitude: 'friendly' }] },
+      { id: 'sin_permiso', title: 'Los eslabones, sin permiso', when: { kind: 'way', quest_id: 'q_cadena', step_id: 'eslabones', way_id: 'losa' },
+        journal: 'Sacamos los eslabones de la losa sin que Hugo lo supiera. Algún día los echará en falta.' },
+      { id: 'sin_hugo', title: 'Los eslabones de un muerto', when: { kind: 'npc_status', npc_id: 'npc_hugo', status: 'dead' },
+        journal: 'Hugo no llegó a ver que la cadena de su maestro servía para algo.' },
+      { id: 'confiados', title: 'Hugo nos confió los eslabones', journal: 'Hugo nos confió los eslabones de su maestro.',
+        on_complete: [{ kind: 'attitude', npc_id: 'npc_hugo', attitude: 'friendly' }] },
     ],
     reward: { coins: 150, xp: 300 },
     // Va de parte de Ilse: Hugo le recibe como a un conocido (con lo que sabe de la Brasa, le habla de la cadena).
     on_accept: [{ kind: 'trust', npc_id: 'npc_hugo', at_least: 'acquaintance' }],
-    on_complete: [{ kind: 'attitude', npc_id: 'npc_hugo', attitude: 'friendly' }],
+    on_complete: [],
     on_npc_dead: [
       // Caso de la partida del 2026-10-27: Hugo muerto con la misión abierta. Los eslabones siguen bajo su losa.
       { npc_id: 'npc_hugo', outcome: 'reroute', why: 'Hugo murió antes de enseñarnos los eslabones, pero siguen escondidos en su herrería', steps: [
@@ -277,9 +363,26 @@ const QUESTS: StoryQuest[] = [
     text: 'Tobías, el hijo del molinero, sale de noche y vuelve con las uñas negras. Mateo no quiere saberlo, pero tose gris como todos y te pide que hables con él.',
     notes: 'Con las cartas o la bolsa de ceniza delante, Tobías confiesa (CD 12; sin ellas, CD 15): echa al pozo ceniza de las grietas del altar por encargo de «la señora del granero», que le ha prometido hacerle señor de Vharn. Pararlo cura poco a poco el pozo y frena la tos gris. Si se le humilla delante de su padre o se le entrega a Garrán, se esconde en el Granero Quemado. La recompensa, al volver con Mateo.',
     rumor: { text: 'en el molino dicen que {giver} quiere hablar con alguien de fuera del pueblo', where: at('loc_molino') },
+    // Por fases: que hable y que pare; si confiesa, se abre la secundaria de hacer las paces con su padre.
+    phases: [
+      { id: 'hablar', title: 'Que Tobías hable', journal: 'Tobías lo confesó: echa ceniza al pozo porque la señora del granero le ha prometido hacerle señor de Vharn.' },
+      { id: 'parar', title: 'Que deje de echar ceniza' },
+      { id: 'padre', title: 'Padre e hijo', secondary: true, opens_when: { kind: 'step', quest_id: 'q_tobias', step_id: 'confesar' }, reward: { xp: 50 },
+        journal: 'Tobías se lo contó todo a su padre. Mateo no gritó.' },
+    ],
     steps: [
-      { id: 'confesar', text: 'Hacer que Tobías cuente lo que hace de noche', done_when: { kind: 'narrative', how: 'cuando Tobías confiese que echa ceniza al pozo por encargo de la mujer del granero (Persuasión/Intimidación CD 15, CD 12 con las cartas o la bolsa delante)' } },
-      { id: 'parar', text: 'Que deje de echar ceniza al pozo', done_when: { kind: 'any', of: [
+      { id: 'confesar', phase: 'hablar', text: 'Hacer que Tobías cuente lo que hace de noche', done_when: { kind: 'narrative', how: 'cuando Tobías confiese que echa ceniza al pozo por encargo de la mujer del granero' },
+        ways: [
+          { id: 'pruebas', kind: 'word', text: 'Con las cartas o la bolsa de ceniza delante, Tobías no podrá negarlo.', how: 'ponerle delante las cartas o la bolsa de ceniza (Persuasión CD 12)',
+            revealed_by: { kind: 'any', of: [{ kind: 'carry', item_id: 'it_cartas_tobias' }, { kind: 'carry', item_id: 'it_bolsa_ceniza' }, { kind: 'clue', clue_id: 'clue_tobias' }] },
+            requires: { kind: 'any', of: [{ kind: 'carry', item_id: 'it_cartas_tobias' }, { kind: 'carry', item_id: 'it_bolsa_ceniza' }] }, check: { skill: 'Persuasión', dc: 12 } },
+          { id: 'persuadir', kind: 'word', text: 'Tobías es un crío asustado: con buenas palabras puede que hable.', how: 'convencerle sin pruebas (Persuasión CD 15)', check: { skill: 'Persuasión', dc: 15 } },
+          { id: 'intimidar', kind: 'word', text: 'Se le puede apretar las tuercas, aunque no lo olvidará.', how: 'asustarle (Intimidación CD 15): confiesa, pero queda humillado', check: { skill: 'Intimidación', dc: 15 }, facts: ['tobias_humillado'],
+            on_fail: { text: 'Tobías se cerró en banda y salió corriendo hacia el Soto.', facts: ['tobias_huyo'] } },
+          { id: 'seguirle', kind: 'stealth', text: 'De noche sale del molino: se le puede seguir.', how: 'seguirle de noche hasta el pozo y pillarle con la bolsa en la mano (Sigilo CD 13)', check: { skill: 'Sigilo', dc: 13 },
+            on_fail: { text: 'Tobías nos oyó en la oscuridad y esa noche no salió.' } },
+        ] },
+      { id: 'parar', phase: 'parar', text: 'Que deje de echar ceniza al pozo', done_when: { kind: 'any', of: [
         { kind: 'narrative', how: 'cuando Tobías prometa parar de verdad, o el PJ le quite la bolsa de ceniza y lo deje en manos de su padre' },
         { kind: 'npc_has', npc_id: 'npc_mateo', item_id: 'it_bolsa_ceniza' },
       ] },
@@ -287,7 +390,29 @@ const QUESTS: StoryQuest[] = [
           { kind: 'cancel_schedule', event_id: 'se_tobias' },
           { kind: 'npc_routine', npc_id: 'npc_tobias', routine: { day: 'sp_mo_sacos', night: 'sp_mo_sacos' } },
           { kind: 'spot_state', spot_id: 'sp_pl_pozo', patch: { agua: 'aclarándose: ya no trae ceniza nueva' } },
+        ],
+        ways: [
+          { id: 'promesa', kind: 'word', text: 'Si promete parar, hay que saber si lo dice de verdad.', how: 'que lo prometa y comprobar que no miente (Perspicacia CD 12)', check: { skill: 'Perspicacia', dc: 12 },
+            on_fail: { text: 'Tobías lo prometió mirando al suelo. No le creímos del todo.' } },
+          { id: 'bolsa', kind: 'item', text: 'Sin la bolsa de ceniza no tiene qué echar.', how: 'quitarle la bolsa de ceniza y dársela a Mateo', done_when: { kind: 'npc_has', npc_id: 'npc_mateo', item_id: 'it_bolsa_ceniza' } },
+          { id: 'garran', kind: 'help', text: 'Garrán, el alguacil, se lo llevaría encantado.', how: 'entregarle a Garrán: para, pero se escapa y se esconde en el Granero Quemado',
+            requires: { kind: 'talk', npc_id: 'npc_garran' }, facts: ['tobias_entregado'],
+            on_done: [{ kind: 'npc_routine', npc_id: 'npc_tobias', routine: { day: 'sp_ru_patio', night: 'sp_ru_patio' } }] },
         ] },
+      { id: 'paces', phase: 'padre', text: 'Que Tobías se lo cuente a su padre', done_when: { kind: 'narrative', how: 'cuando Tobías le cuente a Mateo lo que hacía y hagan las paces' },
+        ways: [
+          { id: 'mediar', kind: 'word', text: 'Mateo escuchará si alguien está delante para que no griten.', how: 'juntarlos y mediar (Persuasión CD 12)', requires: { kind: 'talk', npc_id: 'npc_mateo' }, check: { skill: 'Persuasión', dc: 12 } },
+        ] },
+    ],
+    outcomes: [
+      { id: 'entregado', title: 'Tobías, en manos de Garrán', when: { kind: 'way', quest_id: 'q_tobias', step_id: 'parar', way_id: 'garran' },
+        journal: 'Entregamos a Tobías a Garrán. Dejó de echar ceniza, pero se escapó al Granero Quemado y Mateo no nos lo perdona.',
+        on_complete: [{ kind: 'attitude', npc_id: 'npc_mateo', attitude: 'neutral' }] },
+      { id: 'en_paz', title: 'El molino en paz', when: { kind: 'phase', quest_id: 'q_tobias', phase_id: 'padre' },
+        journal: 'Tobías dejó de echar ceniza y en el molino vuelven a hablarse.', reward: { coins: 30 } },
+      { id: 'humillado', title: 'Tobías paró, pero no perdona', when: { kind: 'fact', id: 'tobias_humillado' },
+        journal: 'Tobías dejó de echar ceniza. Cuando nos cruzamos, mira para otro lado.' },
+      { id: 'paro', title: 'Tobías ha parado', journal: 'Tobías dejó de echar ceniza al pozo.' },
     ],
     reward: { coins: 150, reputation: 2, xp: 250 },
     on_complete: [{ kind: 'attitude', npc_id: 'npc_mateo', attitude: 'allied' }, { kind: 'learn_place', location_id: 'loc_ruinas' },
@@ -468,7 +593,11 @@ const ESCALATION: StoryEscalation[] = [
   },
   {
     id: 'esc_lobos', title: 'Los lobos bajan a los Corrales', after_hours: 20,
-    unless: { kind: 'any', of: [{ kind: 'quest', quest_id: 'q_perro' }, { kind: 'npc_status', npc_id: 'npc_loba', status: 'dead' }] },
+    // Si la loba huyó del fuego (vía `fuego` de «Ceniza se ha perdido»), baja igual: devolver el perro no basta.
+    unless: { kind: 'any', of: [
+      { kind: 'all', of: [{ kind: 'quest', quest_id: 'q_perro' }, { kind: 'not', of: { kind: 'fact', id: 'loba_suelta' } }] },
+      { kind: 'npc_status', npc_id: 'npc_loba', status: 'dead' },
+    ] },
     location_id: 'loc_corrales', spot_id: 'sp_co_gallinero',
     text: 'Los lobos han saltado la cerca de los Corrales: el gallinero reventado, plumas por todas partes, dos ovejas muertas en el redil y huellas enormes, de ceniza, en la cancela. Úrsula está en medio con una horca en la mano.',
     effects: [

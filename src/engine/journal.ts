@@ -41,12 +41,19 @@ import { contractArticles, maskUnknownNames, roleLabel } from './narrate.js';
 import { activeJobs } from './progress.js';
 import { rumorsHeardBy, rumorsIn, type Rumor } from './rumors.js';
 import { characterStory, difficultyOf, mainQuestFor, nameFor, questsOf, type QuestDifficulty, type QuestLogEntry, type StoryCondition, type StoryQuest } from './story.js';
+import { knownWays, outcomeOf, phaseOfStep, type StoryStep } from './story.js';
 import { boardSeen, droppedAt, givenQuests } from './quests.js';
 
 /** `ready`: lista para entregar a quien la recibe; `declined`: se la pidieron y dijo que no. */
 export type QuestStatus = 'available' | 'active' | 'ready' | 'completed' | 'expired' | 'failed' | 'declined';
 
-export interface JournalStep { text: string; done: boolean }
+export interface JournalStep {
+  text: string; done: boolean;
+  /** Misiones por fases: la fase del objetivo (el Diario las pone como encabezado) y si es secundaria (opcional). */
+  phase?: string; secondary?: boolean;
+  /** Formas que conocemos de lograrlo (story.ts, vías), con la que usamos y las que salieron mal. */
+  ways?: { text: string; used: boolean; failed: boolean }[];
+}
 
 /** De dónde le vino la misión al PJ. */
 export interface JournalOrigin {
@@ -126,6 +133,8 @@ export interface JournalQuest {
    */
   /** De qué va y qué toca ahora. Lo que dijo cada NPC va en Charlas y en la Crónica, no aquí. */
   summary: { text: string; next: string | null };
+  /** Misiones con desenlaces: cómo acabó (título y la línea del Diario). */
+  outcome?: { title: string; text: string } | null;
 }
 
 export interface JournalExchange {
@@ -326,8 +335,11 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
         : x.kind === 'done' ? ['completed', q.main_for ? 'Se acabó' : 'Lo hemos conseguido']
         : x.kind === 'failed' ? ['failed', cap(x.why)]
         : x.kind === 'expired' ? ['expired', 'Ya no se puede']
+        // Fases: una cerrada, una secundaria que se abre, una vía que salió mal.
+        : x.kind === 'phase' ? ['step', x.why]
+        : x.kind === 'phase_open' || x.kind === 'way_failed' ? ['changed', cap(x.why)]
         : ['step', s?.journal ? masked(s.journal) : `✔ ${masked(s?.text ?? x.step_id ?? '')}`];
-      const why = ['open', 'declined', 'changed', 'warned', 'failed'].includes(x.kind) ? null : x.why ? masked(x.why) : null;
+      const why = ['open', 'declined', 'changed', 'warned', 'failed', 'phase', 'phase_open', 'way_failed'].includes(x.kind) ? null : x.why ? masked(x.why) : null;
       return { key: `${q.id}:${x.kind}:${x.step_id ?? ''}:${x.game_s}`, ...at(x.game_s), kind, text: masked(text), why };
     });
   };
@@ -503,6 +515,13 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
   // La principal va arriba, en la de su situación.
   const storyTimes = mine.filter((e) => e.action_type === 'progress_story' && e.actor_id === c.id);
   const mainId = s ? mainQuestFor(w, c)?.id ?? null : null;
+  // Misiones por fases: la fase de cada objetivo y las formas que conocemos de lograrlo; al cerrarla, su desenlace.
+  const phaseOf = (q: StoryQuest, st: StoryStep): Partial<JournalStep> => {
+    const p = phaseOfStep(q, st);
+    const ways = knownWays(w, c, q, st).map((x) => ({ text: masked(x.way.text), used: x.used, failed: x.failed }));
+    return { ...(p ? { phase: p.title, ...(p.secondary ? { secondary: true } : {}) } : {}), ...(ways.length ? { ways } : {}) };
+  };
+  const outcomeView = (q: StoryQuest) => { const o = outcomeOf(w, c, q); return o ? { title: o.title, text: masked(o.journal) } : null; };
   for (const v of questsOf(w, c)) {
     const q = v.quest;
     if (q.id === mainId) continue;
@@ -531,8 +550,9 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
       reward: [r.coins ? money(w, r.coins) : '', r.reputation ? `+${r.reputation} de reputación` : '', r.xp ? `${r.xp} PX` : ''].filter(Boolean).join(' · ') || null,
       seen_game_s: seen, seen: fmt(seen), completed_game_s: completed, completed: completed === null ? null : fmt(completed),
       updated_game_s: updated, updated: fmt(updated),
-      steps: [...v.steps.map((s) => ({ text: masked(s.step.text), done: s.done })), ...back],
+      steps: [...v.steps.map((s) => ({ text: masked(s.step.text), done: s.done, ...phaseOf(q, s.step) })), ...back],
       clock: null, antagonist: null, paths: [], rumors: questRumors([q.title, q.text]), pinned: false, summary: EMPTY_SUMMARY(),
+      ...(q.outcomes?.length && v.status === 'completed' ? { outcome: outcomeView(q) } : {}),
     });
   }
 
