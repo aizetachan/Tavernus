@@ -60,6 +60,12 @@ No dice «diezmo», dice «ofrenda de vecindad». Ver [[Costumbres#Saludos y man
 | Tarde (14-20) | El tablón, [[Plaza del Pozo]] |
 | Noche (20-6) | La alcoba de arriba, [[La casona]] |
 
+## Lleva encima
+
+Una bolsa de cuero con 6 de oro, 4 de plata y 4 de cobre. Dentro, un anillo de sello, el manojo de llaves de la casona y un pañuelo. Al cinto, un estoque.
+
+Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+
 ## Relaciones
 
 - [[Doro]]: su sobrino.

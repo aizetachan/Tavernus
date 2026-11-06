@@ -22,6 +22,7 @@ import type { EncounterTable } from '../engine/travel.js';
 import type { TagDef } from '../engine/model.js';
 import { validateReactions, type WorldRule } from '../engine/worldrules.js';
 import type { ChatterDef } from '../engine/chatter.js';
+import { KITS } from '../engine/outfit.js';
 
 const norm = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const blank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
@@ -132,6 +133,7 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
       if (!defs.has(t.item_id)) errs.push(`comercio de ${n.id}: el objeto ${t.item_id} no está en el catálogo.`);
       if (!Number.isInteger(t.price) || t.price <= 0) errs.push(`comercio de ${n.id}: el precio de ${t.item_id} debe ser un entero positivo.`);
     }
+    if (n.kit && !KITS.some((k) => k.id === n.kit)) errs.push(`${n.id}: el ajuar «${n.kit}» no existe (outfit.ts: ${KITS.map((k) => k.id).join(', ')}).`);
     const r = (n as typeof n & { routine?: NpcRoutine }).routine;
     for (const id of Object.values(r ?? {})) if (id && !spots.has(id)) errs.push(`horario de ${n.id}: el punto ${id} no existe.`);
   }

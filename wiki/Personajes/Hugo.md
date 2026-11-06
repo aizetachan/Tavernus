@@ -67,6 +67,12 @@ Cena en el Jabalí de 19:00 a 21:00. Ver [[Vida del pueblo]].
 
 Precios en monedas. Ver [[Objetos]].
 
+## Lleva encima
+
+Una bolsa de cuero con 8 de plata y 7 de cobre. Dentro, un puñado de clavos, yesca y pedernal y una navaja. Y su martillo.
+
+Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+
 ## Relaciones
 
 - [[Osric Malvez]]: le debe dinero. Osric lo tiene agarrado.

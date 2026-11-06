@@ -7,7 +7,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { Engine } from '../engine/engine.js';
 import type { World } from '../engine/world.js';
 import { rollD20, rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
-import { consumeItem, inventoryDetailed, inventoryView, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
+import { carrierOf, consumeItem, inventoryDetailed, inventoryView, npcCarryList, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
 import type { Character, Id, Npc, Placement, ReactionKind } from '../engine/model.js';
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
 import { perceive, witnesses } from '../engine/perception.js';
@@ -853,7 +853,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         remembers_about_others: n.memory.filter((m) => m.character_id !== actor.id && m.importance >= 2).slice(-5).map((m) => `[${engine.clock.format(m.game_s)}] ${world.characters.get(m.character_id)?.name ?? '?'}: ${m.note}`),
         talking_to: n.talking_to ? (world.characters.get(n.talking_to.character_id)?.name ?? null) : null,
         order: orderLine(world, n, nowGameS),
-        carries: world.itemsIn({ type: 'npc', id: n.id }).map((i) => `${world.itemDef(i.item_id).name} ×${i.quantity} [${i.id}]`),
+        carries: npcCarryList(world, n.id),
         ...(n.death ? { death: { at: engine.clock.format(n.death.died_game_s), by: n.death.by_name, cause: n.death.cause } } : {}),
       };
     }
@@ -1074,7 +1074,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (guard) return guard;
       // Quitarle algo a alguien que lo lleva encima («le robo la bolsa»): un robo, salvo que la tirada lo haya hecho sin que se note.
       const held = world.itemInstances.get(s('instance_id'))?.location;
-      const victim = held?.type === 'npc' ? world.npcs.get(held.id) : undefined;
+      // También lo que va dentro de su bolsa: quien lo lleva es el NPC (outfit.ts).
+      const holder = held ? carrierOf(world, held) : null;
+      const victim = holder?.type === 'npc' ? world.npcs.get(holder.id) : undefined;
       // Al inconsciente se le registra sin tirada, pero quien lo vea lo ve como un robo.
       const stolen = Boolean(victim && toType === 'character' && s('to_id') === actor.id
         && ((victim.status === 'alive' && readsAsTheft(ctx.action_text) && !['exito_justo', 'exito_claro', 'critico'].includes(ctx.roll_category ?? '')) || victim.status === 'unconscious'));
@@ -1096,7 +1098,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!r.ok) return { error: r.error.code, detail: r.error, ...(r.error.code === 'no_space' && r.error.fits ? { hint: `Caben ${r.error.fits}: repite con quantity ${r.error.fits} si es lo que quiere.` } : {}) };
       // Darle algo a un NPC es un regalo (o una entrega): sube su confianza, con el tope de la charla.
       if (toType === 'npc') { const n = world.npc(s('to_id')); if (n.status === 'alive') trustProgress(ctx, adjustTrust(world, n, actor, 'gift', nowGameS)); }
-      return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity, ...(stolen ? crimeNote(ctx) : {}) };
+      return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity, ...(r.coins ? { coins_found: money(world, r.coins), hint_coins: `Dentro había ${money(world, r.coins)}: ya están en las monedas del actor. Dilo con esa cifra exacta.` } : {}), ...(stolen ? crimeNote(ctx) : {}) };
     }
     case 'report_incident': {
       const kind = s('kind') as IncidentKind;

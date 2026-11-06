@@ -62,6 +62,12 @@ Justicia para su casa: que el valle confiese quién prendió el fuego y lo pague
 
 Precios en monedas. Ver [[Objetos]].
 
+## Lleva encima
+
+Una bolsa de cuero sin una moneda. Dentro, un amuleto de hueso y yesca y pedernal.
+
+Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+
 ## Relaciones
 
 > [!warning]- Spoiler: con quién trata

@@ -423,6 +423,17 @@ Reglas del servidor: carga máxima, slots de equipo válidos por tipo, límite d
 ### 5.3 Ítems en el mundo
 Un ítem siempre está en **exactamente un sitio**: inventario de un PJ, inventario de un NPC, o `location.contents`. Mover = transacción atómica. Así nunca hay duplicados ni desapariciones.
 
+#### 5.3.1 Lo que lleva encima cada NPC: el ajuar — DECIDIDO 2026-11-06
+Partida «Humo y ceniza» (VPS): el PJ le robó a Garrán «la bolsa de cuero» con buenas tiradas, pero la bolsa no existía; el máster la inventó y no apareció en la mochila. Regla: **toda persona lleva al empezar algo real que robar o encontrar** (`src/engine/outfit.ts`).
+
+- **Qué lleva.** Una bolsa al cinto (`it_kit_purse`: «bolsa de cuero»; «riñonera» en ciencia ficción, «riñonera de lona» en postapocalíptico) con monedas dentro (`state.coins`, en la moneda más pequeña); dentro de la bolsa, dos o tres cosas de su oficio (navaja, yesca y pedernal, mendrugo, manojo de llaves, anillo de sello, hierbas, vendas, silbato, clavos, cuentas de rezo, amuleto, sedal…); y su arma, si pelea y su ataque nombra un arma (`stats.attack_name` «maza corta» → la maza del catálogo; «lanza», «garrote», «martillo», «horca» y «cimitarra» las pone el ajuar). Quien no pelea (`noncombatant`) no lleva arma a la vista. Los animales (`mute` o un oficio de animal), nada.
+- **De dónde sale.** Del oficio (`Npc.role`, por palabras: «tabernera» → posadero; «alguacil» → guardia; «regidor» → noble…) o de `Npc.kit` si la campaña lo dice. La riqueza, del ajuar o de `Npc.wealth` (`none`, `poor`, `modest`, `comfortable`, `rich`). Las monedas se miden por lo que lleva un PJ al empezar (`campaign.starting_coins`): pobre de 0,05 a 0,2 veces; modesto, de 0,2 a 0,6; acomodado, de 0,6 a 1,5; rico, de 2 a 5. La cifra sale del id del NPC: el mismo mundo da siempre el mismo ajuar.
+- **Lo escrito manda.** El ajuar solo completa: no pone bolsa a quien ya lleva un contenedor, no repite una cosa que ya lleva y no da arma a quien ya lleva una. Brezal escribe la bolsa del diezmo de Garrán con su dinero; el resto lo pone el ajuar.
+- **Cuándo.** Al arrancar la partida (`migrate` en `engine.ts`), una vez por NPC (`Npc.outfitted`): campañas escritas, demo, mundos generados y partidas ya empezadas. En estas, antes, el NPC recupera lo que la campaña escrita le pone encima y la partida no tenía (la bolsa de Garrán en «Humo y ceniza»). Lo que le roben no se repone. A un muerto no se le da nada.
+- **El dinero de la bolsa.** En cuanto la bolsa llega a un PJ (en la mano, al cinto o dentro de su mochila), sus monedas pasan a `Character.coins` y la bolsa queda vacía (`transferItem`, inventory.ts). `transfer_item` le devuelve al máster `coins_found` con la cifra; al coger una bolsa del suelo, el motor dice «Dentro hay 3 de plata: te las guardas.».
+- **El máster lo ve.** En el contexto («Lleva: …») y en `get_npc` va todo con su id, con el dinero y lo de dentro: «bolsa de cuero con 4 de oro y 3 de plata [ii_garran_bolsa] (dentro: trenza de esparto […], silbato de hueso […])». Sacar algo de la bolsa de un NPC cuenta como quitárselo a él (robo, testigos).
+- **Los PJ** empiezan con el equipo de su clase (arma, armadura, mochila con antorchas, raciones y cuerda): ya llevan qué robar. Su dinero es un número, no una bolsa: un NPC no se lo puede quitar.
+
 ---
 
 ### 5.4 Capacidad — DECIDIDO: nada es infinito

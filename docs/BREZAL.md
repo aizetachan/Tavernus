@@ -147,6 +147,23 @@ Bloques SRD de los arquetipos del generador (`ARCHETYPES`, mismos rangos que val
 | **la loba de ceniza** | loba | grande como un poni, humea, ojos de brasa | defender la madriguera | no ataca a quien lleva ceniza del granero | — | — | 14 CA, 37 PG, 2d6+3 | la madriguera **[cambia]** |
 | **Ceniza** | perro de Brenna | pardo, oreja rota | volver a casa | — | — | — | sin combate | la madriguera (luego, la chimenea) |
 
+**Lo que lleva encima cada uno** **[nuevo, 2026-11-06]**. Lo pone el ajuar al arrancar (`src/engine/outfit.ts`, SPEC §5.3.1), salvo la bolsa del diezmo de Garrán y su trenza, que van escritas en `items.ts`. `people.ts` solo corrige dos ajuares: Garrán, de alguacil (`kit: 'guard'`: no sabe escribir, sin libreta de recaudador), e Ysolde, de hechicera y sin dinero (`kit: 'mystic'`).
+
+| NPC | Bolsa de cuero (dinero) | Dentro | Además |
+|---|---|---|---|
+| Brenna | 1 de oro, 5 de plata y 2 de cobre | manojo de llaves, pañuelo | |
+| Doro | 8 de plata y 9 de cobre | silbato de hueso, mendrugo | lanza |
+| Osric | 6 de oro, 4 de plata y 4 de cobre | anillo de sello, manojo de llaves, pañuelo | estoque |
+| Garrán | 4 de oro y 3 de plata (el diezmo) | trenza de esparto, silbato de hueso, mendrugo | llave del arcón, maza |
+| Ilse | 7 de plata y 9 de cobre | hierbas secas, vendas de lino | 3 tónicos, 1 poción |
+| Hugo | 8 de plata y 7 de cobre | clavos, yesca y pedernal, navaja | martillo |
+| Mateo | 1 de plata | navaja, yesca y pedernal, mendrugo | |
+| Tobías | 1 de plata y 2 de cobre | navaja, yesca y pedernal, mendrugo | |
+| Ysolde | nada | amuleto de hueso, yesca y pedernal | |
+| Hal | 2 de plata y 2 de cobre | navaja, sedal y anzuelos, yesca y pedernal | arco corto |
+| Úrsula | 2 de plata | navaja, yesca y pedernal, mendrugo | |
+| los tres animales | | | nada |
+
 ### 2.6 Lugares **[cambia]**
 
 **Una zona jugable** (Aldea de Brezal), **diez lugares** (la taberna cuenta con su sótano) y 63 puntos. Los planos salen de mapgen con las coordenadas, tags y alias de cada punto. Las ids de siempre se conservan: el Soto es `loc_claro`, el Granero Quemado es `loc_ruinas`, la madriguera es `sp_cs_cueva` y el mojón del Lindero es `sp_cs_mojon`.

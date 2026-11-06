@@ -116,6 +116,8 @@ export const NPCS: AuthoredNpc[] = [
     buys: [], sells: [],
     // Alguacil: jubón de cuero mojado (CA 13) y maza corta; si te resistes, Doro acude.
     stats: srd('thug', 24, { ac: 13, attack_name: 'maza corta', multiattack: 1 }),
+    // Ajuar de alguacil (silbato, mendrugo) y no de recaudador: no sabe escribir, no lleva libreta. La bolsa del diezmo va en items.ts.
+    kit: 'guard',
     routine: { day: 'sp_pl_tablon', afternoon: 'sp_tab_barra', night: 'sp_ca_banco' },
   },
   {
@@ -220,6 +222,8 @@ export const NPCS: AuthoredNpc[] = [
     buys: [{ item_id: 'it_racion', price: 12 }, { item_id: 'it_libro_cuentas', price: 3000 }],
     sells: [],
     stats: { ac: 12, hp_max: 22, hp: 22, attack_bonus: 5, damage: '2d6', damage_type: 'fire', attack_name: 'llama de la Brasa', xp: 450 },
+    // Ajuar de hechicera, sin dinero: vive en las ruinas de lo que le da Hal (amuleto, yesca; outfit.ts).
+    kit: 'mystic',
     routine: { day: 'sp_ru_torre', night: 'sp_ru_capilla' },
   },
   {

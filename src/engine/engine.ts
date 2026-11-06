@@ -56,6 +56,7 @@ import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, i
 import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
+import { outfitNpcs } from './outfit.js';
 import { discoverSpot, lookAround, migrateSpotSight, noteSight, searchableSpots, seeFrom } from './spots.js';
 import { absence, absenceRule, acceptPrologue, acceptRecap, forPrologue, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
 
@@ -365,6 +366,8 @@ export class Engine {
       for (const n of engine.world.npcs.values()) engine.world.touch('npcs', n.id);
       for (const sp of engine.world.spots.values()) engine.world.touch('spots', sp.id);
       for (const d of engine.world.itemDefs.values()) engine.world.touch('item_defs', d.id);
+      // Y ejemplares nuevos: el ajuar de los NPC (outfit.ts).
+      for (const i of engine.world.itemInstances.values()) engine.world.touch('item_instances', i.id);
       await engine.flush();
     }
     return engine;
@@ -1240,9 +1243,10 @@ export class Engine {
       case 'take': {
         const inst = this.world.itemInstance(intent.instance_id);
         const def = this.world.itemDef(inst.item_id);
+        const before = c.coins;
         const where = this.takeToHands(c, inst.id, intent.quantity);
         if (!where) return null;
-        return this.emitTrivial(c, input, 'take', 'inventory', led(`Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.`),
+        return this.emitTrivial(c, input, 'take', 'inventory', led(`Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.${foundCoins(this.world, c.coins - before)}`),
           `${c.name} coge ${def.name}.`, 'Una figura coge algo.', undefined, { item_id: def.id });
       }
       case 'drop': {
@@ -3631,7 +3635,7 @@ export class Engine {
       const res = transferItem(this.world, inst.id, t, quantity);
       if (res.ok) {
         const where = t.type === 'character' && t.slot.kind === 'pocket' ? 'y te lo guardas en un bolsillo' : 'con la mano';
-        return this.emit(c, input, 'take', `Coges ${def.name} ${where}.`, `${c.name} coge ${def.name} del suelo de ${here.name}.`, 1, { observable_vague: 'Una figura se agacha a coger algo.', item_id: def.id });
+        return this.emit(c, input, 'take', `Coges ${def.name} ${where}.${foundCoins(this.world, res.coins ?? 0)}`, `${c.name} coge ${def.name} del suelo de ${here.name}.`, 1, { observable_vague: 'Una figura se agacha a coger algo.', item_id: def.id });
       }
       lastErr = res.error;
     }
@@ -3834,7 +3838,14 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   if (migrateRentableRooms(snapshot)) changed = true;
   // Partidas de antes de que los rincones se descubrieran: cada PJ conserva los de los sitios donde ha estado.
   if (migrateSpotSight(snapshot)) changed = true;
+  // Ajuar de los NPC (outfit.ts): bolsa con monedas, cosas de su oficio y su arma, una vez por NPC.
+  if (outfitNpcs(snapshot, seed)) changed = true;
   return changed;
+}
+
+/** « Dentro hay 3 de plata: te las guardas.» al coger una bolsa con monedas (outfit.ts); nada si no había. */
+function foundCoins(world: World, n: number): string {
+  return n > 0 ? ` Dentro hay ${money(world, n)}: te las guardas.` : '';
 }
 
 export function formatInventory(v: InventoryView): string {

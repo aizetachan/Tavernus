@@ -78,6 +78,12 @@ Cada noche a las 20:00 acude a la misa del pozo, en la [[Plaza del Pozo]]. No ha
 
 Precios en monedas. Ver [[Objetos]].
 
+## Lleva encima
+
+Una bolsa de cuero con 1 de oro, 5 de plata y 2 de cobre. Dentro, el manojo de llaves de la taberna y un pañuelo.
+
+Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+
 ## Relaciones
 
 - [[Ceniza]]: su perro. Se perdió en el Soto.

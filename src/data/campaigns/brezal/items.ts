@@ -3,11 +3,14 @@
  * truchas, la noche de posada y su llave) más lo propio de esta historia: las
  * pruebas, la llave de los Vharn y los eslabones de hierro frío; y lo de la
  * granja de Úrsula (huevos y coles). Dónde está cada cosa al empezar y qué dan
- * el Soto y los Corrales.
+ * el Soto y los Corrales. Lo que cada vecino lleva encima (bolsa, monedas, cosas
+ * de su oficio, su arma) lo pone el ajuar al arrancar (src/engine/outfit.ts); aquí
+ * solo lo que es de esta historia: la bolsa del diezmo de Garrán.
  */
 
 import type { ItemDef, ResourceNode } from '../../../engine/model.js';
 import { CATALOG } from '../../../worldgen/fill.js';
+import { kitItemDef } from '../../../engine/outfit.js';
 import type { AuthoredInstance } from '../format.js';
 
 const quest = (id: string, name: string, aliases: string[], extra: Partial<ItemDef> = {}): ItemDef =>
@@ -29,6 +32,9 @@ export const ITEM_DEFS: ItemDef[] = [
   { id: 'it_huevo', name: 'huevo', aliases: ['huevos', 'huevo de gallina', 'egg'], type: 'consumable', size: 'tiny', weight_lb: 0.1, value: 1, unique: false, origin: 'custom' },
   { id: 'it_col', name: 'col', aliases: ['coles', 'repollo', 'verdura', 'nabos'], type: 'consumable', size: 'small', weight_lb: 2, value: 1, unique: false, origin: 'custom' },
   { id: 'it_piel', name: 'piel de lobo', aliases: ['piel', 'pellejo'], type: 'misc', size: 'medium', weight_lb: 5, value: 150, unique: false, origin: 'custom' },
+  // La bolsa del ajuar (outfit.ts), para la de Garrán, que va escrita; las demás las pone el ajuar al arrancar.
+  kitItemDef('purse', 'fantasy'),
+  { id: 'it_esparto', name: 'trenza de esparto', aliases: ['esparto', 'trenza', 'trenza de esparto'], type: 'misc', size: 'tiny', weight_lb: 0.1, value: 0, unique: true, description: 'Una trenza de esparto a medio hacer, de las que se hacen a la luz de una vela para no dormirse.', origin: 'custom' },
 ];
 
 export const ITEMS: AuthoredInstance[] = [
@@ -43,6 +49,10 @@ export const ITEMS: AuthoredInstance[] = [
   { id: 'ii_bolsa_ceniza', item_id: 'it_bolsa_ceniza', quantity: 1, at: { spot: 'sp_mo_desvan' } },
   { id: 'ii_copa_vharn', item_id: 'it_copa_vharn', quantity: 1, at: { spot: 'sp_ca_arcon' } },
   { id: 'ii_llave_arcon', item_id: 'it_llave_arcon', quantity: 1, at: { npc: 'npc_garran' } },
+  // La bolsa del diezmo, al cinto de Garrán: lo cobrado hoy (life.ts, se_diezmo: «se guarda la bolsa») y la trenza
+  // que hace de noche junto a la vela (su secreto de amigo). El ajuar le añade el silbato y el mendrugo.
+  { id: 'ii_garran_bolsa', item_id: 'it_kit_purse', quantity: 1, at: { npc: 'npc_garran' }, state: { coins: 430 } },
+  { id: 'ii_garran_esparto', item_id: 'it_esparto', quantity: 1, at: { container: 'ii_garran_bolsa' } },
   // Lo que Ilse vende lo tiene a mano, en su mesa de hierbas: se compra o se roba de aquí.
   { id: 'ii_ilse_tonico', item_id: 'it_tonico', quantity: 3, at: { npc: 'npc_ilse' } },
   { id: 'ii_ilse_pocion', item_id: 'it_pocion', quantity: 1, at: { npc: 'npc_ilse' } },

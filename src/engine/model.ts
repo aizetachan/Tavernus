@@ -711,6 +711,15 @@ export interface Npc {
   tag_reactions?: TagReaction[];
   /** No habla (un animal): ni comenta al pasar ni cuenta noticias, aunque vea lo que pasa (chatter.ts, worldrules.ts). */
   mute?: boolean;
+  /**
+   * Ajuar (outfit.ts): qué lleva encima por su oficio (`KITS`: 'guard', 'healer', 'noble', 'animal'…). Datos de campaña;
+   * sin campo, sale de `role`.
+   */
+  kit?: string;
+  /** Lo que lleva en la bolsa (outfit.ts): sin campo, la riqueza de su ajuar. Datos de campaña. */
+  wealth?: 'none' | 'poor' | 'modest' | 'comfortable' | 'rich';
+  /** Ya tiene su ajuar (outfit.ts): no se le vuelve a dar, aunque le roben. Estado de partida. */
+  outfitted?: boolean;
 }
 
 /** Opinión de un NPC con un PJ: de −100 a 100, con los últimos motivos; y las etiquetas a las que ya ha reaccionado. */

@@ -130,7 +130,10 @@ describe('n.º 6: nada sale de la nada', () => {
     c.knows.push(ilse.id);
     expect(actionContext(engine, c, 'mirar la mesa')).toMatch(/Lleva: tónico de corteza ×3 \[ii_ilse_tonico\], poción de curación \[ii_ilse_pocion\]/);
     const ctx = ctxFor(engine, c);
-    expect(tool(ctx, 'get_npc', { npc_id: 'npc_ilse' })['carries']).toEqual(['tónico de corteza ×3 [ii_ilse_tonico]', 'poción de curación ×1 [ii_ilse_pocion]']);
+    // Lo mismo que en el contexto, y además su bolsa con lo de dentro (ajuar, outfit.ts).
+    const carriesList = tool(ctx, 'get_npc', { npc_id: 'npc_ilse' })['carries'] as string[];
+    expect(carriesList.slice(0, 2)).toEqual(['tónico de corteza ×3 [ii_ilse_tonico]', 'poción de curación [ii_ilse_pocion]']);
+    expect(carriesList.join(', ')).toMatch(/bolsa de cuero con .+ \(dentro: manojo de hierbas secas/);
     // El robo: el tónico pasa de Ilse al PJ (lo que antes creaba spawn_item).
     expect(tool(ctx, 'transfer_item', { instance_id: 'ii_ilse_tonico', to_type: 'character', to_id: c.id, slot: 'pocket', equip_slot: null, quantity: 1 }).ok).toBe(true);
     expect(engine.world.itemInstances.get('ii_ilse_tonico')!.quantity).toBe(2);

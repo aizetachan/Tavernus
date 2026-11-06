@@ -90,6 +90,17 @@ Nada es infinito. El servidor decide si algo cabe; el máster solo lo narra.
 - Un objeto está siempre **en un solo sitio**. Moverlo es atómico: nunca se duplica ni desaparece.
 - Si algo no cabe, el máster lo dice en ficción: «no te cabe, ¿sueltas algo o lo llevas en la mano?».
 
+**Lo que lleva encima cada vecino**
+
+Toda persona lleva algo real que se le puede robar o que se encuentra al registrarla. Nadie se lo inventa a mitad de partida:
+
+- **Una bolsa de cuero al cinto con unas monedas.** Cuántas depende de su oficio: el regidor lleva oro; el cazador, unos cobres. Si coges la bolsa, su dinero pasa a tus monedas.
+- **Dentro, dos o tres cosas de su oficio.** La tabernera, un manojo de llaves; la curandera, hierbas secas y vendas; el herrero, clavos y yesca; el guardia, un silbato; el regidor, un anillo de sello.
+- **Su arma, si es de pelear.** La maza del alguacil, la lanza del guardia, el arco del cazador. Quien no pelea no la lleva a la vista.
+- Los animales no llevan nada.
+
+Robar la bolsa o sacar algo de ella es robarle a esa persona: si alguien lo ve, es un robo, con sus testigos (ver [[#Crimen, testigos y ley]]). Lo que le quitas no vuelve a aparecer. Lo mismo vale para los mundos generados: la regla sale del oficio de cada uno, no de una lista escrita para Brezal.
+
 ## Progreso
 
 Se aprende «como en la vida»: lo básico no sube nada, la práctica repetida mejora algo concreto y resolver la trama da lo más.

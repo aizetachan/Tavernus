@@ -62,6 +62,12 @@ Vende huevos en el mercado de la plaza, de 9:00 a 13:00. Ver [[Vida del pueblo]]
 
 Precios en monedas. Ver [[Objetos]].
 
+## Lleva encima
+
+Una bolsa de cuero con 2 de plata. Dentro, una navaja, yesca y pedernal y un mendrugo de pan.
+
+Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+
 ## Relaciones
 
 - [[Brenna]]: le vende huevos.

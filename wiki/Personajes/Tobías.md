@@ -50,6 +50,12 @@ Ser alguien.
 
 Cada noche, de 23:00 a 24:00, cruza el arroyo de [[El Soto]] sin antorcha, con un hatillo. Ver [[Vida del pueblo]].
 
+## Lleva encima
+
+Una bolsa de cuero con 1 de plata y 2 de cobre. Dentro, una navaja, yesca y pedernal y un mendrugo de pan.
+
+Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+
 ## Relaciones
 
 - [[Mateo]]: su padre.

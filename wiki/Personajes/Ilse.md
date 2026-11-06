@@ -71,6 +71,12 @@ A las 20:00 dirige la misa del pozo, en la [[Plaza del Pozo]]. Ver [[Vida del pu
 
 Precios en monedas. Ver [[Objetos]].
 
+## Lleva encima
+
+Tres tónicos de corteza y una poción de curación, lo que vende. Una bolsa de cuero con 7 de plata y 9 de cobre; dentro, un manojo de hierbas secas y vendas de lino.
+
+Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+
 ## Relaciones
 
 - [[Brenna]]: la tiene por buena mujer con un peso dentro. Brenna la respeta.

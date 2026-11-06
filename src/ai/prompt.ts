@@ -13,7 +13,7 @@ import { positionOf } from '../engine/movement.js';
 import { lightAt, perceive, witnesses } from '../engine/perception.js';
 import { regenState } from '../engine/resources.js';
 import { hiddenSpots, knownSpots, unseenSpots } from '../engine/spots.js';
-import { containerLoads, inventoryDetailed, inventoryView } from '../engine/inventory.js';
+import { containerLoads, inventoryDetailed, inventoryView, npcCarryList } from '../engine/inventory.js';
 import { SKILLS, armorClass } from '../engine/rules.js';
 import { activeJobs } from '../engine/progress.js';
 import { contractArticles, descriptorOf, fmtDuration } from '../engine/narrate.js';
@@ -609,8 +609,8 @@ export function talkPlanFor(engine: Engine, actor: Character, text: string): Tal
 
 /** Lo que lleva encima un NPC (con IDs, para transfer_item): sin esto el máster lo inventa con spawn_item. */
 function carriedBy(world: Engine['world'], npcId: Id): string {
-  const items = world.itemsIn({ type: 'npc', id: npcId });
-  return items.length ? `  Lleva: ${items.map((i) => `${world.itemDef(i.item_id).name}${i.quantity > 1 ? ` ×${i.quantity}` : ''} [${i.id}]`).join(', ')}` : '';
+  const items = npcCarryList(world, npcId);
+  return items.length ? `  Lleva: ${items.join(', ')}` : '';
 }
 
 /** Lo último que ha dicho un NPC aquí: para que no repita la misma frase (closecheck.ts lo rechaza). */

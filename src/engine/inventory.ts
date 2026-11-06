@@ -5,7 +5,7 @@
 
 import type { CarrySlot, Character, EquipSlot, Id, ItemDef, ItemInstance, ItemSize, Placement, Spot } from './model.js';
 import { EQUIP_SLOTS } from './model.js';
-import { coinPieces, currencyOf } from './money.js';
+import { coinPieces, currencyOf, fmtMoney } from './money.js';
 import { samePlacement, slotKey, type World } from './world.js';
 
 const SIZE_RANK: Record<ItemSize, number> = { tiny: 0, small: 1, medium: 2, large: 3, bulky: 4 };
@@ -19,8 +19,42 @@ export type TransferError =
   | { code: 'invalid_slot'; reason: string };
 
 export type TransferResult =
-  | { ok: true; moved: ItemInstance; remaining: ItemInstance | null }
+  | { ok: true; moved: ItemInstance; remaining: ItemInstance | null; /** Monedas que había dentro y pasan al PJ que lo coge (outfit.ts). */ coins?: number }
   | { ok: false; error: TransferError };
+
+/** Quién lleva algo que está en `p`, subiendo por los contenedores: un PJ, un NPC o nadie (suelo, vehículo). */
+export function carrierOf(world: World, p: Placement): { type: 'character' | 'npc'; id: Id } | null {
+  let at: Placement = p;
+  for (let g = 0; g < 32; g++) {
+    if (at.type === 'character' || at.type === 'npc') return { type: at.type, id: at.id };
+    if (at.type !== 'container') return null;
+    const box = world.itemInstances.get(at.id);
+    if (!box) return null;
+    at = box.location;
+  }
+  return null;
+}
+
+/**
+ * Las monedas sueltas en una bolsa (`state.coins`, outfit.ts) son dinero: cuando la bolsa llega a
+ * un PJ (en la mano, al cinto o dentro de su mochila) pasan a sus monedas. Mira también lo que va
+ * dentro. Devuelve cuántas.
+ */
+function pocketCoins(world: World, inst: ItemInstance): number {
+  const who = carrierOf(world, inst.location);
+  if (who?.type !== 'character') return 0;
+  const c = world.characters.get(who.id);
+  if (!c) return 0;
+  let total = 0;
+  const walk = (i: ItemInstance, depth: number) => {
+    const n = i.state['coins'];
+    if (typeof n === 'number' && n > 0) { total += n; delete i.state['coins']; world.touch('item_instances', i.id); }
+    if (depth < 8) for (const inner of world.itemsIn({ type: 'container', id: i.id })) walk(inner, depth + 1);
+  };
+  walk(inst, 0);
+  if (total > 0) { c.coins += total; world.touch('characters', c.id); }
+  return total;
+}
 
 export function sizeFits(item: ItemSize, max: ItemSize): boolean {
   return SIZE_RANK[item] <= SIZE_RANK[max];
@@ -238,7 +272,23 @@ export function transferItem(world: World, instanceId: Id, to: Placement, quanti
       world.touch('item_instances', moved.id);
     }
   }
-  return { ok: true, moved, remaining };
+  const coins = pocketCoins(world, moved);
+  return { ok: true, moved, remaining, ...(coins ? { coins } : {}) };
+}
+
+/**
+ * Lo que lleva un NPC, para el máster, con IDs para transfer_item: «bolsa de cuero con 3 de plata
+ * [ii_x] (dentro: navaja [ii_y], yesca y pedernal [ii_z])». Sin esto el máster lo inventa.
+ */
+export function npcCarryList(world: World, npcId: Id): string[] {
+  const label = (i: ItemInstance): string => {
+    const d = world.itemDef(i.item_id);
+    const coins = i.state['coins'];
+    const money = typeof coins === 'number' && coins > 0 ? ` con ${fmtMoney(coins, currencyOf(world.campaign))}` : '';
+    const inside = d.container ? world.itemsIn({ type: 'container', id: i.id }) : [];
+    return `${d.name}${i.quantity > 1 ? ` ×${i.quantity}` : ''}${money} [${i.id}]${inside.length ? ` (dentro: ${inside.map(label).join(', ')})` : ''}`;
+  };
+  return world.itemsIn({ type: 'npc', id: npcId }).map(label);
 }
 
 const COUNT_WORDS: Record<string, number> = { dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };

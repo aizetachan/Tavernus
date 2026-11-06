@@ -55,6 +55,12 @@ Que lo tomen en serio. Cobra de su tío, el regidor, por vigilar el portón y ha
 
 A las 13:00 acompaña a Garrán en el cobro del diezmo, haciendo de pared. Ver [[Vida del pueblo]].
 
+## Lleva encima
+
+Una bolsa de cuero con 8 de plata y 9 de cobre. Dentro, un silbato de hueso y un mendrugo de pan. Y su lanza.
+
+Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+
 ## Relaciones
 
 - [[Osric Malvez]]: su tío. Le admira y le teme.

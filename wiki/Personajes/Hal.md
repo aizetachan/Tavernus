@@ -58,6 +58,12 @@ Es el único que tose antes de llegar a una puerta. Si llega sin toser, trae una
 
 Precios en monedas. Ver [[Objetos]].
 
+## Lleva encima
+
+Una bolsa de cuero con 2 de plata y 2 de cobre. Dentro, una navaja, sedal y anzuelos y yesca y pedernal. Y su arco corto.
+
+Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+
 ## Relaciones
 
 - [[Garrán]]: le rompió la nariz.
