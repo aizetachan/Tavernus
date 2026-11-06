@@ -47,6 +47,8 @@ import { conversationCheck, conversationOf, conversationRejection, narrationWith
 import { secondPersonSingular } from '../engine/turnwindow.js';
 import { askBlocked, endsTalk, offersNow, talkPlanWith, talkProblems, TALK_SITUATIONS, withoutRefused, type TalkPlan } from '../engine/talk.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
+import { CONFLICT_KINDS, conflictKindOf, refusedBefore, confrontButtons, confrontOf, conflictVerdict, createItem, resolveConflict, type ConflictKind, type ConflictPlan, type ConflictResult, type ConflictVerdict } from '../engine/conflict.js';
+import { conflictCloseProblems } from '../engine/closecheck.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
 type Tool = Anthropic.Beta.BetaTool;
@@ -242,6 +244,13 @@ export const MASTER_TOOLS: Tool[] = [
     victim_id: str('ID del NPC agraviado (o del muerto, si es un cadáver)'),
     weapon: nstr('Solo armed_assault: con qué; null si no'),
   }),
+  tool('conflict_act', 'El actor le hace a un NPC algo contra su voluntad: hurtarle algo sin que se note (steal), arrancárselo a la vista (snatch), empujarle (shove), agarrarle (grab) o tocarle sin permiso (touch). Es la ÚNICA forma de quitarle algo a un NPC despierto y de pedir la tirada de Juego de manos o Atletismo contra él: el servidor decide si se puede (dónde lo lleva, si le mira, si está en guardia), con qué tirada, y luego qué pasa y cómo se lo toma el NPC (broma, careo o delito, según su relación). Si lo que quiere quitarle no está en lo que «Lleva», usa new_item (solo si es razonable que lo lleve). Tú narras el intento y, después, lo que diga el servidor.', {
+    npc_id: str('ID del NPC'),
+    kind: enm([...CONFLICT_KINDS], 'steal (hurtar a escondidas), snatch (arrebatar a la vista), shove (empujar), grab (agarrar), touch (tocar sin permiso)'),
+    instance_id: nstr('steal/snatch: ID del ejemplar que lleva el NPC («Lleva» en su línea). null si no está en los datos (entonces new_item) o si no es un robo'),
+    new_item_name: nstr('steal/snatch, solo si no está en los datos: nombre corto de lo que lleva («anillo de plata»). Nada mágico ni único. null si no'),
+    new_item_worn: nstr('"worn" si lo lleva puesto (joya, ropa), "hand" si lo tiene en la mano, null si va al cinto o en un bolsillo'),
+  }),
   tool('plant_rumor', 'Siembra un rumor cuando el jugador busca, afirma o inventa algo plausible del mundo compartido que no está en los datos (un tesoro, alguien, un sitio, un pasadizo, un encargo). No crea nada real: queda que «se dice» algo, circulando por esta localización, para que la historia pueda retomarlo. Con el mismo nombre que uno que ya corre aquí, lo retoma sin gastar presupuesto. Presupuesto: pocos rumores nuevos por personaje y día de juego; si se agota, devuelve error.', {
     kind: enm([...RUMOR_KINDS], 'rumor (habladuría), place (lugar), person (persona), item (objeto), quest (empresa o encargo)'),
     name: str('Cómo lo llama la gente, corto: «el tesoro de la croqueta dorada»'),
@@ -336,7 +345,7 @@ export const MASTER_TOOLS: Tool[] = [
 export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story', 'story_quest',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
-  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident', 'npc_trust', 'restrain_npc',
+  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident', 'npc_trust', 'restrain_npc', 'conflict_act',
 ]);
 
 export const MEMORY_CAP_PER_CHARACTER = 8;
@@ -415,6 +424,12 @@ export interface ToolContext {
   untold_narration?: string;
   /** Tools que ha resuelto el motor por su cuenta (los ataques de esos turnos): el máster los guarda con los suyos. */
   engine_calls?: { name: string; input: Record<string, unknown>; result: string }[];
+  /** Acción conflictiva que el motor leyó en el texto antes del máster (conflict.ts). */
+  conflict_plan?: ConflictPlan | null;
+  /** Lo que ha decidido conflict_act en este turno: el veredicto y, si no hacía falta tirada, lo que ha pasado. */
+  conflict?: { verdict: ConflictVerdict; result?: ConflictResult };
+  /** Cierres rechazados por saltarse una acción conflictiva (closecheck.ts; uno como mucho). */
+  conflict_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -428,7 +443,7 @@ export interface LogEventInput {
   loudness: number;
   tags: string[];
   suggested_actions: string[];
-  requires_roll: { kind: CheckKind; key: string; dc: number | null; advantage: Advantage; target?: string } | null;
+  requires_roll: { kind: CheckKind; key: string; dc: number | null; advantage: Advantage; target?: string; conflict?: ConflictVerdict } | null;
   decisive: { threat: string; npc_id: string | null } | null;
   /** NPC con quien ha hablado el actor (para el retrato del primer encuentro). */
   npc_id?: string | null;
@@ -756,6 +771,15 @@ function mentionsNpc(world: World, texts: readonly string[], n: Npc): boolean {
 }
 
 /** Si hay un incidente con testigos por contar aquí (crime.ts): lo que ya ha decidido el servidor, para que la narración lo cuente. */
+/** El NPC que tiene que reaccionar en la narración tras una acción conflictiva resuelta en este turno, y cómo se le nombra. */
+function reactorOf(ctx: ToolContext): { name: string; refs: string[] } | null {
+  const res = ctx.conflict?.result;
+  if (!res?.reaction || res.response === 'crime') return null;
+  const n = ctx.engine.world.npcs.get(ctx.conflict!.verdict.npc_id);
+  if (!n) return null;
+  return { name: ctx.actor.knows.includes(n.id) ? n.name : descriptorOf(ctx.engine.world, n.id), refs: [n.name, ...n.name.split(' '), descriptorOf(ctx.engine.world, n.id), ...n.role.split(/\s+y\s+|,\s*/)].map((r) => r.trim()).filter((r) => r.length > 2) };
+}
+
 function crimeNote(ctx: ToolContext): { incident?: string } {
   const p = pendingIncidents(ctx.engine.world, ctx.actor, ctx.nowGameS)[0];
   return p ? { incident: `Testigos: el servidor ya ha aplicado su reacción. Cuéntala en la narración, sin contradecirla: ${reactionSentences(ctx.engine.world, p, p.perpetrator_id === ctx.actor.id, ctx.actor).join(' ')}` } : {};
@@ -843,10 +867,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const n = world.npc(s('npc_id'));
       return {
         id: n.id, name: n.name, role: n.role, status: n.status, spot_id: n.location.id,
-        // Lo que vio del actor va antes que su carÃ¡cter (crime.ts).
+        // Lo que vio del actor va antes que su carácter (crime.ts).
         ...(npcCrimeLine(world, n, actor, nowGameS) ? { first_of_all: npcCrimeLine(world, n, actor, nowGameS) } : {}),
         description: n.description, motivation: n.motivation,
-        // Solo lo que se fÃ­a de contarle al actor; lo demÃ¡s no llega al mÃ¡ster (trust.ts).
+        // Solo lo que se fía de contarle al actor; lo demás no llega al máster (trust.ts).
         trust_with_actor: TRUST_LABEL[trustTier(n, actor.id)], would_tell_actor: knowledgeFor(n, actor.id).map((k) => k.text),
         attitude_to_actor: attitudeOf(n, actor.id), combat: n.stats ? { ac: n.stats.ac, hp: `${n.stats.hp}/${n.stats.hp_max}`, attack: `${n.stats.attack_name} +${n.stats.attack_bonus}, ${n.stats.damage} ${n.stats.damage_type}` } : null,
         remembers_about_actor: n.memory.filter((m) => m.character_id === actor.id).map((m) => `[${engine.clock.format(m.game_s)}] ${m.note}`),
@@ -1072,6 +1096,15 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       }
       const guard = lootGuard(ctx, s('instance_id'));
       if (guard) return guard;
+      // Quitarle algo a un NPC despierto lo decide el motor (conflict.ts): con conflict_act, no a mano.
+      {
+        const from = world.itemInstances.get(s('instance_id'))?.location;
+        const awake = from?.type === 'npc' ? world.npcs.get(from.id) : undefined;
+        const k = conflictKindOf(ctx.action_text ?? '');
+        if (awake && awake.status === 'alive' && toType === 'character' && s('to_id') === actor.id && (k === 'steal' || k === 'snatch') && !ctx.conflict?.result?.moved && !ctx.roll_category) {
+          return { error: 'conflict_needed', hint: `Quitarle algo a ${awake.name} lo decide el servidor: llama a conflict_act (npc_id "${awake.id}", kind "${k}", instance_id "${s('instance_id')}"). No lo muevas tú.` };
+        }
+      }
       // Quitarle algo a alguien que lo lleva encima («le robo la bolsa»): un robo, salvo que la tirada lo haya hecho sin que se note.
       const held = world.itemInstances.get(s('instance_id'))?.location;
       const victim = held?.type === 'npc' ? world.npcs.get(held.id) : undefined;
@@ -1098,18 +1131,57 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (toType === 'npc') { const n = world.npc(s('to_id')); if (n.status === 'alive') trustProgress(ctx, adjustTrust(world, n, actor, 'gift', nowGameS)); }
       return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity, ...(stolen ? crimeNote(ctx) : {}) };
     }
+    case 'conflict_act': {
+      const npc = world.npcs.get(s('npc_id'));
+      if (!npc) return { error: `no existe el NPC ${s('npc_id')}` };
+      const kind = s('kind') as ConflictKind;
+      if (!CONFLICT_KINDS.includes(kind)) return { error: `kind debe ser ${CONFLICT_KINDS.join(', ')}` };
+      if (world.spot(npc.location.id).location_id !== here()) return { error: `${npc.name} no está aquí: no lo narres como presente` };
+      if (ctx.conflict) return { error: 'ya has hecho una acción conflictiva en este turno: una por turno. Narra lo que dijo el servidor.' };
+      const miss = reachNpc(ctx, npc);
+      if (miss) return miss;
+      let inst = input['instance_id'] ? world.itemInstances.get(s('instance_id')) ?? null : null;
+      let created = false;
+      if ((kind === 'steal' || kind === 'snatch') && !inst) {
+        if (!input['new_item_name']) return { error: 'falta instance_id (lo que «Lleva») o new_item_name (si es razonable que lo lleve y no está en los datos)' };
+        const worn = input['new_item_worn'] == null ? null : s('new_item_worn');
+        const r = createItem(world, npc, { name: s('new_item_name'), worn: worn === 'worn', in_hand: worn === 'hand' });
+        if (!r.ok) return { error: 'cannot_create', hint: `${r.reason}. Cuenta que no lo lleva o que no lo encuentra.` };
+        inst = r.inst; created = r.created;
+      }
+      const events = engine.events.recentInLocation(here(), 80);
+      const v = conflictVerdict(world, events, actor, npc, kind, inst, nowGameS, { insist: refusedBefore(events, actor, npc, nowGameS) });
+      if (!v) return { error: `${npc.name} no entra en estas reglas (no es alguien a quien robar o empujar): narra lo que haga sin más` };
+      ctx.conflict = { verdict: v };
+      const itemNote = inst ? { item: world.itemDef(inst.item_id).name, instance_id: inst.id, ...(created ? { created: true } : {}) } : {};
+      if (!v.possible) {
+        return { ok: true, possible: false, ...itemNote, reason: v.reason, needs: v.needs, hint: 'NO ha pasado: no se lo quita. Cuéntalo en la escena (qué lo impide) y cierra con log_event sin tirada. Si insiste en hacerlo igualmente, en el siguiente turno es un intento a la vista (conflict_act kind touch).' };
+      }
+      if (!v.roll) {
+        const res = resolveConflict(world, actor, npc, v, null, nowGameS);
+        ctx.conflict.result = res;
+        return { ok: true, resolved: true, ...itemNote, facts: res.facts, reaction: res.reaction, ...(res.incident ? crimeNote(ctx) : {}), hint: `Ya ha pasado y está aplicado: cuéntalo así, sin contradecirlo${res.reaction ? '; la primera frase del NPC es su reacción, sin deudas, encargos ni comercio' : ''}. No muevas tú ningún objeto.` };
+      }
+      const r = v.roll;
+      return {
+        ok: true, possible: true, ...itemNote, reason: v.reason,
+        roll: `${r.key === 'sleight_of_hand' ? 'Juego de manos' : 'Atletismo'} ${r.against === 'passive' ? `contra CD ${r.dc}` : `contra una tirada de ${npc.name}`}${r.advantage !== 'none' ? `, con ${r.advantage === 'advantage' ? 'ventaja' : 'desventaja'}` : ''}`,
+        hint: 'Cierra con log_event narrando SOLO el intento (cómo se acerca, qué hace con las manos), sin el resultado. La tirada la pone el servidor: no pidas requires_roll tú. Tras la tirada, el servidor resolverá lo que pasa y te lo dirá.',
+      };
+    }
     case 'report_incident': {
       const kind = s('kind') as IncidentKind;
       if (!INCIDENT_KINDS.includes(kind) || kind === 'murder') return { error: 'kind debe ser insult, theft, assault, armed_assault o desecration (las muertes las registra el servidor)' };
       const v = world.npcs.get(s('victim_id'));
       if (!v) return { error: `no existe el NPC ${s('victim_id')}` };
-      if (world.spot(v.location.id).location_id !== here()) return { error: `${v.name} no estÃ¡ aquÃ­` };
-      if (kind === 'desecration' ? v.status !== 'dead' : v.status !== 'alive') return { error: kind === 'desecration' ? `${v.name} no estÃ¡ muerto` : `${v.name} no estÃ¡ vivo` };
+      if (world.spot(v.location.id).location_id !== here()) return { error: `${v.name} no está aquí` };
+      if (kind === 'desecration' ? v.status !== 'dead' : v.status !== 'alive') return { error: kind === 'desecration' ? `${v.name} no está muerto` : `${v.name} no está vivo` };
       const i = reportIncident(world, { kind, perpetrator_id: actor.id, victim_id: v.id, spot_id: v.location.id, weapon: input['weapon'] == null ? null : s('weapon') }, nowGameS);
-      if (!i) return { ok: true, note: 'ya constaba algo igual o mÃ¡s grave de este actor contra esa persona: nada nuevo' };
+      if (!i) return { ok: true, note: 'ya constaba algo igual o más grave de este actor contra esa persona: nada nuevo' };
       return { ok: true, incident: i.id, kind: i.kind, witnesses: i.knowers.map((k) => world.npcs.get(k.npc_id)?.name).filter(Boolean), ...crimeNote(ctx) };
     }
     case 'spawn_item': {
+      { const k = conflictKindOf(ctx.action_text ?? ''); if (k === 'steal' || k === 'snatch') return { error: 'conflict_needed', hint: 'Lo que se roba a alguien no se crea con spawn_item: usa conflict_act con new_item_name (el servidor lo crea en el NPC, con sus límites, y decide si se lo quitas).' }; }
       if (world.campaign.master.improvisation < 3) return { error: 'improvisation_too_low', hint: 'En esta campaña no se crean objetos: lo que hay está en el mundo (en el suelo, en un contenedor o lo lleva alguien: «Lleva» de cada NPC, get_npc, get_inventory). Usa transfer_item con ese ejemplar o narra que no lo hay.' };
       const r = spawnItem(world, s('item_id'), Math.max(1, Number(input['quantity']) || 1), { type: 'spot', id: s('spot_id') });
       if (!r.ok) return { error: r.error.code, detail: r.error };
@@ -1508,13 +1580,22 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     }
     case 'log_event': {
       const kind = input['requires_roll_kind'];
-      const req = kind && ROLL_KINDS.includes(String(kind))
+      let req: LogEventInput['requires_roll'] = kind && ROLL_KINDS.includes(String(kind))
         ? { kind: String(kind) as CheckKind, key: String(kind) === 'skill' ? normalizeSkill(s('requires_roll_key')) : s('requires_roll_key'), dc: input['requires_roll_dc'] == null ? null : Number(input['requires_roll_dc']), advantage: (ADV.includes(s('requires_roll_advantage')) ? s('requires_roll_advantage') : 'none') as Advantage, ...(input['requires_roll_target'] ? { target: s('requires_roll_target') } : {}) }
         : null;
       if (req?.kind === 'attack' && !req.target) return { error: 'un ataque necesita requires_roll_target (ID del objetivo)' };
       if (req?.kind === 'attack' && req.target !== actor.id && world.characters.has(req.target!) && !sharedWith(engine, actor.id).includes(req.target!)) return { error: 'Contra otro jugador no se pide tirada de ataque: usa request_reaction (kind attack) y él decide si se defiende; cierra sin requires_roll.' };
       if (req?.target && !world.npcs.has(req.target) && !world.characters.has(req.target)) return { error: `objetivo desconocido: ${req.target}` };
       if (req && req.kind === 'skill' && !SKILLS[req.key]) return { error: `skill desconocida: ${req.key}. Válidas: ${Object.keys(SKILLS).join(', ')}` };
+      // Acción conflictiva (conflict.ts): sin conflict_act no hay tirada contra el NPC ni robo; con él, la tirada la pone el servidor.
+      if ((ctx.conflict_rejections ?? 0) < 1) {
+        const problem = conflictCloseProblems({ plan: ctx.conflict_plan ?? null, called: Boolean(ctx.conflict), possible: ctx.conflict?.verdict.possible ?? null, req, narration: s('narration_private'), lines: parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id)), reacts: reactorOf(ctx), actionText: ctx.action_text ?? null, rolling: Boolean(ctx.roll_category) });
+        if (problem) { ctx.conflict_rejections = (ctx.conflict_rejections ?? 0) + 1; return { error: problem }; }
+      }
+      if (ctx.conflict?.verdict.possible && ctx.conflict.verdict.roll && !ctx.conflict.result) {
+        const r = ctx.conflict.verdict.roll;
+        req = { kind: 'skill', key: r.key, dc: r.against === 'passive' ? r.dc : null, advantage: r.advantage, conflict: ctx.conflict.verdict };
+      } else if (ctx.conflict && req && (req.key === 'sleight_of_hand' || req.key === 'athletics' || req.key === 'acrobatics')) req = null;
       // La opinión del NPC con quien habla mueve la CD social (standing.ts): el máster pone la base y el servidor la ajusta.
       if (req && req.kind === 'skill' && req.dc != null && SOCIAL_SKILLS.has(req.key)) {
         const target = (input['npc_id'] ? world.npcs.get(s('npc_id')) : undefined) ?? [...world.npcs.values()].find((n) => n.talking_to?.character_id === actor.id);
@@ -1853,7 +1934,10 @@ ${forcedTail}` : '');
           .map((t) => capFirst(maskUnknownNames(world, actor.id, t, unknownNpcsNamed(world, actor.id, t).filter((n) => heardName(n)).map((n) => n.id))))
           // Una opción con etiqueta (worldrules.ts), como las de BG3: «[Soldado] Hablarle de tú a tú (Persuasión CD 12)».
           .concat(req ? [] : freshTagOptions(tagOptions(world, actor, (k) => SKILLS[k]?.es ?? k), engine.events.all(), actor.id, nowGameS).slice(0, 1))
-          .filter((t, i, all) => all.indexOf(t) === i).slice(-4),
+          .filter((t, i, all) => all.indexOf(t) === i).slice(-4)
+          // Un careo abierto (conflict.ts): los botones son arreglarlo o huir.
+          .filter(() => !confrontOf(world, actor, nowGameS))
+          .concat(req ? [] : confrontButtons(world, actor, nowGameS)),
         requires_roll: req,
         decisive: input['decisive_threat'] ? { threat: cleanText(s('decisive_threat')), npc_id: input['decisive_npc_id'] ? s('decisive_npc_id') : null } : null,
         npc_id: closingNpc,

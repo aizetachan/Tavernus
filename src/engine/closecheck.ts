@@ -720,3 +720,55 @@ export function confirmedNames(ids: readonly string[], npcs: readonly NamedNpc[]
 export function namedByPlayer(npcs: readonly NamedNpc[], playerText: string | null | undefined): string[] {
   return playerText ? npcs.filter((n) => named(playerText, n.name)).map((n) => n.id) : [];
 }
+
+// ---------------------------------------------------------------------------
+// Acciones conflictivas (conflict.ts, docs/CONFLICTOS-NPC.md §11)
+// ---------------------------------------------------------------------------
+
+const CONFLICT_ROLLS = new Set(['sleight_of_hand', 'athletics', 'acrobatics']);
+/** Lo suyo con el actor (deudas, encargos) o comercio: no es reaccionar a lo que acaba de hacerle. */
+const OFF_TOPIC = /\b(deuda|debes|me debes|tu cuenta|la cuenta|el plazo|cobrar\w*|encargo|trabajo para|te pongo|cuesta|vale \d+)\b/;
+
+export interface ConflictCloseInput {
+  /** Lo que el motor leyó antes del máster (conflict.ts, conflictPlan). */
+  plan: { kind: string; npc_id: string; verdict: { possible: boolean } | null } | null;
+  /** El máster ha llamado a conflict_act en este turno, y si se podía. */
+  called: boolean;
+  possible: boolean | null;
+  req: { kind: string; key: string } | null;
+  narration: string;
+  lines: readonly DialogueLine[];
+  /** El NPC que tiene que reaccionar (conflict_act lo resolvió en el acto) y cómo se le nombra. */
+  reacts: { name: string; refs: readonly string[] } | null;
+  actionText: string | null;
+  /** Es la continuación de una tirada: lo ha resuelto el motor y aquí solo se cuenta. */
+  rolling: boolean;
+}
+
+/**
+ * ¿Se salta el cierre una acción conflictiva? Sin conflict_act no hay tirada
+ * contra el NPC ni robo; lo que no se puede no lleva tirada; y cuando el NPC
+ * reacciona, la narración le nombra y su primera frase no va de deudas,
+ * encargos ni comercio. Devuelve el motivo para reescribir, o null.
+ */
+export function conflictCloseProblems(i: ConflictCloseInput): string | null {
+  if (i.rolling) return null;
+  const rollsAgainst = Boolean(i.req && i.req.kind === 'skill' && CONFLICT_ROLLS.has(i.req.key));
+  if (i.plan && !i.called) {
+    if (i.plan.verdict && !i.plan.verdict.possible) {
+      return i.req ? 'Lo que intenta el actor NO SE PUEDE (lo dice el bloque «Acción conflictiva»): sin tirada. Cuenta qué lo impide y cierra sin requires_roll.' : null;
+    }
+    return `El actor intenta algo contra un NPC (${i.plan.kind}): lo decide el servidor. Llama antes a conflict_act (npc_id "${i.plan.npc_id}", kind "${i.plan.kind}") y cierra sin requires_roll; la tirada, si la hay, la pone el servidor.`;
+  }
+  if (!i.called && rollsAgainst && i.actionText && /\b(rob\w*|birl\w*|hurt\w*|quit\w*|arranc\w*|arrebat\w*|empuj\w*|agarr\w*|sujet\w*)/.test(i.actionText.toLowerCase())) {
+    return 'Una tirada de Juego de manos o Atletismo contra un NPC (robarle, empujarle, agarrarle) la decide el servidor: llama a conflict_act y cierra sin requires_roll.';
+  }
+  if (i.reacts) {
+    const said = i.lines.filter((l) => l.speaker === 'npc').map((l) => l.text).join(' ');
+    const all = `${i.narration} ${said}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const named = i.reacts.refs.some((r) => all.includes(r.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^(el|la|los|las) /, '')));
+    if (!named) return `Lo ha resuelto el servidor y ${i.reacts.name} reacciona: cuéntalo (nómbrale y di lo que hace, como en «reaction» de conflict_act). Reescribe log_event.`;
+    if (OFF_TOPIC.test(said.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''))) return `${i.reacts.name} acaba de pillar al actor: su primera frase es la reacción a eso, no deudas, encargos ni precios. Reescribe sus líneas.`;
+  }
+  return null;
+}

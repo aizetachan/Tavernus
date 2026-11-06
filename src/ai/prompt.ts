@@ -49,6 +49,7 @@ import { currencyOf, money } from '../engine/money.js';
 import { priceFor } from '../engine/standing.js';
 import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
 import { socialOutcomeLine, talkPlan, talkScript, type TalkPlan } from '../engine/talk.js';
+import { conflictBlock, conflictPlan, type ConflictPlan } from '../engine/conflict.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
 const LENGTH_ES = { short: 'uno o dos párrafos cortos de narración, unas 60-90 palabras sin contar lo que se dice; más solo si la escena lo exige de verdad', medium: 'dos o tres párrafos', long: 'hasta cinco párrafos' };
@@ -90,6 +91,7 @@ export function systemPrompt(c: Campaign, opts: { actor?: boolean } = {}): strin
     'GANCHOS: lo trivial (moverse entre puntos, salir por una salida, coger o soltar, esperar, llegar a un sitio ya visitado) lo resuelve el servidor sin llamarte. Para que el mundo siga vivo, siembra con plant_hook lo que deba pasar después: alguien que llega a una hora, una consecuencia al acercarse a un sitio o al coger algo. Con mesura: uno o dos por escena como mucho, y nunca para empujar al jugador hacia un secreto.',
     'AGENDA: lo que un NPC anuncia con hora (una misa, un mercado, una reunión, una llegada) prográmalo con schedule_event para que ocurra de verdad: a su hora el servidor trae a la gente y a los NPC, y lo cuenta a quien esté. Para saber qué hay y cuándo, get_schedule. No narres como presente lo que la agenda no tiene en marcha.',
     'IMPARCIALIDAD: sabes cosas que los personajes no saben (secretos, motivaciones). Eres neutral: no guías al jugador hacia ellas, no las insinúas con el ambiente ni con las acciones sugeridas, no premias ni castigas por acercarse. El mundo reacciona a lo que el jugador hace, no a lo que tú sabes.',
+    'ACCIONES CONFLICTIVAS: robarle a un NPC (a escondidas o de un tirón), empujarle, agarrarle o tocarle sin permiso lo decide el servidor con conflict_act: si se puede, la tirada, lo que pasa y cómo se lo toma el NPC (broma, careo o delito, según su relación con el actor). Nunca pidas tú esa tirada ni muevas o crees el objeto; cuenta lo que diga el servidor. Lo que no se puede, no se tira: lo cuentas en la escena. Lo absurdo o físicamente imposible («le arranco la cabeza y salgo volando») no pasa: contéstalo con ironía, en la voz de la escena, sin cambiar nada.',
     'CONFIANZA: cada NPC cuenta solo lo que su confianza con el actor permite (extraño, conocido, amigo, aliado). Su línea en «Presentes» trae lo que contaría a ese nivel y nada más: lo que calla no te llega, así que no inventes secretos suyos ni le hagas soltar más con una tirada. Una tirada social con éxito le hace hablar mejor de lo que ya contaría, no saltarse niveles. La confianza sube con misiones, encargos, regalos, favores y adulación a quien la agradece (npc_trust) y tiradas sociales con éxito, con tope por charla; baja con amenazas, mentiras pilladas, insultos, hostigar (insistir cuando ya dijo que no) y adular a quien no lo soporta (npc_trust), y con crímenes. Si grant_clue rechaza una pista, el actor no la consigue: narra el motivo que devuelve dentro de la ficción.',
     'COMBATE: no hay turnos fijos; es conversación. Cada NPC hostil del combate actúa en CADA turno: resuelve su ataque con attack (una llamada por NPC; su multiataque lo tira el servidor en esa misma llamada) y narra; si no lo haces, el servidor lo hace al cerrar y tendrás que contarlo. Golpe no letal: a 0 PG un NPC cae INCONSCIENTE si el golpe es contundente (bastón, maza, puños) o el jugador dice pegar, golpear o reducir; muere si dice que quiere matar, si el arma corta o perfora y no dice lo contrario, o si remata a quien ya está en el suelo. Lo decide el servidor: narra lo que devuelve. Al inconsciente se le puede atar (restrain_npc), registrar o rematar. Nadie es inmortal. El ataque del jugador va con requires_roll kind=attack y requires_roll_target; el servidor tira contra la CA y aplica el daño; tú narras el resultado que te devuelve. Huir es move_to (el enemigo puede perseguir). A 0 PG el PJ cae inconsciente y el servidor tira sus salvaciones contra muerte: tú no las tiras ni decides si muere. MUERTE: un PJ solo muere si attack o apply_damage devuelven died (o el contexto dice MUERTO); nunca narres por tu cuenta que un PJ muere, resucita o vuelve de la muerte: su vuelta la cuenta el servidor. Atender a un caído: stabilize; curarle: heal; descanso que pide la ficción: take_rest; recursos de clase: spend_resource; conjuros: cast_spell (solo los de su lista). Ventana decisiva (decisive_threat): solo con una amenaza real e inmediata contra el actor, nunca dos seguidas; si no responde en 60 s, la amenaza se ejecuta.',
     'PROGRESO: recolectar (harvest) tira solo y cuenta práctica. Las misiones de la historia escrita (q_…, ver «Historia escrita») las pide alguien en escena: quien la da la cuenta con su voz y entra en el Diario (story_quest ask), sin preguntar si acepta; si el jugador dice que no, story_quest decline; la recompensa la da quien la recibe al entregarla (story_quest turn_in); nunca abras ni insinúes una que no esté disponible. Los demás encargos no se aceptan: si un NPC le da uno al actor o le pide algo concreto que hacer, ya es suyo; no le preguntes si acepta ni esperes un «acepto», y hacerlo o no es cosa suya. Uno del tablón queda en su Diario con que lo hablen; cualquier otro, regístralo con give_quest en ese mismo turno (título corto, de qué va, quién lo da, objetivo y recompensa si se dijo), y cuando lo cumpla o ya no se pueda, finish_quest. Los encargos del tablón se cierran con complete_job al entregarlos al NPC que los pidió; los de entrega los valida el servidor. Las pistas se conceden con grant_clue únicamente cuando el jugador las ha obtenido con sus actos. Vender y comprar: sell_item y buy_item con los precios del NPC; el master no negocia fuera de esa lista salvo una tirada de Persuasión que como mucho mueve un 10 %. El contexto solo trae las pistas de este lugar o de quien está delante y los títulos del tablón: si el jugador busca otra pista, pregunta por un encargo o va a entregarlo, consulta get_campaign_notes antes de responder.',
@@ -113,6 +115,8 @@ ${TALK_RULES}`,
 export interface RollContext {
   original_text: string;
   result: CheckResult & { label: string };
+  /** Acción conflictiva (conflict.ts): lo que el motor ya ha resuelto tras la tirada, en hechos. */
+  conflict?: string;
 }
 
 /** Contexto dinámico de la acción. Va en el mensaje de usuario, después del prefijo cacheado. */
@@ -280,7 +284,7 @@ function boardLine(jobs: string[]): string {
   return jobs.length ? `Tablón: ${jobs.join(' · ')}.` : 'Tablón: vacío.';
 }
 
-export function actionContext(engine: Engine, actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string; prologue?: string }, scene?: Scene, decisive?: DecisiveResponse, talk?: TalkPlan | null): string {
+export function actionContext(engine: Engine, actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string; prologue?: string }, scene?: Scene, decisive?: DecisiveResponse, talk?: TalkPlan | null, conflict?: ConflictPlan | null): string {
   const world = engine.world;
   const nowG = engine.nowFor(actor); // la hora del actor: la del mundo, o la de su llegada si ha viajado (travel.ts)
   const pos = positionOf(world, actor, nowG);
@@ -514,7 +518,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     // Una tirada social con éxito da el camino, no el secreto (talk.ts).
     const skill = Object.entries(SKILLS).find(([, v]) => roll.result.label.startsWith(v.es))?.[0];
     const social = skill ? socialOutcomeLine(world, engine.events.all(), actor, skill, roll.result.success, engine.nowFor(actor)) : null;
-    L.push(`## Resultado de la tirada\nAcción original: «${roll.original_text}»\n${roll.result.label}: ${roll.result.breakdown} → ${roll.result.success === null ? 'sin CD' : roll.result.success ? 'ÉXITO' : 'FALLO'}${roll.result.natural ? ` (${roll.result.natural} natural)` : ''}.${rollLine(roll.result)}${social ? `\n${social}` : ''}\nNarra la consecuencia y aplica los cambios con tools. No pidas otra tirada para esta misma acción.`);
+    L.push(`## Resultado de la tirada\nAcción original: «${roll.original_text}»\n${roll.result.label}: ${roll.result.breakdown} → ${roll.result.success === null ? 'sin CD' : roll.result.success ? 'ÉXITO' : 'FALLO'}${roll.result.natural ? ` (${roll.result.natural} natural)` : ''}.${rollLine(roll.result)}${social ? `\n${social}` : ''}${roll.conflict ? `\nLo ha resuelto el motor (acción conflictiva) y ya está aplicado: no muevas tú ningún objeto (transfer_item, spawn_item) ni lo contradigas. Si el NPC reacciona, su primera frase es la reacción, sin deudas, encargos ni comercio.\nCuéntalo así (hechos): ${roll.conflict}` : ''}\nNarra la consecuencia y aplica los cambios con tools. No pidas otra tirada para esta misma acción.`);
   } else if (engine.sceneHints(actor.id)?.round || engine.sceneHints(actor.id)?.group || engine.sceneHints(actor.id)?.window) {
     // Turno compartido: lo de cada uno va en su bloque (Ronda, Conversación de grupo o A la vez), no como acción del actor.
     L.push([
@@ -532,8 +536,10 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       ? `\nVa dirigida a ${pcName(world, actor.id, toPc)} [${toPc.id}], otro JUGADOR presente, no a ningún NPC: el NPC con quien hablaba no contesta por él ni se da por aludido; lo que responda ${pcName(world, actor.id, toPc)} lo escribe su jugador. Narra solo lo que hace o dice el actor y, si toca, cómo reacciona la sala.`
       : '';
     // Charla con un NPC (talk.ts): la situación y el guion del turno, decididos por el motor.
-    const plan = toOther ? null : talk !== undefined ? talk : talkPlanFor(engine, actor, text);
+    const fight = toOther ? null : conflict !== undefined ? conflict : conflictPlanFor(engine, actor, text);
+    const plan = toOther || fight ? null : talk !== undefined ? talk : talkPlanFor(engine, actor, text);
     L.push(`## Acción del jugador\n«${text}»${toOther}${decisive ? `\nRespondió a la ventana decisiva («${decisive.threat}») en ${decisive.seconds} s: ${decisive.speed === 'fast' ? 'RÁPIDA → actúa antes de que la amenaza se resuelva; si pides tirada, el servidor le dará ventaja' : 'normal → su acción y la amenaza se resuelven a la vez; decide el dado'}.` : ''}`);
+    if (fight) L.push(conflictBlock(world, actor, fight));
     if (plan) L.push(talkScript(world, actor, plan));
   }
 
@@ -601,6 +607,14 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
  * El plan de charla de una acción del jugador (talk.ts), o null: no en la
  * apertura, llegadas, tiradas ni turnos compartidos (ronda o charla de grupo).
  */
+/** Lo que el motor lee como acción conflictiva contra un NPC (conflict.ts), o null. No en turnos compartidos. */
+export function conflictPlanFor(engine: Engine, actor: Character, text: string): ConflictPlan | null {
+  const h = engine.sceneHints(actor.id);
+  if (h?.round || h?.group || h?.window || !text.trim()) return null;
+  const loc = engine.world.characterSpot(actor)?.location_id;
+  return loc ? conflictPlan(engine.world, engine.events.recentInLocation(loc, 80), actor, text, engine.nowFor(actor)) : null;
+}
+
 export function talkPlanFor(engine: Engine, actor: Character, text: string): TalkPlan | null {
   const h = engine.sceneHints(actor.id);
   if (h?.round || h?.group || h?.window || !text.trim()) return null;
