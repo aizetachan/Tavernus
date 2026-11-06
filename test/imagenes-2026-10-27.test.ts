@@ -95,7 +95,7 @@ describe('pistas que se oyen: el retrato de quien habla o nada', () => {
     expect(moments(engine, e, [`talk:${leodhin.id}:npc_ilse`])).toEqual([]);
   });
 
-  it('Hugo habla de la cadena (seq 65): su retrato y ningún descubrimiento', async () => {
+  it('Hugo habla de la cadena (seq 65): la imagen de la charla con él y ningún descubrimiento', async () => {
     const { engine, leodhin } = await partida();
     const e = ev(leodhin, {
       id: 'ev_0000001t', location_id: 'loc_taberna', spot_id: 'sp_tab_barra', input_text: 'Preguntar al herrero por la cadena de su maestro', payload: { npc_id: 'npc_hugo' },
@@ -104,7 +104,7 @@ describe('pistas que se oyen: el retrato de quien habla o nada', () => {
     });
     const out = moments(engine, e);
     expect(out.map((x) => [x.m.kind, x.m.entity_id])).toEqual([['talk', 'npc_hugo']]);
-    expect(out[0]!.prompt).toMatch(/^Portrait of Hugo, herrero/);
+    expect(out[0]!.prompt).toMatch(/^Taberna del Jabalí \(interior\)\. Hugo, herrero: .*mid-conversation, looking at the viewer/);
   });
 
   it('una pista que dice qué se ve sigue siendo hallazgo aunque llegue hablando', async () => {
