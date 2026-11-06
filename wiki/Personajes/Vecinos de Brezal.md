@@ -9,6 +9,8 @@ Además de los [[Personajes|once con historia]], en Brezal viven doce vecinos m�
 
 Al hablarles contestan poco: un par de frases frías y, a la segunda pregunta que no es lo suyo, se cierran. Lo que no saben lo remiten a quien sí sabe. Lo que su oficio les deja contestar, sí lo contestan: el sereno dice dónde está alguien, la beata a qué hora es la misa y la panadera vende pan.
 
+Esas charlas las contesta el juego al momento, sin el narrador: «Hola, panadera» y te dice el precio del pan; «dame un pan» y te lo vende; «¿dónde está la curandera?» y la niña te lo dice corriendo; «¿a qué hora es la misa?» y la beata te da la hora. Si les sacas de ahí, primero te remiten a otro, luego te despachan y al final ya no te hacen caso. Si alguna noticia corre por el pueblo, te la cuentan al saludar.
+
 ## Los doce
 
 | Nombre | Oficio | Mañana (6-14) | Tarde (14-20) | Noche (20-6) | Además | Sirve para |

@@ -444,7 +444,6 @@
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
         "SFX": "off",
         "TTS": "off"
-
       }
     },
     {
@@ -465,6 +464,25 @@
         "DATA_DIR": "D:/MyProjects/tavernus/.claude/worktrees/integracion/data",
         "GAMES_DIR": "D:/MyProjects/tavernus/.claude/worktrees/integracion/data/games",
         "DISCORD_TOKEN": ""
+      }
+    },
+    {
+      "name": "tavernus-web-relleno",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "C:/Users/migue/.claude/hooks/con-tope.ps1",
+        "-GB",
+        "2",
+        "-Comando",
+        "npm run web:offline"
+      ],
+      "port": 3291,
+      "env": {
+        "WEB_PORT": "3291"
       }
     }
   ]

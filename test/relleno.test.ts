@@ -23,15 +23,18 @@ import { extraSpotNow, extraStagger, EXTRA_STAGGER_S } from '../src/engine/sched
 import { placeExtraAt } from '../src/engine/extras.js';
 import { encounterTable, encounterWhat } from '../src/engine/travel.js';
 import { inventedPeople } from '../src/engine/invented.js';
+import { extraReply } from '../src/engine/extratalk.js';
+import { coinsOf } from '../src/engine/money.js';
+import { setFact } from '../src/engine/worldfacts.js';
 
 /** El mundo nace a las 18:00 del día 0 de juego. */
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 const H = 3600;
 const seedNow = () => authoredSeed('brezal', { now: new Date(EPOCH) });
 
-async function boot(repo = new MemoryRepository(), seed: WorldSnapshot = seedNow()) {
+async function boot(repo = new MemoryRepository(), seed: WorldSnapshot = seedNow(), deterministic = false) {
   const time = fakeTime(EPOCH);
-  const engine = await Engine.boot({ repo, campaignId: 'brezal', seed, now: time.now, deterministic: false, fastTravel: false });
+  const engine = await Engine.boot({ repo, campaignId: 'brezal', seed, now: time.now, deterministic, fastTravel: false });
   return { engine, time, repo };
 }
 
@@ -486,5 +489,125 @@ describe('relleno, fase 2: gente inventada', () => {
     const { log } = await tavernAt(22.5);
     const r = log({ narration_private: 'Brenna asiente.', lines: [{ speaker: 'npc_brenna', text: 'Eso pregúntaselo a Ilse, la de las hierbas.', to: 'all' }], npc_id: 'npc_brenna' });
     expect(r.error ?? '').not.toMatch(/Gente que no existe/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 3: la charla con el relleno, sin IA (extratalk.ts)
+// ---------------------------------------------------------------------------
+
+describe('relleno, fase 3: charla sin máster', () => {
+  /** Brezal sin máster: lo que conteste, lo contesta el motor. Día 1, 7:00; el PJ junto a `spot`. */
+  async function morning(spot: string) {
+    // Con los atajos del motor (como en la partida de verdad): la charla con el relleno es uno de ellos.
+    const { engine, time } = await boot(new MemoryRepository(), seedNow(), true);
+    await at(engine, time, 1, 7);
+    const pc = await newPc(engine, 'Pillin');
+    pc.location = { type: 'spot', id: spot };
+    engine.setPresence(pc.id, true);
+    const talk = async (text: string) => {
+      const from = engine.events.all().at(-1)?.seq ?? 0;
+      const r = await engine.act(pc.id, text);
+      // La respuesta del vecino (detrás pueden ir avisos de la historia).
+      const ev = engine.events.all().filter((e) => e.seq > from && e.actor_id === pc.id && e.action_type === 'master').at(-1);
+      return { text: r.text, ev, line: ((ev?.payload['lines'] as { text: string }[] | undefined) ?? [])[0]?.text ?? null };
+    };
+    return { engine, pc, talk };
+  }
+
+  it('saludar a la panadera: un saludo seco y lo que vende, del motor y sin máster', async () => {
+    const { talk } = await morning('sp_pl_horno');
+    const r = await talk('Hola, panadera');
+    expect(r.ev?.tags).toContain('extra');
+    expect(r.ev?.payload['master']).toBeNull();
+    expect(r.line).toMatch(/Pan gris.*2 de cobre/);
+    expect(r.text).toMatch(/^La panadera contesta sin levantar la vista\./);
+  });
+
+  it('«dame un pan» después de hablar con ella: se lo vende, con sus monedas y su existencia', async () => {
+    const { engine, pc, talk } = await morning('sp_pl_horno');
+    await talk('¿Cuánto vale el pan, panadera?');
+    const coins = coinsOf(engine.world, pc.id);
+    const r = await talk('Dame un pan');
+    expect(r.ev?.payload['bought']).toBe('pan gris ×1');
+    expect(coinsOf(engine.world, pc.id)).toBe(coins - 2);
+    expect(engine.world.itemsCarriedBy(pc.id).some((i) => i.item_id === 'it_pan_gris')).toBe(true);
+    const left = [...engine.world.itemInstances.values()].filter((i) => i.item_id === 'it_pan_gris' && i.location.type === 'npc' && i.location.id === 'npc_x_marta').reduce((n, i) => n + i.quantity, 0);
+    expect(left).toBe(5);
+  });
+
+  it('lo que no sabe, lo dice y remite a quien sabe; a la segunda le despacha; luego ya no le hace caso', async () => {
+    const { pc, talk } = await morning('sp_pl_horno');
+    const a = await talk('Panadera, ¿qué sabes del granero quemado?');
+    expect(a.line).toMatch(/Brenna|Mateo|Ni idea/);
+    if (a.line?.includes('Brenna')) expect(pc.knows).toContain('npc_brenna');
+    const b = await talk('Panadera, ¿y de la niebla?');
+    expect(TRADES.baker.lines.brush).toContain(b.line);
+    const c = await talk('Panadera, ¿y del regidor?');
+    expect(c.line).toBeNull();
+    expect(c.text).toMatch(/ya no te hace caso/);
+    // Lo suyo sí lo sigue contestando.
+    const d = await talk('Panadera, ¿cuánto vale el pan?');
+    expect(d.line).toMatch(/2 de cobre/);
+  });
+
+  it('la niña dice dónde está la curandera, y el PJ aprende su nombre; de la mujer del granero, nada', async () => {
+    const { engine, pc, talk } = await morning('sp_pl_pozo');
+    pc.location = { type: 'spot', id: spotOf(engine, 'npc_x_pia') };
+    const r = await talk('Oye, niña, ¿dónde está la curandera?');
+    expect(r.line).toMatch(/Ilse, la curandera: ahora está en Casa de las hierbas/);
+    expect(pc.knows).toContain('npc_ilse');
+    const y = await talk('Niña, ¿dónde está la mujer del ascua?');
+    expect(y.line ?? '').not.toMatch(/Granero/);
+  });
+
+  it('la beata dice a qué hora es la misa', async () => {
+    const { talk } = await morning('sp_pl_pozo');
+    const r = await talk('Beata, ¿a qué hora es la misa?');
+    expect(r.line).toBe('La misa del pozo: cada día a las 20:00, en el pozo.');
+  });
+
+  it('nunca da una misión, aunque se la pidan', async () => {
+    const { talk } = await morning('sp_pl_horno');
+    const r = await talk('Panadera, ¿tienes algún trabajo para mí?');
+    expect(r.ev?.tags).toContain('extra');
+    expect(r.ev?.payload['story_quest']).toBeUndefined();
+  });
+
+  it('amenazar o insultar no es charla simple: va al máster', () => {
+    return morning('sp_pl_horno').then(({ engine, pc }) => {
+      expect(extraReply(engine.world, engine.events.all(), pc, 'Panadera, dame el pan o te parto la cara', engine.nowFor(pc))).toBeNull();
+      expect(extraReply(engine.world, engine.events.all(), pc, 'Panadera, eres una inútil', engine.nowFor(pc))).toBeNull();
+    });
+  });
+
+  it('a quien le pegó, le tiene miedo: no le atiende y se va a su casa', async () => {
+    const { engine, pc, talk } = await morning('sp_pl_horno');
+    const marta = engine.world.npc('npc_x_marta');
+    marta.attitude.by_character[pc.id] = 'hostile';
+    const r = await talk('Hola, panadera');
+    expect(TRADES.baker.lines.afraid).toContain(r.line);
+    expect(r.text).toMatch(/se aparta de ti y se marcha/);
+    expect(spotOf(engine, 'npc_x_marta')).toBe('sp_pl_casas');
+  });
+
+  it('si sabe que le robó, se lo echa en cara', async () => {
+    const { engine, pc, talk } = await morning('sp_pl_horno');
+    (engine.world.campaign as unknown as { incidents: unknown[] }).incidents = [{
+      id: 'inc_t', kind: 'theft', severity: 1, game_s: engine.gameNow(), updated_game_s: engine.gameNow(), location_id: 'loc_plaza', spot_id: 'sp_pl_horno',
+      perpetrator_id: pc.id, perpetrator_name: pc.name, victim_id: 'npc_x_marta', victim_name: 'Marta', weapon: null, crowd: null,
+      knowers: [{ npc_id: 'npc_x_marta', how: 'saw' }], announced: 1, narrated_to: [], crowd_alert_game_s: null, rep_applied: 0, infamy_applied: 0,
+    }];
+    const r = await talk('Hola, panadera');
+    expect(TRADES.baker.lines.accuse).toContain(r.line);
+  });
+
+  it('una noticia que sabe la cuenta al saludar, una vez', async () => {
+    const { engine, talk } = await morning('sp_pl_horno');
+    setFact(engine.world, { id: 'npc_dead:npc_hugo', text: 'Han encontrado muerto al herrero en la fragua.', by: null, subject: 'npc_hugo', location_id: 'loc_herreria', game_s: engine.gameNow(), knowers: [{ npc_id: 'npc_x_marta', how: 'told', from: null, game_s: engine.gameNow() }] });
+    const a = await talk('Hola, panadera');
+    expect(a.line).toMatch(/Han encontrado muerto al herrero en la fragua/);
+    const b = await talk('Buenos días, panadera');
+    expect(b.line ?? '').not.toMatch(/herrero/);
   });
 });
