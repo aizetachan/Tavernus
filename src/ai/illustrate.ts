@@ -192,6 +192,8 @@ export function portraitPrompt(p: { name: string; role: string; description: str
 
 const ITEM_EN: Record<string, string> = {
   weapon: 'weapon', armor: 'armor', consumable: 'consumable', tool: 'tool', quest: 'curious object', treasure: 'treasure', misc: 'object', container: 'container',
+  ammunition: 'ammunition', gear: 'adventuring gear', focus: 'spellcasting focus', scroll: 'scroll', wand: 'wand', rod: 'rod', staff: 'staff',
+  ring: 'ring', wondrous: 'curious object', coin: 'coin',
 };
 
 /**
