@@ -31,10 +31,8 @@ export const ITEM_DEFS: ItemDef[] = [
   { id: 'it_piel', name: 'piel de lobo', aliases: ['piel', 'pellejo'], type: 'misc', size: 'medium', weight_lb: 5, value: 150, unique: false, origin: 'custom' },
   // Lo que venden o llevan los vecinos de relleno (extras.ts).
   { id: 'it_pan_gris', name: 'pan gris', aliases: ['pan', 'hogaza', 'pan de centeno', 'bread'], type: 'consumable', size: 'small', weight_lb: 1, value: 2, unique: false, origin: 'custom' },
-  { id: 'it_farol', name: 'farol de aceite', aliases: ['farol', 'linterna', 'candil', 'lantern'], type: 'tool', size: 'small', weight_lb: 2, value: 50, unique: false, light_source: true, origin: 'custom' },
-  { id: 'it_hilo_aguja', name: 'hilo y aguja', aliases: ['aguja', 'hilo', 'aguja e hilo'], type: 'tool', size: 'tiny', weight_lb: 0.1, value: 3, unique: false, origin: 'custom' },
+  { id: 'it_farol_aceite', name: 'farol de aceite', aliases: ['farol de aceite', 'farol del sereno', 'candil'], type: 'tool', size: 'small', weight_lb: 2, value: 50, unique: false, light_source: true, origin: 'custom' },
   { id: 'it_llave_casas', name: 'llave de las casas del callejón', aliases: ['llave de casa', 'llave de las casas', 'llave de hierro'], type: 'tool', size: 'tiny', weight_lb: 0.1, value: 1, unique: false, origin: 'custom' },
-  { id: 'it_yesca', name: 'yesca y pedernal', aliases: ['yesca', 'pedernal', 'eslabón de encender'], type: 'tool', size: 'tiny', weight_lb: 0.2, value: 2, unique: false, origin: 'custom' },
 ];
 
 export const ITEMS: AuthoredInstance[] = [
@@ -59,12 +57,9 @@ export const ITEMS: AuthoredInstance[] = [
   { id: 'ii_cuerda_torre', item_id: 'it_cuerda', quantity: 1, at: { spot: 'sp_ca_torre' } },
   { id: 'ii_antorchas_ruinas', item_id: 'it_antorcha', quantity: 2, at: { spot: 'sp_ru_torre' } },
   // Vecinos de relleno: lo que venden lo llevan encima (se compra o se roba de aquí) y lo que es solo suyo.
-  { id: 'ii_anselmo_farol', item_id: 'it_farol', quantity: 1, at: { npc: 'npc_x_anselmo' } },
+  { id: 'ii_anselmo_farol', item_id: 'it_farol_aceite', quantity: 1, at: { npc: 'npc_x_anselmo' } },
   { id: 'ii_marta_pan', item_id: 'it_pan_gris', quantity: 6, at: { npc: 'npc_x_marta' } },
   { id: 'ii_gil_lena', item_id: 'it_madera', quantity: 4, at: { npc: 'npc_x_gil' } },
-  { id: 'ii_lucio_cuerda', item_id: 'it_cuerda', quantity: 1, at: { npc: 'npc_x_lucio' } },
-  { id: 'ii_lucio_aguja', item_id: 'it_hilo_aguja', quantity: 3, at: { npc: 'npc_x_lucio' } },
-  { id: 'ii_lucio_yesca', item_id: 'it_yesca', quantity: 2, at: { npc: 'npc_x_lucio' } },
   // Las casas del callejón están cerradas: la llave la llevan Marta y Fermina (robarla abre la puerta).
   { id: 'ii_marta_llave', item_id: 'it_llave_casas', quantity: 1, at: { npc: 'npc_x_marta' } },
   { id: 'ii_fermina_llave', item_id: 'it_llave_casas', quantity: 1, at: { npc: 'npc_x_fermina' } },

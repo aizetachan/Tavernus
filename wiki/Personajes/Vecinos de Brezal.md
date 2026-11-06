@@ -1,15 +1,15 @@
 ---
 title: Vecinos de Brezal
 aliases: ["Vecinos de relleno", "Relleno"]
-description: "Trece vecinos con oficio, nombre y horario que hacen pueblo: el sereno, la panadera, los labradores de la cena, la niña del callejón."
+description: "Doce vecinos con oficio, nombre y horario que hacen pueblo: el sereno, la panadera, los labradores de la cena, la niña del callejón."
 tags: [personaje, brezal]
 ---
 
-Además de los [[Personajes|once con historia]], en Brezal viven trece vecinos más. No guardan secretos ni dan misiones, y del incendio de Vharn saben lo mismo que todo el pueblo. Hacen pueblo: tienen su oficio, su sitio a cada hora, su casa y algo encima. Se les puede comprar, robar o hacer daño, y ven lo que pasa.
+Además de los [[Personajes|once con historia]], en Brezal viven doce vecinos más. No guardan secretos ni dan misiones, y del incendio de Vharn saben lo mismo que todo el pueblo. Hacen pueblo: tienen su oficio, su sitio a cada hora, su casa y algo encima. Se les puede comprar, robar o hacer daño, y ven lo que pasa.
 
 Al hablarles contestan poco: un par de frases frías y, a la segunda pregunta que no es lo suyo, se cierran. Lo que no saben lo remiten a quien sí sabe. Lo que su oficio les deja contestar, sí lo contestan: el sereno dice dónde está alguien, la beata a qué hora es la misa y la panadera vende pan.
 
-## Los trece
+## Los doce
 
 | Nombre | Oficio | Mañana (6-14) | Tarde (14-20) | Noche (20-6) | Además | Sirve para |
 |---|---|---|---|---|---|---|
@@ -20,7 +20,6 @@ Al hablarles contestan poco: un par de frases frías y, a la segunda pregunta qu
 | Ciro | Jornalero | El camino de los corrales | El camino del molino | En casa | La cena del Jabalí, 19:00 | Nada |
 | Fermina | Lavandera | La rueda, [[El molino]] | El pozo | En casa | La misa del pozo, 20:00 | Dice a qué hora es cada cosa |
 | Gil | Leñero | El sendero, [[El Soto]] | La puerta de la taberna | En casa | La cena del Jabalí, 19:00 | Vende leña a 3 de cobre |
-| Lucio | Buhonero | El pozo | La mesa del fondo, [[Taberna del Jabalí]] | La chimenea del Jabalí | El mercado y la cena | Vende cuerda, hilo y aguja, yesca |
 | Inés | Zagala | El redil, [[Los Corrales]] | El sendero, [[El Soto]] | La casa de la granja | | Remite a [[Úrsula]] |
 | Pía | Niña | El pozo | El callejón de las hierbas | En casa | El mercado, 9:00 | Dice dónde está algo, mal y corriendo |
 | Herminia | Criada de la casona | El zaguán, [[La casona]] | El pozo | El banco de espera, [[La casona]] | | Dice cuándo recibe el regidor |
@@ -38,7 +37,6 @@ Al hablarles contestan poco: un par de frases frías y, a la segunda pregunta qu
 - **Ciro**, veinte años y un cubilete de dados en el bolsillo. Juega en la cena y pierde. Le debe unas monedas a [[Garrán]] y se calla en cuanto le ve entrar.
 - **Fermina**, la lavandera del chal oscuro. Lava para la casona y para el Jabalí; dice que el agua sale gris y la ropa también. Mira mucho a la puerta: su marido, Ramiro, entra en la niebla cada noche atado a una cuerda.
 - **Gil**, el leñero, con astillas en la barba. Corta en el borde de [[El Soto]] y no entra más: «ahí hay lobos y algo peor».
-- **Lucio**, buhonero de Valcruz. La niebla le pilló dentro con el carro a medio vender. Duerme junto a la chimenea del Jabalí por una moneda y pregunta a todos si saben cómo salir.
 - **Inés**, catorce años, la zagala de los Corrales. Saca las ovejas de [[Úrsula]] desde que Pol se quedó fuera. Habla con las ovejas más que con la gente.
 - **Pía**, ocho años, una cinta roja en el pelo y canicas de barro en los bolsillos. Corre detrás de los forasteros y repite lo que oye en casa.
 - **Herminia**, criada de [[Osric Malvez]] desde hace doce años. No dice nada de la casa, y se nota que lo tiene ensayado.
@@ -50,6 +48,8 @@ Al hablarles contestan poco: un par de frases frías y, a la segunda pregunta qu
 - **A lo que pasa:** las noticias les llegan de boca en boca, como a todos, y las comentan.
 - **Si les hacen daño:** no pelean. Huyen y gritan, y los demás avisan a la autoridad. Fermina y Ramiro son matrimonio: lo que le pase a uno lo siente el otro.
 - **Si les roban:** lo que venden lo llevan encima. Si pillan al ladrón, gritan «¡al ladrón!». También son testigos de lo que les pasa a otros: con la plaza llena, robar en el mercado es más difícil.
+
+El buhonero de la plaza, Lucio Cendal, no es de relleno: es el tendero de la tienda, con su surtido (ver [[Plaza del Pozo]]).
 
 ## Ver también
 

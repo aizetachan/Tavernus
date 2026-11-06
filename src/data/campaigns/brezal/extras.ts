@@ -1,12 +1,13 @@
 /**
- * Brezal: los vecinos de relleno (docs/PLAN-NPC-RELLENO.md). Trece personas con oficio, nombre, horario y una
+ * Brezal: los vecinos de relleno (docs/PLAN-NPC-RELLENO.md). Doce personas con oficio, nombre, horario y una
  * historia breve que hacen pueblo sin pesar en la historia: no saben nada del incendio, no dan misiones y remiten a
  * quien sí sabe. Lo demás (cómo se llama su oficio, qué lleva, cómo habla) lo pone la plantilla de su oficio
  * (src/engine/extras.ts); aquí, lo propio de cada uno.
  *
  * Sin contradecir el lore: la única guardia pagada sigue siendo Doro (el sereno hace la ronda por su cuenta), Brenna
  * sigue sola en la barra y no hay sacerdote (el rezo lo dirige Ilse; la beata cambia las velas). Benito y Fermina
- * son el labrador y la mujer de chal de la cena de «Humo y ceniza».
+ * son el labrador y la mujer de chal de la cena de «Humo y ceniza». El buhonero no es de relleno: es Lucio Cendal,
+ * el tendero de la tienda de la plaza (people.ts), con su surtido.
  *
  * Franjas del motor: mañana de 6 a 14, tarde de 14 a 20, noche de 20 a 6. Lo que pasa a una hora concreta (la cena,
  * la misa, la prueba de la niebla) va por los eventos a los que asisten (`attends`), y salen de su multitud.
@@ -79,15 +80,6 @@ export const EXTRAS: AuthoredExtra[] = [
     routine: { day: 'sp_cl_sendero', afternoon: 'sp_pl_taberna', night: CASAS }, home_spot_id: CASAS,
     attends: ['se_cena'], sells: [{ item_id: 'it_madera', price: 3 }], refer_to: ['npc_hal'],
     lines: { dunno: ['¿El Soto? Yo corto en el borde y no entro más. Pregúntale a Hal, que vive dentro.', 'Ni idea.'] },
-  },
-  {
-    id: 'npc_x_lucio', name: 'Lucio', trade: 'peddler',
-    look: 'Forastero de Valcruz, sombrero de ala ancha y un fardo de cacharros a la espalda.',
-    story: 'La niebla le pilló dentro con el carro a medio vender. Duerme junto a la chimenea del Jabalí por una moneda y pregunta a todo el mundo si sabe cómo salir.',
-    routine: { day: 'sp_pl_pozo', afternoon: 'sp_tab_mesa', night: 'sp_tab_chimenea' }, home_spot_id: 'sp_tab_chimenea',
-    attends: ['se_mercado', 'se_cena'], refer_to: ['npc_brenna'],
-    sells: [{ item_id: 'it_cuerda', price: 80 }, { item_id: 'it_hilo_aguja', price: 3 }, { item_id: 'it_yesca', price: 2 }],
-    lines: { greet: ['¡Mira, mira! Cordel, aguja, yesca. Barato, que me quiero ir.', '¿Buscas algo? Lo que queda, barato.'] },
   },
   {
     id: 'npc_x_ines', name: 'Inés', trade: 'shepherd', gender: 'f', role: 'zagala',

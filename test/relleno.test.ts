@@ -1,5 +1,5 @@
 /**
- * NPC de relleno, fase 1 (docs/PLAN-NPC-RELLENO.md): el modelo, el catálogo de oficios, los trece vecinos de Brezal,
+ * NPC de relleno, fase 1 (docs/PLAN-NPC-RELLENO.md): el modelo, el catálogo de oficios, los doce vecinos de Brezal,
  * sus horarios y eventos, las casas que no se ven desde fuera, el validador y la migración de partidas empezadas.
  */
 import { describe, expect, it } from 'vitest';
@@ -54,10 +54,10 @@ const posAt = (engine: Engine, spotId: string) => {
 };
 
 describe('relleno: montaje desde la plantilla de su oficio', () => {
-  it('Brezal trae trece vecinos de relleno, con su oficio, su guion y sin secretos ni misiones', () => {
+  it('Brezal trae doce vecinos de relleno, con su oficio, su guion y sin secretos ni misiones', () => {
     const seed = seedNow();
     const extras = seed.npcs.filter(isExtra);
-    expect(extras).toHaveLength(13);
+    expect(extras).toHaveLength(12);
     expect(seed.npcs.filter((n) => !isExtra(n)).map((n) => n.id)).toContain('npc_brenna');
     const marta = extras.find((n) => n.id === 'npc_x_marta')!;
     expect(marta.role).toBe('panadera');
@@ -98,7 +98,7 @@ describe('relleno: montaje desde la plantilla de su oficio', () => {
     const seed = seedNow();
     const at = (id: string) => seed.npcs.find((n) => n.id === id)!.location.id;
     expect(at('npc_x_marta')).toBe('sp_pl_horno');
-    expect(at('npc_x_lucio')).toBe('sp_tab_mesa');
+    expect(at('npc_x_gil')).toBe('sp_pl_taberna');
     expect(at('npc_x_remedios')).toBe('sp_pl_casas');
   });
 
@@ -108,8 +108,7 @@ describe('relleno: montaje desde la plantilla de su oficio', () => {
     expect(on('npc_x_marta')).toContain('it_pan_gris×6');
     expect(on('npc_x_marta')).toContain('it_llave_casas×1');
     expect(on('npc_x_gil')).toContain('it_madera×4');
-    expect(on('npc_x_lucio')).toEqual(expect.arrayContaining(['it_cuerda×1', 'it_hilo_aguja×3', 'it_yesca×2']));
-    expect(on('npc_x_anselmo')).toContain('it_farol×1');
+    expect(on('npc_x_anselmo')).toContain('it_farol_aceite×1');
   });
 });
 
@@ -118,9 +117,9 @@ describe('relleno: eventos y multitud', () => {
     const seed = seedNow();
     const ev = (id: string) => ((seed.campaign as WorldSnapshot['campaign'] & { schedule: { id: string; npc_ids: string[]; crowd: { label: string; count: number }[] }[] }).schedule).find((e) => e.id === id)!;
     const original = (id: string) => BREZAL.campaign.schedule.find((e) => e.id === id)!;
-    expect(ev('se_cena').npc_ids).toEqual(['npc_hugo', 'npc_x_benito', 'npc_x_ciro', 'npc_x_gil', 'npc_x_lucio', 'npc_x_damian']);
-    expect(ev('se_cena').crowd[0]).toEqual({ label: 'vecinos', count: 5 });
-    expect(ev('se_mercado').crowd[0]!.count).toBe(17);
+    expect(ev('se_cena').npc_ids).toEqual(['npc_hugo', 'npc_x_benito', 'npc_x_ciro', 'npc_x_gil', 'npc_x_damian']);
+    expect(ev('se_cena').crowd[0]).toEqual({ label: 'vecinos', count: 6 });
+    expect(ev('se_mercado').crowd[0]!.count).toBe(18);
     expect(ev('se_misa').crowd[0]!.count).toBe(10);
     expect(ev('se_prueba_niebla').crowd[0]!.count).toBe(1);
     // Los datos escritos no se tocan: se monta sobre una copia.
@@ -144,10 +143,10 @@ describe('relleno: horario', () => {
     expect(spotOf(engine, 'npc_x_fermina')).toBe('sp_mo_rueda');
     expect(spotOf(engine, 'npc_x_anselmo')).toBe('sp_pl_casas');
     expect(spotOf(engine, 'npc_x_ines')).toBe('sp_co_redil');
-    // 10:00: el mercado. Marta y Lucio van al pozo.
+    // 10:00: el mercado. Marta va al pozo, con Pía.
     await at(engine, time, 1, 10);
     expect(spotOf(engine, 'npc_x_marta')).toBe('sp_pl_pozo');
-    expect(spotOf(engine, 'npc_x_lucio')).toBe('sp_pl_pozo');
+    expect(spotOf(engine, 'npc_x_pia')).toBe('sp_pl_pozo');
     // 16:00: tarde.
     await at(engine, time, 1, 16);
     expect(spotOf(engine, 'npc_x_marta')).toBe('sp_pl_horno');
@@ -163,10 +162,9 @@ describe('relleno: horario', () => {
     expect(spotOf(engine, 'npc_x_anselmo')).toBe('sp_li_barricada');
     expect(spotOf(engine, 'npc_x_ramiro')).toBe('sp_li_barricada');
     expect(spotOf(engine, 'npc_x_benito')).toBe('sp_pl_casas');
-    // 23:30: Anselmo vuelve al portón y Lucio duerme junto a la chimenea.
+    // 23:30: Anselmo vuelve al portón.
     await at(engine, time, 1, 23.5);
     expect(spotOf(engine, 'npc_x_anselmo')).toBe('sp_pl_porton');
-    expect(spotOf(engine, 'npc_x_lucio')).toBe('sp_tab_chimenea');
   });
 });
 
@@ -264,12 +262,12 @@ describe('relleno: partidas empezadas antes', () => {
 
     const second = await boot(repo, seedNow());
     const w = second.engine.world;
-    expect([...w.npcs.values()].filter(isExtra)).toHaveLength(13);
+    expect([...w.npcs.values()].filter(isExtra)).toHaveLength(12);
     const carried = (id: string) => [...w.itemInstances.values()].filter((i: ItemInstance) => i.location.type === 'npc' && i.location.id === id);
     expect(carried('npc_x_marta').map((i) => i.item_id)).toEqual(expect.arrayContaining(['it_pan_gris', 'it_llave_casas']));
     const cena = allScheduled(w).find((e) => e.id === 'se_cena')!;
     expect(cena.npc_ids).toContain('npc_x_benito');
-    expect(cena.crowd[0]!.count).toBe(5);
+    expect(cena.crowd[0]!.count).toBe(6);
 
     // Le roban el pan a Marta antes de volver a arrancar: no se le repone.
     const pan = carried('npc_x_marta').find((i) => i.item_id === 'it_pan_gris')!;
@@ -279,10 +277,10 @@ describe('relleno: partidas empezadas antes', () => {
 
     const third = await boot(repo, seedNow());
     const w3 = third.engine.world;
-    expect([...w3.npcs.values()].filter(isExtra)).toHaveLength(13);
+    expect([...w3.npcs.values()].filter(isExtra)).toHaveLength(12);
     expect([...w3.itemInstances.values()].filter((i) => i.item_id === 'it_pan_gris' && i.location.type === 'npc')).toHaveLength(0);
     const cena3 = allScheduled(w3).find((e) => e.id === 'se_cena')!;
     expect(cena3.npc_ids.filter((id) => id === 'npc_x_benito')).toHaveLength(1);
-    expect(cena3.crowd[0]!.count).toBe(5);
+    expect(cena3.crowd[0]!.count).toBe(6);
   });
 });

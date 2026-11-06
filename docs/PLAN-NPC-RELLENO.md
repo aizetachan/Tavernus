@@ -70,7 +70,7 @@ personas además de los principales**, y nunca más de cuatro de relleno en un m
 - **Por sitio y franja:** como mucho cuatro de relleno fuera de los eventos (el validador avisa si se pasa).
 - **En los eventos:** el relleno que asiste sale de la cifra de `crowd`; el resto sigue siendo multitud sin cara.
 
-Para Brezal, con once principales: **trece de relleno.** Unas cien almas en total contando la multitud, que es lo que
+Para Brezal, con once principales: **doce de relleno** (eran trece; Lucio pasó a tendero, ver abajo). Unas cien almas en total contando la multitud, que es lo que
 pide una aldea encerrada en la niebla: hay gente, pero se conocen todos.
 
 ## El modelo de datos
@@ -168,7 +168,7 @@ generados, uno por asentamiento.
 
 ## El relleno de Brezal
 
-Trece vecinos. Ninguno contradice el lore: la única guardia pagada sigue siendo Doro (el rumor `rm_diezmo` dice que
+Doce vecinos (el plan tenía trece: el buhonero, Lucio, pasó a ser el tendero de la tienda de la plaza, un principal de la sesión de objetos E, y sale de esta lista). Ninguno contradice el lore: la única guardia pagada sigue siendo Doro (el rumor `rm_diezmo` dice que
 «la guardia es Doro»), así que el que hace la ronda es un viejo que la hace por su cuenta; Brenna sigue sola en la
 barra; no hay sacerdote (Ilse dirige el rezo) y la que se ocupa de las velas es una beata.
 
@@ -185,7 +185,7 @@ de aceite). Franjas del motor: mañana de 6 a 14, tarde de 14 a 20 y noche de 20
 | 5 | **Ciro** | labrador | el camino de los corrales (cercas) | el camino del molino | la mesa del fondo del Jabalí hasta las 21; luego casas | cena del Jabalí | bolsa, navaja, dados de hueso | nada | Joven, juega a los dados en la cena y pierde. Le debe a Garrán. Se calla en cuanto entra. |
 | 6 | **Fermina** | lavandera | la rueda del molino (lava en el canal) | el pozo | casas | misa del pozo | bolsa, jabón de ceniza, pañuelo | **horas** y adónde ir a lavar | Lava para la casona y para el Jabalí. Dice que el agua sale gris y la ropa también. Es la **mujer de chal**: mira a la puerta porque su marido salió a la niebla con la cuerda y volvió callado. |
 | 7 | **Gil** | leñero | el sendero del Soto (corta leña) | la puerta de la taberna (lleva la leña) | la chimenea del Jabalí hasta las 21; luego casas | cena del Jabalí | bolsa, hacha de mano, yesca | **vende** leña a 3 de cobre | Corta en el borde del Soto y no entra más: «ahí dentro hay lobos y algo peor». |
-| 8 | **Lucio** | buhonero atrapado | el pozo (puesto) | la mesa del fondo del Jabalí | la chimenea del Jabalí (duerme ahí por una moneda) | mercado | bolsa, cordel, hilo y aguja, yesca | **vende** cordel, hilo y aguja, yesca | De Valcruz. La niebla le pilló dentro con el carro a medio vender. Pregunta a todo el mundo si sabe cómo salir. |
+| 8 | ~~**Lucio**~~ (ahora tendero, principal: fuera del relleno) | buhonero atrapado | el pozo (puesto) | la mesa del fondo del Jabalí | la chimenea del Jabalí (duerme ahí por una moneda) | mercado | bolsa, cordel, hilo y aguja, yesca | **vende** cordel, hilo y aguja, yesca | De Valcruz. La niebla le pilló dentro con el carro a medio vender. Pregunta a todo el mundo si sabe cómo salir. |
 | 9 | **Inés** | zagala de los Corrales | el redil | el sendero del Soto (pastos) | la casa de la granja | ninguno | bolsa, honda, mendrugo | nada; remite a Úrsula | Catorce años. Saca las ovejas de Úrsula desde que Pol se quedó fuera. Habla con las ovejas más que con la gente. |
 | 10 | **Pía** | niña del callejón | el pozo | el callejón de las hierbas | casas | mercado | sin bolsa: canicas de barro, una cinta | **direcciones** (mal y corriendo) | Ocho años. Corre detrás de los forasteros y repite lo que oye en casa. Se va corriendo a la segunda pregunta. |
 | 11 | **Herminia** | criada de la casona | el zaguán de la casona | el pozo (agua para la casona) | la casona (banco de espera) | ninguno | bolsa, llave de la puerta de servicio, pañuelo | **horas** del regidor: «recibe por la mañana» | Sirve a Osric desde hace doce años. No dice nada de la casa y se nota que lo tiene ensayado. |
@@ -198,12 +198,12 @@ Notas:
   (`rm_luces`), Ramiro hace el evento de la prueba de la niebla y Ciro debe a Garrán (se callará si Garrán entra; no
   es una misión). Nada de eso abre pistas.
 - **Eventos.** Con el relleno dentro, `crowd` baja uno por cada vecino que asiste: la cena pasa de «vecinos ×10» a
-  «vecinos ×5» más Benito, Ciro, Gil, Damián y Lucio; la misa, de 12 a 10 más Remedios y Fermina; el mercado, de 20 a
-  17 más Marta, Lucio y Pía; la prueba de la niebla, de 3 a 1 más Anselmo y Ramiro.
-- **A las 13:00 en la plaza** (cobro del diezmo): Garrán, Doro, Marta en el horno, Remedios, Lucio y Pía junto al
+  «vecinos ×6» más Benito, Ciro, Gil y Damián; la misa, de 12 a 10 más Remedios y Fermina; el mercado, de 20 a
+  18 más Marta y Pía; la prueba de la niebla, de 3 a 1 más Anselmo y Ramiro.
+- **A las 13:00 en la plaza** (cobro del diezmo): Garrán, Doro, Marta en el horno, Remedios y Pía junto al
   pozo, Benito y Ramiro en los huertos, Ciro en las cercas y la fila de ocho sin cara. **A las 16:00**: Osric en el
   tablón, Anselmo dormido en el banco, Fermina y Herminia en el pozo, Pía en el callejón, Marta en el horno, Gil en la
-  puerta de la taberna. **A medianoche**: Doro en la barra, Lucio dormido en la chimenea y Anselmo
+  puerta de la taberna. **A medianoche**: Doro en la barra y Anselmo
   en el portón; el resto, en las casas.
 - **Las rutinas van por las tres franjas del motor**, y lo que pasa a una hora concreta (la cena hasta las 21, la
   prueba de la niebla a las 22) va por los eventos a los que asisten. «Hasta las 21; luego casas» quiere decir eso:
@@ -320,13 +320,12 @@ Todo esto ya lo hace `crime.ts` con cualquier NPC; el relleno entra igual:
 ### Horarios y movimiento por el mapa
 
 - **Horario**: tres franjas (mañana, tarde, noche) con su punto, una casa y los eventos a los que van, como los
-  principales (`tickSchedule`). Los trece de Brezal tienen el suyo en la tabla de arriba. Existe.
+  principales (`tickSchedule`). Los doce de Brezal tienen el suyo en la tabla de arriba. Existe.
 - **Escalonado** (**nuevo**): hoy todos los NPC cambian de punto en el mismo instante en que cambia la franja (a las
   14:00 se movería el pueblo entero de golpe). Cada vecino de relleno cambia a su propia hora, con la semilla, entre
   40 minutos antes y 40 después, así que se ve gente que llega y se va a lo largo de la tarde.
 - **Paseos** (**nuevo**): con `wander`, dentro de su franja va de un punto a otro de la lista cada 20 a 40 minutos de
   juego. Pía corretea entre el pozo, el tablón y el callejón; Anselmo hace la ronda del portón a la barricada y vuelve;
-  Lucio pregona entre el pozo y la puerta de la taberna.
 - **En el minimapa**: el punto del vecino **se desliza** del sitio viejo al nuevo en el tablero (animación de la página,
   sin coste para el motor: el motor sigue moviéndolo de punto a punto). Si pasa a otra localización, sale por la
   salida de su lado. Sin avisos en el chat (ver abajo).
@@ -393,7 +392,7 @@ Un turno típico de «Humo y ceniza» (seq 89: 8 345 de entrada, 1 486 de salida
 | Regla GENTE en el prompt de sistema | +150, en la parte en caché | despreciable |
 | Charla de relleno que va al máster | un turno normal | ~0,002 $ |
 | Rechazo de «gente inventada» | una reescritura (pasa en pocos turnos) | ~0,002 $ cuando pasa |
-| Frases propias con el escritor barato (opcional) | ~600 de salida por vecino, una vez | ~0,004 $ por partida para los trece |
+| Frases propias con el escritor barato (opcional) | ~600 de salida por vecino, una vez | ~0,004 $ por partida para los doce |
 | Generar el relleno de un mundo | 0 (semilla) | **0 $** |
 
 Una sesión de 300 turnos con relleno cuesta como mucho **medio céntimo** más por el contexto, y menos que hoy si el
@@ -514,10 +513,10 @@ depende de la pregunta 2 de `CONVERSACION-FLUJO.md`, que se decide allí para to
   nace el mundo.
 - **Casas** (`perception.ts`, `isDwelling`): un punto con la etiqueta `dwelling` no se ve ni se oye desde fuera, ni ve
   lo de fuera. En el crimen, desde casa se oye lo violento y no lo callado. `move_to` no lista a quien está en casa.
-- **Brezal** (`src/data/campaigns/brezal/extras.ts`): los trece, con dos cambios sobre la tabla: Ciro es «jornalero»
+- **Brezal** (`src/data/campaigns/brezal/extras.ts`): los doce (Lucio pasó a tendero, principal de la sesión de objetos E, y el farol del sereno es `it_farol_aceite` para no chocar con el `it_farol` de su tienda), con dos cambios sobre la tabla: Ciro es «jornalero»
   y Ramiro «hortelano», para que «el labrador» sea solo Benito. Puntos nuevos: el horno y las casas del callejón
-  (cerradas con `it_llave_casas`, que llevan Marta y Fermina: robarla abre la puerta). Objetos nuevos: pan gris, farol,
-  hilo y aguja, yesca y la llave.
+  (cerradas con `it_llave_casas`, que llevan Marta y Fermina: robarla abre la puerta). Objetos nuevos: pan gris, farol de
+  aceite y la llave.
 - **Migración** (`engine.ts`, `migrate`): el relleno que falta entra en las partidas empezadas con lo que lleva y su
   sitio en los eventos, una sola vez; lo robado no se repone.
 - **Wiki**: `wiki/Personajes/Vecinos de Brezal.md`; Personajes, Vida del pueblo, Plaza del Pozo y Taberna del Jabalí.

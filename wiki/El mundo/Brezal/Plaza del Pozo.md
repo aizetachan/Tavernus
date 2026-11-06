@@ -54,7 +54,7 @@ Ver [[Costumbres#El pozo]].
 - [[Garrán]]: en el tablón de día.
 - [[Doro]]: en el portón norte de día.
 - [[Osric Malvez]]: en el tablón por la tarde.
-- Vecinos de relleno ([[Vecinos de Brezal]]): Marta en el horno todo el día; Remedios y Pía junto al pozo por la mañana, y Lucio con su puesto; Benito, Ciro y Ramiro en los caminos de los huertos y de los corrales; Anselmo dormido en el banco del tablón por la tarde y en el portón de noche; Fermina y Herminia en el pozo por la tarde.
+- Vecinos de relleno ([[Vecinos de Brezal]]): Marta en el horno todo el día; Remedios y Pía junto al pozo por la mañana; Benito, Ciro y Ramiro en los caminos de los huertos y de los corrales; Anselmo dormido en el banco del tablón por la tarde y en el portón de noche; Fermina y Herminia en el pozo por la tarde.
 
 La plaza tiene tres citas diarias (ver [[Vida del pueblo]]):
 

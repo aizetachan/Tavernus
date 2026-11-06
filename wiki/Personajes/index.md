@@ -29,7 +29,7 @@ La actitud es la de partida. Cambia según lo que haga el jugador: por ejemplo, 
 
 ## Los vecinos de relleno
 
-Además viven en Brezal trece vecinos sin peso en la historia: el sereno, la beata, la panadera, los labradores de la cena, la lavandera, el leñero, un buhonero atrapado, la zagala, una niña, la criada de la casona, el viejo de la chimenea y el vecino de la cuerda. Tienen oficio, horario y casa, y contestan poco. Ver [[Vecinos de Brezal]].
+Además viven en Brezal doce vecinos sin peso en la historia: el sereno, la beata, la panadera, los labradores de la cena, la lavandera, el leñero, la zagala, una niña, la criada de la casona, el viejo de la chimenea y el vecino de la cuerda. Tienen oficio, horario y casa, y contestan poco. Ver [[Vecinos de Brezal]].
 
 ## Animales
 
