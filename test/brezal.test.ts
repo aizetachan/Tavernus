@@ -116,8 +116,10 @@ describe('Brezal sellada: la campaña escrita', () => {
     expect(snap.locations.find((l) => l.id === 'loc_ruinas')!.name).toBe('El Granero Quemado');
     expect(snap.spots.find((s) => s.id === 'sp_cs_cueva')!.location_id).toBe('loc_claro');
     expect(snap.spots.find((s) => s.id === 'sp_cs_mojon')!.location_id).toBe('loc_lindero');
-    const people = snap.npcs.filter((n) => n.attitude.default !== 'hostile' && n.stats?.attack_name !== 'mordisco' && n.role !== 'perro');
+    // Las personas con historia; los vecinos de relleno (sin secreto, docs/PLAN-NPC-RELLENO.md) van aparte.
+    const people = snap.npcs.filter((n) => n.attitude.default !== 'hostile' && n.stats?.attack_name !== 'mordisco' && n.role !== 'perro' && n.tier !== 'extra');
     expect(people.length).toBe(12);
+    expect(snap.npcs.filter((n) => n.tier === 'extra')).toHaveLength(12);
     expect(people.some((n) => n.id === 'npc_ursula' && n.location.id === 'sp_co_gallinero')).toBe(true);
     for (const n of people) {
       expect(n.secret, n.id).not.toBe('');

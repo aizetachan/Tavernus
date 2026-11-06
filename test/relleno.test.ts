@@ -235,6 +235,12 @@ describe('relleno: validador', () => {
     expect(extraProblems(s).join(' ')).toMatch(/5 en sp_pl_tablon por la mañana/);
   });
 
+  it('un oficio que nombra un sitio es un error: «voy a la casona» se leería como hablar con la criada', () => {
+    const s = base();
+    s.npcs.find((n) => n.id === 'npc_x_herminia')!.role = 'criada de la casona';
+    expect(extraProblems(s).join(' ')).toMatch(/npc_x_herminia: su oficio .* nombra un sitio \(casona\)/);
+  });
+
   it('sin casa, o con el nombre de un principal, es un error', () => {
     const s = base();
     marta(s).home_spot_id = 'sp_no_existe';
