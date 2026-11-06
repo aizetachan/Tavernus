@@ -34,27 +34,37 @@ Antes se llamaba *Ceniza en el agua*. Se cambió para que no chocara con [[Ceniz
 
 > A Brenna se le ha perdido Ceniza, su perro: pardo, una oreja rota. Lo vieron por el Soto, detrás de un olor. Paga a quien se lo traiga.
 
-- **Objetivo**: encontrar a [[Ceniza]] y devolverlo a casa.
+- **Objetivo**: encontrar a [[Ceniza]] y devolverlo a casa. Va **por fases** (ver [[Misiones#Misiones por fases|Misiones por fases]]).
 - **La pide**: [[Brenna]]. En la [[Taberna del Jabalí]] se oye el rumor: «dicen que Brenna lleva días con mala cara, mirando a la puerta».
 - **Nivel**: 2, pero la pide desde el nivel 1. La loba es dura.
-- **Recompensa**: 100 monedas, +2 de reputación y 150 PX, de manos de Brenna.
+- **Recompensa**: 100 monedas, +2 de reputación y 150 PX, de manos de Brenna, más lo de su desenlace.
 
-> [!warning]- Spoiler: pasos y solución
-> 1. **Buscar el rastro en el Soto.** Se cumple al llegar a [[El Soto]]. En el barro hay huellas de perro hacia el pie del roble y, al lado, otras enormes, de lobo.
-> 2. **Encontrar a Ceniza en la madriguera.** Se cumple al pisar la madriguera.
-> 3. **Sacarlo de la madriguera.** Lo guarda **la loba de ceniza** (CA 14, 37 PG, mordisco 2d6+3). Es demasiado para un nivel 1 a lo bruto. Hay varias salidas:
->    - ahuyentarla con fuego o Intimidación CD 15;
->    - colarse sin que te vea, Sigilo CD 13 mientras duerme;
->    - llevar encima ceniza del granero: no ataca a quien la lleva;
->    - matarla.
+> [!warning]- Spoiler: fases, vías y desenlaces
+> **Fase 1. Encontrar el rastro**: averiguar dónde se ha metido el perro. Vale llegar a la madriguera o saberlo por una vía:
+> - **rastrear** en el barro de [[El Soto]] (Supervivencia CD 12; si falla, se pierde una hora y suena un aullido);
+> - **preguntar a [[Hal]]**, que conoce el Soto mejor que nadie;
+> - **el aullido**: de noche, en el Soto, se oye aullar hacia el roble.
 >
->    El perro sale cojeando y corre solo a la chimenea del Jabalí.
+> **Fase 2. Sacarlo de la madriguera**: llegar a la madriguera al pie del roble y sacar a Ceniza. Lo guarda **la loba de ceniza** (CA 14, 37 PG, mordisco 2d6+3), demasiado para un nivel 1 a lo bruto. Vías:
+> - **fuego**: ahuyentarla con una antorcha (Intimidación CD 15). Huye hacia los Corrales, y **los lobos bajan igual** aunque devuelvas el perro. Se conoce al conocer a Hal;
+> - **sigilo**: colarse de noche mientras duerme (Sigilo CD 13);
+> - **ceniza del granero**: la loba no ataca a quien la lleva encima. Se conoce por Ilse o Hal, o al llevarla;
+> - **cebo**: tirarle una ración lejos (Trato con animales CD 12);
+> - **matarla**: el motor lo ve solo. [[Hal]] la conocía y te mira peor (−5);
+> - **Hal la distrae**, si se fía de ti (amigo);
+> - **magia**: *Dormir*, *Luces danzantes* o *Hablar con los animales*.
+>
+> Si falla el fuego, el sigilo o el cebo, la loba embiste y **Ceniza sale herido**: se abre la fase secundaria. El perro sale cojeando y corre solo a la chimenea del Jabalí.
+>
+> **Fase secundaria. La pata de Ceniza** (opcional): que le miren la pata, con [[Ilse]], Medicina CD 12 o una poción.
+>
+> **Desenlaces**: con la pata curada (Brenna se fía de ti como amiga, +1 de reputación); la loba muerta; la loba lejos (huyó del fuego); sin que la loba se entere (sigilo, ceniza, Hal o magia: 20 monedas más); o, sin más, Ceniza en casa.
 >
 > **Plazo**: el perro no aguanta más de dos descansos largos en la madriguera. Tras el primero, aviso; tras el segundo, Ceniza muere y el Diario lo escribe.
 >
 > **Al entregarla**: Brenna se arrodilla junto al perro y pasa a ser amiga. Te sirve sin cobrar y murmura: «Hay cosas que te debo contar. Ahora no».
 >
-> Con nivel 2 abre [[Acto II · Lo que esconde Brezal#Bajo el Jabalí|Bajo el Jabalí]] y [[Acto II · Lo que esconde Brezal#El Granero Quemado|El Granero Quemado]]. Evita que **los lobos bajen a los Corrales**. Ver [[La amenaza]]. Si muere el perro, falla.
+> Con nivel 2 abre [[Acto II · Lo que esconde Brezal#Bajo el Jabalí|Bajo el Jabalí]] y [[Acto II · Lo que esconde Brezal#El Granero Quemado|El Granero Quemado]]. Evita que **los lobos bajen a los Corrales**, salvo si la loba huyó del fuego. Ver [[La amenaza]]. Si muere el perro, falla.
 
 ## Lo que vio Doro
 

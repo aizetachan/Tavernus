@@ -32,6 +32,10 @@ Lo que entiende el generador:
   campaña escrita con el ajuar aplicado): qué, dónde (puesto, al cinto, en la bolsa, encima), el dinero o la
   descripción, y si lo pone la historia o el ajuar. Si la ficha no tiene la sección, se añade antes de
   «Relaciones». Un `npc` que no existe en los datos rompe la construcción.
+- **El mapa de misiones** tampoco se dibuja a mano: `npm run wiki:misiones` (`src/wiki/questmap.ts`) lo saca de la
+  historia de Brezal (qué misión abre cuál, quién la pide y dónde, el nivel y si va por fases) y escribe
+  `wiki/Imágenes/Mapa de misiones.svg` y la tabla de «Todas las misiones» en `wiki/Misiones/Mapa de misiones.md`.
+  Al cambiar una misión, vuelve a lanzarlo: `test/questmap.test.ts` falla si no están al día.
 - **Enlaces** `[[Página]]`, `[[Página|texto]]`, `[[Página#Sección]]`, `[[Página#Sección|texto]]` y
   `[[#Sección]]`. Se resuelven por nombre de fichero, por alias y, para los `index.md`, por el nombre de
   su carpeta, sin distinguir mayúsculas ni acentos. Dentro de una tabla, `\|` como en Obsidian.

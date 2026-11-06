@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node dist/wiki/build.js",
     "wiki": "node --import tsx src/wiki/build.ts",
+    "wiki:misiones": "node --import tsx src/wiki/questmap.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
