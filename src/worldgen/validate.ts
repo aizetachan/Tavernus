@@ -23,6 +23,8 @@ import type { TagDef } from '../engine/model.js';
 import { validateReactions, type WorldRule } from '../engine/worldrules.js';
 import type { ChatterDef } from '../engine/chatter.js';
 import { KITS } from '../engine/outfit.js';
+import { itemDefErrors, needsAttunement } from '../engine/items.js';
+import { spellById } from '../data/srd/spells.js';
 
 const norm = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const blank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
@@ -142,9 +144,22 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
   // Objetos
   for (const d of snap.item_defs) {
     if (d.service && !defs.has(d.service.gives_item_id)) errs.push(`${d.id}: el servicio entrega ${d.service.gives_item_id}, que no existe.`);
+    errs.push(...itemDefErrors(d, (id) => !!spellById(id)));
+    // La base puede no estar en la partida (el catálogo SRD se lee del código); si está, es del mismo tipo.
+    const base = d.base_id ? defs.get(d.base_id) : undefined;
+    if (d.base_id === d.id) errs.push(`${d.id}: base_id apunta a sí mismo.`);
+    else if (base && base.type !== d.type) errs.push(`${d.id}: su base ${base.id} es de otro tipo (${base.type}).`);
   }
+  const isWho = (id: unknown) => typeof id === 'string' && (chars.has(id) || npcs.has(id));
   for (const i of snap.item_instances) {
     if (!defs.has(i.item_id)) errs.push(`${i.id}: el objeto ${i.item_id} no existe.`);
+    const def = defs.get(i.item_id);
+    const st = i.state;
+    if (st.identified_by !== undefined && !(Array.isArray(st.identified_by) && st.identified_by.every(isWho))) errs.push(`${i.id}: identified_by tiene a alguien que no existe.`);
+    if (st.attuned_to !== undefined && st.attuned_to !== null && !isWho(st.attuned_to)) errs.push(`${i.id}: sintonizado con ${String(st.attuned_to)}, que no existe.`);
+    if (st.attuned_to && def && !needsAttunement(def)) errs.push(`${i.id}: sintonizado, pero ${def.id} no pide sintonía.`);
+    if (st.charges !== undefined && !(def?.charges && Number.isInteger(st.charges) && st.charges >= 0 && st.charges <= def.charges.max)) errs.push(`${i.id}: cargas ${String(st.charges)} fuera de lo que admite ${i.item_id}.`);
+    if (st.owner_id !== undefined && !isWho(st.owner_id)) errs.push(`${i.id}: su dueño ${String(st.owner_id)} no existe.`);
     if (!(i.quantity > 0)) errs.push(`${i.id}: cantidad no positiva.`);
     const at = i.location;
     const ok = at.type === 'spot' ? spots.has(at.id) : at.type === 'npc' ? npcs.has(at.id) : at.type === 'container' ? insts.has(at.id) : at.type === 'character' ? chars.has(at.id) : snap.vehicles.some((v) => v.id === at.id);

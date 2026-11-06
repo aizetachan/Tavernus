@@ -90,9 +90,9 @@ describe('pistas que se oyen: el retrato de quien habla o nada', () => {
       narration_private: '«¿Qué es la Brasa?» Ilse suelta la muñeca, pero no la carta. Se inclina sobre el brocal y habla tan bajo que el agua del cubo parece callar con ella.',
       calls: [call('grant_clue', { character_id: leodhin.id, clue_id: 'clue_ilse' }, { ok: true, events: ['Pista: La Brasa de Vharn (1/11).'] })],
     });
-    expect(moments(engine, e).map((x) => x.m.kind)).toEqual(['portrait']);
+    expect(moments(engine, e).map((x) => x.m.kind)).toEqual(['talk']);
     // Ya tenía su retrato (seq 18): nada.
-    expect(moments(engine, e, [`portrait:${leodhin.id}:npc_ilse`])).toEqual([]);
+    expect(moments(engine, e, [`talk:${leodhin.id}:npc_ilse`])).toEqual([]);
   });
 
   it('Hugo habla de la cadena (seq 65): su retrato y ningún descubrimiento', async () => {
@@ -103,14 +103,14 @@ describe('pistas que se oyen: el retrato de quien habla o nada', () => {
       calls: [call('grant_clue', { character_id: leodhin.id, clue_id: 'clue_hugo' }, { ok: true, events: ['Pista: La cadena de hierro frío (3/11).'] })],
     });
     const out = moments(engine, e);
-    expect(out.map((x) => [x.m.kind, x.m.entity_id])).toEqual([['portrait', 'npc_hugo']]);
+    expect(out.map((x) => [x.m.kind, x.m.entity_id])).toEqual([['talk', 'npc_hugo']]);
     expect(out[0]!.prompt).toMatch(/^Portrait of Hugo, herrero/);
   });
 
   it('una pista que dice qué se ve sigue siendo hallazgo aunque llegue hablando', async () => {
     const { engine, leodhin } = await partida();
     const e = ev(leodhin, { payload: { npc_id: 'npc_ilse' }, calls: [call('grant_clue', { character_id: leodhin.id, clue_id: 'clue_pozo' })] });
-    expect(moments(engine, e).map((x) => x.m.kind)).toEqual(['portrait', 'discovery']);
+    expect(moments(engine, e).map((x) => x.m.kind)).toEqual(['talk', 'discovery']);
   });
 });
 
@@ -122,7 +122,7 @@ describe('combate: el rival es siempre el otro', () => {
 
   it('Hugo golpea a Leodhin (seq 74): Leodhin contra Hugo, no contra sí mismo', async () => {
     const { engine, leodhin } = await partida();
-    const out = moments(engine, hugoHits(leodhin, {}), [`portrait:${leodhin.id}:npc_hugo`]);
+    const out = moments(engine, hugoHits(leodhin, {}), [`talk:${leodhin.id}:npc_hugo`]);
     expect(out.map((x) => x.m)).toEqual([{ kind: 'combat', key: `combat:${leodhin.id}:npc_hugo`, character_id: leodhin.id, entity_id: 'ev_00000022', subject: 'npc_hugo' }]);
     // Antes: «Leodhin (humano mago) fighting Leodhin, humano mago:».
     expect(out[0]!.prompt).toContain('Leodhin (humano mago) fighting Hugo, herrero');
@@ -134,12 +134,12 @@ describe('combate: el rival es siempre el otro', () => {
     const first = ev(leodhin, { id: 'ev_00000021', action_type: 'roll', location_id: 'loc_taberna', payload: { attack: { target_id: 'npc_hugo', hit: true, down: false, dead: false, damage: 3 } } });
     const [m] = classifyMoments(first, new Set(), momentLookupOf(engine.world));
     expect(m!.key).toBe(`combat:${leodhin.id}:npc_hugo`);
-    expect(moments(engine, hugoHits(leodhin, {}), [m!.key, `portrait:${leodhin.id}:npc_hugo`])).toEqual([]);
+    expect(moments(engine, hugoHits(leodhin, {}), [m!.key, `talk:${leodhin.id}:npc_hugo`])).toEqual([]);
   });
 
   it('si Hugo tumba a Leodhin, la caída es contra Hugo; y Leodhin mata a Hugo (seq 87), también', async () => {
     const { engine, leodhin } = await partida();
-    const down = moments(engine, hugoHits(leodhin, { target_down: true }), [`portrait:${leodhin.id}:npc_hugo`]);
+    const down = moments(engine, hugoHits(leodhin, { target_down: true }), [`talk:${leodhin.id}:npc_hugo`]);
     expect(down.map((x) => [x.m.key, x.m.subject])).toEqual([['combat:ev_00000022', 'npc_hugo']]);
     const kill = ev(leodhin, { id: 'ev_0000002f', action_type: 'roll', location_id: 'loc_taberna', payload: { attack: { target_id: 'npc_hugo', hit: true, down: true, dead: true, damage: 5 } } });
     expect(moments(engine, kill).map((x) => [x.m.key, x.m.subject])).toEqual([['combat:ev_0000002f', 'npc_hugo']]);
@@ -166,7 +166,7 @@ describe('servicios y consumibles abstractos: no son un objeto en la mano', () =
       location_id: 'loc_taberna', spot_id: 'sp_tab_barra', payload: { npc_id: 'npc_brenna' },
       calls: [call('buy_item', { character_id: leodhin.id, npc_id: 'npc_brenna', item_id, quantity: 1 }, { ok: true, total: 100 })],
     });
-    const seen = [`portrait:${leodhin.id}:npc_brenna`];
+    const seen = [`talk:${leodhin.id}:npc_brenna`];
     expect(moments(engine, buy('it_noche_posada'), seen)).toEqual([]);
     const beer = moments(engine, buy('it_cerveza'), seen);
     expect(beer.map((x) => x.m.entity_id)).toEqual(['it_cerveza']);

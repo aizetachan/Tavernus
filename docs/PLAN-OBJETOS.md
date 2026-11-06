@@ -1,6 +1,6 @@
 # Plan: objetos con reglas de D&D, tienda en Brezal, lo que lleva cada personaje y dónde se guarda el mundo
 
-Propuesta del 2026-11-06, pendiente de que Miguel la apruebe. No hay nada implementado de lo que sigue; lo
+Propuesta del 2026-11-06, aprobada el mismo día (respuestas en §10); cada bloque va en su sesión. No hay nada implementado de lo que sigue; lo
 ya hecho (el ajuar de los NPC) está en SPEC §5.3.1.
 
 ## 0. Resumen
@@ -330,3 +330,12 @@ cada vez más vacías». Uno de ellos se ha quedado con una casa vacía de la pl
 5. **Persistencia:** ¿G0 ya y G después de los objetos, o G antes, aprovechando que habrá que migrar las
    partidas igualmente?
 6. **«Intuición»:** he entendido sintonización (*attunement*). Si era otra regla, hay que añadirla.
+
+### Respuestas de Miguel (2026-11-06)
+
+- **Monedas en bolsas también para los PJ:** sí.
+- **Magia en Brezal:** sí, pero pocos objetos, enigmáticos y ligados al lore. El lote mágico del SRD es para los mundos generados.
+- **El buhonero:** un personaje con lore, tan elaborado como los que ya hay en Brezal.
+- **La tienda:** se compra hablándole, y además un botón que ahorra tokens y enseña lo que tiene a la venta, o una burbuja de tienda en el chat.
+- **Persistencia:** la decide la sesión; G0 y después G, como recomienda §8.
+- **Sintonización:** explicada; se queda como en §4.6.

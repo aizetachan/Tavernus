@@ -402,18 +402,45 @@ Todos los pesos en `campaign.progression` para tunearlos con la validación.
 
 ## 5. Ítems e inventario
 
-### 5.1 Catálogo (`items`)
+### 5.1 Catálogo (`ItemDef`) y estado de cada ejemplar (`ItemInstance.state`)
+
+El modelo de objetos 5e (PLAN-OBJETOS §2) está en `src/engine/model.ts`; las tablas y ayudas puras, en
+`src/engine/items.ts`. Todo lo nuevo es opcional: un objeto sencillo sigue siendo nombre, tipo, tamaño, peso y valor.
+Las reglas que usan estos datos (bonos en la tirada, sintonizar, gastar cargas o munición, pergaminos) son el
+bloque C del plan; el modelo solo dice qué es cada cosa y qué ve cada personaje.
+
 | Campo | Detalle |
 |---|---|
-| `name`, `description` | |
-| `type` | `weapon` / `armor` / `consumable` / `tool` / `quest` / `treasure` / `misc` |
-| `rarity` | common → legendary |
-| `weight`, `value_gp` | |
-| `properties` | Weapon: `damage`, `damage_type`, `range`, `tags` (finesse, two-handed…). Armor: `ac_base`, `type`, `stealth_disadvantage`. Consumable: `effect` (estructurado: `{heal: "2d4+2"}`), `uses` |
-| `attunement` | bool |
-| `magic_effects[]` | Modificadores mecánicos estructurados (`+1 attack`) + descripción narrativa |
-| `unique` | bool — un solo ejemplar en el mundo |
+| `name`, `aliases`, `description` | La ficha sale de los datos si no hay `description` |
+| `type` | Categoría de reglas: `weapon`, `armor`, `ammunition`, `gear`, `tool`, `focus`, `consumable`, `scroll`, `wand`, `rod`, `staff`, `ring`, `wondrous`, `treasure`, `coin`, `quest`, `container`, `misc` |
+| `subtype` | Afina el tipo (`SUBTYPES` en items.ts): arma `simple_melee`…`martial_ranged`; armadura `light`/`medium`/`heavy`/`shield`; munición `arrow`/`bolt`/`bullet`/`needle`; equipo `adventuring`/`clothes`/`light`/`container`; herramienta `artisan`/`kit`/`gaming`/`instrument`/`vehicle`; foco `arcane`/`druidic`/`holy`; consumible `food`/`drink`/`potion`/`poison`/`oil`; tesoro `gem`/`art`/`trade` |
+| `base_id` | La definición SRD de la que sale una variante («espada larga +1», la pistola de rayos con el bloque de la ballesta ligera). Las competencias con armas concretas comparan `base_id ?? id` |
+| `size`, `weight_lb`, `value` | Valor en la moneda más pequeña (`money.ts`) |
+| `weapon` | `damage`, `damage_type`, las booleanas de siempre (`finesse`, `ranged`, `two_handed`) y `properties` (`light`, `heavy`, `finesse`, `thrown`, `two_handed`, `versatile`, `reach`, `loading`, `ammunition`, `special`), `range: [normal, largo]` en pies, `versatile_damage`, `ammo_type` |
+| `armor` | `ac_base`, `dex_max` (null = sin tope), `stealth_disadvantage`, `str_min`, `don_s`, `doff_s`. La categoría es `subtype` (sin él, se deduce: sin tope de DES, ligera; tope > 0, intermedia; tope 0, pesada) |
+| `shield_bonus`, `container`, `equip_slot`, `light_source`, `service`, `heals`, `illustrate` | Como siempre |
+| `rarity` | `common` → `artifact`. Con rareza, el objeto es mágico y hay que identificarlo |
+| `attunement` | `true` o una condición (`classes`, `spellcaster`, `note`) |
+| `bonus` | `attack`, `damage`, `ac`, `save_dc`, `spell_attack` (el +1, +2, +3) |
+| `charges` | `max`, `recharge: { amount: '1d6+1', at: 'dawn' }`, `destroy_on_empty` |
+| `effects[]` | Efectos con estructura mientras se lleva: `resist`, `immune`, `condition_immunity`, `advantage`, `disadvantage`, `speed`, `light`, `darkvision`, `save_bonus`, `ability_score`, `condition`, `note` (solo narrativo). Los aplica el motor; el máster los narra |
+| `cursed` | `{ effects?, description? }`: no se quita ni se deja de sintonizar; no se ve hasta que alguien lo sintoniza |
+| `unidentified` | Cómo se ve sin identificar (`name`, `description`); sin él, un nombre genérico por tipo («anillo», «arma») |
+| `spell` | Pergamino, varita o bastón: `spell_id` (de `src/data/srd/spells.ts`), `level`, y `save_dc`/`attack_bonus` si no los de la tabla |
+| `effect`, `duration_s` | Lo que hace al usarlo (poción) y cuánto dura |
+| `unique` | Un solo ejemplar en el mundo |
 | `origin` | `srd` / `custom` |
+
+Estado por ejemplar (`ItemState`, admite claves libres): `identified_by` (quién sabe qué es), `attuned_to`,
+`charges` (sin él, lleno), `coins` (bolsas), `lit` (luces), `owner_id` (de quién es: tiendas y robos).
+
+**Lo que ve el máster.** `get_item` devuelve tipo, subtipo, la cifra (daño o CA), las propiedades y `magic`: si el
+actor lo ha identificado, rareza, sintonía (y con quién), bonos, cargas, conjuro y efectos; si no,
+`'objeto mágico sin identificar'`, el nombre de `unidentified` y sin `item_id`. El inventario del máster, la mochila de
+la web (`packView`) y la hoja usan el mismo nombre. **Migración:** `migrate` rellena desde la semilla lo que la
+partida guardada no tiene (sin pisar nada; el tipo, solo si era uno de los genéricos viejos) y deduce de sus datos
+la lista de propiedades del arma y la categoría de la armadura. `validate.ts` comprueba subtipos, propiedades,
+alcance, munición, que la magia lleve rareza, cargas, conjuros y el estado de cada ejemplar.
 
 **De dónde sale el catálogo** (PLAN-OBJETOS §3, bloque B). El equipo entero del SRD 5.1 (CC BY 4.0) está en
 `src/data/srd/items.ts`: 37 armas, 12 armaduras y el escudo, munición (por pieza: una flecha, 5 de cobre), equipo de
@@ -421,7 +448,9 @@ aventurero, focos, herramientas, arreos, comida y bebida, mercancías, y un prim
 pergamino de conjuro por nivel, arma, armadura, escudo y munición +1/+2/+3, anillo y capa de protección, bolsa de
 contención, varita de proyectiles mágicos, botas y capa élficas). Nombres en castellano con el inglés del SRD de
 primer alias; precios en cobre del SRD; la magia, que el SRD no pone precio, con un valor de la casa por rareza
-(`MAGIC_VALUE`). Monturas y vehículos van aparte (`SRD_MOUNTS`, `SRD_VEHICLES`): no son objetos que se lleven encima.
+(`MAGIC_VALUE`). Las +N salen de su base (`base_id`) y sin identificar se ven como ella; el pergamino va por nivel, con
+su CD y su ataque, y el conjuro concreto en el ejemplar (`state.spell_id`); la poción de curación no tiene rareza (está en
+la lista de equipo y se reconoce a la vista). Monturas y vehículos van aparte (`SRD_MOUNTS`, `SRD_VEHICLES`): no son objetos que se lleven encima.
 `src/data/catalog.ts` lo junta con las cosas de la casa que el SRD no trae (leña, bayas, truchas, hacha de leñador,
 cofre de la posada) y los cuartos de alquiler: `CATALOG` para la demo, Brezal y la creación de personaje, y
 `catalogFor(genre)` para los mundos generados, con nombres de ciencia ficción o postapocalípticos y las mismas reglas
