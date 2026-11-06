@@ -1,7 +1,7 @@
 # NPC de relleno: gente de paso que hace pueblo (plan para revisar)
 
 Estado: **aprobado por Miguel el 06-11, con las propuestas de las preguntas del final y la sección «Cómo reaccionan».
-Fases 1, 2 y 3 hechas (y de la 4, el control de gente inventada y los encuentros): ver «lo hecho» al final.** Se apoya en el flujo de charla propuesto en
+Fases 1 a 5 hechas: ver «lo hecho» al final. Queda opcional la variedad de frases con el escritor barato.** Se apoya en el flujo de charla propuesto en
 `CONVERSACION-FLUJO.md` (rama `claude/nervous-lederberg-e007cb`, aún sin fusionar) y en el ajuar de los NPC
 (`src/engine/outfit.ts`, rama `claude/amazing-mahavira-788ef2`, aún sin fusionar).
 
@@ -589,3 +589,25 @@ encuentros con vecinos de relleno. Era el fallo que lo empezó todo, y la sesió
 - **Solo con los atajos del motor encendidos** (`deterministic`, como en la partida de verdad).
 - **Tests**: 10 nuevos en `test/relleno.test.ts`.
 - **Pendiente**: la fase 5 (relleno en los mundos generados) y la variedad opcional con el escritor barato.
+
+## Fase 5: lo hecho (06-11)
+
+- **Relleno en los mundos generados** (`src/worldgen/extras.ts`, `addExtras`, al final de `buildSnapshot`): sin IA y
+  con un generador de números propio (la semilla del mundo cambiada), así que el esqueleto y el relleno semántico no
+  cambian y una semilla de antes da el mismo mundo de antes, con vecinos.
+- **Qué oficios** (`EXTRAS_BY_SETTLEMENT`), por tipo de asentamiento, con tope de vez y media los principales (16 como
+  mucho). Por ejemplo, la aldea tiene labradores, panadero, niños y beata; el puerto pesquero, pescadores y lavandera;
+  la estación minera, perforadores, un vigilante y un cliente de la cantina; el pueblo abandonado, uno como mucho. Dos
+  oficios nuevos en el catálogo: pescador y minero.
+- **Dónde y cuándo** (`WORKS_AT`, `LEISURE`): de día donde trabaja su oficio (o el centro), por la tarde donde se
+  junta la gente (la taberna, la cantina, el refugio) y de noche en las casas. El sereno, al revés. Respeta el tope de
+  cuatro por punto y franja.
+- **Las casas**: un punto `dwelling` en el centro, cerrado con llave (`it_llave_casas`), con nombre de su género («las
+  casas», «los camarotes», «las chabolas»). La llave la lleva el primer vecino que vive allí.
+- **Quiénes**: nombres por género del mundo (fantasía, ciencia ficción, postapocalíptico) que no repiten los de los
+  principales; aspecto e historia breve por oficio; remiten a un principal. Venden lo de su oficio si el catálogo del
+  mundo lo trae (raciones, leña, pescado, antorchas y cuerda), con tres de existencias.
+- **Se salta** un oficio cuyo nombre choca con un sitio o que no encuentra punto libre: el mundo siempre pasa el
+  validador. Probado con 120 mundos (40 semillas de cada género): ningún fallo.
+- **Tests**: 4 nuevos en `test/relleno.test.ts`.
+- **No hecho (opcional)**: frases propias por vecino con el escritor barato. Las plantillas bastan y no gastan.

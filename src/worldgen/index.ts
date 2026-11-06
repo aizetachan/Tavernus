@@ -11,6 +11,7 @@
  */
 
 import type { Attitude, Character, GenerationInfo, Id, InitialSituation, ItemDef, Spot, WorldSnapshot } from '../engine/model.js';
+import { addExtras } from './extras.js';
 import type { World } from '../engine/world.js';
 import { DEFAULT_MASTER, makeSeed } from '../data/seed/demo.js';
 import { buildSkeleton, type Skeleton, type Tone } from './skeleton.js';
@@ -232,6 +233,8 @@ export function buildSnapshot(sk: Skeleton, f: WorldFill, generation: Generation
   }
   // Tiendas (shop.ts): mercaderes, posaderos y lonjeros venden de un estante suyo con lo que ya venden, y reponen.
   openShops(snap);
+  // Vecinos de relleno (extras.ts): gente de paso con oficio, horario y casa, sin IA y con su propia semilla.
+  addExtras(snap, sk);
   return snap;
 }
 

@@ -281,7 +281,8 @@ export function openShops(snap: WorldSnapshot): boolean {
   const plainRole = (r: string) => r.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   let changed = false;
   for (const n of snap.npcs) {
-    if (n.shop || n.status === 'dead' || n.status === 'missing' || n.mute) continue;
+    // El relleno (extras.ts) vende de lo que lleva encima, sin estante.
+    if (n.shop || n.status === 'dead' || n.status === 'missing' || n.mute || n.tier === 'extra') continue;
     const goods = n.sells.filter((s) => { const d = defs.get(s.item_id); return d && !d.service && !d.unique; });
     if (!goods.length) continue;
     if (!SHOPKEEPER_KITS.has(kitOf(n).id) && !SHOPKEEPER_ROLE.test(plainRole(n.role))) continue;

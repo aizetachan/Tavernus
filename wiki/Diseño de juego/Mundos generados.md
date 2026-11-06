@@ -68,6 +68,16 @@ flowchart TD
 3. **Validación.** Cada llamada se valida y se reintenta por su cuenta. Si aun así no cabe, se pide como JSON libre y se valida igual.
 4. **Mapas.** Los planos del tablero se generan desde los datos, con variedad por semilla y una plantilla por tipo de lugar.
 
+## Los vecinos de relleno
+
+Además de los personajes con historia, cada mundo generado trae vecinos de relleno, como los [[Vecinos de Brezal]]: gente de paso con oficio, nombre, horario y casa, que hace pueblo sin pesar en la historia. Salen del tipo de asentamiento y de la semilla, sin IA y sin coste:
+
+- **Qué oficios:** los de su lugar. La aldea tiene labradores, panadero, niños y beata; el puerto, pescadores y lavandera; la estación minera, perforadores y un vigilante; el pueblo abandonado, uno como mucho.
+- **Dónde:** de día donde trabaja su oficio, por la tarde donde se junta la gente y de noche en las casas del centro, cerradas con llave («las casas», «los camarotes», «las chabolas», según el género).
+- **Cómo hablan:** igual que en Brezal: dos frases frías, lo suyo (vender, indicar, la hora) y, de lo demás, a quién preguntar.
+
+La misma semilla da los mismos vecinos, y los personajes con historia no cambian por tenerlos.
+
 ## La situación inicial
 
 Para cada personaje, el relleno escribe una situación:

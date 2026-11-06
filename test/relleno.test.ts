@@ -26,6 +26,8 @@ import { inventedPeople } from '../src/engine/invented.js';
 import { extraReply } from '../src/engine/extratalk.js';
 import { coinsOf } from '../src/engine/money.js';
 import { setFact } from '../src/engine/worldfacts.js';
+import { generateSeed, TONES } from '../src/worldgen/index.js';
+import { buildSkeleton } from '../src/worldgen/skeleton.js';
 
 /** El mundo nace a las 18:00 del día 0 de juego. */
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
@@ -609,5 +611,59 @@ describe('relleno, fase 3: charla sin máster', () => {
     expect(a.line).toMatch(/Han encontrado muerto al herrero en la fragua/);
     const b = await talk('Buenos días, panadera');
     expect(b.line ?? '').not.toMatch(/herrero/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fase 5: relleno en los mundos generados (worldgen/extras.ts)
+// ---------------------------------------------------------------------------
+
+describe('relleno, fase 5: mundos generados', () => {
+  const gen = (seed: number, setting: string) => generateSeed({ seed, tone: TONES[seed % TONES.length]!, setting, client: null, env: { MASTER_MODE: 'offline' } });
+  const SETTINGS = ['fantasía medieval', 'ciencia ficción en una estación espacial', 'postapocalíptico tras el colapso'];
+
+  it('cada género monta su relleno, con oficio de su género, horario, casa cerrada y llave; y pasa el validador', async () => {
+    for (const setting of SETTINGS) {
+      for (const seed of [1, 2, 3]) {
+        const s = await gen(seed, setting);
+        expect(validateSnapshot(s), `${setting} ${seed}`).toEqual([]);
+        const ex = s.npcs.filter(isExtra);
+        if ((s.campaign as unknown as { generation: { settlement: string } }).generation.settlement === 'pueblo abandonado') continue;
+        expect(ex.length, `${setting} ${seed}`).toBeGreaterThan(1);
+        const home = s.spots.find((sp) => sp.tags.includes('dwelling'))!;
+        expect(home.state).toMatchObject({ locked: true, key_item_id: 'it_llave_casas' });
+        expect(s.item_instances.some((i) => i.item_id === 'it_llave_casas' && i.location.type === 'npc')).toBe(true);
+        for (const n of ex) {
+          expect(n.home_spot_id, n.id).toBe(home.id);
+          expect(Object.values((n as unknown as { routine: Record<string, string> }).routine)).toContain(home.id);
+          expect(n.script.refer_to.length, n.id).toBe(1);
+        }
+      }
+    }
+  });
+
+  it('la misma semilla da los mismos vecinos; los principales no cambian por tenerlos', async () => {
+    const a = await gen(7, SETTINGS[0]!);
+    const b = await gen(7, SETTINGS[0]!);
+    expect(a.npcs.filter(isExtra).map((n) => `${n.id}:${n.role}:${n.location.id}`)).toEqual(b.npcs.filter(isExtra).map((n) => `${n.id}:${n.role}:${n.location.id}`));
+    const sk = buildSkeleton({ seed: 7, tone: TONES[7 % TONES.length]!, setting: SETTINGS[0]! });
+    expect(a.npcs.filter((n) => !isExtra(n)).map((n) => n.id)).toEqual(sk.npcs.map((n) => n.id));
+  });
+
+  it('los nombres son del género del mundo y no se repiten con los de los principales', async () => {
+    const s = await gen(2, SETTINGS[1]!);
+    const ex = s.npcs.filter(isExtra);
+    const principals = new Set(s.npcs.filter((n) => !isExtra(n)).map((n) => n.name.split(' ')[0]));
+    for (const n of ex) expect(principals.has(n.name)).toBe(false);
+    expect(new Set(ex.map((n) => n.name)).size).toBe(ex.length);
+  });
+
+  it('el pueblo abandonado tiene uno como mucho', async () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const s = await gen(seed, SETTINGS[0]!);
+      if ((s.campaign as unknown as { generation: { settlement: string } }).generation.settlement !== 'pueblo abandonado') continue;
+      expect(s.npcs.filter(isExtra).length).toBeLessThanOrEqual(1);
+      return;
+    }
   });
 });
