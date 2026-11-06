@@ -9,8 +9,8 @@
 
 import type { Engine } from '../../engine/engine.js';
 import type { Id } from '../../engine/model.js';
-import { money } from '../../engine/money.js';
-import { pcCoins, shopClosed, shopHere, shopLines } from '../../engine/shop.js';
+import { coinsOf, money } from '../../engine/money.js';
+import { shopClosed, shopHere, shopLines } from '../../engine/shop.js';
 
 export interface WebShopLine {
   item_id: Id;
@@ -42,7 +42,7 @@ export function shopView(engine: Engine, characterId: Id): { shop: WebShop | nul
   const nowG = engine.nowFor(c);
   const away = w.spots.get(npc.location.id)?.location_id !== npc.shop!.location_id ? `${npc.name} no está en la tienda` : null;
   const closed = away ?? shopClosed(npc, nowG);
-  const have = pcCoins(w, c);
+  const have = coinsOf(w, c.id);
   // El nombre solo si el PJ ya le conoce; si no, su oficio.
   const name = c.knows.includes(npc.id) ? npc.name : (npc.role_short ?? npc.role);
   return {

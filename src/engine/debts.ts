@@ -16,7 +16,7 @@
  */
 
 import { transferItem } from './inventory.js';
-import { money } from './money.js';
+import { coinsOf, money, pay } from './money.js';
 import { contractArticles } from './narrate.js';
 import type { Character, Debt, Id, Npc, Placement } from './model.js';
 import { deliverGoods } from './progress.js';
@@ -201,8 +201,9 @@ export function settleDebt(world: World, c: Character, input: { npc_id: Id; how:
     const want = input.amount == null ? d.amount : validAmount(input.amount);
     if (want === null) return { ok: false, error: 'amount debe ser un número de monedas mayor que 0, o null para pagarlo todo' };
     paid = Math.min(want, d.amount);
-    if (c.coins < paid) return { ok: false, error: `${c.name} tiene ${money(world, c.coins)} y hacen falta ${money(world, paid)}` };
-    c.coins -= paid;
+    // Se le paga al acreedor: el dinero pasa de su bolsa a la del NPC (money.ts).
+    const p = pay(world, c.id, paid, input.npc_id);
+    if (!p.ok) return { ok: false, error: `${c.name} tiene ${money(world, p.have)} y hacen falta ${money(world, paid)}` };
     d.amount -= paid;
     if (d.amount > 0) d.log = [...(d.log ?? []), { game_s: nowGameS, kind: 'paid' as const, text: `Pagas ${money(world, paid)} a cuenta; quedan ${money(world, d.amount)}` }].slice(-LOG_CAP);
   } else d.amount = 0;

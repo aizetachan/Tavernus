@@ -2019,8 +2019,8 @@ function withImages(m: WebMessage, ill: Illustrator | null, slug: string, engine
     out.moments = m.moments.map((x) => {
       const img = x.kind === 'scene' ? null : ill.entityImage(x.kind, x.entity_id);
       if (!img) return x;
-      // Retrato de un NPC: el nombre con que habla en el turno (nombre y apellidos, si los tiene) y su oficio.
-      const npc = x.kind === 'portrait' ? engine?.world.npcs.get(x.entity_id) : undefined;
+      // La charla con un NPC: el nombre con que habla en el turno (nombre y apellidos, si los tiene) y su oficio.
+      const npc = x.kind === 'talk' ? engine?.world.npcs.get(x.entity_id) : undefined;
       if (!npc) return { ...x, name: img.name, src: imageSrc(img, slug) };
       const said = m.lines?.find((l) => l.id === x.entity_id)?.name;
       return { ...x, name: said || npc.name, role: npc.role_short?.replace(/^(el|la|los|las)\s+/i, '') || npc.role, src: imageSrc(img, slug) };

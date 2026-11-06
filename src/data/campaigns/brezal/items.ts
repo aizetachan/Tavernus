@@ -16,6 +16,21 @@ import type { AuthoredInstance } from '../format.js';
 const quest = (id: string, name: string, aliases: string[], extra: Partial<ItemDef> = {}): ItemDef =>
   ({ id, name, aliases, type: 'quest', size: 'small', weight_lb: 0.5, value: 0, unique: true, origin: 'custom', ...extra });
 
+/**
+ * La tienda del buhonero (shop.ts): equipo de aventurero del SRD que el catálogo común aún no trae, a precios de
+ * Brezal. Con los mismos ids que el catálogo SRD (PLAN-OBJETOS §3, bloque B): cuando el catálogo los traiga, mandan
+ * los suyos y estos se dejan de añadir (el filtro de ITEM_DEFS), sin ids repetidos.
+ */
+const SHOP_GOODS: ItemDef[] = [
+  { id: 'it_aceite', name: 'frasco de aceite', aliases: ['aceite', 'frasco de aceite', 'oil'], type: 'consumable', size: 'tiny', weight_lb: 1, value: 10, unique: false, origin: 'srd', description: 'Aceite de lámpara: llena un farol o se echa al suelo y se le prende fuego.' },
+  { id: 'it_farol', name: 'farol con capucha', aliases: ['farol', 'linterna', 'lámpara', 'lampara', 'lantern'], type: 'misc', size: 'small', weight_lb: 2, value: 500, unique: false, light_source: true, origin: 'srd', description: 'Alumbra más y mejor que una antorcha; se tapa para no ser visto.' },
+  { id: 'it_saco', name: 'saco', aliases: ['saco', 'saca', 'costal', 'sack'], type: 'container', size: 'small', weight_lb: 0.5, value: 1, unique: false, container: { slots: 8, max_weight_lb: 30, max_size: 'medium' }, origin: 'srd', description: 'Un saco de arpillera para cargar lo que sea.' },
+  { id: 'it_odre', name: 'odre', aliases: ['odre', 'cantimplora', 'bota de vino', 'waterskin'], type: 'misc', size: 'small', weight_lb: 5, value: 20, unique: false, origin: 'srd', description: 'Lleva agua para un día de camino.' },
+  { id: 'it_garfio', name: 'garfio de abordaje', aliases: ['garfio', 'gancho', 'rezón', 'grappling hook'], type: 'tool', size: 'small', weight_lb: 4, value: 200, unique: false, origin: 'srd', description: 'Se ata a una cuerda para trepar o engancharse a un muro.' },
+  { id: 'it_tiza', name: 'tiza', aliases: ['tiza', 'yeso', 'chalk'], type: 'misc', size: 'tiny', weight_lb: 0, value: 1, unique: false, origin: 'srd', description: 'Para marcar el camino o escribir en la piedra.' },
+  { id: 'it_pergamino_curar', name: 'pergamino de curar heridas', aliases: ['pergamino', 'pergamino de conjuro', 'rollo', 'scroll'], type: 'scroll', size: 'tiny', weight_lb: 0, value: 3000, unique: false, origin: 'srd', rarity: 'common', spell: { spell_id: 'cure_wounds', level: 1 }, unidentified: { name: 'pergamino escrito', description: 'Un rollo con letra apretada que no sabes leer.' }, description: 'Un conjuro de nivel 1 escrito en un rollo: quien sepa lanzarlo, lo lee una vez y se gasta.' },
+];
+
 export const ITEM_DEFS: ItemDef[] = [
   ...structuredClone(CATALOG as ItemDef[]),
   quest('it_llave_vharn', 'llave vieja con el sello de Vharn', ['llave', 'llave de vharn', 'llave vieja', 'key'], { size: 'tiny', weight_lb: 0.1 }),
@@ -36,15 +51,8 @@ export const ITEM_DEFS: ItemDef[] = [
   kitItemDef('purse', 'fantasy'),
   // Cosas del ajuar que el buhonero vende (outfit.ts): hilo y aguja, sedal y anzuelos.
   kitItemDef('needle', 'fantasy'), kitItemDef('hook', 'fantasy'),
-  // La tienda del buhonero (shop.ts): equipo de aventurero del SRD que el catálogo común no trae, a precios de Brezal.
-  // Cuando llegue el catálogo SRD completo (PLAN-OBJETOS §3, src/data/srd/items.ts) estos ids pasan a ser los suyos.
-  { id: 'it_aceite', name: 'frasco de aceite', aliases: ['aceite', 'frasco de aceite', 'oil'], type: 'consumable', size: 'tiny', weight_lb: 1, value: 10, unique: false, origin: 'srd', description: 'Aceite de lámpara: llena un farol o se echa al suelo y se le prende fuego.' },
-  { id: 'it_farol', name: 'farol con capucha', aliases: ['farol', 'linterna', 'lámpara', 'lampara', 'lantern'], type: 'misc', size: 'small', weight_lb: 2, value: 500, unique: false, light_source: true, origin: 'srd', description: 'Alumbra más y mejor que una antorcha; se tapa para no ser visto.' },
-  { id: 'it_saco', name: 'saco', aliases: ['saco', 'saca', 'costal', 'sack'], type: 'container', size: 'small', weight_lb: 0.5, value: 1, unique: false, container: { slots: 8, max_weight_lb: 30, max_size: 'medium' }, origin: 'srd', description: 'Un saco de arpillera para cargar lo que sea.' },
-  { id: 'it_odre', name: 'odre', aliases: ['odre', 'cantimplora', 'bota de vino', 'waterskin'], type: 'misc', size: 'small', weight_lb: 5, value: 20, unique: false, origin: 'srd', description: 'Lleva agua para un día de camino.' },
-  { id: 'it_garfio', name: 'garfio de abordaje', aliases: ['garfio', 'gancho', 'rezón', 'grappling hook'], type: 'tool', size: 'small', weight_lb: 4, value: 200, unique: false, origin: 'srd', description: 'Se ata a una cuerda para trepar o engancharse a un muro.' },
-  { id: 'it_tiza', name: 'tiza', aliases: ['tiza', 'yeso', 'chalk'], type: 'misc', size: 'tiny', weight_lb: 0, value: 1, unique: false, origin: 'srd', description: 'Para marcar el camino o escribir en la piedra.' },
-  { id: 'it_pergamino_curar', name: 'pergamino de curar heridas', aliases: ['pergamino', 'pergamino de conjuro', 'rollo', 'scroll'], type: 'misc', size: 'tiny', weight_lb: 0, value: 3000, unique: false, origin: 'srd', description: 'Un conjuro de nivel 1 escrito en un rollo: quien sepa lanzarlo, lo lee una vez y se gasta.' },
+  // Lo que vende el buhonero y el catálogo común aún no trae (abajo, SHOP_GOODS).
+  ...SHOP_GOODS.filter((d) => !CATALOG.some((c) => c.id === d.id)),
   // Los estantes del buhonero: contenedores fijos con dueño (state.owner_id). Lo de dentro está a la venta.
   { id: 'it_estantes_cendal', name: 'estantes del buhonero', aliases: ['estantes', 'estante', 'baldas', 'género', 'mercancía'], type: 'container', size: 'bulky', weight_lb: 60, value: 0, unique: true, container: { slots: 30, max_weight_lb: 300, max_size: 'large', fixed: true }, origin: 'custom', description: 'Lo que le queda al buhonero, a la venta. Cogerlo sin pagar es robar.' },
   { id: 'it_arcon_cendal', name: 'arcón de la trastienda', aliases: ['arcón', 'arcon', 'baúl', 'baul'], type: 'container', size: 'bulky', weight_lb: 60, value: 0, unique: true, container: { slots: 10, max_weight_lb: 100, max_size: 'medium', fixed: true }, origin: 'custom', description: 'Lo caro del buhonero, bajo llave.' },

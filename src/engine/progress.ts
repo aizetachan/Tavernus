@@ -8,8 +8,8 @@ import { GAME_DAY } from '../clock/clock.js';
 import { consumeItem, spawnItem, transferItem } from './inventory.js';
 import { refusesService } from './crime.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
-import { money } from './money.js';
-import { buyPrice, listPrice, npcCash, npcPay, npcReceive, pcCoins, pcPay, pcReceive, putInStock, shopClosed, shopReach, stockCount, takeFromStock } from './shop.js';
+import { coinsOf, money, pay, receive } from './money.js';
+import { buyPrice, listPrice, putInStock, shopClosed, shopReach, stockCount, takeFromStock } from './shop.js';
 import { priceFor } from './standing.js';
 import { discoverSpot } from './spots.js';
 import type { World } from './world.js';
@@ -76,7 +76,7 @@ export function completeJob(world: World, c: Character, jobId: Id, npcId: Id | n
     }
   }
   c.completed_jobs.push(jobId);
-  c.coins += job.reward_coins;
+  receive(world, c.id, job.reward_coins);
   const rep = addReputation(world, c, world.campaign.achievement.faction_id, job.reward_reputation);
   const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${money(world, job.reward_coins)}. Reputación en Brezal: ${rep}.`, quest: { id: job.id, title: job.title, event: 'done', why: `se lo ${job.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${giver.name} · +${money(world, job.reward_coins)}` } }];
   const ach = checkAchievement(world, c);
@@ -190,15 +190,16 @@ export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id,
   // Lo que piensa de él cambia el precio (standing.ts).
   const total = priceFor(npc, c.id, base, 'sell') * q;
   if (npc.shop) {
-    const cash = npcCash(world, npc);
+    // La tienda paga de su bolsa (money.ts): si no le llega, no compra.
+    const cash = coinsOf(world, npc.id);
     if (cash < total) return { ok: false, reason: `a ${npc.name} no le llega: pide ${money(world, total)} y solo tiene ${money(world, cash)}` };
     if (!putInStock(world, npc, inst, q)) return { ok: false, reason: `a ${npc.name} no le cabe en la tienda` };
-    npcPay(world, npc, total);
+    pay(world, npc.id, total, c.id);
   } else {
     const r = transferItem(world, inst.id, { type: 'npc', id: npc.id }, q);
     if (!r.ok) return { ok: false, reason: r.error.code };
+    receive(world, c.id, total);
   }
-  pcReceive(world, c, total);
   return { ok: true, item: world.itemDef(inst.item_id).name, quantity: q, total };
 }
 
@@ -223,12 +224,12 @@ export function buyFromNpc(world: World, c: Character, npcId: Id, itemId: Id, qu
   const q = Math.max(1, Math.floor(quantity));
   if (npc.shop && !def.service && stocked < q) return { ok: false, reason: stocked ? `a ${npc.name} solo le ${stocked === 1 ? 'queda 1' : `quedan ${stocked}`} de ${def.name}` : `a ${npc.name} no le queda ${def.name}` };
   const total = priceFor(npc, c.id, npc.shop ? listPrice(world, npc, itemId) : offer!.price, 'buy') * q;
-  const have = pcCoins(world, c);
+  const have = coinsOf(world, c.id);
   if (have < total) return { ok: false, reason: `faltan ${money(world, total - have)}` };
   const r = deliverGoods(world, c, npc, itemId, q);
   if (!r.ok) return r;
-  pcPay(world, c, total);
-  if (npc.shop) npcReceive(world, npc, total);
+  // El dinero pasa de su bolsa a la del vendedor (money.ts).
+  pay(world, c.id, total, npc.id);
   return { ok: true, item: r.item, quantity: q, total, unlocked: r.unlocked };
 }
 

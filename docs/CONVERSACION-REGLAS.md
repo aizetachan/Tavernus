@@ -300,3 +300,26 @@ tablón, entraban en el Diario los tres encargos del tablón. La regla es la mis
   leerlo estando delante («leo los avisos», «me acerco al tablón a ver qué hay», «¿qué pone en el tablón?») o usa
   `/tablon` (`quests.ts`, `readsBoard`; `Engine.act`). Pasar, pararse delante o acercarse a alguien que está allí ya no
   lo lee (antes lo hacía el tick con cualquiera parado ante él).
+
+## Solo existe lo que está en los datos: robos y lo que se sirve (06-11)
+
+En la partida «Humo y ceniza», el PJ miró el cinto de Garrán y el máster describió una bolsa de cuero que no
+existía. Le pidió la tirada para robarla, salió bien, la narró en su mano y en su manga y, al abrirla, no estaba en
+ningún sitio. En la misma partida, Brenna le puso una jarra delante («Cuatro de cobre») sin cobrarla ni apuntarla, y
+el PJ se fue sin pagar sin que pasara nada.
+
+- **Lo que lleva un NPC es lo único que lleva.** En el contexto, cada NPC presente trae «Lleva (solo esto; nada más
+  que se pueda ver de cerca, coger o robar): …» con sus IDs, o «No lleva nada que se pueda coger o robar: ni bolsas,
+  ni monedas, ni llaves». Antes, sin objetos, no salía ninguna línea y el máster rellenaba el hueco.
+- **Robar solo de palabra se reescribe** (`stolenWithoutTool` en `closecheck.ts`). Si el jugador quiere robar
+  (robar, birlar, hurtar, quitarle…) y la narración da el objeto por suyo («cae limpia a tu mano», «escondida bajo la
+  manga», «te haces con») sin transfer_item ni otro tool que mueva algo, el cierre pide una reescritura. Si el objeto
+  está en «Lleva», se mueve con transfer_item; si no está, no existe y se cuenta que no lo encuentra. Con la tirada
+  pendiente, o si la narración lo niega o lo deja en intento, no salta.
+- **Lo que se sirve se cobra al servirlo** (`servedWithoutPay`). En un turno de comercio (situación `trade` o
+  etiqueta `trade`), si el NPC entrega lo que vende («te la pone delante», «te sirve») sin buy_item ni set_debt, se
+  reescribe una vez. El guion de comercio lo dice: lo que se da se cobra con buy_item en el mismo turno, o se fía con
+  set_debt. Así no queda ninguna cuenta sin registrar, y lo fiado es una deuda que vence y se reclama como las demás.
+  Decir solo el precio sin darlo no salta.
+- **«Pedir una jarra» es comercio.** Las señales del texto cuentan como comercio «pido / pedir / pide / ponnos» seguido
+  de «una, un, otra, algo de…». «Pedir trabajo» no.

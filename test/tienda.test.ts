@@ -12,7 +12,8 @@ import { seededRng } from '../src/engine/dice.js';
 import { allIncidents } from '../src/engine/crime.js';
 import { carrierOf, spawnItem } from '../src/engine/inventory.js';
 import { buyFromNpc, sellToNpc } from '../src/engine/progress.js';
-import { npcCash, openShops, restockShops, shopClosed, shopLines, stockCount, stockOf, stockOwnerOf } from '../src/engine/shop.js';
+import { coinsOf, setCoins } from '../src/engine/money.js';
+import { openShops, restockShops, shopClosed, shopLines, stockCount, stockOf, stockOwnerOf } from '../src/engine/shop.js';
 import { validateSnapshot } from '../src/worldgen/validate.js';
 import { generateSeed } from '../src/worldgen/index.js';
 import { GAME_DAY, GAME_HOUR } from '../src/clock/clock.js';
@@ -55,7 +56,7 @@ describe('la tienda del buhonero en Brezal', () => {
     // Sus llaves abren la trastienda; su bolsa lleva lo que ha ido cobrando.
     expect(engine.world.spot('sp_ti_trastienda').state['key_item_id']).toBe('it_llaves_cendal');
     expect(carrierOf(engine.world, engine.world.itemInstance('ii_cendal_llaves').location)).toEqual({ type: 'npc', id: 'npc_lucio' });
-    expect(npcCash(engine.world, a)).toBe(600);
+    expect(coinsOf(engine.world, a.id)).toBe(600);
     expect(stockCount(engine.world, a, 'it_cuerda')).toBe(2);
     expect(stockCount(engine.world, a, 'it_pocion')).toBe(1);
   });
@@ -64,7 +65,7 @@ describe('la tienda del buhonero en Brezal', () => {
     const { engine } = await boot();
     const c = await newPc(engine, 'Nia');
     const a = engine.world.npc('npc_lucio');
-    c.coins = 1000;
+    setCoins(engine.world, c.id, 1000);
     const total = () => engine.world.itemInstances.size;
     const before = total();
     const r = buyFromNpc(engine.world, c, a.id, 'it_cuerda', 1, OPEN);
@@ -75,15 +76,15 @@ describe('la tienda del buhonero en Brezal', () => {
     const cuerdas = [...engine.world.itemInstances.values()].filter((i) => i.item_id === 'it_cuerda' && i.id !== 'ii_cuerda_torre').reduce((s, i) => s + i.quantity, 0);
     expect(cuerdas).toBe(2);
     if (!r.ok) throw new Error();
-    expect(c.coins).toBe(1000 - r.total);
-    expect(npcCash(engine.world, a)).toBe(600 + r.total);
+    expect(coinsOf(engine.world, c.id)).toBe(1000 - r.total);
+    expect(coinsOf(engine.world, a.id)).toBe(600 + r.total);
   });
 
   it('sin existencias no se vende, aunque esté en su lista; y no vende más de lo que le queda', async () => {
     const { engine } = await boot();
     const c = await newPc(engine, 'Nia');
     const a = engine.world.npc('npc_lucio');
-    c.coins = 5000;
+    setCoins(engine.world, c.id, 5000);
     expect(buyFromNpc(engine.world, c, a.id, 'it_garfio', 2, OPEN)).toEqual({ ok: false, reason: 'a Lucio Cendal solo le queda 1 de garfio de abordaje' });
     expect(buyFromNpc(engine.world, c, a.id, 'it_garfio', 1, OPEN).ok).toBe(true);
     expect(buyFromNpc(engine.world, c, a.id, 'it_garfio', 1, OPEN)).toEqual({ ok: false, reason: 'a Lucio Cendal no le queda garfio de abordaje' });
@@ -98,7 +99,7 @@ describe('la tienda del buhonero en Brezal', () => {
     const { engine } = await boot();
     const c = await newPc(engine, 'Nia');
     const a = engine.world.npc('npc_lucio');
-    c.coins = 5000;
+    setCoins(engine.world, c.id, 5000);
     buyFromNpc(engine.world, c, a.id, 'it_farol', 1, OPEN);
     restockShops(engine.world, OPEN + 3 * GAME_DAY);
     expect(stockCount(engine.world, a, 'it_farol')).toBe(0);
@@ -108,7 +109,7 @@ describe('la tienda del buhonero en Brezal', () => {
     const { engine } = await boot();
     const c = await newPc(engine, 'Nia');
     const a = engine.world.npc('npc_lucio');
-    c.coins = 1000;
+    setCoins(engine.world, c.id, 1000);
     expect(shopClosed(a, 22 * GAME_HOUR)).toMatch(/abre de 9 a 19/);
     expect(buyFromNpc(engine.world, c, a.id, 'it_tiza', 1, GAME_DAY + 7 * GAME_HOUR)).toMatchObject({ ok: false });
     c.location = { type: 'spot', id: 'sp_pl_pozo' };
@@ -119,15 +120,15 @@ describe('la tienda del buhonero en Brezal', () => {
     const { engine } = await boot();
     const c = await newPc(engine, 'Nia');
     const a = engine.world.npc('npc_lucio');
-    c.coins = 0;
+    setCoins(engine.world, c.id, 0);
     // Una piel (en su lista, a 120) y un hacha (no está en su lista: la mitad de lo que vale).
     const piel = spawnItem(engine.world, 'it_piel', 1, { type: 'character', id: c.id, slot: { kind: 'hand', which: 'main' } });
     if (!piel.ok) throw new Error();
     const r = sellToNpc(engine.world, c, a.id, piel.moved.id, 1, OPEN);
     expect(r).toMatchObject({ ok: true, item: 'piel de lobo', quantity: 1 });
     if (!r.ok) throw new Error();
-    expect(c.coins).toBe(r.total);
-    expect(npcCash(engine.world, a)).toBe(600 - r.total);
+    expect(coinsOf(engine.world, c.id)).toBe(r.total);
+    expect(coinsOf(engine.world, a.id)).toBe(600 - r.total);
     expect(stockCount(engine.world, a, 'it_piel')).toBe(1);
     expect(stockOwnerOf(engine.world, engine.world.itemInstance(piel.moved.id))?.id).toBe('npc_lucio');
     const hacha = spawnItem(engine.world, 'it_hacha', 1, { type: 'character', id: c.id, slot: { kind: 'hand', which: 'main' } });
@@ -140,9 +141,9 @@ describe('la tienda del buhonero en Brezal', () => {
     engine.world.itemDefs.set('it_joya', { id: 'it_joya', name: 'joya', aliases: [], type: 'treasure', size: 'tiny', weight_lb: 0, value: 10000, unique: false, origin: 'custom' });
     const joya = spawnItem(engine.world, 'it_joya', 1, { type: 'character', id: c.id, slot: { kind: 'pocket' } });
     if (!joya.ok) throw new Error();
-    const cash = npcCash(engine.world, a);
+    const cash = coinsOf(engine.world, a.id);
     expect(sellToNpc(engine.world, c, a.id, joya.moved.id, 1, OPEN)).toMatchObject({ ok: false, reason: expect.stringMatching(/no le llega/) });
-    expect(npcCash(engine.world, a)).toBe(cash);
+    expect(coinsOf(engine.world, a.id)).toBe(cash);
     expect(carrierOf(engine.world, engine.world.itemInstance(joya.moved.id).location)).toEqual({ type: 'character', id: c.id });
   });
 
@@ -156,7 +157,7 @@ describe('la tienda del buhonero en Brezal', () => {
     expect(inc).toBeDefined();
     expect(inc!.knowers.some((k) => k.npc_id === 'npc_lucio')).toBe(true);
     // Ya no le vende (crime.ts, refusesService).
-    c.coins = 1000;
+    setCoins(engine.world, c.id, 1000);
     expect(buyFromNpc(engine.world, c, 'npc_lucio', 'it_antorcha', 1, OPEN)).toMatchObject({ ok: false });
   });
 
@@ -173,7 +174,7 @@ describe('la tienda del buhonero en Brezal', () => {
   it('el botón de comprar de la web: sin máster, con su evento', async () => {
     const { engine } = await boot();
     const c = await newPc(engine, 'Nia');
-    c.coins = 100;
+    setCoins(engine.world, c.id, 100);
     const r = await engine.shopBuy(c.id, 'npc_lucio', 'it_antorcha', 2);
     expect(r.ok).toBe(true);
     expect(r.text).toMatch(/^Compras 2 × antorcha a Lucio Cendal por/);
@@ -214,7 +215,7 @@ describe('tiendas en mundos generados', () => {
   it('un NPC sin tienda sigue como siempre: vende de su lista sin contar existencias', async () => {
     const { engine } = await boot();
     const c = await newPc(engine, 'Nia', 'sp_tab_barra');
-    c.coins = 100;
+    setCoins(engine.world, c.id, 100);
     expect(engine.world.npc('npc_brenna').shop).toBeUndefined();
     expect(buyFromNpc(engine.world, c, 'npc_brenna', 'it_cerveza', 1, OPEN)).toMatchObject({ ok: true });
     expect(buyFromNpc(engine.world, c, 'npc_brenna', 'it_cerveza', 1, OPEN)).toMatchObject({ ok: true });

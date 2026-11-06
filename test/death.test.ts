@@ -16,6 +16,7 @@ import { fateSince } from '../src/engine/prologue.js';
 import { hitDiceLeft, parseRest } from '../src/engine/rest.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
+import { coinsOf } from '../src/engine/money.js';
 function dice(...values: number[]) {
   let i = 0;
   return () => (i < values.length ? values[i++]! : 0.99);
@@ -209,8 +210,11 @@ describe('muerte y vuelta', () => {
     const body = bodiesAt(engine.world, 'sp_tab_barra')[0]!;
     expect(engine.world.itemDef(body.item_id).name).toBe('cuerpo de Kael');
     expect(engine.world.itemsIn({ type: 'container', id: body.id }).map((i) => i.id)).toEqual(expect.arrayContaining(['ii_kael_mochila', 'ii_kael_daga']));
-    expect(bodyStateOf(body)!.coins).toBe(1500);
-    expect(kael.coins).toBe(0);
+    // El dinero cae en su bolsa, dentro del cuerpo (money.ts).
+    expect(engine.world.itemInstance('ii_kael_bolsa').location).toEqual({ type: 'container', id: body.id });
+    expect(engine.world.itemInstance('ii_kael_bolsa').state['coins']).toBe(1500);
+    expect(bodyStateOf(body)!.coins).toBe(0);
+    expect(coinsOf(engine.world, kael.id)).toBe(0);
     // Casual: nadie más lo toca.
     expect((await engine.act(mira.id, 'saquear el cuerpo de Kael')).text).toMatch(/murió en modo casual/);
     expect(JSON.parse(executeTool(ctxFor(engine, mira.id), 'transfer_item', { instance_id: 'ii_kael_daga', to_type: 'character', to_id: mira.id, slot: 'pocket', equip_slot: '', quantity: null })).error).toBe('not_allowed');
@@ -228,7 +232,7 @@ describe('muerte y vuelta', () => {
     const r = await engine.act(kael.id, 'recoger mis cosas');
     expect(r.text).toMatch(/^Recuperas de las cosas de Kael: /);
     expect(engine.world.itemInstance('ii_kael_daga').location).toEqual({ type: 'character', id: kael.id, slot: { kind: 'hand', which: 'main' } });
-    expect(kael.coins).toBe(1500);
+    expect(coinsOf(engine.world, kael.id)).toBe(1500);
     expect(engine.world.itemInstances.has(body.id)).toBe(false);
     const chron = journalOf(engine, kael.id).chronicle.flatMap((d) => d.entries.map((e) => e.text));
     expect(chron.some((t) => /^Mueres en .+, la barra\. Tu cuerpo queda allí con .*15 de oro/.test(t))).toBe(true);
@@ -243,7 +247,7 @@ describe('muerte y vuelta', () => {
     expect(kael.status).toBe('dead');
     const r = await engine.act(mira.id, 'saquear el cuerpo de Kael');
     expect(r.text).toMatch(/^Te llevas de cuerpo de Kael: .*15 de oro/);
-    expect(mira.coins).toBe(3000);
+    expect(coinsOf(engine.world, mira.id)).toBe(3000);
     time.advanceReal(30 * 60 + 1);
     await engine.tick();
     expect(kael.status).toBe('active');

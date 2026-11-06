@@ -43,10 +43,10 @@ import { TALK_RULES } from './actor.js';
 import { concernsLine } from '../engine/concerns.js';
 import { recentNpcLines } from '../engine/closecheck.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
-import { npcCash, shopClosed, shopLines } from '../engine/shop.js';
+import { shopClosed, shopLines } from '../engine/shop.js';
 import { abilitiesForMaster } from '../engine/levels.js';
 import { hhmm } from '../engine/schedule.js';
-import { currencyOf, money } from '../engine/money.js';
+import { coinsOf, currencyOf, money } from '../engine/money.js';
 import { priceFor } from '../engine/standing.js';
 import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
 import { socialOutcomeLine, talkPlan, talkScript, type TalkPlan } from '../engine/talk.js';
@@ -610,10 +610,16 @@ export function talkPlanFor(engine: Engine, actor: Character, text: string): Tal
   return talkPlan(engine.world, engine.events.all(), actor, text, engine.nowFor(actor));
 }
 
-/** Lo que lleva encima un NPC (con IDs, para transfer_item): sin esto el máster lo inventa con spawn_item. */
+/**
+ * Lo que lleva encima un NPC (con IDs, para transfer_item), y que no lleva nada más: sin esto el máster lo inventa
+ * (la bolsa de cuero de Garrán, que se robó con éxito y nunca existió; partida «Humo y ceniza», 05-11).
+ */
 function carriedBy(world: Engine['world'], npcId: Id): string {
+  // Con la bolsa del ajuar (outfit.ts), su dinero y lo que va dentro, cada cosa con su id.
   const items = npcCarryList(world, npcId);
-  return items.length ? `  Lleva: ${items.join(', ')}` : '';
+  return items.length
+    ? `  Lleva (solo esto; nada más que se pueda ver de cerca, coger o robar): ${items.join(', ')}`
+    : '  No lleva nada que se pueda coger o robar: ni bolsas, ni monedas, ni llaves.';
 }
 
 /** Lo último que ha dicho un NPC aquí: para que no repita la misma frase (closecheck.ts lo rechaza). */
@@ -627,5 +633,5 @@ function shopLine(world: World, n: Npc, actor: Character, nowG: number): string 
   const lines = shopLines(world, n, actor);
   const closed = shopClosed(n, nowG);
   const list = lines.length ? lines.map((l) => `${l.name} [${l.item_id}]${l.service ? '' : ` ×${l.quantity}`} a ${money(world, l.price)}`).join(', ') : 'nada: no le queda género';
-  return `  Tienda (existencias reales, buy_item las saca; lo que no está aquí NO lo tiene): ${list}. Paga lo que compra con su bolsa (${money(world, npcCash(world, n))}).${closed ? ` CERRADA: ${closed}.` : ''} Lo de sus estantes es suyo: cogerlo sin pagar es robo.`;
+  return `  Tienda (existencias reales, buy_item las saca; lo que no está aquí NO lo tiene): ${list}. Paga lo que compra con su bolsa (${money(world, coinsOf(world, n.id))}).${closed ? ` CERRADA: ${closed}.` : ''} Lo de sus estantes es suyo: cogerlo sin pagar es robo.`;
 }

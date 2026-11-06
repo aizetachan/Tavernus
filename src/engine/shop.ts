@@ -15,80 +15,17 @@
  *
  * Un NPC sin `shop` comercia como siempre (progress.ts): `sells` sin existencias contadas.
  *
- * El dinero del PJ pasa por `pcCoins`, `pcPay` y `pcReceive`: hoy es `Character.coins`; cuando el dinero viva en
- * bolsas (PLAN-OBJETOS §5, bloque D) solo cambian esas tres.
+ * El dinero va de bolsa a bolsa con `coinsOf`, `pay` y `receive` (money.ts, bloque D): lo que cobra el tendero
+ * entra en su bolsa y lo que paga sale de ella.
  */
 
 import { GAME_DAY, GAME_HOUR } from '../clock/clock.js';
 import { checkFits, consumeItem, spawnItem } from './inventory.js';
 import type { Character, Id, ItemDef, ItemInstance, Npc, NpcShop, Placement, WorldSnapshot } from './model.js';
+import { isIdentifiedBy, itemName } from './items.js';
 import { kitOf } from './outfit.js';
 import { priceFor } from './standing.js';
 import type { World } from './world.js';
-
-// ---------------------------------------------------------------------------
-// Dinero (aislado: el bloque D lo pasa a bolsas)
-// ---------------------------------------------------------------------------
-
-/** Lo que lleva el PJ, en la moneda más pequeña. */
-export function pcCoins(_world: World, c: Character): number { return c.coins; }
-/** El PJ paga. Devuelve false si no le llega (y no paga nada). */
-export function pcPay(world: World, c: Character, amount: number): boolean {
-  if (amount <= 0) return true;
-  if (c.coins < amount) return false;
-  c.coins -= amount;
-  world.touch('characters', c.id);
-  return true;
-}
-/** El PJ cobra. */
-export function pcReceive(world: World, c: Character, amount: number): void {
-  if (amount <= 0) return;
-  c.coins += amount;
-  world.touch('characters', c.id);
-}
-
-/** Las bolsas con dinero que lleva un NPC encima (las del ajuar, outfit.ts), la más llena primero. */
-function npcPurses(world: World, npc: Npc): ItemInstance[] {
-  const out: ItemInstance[] = [];
-  const walk = (p: Placement, depth: number) => {
-    for (const i of world.itemsIn(p)) {
-      if (world.itemDef(i.item_id).container && !world.itemDef(i.item_id).container!.fixed) out.push(i);
-      if (depth < 4) walk({ type: 'container', id: i.id }, depth + 1);
-    }
-  };
-  walk({ type: 'npc', id: npc.id }, 0);
-  return out.sort((a, b) => coinsOf(b) - coinsOf(a));
-}
-const coinsOf = (i: ItemInstance) => (typeof i.state['coins'] === 'number' && (i.state['coins'] as number) > 0 ? i.state['coins'] as number : 0);
-
-/** Lo que lleva un NPC en sus bolsas. */
-export function npcCash(world: World, npc: Npc): number {
-  return npcPurses(world, npc).reduce((a, i) => a + coinsOf(i), 0);
-}
-/** El NPC paga de sus bolsas. Devuelve false si no le llega (y no paga nada). */
-export function npcPay(world: World, npc: Npc, amount: number): boolean {
-  if (amount <= 0) return true;
-  if (npcCash(world, npc) < amount) return false;
-  let left = amount;
-  for (const p of npcPurses(world, npc)) {
-    const take = Math.min(left, coinsOf(p));
-    if (take <= 0) continue;
-    const rest = coinsOf(p) - take;
-    if (rest > 0) p.state['coins'] = rest; else delete p.state['coins'];
-    world.touch('item_instances', p.id);
-    left -= take;
-    if (left <= 0) break;
-  }
-  return true;
-}
-/** El NPC cobra: a la bolsa más llena (la de las monedas). Sin bolsa, el dinero se va con él igual: no se pierde. */
-export function npcReceive(world: World, npc: Npc, amount: number): void {
-  if (amount <= 0) return;
-  const p = npcPurses(world, npc)[0];
-  if (!p) return;
-  p.state['coins'] = coinsOf(p) + amount;
-  world.touch('item_instances', p.id);
-}
 
 // ---------------------------------------------------------------------------
 // Existencias
@@ -254,11 +191,14 @@ export interface ShopLine {
 
 /** Lo que vende ahora a este PJ: sus existencias agrupadas, y sus servicios. */
 export function shopLines(world: World, npc: Npc, c: Character): ShopLine[] {
-  const by = new Map<Id, number>();
-  for (const i of stockOf(world, npc)) by.set(i.item_id, (by.get(i.item_id) ?? 0) + i.quantity);
-  const lines: ShopLine[] = [...by].map(([item_id, quantity]) => {
+  const by = new Map<Id, { n: number; first: ItemInstance }>();
+  for (const i of stockOf(world, npc)) { const g = by.get(i.item_id); if (g) g.n += i.quantity; else by.set(i.item_id, { n: i.quantity, first: i }); }
+  const lines: ShopLine[] = [...by].map(([item_id, { n: quantity, first }]) => {
     const def = world.itemDef(item_id);
-    return { item_id, name: def.name, quantity, price: priceFor(npc, c.id, listPrice(world, npc, item_id), 'buy'), ...(def.description ? { description: def.description } : {}) };
+    // Lo mágico sin identificar, con el nombre que ve este PJ (items.ts): el tendero no sabe más que él.
+    const known = isIdentifiedBy(def, first, c.id);
+    const description = known ? def.description : def.unidentified?.description;
+    return { item_id, name: itemName(def, first, c.id), quantity, price: priceFor(npc, c.id, listPrice(world, npc, item_id), 'buy'), ...(description ? { description } : {}) };
   });
   for (const s of npc.sells) {
     const def = world.itemDefs.get(s.item_id);

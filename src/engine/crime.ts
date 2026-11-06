@@ -38,6 +38,7 @@
 
 import { GAME_DAY, GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
 import type { Character, Id, IncidentKind, LawRules, Npc, NpcBond, Spot, Wanted } from './model.js';
+import { coinsOf, pay } from './money.js';
 import { descriptorOf, fmtDuration } from './narrate.js';
 import { orderOf, setNpcOrder } from './npcorders.js';
 import type { Rumor } from './rumors.js';
@@ -691,7 +692,7 @@ function sentenceFor(world: World, c: Character): { kind: 'fine' | 'jail'; fine:
   if (!worst) return { kind: 'fine', fine: 0, hours: 0 };
   const hours = law.jail_hours?.[worst.kind] ?? DEFAULT_JAIL_HOURS[worst.kind];
   const fine = law.fines?.[worst.kind] ?? DEFAULT_FINES[worst.kind];
-  if (jailSpot(world) && (hours > 0 || c.coins < fine)) return { kind: 'jail', fine: 0, hours: Math.max(hours, 8) };
+  if (jailSpot(world) && (hours > 0 || coinsOf(world, c.id) < fine)) return { kind: 'jail', fine: 0, hours: Math.max(hours, 8) };
   return { kind: 'fine', fine, hours: 0 };
 }
 
@@ -735,8 +736,9 @@ export function surrender(world: World, c: Character, nowG: number, nowC: number
     settle(world, c);
     return { kind: 'jail', paid: 0, until_game_s: j?.until ?? null, spot_id: j?.spot.id ?? null, by, reason };
   }
-  const paid = Math.min(c.coins, s.fine);
-  c.coins -= paid;
+  // La multa sale de sus bolsas (money.ts) y no va a nadie.
+  const paid = Math.min(coinsOf(world, c.id), s.fine);
+  pay(world, c.id, paid);
   settle(world, c);
   return { kind: 'fine', paid, until_game_s: null, spot_id: null, by, reason };
 }

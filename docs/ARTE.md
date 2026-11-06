@@ -124,6 +124,12 @@ sirve JPEG para todo y PNG solo para objetos.
 Sin activo escrito, el motor decide qué merece imagen (`src/engine/moments.ts`) y el ilustrador escribe el
 prompt desde los datos (`entityOf` en `src/ai/illustrate.ts`), nunca desde la narración del turno:
 
+- **Charla** (desde el 06-11): la primera vez que un PJ habla con un NPC sale una imagen grande, como la del
+  sitio o la del objeto: el NPC en su sitio, de medio cuerpo, mirando a quien le habla («… mid-conversation,
+  looking at the viewer. medium shot from the point of view of the person talking to them»). Sin el PJ en la
+  imagen, así hay una por NPC y vale para todos. Antes salía su retrato pequeño y cuadrado dentro de la burbuja;
+  ya no sale en el hilo (tampoco en partidas viejas). El retrato se sigue haciendo, pero solo es el avatar
+  redondo junto a sus frases. Mientras se pinta, el marcador «Pintando…» hace de hueco.
 - **Descubrimiento:** lo hallado de cerca y en primer plano; el sitio va al final, como fondo desenfocado
   («Close-up of …. blurred background: Plaza del Pozo (exterior)»). Si empezara por el sitio, el modelo
   volvería a pintar la vista del lugar.
@@ -131,7 +137,7 @@ prompt desde los datos (`entityOf` en `src/ai/illustrate.ts`), nunca desde la na
   - Una pista se pinta con lo que dice su campo `image` en los datos («un cubo de madera con agua turbia y un
     poso de ceniza gris…»). Si no lo tiene, con su título.
   - **Pistas oídas:** si llega mientras el PJ habla con un NPC (lo que cuenta Ilse o Hugo), no hay
-    descubrimiento, solo el retrato de quien habla si aún no lo tenía. Una pista con `image` es algo que se ve
+    descubrimiento, solo la imagen de la charla con quien habla si aún no la tenía. Una pista con `image` es algo que se ve
     y sigue siendo hallazgo aunque llegue hablando.
 - **Combate:** «el PJ contra su rival», y el rival es siempre el otro. Cuando un NPC golpea al PJ, el rival es
   quien golpea, y la pareja comparte imagen: el primer golpe entre los dos da una sola, lo dé quien lo dé. Si el

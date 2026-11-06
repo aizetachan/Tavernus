@@ -402,18 +402,45 @@ Todos los pesos en `campaign.progression` para tunearlos con la validación.
 
 ## 5. Ítems e inventario
 
-### 5.1 Catálogo (`items`)
+### 5.1 Catálogo (`ItemDef`) y estado de cada ejemplar (`ItemInstance.state`)
+
+El modelo de objetos 5e (PLAN-OBJETOS §2) está en `src/engine/model.ts`; las tablas y ayudas puras, en
+`src/engine/items.ts`. Todo lo nuevo es opcional: un objeto sencillo sigue siendo nombre, tipo, tamaño, peso y valor.
+Las reglas que usan estos datos (bonos en la tirada, sintonizar, gastar cargas o munición, pergaminos) son el
+bloque C del plan; el modelo solo dice qué es cada cosa y qué ve cada personaje.
+
 | Campo | Detalle |
 |---|---|
-| `name`, `description` | |
-| `type` | `weapon` / `armor` / `consumable` / `tool` / `quest` / `treasure` / `misc` |
-| `rarity` | common → legendary |
-| `weight`, `value_gp` | |
-| `properties` | Weapon: `damage`, `damage_type`, `range`, `tags` (finesse, two-handed…). Armor: `ac_base`, `type`, `stealth_disadvantage`. Consumable: `effect` (estructurado: `{heal: "2d4+2"}`), `uses` |
-| `attunement` | bool |
-| `magic_effects[]` | Modificadores mecánicos estructurados (`+1 attack`) + descripción narrativa |
-| `unique` | bool — un solo ejemplar en el mundo |
+| `name`, `aliases`, `description` | La ficha sale de los datos si no hay `description` |
+| `type` | Categoría de reglas: `weapon`, `armor`, `ammunition`, `gear`, `tool`, `focus`, `consumable`, `scroll`, `wand`, `rod`, `staff`, `ring`, `wondrous`, `treasure`, `coin`, `quest`, `container`, `misc` |
+| `subtype` | Afina el tipo (`SUBTYPES` en items.ts): arma `simple_melee`…`martial_ranged`; armadura `light`/`medium`/`heavy`/`shield`; munición `arrow`/`bolt`/`bullet`/`needle`; equipo `adventuring`/`clothes`/`light`/`container`; herramienta `artisan`/`kit`/`gaming`/`instrument`/`vehicle`; foco `arcane`/`druidic`/`holy`; consumible `food`/`drink`/`potion`/`poison`/`oil`; tesoro `gem`/`art`/`trade` |
+| `base_id` | La definición SRD de la que sale una variante («espada larga +1», la pistola de rayos con el bloque de la ballesta ligera). Las competencias con armas concretas comparan `base_id ?? id` |
+| `size`, `weight_lb`, `value` | Valor en la moneda más pequeña (`money.ts`) |
+| `weapon` | `damage`, `damage_type`, las booleanas de siempre (`finesse`, `ranged`, `two_handed`) y `properties` (`light`, `heavy`, `finesse`, `thrown`, `two_handed`, `versatile`, `reach`, `loading`, `ammunition`, `special`), `range: [normal, largo]` en pies, `versatile_damage`, `ammo_type` |
+| `armor` | `ac_base`, `dex_max` (null = sin tope), `stealth_disadvantage`, `str_min`, `don_s`, `doff_s`. La categoría es `subtype` (sin él, se deduce: sin tope de DES, ligera; tope > 0, intermedia; tope 0, pesada) |
+| `shield_bonus`, `container`, `equip_slot`, `light_source`, `service`, `heals`, `illustrate` | Como siempre |
+| `rarity` | `common` → `artifact`. Con rareza, el objeto es mágico y hay que identificarlo |
+| `attunement` | `true` o una condición (`classes`, `spellcaster`, `note`) |
+| `bonus` | `attack`, `damage`, `ac`, `save_dc`, `spell_attack` (el +1, +2, +3) |
+| `charges` | `max`, `recharge: { amount: '1d6+1', at: 'dawn' }`, `destroy_on_empty` |
+| `effects[]` | Efectos con estructura mientras se lleva: `resist`, `immune`, `condition_immunity`, `advantage`, `disadvantage`, `speed`, `light`, `darkvision`, `save_bonus`, `ability_score`, `condition`, `note` (solo narrativo). Los aplica el motor; el máster los narra |
+| `cursed` | `{ effects?, description? }`: no se quita ni se deja de sintonizar; no se ve hasta que alguien lo sintoniza |
+| `unidentified` | Cómo se ve sin identificar (`name`, `description`); sin él, un nombre genérico por tipo («anillo», «arma») |
+| `spell` | Pergamino, varita o bastón: `spell_id` (de `src/data/srd/spells.ts`), `level`, y `save_dc`/`attack_bonus` si no los de la tabla. Un pergamino puede no fijar `spell_id` (el pergamino de nivel N del SRD): el conjuro va entonces en el ejemplar (`state.spell_id`), de ese nivel |
+| `effect`, `duration_s` | Lo que hace al usarlo (poción) y cuánto dura |
+| `unique` | Un solo ejemplar en el mundo |
 | `origin` | `srd` / `custom` |
+
+Estado por ejemplar (`ItemState`, admite claves libres): `identified_by` (quién sabe qué es), `attuned_to`,
+`charges` (sin él, lleno), `coins` (bolsas), `lit` (luces), `owner_id` (de quién es: tiendas y robos).
+
+**Lo que ve el máster.** `get_item` devuelve tipo, subtipo, la cifra (daño o CA), las propiedades y `magic`: si el
+actor lo ha identificado, rareza, sintonía (y con quién), bonos, cargas, conjuro y efectos; si no,
+`'objeto mágico sin identificar'`, el nombre de `unidentified` y sin `item_id`. El inventario del máster, la mochila de
+la web (`packView`) y la hoja usan el mismo nombre. **Migración:** `migrate` rellena desde la semilla lo que la
+partida guardada no tiene (sin pisar nada; el tipo, solo si era uno de los genéricos viejos) y deduce de sus datos
+la lista de propiedades del arma y la categoría de la armadura. `validate.ts` comprueba subtipos, propiedades,
+alcance, munición, que la magia lleve rareza, cargas, conjuros y el estado de cada ejemplar.
 
 ### 5.2 Inventario (`inventory`)
 `character_id`, `item_id`, `quantity`, `equipped` (slot: main_hand, off_hand, armor, ring1…), `attuned`, `identified` (para magia desconocida), `notes`.
@@ -430,9 +457,23 @@ Partida «Humo y ceniza» (VPS): el PJ le robó a Garrán «la bolsa de cuero» 
 - **De dónde sale.** Del oficio (`Npc.role`, por palabras: «tabernera» → posadero; «alguacil» → guardia; «regidor» → noble…) o de `Npc.kit` si la campaña lo dice. La riqueza, del ajuar o de `Npc.wealth` (`none`, `poor`, `modest`, `comfortable`, `rich`). Las monedas se miden por lo que lleva un PJ al empezar (`campaign.starting_coins`): pobre de 0,05 a 0,2 veces; modesto, de 0,2 a 0,6; acomodado, de 0,6 a 1,5; rico, de 2 a 5. La cifra sale del id del NPC: el mismo mundo da siempre el mismo ajuar.
 - **Lo escrito manda.** El ajuar solo completa: no pone bolsa a quien ya lleva un contenedor, no repite una cosa que ya lleva y no da arma a quien ya lleva una. Brezal escribe la bolsa del diezmo de Garrán con su dinero; el resto lo pone el ajuar.
 - **Cuándo.** Al arrancar la partida (`migrate` en `engine.ts`), una vez por NPC (`Npc.outfitted`): campañas escritas, demo, mundos generados y partidas ya empezadas. En estas, antes, el NPC recupera lo que la campaña escrita le pone encima y la partida no tenía (la bolsa de Garrán en «Humo y ceniza»). Lo que le roben no se repone. A un muerto no se le da nada.
-- **El dinero de la bolsa.** En cuanto la bolsa llega a un PJ (en la mano, al cinto o dentro de su mochila), sus monedas pasan a `Character.coins` y la bolsa queda vacía (`transferItem`, inventory.ts). `transfer_item` le devuelve al máster `coins_found` con la cifra; al coger una bolsa del suelo, el motor dice «Dentro hay 3 de plata: te las guardas.».
+- **El dinero de la bolsa.** Se queda en la bolsa (§5.3.2): quien la coge (o la roba) lleva ese dinero mientras lleve la bolsa. `transfer_item` le devuelve al máster `coins_found` con la cifra; al coger una bolsa del suelo, el motor dice «Dentro hay 3 de plata.».
 - **El máster lo ve.** En el contexto («Lleva: …») y en `get_npc` va todo con su id, con el dinero y lo de dentro: «bolsa de cuero con 4 de oro y 3 de plata [ii_garran_bolsa] (dentro: trenza de esparto […], silbato de hueso […])». Sacar algo de la bolsa de un NPC cuenta como quitárselo a él (robo, testigos).
-- **Los PJ** empiezan con el equipo de su clase (arma, armadura, mochila con antorchas, raciones y cuerda): ya llevan qué robar. Su dinero es un número, no una bolsa: un NPC no se lo puede quitar.
+- **Los PJ** empiezan con el equipo de su clase (arma, armadura, mochila con antorchas, raciones y cuerda) y su propia bolsa con su dinero (§5.3.2).
+
+#### 5.3.2 El dinero vive en bolsas — DECIDIDO 2026-11-06 (PLAN-OBJETOS §5, bloque D)
+Antes el dinero de un PJ era un número (`Character.coins`) que nadie le podía quitar. Ahora **nadie tiene un número de monedas: tiene bolsas con monedas dentro** (`ItemInstance.state.coins`, en la moneda más pequeña), PJ y NPC por igual (`src/engine/money.ts`).
+
+- **Cuánto lleva** (`coinsOf`): la suma de lo que hay en todo lo que lleva encima, bolsas dentro de la mochila incluidas. La ficha, la mochila de la web (`packView`), el contexto del máster y `get_character` enseñan ese total con `money()`; con más de una bolsa, `/monedas` dice cuánto hay en cada una.
+- **Todo PJ empieza con una bolsa al cinto** (`it_kit_purse` de `outfit.ts`, con el nombre del género del mundo) con `campaign.starting_coins` dentro. Puede llevar más de una (una escondida en la mochila).
+- **Pagar** (`pay`) saca de la bolsa más a mano (en la mano, al cinto, en el bolsillo, el resto del equipo; luego lo de dentro, por capas) y sigue por las demás. Todo o nada. Con destinatario, el dinero pasa a su bolsa: comprar paga al vendedor, `give_coins` y `settle_debt` al NPC, dar monedas a otro PJ (oferta aceptada) de bolsa a bolsa. Sin destinatario, sale del mundo (las multas). **Cobrar** (`receive`) mete en la bolsa más a mano; quien no lleva ninguna recibe una (al cinto; si lo ocupa algo, al bolsillo). Las recompensas de encargos y misiones y lo que pagan los NPC al comprar entran así.
+- **Pesa con la bolsa:** `instanceWeight` suma las piezas de `state.coins` (50 por libra), así que la carga del PJ cuenta el dinero de todas sus bolsas y una bolsa llena pesa dentro de la mochila.
+- **Robar la bolsa entera:** `transfer_item`, con las reglas de siempre (robo si se nota, §9.4). El dinero va dentro.
+- **Robar parte:** tool `take_coins` (`instance_id` de la bolsa, `amount` o null para todo, `to_instance_id` opcional). Saca lo que haya hasta esa cifra y lo mete en la bolsa más a mano del actor. De un NPC es como quitarle la bolsa: robo con testigos si la acción se lee como robo y la tirada no fue limpia, siempre si está inconsciente. De otro PJ, solo con su reacción (abajo). De una bolsa del suelo o de un cofre, sin más. Con `to_instance_id`, pasa monedas de una bolsa suya a otra (esconder dinero).
+- **A otro jugador no se le quita nada sin que lo decida él** (`lootGuard`, tools.ts; reactions.ts): ni su bolsa (`transfer_item`) ni parte de ella (`take_coins`), salvo en el desenlace de su reacción (`request_reaction` con Juego de manos contra Percepción) si la acepta o pierde la tirada (`Engine.reactionWon`). Inconsciente, nada sin su consentimiento; muerto, las reglas del cuerpo.
+- **Al morir**, sus bolsas caen con el cuerpo como cualquier otra cosa (`death.ts`): en casual le esperan a él; en hardcore se saquean, y quien las coge se lleva el dinero dentro («bolsa de cuero con 15 de oro»). `coins_left` de la muerte guarda el total para el Diario. Los cuerpos de antes guardaban las monedas sueltas (`BodyState.coins`): siguen dándolas a quien los recoge.
+- **Partidas guardadas** (`migrate`, `migrateLegacyCoins`): el número de cada PJ pasa a una bolsa nueva al cinto (`ii_bolsa_<pj>`), una vez, y el campo se borra. Al muerto sin dinero no se le da bolsa.
+- **Para la tienda (bloque E):** `pay(world, pc, precio, npc)` al comprar; `pay(world, npc, precio, pc)` al venderle, que falla con `{ ok: false, have }` si al NPC no le llega.
 
 ---
 
@@ -479,7 +520,7 @@ El valor y el esfuerzo tienen que sentirse como en el mundo real: ni hacerse ric
 
 > **Cambiado el 27-10-2026** (revisión de la partida «La noche del Brezal»): un mago empezaba «cargado» con 1.500 monedas que pesaban 30 lb, y el tablón pagaba 900 por diez leños. Ahora se paga como en el SRD: una cerveza son unas monedas de cobre y un arma legendaria, unas 100 de oro. Código en `src/engine/money.ts`.
 
-- **Moneda**: oro, plata y cobre (1 de oro = 10 de plata = 100 de cobre; cada campaña puede traer las suyas en `campaign.currency`). El valor se guarda en cobre (`Character.coins`, precios, recompensas, deudas) y se **enseña, se lee y se pesa en monedas**: 1.500 son «15 de oro», 125 son «1 de oro, 2 de plata y 5 de cobre». Se lleva siempre el menor número de piezas (el cambio se da solo); pesan esas piezas, 50 por libra (`coins_per_lb`). El jugador puede escribir «dar 3 de oro a Mira» o «20 monedas» (cobre).
+- **Moneda**: oro, plata y cobre (1 de oro = 10 de plata = 100 de cobre; cada campaña puede traer las suyas en `campaign.currency`). El valor se guarda en cobre (lo que hay en cada bolsa, `state.coins` (§5.3.2), precios, recompensas, deudas) y se **enseña, se lee y se pesa en monedas**: 1.500 son «15 de oro», 125 son «1 de oro, 2 de plata y 5 de cobre». Se lleva siempre el menor número de piezas (el cambio se da solo); pesan esas piezas, 50 por libra (`coins_per_lb`). El jugador puede escribir «dar 3 de oro a Mira» o «20 monedas» (cobre).
 - **Precios**: los del catálogo SRD en cobre para el equipo (daga 2 de oro, espada corta 10, espada larga 15, cota de malla 150); lo de cada día, barato: cerveza 4 de cobre · ración 1 de plata · noche de posada 2 de plata (`ROOM_NIGHT_PRICE`) · antorcha 1–2 de cobre. Lo que compran los NPC, por debajo de lo que venden (un leño, 3 de cobre).
 - **Ingresos**: un encargo del tablón paga unas monedas de plata (15–60 de cobre en Brezal; 20–80 en los mundos generados): de una a tres noches de posada, no nueve. Misiones: de unas monedas de plata (acto I) a unas 10 de oro (el final). Botín de combate: lo que llevaban, no bolsas de oro mágicas.
 - **Sumideros**: alojamiento, comida, reparaciones, entrenamiento, monturas, alijos alquilados, impuestos/peajes de facción.
