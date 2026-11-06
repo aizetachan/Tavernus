@@ -100,7 +100,7 @@ describe('wiki: nombres y cabeceras', () => {
 
   it('lee título, descripción, alias y etiquetas del YAML, con comillas o sin ellas', () => {
     const { meta, body } = frontmatter(`---\ntitle: "Misiones"\ndescription: 'Los actos'\naliases: [Misiones, "Los actos"]\ntags: [mision, brezal]\nrol: tabernera\n---\nCuerpo.`);
-    expect(meta).toEqual({ title: 'Misiones', description: 'Los actos', aliases: ['Misiones', 'Los actos'], tags: ['mision', 'brezal'] });
+    expect(meta).toEqual({ title: 'Misiones', description: 'Los actos', aliases: ['Misiones', 'Los actos'], tags: ['mision', 'brezal'], npc: null });
     expect(body).toBe('Cuerpo.');
     expect(frontmatter('Sin cabecera.').meta.title).toBeNull();
   });
