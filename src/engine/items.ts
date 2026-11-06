@@ -85,6 +85,11 @@ export function armorCategory(def: ItemDef): ArmorSubtype | null {
   return m === null ? 'light' : m > 0 ? 'medium' : 'heavy';
 }
 
+/** De qué definición SRD sale (para competencias con armas concretas): `base_id`, o la propia `id`. */
+export function baseIdOf(def: ItemDef): Id {
+  return def.base_id ?? def.id;
+}
+
 /** Objeto mágico: tiene rareza. */
 export function isMagic(def: ItemDef): boolean {
   return def.rarity !== undefined;
@@ -205,7 +210,7 @@ export function normalizeItemDef(def: ItemDef): boolean {
 }
 
 /** Campos de la definición que la semilla rellena en una partida guardada si faltan (migrate). */
-const FILLABLE: readonly (keyof ItemDef)[] = ['subtype', 'rarity', 'attunement', 'bonus', 'charges', 'effects', 'cursed', 'unidentified', 'spell', 'effect', 'duration_s'];
+const FILLABLE: readonly (keyof ItemDef)[] = ['subtype', 'base_id', 'rarity', 'attunement', 'bonus', 'charges', 'effects', 'cursed', 'unidentified', 'spell', 'effect', 'duration_s'];
 const LEGACY_TYPES: readonly ItemType[] = ['misc', 'container', 'consumable', 'tool'];
 
 /**

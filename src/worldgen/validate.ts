@@ -145,6 +145,10 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
   for (const d of snap.item_defs) {
     if (d.service && !defs.has(d.service.gives_item_id)) errs.push(`${d.id}: el servicio entrega ${d.service.gives_item_id}, que no existe.`);
     errs.push(...itemDefErrors(d, (id) => !!spellById(id)));
+    // La base puede no estar en la partida (el catálogo SRD se lee del código); si está, es del mismo tipo.
+    const base = d.base_id ? defs.get(d.base_id) : undefined;
+    if (d.base_id === d.id) errs.push(`${d.id}: base_id apunta a sí mismo.`);
+    else if (base && base.type !== d.type) errs.push(`${d.id}: su base ${base.id} es de otro tipo (${base.type}).`);
   }
   const isWho = (id: unknown) => typeof id === 'string' && (chars.has(id) || npcs.has(id));
   for (const i of snap.item_instances) {

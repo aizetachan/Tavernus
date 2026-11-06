@@ -12,7 +12,7 @@ import { MemoryRepository } from '../src/persistence/memory.js';
 import { executeTool, type ToolContext } from '../src/ai/tools.js';
 import { seededRng } from '../src/engine/dice.js';
 import { inventoryDetailed, inventoryView, packView, spawnItem } from '../src/engine/inventory.js';
-import { armorCategory, chargesLeft, fillItemDefFrom, isIdentifiedBy, itemDefErrors, itemName, normalizeItemDef, weaponCategory, weaponProperties } from '../src/engine/items.js';
+import { armorCategory, baseIdOf, chargesLeft, fillItemDefFrom, isIdentifiedBy, itemDefErrors, itemName, normalizeItemDef, weaponCategory, weaponProperties } from '../src/engine/items.js';
 import { validateSnapshot } from '../src/worldgen/validate.js';
 import type { ItemDef, ItemInstance, WorldSnapshot } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
@@ -106,6 +106,18 @@ describe('modelo de objetos: validación', () => {
     expect(errs({ type: 'ammunition' }).join()).toMatch(/munición sin subtipo/);
     expect(errs({ duration_s: 60 }).join()).toMatch(/duration_s sin effect/);
     expect(errs({ rarity: 'mythic' as never }).join()).toMatch(/rareza/);
+  });
+
+  it('base_id: la variante dice de qué arma SRD sale; si la base está en la partida, es del mismo tipo', () => {
+    expect(baseIdOf(ESPADA)).toBe(ESPADA.id);
+    expect(baseIdOf({ ...ESPADA, base_id: 'it_daga' })).toBe('it_daga');
+    const snap = makeSeed();
+    snap.item_defs.push({ ...ESPADA, base_id: 'it_daga' }, { ...VARITA, id: 'it_v2', base_id: 'it_daga' }, { ...ANILLO, id: 'it_a2', base_id: 'it_a2' }, { ...ANILLO, id: 'it_a3', base_id: 'it_fuera_de_la_partida' });
+    const errs = validateSnapshot(snap).join('\n');
+    expect(errs).not.toMatch(/it_espada_prueba: su base/);
+    expect(errs).toMatch(/it_v2: su base it_daga es de otro tipo/);
+    expect(errs).toMatch(/it_a2: base_id apunta a sí mismo/);
+    expect(errs).not.toMatch(/it_a3/);
   });
 
   it('el estado del ejemplar: quién lo conoce, a quién está sintonizado, sus cargas y su dueño existen', () => {

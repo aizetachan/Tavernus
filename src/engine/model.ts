@@ -866,6 +866,11 @@ export interface ItemDef {
   type: ItemType;
   /** Afina la categoría: `simple_melee`, `heavy`, `arrow`, `potion`… (qué vale para cada tipo: `SUBTYPES`). */
   subtype?: ItemSubtype;
+  /**
+   * La definición SRD de la que sale una variante («espada larga +1» → `it_espada_larga`; la pistola de rayos que usa
+   * el bloque de la ballesta ligera). Sin él, la propia `id`. Las competencias con armas concretas comparan `base_id ?? id`.
+   */
+  base_id?: Id;
   size: ItemSize;
   weight_lb: number;
   value: number;
