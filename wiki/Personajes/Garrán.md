@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: alguacil y recaudador
 lugar: "[[Plaza del Pozo]]"
 actitud: desconfiado
+npc: npc_garran
 ---
 
 > [!ficha] Garrán
@@ -54,6 +55,10 @@ De noche, junto a la vela, trenza esparto durante horas. Solo lo sabe Doro, que 
 | Noche (20-6) | El banco de espera, [[La casona]] |
 
 De 13:00 a 14:00 cobra el diezmo junto al tablón, con [[Doro]] detrás. Según [[Hugo]], los jueves va a cobrarle. Ver [[Vida del pueblo]].
+
+## Lleva encima
+
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

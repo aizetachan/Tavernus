@@ -25,7 +25,7 @@ import { authoredSeed, isAuthoredCampaign } from '../data/campaigns/index.js';
 import { chatterWriter } from '../ai/chatter-writer.js';
 import { CLASSES, RACES } from '../data/srd/index.js';
 import { JsonFileRepository } from '../persistence/jsonfile.js';
-import { CATALOG } from '../worldgen/fill.js';
+import { CATALOG } from '../data/catalog.js';
 import { claimSituation, generateSeed, TONES, type GenerateOptions, type Tone } from '../worldgen/index.js';
 import { Master, noCredit } from '../ai/master.js';
 import { isMasterMode, masterCacheDir, masterModeFromEnv, masterOptionsFor, type MasterMode } from '../ai/mode.js';

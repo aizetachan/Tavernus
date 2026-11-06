@@ -10,6 +10,7 @@ import { HEARTBEAT_MS } from './presence.js';
 import { FIGHT_SCRIPT, FIGHT_STYLE } from './fight.js';
 import { AWAY_JS, AWAY_STYLE } from './whileaway.js';
 import { TABLON_JS, TABLON_STYLE } from './tablon.js';
+import { SHOP_JS, SHOP_STYLE } from './tienda.js';
 
 /** El modo Decir vuelve solo a Hacer tras este rato sin escribir ni decir nada (revisión de la partida del 2026-10-26, n.º 9). */
 export const SAY_IDLE_MS = 30_000;
@@ -773,6 +774,7 @@ ${PAINT_STYLE}
 ${FIGHT_STYLE}
 ${AWAY_STYLE}
 ${TABLON_STYLE}
+${SHOP_STYLE}
   /* B5 sobre los módulos (novel, tts, sfx, voz, pincel, avatar): mismas piezas, otra piel. */
   .msg.row { gap: 8px; margin-top: 8px; max-width: min(760px, 100%); }
   .msg.scene { width: min(640px, calc(100% - 42px)); }
@@ -1184,6 +1186,7 @@ ${TABLON_STYLE}
     <div class="pane" data-pane="map"><div id="map"></div><p class="none">Aún no hay mapa de la zona.</p></div>
     <div id="near"></div>
     <div id="quest"></div>
+    <div id="shop-side"></div>
     <div id="tablon-side"></div>
   </div>
 </aside>
@@ -1386,6 +1389,7 @@ ${PAINT_JS}
 ${FIGHT_SCRIPT}
 ${AWAY_JS}
 ${TABLON_JS}
+${SHOP_JS}
   /** Cada mensaje del stream entra en el hilo tipo chat (novel.ts): avatar, burbuja, botones e imágenes. */
   function renderMessage(m, live, animate) {
     // Irse o volver: aviso de sistema, sin puntos del narrador ni turno (el propio no tiene texto).
@@ -3071,7 +3075,7 @@ ${TABLON_JS}
     mapEl.innerHTML = ''; mapData = null; document.body.classList.remove('map-big');
     journalEl.innerHTML = ''; journalData = null; setJournalNew(false);
     showScene(null);
-    $('card').innerHTML = ''; $('sheet').innerHTML = ''; $('pack').innerHTML = ''; $('near').innerHTML = ''; $('quest').innerHTML = '';
+    $('card').innerHTML = ''; $('sheet').innerHTML = ''; $('pack').innerHTML = ''; $('near').innerHTML = ''; $('quest').innerHTML = ''; $('shop-side').innerHTML = '';
     sheetData = null;
     var dot = $('scene-dot'); dot.removeAttribute('data-src'); dot.innerHTML = '<svg class="i"><use href="#i-pin"/></svg>';
     renderParty();
@@ -3100,11 +3104,12 @@ ${TABLON_JS}
       inChat(function () {
         liveUnread(m);
         if (window.TavernusSfx) TavernusSfx.cue(m.sfx);
-        loadBoard(); loadScene();
+        loadBoard(); loadScene(); loadShop();
         return renderMessage(m, true, true);
       });
     });
     stream.addEventListener('sheet', loadSheet);
+    stream.addEventListener('sheet', loadShop);
     stream.addEventListener('moment', function (e) { var x = JSON.parse(e.data); showMoment(x, x.seq); });
     stream.addEventListener('portrait', function (e) {
       var p = JSON.parse(e.data);
@@ -3127,6 +3132,7 @@ ${TABLON_JS}
     loadScene();
     loadJournal();
     loadTablon();
+    loadShop();
     input.focus();
   }
 
@@ -3323,7 +3329,7 @@ ${TABLON_JS}
   var cube = $('cube'), cubeMenu = $('cube-menu'), drawer = $('drawer'), drawerKey = null;
   var DR_TITLE = { sheet: 'Hoja', journal: 'Diario', tablon: 'Tablón', pack: 'Mochila', side: 'Tablero y mapa' };
   /** En el móvil, «Tablero» del modal se lleva del panel el tablero, el mapa, la gente cerca y la misión, y al cerrar los devuelve. */
-  var SIDE_PARTS = ['.views', '.pane[data-pane="board"]', '.pane[data-pane="map"]', '#near', '#quest', '#tablon-side'];
+  var SIDE_PARTS = ['.views', '.pane[data-pane="board"]', '.pane[data-pane="map"]', '#near', '#quest', '#shop-side', '#tablon-side'];
   function moveSide(toDrawer) {
     var dest = toDrawer ? document.querySelector('[data-drpane="side"]') : document.querySelector('#side .side-scroll');
     SIDE_PARTS.forEach(function (sel) { var el = document.querySelector(sel); if (el && el.parentNode !== dest) dest.appendChild(el); });

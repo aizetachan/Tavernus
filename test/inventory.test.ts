@@ -3,6 +3,7 @@ import { sheetView } from '../src/adapters/sheet-view.js';
 import { encumbrance, inventoryView, packView, spawnItem, transferItem } from '../src/engine/inventory.js';
 import { bootEngine, freshWorld } from './helpers.js';
 
+import { setCoins } from '../src/engine/money.js';
 const hand = (id: string, which: 'main' | 'off' | 'both') => ({ type: 'character' as const, id, slot: { kind: 'hand' as const, which } });
 const pocket = (id: string) => ({ type: 'character' as const, id, slot: { kind: 'pocket' as const } });
 
@@ -115,15 +116,15 @@ describe('inventario y capacidad', () => {
     expect(encumbrance(world, kael).level).toBe('ok');
     kael.location = { type: 'spot', id: 'sp_tab_chimenea' };
     transferItem(world, 'ii_kael_daga', pocket('ch_kael'));
-    transferItem(world, 'ii_barril', hand('ch_kael', 'both')); // +40 → ~48 (las 1500 de cobre son 15 de oro: 0,3 lb)
-    expect(encumbrance(world, kael).level).toBe('ok');
-    kael.coins = 150_000; // 1500 de oro: +30 lb
+    transferItem(world, 'ii_barril', hand('ch_kael', 'both')); // el barril del SRD pesa 70 → ~90: cargado (las 1500 de cobre son 15 de oro: 0,3 lb)
     expect(encumbrance(world, kael).level).toBe('encumbered');
-    kael.coins = 500_000; // 5000 de oro: +100 lb
+    setCoins(world, kael.id, 150_000); // 1500 de oro: +30 lb
+    expect(encumbrance(world, kael).level).toBe('encumbered');
+    setCoins(world, kael.id, 500_000); // 5000 de oro: +100 lb
     const e = encumbrance(world, kael);
     expect(e.level).toBe('heavily');
     expect(e.speed_penalty_ft).toBe(20);
-    kael.coins = 1_000_000;
+    setCoins(world, kael.id, 1_000_000);
     expect(encumbrance(world, kael).level).toBe('immobile');
   });
 
@@ -146,7 +147,8 @@ describe('inventario y capacidad', () => {
     const back = p.equipped.find((e) => e.slot === 'back')!.item!;
     expect(back).toMatchObject({ icon: 'container', equip_slot: 'back', weight_lb: 18 });
     expect(back.props).toContain('se lleva en la espalda');
-    const torches = p.containers[0]!.items.find((i) => i.name === 'antorcha')!;
+    // La primera es la bolsa del dinero (al cinto); las antorchas van en la mochila.
+    const torches = p.containers.find((c) => c.items.some((i) => i.name === 'antorcha'))!.items.find((i) => i.name === 'antorcha')!;
     expect(torches).toMatchObject({ label: 'antorcha ×3', quantity: 3, icon: 'light', weight_lb: 3, about: 'Da luz donde está oscuro.' });
   });
 

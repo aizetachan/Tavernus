@@ -30,6 +30,7 @@ import { allScheduled, nextStart, routineOf } from './schedule.js';
 import { encounterTable, pickEntry, type EncounterEntry } from './travel.js';
 import type { World } from './world.js';
 import { classResources } from './levels.js';
+import { rechargeOnRest } from './itemrules.js';
 
 export const SHORT_REST_S = GAME_HOUR;
 export const LONG_REST_S = 8 * GAME_HOUR;
@@ -231,6 +232,8 @@ export function applyRest(world: World, c: Character, plan: RestPlan, rng: Rng, 
   } else if (plan.kind === 'long' && end - plan.start_game_s >= SHORT_REST_S) {
     recover('short');
   }
+  // Los objetos que recargan al descansar (o al alba, si el descanso la cruza): itemrules.ts.
+  if (out.completed) out.recovered.push(...rechargeOnRest(world, c, plan.kind, end, rng));
   world.touch('characters', c.id);
   return out;
 }

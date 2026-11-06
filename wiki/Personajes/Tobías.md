@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: hijo del molinero
 lugar: "[[El molino]]"
 actitud: desconfiado
+npc: npc_tobias
 ---
 
 > [!ficha] Tobías
@@ -49,6 +50,10 @@ Ser alguien.
 | Noche (20-6) | El desván, [[El molino]] |
 
 Cada noche, de 23:00 a 24:00, cruza el arroyo de [[El Soto]] sin antorcha, con un hatillo. Ver [[Vida del pueblo]].
+
+## Lleva encima
+
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

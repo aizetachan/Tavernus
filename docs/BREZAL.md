@@ -143,13 +143,32 @@ Bloques SRD de los arquetipos del generador (`ARCHETYPES`, mismos rangos que val
 | **Ysolde** (Vharn) | mujer del ascua | 25 años, cicatriz de quemadura, un ascua en el guante, habla como en los libros | justicia o fuego | es la heredera; cree culpable a Brenna; no sabe que despertó la Guarda **[cambia]** | su historia, cómo despertar la Brasa (no sabe templar el ascua) | compra raciones y el libro | 12 CA, 22 PG, llama de la Brasa 2d6 | pajar del granero / pajar / capilla **[cambia]** |
 | **Hal** | cazador | flaco, pieles, mira antes los pies que la cara | que lo dejen en paz en su Soto | lleva caza a Ysolde por plata del sello | la madriguera, la loba; vio un ciervo entrar en la niebla y volver | truchas, flechas, antorchas; compra pieles | explorador, 16 PG, arco (a distancia, multiataque ×2) | piedra / choza / choza |
 | **Úrsula** **[nuevo]** | granjera | viuda, recia, pañuelo a la nuca, riñe a las gallinas como a la gente; mira siempre hacia la niebla | que su hijo Pol vuelva; que no le maten las ovejas | Pol salió a Valcruz la víspera de la niebla; ella ha entrado tres veces a buscarlo y ha salido por donde entró; deja un farol en la cerca cada noche | que la niebla devuelve a quien entra; que los lobos rondan el redil | huevos, coles, raciones; compra leña y bayas | plebeyo, 8 PG, horca 1d6 | gallinero / huerto / casa; vende en el mercado |
+| **Lucio Cendal** **[nuevo, 2026-11-06]** | buhonero | de Valcruz, flaco, sombrero de ala ancha, chaleco de bolsillos, cinta métrica al cuello; habla deprisa, de usted, y a todo le pone precio | salir del valle con el carro; no malvender lo que le queda; cumplir el encargo de una muerta | no vino a vender: siguió a Ysolde (Tizne, la cría de los carboneros del sur, a los que vende cada otoño) con un encargo de la carbonera que la crio: **la tapa de hierro frío del cuenco de cuna** que guarda Ilse; la lleva bajo el chaleco (aliado); se cruzó con Ysolde y su cuenco en el camino (amigo) | Pol en Valcruz; que Garrán le cobra doble y le quitó la mula; no sabe nada del incendio | **tienda con existencias** (§2.6, `shop`): equipo de aventurero y sal; nada mágico; compra pieles y lo demás a la mitad, con su bolsa | plebeyo, 8 PG, bastón; no combate | mostrador / mostrador / trastienda; atiende de 9 a 19 y va a la cena del Jabalí |
 | un lobo flaco | lobo | flaco, ceniza en el lomo | hambre | — | — | — | lobo | arroyo del Soto |
 | **la loba de ceniza** | loba | grande como un poni, humea, ojos de brasa | defender la madriguera | no ataca a quien lleva ceniza del granero | — | — | 14 CA, 37 PG, 2d6+3 | la madriguera **[cambia]** |
 | **Ceniza** | perro de Brenna | pardo, oreja rota | volver a casa | — | — | — | sin combate | la madriguera (luego, la chimenea) |
 
+**Lo que lleva encima cada uno** **[nuevo, 2026-11-06]**. Lo pone el ajuar al arrancar (`src/engine/outfit.ts`, SPEC §5.3.1), salvo la bolsa del diezmo de Garrán y su trenza, que van escritas en `items.ts`. `people.ts` solo corrige dos ajuares: Garrán, de alguacil (`kit: 'guard'`: no sabe escribir, sin libreta de recaudador), e Ysolde, de hechicera y sin dinero (`kit: 'mystic'`).
+
+| NPC | Bolsa de cuero (dinero) | Dentro | Además |
+|---|---|---|---|
+| Brenna | 1 de oro, 5 de plata y 2 de cobre | manojo de llaves, pañuelo | |
+| Doro | 8 de plata y 9 de cobre | silbato de hueso, mendrugo | lanza |
+| Osric | 6 de oro, 4 de plata y 4 de cobre | anillo de sello, manojo de llaves, pañuelo | estoque |
+| Garrán | 4 de oro y 3 de plata (el diezmo) | trenza de esparto, silbato de hueso, mendrugo | llave del arcón, maza |
+| Ilse | 7 de plata y 9 de cobre | hierbas secas, vendas de lino | 3 tónicos, 1 poción |
+| Hugo | 8 de plata y 7 de cobre | clavos, yesca y pedernal, navaja | martillo ligero |
+| Mateo | 1 de plata | navaja, yesca y pedernal, mendrugo | |
+| Tobías | 1 de plata y 2 de cobre | navaja, yesca y pedernal, mendrugo | |
+| Ysolde | nada | amuleto de hueso, yesca y pedernal | |
+| Hal | 2 de plata y 2 de cobre | navaja, sedal y anzuelos, yesca y pedernal | arco corto |
+| Úrsula | 2 de plata | navaja, yesca y pedernal, mendrugo | |
+| Lucio | 6 de oro (escrita en `items.ts`) | manojo de llaves del buhonero (abre la trastienda), libreta de cuentas, llave de hierro, pañuelo | la tapa de hierro frío del cuenco de cuna (`it_tapa_cuna`, mágica, no está a la venta); sus existencias no las lleva encima: están en sus estantes |
+| los tres animales | | | nada |
+
 ### 2.6 Lugares **[cambia]**
 
-**Una zona jugable** (Aldea de Brezal), **diez lugares** (la taberna cuenta con su sótano) y 63 puntos. Los planos salen de mapgen con las coordenadas, tags y alias de cada punto. Las ids de siempre se conservan: el Soto es `loc_claro`, el Granero Quemado es `loc_ruinas`, la madriguera es `sp_cs_cueva` y el mojón del Lindero es `sp_cs_mojon`.
+**Una zona jugable** (Aldea de Brezal), **once lugares** (la taberna cuenta con su sótano) y 69 puntos. Los planos salen de mapgen con las coordenadas, tags y alias de cada punto. Las ids de siempre se conservan: el Soto es `loc_claro`, el Granero Quemado es `loc_ruinas`, la madriguera es `sp_cs_cueva` y el mojón del Lindero es `sp_cs_mojon`.
 
 | # | Lugar | Puntos | Estado | Lo que esconde |
 |---|---|---|---|---|
@@ -163,12 +182,15 @@ Bloques SRD de los arquetipos del generador (`ARCHETYPES`, mismos rangos que val
 | 8 | **El Soto** (antes Claro del Roble) | sendero, roble viejo, **madriguera** (la loba y el perro), piedra (bayas), arroyo, choza de pieles (Hal), **senda del granero** | huellas de botas y de perro | por el arroyo pasa Tobías a las 23:00 |
 | 9 | **El Granero Quemado** (antes Ruinas de Vharn) | portalón caído, era quemada, pajar hundido (Ysolde), capilla derruida, **pasadizo bajo el altar** (cerrado con la llave de los Vharn) | ceniza tibia, resplandor rojo | bajo el altar, la cripta derrumbada donde duerme la Brasa grande |
 | 10 | **El Lindero** **[nuevo]** | final del camino, barricada de los vecinos, mojón de Vharn, borde de la niebla | la niebla quieta, sin olor, que apaga los sonidos | el primer anclaje de la Guarda |
+| 11 | **La tienda del buhonero** **[nuevo, 2026-11-06]** (`loc_tienda`) | puerta, mostrador, estantes, trastienda (cerrada con `it_llaves_cendal`, el manojo de Lucio); en la plaza, su puerta y **el carro del buhonero** | estantes medio vacíos; el carro sin mula | lo que esconde no está en la tienda: la tapa que Lucio lleva encima |
+
+**La tienda del buhonero** (PLAN-OBJETOS §6, `src/engine/shop.ts`). Lucio tiene `shop`: vende de existencias reales en tres contenedores fijos suyos (`state.owner_id: 'npc_lucio'`): los estantes, el arcón de la trastienda y el arcón del carro. Comprar saca de ahí y no crea nada; sin existencias, no le queda. Lo vendido va a sus estantes y lo paga de su bolsa (600 de cobre al empezar); si no le llega, no compra. **No repone** (`restock: 'none'`): el valle está sellado y solo entra lo que le venden. Atiende de 9 a 19 (`hours`). Coger de sus contenedores sin pagar es robo (`law.owners` y crime.ts); desde la trastienda no lo ve. Existencias al empezar: tiza ×5, antorchas ×6, hilo y aguja ×3, sedal y anzuelos ×2, aceite ×4, raciones ×4, cuerda ×2, garfio, daga y farol (estantes); sacos ×3 y odres ×2 (carro); dos saquetes de sal de Valcruz (trastienda). **Nada mágico a la venta** (Miguel, 06-11: en Brezal lo mágico es poco, enigmático y del lore): lo único mágico es la tapa de hierro frío del cuenco de cuna de Ysolde (`it_tapa_cuna`, `wondrous`, poco común, con efecto solo narrativo), que Lucio lleva encima y da a un aliado. Se compra hablándole (el máster, `buy_item`) o, sin máster, desde la burbuja de tienda del chat (botón «Ver lo que vende» del lateral).
 
 **[cortado]** Cuesta Gris (pie, mojón quemado, lobera, mirador, lo alto) y Cripta de la Brasa (escalera, cadenas rotas, la Brasa, altar).
 
 Al otro lado de la niebla está el **Camino de Valcruz** (`loc_valcruz`, zona «Más allá del Cerco»): un lugar sellado que solo existe para que el Cerco sea una salida con destino. Nadie llega en la demo; el tablero y el mapa de zona lo enseñan como vecino bloqueado. La expansión lo abrirá con un `exit_state` que borre `blocked_by`.
 
-Salidas: taberna-plaza (3 m), trampilla-sótano (3 m), plaza-herrería, plaza-casona, plaza-curandera (25 m), plaza-molino (150 m), plaza-corrales (180 m), portón-Soto (250 m), portón-Lindero (450 m), molino-Soto por el arroyo (220 m), corrales-Soto (200 m), Soto-granero (180 m) y **el Cerco**: borde de la niebla → camino de Valcruz, `blocked_by: 'El Cerco de Ceniza'` con `rebound` (§2.13).
+Salidas: taberna-plaza (3 m), trampilla-sótano (3 m), plaza-herrería, plaza-casona, plaza-tienda del buhonero (3 m), plaza-curandera (25 m), plaza-molino (150 m), plaza-corrales (180 m), portón-Soto (250 m), portón-Lindero (450 m), molino-Soto por el arroyo (220 m), corrales-Soto (200 m), Soto-granero (180 m) y **el Cerco**: borde de la niebla → camino de Valcruz, `blocked_by: 'El Cerco de Ceniza'` con `rebound` (§2.13).
 
 ### 2.7 Pistas (11) **[cambia, 2026-10-27: pistas con requisitos]**
 
@@ -331,7 +353,7 @@ Lo que el motor hace cuando alguien comete un crimen delante de la gente (`src/e
 - **Autoridad**: Garrán (alguacil) y Doro (guardia del portón). Dan el alto, detienen y, si te resistes, pelean.
 - **Calabozo**: en la casona (`sp_ca_calabozo`). Muerte, 24 h de juego; agresión con arma o profanar un cadáver, 8 h. Robo (150), agresión sin arma (100): multa; si no puedes pagar, calabozo.
 - **Reputación**: lo que se sabe se paga con la aldea de Brezal (`fac_brezal`), tanto como la gravedad.
-- **Dueños**: Brenna (taberna y sótano), Hugo (herrería), Osric (casona), Ilse (casa de las hierbas), Mateo (molino), Úrsula (corrales). No sirven ni alojan a quien saben culpable.
+- **Dueños**: Brenna (taberna y sótano), Hugo (herrería), Osric (casona), Ilse (casa de las hierbas), Mateo (molino), Úrsula (corrales), Lucio (la tienda del buhonero). No sirven ni alojan a quien saben culpable.
 - **Carácter**: Hal y Úrsula corren a avisar o se meten; Mateo, Tobías e Ilse huyen; el resto grita y se aparta.
 - **Vínculos** (de los `ties` de cada uno): Hugo bebe con Doro (se mete si le hacen daño); Doro es sobrino de Osric (Osric se mete); Garrán es el perro de Osric (se mete por él); Brenna quiere a Doro, aprecia a Ilse y Ceniza es su perro; Mateo y Tobías, padre e hijo; Ysolde, Hal y Tobías se tienen por amigos. Los rivales no reaccionan.
 
@@ -415,4 +437,4 @@ El máster IA también encadena: con viaje rápido, `move_to` deja al actor ya e
 Para rehacer el registro de arte y el manifiesto (`assets/campaigns/brezal/manifest.json`; issue #55). El manifiesto busca por id.
 
 - **Deja de aplicar**: vista y plano de `loc_cuesta` (Cuesta Gris, el mirador, la lobera en la montaña), vista y plano de `loc_cripta` (la Cripta de la Brasa con la piedra en su pedestal), y todo lo pintado de las ruinas como ciudadela en la montaña (torre hundida, muralla, patio de armas). La vista de `loc_ruinas` y de `loc_claro` hay que **rehacerla** aunque la id siga: ahora son el granero quemado en el borde del pueblo y una arboleda junto a las casas. El mapa de región ya no tiene montaña jugable ni bosque de Fresnos.
-- **Nuevo**: vista y plano de **El Soto** (`loc_claro`: arboleda, roble, arroyo, la madriguera entre las raíces), **El Granero Quemado** (`loc_ruinas`: era de ceniza, pajar hundido, capilla derruida, losa de hierro con el sello tras el altar), **Los Corrales** (`loc_corrales`), **El Lindero** (`loc_lindero`: la pared de niebla quieta, la barricada, el mojón tibio); retrato de **Úrsula** (`npc_ursula`); descubrimientos de `sp_ru_cripta` (el pasadizo bajo el altar) y `sp_ca_bodega` (la bodega tapiada); objetos `it_huevo` y `it_col` si se quieren. La niebla, en el estilo de `docs/ARTE.md`: gris pizarra, sin luz propia, con la única luz cálida fuera de ella.
+- **Nuevo**: vista y plano de **El Soto** (`loc_claro`: arboleda, roble, arroyo, la madriguera entre las raíces), **El Granero Quemado** (`loc_ruinas`: era de ceniza, pajar hundido, capilla derruida, losa de hierro con el sello tras el altar), **Los Corrales** (`loc_corrales`), **El Lindero** (`loc_lindero`: la pared de niebla quieta, la barricada, el mojón tibio); retrato de **Úrsula** (`npc_ursula`); vista y plano de **la tienda del buhonero** (`loc_tienda`) y retrato de **Lucio Cendal** (`npc_lucio`), ver `docs/ARTE.md`; descubrimientos de `sp_ru_cripta` (el pasadizo bajo el altar) y `sp_ca_bodega` (la bodega tapiada); objetos `it_huevo` y `it_col` si se quieren. La niebla, en el estilo de `docs/ARTE.md`: gris pizarra, sin luz propia, con la única luz cálida fuera de ella.

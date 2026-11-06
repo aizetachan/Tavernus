@@ -14,7 +14,7 @@ import { positionOf } from '../engine/movement.js';
 import { lightAt, perceive, witnesses } from '../engine/perception.js';
 import { regenState } from '../engine/resources.js';
 import { hiddenSpots, knownSpots, unseenSpots } from '../engine/spots.js';
-import { containerLoads, inventoryDetailed, inventoryView } from '../engine/inventory.js';
+import { containerLoads, inventoryDetailed, inventoryView, npcCarryList } from '../engine/inventory.js';
 import { SKILLS, armorClass } from '../engine/rules.js';
 import { activeJobs } from '../engine/progress.js';
 import { contractArticles, descriptorOf, fmtDuration } from '../engine/narrate.js';
@@ -44,12 +44,14 @@ import { TALK_RULES } from './actor.js';
 import { concernsLine } from '../engine/concerns.js';
 import { recentNpcLines } from '../engine/closecheck.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
+import { shopClosed, shopLines } from '../engine/shop.js';
 import { abilitiesForMaster } from '../engine/levels.js';
 import { hhmm } from '../engine/schedule.js';
-import { currencyOf, money } from '../engine/money.js';
+import { coinsOf, currencyOf, money } from '../engine/money.js';
 import { priceFor } from '../engine/standing.js';
 import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
 import { socialOutcomeLine, talkPlan, talkScript, type TalkPlan } from '../engine/talk.js';
+import { gearLines } from '../engine/itemrules.js';
 import { conflictBlock, conflictPlan, type ConflictPlan } from '../engine/conflict.js';
 
 const TONE_ES = { epic: 'épico', grim: 'sombrío y crudo', comedy: 'ligero y cómico', horror: 'inquietante', pulp: 'de aventuras pulp' };
@@ -395,8 +397,10 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage})${(n.stats.multiattack ?? 1) > 1 ? `, multiataque ×${n.stats.multiattack}` : ''}.${n.bound ? ' ATADO: no se mueve ni pelea.' : ''}${n.noncombatant ? ' No es de pelear: se defiende si le atacan, pero no remata a nadie; le deja, le echa, pide ayuda o llama a la guardia.' : ''}` : ' No combate.'}`,
       // Opinión con el actor, temas que tiene en la cabeza y reacción a sus etiquetas (standing.ts, worldrules.ts).
       ...npcStandingLines(world, n, actor, nowG),
-      n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${money(world, priceFor(n, actor.id, b.price, 'sell'))}`).join(', ')}` : '',
-      n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, priceFor(n, actor.id, b.price, 'buy'))}`).join(', ')}` : '',
+      n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${money(world, priceFor(n, actor.id, b.price, 'sell'))}`).join(', ')}${n.shop?.buys_any ? `; lo demás, a ${Math.round(n.shop.buys_any * 100)}% de lo que vale` : ''}` : '',
+      // Con tienda (shop.ts), lo que vende es lo que le queda: sin existencias no hay venta, y lo de los estantes no se coge sin pagar.
+      n.shop ? shopLine(world, n, actor, nowG)
+        : n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, priceFor(n, actor.id, b.price, 'buy'))}`).join(', ')}` : '',
       carriedBy(world, n.id),
       saidBy(engine.events.recentInLocation(loc.id, 60), n.id),
       knowledgeLine(n, actor),
@@ -441,6 +445,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     `${actor.race} ${actor.class_name} nivel ${actor.level}. PG ${actor.hp_current}/${actor.hp_max}${actor.hp_temp ? ` (+${actor.hp_temp} temp)` : ''}. CA ${armorClass(world, actor)}. Estado: ${actor.status}${actor.conditions.length ? `; condiciones: ${actor.conditions.map((x) => x.name).join(', ')}` : ''}.${downLine(actor)} Modo de muerte: ${actor.death_mode}.`,
     `Dados de golpe: ${hitDiceLeft(actor)}/${actor.level} (d${actor.hit_die}).${resourceLines(actor).length ? ` Recursos (spend_resource; espacios con cast_spell): ${resourceLines(actor).join('; ')}.` : ''}`,
     ...abilitiesForMaster(actor),
+    // Sintonía, armadura sin competencia, cargas (itemrules.ts): lo aplica el motor, el máster lo narra.
+    ...gearLines(world, actor),
     // Raza, clase, trasfondo y lo que ha ganado con lo que hace (standing.ts).
     tagsLine(world, actor),
     `FUE ${actor.abilities.str} DES ${actor.abilities.dex} CON ${actor.abilities.con} INT ${actor.abilities.int} SAB ${actor.abilities.wis} CAR ${actor.abilities.cha}. Competente en: ${skills.join(', ') || 'nada'}.`,
@@ -630,9 +636,10 @@ export function talkPlanFor(engine: Engine, actor: Character, text: string): Tal
  * (la bolsa de cuero de Garrán, que se robó con éxito y nunca existió; partida «Humo y ceniza», 05-11).
  */
 function carriedBy(world: Engine['world'], npcId: Id): string {
-  const items = world.itemsIn({ type: 'npc', id: npcId });
+  // Con la bolsa del ajuar (outfit.ts), su dinero y lo que va dentro, cada cosa con su id.
+  const items = npcCarryList(world, npcId);
   return items.length
-    ? `  Lleva (solo esto; nada más que se pueda ver de cerca, coger o robar): ${items.map((i) => `${world.itemDef(i.item_id).name}${i.quantity > 1 ? ` ×${i.quantity}` : ''} [${i.id}]`).join(', ')}`
+    ? `  Lleva (solo esto; nada más que se pueda ver de cerca, coger o robar): ${items.join(', ')}`
     : '  No lleva nada que se pueda coger o robar: ni bolsas, ni monedas, ni llaves.';
 }
 
@@ -640,4 +647,12 @@ function carriedBy(world: Engine['world'], npcId: Id): string {
 function saidBy(events: readonly GameEvent[], npcId: Id): string {
   const said = recentNpcLines(events, npcId).slice(-4);
   return said.length ? `  Ya ha dicho hace poco (no lo repitas; si vuelve al tema, dilo de otra manera o con algo nuevo): ${said.map((t) => `«${t}»`).join(' · ')}` : '';
+}
+
+/** Lo que tiene a la venta un tendero (shop.ts), con existencias y precio, y su horario. */
+function shopLine(world: World, n: Npc, actor: Character, nowG: number): string {
+  const lines = shopLines(world, n, actor);
+  const closed = shopClosed(n, nowG);
+  const list = lines.length ? lines.map((l) => `${l.name} [${l.item_id}]${l.service ? '' : ` ×${l.quantity}`} a ${money(world, l.price)}`).join(', ') : 'nada: no le queda género';
+  return `  Tienda (existencias reales, buy_item las saca; lo que no está aquí NO lo tiene): ${list}. Paga lo que compra con su bolsa (${money(world, coinsOf(world, n.id))}).${closed ? ` CERRADA: ${closed}.` : ''} Lo de sus estantes es suyo: cogerlo sin pagar es robo.`;
 }

@@ -12,7 +12,7 @@ import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, takeAmount, transferItem, type InventoryView, type TransferError } from './inventory.js';
-import type { Character, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
+import type { CarrySlot, Character, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
 import { EQUIP_SLOTS } from './model.js';
 import { approachSpot, interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
 import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswered, parseGive, parseOfferAnswer, parseParty, parseSay, pcName, SAY_LOUDNESS, type SayMode } from './party.js';
@@ -32,7 +32,7 @@ import { atBoard, dropQuest, readBoard, readsBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, plantBeat, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { activeIn, crowdHere, tickSchedule } from './schedule.js';
 import { allIncidents, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, surrender, type LawNotice } from './crime.js';
-import { currencyOf, DEFAULT_STARTING_COINS, money } from './money.js';
+import { coinsOf, currencyOf, DEFAULT_STARTING_COINS, migrateLegacyCoins, money, newPurse, pay } from './money.js';
 import { tickOrders } from './npcorders.js';
 import { nameFor, storyQuestAction, tickStory, type StoryOutput } from './story.js';
 import { trustFromRoll, trustNotice } from './trust.js';
@@ -45,13 +45,13 @@ import { harvest } from './resources.js';
 import { spawnItem } from './inventory.js';
 import { classifyMoments, momentLookupOf, seenFromEvents, type DialogueLine, type Moment } from './moments.js';
 import { characterCheck, type CheckKind } from './rules.js';
-import { activeJobs, addPractice, rotateBoard, type ProgressEvent } from './progress.js';
+import { activeJobs, addPractice, buyFromNpc, rotateBoard, type ProgressEvent } from './progress.js';
 import { resolveAttack } from './combat.js';
 import { attackRoll, checkRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
 import { passivePerception, type Ability } from './rules.js';
 import { casterOf, initClass, levelUp, levelUpText, makeChoice, setSpells } from './levels.js';
 import { spellById } from '../data/srd/spells.js';
-import { characterNameProblem, cleanCharacterName, newCharacter, resolveCharacterSpec } from './chargen.js';
+import { characterNameProblem, cleanCharacterName, newCharacter, resolveCharacterSpec, startingEquipment, startingItemDef } from './chargen.js';
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
 import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, NPC_DOWN_HINT, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, wakeNpcs, type DeathSave } from './death.js';
@@ -59,6 +59,10 @@ import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPla
 import { hhmm } from './schedule.js';
 import { migrateExtras } from './extras.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
+import { compactSnapshot, syncCatalog } from '../data/catalog.js';
+import { outfitNpcs } from './outfit.js';
+import { openShops, restockShops, shopsFromSeed, stockOwnerOf } from './shop.js';
+import { fillItemDefFrom, normalizeItemDef } from './items.js';
 import { discoverSpot, lookAround, migrateSpotSight, noteSight, searchableSpots, seeFrom } from './spots.js';
 import { absence, absenceRule, acceptPrologue, acceptRecap, forPrologue, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
 
@@ -351,7 +355,7 @@ export class Engine {
     if (!snapshot) {
       if (!opts.seed) throw new Error(`no snapshot for campaign ${opts.campaignId} and no seed`);
       snapshot = opts.seed;
-      await opts.repo.saveSnapshot(snapshot);
+      await opts.repo.saveSnapshot(compactSnapshot(snapshot));
     }
     const migrated = migrate(snapshot, opts.seed);
     const past = await opts.repo.loadEvents(opts.campaignId, 0);
@@ -374,7 +378,7 @@ export class Engine {
       for (const n of engine.world.npcs.values()) engine.world.touch('npcs', n.id);
       for (const sp of engine.world.spots.values()) engine.world.touch('spots', sp.id);
       for (const d of engine.world.itemDefs.values()) engine.world.touch('item_defs', d.id);
-      // Y los ejemplares (lo que lleva el relleno que acaba de entrar, extras.ts).
+      // Y ejemplares nuevos: el ajuar de los NPC (outfit.ts) y lo que lleva el relleno que acaba de entrar (extras.ts).
       for (const i of engine.world.itemInstances.values()) engine.world.touch('item_instances', i.id);
       await engine.flush();
     }
@@ -413,6 +417,8 @@ export class Engine {
 
   /** Un día de juego: rota el tablón y lo anuncia en público. */
   private onDay(tickGameS: number): void {
+    // Las tiendas que reponen cada día (shop.ts); las de un valle sellado, no.
+    restockShops(this.world, tickGameS);
     const jobs = rotateBoard(this.world, tickGameS, this.world.campaign.board.active_job_ids.length === 0);
     if (!jobs) return;
     const anchor = this.world.spot(this.world.campaign.starting_points[0]!.spot_id);
@@ -843,7 +849,8 @@ export class Engine {
     const changes = [...this.pending.values()];
     this.pending.clear();
     await this.repo.write(this.world.campaign.id, changes);
-    if (this.repo.flush) await this.repo.flush(this.world.snapshot());
+    // Sin las definiciones del catálogo SRD que son las del código (src/data/catalog.ts): se leen de él al arrancar.
+    if (this.repo.flush) await this.repo.flush(compactSnapshot(this.world.snapshot()));
   }
 
   // -------------------------------------------------------------------------
@@ -1251,9 +1258,10 @@ export class Engine {
       case 'take': {
         const inst = this.world.itemInstance(intent.instance_id);
         const def = this.world.itemDef(inst.item_id);
+        const before = coinsOf(this.world, c.id);
         const where = this.takeToHands(c, inst.id, intent.quantity);
         if (!where) return null;
-        return this.emitTrivial(c, input, 'take', 'inventory', led(`Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.`),
+        return this.emitTrivial(c, input, 'take', 'inventory', led(`Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.${foundCoins(this.world, coinsOf(this.world, c.id) - before)}`),
           `${c.name} coge ${def.name}.`, 'Una figura coge algo.', undefined, { item_id: def.id });
       }
       case 'drop': {
@@ -1324,7 +1332,7 @@ export class Engine {
       let conflictNote: string | null = null;
       if (pending.roll.kind === 'attack' && pending.roll.target) {
         // Lo que escribió el jugador decide si el golpe a 0 PG mata o deja inconsciente (combat.ts, lethalBlow).
-        const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c), { intent: pending.text });
+        const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c), { intent: pending.text, hand: pending.roll.key === 'off_hand' ? 'off' : 'main' });
         if ('error' in atk) return { ok: false, text: atk.error };
         attack = { target_id: pending.roll.target, hit: atk.hit, down: Boolean(atk.target_down), dead: Boolean(atk.target_dead), damage: atk.damage, ...(atk.knocked_out ? { ko: true } : {}) };
         result = {
@@ -1356,7 +1364,7 @@ export class Engine {
         const npc = this.world.npcs.get(pending.roll.confront);
         if (npc) conflictNote = confrontRolled(this.world, c, npc, Boolean(result.success), this.nowFor(c)).text;
       } else {
-        result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage);
+        result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage, undefined, this.world);
         roll = checkRoll(c.id, result);
         // Sigilo que sale bien: va a escondidas (conflict.ts), y quien no le supere con su pasiva no le ve.
         if (pending.roll.kind === 'skill' && pending.roll.key === 'stealth' && result.success) noteSneak(this.world, c, result.total, this.nowFor(c));
@@ -1744,7 +1752,7 @@ export class Engine {
     const klass = check.resolved.klass;
 
     const id = `ch_${clean.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_')}_${Date.now().toString(36)}`;
-    const c = newCharacter(id, userId, clean, check.resolved, { spot_id: this.pickStartingPoint().spot_id, coins: this.world.campaign.starting_coins ?? DEFAULT_STARTING_COINS });
+    const c = newCharacter(id, userId, clean, check.resolved, { spot_id: this.pickStartingPoint().spot_id });
     this.world.characters.set(c.id, c);
     this.world.touch('characters', c.id);
     opts.place?.(c);
@@ -1753,27 +1761,38 @@ export class Engine {
     loc.discovery[c.id] = 'visited';
     this.world.touch('locations', loc.id);
 
-    // Equipo inicial de la clase.
+    // Equipo inicial: el de su clase, su ropa y lo de su trasfondo (chargen.ts, `startingEquipment`). Lo que la
+    // partida no tiene en su catálogo (ropa, objetos de trasfondo) se añade de gear.ts; si no está en ninguno, no se da.
     let pack: Id | null = null;
     const pending: { item_id: Id; quantity: number }[] = [];
-    for (const eq of klass.equipment) {
-      if (!this.world.itemDefs.has(eq.item_id)) continue;
+    for (const eq of startingEquipment(klass, check.resolved.background)) {
+      if (!this.world.itemDefs.has(eq.item_id)) {
+        const d = startingItemDef(eq.item_id, this.world.itemDefs);
+        if (!d) continue;
+        this.world.itemDefs.set(d.id, d);
+        this.world.touch('item_defs', d.id);
+      }
       const qty = eq.quantity ?? 1;
-      const to = eq.slot === 'body' ? { type: 'character' as const, id: c.id, slot: { kind: 'equipped' as const, slot: 'body' as const } }
-        : eq.slot === 'back' ? { type: 'character' as const, id: c.id, slot: { kind: 'equipped' as const, slot: 'back' as const } }
-        : eq.slot === 'hand_main' ? { type: 'character' as const, id: c.id, slot: { kind: 'hand' as const, which: 'main' as const } }
-        : eq.slot === 'hand_off' ? { type: 'character' as const, id: c.id, slot: { kind: 'hand' as const, which: 'off' as const } }
-        : eq.slot === 'pocket' ? { type: 'character' as const, id: c.id, slot: { kind: 'pocket' as const } }
+      const at = (slot: CarrySlot) => ({ type: 'character' as const, id: c.id, slot });
+      const to = eq.slot === 'body' ? at({ kind: 'equipped', slot: 'body' })
+        : eq.slot === 'back' ? at({ kind: 'equipped', slot: 'back' })
+        : eq.slot === 'ring' ? at({ kind: 'equipped', slot: 'ring1' })
+        : eq.slot === 'hand_main' ? at({ kind: 'hand', which: 'main' })
+        : eq.slot === 'hand_off' ? at({ kind: 'hand', which: 'off' })
+        : eq.slot === 'pocket' ? at({ kind: 'pocket' })
         : null;
       if (to === null) { pending.push({ item_id: eq.item_id, quantity: qty }); continue; }
       const r = spawnItem(this.world, eq.item_id, qty, to);
       if (r.ok && eq.slot === 'back') pack = r.moved.id;
+      // Sin sitio (la ropa con armadura puesta, bolsillos llenos): a la mochila.
       if (!r.ok) pending.push({ item_id: eq.item_id, quantity: qty });
     }
     for (const p of pending) {
       const r = pack ? spawnItem(this.world, p.item_id, p.quantity, { type: 'container', id: pack }) : { ok: false as const };
       if (!r.ok) spawnItem(this.world, p.item_id, p.quantity, { type: 'spot', id: start.id });
     }
+    // Su dinero, en su bolsa al cinto (money.ts): se le puede robar, perder o esconder.
+    newPurse(this.world, c.id, this.world.campaign.starting_coins ?? DEFAULT_STARTING_COINS);
 
     this.events.emit({
       actor_id: c.id, action_type: 'character_joined', narration_private: this.master ? '' : `Llegas a ${loc.name}.`,
@@ -2009,6 +2028,30 @@ export class Engine {
     return { ok: true, text: done };
   }
 
+  /**
+   * Comprar en una tienda con el botón de la web (shop.ts, PLAN-OBJETOS §6.2): el atajo determinista, sin máster ni
+   * tokens. Lo mismo que buy_item: existencias, horario, precio y bolsa. El regateo va por el chat, al máster.
+   */
+  async shopBuy(characterId: Id, npcId: Id, itemId: Id, quantity = 1): Promise<ActionResult> {
+    await this.tick();
+    const c = this.world.character(characterId);
+    if (c.status !== 'active') return { ok: false, text: c.status === 'asleep' ? 'Estás dormido.' : 'Ahora no puedes comprar.' };
+    if (c.transit) return { ok: false, text: 'Vas de camino: primero llega.' };
+    const npc = this.world.npcs.get(npcId);
+    if (!npc?.shop) return { ok: false, text: 'Aquí no hay tienda.' };
+    const locId = positionOf(this.world, c, this.gameNow()).location_id;
+    return this.runInLocation(locId, async () => {
+      this.lastAction.set(c.id, this.now());
+      const r = buyFromNpc(this.world, c, npc.id, itemId, quantity, this.nowFor(c));
+      if (!r.ok) return { ok: false, text: `${r.reason.charAt(0).toUpperCase()}${r.reason.slice(1)}.` };
+      const what = r.quantity > 1 ? `${r.quantity} × ${r.item}` : r.item;
+      const res = this.emitTrivial(c, `comprar ${what} a ${npc.name}`, 'buy', 'trade', `Compras ${what} a ${npc.name} por ${money(this.world, r.total)}.${r.unlocked.length ? ` Ya puedes entrar en ${r.unlocked.join(', ')}.` : ''}`,
+        `${c.name} le compra ${what} a ${npc.name}.`, 'Alguien paga algo en el mostrador.', undefined, { item_id: itemId, npc_id: npc.id, total: r.total });
+      await this.flush();
+      return res;
+    });
+  }
+
   async say(characterId: Id, text: string, opts: { to?: Id | null; mode?: SayMode } = {}): Promise<ActionResult> {
     const c = this.world.character(characterId);
     this.lastAction.set(c.id, this.now());
@@ -2124,7 +2167,8 @@ export class Engine {
     if (!here || !there || here.location_id !== there.location_id) return { ok: false, error: `${toName} no está aquí.` };
     if (to.status !== 'active') return { ok: false, error: `${toName} no está en condiciones de recibir nada.` };
     const coins = Math.max(0, Math.floor(what.coins));
-    if (coins > from.coins) return { ok: false, error: `No tienes ${money(this.world, coins)} (llevas ${money(this.world, from.coins)}).` };
+    const have = coinsOf(this.world, from.id);
+    if (coins > have) return { ok: false, error: `No tienes ${money(this.world, coins)} (llevas ${money(this.world, have)}).` };
     let label = '';
     let quantity = 0;
     if (what.instance_id) {
@@ -2187,12 +2231,16 @@ export class Engine {
     const mySpot = this.world.characterSpot(c);
     const theirSpot = this.world.characterSpot(from);
     if (!mySpot || !theirSpot || mySpot.location_id !== theirSpot.location_id || from.transit) return failed(`${fromName} ya no está aquí`);
-    if (offer.coins > from.coins) return failed(`${fromName} ya no tiene esas monedas`);
+    if (offer.coins > coinsOf(this.world, from.id)) return failed(`${fromName} ya no tiene esas monedas`);
     const inst = offer.instance_id ? this.world.itemInstances.get(offer.instance_id) : null;
     if (offer.instance_id && (!inst || !this.world.itemsCarriedBy(from.id).some((i) => i.id === inst.id) || inst.quantity < offer.quantity)) return failed(`${fromName} ya no lo tiene`);
     if (mySpot.id !== theirSpot.id) approachSpot(this.world, c, theirSpot.id);
-    if (inst && !this.takeToHands(c, inst.id, offer.quantity)) return failed('no tienes dónde llevarlo');
-    if (offer.coins) { from.coins -= offer.coins; c.coins += offer.coins; this.world.touch('characters', from.id); this.world.touch('characters', c.id); }
+    // Primero las monedas (de su bolsa a la tuya): si el objeto es su bolsa, lo que queda dentro va con ella.
+    if (offer.coins && !pay(this.world, from.id, offer.coins, c.id).ok) return failed(`${fromName} ya no tiene esas monedas`);
+    if (inst && !this.takeToHands(c, inst.id, offer.quantity)) {
+      if (offer.coins) pay(this.world, c.id, offer.coins, from.id);
+      return failed('no tienes dónde llevarlo');
+    }
     const e = emit('offer_accepted', `Aceptas ${offer.label} de ${fromName}.`, `${c.name} acepta ${offer.label} de ${from.name}.`, `${c.name} acepta lo que le ofreces: ${offer.label}.`);
     return done({ ok: true, text: e.narration_private, event: e });
   }
@@ -2224,10 +2272,16 @@ export class Engine {
   /** Peticiones que pidió el máster en esta acción: se anuncian después de su narración. */
   private unannounced = new Map<Id, Reaction[]>();
   /** Actores cuya narración del máster es el desenlace de una reacción (no se pide otra encima). */
-  private reactionOutcome = new Set<Id>();
+  /** Quien está narrando el desenlace de su reacción: contra quién y si le ha salido (take_coins y robar a otro PJ, tools.ts). */
+  private reactionOutcome = new Map<Id, { target_id: Id; success: boolean }>();
 
   /** ¿Está el máster narrando el desenlace de una reacción de este actor? (tools.ts no deja pedir otra.) */
   inReactionOutcome(characterId: Id): boolean { return this.reactionOutcome.has(characterId); }
+  /** ¿Le ha salido a `fromId` lo que intentaba con `targetId` (el otro lo aceptó o perdió la tirada)? Solo mientras se narra ese desenlace. */
+  reactionWon(fromId: Id, targetId: Id): boolean {
+    const r = this.reactionOutcome.get(fromId);
+    return Boolean(r && r.target_id === targetId && r.success);
+  }
 
   /** Lo que el actor intenta sobre otro PJ (reactions.ts), reconocido por el motor; null si no es eso. */
   private tryReaction(c: Character, text: string): ActionResult | null {
@@ -2495,7 +2549,7 @@ export class Engine {
     // Con máster: narra el desenlace para quien actuaba, como tras una tirada.
     if (this.master) {
       check.breakdown = `${check.breakdown}${effects.length ? ` Ya aplicado por el servidor (no lo repitas): ${effects.join('; ')}.` : ''} ${to.name} es otro jugador y ya ha decidido: narra el desenlace sin ponerle palabras, gestos ni intenciones que no estén aquí, y no pidas otra reacción para esto.`;
-      this.reactionOutcome.add(from.id);
+      this.reactionOutcome.set(from.id, { target_id: to.id, success });
       try { await this.resolveWithMaster(from, r.input ?? `(intenta ${r.attempt})`, { original_text: r.input ?? r.attempt, result: check }); } finally { this.reactionOutcome.delete(from.id); }
     }
     return done({ ok: true, text: e.narration_private, event: e });
@@ -3131,7 +3185,7 @@ export class Engine {
       if (!t) return null;
       if (t.status === 'dead') return { ok: false, text: `${t.name} está muerto: ya no hay nada que atender. Volverá por su cuenta.` };
       if (!isDying(t)) return { ok: false, text: t.hp_current > 0 ? `${t.name} no está malherido de muerte.` : `${t.name} ya está estable.` };
-      const roll = characterCheck(c, 'skill', 'medicine', 10, 'none', this.rng);
+      const roll = characterCheck(c, 'skill', 'medicine', 10, 'none', this.rng, this.world);
       const shown = `🎲 Medicina: ${roll.breakdown.replace(/ vs CD \d+$/, '')} → ${roll.success ? 'éxito' : 'fallo'}`;
       if (roll.success) stabilize(this.world, t, nowG, c.name, `estabilizado por ${c.name}`, this.rng);
       const r = this.emitTrivial(c, text, 'tend', 'death',
@@ -3158,7 +3212,7 @@ export class Engine {
     if (!allowed.ok) return { ok: false, text: `No: ${allowed.reason}.` };
     const own = bodyStateOf(body)!.owner_id === c.id;
     const got = lootBody(this.world, c, body, (id) => this.takeToHands(c, id) !== null || this.world.itemsCarriedBy(c.id).some((k) => Boolean(this.world.itemDef(k.item_id).container) && transferItem(this.world, id, { type: 'container', id: k.id }).ok));
-    const list = [...got.taken, ...(got.coins ? [money(this.world, got.coins)] : [])];
+    const list = [...got.taken, ...(got.loose ? [money(this.world, got.loose)] : [])];
     if (!list.length) return { ok: false, text: got.left ? 'No te cabe nada más encima.' : `No queda nada en ${label}.` };
     return this.emitTrivial(c, text, own ? 'recover' : 'loot', 'death',
       `${own ? 'Recuperas' : 'Te llevas'} de ${label}: ${list.join(', ')}.${got.left ? ` Se queda${got.left > 1 ? 'n' : ''} ${got.left} ${got.left > 1 ? 'cosas' : 'cosa'} que no te caben.` : ''}`,
@@ -3587,7 +3641,7 @@ export class Engine {
       const skill = /^(registr|rebusc)/.test(lower) ? 'investigation' : 'perception';
       const hidden = searchableSpots(this.world, c);
       const dc = hidden.length ? Math.min(...hidden.map((s) => s.dc_to_find ?? 10)) : 15;
-      const check = characterCheck(c, 'skill', skill, dc, 'none', this.rng);
+      const check = characterCheck(c, 'skill', skill, dc, 'none', this.rng, this.world);
       const found = hidden.filter((s) => check.total >= (s.dc_to_find ?? 10) && discoverSpot(this.world, c, s));
       const priv = `${check.breakdown}\n${found.length ? `Encuentras ${listEs(found.map((s) => s.name))}.` : 'Buscas a conciencia, pero no encuentras nada fuera de lo normal.'}`;
       return this.emitPrivate(c, text, 'search', priv, `${c.name} busca algo por los rincones.`);
@@ -3700,7 +3754,7 @@ export class Engine {
       const res = transferItem(this.world, inst.id, t, quantity);
       if (res.ok) {
         const where = t.type === 'character' && t.slot.kind === 'pocket' ? 'y te lo guardas en un bolsillo' : 'con la mano';
-        return this.emit(c, input, 'take', `Coges ${def.name} ${where}.`, `${c.name} coge ${def.name} del suelo de ${here.name}.`, 1, { observable_vague: 'Una figura se agacha a coger algo.', item_id: def.id });
+        return this.emit(c, input, 'take', `Coges ${def.name} ${where}.${foundCoins(this.world, res.coins ?? 0)}`, `${c.name} coge ${def.name} del suelo de ${here.name}.`, 1, { observable_vague: 'Una figura se agacha a coger algo.', item_id: def.id });
       }
       lastErr = res.error;
     }
@@ -3750,9 +3804,12 @@ export class Engine {
     if (item.kind === 'none' || (item.kind === 'one' && !inside.some((i) => i.id === item.value))) return { ok: false, text: `En ${contDef.name} no hay «${what}».` };
     if (item.kind === 'many') return this.ambiguous(item);
     const def = this.world.itemDef(this.world.itemInstance(item.value).item_id);
+    // De un estante con dueño (shop.ts): cogerlo sin pagar es robo.
+    const owner = stockOwnerOf(this.world, this.world.itemInstance(item.value));
     for (const which of ['main', 'off'] as const) {
       const res = transferItem(this.world, item.value, { type: 'character', id: c.id, slot: { kind: 'hand', which } });
-      if (res.ok) return this.emit(c, input, 'take_out', `Sacas ${def.name} de ${contDef.name}.`, `${c.name} saca ${def.name} de ${contDef.name}.`, 1, { item_id: def.id });
+      if (res.ok && owner && owner.id !== c.id) reportIncident(this.world, { kind: 'theft', perpetrator_id: c.id, victim_id: owner.id, victim_present: false }, this.nowFor(c));
+      if (res.ok) return this.emit(c, input, 'take_out', `Sacas ${def.name} de ${contDef.name}.${owner && owner.id !== c.id ? ` Es de ${owner.name}, y no lo has pagado.` : ''}`, `${c.name} saca ${def.name} de ${contDef.name}.`, 1, { item_id: def.id });
       if (res.error.code !== 'no_space') return { ok: false, text: transferErrorText(res.error) };
     }
     return { ok: false, text: 'Tienes las manos ocupadas.' };
@@ -3799,6 +3856,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     delete camp.starting_spot_id;
     delete camp.starting_spot_ids;
   }
+  // Catálogo SRD (src/data/catalog.ts): definiciones a la versión del código y las que no se guardan, del código.
+  if (syncCatalog(snapshot)) changed = true;
   for (const c of snapshot.characters as (Character & { recap_from?: unknown })[]) {
     if (c.recap_from === undefined || c.race === undefined || c.hp_max === undefined) changed = true;
     if (c.recap_from === undefined) c.recap_from = null;
@@ -3863,11 +3922,35 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
       const cur = snapshot.item_defs.find((x) => x.id === d.id);
       if (!cur) { snapshot.item_defs.push(d); changed = true; }
       else if (d.weapon && !cur.weapon) { cur.weapon = d.weapon; changed = true; }
+      // Modelo de objetos 5e (items.ts): lo que la semilla trae y la partida guardada no (subtipo, magia, alcance…).
+      if (cur && fillItemDefFrom(cur, d)) changed = true;
       // Partidas de cuando la mochila aguantaba 30 lb y el equipo inicial ya pesaba 25: un contenedor no encoge.
       if (cur && d.container && cur.container && d.container.max_weight_lb > cur.container.max_weight_lb) { cur.container.max_weight_lb = d.container.max_weight_lb; changed = true; }
     }
     for (const n of seed.resource_nodes) if (!snapshot.resource_nodes.some((x) => x.id === n.id)) { snapshot.resource_nodes.push(n); changed = true; }
-    for (const s of seed.spots) if (!snapshot.spots.some((x) => x.id === s.id)) { snapshot.spots.push(s); changed = true; }
+    // Sitios nuevos de la campaña escrita (la tienda del buhonero): el lugar, sus puntos, sus salidas y lo que hay en ellos.
+    for (const l of seed.locations) if (!snapshot.locations.some((x) => x.id === l.id)) { snapshot.locations.push(structuredClone(l)); changed = true; }
+    const newSpots = new Set<Id>();
+    for (const s of seed.spots) if (!snapshot.spots.some((x) => x.id === s.id)) { snapshot.spots.push(s); newSpots.add(s.id); changed = true; }
+    if (newSpots.size) {
+      for (const e of seed.exits) {
+        if (snapshot.exits.some((x) => x.id === e.id) || !snapshot.spots.some((x) => x.id === e.from_spot_id) || !snapshot.spots.some((x) => x.id === e.to_spot_id)) continue;
+        snapshot.exits.push(structuredClone(e)); changed = true;
+      }
+      const have = new Set(snapshot.item_instances.map((i) => i.id));
+      const inNewSpot = (i: WorldSnapshot['item_instances'][number]): boolean => {
+        let at = i.location;
+        for (let g = 0; g < 16 && at.type === 'container'; g++) { const box = seed.item_instances.find((x) => x.id === at.id); if (!box) return false; at = box.location; }
+        return at.type === 'spot' && newSpots.has(at.id);
+      };
+      for (const i of seed.item_instances) if (!have.has(i.id) && inNewSpot(i)) { snapshot.item_instances.push(structuredClone(i)); changed = true; }
+      // Los dueños de los locales nuevos (crime.ts): sin ellos, robar en la tienda no tendría dueño ofendido.
+      const law = snapshot.campaign.law;
+      for (const o of seed.campaign.law?.owners ?? []) {
+        if (!law || law.owners?.some((x) => x.npc_id === o.npc_id)) continue;
+        (law.owners ??= []).push(structuredClone(o)); changed = true;
+      }
+    }
   }
   const camp2 = snapshot.campaign;
   if (seed) {
@@ -3906,7 +3989,21 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   if (migrateRentableRooms(snapshot)) changed = true;
   // Partidas de antes de que los rincones se descubrieran: cada PJ conserva los de los sitios donde ha estado.
   if (migrateSpotSight(snapshot)) changed = true;
+  // Partidas de antes de las bolsas (money.ts): el dinero de cada PJ pasa de su número a una bolsa al cinto, una vez.
+  if (migrateLegacyCoins(snapshot)) changed = true;
+  // Ajuar de los NPC (outfit.ts): bolsa con monedas, cosas de su oficio y su arma, una vez por NPC.
+  if (outfitNpcs(snapshot, seed)) changed = true;
+  // Modelo de objetos 5e (items.ts): propiedades de arma en lista y categoría de la armadura, de sus propios datos.
+  for (const d of snapshot.item_defs) if (normalizeItemDef(d)) changed = true;
+  // Tiendas (shop.ts): las de la campaña escrita que la partida no tenía, y las de los mundos generados.
+  if (shopsFromSeed(snapshot, seed)) changed = true;
+  if (openShops(snapshot)) changed = true;
   return changed;
+}
+
+/** « Dentro hay 3 de plata.» al coger una bolsa con monedas (se quedan en ella: money.ts); nada si no había. */
+function foundCoins(world: World, n: number): string {
+  return n > 0 ? ` Dentro hay ${money(world, n)}.` : '';
 }
 
 export function formatInventory(v: InventoryView): string {

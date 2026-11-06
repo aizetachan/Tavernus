@@ -18,7 +18,7 @@ import { transcriptOf } from './conversation.js';
 import { knownBy, npcProfile, reportIncident, type ConflictProfile, type Incident } from './crime.js';
 import type { Advantage } from './dice.js';
 import { checkFits, transferItem } from './inventory.js';
-import { DEFAULT_STARTING_COINS } from './money.js';
+import { DEFAULT_STARTING_COINS, money, pay } from './money.js';
 import type { Character, ConflictKind, GameEvent, Id, ItemDef, ItemInstance, ItemSize, ItemType, Npc, NpcConfront, NpcGuard, Placement } from './model.js';
 import { descriptorOf } from './narrate.js';
 import { npcTarget } from './scene.js';
@@ -101,6 +101,8 @@ export function isBig(def: ItemDef): boolean { return BIG.has(def.size); }
 export function carriedOn(world: World, inst: ItemInstance): CarriedOn {
   const on = inst.state['on'];
   if (typeof on === 'string' && (CARRIED_ON as readonly string[]).includes(on)) return on as CarriedOn;
+  // Lo que el ajuar o la campaña le ponen puesto (outfit.ts, `state.worn`: la ropa, el anillo de sello de Osric).
+  if (inst.state['worn'] === true) return 'worn';
   const h = holderOf(world, inst);
   if (h?.via) return isBig(world.itemDef(h.via.item_id)) ? 'pack' : 'inside';
   const def = world.itemDef(inst.item_id);
@@ -887,12 +889,12 @@ export function settleConfront(world: World, pc: Character, npc: Npc, answer: Co
     case 'pay': {
       const value = inst ? world.itemDef(inst.item_id).value : 0;
       if (!inst) return { text: `${Who} no quiere tu dinero: quiere una disculpa.`, observable: `${pc.name} le ofrece dinero a ${npc.name}.`, closed: false, roll: null, incident: null };
-      if (pc.coins < value) return { text: `No llevas bastante para pagárselo (${value}). ${Who} sigue esperando.`, observable: `${pc.name} busca dinero.`, closed: false, roll: null, incident: null };
-      pc.coins -= value;
+      // El dinero sale de su bolsa y va a la del NPC (money.ts, bloque D: no hay un número de monedas suelto).
+      const paid = pay(world, pc.id, value, npc.id);
+      if (!paid.ok) return { text: `No llevas bastante para pagárselo (${money(world, value)}). ${Who} sigue esperando.`, observable: `${pc.name} busca dinero.`, closed: false, roll: null, incident: null };
       if (inst.state['stolen']) { delete inst.state['stolen']; inst.state['owner_id'] = pc.id; world.touch('item_instances', inst.id); }
-      world.touch('characters', pc.id);
       memo(world, npc, pc, `${pc.name} le pagó ${what} que le había quitado.`, 2, nowG);
-      return done(`Le pagas ${value} a ${who} por ${what}. Lo cuenta, se lo guarda y te deja ir${c.crime ? '' : ': queda en un aviso'}.`, `${pc.name} le paga a ${npc.name}.`);
+      return done(`Le pagas ${money(world, value)} a ${who} por ${what}. Lo cuenta, se lo guarda y te deja ir${c.crime ? '' : ': queda en un aviso'}.`, `${pc.name} le paga a ${npc.name}.`);
     }
     case 'persuade': case 'deceive':
       if (c.argued) return { text: `${Who} ya no quiere oír más excusas.`, observable: '', closed: false, roll: null, incident: null };

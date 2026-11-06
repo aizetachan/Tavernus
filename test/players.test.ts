@@ -62,7 +62,7 @@ describe('alta de personaje y presencia', () => {
     const { engine } = await bootEngine();
     const sheet = sheetView(engine, 'ch_kael');
     expect(sheet.title).toBe('Kael · humano guerrero · nivel 1');
-    expect(sheet.fields.find((f) => f.name === 'Combate')?.value).toContain('PG 12/12 · CA 11');
+    expect(sheet.fields.find((f) => f.name === 'Combate')?.value).toContain('PG 12/12, CA 11');
     expect(sheet.description).toContain('Taberna del Jabalí, la barra');
     expect(sheet.fields.find((f) => f.name === 'Manos')?.value).toBe('daga / —');
     expect(sheet.fields.find((f) => f.name === 'mochila')?.value).toBe('cuerda de cáñamo, antorcha ×3');

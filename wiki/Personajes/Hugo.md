@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: herrero
 lugar: "[[La herrería]]"
 actitud: neutral
+npc: npc_hugo
 ---
 
 > [!ficha] Hugo
@@ -66,6 +67,10 @@ Cena en el Jabalí de 19:00 a 21:00. Ver [[Vida del pueblo]].
 - **Compra:** leña (25).
 
 Precios en monedas. Ver [[Objetos]].
+
+## Lleva encima
+
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

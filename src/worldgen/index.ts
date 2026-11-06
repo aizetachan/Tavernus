@@ -15,11 +15,12 @@ import type { World } from '../engine/world.js';
 import { DEFAULT_MASTER, makeSeed } from '../data/seed/demo.js';
 import { buildSkeleton, type Skeleton, type Tone } from './skeleton.js';
 import { lockedRoomState, ROOM_NIGHT_ITEM_ID, ROOM_NIGHT_PRICE, roomSeller } from './rooms.js';
-import { CATALOG, DEFAULT_WORLDGEN_MODEL, FillError, fillWorld, GENRE_DEFAULT, liveFillClient, type FillClient, type PcBrief, type WorldFill } from './fill.js';
+import { catalogFor, DEFAULT_WORLDGEN_MODEL, FillError, fillWorld, GENRE_DEFAULT, liveFillClient, type FillClient, type PcBrief, type WorldFill } from './fill.js';
 import { validateSnapshot } from './validate.js';
 import { setDebt } from '../engine/debts.js';
 import { spawnItem } from '../engine/inventory.js';
 import { holdNpcAt } from '../engine/npcorders.js';
+import { openShops } from '../engine/shop.js';
 
 export { buildSkeleton, TONES, type Skeleton, type Tone } from './skeleton.js';
 export { FillError, offlineFill, validateFill, type FillClient, type PcBrief, type WorldFill } from './fill.js';
@@ -47,6 +48,27 @@ function words(name: string): string[] {
   const bare = name.trim().replace(/^(el|la|los|las|un|una)\s+/i, '').toLowerCase();
   const ws = bare.split(/[^a-záéíóúüñ]+/i).filter((w) => w.length >= 4 && !STOP.has(w));
   return [...new Set([bare, ...ws])];
+}
+
+/** Lo que vale dinero por su nombre: un objeto propio así es un tesoro (y se puede vender). */
+const VALUABLE = /\b(oro|plata|joya|gema|rub[ií]|esmeralda|zafiro|perla|anillo|sortija|collar|broche|medall[oó]n|relicario|diamante|brazalete|pendiente|camafeo)/i;
+
+/**
+ * El objeto propio de un NPC (parte «gente» del relleno, PLAN-OBJETOS §7): una definición `custom` única, menuda,
+ * de tipo `misc` o, si su nombre dice que vale dinero, `treasure`, y el ejemplar encima del NPC. El ajuar (outfit.ts)
+ * le da después la bolsa, las cosas de su oficio y la ropa. `null` si el relleno no le dio ninguno.
+ */
+export function ownItemOf(npcId: Id, name: string | undefined, note: string | undefined, startingCoins: number): { def: ItemDef; instance: WorldSnapshot['item_instances'][number] } | null {
+  const clean = (name ?? '').trim();
+  if (!clean) return null;
+  const key = npcId.replace(/^npc_/, '');
+  const treasure = VALUABLE.test(clean);
+  const def: ItemDef = {
+    id: `it_own_${key}`, name: clean, aliases: words(clean), type: treasure ? 'treasure' : 'misc', size: 'tiny', weight_lb: 0.2,
+    value: treasure ? Math.max(1, Math.round(startingCoins / 2)) : 0, unique: true, origin: 'custom',
+    ...((note ?? '').trim() ? { description: note!.trim() } : {}),
+  };
+  return { def, instance: { id: `ii_own_${key}`, item_id: def.id, quantity: 1, location: { type: 'npc', id: npcId }, state: {} } };
 }
 
 export interface GenerateOptions {
@@ -181,7 +203,8 @@ export function buildSnapshot(sk: Skeleton, f: WorldFill, generation: Generation
       };
     }),
     vehicles: [],
-    item_defs: [...structuredClone(CATALOG as ItemDef[]), reward],
+    // El catálogo común con los nombres del género (pistola de rayos en vez de ballesta ligera, mismas reglas).
+    item_defs: [...structuredClone(catalogFor(sk.genre) as ItemDef[]), reward],
     item_instances: sk.items.map((i) => ({
       id: i.id, item_id: i.item_id, quantity: i.quantity,
       location: { type: 'spot' as const, id: i.spot_id }, state: {},
@@ -194,12 +217,21 @@ export function buildSnapshot(sk: Skeleton, f: WorldFill, generation: Generation
       };
     }),
   };
+  // El objeto propio de cada NPC, encima.
+  for (const n of f.npcs) {
+    const own = ownItemOf(n.id, n.item, n.item_note, snap.campaign.starting_coins ?? 150);
+    if (!own) continue;
+    snap.item_defs.push(own.def);
+    snap.item_instances.push(own.instance);
+  }
   // Cuartos de alquiler: los vende quien atiende ese lugar; sin nadie que los venda, quedan abiertos.
   for (const room of snap.spots.filter((s) => s.state['locked'] === true)) {
     const seller = roomSeller(snap.npcs, snap.spots, room.location_id);
     if (!seller) { room.state = {}; continue; }
     if (!seller.sells.some((x) => x.item_id === ROOM_NIGHT_ITEM_ID)) seller.sells.push({ item_id: ROOM_NIGHT_ITEM_ID, price: ROOM_NIGHT_PRICE });
   }
+  // Tiendas (shop.ts): mercaderes, posaderos y lonjeros venden de un estante suyo con lo que ya venden, y reponen.
+  openShops(snap);
   return snap;
 }
 

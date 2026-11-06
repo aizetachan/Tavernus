@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: tabernera
 lugar: "[[Taberna del Jabalí]]"
 actitud: neutral
+npc: npc_brenna
 ---
 
 > [!ficha] Brenna
@@ -77,6 +78,10 @@ Cada noche a las 20:00 acude a la misa del pozo, en la [[Plaza del Pozo]]. No ha
 - Su mula espera en la puerta de la taberna, en la plaza.
 
 Precios en monedas. Ver [[Objetos]].
+
+## Lleva encima
+
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

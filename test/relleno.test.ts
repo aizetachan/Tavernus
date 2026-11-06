@@ -117,14 +117,15 @@ describe('relleno: eventos y multitud', () => {
     const seed = seedNow();
     const ev = (id: string) => ((seed.campaign as WorldSnapshot['campaign'] & { schedule: { id: string; npc_ids: string[]; crowd: { label: string; count: number }[] }[] }).schedule).find((e) => e.id === id)!;
     const original = (id: string) => BREZAL.campaign.schedule.find((e) => e.id === id)!;
-    expect(ev('se_cena').npc_ids).toEqual(['npc_hugo', 'npc_x_benito', 'npc_x_ciro', 'npc_x_gil', 'npc_x_damian']);
+    // Lucio, el buhonero (bloque E), cena en el Jabalí: va escrito en la agenda, antes que el relleno.
+    expect(ev('se_cena').npc_ids).toEqual(['npc_hugo', 'npc_lucio', 'npc_x_benito', 'npc_x_ciro', 'npc_x_gil', 'npc_x_damian']);
     expect(ev('se_cena').crowd[0]).toEqual({ label: 'vecinos', count: 6 });
     expect(ev('se_mercado').crowd[0]!.count).toBe(18);
     expect(ev('se_misa').crowd[0]!.count).toBe(10);
     expect(ev('se_prueba_niebla').crowd[0]!.count).toBe(1);
     // Los datos escritos no se tocan: se monta sobre una copia.
     expect(original('se_cena').crowd[0]!.count).toBe(10);
-    expect(original('se_cena').npc_ids).toEqual(['npc_hugo']);
+    expect(original('se_cena').npc_ids).toEqual(['npc_hugo', 'npc_lucio']);
   });
 
   it('un evento que no existe en la agenda es un error de los datos', () => {

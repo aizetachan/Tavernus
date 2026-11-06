@@ -1,6 +1,6 @@
 /**
  * Brezal sellada: el mapa. Una sola zona, la aldea, encerrada por el Cerco de
- * Ceniza (un anillo de niebla a unos 600 m de la plaza): diez lugares, el
+ * Ceniza (un anillo de niebla a unos 600 m de la plaza): once lugares (con la tienda del buhonero), el
  * sótano del Jabalí y sus puntos con coordenadas en metros, tags que mapgen
  * sabe dibujar y alias para que el jugador los nombre como quiera.
  * Lo que antes estaba fuera del pueblo se ha reubicado dentro del Cerco (el
@@ -77,7 +77,7 @@ export const LOCATIONS: AuthoredLocation[] = [
   },
   {
     id: 'loc_plaza', zone_id: 'zn_brezal', name: 'Plaza del Pozo', indoor: false,
-    description_base: 'La plaza empedrada de Brezal, con el pozo en el centro, el tablón de avisos junto a la herrería y la casona del regidor, la única de dos plantas, mirándolo todo. Por encima de los tejados del norte se ve, quieta, una franja de niebla gris.',
+    description_base: 'La plaza empedrada de Brezal, con el pozo en el centro, el tablón de avisos junto a la herrería, la tienda del buhonero con su carro sin mula a la puerta y la casona del regidor, la única de dos plantas, mirándolo todo. Por encima de los tejados del norte se ve, quieta, una franja de niebla gris.',
     ambience: { light: 'natural', noise: 0.2 },
     secret: 'El agua del pozo trae ceniza: la echa Tobías cada noche por encargo de Ysolde, y el manantial pasa por debajo del granero de Vharn, donde duerme enterrada la Brasa.',
     spots: [
@@ -94,6 +94,23 @@ export const LOCATIONS: AuthoredLocation[] = [
       // cerradas: quien está dentro no se ve desde la plaza (perception.ts, isDwelling) y el PJ no entra sin forzar.
       S('sp_pl_horno', 'el horno', ['horno', 'tahona', 'panadería', 'panaderia'], ['counter', 'fireplace'], 10, -6, 'Un horno de leña con un mostrador de tabla a la calle; huele a pan de centeno y a ceniza, y cada día salen menos hogazas.'),
       S('sp_pl_casas', 'las casas del callejón', ['casas', 'casas del callejón', 'casas del callejon', 'viviendas', 'casas de los vecinos'], ['building', 'dwelling'], -14, 20, 'Una hilera de casas bajas de piedra y adobe con las puertas cerradas y las contraventanas echadas; de alguna chimenea sale humo.', { state: { locked: true, key_item_id: 'it_llave_casas' } }),
+      // La tienda del buhonero (docs/BREZAL.md, PLAN-OBJETOS §6.1): una casa vacía del lado norte, con el carro a la puerta.
+      S('sp_pl_tienda', 'la puerta de la tienda del buhonero', ['tienda', 'tienda del buhonero', 'buhonero', 'casa del buhonero', 'puerta de la tienda'], ['door'], 16, -8, 'Una casa vacía del lado norte de la plaza, con la puerta abierta y un cartel de tabla escrito a carbón: «SE VENDE DE TODO. SE COMPRA LO QUE SIRVA».'),
+      S('sp_pl_carro', 'el carro del buhonero', ['carro', 'carro del buhonero', 'carreta', 'varas'], ['crate'], 19, -7, 'Un carro de buhonero pintado de verde, con las varas en el suelo y sin mula. Tiene una lona atada y un arcón clavado a la caja, con un candado nuevo; en el costado, medio borrado: «Cendal, de Valcruz. Agujas, sal y lo que haga falta».'),
+    ],
+  },
+  {
+    id: 'loc_tienda', zone_id: 'zn_brezal', name: 'La tienda del buhonero', indoor: true,
+    description_base: 'Una casa de una pieza que olía a cerrado y ahora huele a sebo, a cuero y a especias que se acaban. Estantes de tabla clavados a la pared, un mostrador hecho con una puerta sobre dos barriles y, al fondo, una cortina de saco que tapa la trastienda.',
+    ambience: { light: 'twilight', noise: 0.1, smell: 'sebo, cuero y pimienta' },
+    secret: 'En la trastienda, bajo llave, lo caro: dos saquetes de sal de Valcruz, que en un valle sellado vale más que la plata. Lleva la cuenta de lo que le queda en una libreta, con la fecha del día en que bajó la niebla subrayada dos veces.',
+    spots: [
+      S('sp_ti_puerta', 'la puerta', ['puerta', 'entrada', 'umbral'], ['door'], 0, 0, 'La puerta de la tienda, con una campanilla de latón que suena cada vez que alguien entra.'),
+      S('sp_ti_mostrador', 'el mostrador', ['mostrador', 'tabla', 'cuentas'], ['counter'], 3, 3, 'Una puerta vieja tendida sobre dos barriles: el mostrador. Encima, una balanza de platillos, una libreta abierta y un platillo con monedas de cobre para el cambio.'),
+      S('sp_ti_estantes', 'los estantes', ['estantes', 'estante', 'baldas', 'género', 'mercancía'], ['shelf'], 6, 5, 'Baldas de tabla clavadas a la pared con lo que le queda: cada cosa con un papelito de precio. Hay más huecos que género.'),
+      S('sp_ti_trastienda', 'la trastienda', ['trastienda', 'cortina', 'almacén', 'cuarto de atrás'], ['shelf', 'bed'], 8, 9,
+        'Tras la cortina, un cuarto estrecho con un catre, un baúl de viaje y un arcón con cerradura. Aquí duerme Lucio, con las botas puestas.',
+        { capacity: 2, state: { locked: true, key_item_id: 'it_llaves_cendal' }, ...apart('sp_ti_puerta', 'sp_ti_mostrador', 'sp_ti_estantes') }),
     ],
   },
   {
@@ -233,6 +250,7 @@ export const EXITS: AuthoredCampaign['exits'] = [
   { id: 'ex_plaza_herreria', from: 'sp_pl_herreria', to: 'sp_he_puerta', distance_m: 3 },
   { id: 'ex_plaza_casona', from: 'sp_pl_casona', to: 'sp_ca_puerta', distance_m: 4 },
   { id: 'ex_plaza_curandera', from: 'sp_pl_callejon', to: 'sp_cu_puerta', distance_m: 25 },
+  { id: 'ex_plaza_tienda', from: 'sp_pl_tienda', to: 'sp_ti_puerta', distance_m: 3 },
   { id: 'ex_plaza_molino', from: 'sp_pl_camino_molino', to: 'sp_mo_puerta', distance_m: 150 },
   { id: 'ex_plaza_corrales', from: 'sp_pl_corrales', to: 'sp_co_cancela', distance_m: 180 },
   { id: 'ex_plaza_claro', from: 'sp_pl_porton', to: 'sp_cl_sendero', distance_m: 250, terrain_multiplier: 0.9 },

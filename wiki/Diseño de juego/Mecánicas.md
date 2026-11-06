@@ -88,8 +88,80 @@ Nada es infinito. El servidor decide si algo cabe; el máster solo lo narra.
 - **Carga por Fuerza.** Máximo Fuerza × 15 libras. Cargado, vas más lento; muy cargado, además con desventaja.
 - **Las monedas pesan.** 50 monedas son 1 libra, cuente lo que cuente cada una: 15 de oro pesan lo mismo que 15 de cobre.
 - **Oro, plata y cobre.** 1 de oro = 10 de plata = 100 de cobre. Se empieza con 1 de oro y 5 de plata. Una cerveza vale 4 de cobre, una noche de posada 2 de plata y una espada corta 10 de oro. Ver [[Decisiones]].
+- **El dinero va en tu bolsa.** Empiezas con una bolsa de cuero al cinto y tu dinero dentro. Puedes llevar más de una (una escondida en la mochila) y pasar monedas de una a otra. Pagar saca de la bolsa más a mano; cobrar mete en ella. Si te roban la bolsa, te roban lo que hay dentro; si mueres, cae con tu cuerpo.
+- **Robar dinero.** Se puede robar la bolsa entera o solo unas monedas de dentro, a un vecino o a otro jugador. A otro jugador nunca sin que lo decida él: le llega la petición y la acepta o se resiste con su tirada (Juego de manos contra su Percepción). Ver [[Multijugador]].
 - Un objeto está siempre **en un solo sitio**. Moverlo es atómico: nunca se duplica ni desaparece.
 - Si algo no cabe, el máster lo dice en ficción: «no te cabe, ¿sueltas algo o lo llevas en la mano?».
+
+**Lo que lleva encima cada vecino**
+
+Toda persona lleva algo real que se le puede robar o que se encuentra al registrarla. Nadie se lo inventa a mitad de partida:
+
+- **Una bolsa de cuero al cinto con unas monedas.** Cuántas depende de su oficio: el regidor lleva oro; el cazador, unos cobres. Si coges la bolsa, te llevas su dinero dentro; también puedes sacar solo unas monedas. Lo que pagas a un vecino va a su bolsa.
+- **Dentro, dos o tres cosas de su oficio.** La tabernera, un manojo de llaves; la curandera, hierbas secas y vendas; el herrero, clavos y yesca; el guardia, un silbato; el regidor, un anillo de sello.
+- **Su arma, si es de pelear.** La maza del alguacil, la lanza del guardia, el arco del cazador. Quien no pelea no la lleva a la vista.
+- **Su ropa, puesta.** El mandil del herrero, la sobreveste del guardia, la capa de buen paño del regidor. Se puede describir, manchar o quitar.
+- **Lo que la historia nombra.** En Brezal, la jarra con muesca de [[Brenna]], el guante con el ascua de [[Ysolde]], la cuerda trenzada de [[Úrsula]], las botas nuevas de [[Doro]] y los anillos de [[Osric Malvez]] son objetos de verdad. El martillo engrasado de [[La herrería]] cuelga en la fragua.
+- Los niños no llevan bolsa ni dinero, solo sus cosas. Los animales no llevan nada.
+
+Lo que lleva cada uno sale en su ficha, en «Lleva encima», generado de los datos del juego.
+
+Robar la bolsa o sacar algo de ella es robarle a esa persona: si alguien lo ve, es un robo, con sus testigos (ver [[#Crimen, testigos y ley]]). Lo que le quitas no vuelve a aparecer. Lo mismo vale para los mundos generados: la regla sale del oficio de cada uno, no de una lista escrita para Brezal. Allí, además, cada persona lleva un objeto propio que inventa el generador (un relicario, una carta arrugada).
+
+## Reglas de los objetos
+
+Las reglas de 5e para armas, armaduras y objetos mágicos las aplica el servidor. El máster no suma bonos ni decide
+si un objeto funciona: narra lo que el servidor le devuelve. Todo sale de los datos del objeto y de la clase y la raza
+del personaje; un objeto sin esos datos (una campaña con objetos sencillos) funciona como siempre.
+
+**Competencia**
+
+- Cada clase sabe usar unas armas (sencillas, marciales o algunas concretas: el pícaro, el estoque y la espada larga;
+  el mago, la daga y el bastón) y unas armaduras (ligera, intermedia, pesada, escudo). Algunas razas suman armas: el
+  elfo, espadas y arcos; el enano, hachas y martillos.
+- **Arma sin competencia:** atacas sin sumar tu bono de competencia.
+- **Armadura o escudo sin competencia:** desventaja en todo lo de Fuerza y Destreza (ataques incluidos) y no puedes
+  lanzar conjuros mientras lo lleves.
+- Una variante («espada larga +1») cuenta como su arma de base.
+
+**Propiedades de arma**
+
+| Propiedad | Qué hace |
+|---|---|
+| Versátil | A dos manos, o con la otra mano libre, el dado mayor (la espada larga, 1d10) |
+| Arrojadiza | Se lanza a otro punto de la sala dentro de su alcance; cae junto al objetivo y hay que ir a por ella |
+| Alcance | Llega a 3 m, a otro punto cercano |
+| A distancia | Arcos, ballestas, hondas: alcance normal y largo. Más allá del normal, desventaja; con el objetivo encima, también |
+| Pesada | Un personaje pequeño (mediano, gnomo) ataca con desventaja |
+| Ligera | Con dos armas ligeras, una en cada mano, se ataca con la otra mano; ese golpe no suma tu característica al daño (salvo con el estilo de combate con dos armas) |
+| Munición | Sin flechas o virotes no hay disparo |
+
+- **Munición:** cada disparo gasta una. La mitad se recupera: una de cada dos queda en el suelo junto al objetivo,
+  como un objeto más, y hay que recogerla.
+- **Armadura pesada:** si no tienes la Fuerza que pide (la cota de malla, 13), vas 3 m más lento. La que estorba al
+  sigilo pone desventaja en Sigilo.
+
+**Objetos mágicos**
+
+- **Bonos:** un arma +1 suma 1 al ataque y al daño; una armadura o un escudo +1, a la CA; un anillo de protección, a
+  la CA y a las salvaciones; una varita del mago de guerra, al ataque de tus conjuros.
+- **Sintonía:** algunos objetos solo funcionan si te sintonizas con ellos: una hora de descanso corto con el objeto en
+  las manos (si nadie te interrumpe). Como mucho tres a la vez. Algunos solo se sintonizan con ciertas clases o con un
+  lanzador de conjuros. Un objeto maldito no se deja.
+- **Identificar:** un objeto mágico se ve por fuera («anillo de plata», «vara de tejo») hasta que lo identificas: con
+  un descanso corto tocándolo o con el conjuro *Identificar*. Sintonizarte también te dice qué es. Lo sabe quien lo
+  identifica, no los demás.
+- **Pergaminos:** si el conjuro es de tu lista y de un nivel que sabes lanzar, sale sin gastar espacio y el pergamino
+  se deshace. Si es de nivel mayor, prueba de tu característica de lanzamiento (CD 10 + nivel): si fallas, se pierde
+  sin efecto. Si no es de tu lista, no lo puedes leer. El mago puede copiarlo a su libro: 2 horas y 50 de oro por
+  nivel y una prueba de Arcanos; salga o no, el pergamino se pierde.
+- **Cargas:** una varita gasta cargas al usarla (cada carga de más sube un nivel el conjuro) y las recupera al alba.
+  Algunas, al gastar la última, se deshacen con un 1 en el d20.
+- **Pociones:** al beberla, su efecto (invisible, resistencia al fuego…) te queda puesto el tiempo que dure. La
+  resistencia parte el daño de ese tipo a la mitad, sea de un golpe o de una trampa.
+- **Lo que llevas puesto:** unas botas élficas dan ventaja en Sigilo; un objeto en la mochila o el bolsillo no da nada.
+- **El máster no puede inventar magia:** si narra que bebes una poción, lees un pergamino, la varita dispara o quedas
+  sintonizado sin que el servidor lo haya hecho, se le rechaza y lo tiene que hacer de verdad.
 
 ## Progreso
 

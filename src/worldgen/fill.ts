@@ -21,10 +21,10 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { Attitude, Id, ItemDef } from '../engine/model.js';
-import { makeSeed } from '../data/seed/demo.js';
+import { CATALOG } from '../data/catalog.js';
 import { PLACES, type Genre } from './catalog.js';
 import { offlineFill } from './offline.js';
-import { ROOM_ITEMS } from './rooms.js';
+import { ROOM_NIGHT_ITEM_ID } from './rooms.js';
 import { ARCHETYPES, skeletonSpots, SRD_STAT_RANGES, type Skeleton, type SkLocation, type SkNpc, type Tone } from './skeleton.js';
 
 export { offlineFill } from './offline.js';
@@ -60,7 +60,11 @@ export interface WorldPart {
 
 /** Parte 2: la gente y la trama. */
 export interface PeoplePart {
-  npcs: { id: Id; name: string; description: string; motivation: string; secret: string; attitude: string }[];
+  /**
+   * `item` e `item_note`: un objeto propio que lleva encima (nombre y una frase), además de su ajuar (outfit.ts). Vacío,
+   * ninguno (la bestia, el relleno offline). Sin campo, igual: rellenos de antes.
+   */
+  npcs: { id: Id; name: string; description: string; motivation: string; secret: string; attitude: string; item?: string; item_note?: string }[];
   /** Comercio: qué compra o vende cada NPC y a qué precio. */
   trade: { npc_id: Id; buys_or_sells: string; item_id: Id; price: number }[];
   clues: { title: string; how: string; location_ids: Id[]; npc_ids: Id[] }[];
@@ -79,14 +83,21 @@ export type WorldFill = WorldPart & PeoplePart & SituationsPart;
 export type PartName = 'world' | 'people' | 'situations';
 
 // ---------------------------------------------------------------------------
-// Catálogo: los objetos de la semilla demo que se pueden comprar y vender.
+// Catálogo: el común (SRD y cosas de la casa, src/data/catalog.ts). Lo que se
+// compra y vende en un mundo generado es una lista corta de cosas de pueblo: el
+// catálogo entero en el prompt de la gente serían unos 250 objetos más.
 // ---------------------------------------------------------------------------
 
-const DEMO_ITEMS = makeSeed().item_defs;
-/** Objetos del catálogo común (todo menos lo único de la demo). */
-export const CATALOG: readonly ItemDef[] = [...DEMO_ITEMS.filter((d) => !d.unique), ...ROOM_ITEMS];
-/** Lo que un NPC puede comprar o vender. */
-export const TRADE_ITEMS: readonly ItemDef[] = CATALOG.filter((d) => d.value > 0 && !d.container?.fixed && !d.service);
+export { CATALOG, catalogFor } from '../data/catalog.js';
+
+/** Lo que un NPC de un mundo generado puede comprar o vender: equipo de diario, nada mágico. */
+const VILLAGE_GOODS: readonly Id[] = [
+  'it_mochila', 'it_antorcha', 'it_cuerda', 'it_daga', 'it_hacha', 'it_madera', 'it_bayas', 'it_pocion', 'it_barril', 'it_pescado',
+  'it_cerveza', 'it_racion', 'it_armadura_cuero', 'it_cota_escamas', 'it_cota_malla', 'it_escudo', 'it_espada_larga', 'it_espada_corta',
+  'it_estoque', 'it_maza', 'it_baston', 'it_gran_hacha', 'it_hacha_mano', 'it_arco_corto', 'it_flechas', 'it_ganzuas', 'it_libro_conjuros',
+  'it_bolsa_componentes', 'it_simbolo_sagrado', 'it_laud', ROOM_NIGHT_ITEM_ID,
+];
+export const TRADE_ITEMS: readonly ItemDef[] = VILLAGE_GOODS.map((id) => CATALOG.find((d) => d.id === id)!).filter((d) => d.value > 0);
 
 export const ATTITUDES: readonly Attitude[] = ['hostile', 'unfriendly', 'neutral', 'friendly', 'allied'];
 
@@ -106,7 +117,7 @@ export const PART_SCHEMAS: Record<PartName, Record<string, unknown>> = {
     locations: arr(obj({ id: str, name: str, description: str, spots: arr(obj({ id: str, name: str, description: str })) })),
   }),
   people: obj({
-    npcs: arr(obj({ id: str, name: str, description: str, motivation: str, secret: str, attitude: str })),
+    npcs: arr(obj({ id: str, name: str, description: str, motivation: str, secret: str, attitude: str, item: str, item_note: str })),
     trade: arr(obj({ npc_id: str, buys_or_sells: str, item_id: str, price: int })),
     clues: arr(obj({ title: str, how: str, location_ids: strs, npc_ids: strs })),
     jobs: arr(obj({ title: str, text: str, giver_npc_id: str })),
@@ -164,6 +175,7 @@ export const PART_SYSTEM: Record<PartName, string> = {
   ].join('\n'),
   people: [COMMON, '', 'En esta parte escribes la gente y la trama, sobre el mundo ya escrito (te lo dan):',
     '- Cada NPC del esqueleto, una vez: nombre único, descripción física de 1-2 frases con un gesto propio, motivación, un secreto coherente con la Biblia y actitud por defecto (hostile, unfriendly, neutral, friendly o allied; la bestia, hostile). La bestia se nombra con artículo indeterminado ("un lobo de lomo cano"), sin secreto, y no comercia.',
+    '- Cada persona lleva encima un objeto propio que la retrata o esconde algo (item: nombre corto sin artículo, "relicario de latón"; item_note: una frase de cómo se ve, sin destripar el secreto). La bolsa, el dinero, la ropa y las cosas de su oficio ya se las da el juego: no las repitas. La bestia, item e item_note vacíos.',
     '- Comercio (trade): para dos o tres NPC a los que les cuadre comerciar, qué compran y venden (buys_or_sells: "buys" o "sells") del catálogo, con precios enteros cercanos al valor. Lo que dan los recursos del campo, alguien lo compra.',
     '- Pistas: exactamente las que pide el esqueleto. Título corto y "how" para el máster: cómo se obtiene (acción, tirada y CD 10-16) y qué revela. Ancla cada una a una localización (location_ids) o a un NPC que no sea la bestia (npc_ids). Juntas apuntan a la verdad central de la Biblia.',
     '- Encargos: uno por cada encargo del esqueleto y en el mismo orden, coherente con su tipo (deliver: entregar el objeto y la cantidad indicados; visit: ir al punto y volver a contarlo; narrative: un favor que el máster resuelve en ficción). Título y texto de tablón en una o dos frases, y quién lo pide (un NPC que no sea la bestia).',
@@ -252,7 +264,9 @@ export function normalizePeople(sk: Skeleton, p: PeoplePart): PeoplePart {
     npcs: p.npcs.map((n) => {
       const beast = sk.npcs.find((x) => x.id === n.id)?.role === 'beast';
       const att = String(n.attitude ?? '').trim().toLowerCase();
-      return { ...n, secret: n.secret ?? '', attitude: beast ? 'hostile' : (ATTITUDES as readonly string[]).includes(att) ? att : 'neutral' };
+      // Objeto propio: sin artículo delante ni punto al final; la bestia no lleva.
+      const item = beast ? '' : String(n.item ?? '').trim().replace(/^(?:un|una|el|la|unos|unas|los|las)\s+/i, '').replace(/[.\s]+$/, '');
+      return { ...n, secret: n.secret ?? '', attitude: beast ? 'hostile' : (ATTITUDES as readonly string[]).includes(att) ? att : 'neutral', item, item_note: item ? String(n.item_note ?? '').trim() : '' };
     }),
     trade: p.trade.map((t) => {
       const v = value.get(t.item_id);
@@ -333,6 +347,9 @@ export function validateWorld(sk: Skeleton, f: WorldPart): string[] {
   return errs;
 }
 
+/** Un objeto propio (item, item_note) cabe en una línea de inventario. */
+export const OWN_ITEM_MAX = { name: 60, note: 200 } as const;
+
 export function validatePeople(sk: Skeleton, f: PeoplePart): string[] {
   const { errs, once, unique } = checker();
   const locIds = new Set(sk.locations.map((l) => l.id));
@@ -348,6 +365,8 @@ export function validatePeople(sk: Skeleton, f: PeoplePart): string[] {
     if (blank(n.description) || blank(n.motivation)) errs.push(`${n.id}: falta descripción o motivación.`);
     if (sn.role !== 'beast' && blank(n.secret)) errs.push(`${n.id}: falta el secreto.`);
     if (!(ATTITUDES as readonly string[]).includes(n.attitude)) errs.push(`${n.id}: actitud no válida «${n.attitude}» (${ATTITUDES.join(', ')}).`);
+    if ((n.item ?? '').trim().length > OWN_ITEM_MAX.name) errs.push(`${n.id}: el nombre del objeto (item) pasa de ${OWN_ITEM_MAX.name} caracteres.`);
+    if ((n.item_note ?? '').trim().length > OWN_ITEM_MAX.note) errs.push(`${n.id}: la frase del objeto (item_note) pasa de ${OWN_ITEM_MAX.note} caracteres.`);
     const s = sn.stats;
     const [acLo, acHi] = SRD_STAT_RANGES.ac, [hpLo, hpHi] = SRD_STAT_RANGES.hp, [abLo, abHi] = SRD_STAT_RANGES.attack_bonus;
     if (s.ac < acLo || s.ac > acHi || s.hp_max < hpLo || s.hp_max > hpHi || s.attack_bonus < abLo || s.attack_bonus > abHi

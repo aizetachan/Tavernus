@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: guardia
 lugar: "[[Plaza del Pozo]]"
 actitud: neutral
+npc: npc_doro
 ---
 
 > [!ficha] Doro
@@ -54,6 +55,10 @@ Que lo tomen en serio. Cobra de su tío, el regidor, por vigilar el portón y ha
 | Noche (20-6) | La barra, [[Taberna del Jabalí]] |
 
 A las 13:00 acompaña a Garrán en el cobro del diezmo, haciendo de pared. Ver [[Vida del pueblo]].
+
+## Lleva encima
+
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

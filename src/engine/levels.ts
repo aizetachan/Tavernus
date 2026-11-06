@@ -263,7 +263,7 @@ function cantripDice(expr: string, level: number): string {
  * el conjuro hace en la escena (aplicar el daño, la curación, la condición) lo
  * resuelve el máster con sus tools.
  */
-export function castSpell(c: Character, ref: string, opts: { slot_level?: number | null; ritual?: boolean } = {}, rng?: Rng): CastResult {
+export function castSpell(c: Character, ref: string, opts: { slot_level?: number | null; ritual?: boolean; /** Lo que suman sus objetos (itemrules.ts, spellItemBonus). */ bonus?: { save_dc: number; attack: number } } = {}, rng?: Rng): CastResult {
   const cd = casterOf(c);
   if (!cd) return { ok: false, error: `${c.name} no lanza conjuros${progressionOf(c.class_id)?.caster ? ' todavía' : ''}.` };
   const sp = spellNamed(ref);
@@ -296,17 +296,25 @@ export function castSpell(c: Character, ref: string, opts: { slot_level?: number
     used[pick.key] = (used[pick.key] ?? 0) + 1;
     slot = { key: pick.key, label: pick.label, left: resourceLeft(c, pick) };
   }
-  let roll: { expr: string; total: number; breakdown: string } | null = null;
-  if (sp.dice) {
-    let expr = sp.level === 0 ? cantripDice(sp.dice.expr, c.level) : sp.dice.expr;
-    if (sp.dice.upcast) for (let i = sp.level; i < castLevel; i++) expr += `+${sp.dice.upcast}`;
-    const mod = abilityModifier(c.abilities[stats.ability]);
-    if (sp.dice.add_mod && mod) expr += mod > 0 ? `+${mod}` : `${mod}`;
-    if (sp.dice.kind === 'heal' && effectsOf(c).some((e) => e.heal_bonus)) expr += `+${2 + castLevel}`;
-    const r = rollExpr(expr, rng);
-    roll = { expr, total: Math.max(0, r.total), breakdown: r.breakdown };
-  }
-  return { ok: true, spell: sp, cast_level: castLevel, ritual, slot, save_dc: stats.save_dc, attack: stats.attack, roll };
+  const extra = opts.bonus ?? { save_dc: 0, attack: 0 };
+  return { ok: true, spell: sp, cast_level: castLevel, ritual, slot, save_dc: stats.save_dc + extra.save_dc, attack: stats.attack + extra.attack, roll: rollSpellDice(c, sp, castLevel, rng) };
+}
+
+/**
+ * Los dados de un conjuro lanzado a un nivel: los del truco crecen con el
+ * nivel del PJ, los demás suben con el espacio. Sirve también para los
+ * pergaminos y las varitas (itemrules.ts).
+ */
+export function rollSpellDice(c: Character, sp: SpellDef, castLevel: number, rng?: Rng): { expr: string; total: number; breakdown: string } | null {
+  if (!sp.dice) return null;
+  let expr = sp.level === 0 ? cantripDice(sp.dice.expr, c.level) : sp.dice.expr;
+  if (sp.dice.upcast) for (let i = sp.level; i < castLevel; i++) expr += `+${sp.dice.upcast}`;
+  const ability = (casterOf(c) ?? progressionOf(c.class_id)?.caster)?.ability;
+  const mod = ability ? abilityModifier(c.abilities[ability]) : 0;
+  if (sp.dice.add_mod && mod) expr += mod > 0 ? `+${mod}` : `${mod}`;
+  if (sp.dice.kind === 'heal' && effectsOf(c).some((e) => e.heal_bonus)) expr += `+${2 + castLevel}`;
+  const r = rollExpr(expr, rng);
+  return { expr, total: Math.max(0, r.total), breakdown: r.breakdown };
 }
 
 // ---------------------------------------------------------------------------

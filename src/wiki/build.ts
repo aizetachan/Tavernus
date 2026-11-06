@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { carriesOf, replaceSection, type CarriesFn } from './carries.js';
 import { fold, frontmatter, render, slug, type PageRef } from './markdown.js';
 import { CSS, JS, layout } from './theme.js';
 
@@ -62,7 +63,16 @@ export function placeOf(file: string): { url: string; out: string; dirs: string[
   return { url: base + slug(name), out: [...dirSlugs, `${slug(name)}.html`].join('/'), dirs: parts, name, isIndex };
 }
 
-export async function buildWiki(src: string, out: string): Promise<BuildReport> {
+export interface BuildOptions {
+  /**
+   * Lo que lleva encima cada NPC, en Markdown, por su id: rellena la sección «Lleva encima» de las fichas con `npc:`
+   * en sus propiedades. Por defecto, la campaña de Brezal (carries.ts).
+   */
+  carries?: CarriesFn;
+}
+
+export async function buildWiki(src: string, out: string, opts: BuildOptions = {}): Promise<BuildReport> {
+  const carries = opts.carries ?? carriesOf();
   const files = await walk(src, src);
   const pages: WikiPage[] = [];
   const images = new Map<string, { from: string; url: string; out: string }>();
@@ -77,7 +87,11 @@ export async function buildWiki(src: string, out: string): Promise<BuildReport> 
       continue;
     }
     if (ext !== '.md') continue;
-    const { meta, body } = frontmatter(await readFile(join(src, file), 'utf8'));
+    const { meta, body: raw } = frontmatter(await readFile(join(src, file), 'utf8'));
+    // La ficha de un NPC: lo que lleva encima no se escribe a mano, sale de los datos del juego.
+    const carried = meta.npc ? carries(meta.npc) : null;
+    if (meta.npc && carried === null) throw new Error(`${file}: el NPC ${meta.npc} no existe en los datos del juego.`);
+    const body = carried === null ? raw : replaceSection(raw, 'Lleva encima', carried);
     const place = placeOf(file);
     const title = meta.title ?? (place.isIndex ? place.dirs.at(-1) ?? 'Tavernus' : place.name);
     const page: WikiPage = { ...place, file, title, description: meta.description, aliases: meta.aliases, tags: meta.tags, body };

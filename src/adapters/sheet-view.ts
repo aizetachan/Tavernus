@@ -13,6 +13,7 @@ import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { hhmm } from '../engine/schedule.js';
 import { money } from '../engine/money.js';
 import { classSheet, type ClassSheet } from '../engine/levels.js';
+import { armorSpeedPenalty, gearLines } from '../engine/itemrules.js';
 
 export interface SheetView {
   title: string;
@@ -61,7 +62,8 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
     title: `${c.name} · ${c.race} ${c.class_name} · nivel ${c.level}`,
     description: `${status} · ${loc.name}, ${spot.name}${transit}`,
     fields: [
-      { name: 'Combate', value: `PG ${c.hp_current}/${c.hp_max}${c.hp_temp ? ` (+${c.hp_temp})` : ''} · CA ${armorClass(engine.world, c)} · Velocidad ${c.speed_ft} ft · Percepción pasiva ${c.passive_perception}${c.conditions.length ? `\nCondiciones: ${c.conditions.map((x) => x.name).join(', ')}` : ''}`, inline: false },
+      { name: 'Combate', value: `PG ${c.hp_current}/${c.hp_max}${c.hp_temp ? ` (+${c.hp_temp})` : ''}, CA ${armorClass(engine.world, c)}, velocidad ${c.speed_ft - armorSpeedPenalty(engine.world, c)} ft, percepción pasiva ${c.passive_perception}${c.conditions.length ? `\nCondiciones: ${c.conditions.map((x) => x.name).join(', ')}` : ''}`, inline: false },
+      ...(gearLines(engine.world, c).length ? [{ name: 'Objetos', value: gearLines(engine.world, c).join('\n'), inline: false }] : []),
       { name: 'Descanso', value: `Dados de golpe ${hitDiceLeft(c)}/${c.level} (d${c.hit_die})${resourceLines(c).length ? `\n${resourceLines(c).join(' · ')}` : ''}`, inline: false },
       { name: 'Muerte', value: deathLine, inline: false },
       { name: 'Características', value: `FUE ${ab.str} · DES ${ab.dex} · CON ${ab.con} · INT ${ab.int} · SAB ${ab.wis} · CAR ${ab.cha}\nSalvaciones: ${saves || '—'}`, inline: false },

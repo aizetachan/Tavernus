@@ -108,6 +108,7 @@ import { combatView, type CombatEnd, type CombatView, type TurnContext } from '.
 import { ActionLog, presenceLine, reportLine } from './servicelog.js';
 import { AWAY_CARD_MS, awayCard, awayCardEmpty, awayFor, awayText, unreadFrom, type AwayCard } from './whileaway.js';
 import { tablonView } from './tablon.js';
+import { shopView } from './tienda.js';
 import { activeJobs } from '../../engine/progress.js';
 import { boardSeen } from '../../engine/quests.js';
 import { listReports, REPORT_MAX_TEXT, reportOf, ReportQuota, saveReport } from './report.js';
@@ -995,6 +996,11 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       json(res, 200, { image: img ? sceneView(img, slug) : null });
       return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/shop') {
+      const id = characterOr404(engine, characterParam, res);
+      if (id) json(res, 200, shopView(engine, id));
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/sheet') {
       const id = characterOr404(engine, characterParam, res);
       if (id) { const s = sheetView(engine, id); json(res, 200, { ...s, pack: withItemArt(engine, s.pack, id, slug) }); }
@@ -1094,6 +1100,16 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           if (!inst || !dest) { json(res, 400, { ok: false, text: '¿Adónde lo llevas?' }); return; }
           const r = await engine.moveItem(id, inst, dest);
           json(res, 200, { ok: r.ok, text: r.text });
+          return;
+        }
+        // Comprar con el botón de la tienda (tienda.ts): el atajo determinista del motor, sin máster.
+        case '/api/shop/buy': {
+          const npc = typeof body['npc'] === 'string' ? body['npc'] : '';
+          const item = typeof body['item'] === 'string' ? body['item'] : '';
+          const q = Number.isInteger(body['quantity']) ? Math.max(1, Math.min(20, body['quantity'] as number)) : 1;
+          if (!npc || !item) { json(res, 400, { ok: false, text: '¿Qué compras?' }); return; }
+          if (!rt.begin(id)) { json(res, 409, { ok: false, text: 'Ya tienes una acción en curso: espera a que el narrador responda.' }); return; }
+          try { json(res, 200, reply(await rt.actions.track(id, 'shop_buy', () => engine.shopBuy(id, npc, item, q), refused))); } finally { rt.end(id); }
           return;
         }
         case '/api/command': {

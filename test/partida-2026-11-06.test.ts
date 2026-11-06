@@ -283,7 +283,10 @@ describe('lo robado siempre existe', () => {
     expect(createItem(engine.world, osric, { name: 'anillo mágico de fuego' }).ok).toBe(false);
     expect(createItem(engine.world, osric, { name: 'arcón de hierro', size: 'large' }).ok).toBe(false);
     expect(createItem(engine.world, osric, { name: 'sello de cera' }).ok).toBe(true);
-    expect(createItem(engine.world, osric, { name: 'llavero' }).ok).toBe(true);
+    // El llavero ya lo lleva (el manojo de llaves de su ajuar, outfit.ts): no se crea otro.
+    const keys = createItem(engine.world, osric, { name: 'llavero' });
+    expect(keys.ok && !keys.created).toBe(true);
+    expect(createItem(engine.world, osric, { name: 'cordón de cuero' }).ok).toBe(true);
     expect(createItem(engine.world, osric, { name: 'pañuelo bordado' }).ok).toBe(false);
   });
 

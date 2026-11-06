@@ -402,18 +402,124 @@ Todos los pesos en `campaign.progression` para tunearlos con la validación.
 
 ## 5. Ítems e inventario
 
-### 5.1 Catálogo (`items`)
+### 5.1 Catálogo (`ItemDef`) y estado de cada ejemplar (`ItemInstance.state`)
+
+El modelo de objetos 5e (PLAN-OBJETOS §2) está en `src/engine/model.ts`; las tablas y ayudas puras, en
+`src/engine/items.ts`. Todo lo nuevo es opcional: un objeto sencillo sigue siendo nombre, tipo, tamaño, peso y valor.
+Las reglas que usan estos datos (bonos en la tirada, sintonizar, gastar cargas o munición, pergaminos) están en
+§5.1.1; el modelo solo dice qué es cada cosa y qué ve cada personaje.
+
 | Campo | Detalle |
 |---|---|
-| `name`, `description` | |
-| `type` | `weapon` / `armor` / `consumable` / `tool` / `quest` / `treasure` / `misc` |
-| `rarity` | common → legendary |
-| `weight`, `value_gp` | |
-| `properties` | Weapon: `damage`, `damage_type`, `range`, `tags` (finesse, two-handed…). Armor: `ac_base`, `type`, `stealth_disadvantage`. Consumable: `effect` (estructurado: `{heal: "2d4+2"}`), `uses` |
-| `attunement` | bool |
-| `magic_effects[]` | Modificadores mecánicos estructurados (`+1 attack`) + descripción narrativa |
-| `unique` | bool — un solo ejemplar en el mundo |
+| `name`, `aliases`, `description` | La ficha sale de los datos si no hay `description` |
+| `type` | Categoría de reglas: `weapon`, `armor`, `ammunition`, `gear`, `tool`, `focus`, `consumable`, `scroll`, `wand`, `rod`, `staff`, `ring`, `wondrous`, `treasure`, `coin`, `quest`, `container`, `misc` |
+| `subtype` | Afina el tipo (`SUBTYPES` en items.ts): arma `simple_melee`…`martial_ranged`; armadura `light`/`medium`/`heavy`/`shield`; munición `arrow`/`bolt`/`bullet`/`needle`; equipo `adventuring`/`clothes`/`light`/`container`; herramienta `artisan`/`kit`/`gaming`/`instrument`/`vehicle`; foco `arcane`/`druidic`/`holy`; consumible `food`/`drink`/`potion`/`poison`/`oil`; tesoro `gem`/`art`/`trade` |
+| `base_id` | La definición SRD de la que sale una variante («espada larga +1», la pistola de rayos con el bloque de la ballesta ligera). Las competencias con armas concretas comparan `base_id ?? id` |
+| `size`, `weight_lb`, `value` | Valor en la moneda más pequeña (`money.ts`) |
+| `weapon` | `damage`, `damage_type`, las booleanas de siempre (`finesse`, `ranged`, `two_handed`) y `properties` (`light`, `heavy`, `finesse`, `thrown`, `two_handed`, `versatile`, `reach`, `loading`, `ammunition`, `special`), `range: [normal, largo]` en pies, `versatile_damage`, `ammo_type` |
+| `armor` | `ac_base`, `dex_max` (null = sin tope), `stealth_disadvantage`, `str_min`, `don_s`, `doff_s`. La categoría es `subtype` (sin él, se deduce: sin tope de DES, ligera; tope > 0, intermedia; tope 0, pesada) |
+| `shield_bonus`, `container`, `equip_slot`, `light_source`, `service`, `heals`, `illustrate` | Como siempre |
+| `rarity` | `common` → `artifact`. Con rareza, el objeto es mágico y hay que identificarlo |
+| `attunement` | `true` o una condición (`classes`, `spellcaster`, `note`) |
+| `bonus` | `attack`, `damage`, `ac`, `save_dc`, `spell_attack` (el +1, +2, +3) |
+| `charges` | `max`, `recharge: { amount: '1d6+1', at: 'dawn' }`, `destroy_on_empty` |
+| `effects[]` | Efectos con estructura mientras se lleva: `resist`, `immune`, `condition_immunity`, `advantage`, `disadvantage`, `speed`, `light`, `darkvision`, `save_bonus`, `ability_score`, `condition`, `note` (solo narrativo). Los aplica el motor; el máster los narra |
+| `cursed` | `{ effects?, description? }`: no se quita ni se deja de sintonizar; no se ve hasta que alguien lo sintoniza |
+| `unidentified` | Cómo se ve sin identificar (`name`, `description`); sin él, un nombre genérico por tipo («anillo», «arma») |
+| `spell` | Pergamino, varita o bastón: `spell_id` (de `src/data/srd/spells.ts`), `level`, y `save_dc`/`attack_bonus` si no los de la tabla. Un pergamino puede no fijar `spell_id` (el pergamino de nivel N del SRD): el conjuro va entonces en el ejemplar (`state.spell_id`), de ese nivel |
+| `effect`, `duration_s` | Lo que hace al usarlo (poción) y cuánto dura |
+| `unique` | Un solo ejemplar en el mundo |
 | `origin` | `srd` / `custom` |
+
+Estado por ejemplar (`ItemState`, admite claves libres): `identified_by` (quién sabe qué es), `attuned_to`,
+`charges` (sin él, lleno), `coins` (bolsas), `lit` (luces), `owner_id` (de quién es: tiendas y robos).
+
+**Lo que ve el máster.** `get_item` devuelve tipo, subtipo, la cifra (daño o CA), las propiedades y `magic`: si el
+actor lo ha identificado, rareza, sintonía (y con quién), bonos, cargas, conjuro y efectos; si no,
+`'objeto mágico sin identificar'`, el nombre de `unidentified` y sin `item_id`. El inventario del máster, la mochila de
+la web (`packView`) y la hoja usan el mismo nombre. **Migración:** `migrate` rellena desde la semilla lo que la
+partida guardada no tiene (sin pisar nada; el tipo, solo si era uno de los genéricos viejos) y deduce de sus datos
+la lista de propiedades del arma y la categoría de la armadura. `validate.ts` comprueba subtipos, propiedades,
+alcance, munición, que la magia lleve rareza, cargas, conjuros y el estado de cada ejemplar.
+
+**De dónde sale el catálogo** (PLAN-OBJETOS §3, bloque B). El equipo entero del SRD 5.1 (CC BY 4.0) está en
+`src/data/srd/items.ts`: 37 armas, 12 armaduras y el escudo, munición (por pieza: una flecha, 5 de cobre), equipo de
+aventurero, focos, herramientas, arreos, comida y bebida, mercancías, y un primer lote mágico (pociones de curación,
+pergamino de conjuro por nivel, arma, armadura, escudo y munición +1/+2/+3, anillo y capa de protección, bolsa de
+contención, varita de proyectiles mágicos, botas y capa élficas). Nombres en castellano con el inglés del SRD de
+primer alias; precios en cobre del SRD; la magia, que el SRD no pone precio, con un valor de la casa por rareza
+(`MAGIC_VALUE`). Las +N salen de su base (`base_id`) y sin identificar se ven como ella; el pergamino va por nivel, con
+su CD y su ataque, y el conjuro concreto en el ejemplar (`state.spell_id`); la poción de curación no tiene rareza (está en
+la lista de equipo y se reconoce a la vista). Monturas y vehículos van aparte (`SRD_MOUNTS`, `SRD_VEHICLES`): no son objetos que se lleven encima.
+**La magia del SRD es para los mundos generados**: una campaña escrita (sin `campaign.generation`) no la recibe, ni
+en su semilla ni al arrancar, y su magia, si la hay, la escribe ella como objetos propios, pocos y ligados a su
+historia (Brezal: «pocos, enigmáticos y que tengan que ver con el lore», Miguel, 2026-11-06). Así el máster no
+puede sacar una espada +1 en Brezal con `spawn_item`.
+`src/data/catalog.ts` lo junta con las cosas de la casa que el SRD no trae (leña, bayas, truchas, hacha de leñador,
+cofre de la posada) y los cuartos de alquiler: `CATALOG` para la demo, Brezal y la creación de personaje, y
+`catalogFor(genre)` para los mundos generados, con nombres de ciencia ficción o postapocalípticos y las mismas reglas
+(la pistola de rayos es la ballesta ligera). La demo (`src/data/seed/demo.ts`) ya no es el catálogo: solo coloca objetos.
+
+- **Versión** (`campaign.catalog_version`): al arrancar, `syncCatalog` (en `migrate`) cambia cada definición SRD de la
+  partida por la del código si la versión no es la misma (si cambia el nombre, el viejo queda de alias) y añade las
+  que falten. Las de la campaña (`origin: 'custom'`) no se tocan aunque usen un id del SRD. Cualquier cambio en
+  `items.ts` sube `SRD_CATALOG_VERSION`; los ids del catálogo no se borran nunca.
+- **Lo que se guarda**: cada partida guarda sus definiciones propias, las SRD que algún objeto del mundo usa y las que
+  la partida ha cambiado (`compactSnapshot`, al volcar); el resto se lee del código al arrancar. El catálogo entero en
+  cada mundo serían más de 100 KB por partida.
+- **Comercio en mundos generados**: el generador solo ofrece a la parte «gente» una lista corta de cosas de pueblo
+  (`TRADE_ITEMS`, sin magia), no el catálogo entero.
+
+### 5.1.1 Reglas de los objetos — DECIDIDO (PLAN-OBJETOS §4, bloque C, 2026-11-06)
+
+Las aplica `src/engine/itemrules.ts` con los datos de §5.1 y las competencias de clase y raza
+(`ClassDef.weapons`/`armor`, `RaceDef.weapons`/`size` en `src/data/srd/index.ts`). Sin datos, como antes: un arma
+sin `subtype` se usa con competencia; una armadura sin `str_min` no frena. El máster no aplica efectos: los narra.
+
+- **Competencia.** Arma: por categoría (`simple`/`martial`) o por arma concreta (`base_id ?? id`). Sin ella, el
+  ataque no suma el bono de competencia. Armadura o escudo sin competencia: desventaja en las tiradas de FUE y DES
+  (ataques incluidos: `gearAdvantage`, `attackProfile`) y no lanza conjuros (`armorBlocksSpells`: `cast_spell`,
+  `use_scroll` y las varitas lo rechazan).
+- **El ataque del PJ** (`attackProfile`, usado por `resolveAttack` y la línea de ataque de la hoja): característica
+  (DES a distancia, la mejor con sutil), competencia, estilo, bono mágico del arma y de la munición. Versátil a dos
+  manos o con la otra libre; pesada con desventaja para un pequeño; ligera: ataque con la otra mano
+  (`requires_roll_key: off_hand`) sin la característica positiva al daño salvo el estilo `two_weapon`. `loading` no
+  cambia nada mientras cada tirada sea un solo ataque.
+- **Alcance** (`reachCheck`, en `resolveAttack` y en el `attack` del máster): cuerpo a cuerpo, el mismo punto; `reach`,
+  hasta 3 m; arrojadiza o a distancia, `range` en pies (más allá del normal, desventaja; más allá del largo, no
+  llega); un arma a distancia contra quien está en el mismo punto, desventaja. Otra localización, no.
+- **Munición.** Cada disparo gasta una (`spendAmmo`); sin munición del `ammo_type` del arma, no hay disparo. Uno de
+  cada dos disparos deja la pieza en el suelo del punto del objetivo (la mitad recuperable del SRD, como objeto real).
+  El arma arrojadiza lanzada cae allí también (`throwWeapon`).
+- **Fuerza mínima.** Armadura con `str_min` por encima de la FUE: −10 pies (`armorSpeedPenalty`, en `speedMps` y la
+  hoja). Los efectos `speed` de lo que lleva suman o restan ahí mismo.
+- **Bonos mágicos.** `bonus.attack`/`damage` en el ataque; `bonus.ac` de la armadura puesta, el escudo embrazado y lo
+  equipado (anillo, capa) en `armorClass`; `save_dc`/`spell_attack` de lo que lleva activo en `castSpell` (opción
+  `bonus`); `save_bonus` en las salvaciones (`characterCheck` con el mundo).
+- **Objetos activos.** Lo que lleva en las manos o puesto (no en bolsillos ni mochila) y, si pide sintonía,
+  sintonizado con él. Sus `effects` cuentan: `advantage`/`disadvantage` en la tirada, `save_bonus`, `speed`,
+  `resist`/`immune` en el daño (`damageAfterResistance`, en el ataque y en `apply_damage`); los de la maldición, en
+  cuanto se sintoniza. `light`, `darkvision`, `ability_score` y `condition_immunity` los lee el máster en la ficha
+  (`gearLines`); el motor aún no los aplica.
+- **Sintonización** (`attune_item` mode `attune`): un descanso corto de verdad (`restByMaster`, con su tiempo y sus
+  interrupciones) con el objeto a mano; si no le interrumpen, `state.attuned_to`. Tres como mucho (`MAX_ATTUNED`), con
+  la condición del objeto (clases, lanzador). `end` la deja, salvo maldito. Sintonizarse identifica.
+- **Identificar** (`attune_item` mode `identify`, o `cast_spell` Identificar con `target_id` = el ejemplar): añade al
+  PJ a `state.identified_by`. Leer un pergamino o usar una varita también lo identifica.
+- **Pergaminos** (`use_scroll`, `useScroll`): el conjuro es `spell.spell_id` o, en los pergaminos genéricos por nivel,
+  `state.spell_id` del ejemplar. Fuera de su lista o sin lanzar conjuros: no, y no se gasta. De nivel mayor que el que
+  lanza: prueba de su característica CD 10 + nivel; si falla, se gasta sin efecto. CD y ataque: `spell.save_dc` /
+  `attack_bonus` o la tabla del SRD (`SCROLL_TABLE`). Sin componentes ni espacio. `mode: 'copy'` (mago): Arcanos
+  CD 10 + nivel, 2 h y 50 de oro por nivel; el pergamino se pierde salga o no.
+- **Cargas** (`use_item` con `quantity` = cargas): gasta cargas y, si tiene `spell`, lo lanza (una carga de más sube
+  un nivel); CD y ataque del objeto o del PJ. Se recargan al alba o al anochecer al ir a usarlas o al descansar
+  (`refreshCharges`, tirando `recharge.amount` por cada vez), y con descanso corto o largo según `recharge.at`
+  (`rechargeOnRest`, en `applyRest`). Con `destroy_on_empty`, al gastar la última, 1d20: con un 1 se deshace.
+- **Pociones** (`use_item`): se gasta y su `effect` queda como condición con `duration_s` (`applyItemEffect`). La de
+  curar sigue yendo por `heal` con `item_instance_id`.
+- **Cierre** (`magicWithoutTool`, closecheck.ts): si la narración da por hecho un efecto mágico (bebe la poción, lee el
+  pergamino, la varita dispara, queda sintonizado) de lo que el actor tiene a mano y en el turno no ha pasado por
+  `use_item`, `use_scroll`, `attune_item`, `cast_spell`, `heal` o `add_condition`, se rechaza una vez.
 
 ### 5.2 Inventario (`inventory`)
 `character_id`, `item_id`, `quantity`, `equipped` (slot: main_hand, off_hand, armor, ring1…), `attuned`, `identified` (para magia desconocida), `notes`.
@@ -422,6 +528,34 @@ Reglas del servidor: carga máxima, slots de equipo válidos por tipo, límite d
 
 ### 5.3 Ítems en el mundo
 Un ítem siempre está en **exactamente un sitio**: inventario de un PJ, inventario de un NPC, o `location.contents`. Mover = transacción atómica. Así nunca hay duplicados ni desapariciones.
+
+#### 5.3.1 Lo que lleva encima cada NPC: el ajuar — DECIDIDO 2026-11-06
+Partida «Humo y ceniza» (VPS): el PJ le robó a Garrán «la bolsa de cuero» con buenas tiradas, pero la bolsa no existía; el máster la inventó y no apareció en la mochila. Regla: **toda persona lleva al empezar algo real que robar o encontrar** (`src/engine/outfit.ts`).
+
+- **Qué lleva.** Una bolsa al cinto (`it_kit_purse`: «bolsa de cuero»; «riñonera» en ciencia ficción, «riñonera de lona» en postapocalíptico) con monedas dentro (`state.coins`, en la moneda más pequeña); dentro de la bolsa, dos o tres cosas de su oficio (navaja, yesca y pedernal, mendrugo, manojo de llaves, anillo de sello, hierbas, vendas, silbato, clavos, cuentas de rezo, amuleto, sedal…); y su arma, si pelea y su ataque nombra un arma (`stats.attack_name` «maza corta» → la maza del catálogo; «lanza», «garrote», «martillo», «horca» y «cimitarra» las pone el ajuar). Quien no pelea (`noncombatant`) no lleva arma a la vista. Los animales (`mute` o un oficio de animal), nada.
+- **De dónde sale.** Del oficio (`Npc.role`, por palabras: «tabernera» → posadero; «alguacil» → guardia; «regidor» → noble…) o de `Npc.kit` si la campaña lo dice. La riqueza, del ajuar o de `Npc.wealth` (`none`, `poor`, `modest`, `comfortable`, `rich`). Las monedas se miden por lo que lleva un PJ al empezar (`campaign.starting_coins`): pobre de 0,05 a 0,2 veces; modesto, de 0,2 a 0,6; acomodado, de 0,6 a 1,5; rico, de 2 a 5. La cifra sale del id del NPC: el mismo mundo da siempre el mismo ajuar.
+- **Su ropa, puesta** (2026-11-06, bloque F). Cada ajuar puede decir la ropa que distingue el oficio (`KitDef.clothes`): mandil de cuero para el herrero y la tabernera, sobreveste para el guardia, hábito para el cura, capa de buen paño para quien manda, capa con capucha para cazadores y forasteros, ropa de diario para los demás, harapos para un preso; con su nombre en cada género. Va encima del NPC con `state.worn: true` (ocupa el cuerpo: `equip_slot: 'body'`), para que se pueda describir, manchar o quitar; las reglas no la cuentan. El máster la ve con «viste»: «viste mandil de cuero [ii_kit_hugo_apron]». Al cambiar de sitio deja de estar puesta (`transferItem`).
+- **Niños, sin bolsa.** Un ajuar con `purse: false` (el de niño: «niña», «chiquillo», «zagal»…) no da bolsa ni dinero: sus cosas (una peonza, un mendrugo) van sueltas encima.
+- **Lo escrito manda.** El ajuar solo completa: no pone bolsa a quien ya lleva un contenedor, no repite una cosa que ya lleva, no da arma a quien ya lleva una ni ropa a quien ya lleva algo puesto en el cuerpo. Brezal escribe la bolsa del diezmo de Garrán con su dinero y lo que la historia nombra de cada vecino (`brezal/items.ts`): la jarra con muesca de Brenna, el guante con el ascua de Ysolde (puesto), la cuerda trenzada de Úrsula, las botas nuevas de Doro (puestas) y los anillos de Osric (el de sello y dos de plata, puestos); el martillo engrasado del hijo del maestro de Hugo está en la fragua, no encima. El resto lo pone el ajuar.
+- **Cuándo.** Al arrancar la partida (`migrate` en `engine.ts`), una vez por NPC: campañas escritas, demo, mundos generados y partidas ya empezadas. `Npc.outfitted` guarda la versión del ajuar (`OUTFIT_VERSION`, hoy 2; `true` es la 1). Un NPC equipado con una versión anterior recibe solo lo de las versiones que le faltan (la 2: la ropa y lo que la campaña escrita le pone ahora encima): lo que le dieron y le robaron no se repone. En las partidas ya empezadas, el NPC recupera lo que la campaña escrita le pone encima y la partida no tenía (la bolsa de Garrán en «Humo y ceniza»; la jarra de Brenna). Lo que la campaña escrita deja en un punto (el martillo de la fragua) no llega a las partidas ya empezadas. A un muerto no se le da nada.
+- **Mundos generados: un objeto propio.** La parte «gente» del generador pide para cada persona un objeto suyo (`item`, nombre sin artículo; `item_note`, una frase de cómo se ve), además del ajuar. El código le quita el artículo, valida la longitud (60 y 200 caracteres) y lo crea como objeto `custom`, único, menudo y sin reglas (`it_own_<npc>`, encima del NPC): de tipo `treasure` si su nombre dice que vale dinero (oro, plata, anillo, relicario…), si no `misc` (`ownItemOf`, worldgen/index.ts; `validateSnapshot` lo comprueba). Sin nombre, ninguno; offline no lo inventa: el NPC lleva su ajuar.
+- **El dinero de la bolsa.** Se queda en la bolsa (§5.3.2): quien la coge (o la roba) lleva ese dinero mientras lleve la bolsa. `transfer_item` le devuelve al máster `coins_found` con la cifra; al coger una bolsa del suelo, el motor dice «Dentro hay 3 de plata.».
+- **El máster lo ve.** En el contexto («Lleva: …») y en `get_npc` va todo con su id, con el dinero y lo de dentro: «bolsa de cuero con 4 de oro y 3 de plata [ii_garran_bolsa] (dentro: trenza de esparto […], silbato de hueso […])». Sacar algo de la bolsa de un NPC cuenta como quitárselo a él (robo, testigos).
+- **Los PJ** empiezan con el equipo de su clase (arma, armadura, mochila con antorchas, raciones y cuerda), su ropa y lo de su trasfondo (2026-11-06, bloque F; `startingEquipment` en chargen.ts, definiciones en `src/data/srd/gear.ts`): acólito, símbolo sagrado, libro de oraciones, cinco varitas de incienso y vestiduras (SRD 5.1); criminal, una palanca y ropa oscura con capucha; héroe del pueblo, herramientas de carpintero, pala y olla de hierro; noble, anillo de sello (puesto en un dedo), pergamino de linaje y ropa fina; erudito, frasco de tinta, pluma, cuchillo pequeño y la carta de un colega muerto; soldado, insignia de rango, trofeo de un enemigo y un juego de dados. Solo el acólito es del SRD 5.1; los demás siguen la lista de las reglas básicas de 5e. La ropa (de viaje si el trasfondo no dice otra) va puesta en el cuerpo si la clase no lleva armadura; si la lleva, a la mochila. Lo que la clase ya da no se repite. Si la partida no tiene la definición, el motor la añade al crear el PJ. Se ve en el resumen de la creación, en una fila «Del trasfondo». Además, su propia bolsa con su dinero (§5.3.2).
+
+#### 5.3.2 El dinero vive en bolsas — DECIDIDO 2026-11-06 (PLAN-OBJETOS §5, bloque D)
+Antes el dinero de un PJ era un número (`Character.coins`) que nadie le podía quitar. Ahora **nadie tiene un número de monedas: tiene bolsas con monedas dentro** (`ItemInstance.state.coins`, en la moneda más pequeña), PJ y NPC por igual (`src/engine/money.ts`).
+
+- **Cuánto lleva** (`coinsOf`): la suma de lo que hay en todo lo que lleva encima, bolsas dentro de la mochila incluidas. La ficha, la mochila de la web (`packView`), el contexto del máster y `get_character` enseñan ese total con `money()`; con más de una bolsa, `/monedas` dice cuánto hay en cada una.
+- **Todo PJ empieza con una bolsa al cinto** (`it_kit_purse` de `outfit.ts`, con el nombre del género del mundo) con `campaign.starting_coins` dentro. Puede llevar más de una (una escondida en la mochila).
+- **Pagar** (`pay`) saca de la bolsa más a mano (en la mano, al cinto, en el bolsillo, el resto del equipo; luego lo de dentro, por capas) y sigue por las demás. Todo o nada. Con destinatario, el dinero pasa a su bolsa: comprar paga al vendedor, `give_coins` y `settle_debt` al NPC, dar monedas a otro PJ (oferta aceptada) de bolsa a bolsa. Sin destinatario, sale del mundo (las multas). **Cobrar** (`receive`) mete en la bolsa más a mano; quien no lleva ninguna recibe una (al cinto; si lo ocupa algo, al bolsillo). Las recompensas de encargos y misiones y lo que pagan los NPC al comprar entran así.
+- **Pesa con la bolsa:** `instanceWeight` suma las piezas de `state.coins` (50 por libra), así que la carga del PJ cuenta el dinero de todas sus bolsas y una bolsa llena pesa dentro de la mochila.
+- **Robar la bolsa entera:** `transfer_item`, con las reglas de siempre (robo si se nota, §9.4). El dinero va dentro.
+- **Robar parte:** tool `take_coins` (`instance_id` de la bolsa, `amount` o null para todo, `to_instance_id` opcional). Saca lo que haya hasta esa cifra y lo mete en la bolsa más a mano del actor. De un NPC es como quitarle la bolsa: robo con testigos si la acción se lee como robo y la tirada no fue limpia, siempre si está inconsciente. De otro PJ, solo con su reacción (abajo). De una bolsa del suelo o de un cofre, sin más. Con `to_instance_id`, pasa monedas de una bolsa suya a otra (esconder dinero).
+- **A otro jugador no se le quita nada sin que lo decida él** (`lootGuard`, tools.ts; reactions.ts): ni su bolsa (`transfer_item`) ni parte de ella (`take_coins`), salvo en el desenlace de su reacción (`request_reaction` con Juego de manos contra Percepción) si la acepta o pierde la tirada (`Engine.reactionWon`). Inconsciente, nada sin su consentimiento; muerto, las reglas del cuerpo.
+- **Al morir**, sus bolsas caen con el cuerpo como cualquier otra cosa (`death.ts`): en casual le esperan a él; en hardcore se saquean, y quien las coge se lleva el dinero dentro («bolsa de cuero con 15 de oro»). `coins_left` de la muerte guarda el total para el Diario. Los cuerpos de antes guardaban las monedas sueltas (`BodyState.coins`): siguen dándolas a quien los recoge.
+- **Partidas guardadas** (`migrate`, `migrateLegacyCoins`): el número de cada PJ pasa a una bolsa nueva al cinto (`ii_bolsa_<pj>`), una vez, y el campo se borra. Al muerto sin dinero no se le da bolsa.
+- **Para la tienda (bloque E):** `pay(world, pc, precio, npc)` al comprar; `pay(world, npc, precio, pc)` al venderle, que falla con `{ ok: false, have }` si al NPC no le llega.
 
 ---
 
@@ -468,8 +602,8 @@ El valor y el esfuerzo tienen que sentirse como en el mundo real: ni hacerse ric
 
 > **Cambiado el 27-10-2026** (revisión de la partida «La noche del Brezal»): un mago empezaba «cargado» con 1.500 monedas que pesaban 30 lb, y el tablón pagaba 900 por diez leños. Ahora se paga como en el SRD: una cerveza son unas monedas de cobre y un arma legendaria, unas 100 de oro. Código en `src/engine/money.ts`.
 
-- **Moneda**: oro, plata y cobre (1 de oro = 10 de plata = 100 de cobre; cada campaña puede traer las suyas en `campaign.currency`). El valor se guarda en cobre (`Character.coins`, precios, recompensas, deudas) y se **enseña, se lee y se pesa en monedas**: 1.500 son «15 de oro», 125 son «1 de oro, 2 de plata y 5 de cobre». Se lleva siempre el menor número de piezas (el cambio se da solo); pesan esas piezas, 50 por libra (`coins_per_lb`). El jugador puede escribir «dar 3 de oro a Mira» o «20 monedas» (cobre).
-- **Precios**: los del catálogo SRD en cobre para el equipo (daga 2 de oro, espada corta 10, espada larga 15, cota de malla 150); lo de cada día, barato: cerveza 4 de cobre · ración 1 de plata · noche de posada 2 de plata (`ROOM_NIGHT_PRICE`) · antorcha 1–2 de cobre. Lo que compran los NPC, por debajo de lo que venden (un leño, 3 de cobre).
+- **Moneda**: oro, plata y cobre (1 de oro = 10 de plata = 100 de cobre; cada campaña puede traer las suyas en `campaign.currency`). El valor se guarda en cobre (lo que hay en cada bolsa, `state.coins` (§5.3.2), precios, recompensas, deudas) y se **enseña, se lee y se pesa en monedas**: 1.500 son «15 de oro», 125 son «1 de oro, 2 de plata y 5 de cobre». Se lleva siempre el menor número de piezas (el cambio se da solo); pesan esas piezas, 50 por libra (`coins_per_lb`). El jugador puede escribir «dar 3 de oro a Mira» o «20 monedas» (cobre).
+- **Precios**: los del catálogo SRD en cobre para el equipo (daga 2 de oro, espada corta 10, espada larga 15, cota de malla 75, ración 5 de plata, poción de curación 50 de oro); lo que vende cada NPC lleva su precio en su lista (`sells`), y en un pueblo lo de cada día es barato: cerveza, 4 de cobre; ración, 1 de plata; noche de posada, 2 de plata (`ROOM_NIGHT_PRICE`); antorcha, 1 o 2 de cobre. Lo que compran los NPC, por debajo de lo que venden (un leño, 3 de cobre).
 - **Ingresos**: un encargo del tablón paga unas monedas de plata (15–60 de cobre en Brezal; 20–80 en los mundos generados): de una a tres noches de posada, no nueve. Misiones: de unas monedas de plata (acto I) a unas 10 de oro (el final). Botín de combate: lo que llevaban, no bolsas de oro mágicas.
 - **Sumideros**: alojamiento, comida, reparaciones, entrenamiento, monturas, alijos alquilados, impuestos/peajes de facción.
 - **Dinero inicial**: unas pocas monedas tras el equipo de clase: 1 de oro y 5 de plata (`campaign.starting_coins`, por defecto `DEFAULT_STARTING_COINS` = 150).
@@ -515,6 +649,8 @@ Dados (el servidor tira):
 Escritura (efectos):
 - `apply_damage(target_id, amount, type, source)` / `heal(target_id, amount)`
 - `add_condition(target_id, condition, duration)` / `remove_condition(...)`
+- `use_item(instance_id, quantity, target_id)` — gasta un consumible; poción con efecto, varita con cargas (§5.1.1)
+- `use_scroll(instance_id, mode: cast|copy, target_id)` / `attune_item(instance_id, mode: attune|identify|end)` (§5.1.1)
 - `use_resource(character_id, feature|spell_slot, level?)`
 - `move_to(character_id, target_spot_id, pace)` — el servidor calcula tiempo y ruta (§3.2.3)
 - `update_location_state(location_id, patch)`

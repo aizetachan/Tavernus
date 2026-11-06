@@ -39,7 +39,7 @@ const DEAL = /\b((?:en|como|de) (?:prenda|fianza)|acept\w* (?:la|tu|su|el|esa|es
 /** Lo que niega, rechaza, pregunta u ofrece: no cierra nada. */
 const NOT_CLOSED = /\b(no|ni|nunca|jamas|sin|niega\w*|rechaza\w*|tampoco|nadie|nada|ofreces|ofrece|propones|propone|pides|pide|preguntas|pregunta|quieres|quiere|si|tal vez|quiza\w*|podria\w*|espera\w*|piensa\w*|pesando|ya tengo|ya guarda|sigue\w*|hablamos|al contado|algo|quien|cualquiera|cada uno)\b/;
 /** Tools que dejan estado de un trato. */
-export const DEAL_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'transfer_item', 'buy_item', 'sell_item', 'complete_job']);
+export const DEAL_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'take_coins', 'transfer_item', 'buy_item', 'sell_item', 'complete_job']);
 
 /**
  * Frases que dan un trato por cerrado sin tool que lo respalde. Mira lo que
@@ -76,7 +76,7 @@ export const DEAL_REJECTION = 'Has narrado un trato sin registrarlo: usa set_deb
 // ---------------------------------------------------------------------------
 
 /** Tools que mueven las monedas del actor. */
-export const COIN_TOOLS = new Set(['give_coins', 'settle_debt', 'buy_item', 'sell_item', 'set_debt', 'pawn_item', 'complete_job']);
+export const COIN_TOOLS = new Set(['give_coins', 'take_coins', 'settle_debt', 'buy_item', 'sell_item', 'set_debt', 'pawn_item', 'complete_job']);
 const COIN = String.raw`(?:monedas?|cobres?|platas?|oros?)`;
 /** El actor las suelta («dejas las monedas sobre la mesa», «le das diez de plata», «pagas la cuenta»). */
 const HANDS_COINS = new RegExp(String.raw`(?<!\bte )\b(dejas|pones|sueltas|entregas|das|pagas|tiendes|deslizas|empujas|pasas)\b[^,]{0,40}\b${COIN}\b|\b(pagas|saldas)\b`);
@@ -115,7 +115,7 @@ const WANTS_THEFT = /\b(?:robar\w*|robo|roba|birl\w*|hurt\w*|sis\w*|mang\w*|quit
 /** La narración lo da por hecho: el objeto ya está en su mano, su manga o su bolsillo. */
 const TELLS_TAKEN = /\b(?:(?:cae|queda|esta)\w* (?:\w+ ){0,2}(?:a|en) tu (?:mano|palma|manga|bolsillo)|(?:te (?:lo|la|los|las) )?(?:guardas|escondes|metes)\b[^.;:]{0,30}\b(?:manga|bolsillo|cinto|mochila|zurron)|escondid[oa] (?:bajo|en) (?:la|tu) manga|(?:lo|la) sacas (?:del|de su)|se suelta del cinto|ya es tuy[oa]|te haces con)\b/;
 /** Tools que mueven objetos o monedas de verdad. */
-const MOVE_TOOLS = new Set(['transfer_item', 'give_coins', 'spawn_item', 'buy_item', 'sell_item', 'pawn_item']);
+const MOVE_TOOLS = new Set(['transfer_item', 'take_coins', 'give_coins', 'spawn_item', 'buy_item', 'sell_item', 'pawn_item']);
 
 /**
  * El jugador roba algo y la narración lo da por conseguido sin que nada haya cambiado de manos: o el objeto está en
@@ -158,6 +158,48 @@ export function servedWithoutPay(input: { narration: string; lines?: readonly Di
 
 export function servedRejection(phrase: string): string {
   return `El NPC entrega lo que vende («${phrase}») y nadie lo cobra: lo que se sirve se paga al servirlo con buy_item (de su lista «Vende») o se fía con set_debt si no puede o no quiere pagar ahora. Si todavía no se lo da (solo dice el precio), cuéntalo así. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Efecto mágico narrado sin que el motor lo aplique (PLAN-OBJETOS §4.11)
+// ---------------------------------------------------------------------------
+
+/** Tools que aplican el efecto de un objeto mágico. */
+export const MAGIC_TOOLS = new Set(['use_item', 'use_scroll', 'cast_spell', 'heal', 'attune_item', 'add_condition']);
+
+/** Lo que el actor lleva que se puede usar con magia: solo eso se vigila, para no confundir un pergamino mágico con una carta. */
+export interface MagicAtHand { scroll: boolean; potion: boolean; charged: boolean; attunable: boolean }
+
+const MAGIC_PATTERNS: { kind: keyof MagicAtHand; re: RegExp }[] = [
+  { kind: 'scroll', re: /\b(lees|lee|recitas|recita|pronuncias|pronuncia|activas|activa)\b[^,.;]{0,40}\bpergamino\b|\bpergamino\b[^,.;]{0,30}\b(arde|se deshace|se consume|se convierte en ceniza|se desvanece|brilla)\b/ },
+  { kind: 'potion', re: /\b(bebes|te bebes|bebe|se bebe|apuras|apura|tragas|traga|vacias|vacia)\b[^,.;]{0,40}\b(pocion|elixir|frasco|frasquito|vial|redoma|brebaje)\b/ },
+  { kind: 'charged', re: /\b(la varita|la vara|el baston|el anillo|el amuleto|el cetro)\b[^,.;]{0,30}\b(escupe|lanza|dispara|suelta|despide|se activa|descarga|chisporrotea)\b|\b(agitas|agita|apuntas|apunta|activas|activa|blandes|blande)\b[^,.;]{0,30}\b(varita|vara|cetro)\b/ },
+  { kind: 'attunable', re: /\b(te sintonizas|se sintoniza|sintonizas|quedas sintonizad[oa]|queda sintonizad[oa]|te vinculas con|se vincula con)\b/ },
+];
+/** Lo que no llega a ocurrir: niega, se queda en intento u ocurre en otro momento. */
+const MAGIC_NOT_DONE = /\b(no|ni|nunca|sin|si|quieres|intentas|piensas|vas a|antes de|tampoco|podrias|podria|seria|guardas|guarda)\b/;
+
+/**
+ * La narración cuenta que un objeto mágico hace efecto (bebe la poción y se vuelve invisible, lee el pergamino,
+ * la varita escupe dardos, queda sintonizado) y en el turno no ha pasado por su tool: el motor no lo ha aplicado.
+ * Solo se mira lo que el actor tiene a mano (`atHand`). Las palabras entre «» no cuentan.
+ */
+export function magicWithoutTool(input: { narration: string; okTools: readonly string[]; atHand: MagicAtHand; pendingRoll?: boolean }): string | null {
+  if (input.pendingRoll || input.okTools.some((t) => MAGIC_TOOLS.has(t))) return null;
+  const acts = norm(input.narration).replace(/«[^»]*»/g, ' . ');
+  for (const c of clauses(acts)) {
+    if (MAGIC_NOT_DONE.test(c)) continue;
+    for (const { kind, re } of MAGIC_PATTERNS) {
+      if (!input.atHand[kind]) continue;
+      const m = re.exec(c);
+      if (m) return m[0];
+    }
+  }
+  return null;
+}
+
+export function magicRejection(phrase: string): string {
+  return `La narración da por hecho un efecto mágico («${phrase}») que el motor no ha aplicado: lo que no pasa por un tool no ha ocurrido. Usa use_item (poción, varita, objeto con cargas), use_scroll (pergamino), attune_item (sintonizarse o identificar) o cast_spell, y narra lo que devuelva; o narra que no llega a usarlo. Reescribe log_event.`;
 }
 
 // ---------------------------------------------------------------------------

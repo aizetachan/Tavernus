@@ -9,10 +9,10 @@
 
 import { journalOf, npcLabel } from './journal.js';
 import type { Engine } from './engine.js';
-import { weaponOf } from './combat.js';
+import { attackProfile } from './itemrules.js';
 import { isDying, isStable } from './death.js';
 import { debtLine, openDebts } from './debts.js';
-import { money } from './money.js';
+import { coinsAt, coinsOf, money, pursesOf } from './money.js';
 import { abilityModifier, proficiencyBonus } from './dice.js';
 import type { InfoIntent } from './fastpath.js';
 import { RULE_TERMS } from './fastpath.js';
@@ -23,7 +23,7 @@ import { descriptorOf, whereAmI } from './narrate.js';
 import { perceive } from './perception.js';
 import { hitDiceLeft } from './rest.js';
 import { ABILITY_ES, SKILLS, armorClass, modifierFor, saveModifier, skillModifier, type Ability, type CheckKind } from './rules.js';
-import { casterOf, castableSpells, choiceOptions, classChoices, classFeatures, classResources, nextLevelXp, pendingChoices, preparedCount, rangedStyleBonus, resourceLeft, spellGroups, spellStats, spellsOf } from './levels.js';
+import { casterOf, castableSpells, choiceOptions, classChoices, classFeatures, classResources, nextLevelXp, pendingChoices, preparedCount, resourceLeft, spellGroups, spellStats, spellsOf } from './levels.js';
 import { progressionOf } from '../data/srd/progression.js';
 import { spellById } from '../data/srd/spells.js';
 
@@ -108,7 +108,11 @@ export function answerInfo(engine: Engine, c: Character, intent: InfoIntent): In
     case 'coins': {
       const now = engine.nowFor(c);
       const debts = openDebts(c).map((d) => debtLine(w, d, now, (n) => npcLabel(c, n)));
-      return { title: 'Monedas', lines: [c.coins > 0 ? `Llevas ${money(w, c.coins)}.` : 'No llevas ni una moneda.', ...debts.map((d) => `${d}.`)] };
+      const total = coinsOf(w, c.id);
+      // Con más de una bolsa, cuánto hay en cada una (la escondida en la mochila también).
+      const purses = pursesOf(w, c.id).filter((p) => coinsAt(p) > 0);
+      const each = purses.length > 1 ? purses.map((p) => `En ${w.itemDef(p.item_id).name}${p.location.type === 'container' ? ` (dentro de ${w.itemDef(w.itemInstance(p.location.id).item_id).name})` : ''}: ${money(w, coinsAt(p))}.`) : [];
+      return { title: 'Monedas', lines: [total > 0 ? `Llevas ${money(w, total)}.` : 'No llevas ni una moneda.', ...each, ...debts.map((d) => `${d}.`)] };
     }
     case 'hp': {
       const state = c.status === 'dead' ? 'Muerto.'
@@ -272,11 +276,11 @@ function checkLine(c: Character, kind: CheckKind, key: string): string {
   return `${cap(label)}: ${d20(modifier)}.`;
 }
 
-/** El ataque con el arma que lleva en la mano, como lo resuelve combat.ts. */
+/** El ataque con el arma que lleva en la mano, como lo resuelve combat.ts (itemrules.ts: competencia, magia, versátil). */
 function attackLine(engine: Engine, c: Character): string {
-  const wpn = weaponOf(engine.world, c);
-  const str = abilityModifier(c.abilities.str), dex = abilityModifier(c.abilities.dex);
-  const mod = wpn.ranged ? dex : wpn.finesse ? Math.max(str, dex) : str;
-  const dmg = mod === 0 ? wpn.damage : `${wpn.damage} ${mod < 0 ? '−' : '+'} ${Math.abs(mod)}`;
-  return `Ataque con ${wpn.name}: ${d20(mod + proficiencyBonus(c.level) + (wpn.ranged ? rangedStyleBonus(c) : 0))} · daño ${dmg} (${DAMAGE_ES[wpn.damage_type] ?? wpn.damage_type}).`;
+  const p = attackProfile(engine.world, c);
+  if ('error' in p) return p.error;
+  const dmg = p.damage_mod === 0 ? p.damage : `${p.damage} ${p.damage_mod < 0 ? '−' : '+'} ${Math.abs(p.damage_mod)}`;
+  const extra = [...p.notes, ...(p.needs_ammo ? [p.ammo ? `munición: ${p.ammo.quantity}` : 'sin munición: no puede disparar'] : [])];
+  return `Ataque con ${p.name}: ${d20(p.attack_bonus + (p.proficient ? proficiencyBonus(c.level) : 0))}, daño ${dmg} (${DAMAGE_ES[p.damage_type] ?? p.damage_type}).${extra.length ? ` ${cap(extra.join('; '))}.` : ''}`;
 }
