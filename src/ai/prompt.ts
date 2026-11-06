@@ -3,6 +3,7 @@
  * por campaña y va cacheado; todo lo que cambia va en el mensaje de usuario.
  */
 
+import { alarmAt, alarmLine } from '../engine/alarm.js';
 import type { Engine } from '../engine/engine.js';
 import type { CheckResult } from '../engine/dice.js';
 import type { Campaign, Character, Clue, GameEvent, Id, Npc } from '../engine/model.js';
@@ -292,6 +293,9 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
 
   // La luz real ya va en Tiempo; el estado solo si hay algo.
   L.push(`## Localización: ${loc.name} (${loc.id})\n${loc.description_base}\nAmbiente: ruido ${loc.ambience.noise}${loc.ambience.smell ? `, olor a ${loc.ambience.smell}` : ''}.${Object.keys(loc.state).length ? ` Estado: ${JSON.stringify(loc.state)}` : ''}`);
+  // Alarma del sitio (alarm.ts): fuego, derrumbe… Va aparte del estado para que se lea.
+  const alarm = alarmLine(alarmAt(world, loc.id, nowG));
+  if (alarm) L.push(alarm);
   // Solo los rincones que el actor conoce (spots.ts); los demás van aparte, sin descripción.
   const spots = knownSpots(world, actor, loc.id);
   L.push('Puntos que el actor conoce:\n' + spots.map((s) => {

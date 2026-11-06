@@ -6,6 +6,7 @@
  * plana desde los datos. En fase 2 el mismo punto de entrada llama al master.
  */
 
+import { noticeThefts } from './stolen.js';
 import { GameClock, Ticker, GAME_DAY, GAME_MINUTE } from '../clock/clock.js';
 import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
@@ -3344,6 +3345,8 @@ export class Engine {
    * los tools del máster, que no emiten.
    */
   private announceIncidents(): void {
+    // Lo robado sin testigos: el dueño lo echa en falta al cambiar de actividad (stolen.ts, CONVERSACION-FLUJO).
+    noticeThefts(this.world, this.gameNow());
     const notices = lawTick(this.world, this.gameNow(), (c) => this.nowFor(c));
     for (const i of allIncidents(this.world)) {
       if (i.status !== 'open' || i.severity < 2 || i.announced >= i.severity) continue;

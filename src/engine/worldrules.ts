@@ -46,6 +46,7 @@ import { changeOpinion, dropTag, earnTag, opinionEffects, opinionOf, opinionReas
 import { applyStoryEffects, characterStory, conditionErrors, effectErrors, emptyStoryOutput, holds, storyOf, type Story, type StoryCondition, type StoryEffect, type StoryOutput, type StoryRefs } from './story.js';
 import { allFacts, FACT_NEWS_S, factById, knowsFact, learnFact, removeFact, setFact, type WorldFact } from './worldfacts.js';
 import type { World } from './world.js';
+import { clearAlarm, setAlarm, ALARM_KINDS, type AlarmKind } from './alarm.js';
 
 // ---------------------------------------------------------------------------
 // Definición (datos de campaña)
@@ -97,7 +98,12 @@ export type RuleEffect =
   /** Abre o cierra una pista (un paso) de una misión para el PJ del evento (o para quien la tenga abierta). */
   | { kind: 'lead'; quest_id: Id; step_id: Id; open: boolean }
   /** Apunta (o borra) un hecho consultable. */
-  | { kind: 'fact'; id: Id; text?: string; remove?: boolean };
+  | { kind: 'fact'; id: Id; text?: string; remove?: boolean }
+  /**
+   * Pone (o quita) una alarma en una localización (alarm.ts): fuego, derrumbe… Sin `location_id`, donde pasó el
+   * evento. Mientras dura, nadie de allí está para charlas (CONVERSACION-FLUJO, capa 1).
+   */
+  | { kind: 'alarm'; alarm_kind: AlarmKind; text: string; location_id?: Id; minutes?: number; clear?: boolean };
 
 export interface WorldRule {
   id: Id;
@@ -396,7 +402,7 @@ function fillDeep<T>(x: T, vars: Record<string, string>): T {
   return x;
 }
 
-const NEW_KINDS = new Set(['opinion', 'tag', 'topic', 'comment', 'lead', 'fact']);
+const NEW_KINDS = new Set(['opinion', 'tag', 'topic', 'comment', 'lead', 'fact', 'alarm']);
 
 /** Junta la salida de la historia de un efecto en la de la pasada. */
 function merge(o: StoryOutput, x: StoryOutput): void {
@@ -490,6 +496,13 @@ function applyEffect(p: Pass, rule: WorldRule, e: WorldEvent, eff: RuleEffect, i
         st.leads = { ...(st.leads ?? {}), [`${x.quest_id}/${x.step_id}`]: x.open ? 'open' : 'closed' };
         world.touch('characters', y.id);
       }
+      return;
+    }
+    case 'alarm': {
+      const loc = x.location_id ?? e.location_id;
+      if (!loc || !world.locations.has(loc)) return;
+      if (x.clear) { clearAlarm(world, loc); return; }
+      setAlarm(world, loc, { kind: x.alarm_kind, text: fill(x.text, e.vars), minutes: x.minutes ?? null, by: 'rule' }, nowS);
       return;
     }
     case 'fact': {
@@ -788,6 +801,11 @@ export function validateReactions(rules: readonly WorldRule[], has: StoryRefs & 
           break;
         case 'lead': if (!has.quest(x.quest_id)) errs.push(`${w}: la misión ${x.quest_id} no existe.`); break;
         case 'fact': if (!x.id.trim()) errs.push(`${w}: hecho sin id.`); break;
+        case 'alarm':
+          if (!ALARM_KINDS.includes(x.alarm_kind)) errs.push(`${w}: alarma de tipo desconocido (${x.alarm_kind}).`);
+          if (!x.clear && !x.text?.trim()) errs.push(`${w}: alarma sin texto.`);
+          if (x.location_id && !has.location(x.location_id)) errs.push(`${w}: la localización ${x.location_id} no existe.`);
+          break;
       }
     }
   }

@@ -686,6 +686,11 @@ export interface Npc {
   /** Confianza en cada PJ (trust.ts): puntos y lo ganado en la última charla. */
   trust?: Record<Id, NpcTrust>;
   memory: NpcMemory[];
+  /**
+   * PJ cuyo nombre sabe este NPC (docs/CONVERSACION-FLUJO.md, capa 2): se le presentaron hablando con él. Los que le
+   * conocen por su situación (`situation.knows`, recíproco) no hace falta apuntarlos. Estado de partida.
+   */
+  knows_name_of?: Id[];
   /** Cola de conversación (SPEC §9.6): con quién habla ahora. */
   talking_to: { character_id: Id; since_game_s: number; /** Otros PJ unidos a la charla (scene.ts). */ with?: Id[]; /** Turno guardado para quien esperaba: aún no ha hablado. */ reserved?: boolean; /** Cuándo empezó esta charla (`since_game_s` se renueva en cada turno). */ started_game_s?: number; /** La charla ya da para pedirle una misión (talk.ts) y el NPC ha contado esta (story.ts, `voicedQuest`); `true`, cualquiera de las suyas (partidas de antes). */ ripe?: boolean | Id } | null;
   /** Su casa (datos de campaña): el máster sabe dónde vive y no se la inventa en otro sitio (prompt.ts, homeLine). */
