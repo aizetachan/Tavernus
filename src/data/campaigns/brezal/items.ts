@@ -23,7 +23,13 @@ export const ITEM_DEFS: ItemDef[] = [
   ...structuredClone(CATALOG as ItemDef[]),
   quest('it_llave_vharn', 'llave vieja con el sello de Vharn', ['llave', 'llave de vharn', 'llave vieja', 'key'], { size: 'tiny', weight_lb: 0.1 }),
   quest('it_libro_cuentas', 'libro de cuentas de Vharn', ['libro', 'libro de cuentas', 'cuentas', 'ledger'], { weight_lb: 2 }),
-  quest('it_cadena_fria', 'eslabones de hierro frío', ['eslabones', 'cadena', 'hierro frío', 'hierro frio'], { size: 'medium', weight_lb: 4 }),
+  // Mágicos, pocos y del lore (Miguel, 2026-11-06: «pocos, enigmáticos y que tengan que ver con el lore»; propuesta del
+  // bloque F). Siguen siendo objetos de misión: no se venden. Sin identificar, no se sabe qué hacen.
+  quest('it_cadena_fria', 'eslabones de hierro frío', ['eslabones', 'cadena', 'hierro frío', 'hierro frio'], {
+    size: 'medium', weight_lb: 4, rarity: 'uncommon',
+    effects: [{ kind: 'note', text: 'Siempre fríos al tacto. Sujetos, el fuego de la Brasa no prende en quien los lleva.' }, { kind: 'resist', damage_type: 'fire' }],
+    unidentified: { name: 'eslabones de hierro viejo', description: 'Unos eslabones de cadena, gruesos y negros, más fríos de lo que deberían.' },
+  }),
   quest('it_cartas_tobias', 'cartas con una brasa dibujada', ['cartas', 'carta', 'cartas de tobías', 'cartas de tobias'], { size: 'tiny', weight_lb: 0.1 }),
   quest('it_bolsa_ceniza', 'bolsa de ceniza del granero', ['bolsa de ceniza', 'ceniza', 'bolsa'], { weight_lb: 1 }),
   quest('it_llave_arcon', 'llave del arcón del regidor', ['llave del arcón', 'llave del arcon', 'llave pequeña'], { type: 'tool', size: 'tiny', weight_lb: 0.1 }),
@@ -39,7 +45,10 @@ export const ITEM_DEFS: ItemDef[] = [
   // Lo que la historia nombra de cada vecino. Las descripciones solo dicen lo que se ve: lo que esconde cada cosa
   // está en su ficha de la wiki (wiki/Personajes/) y en lo que el NPC cuenta según su confianza.
   { id: 'it_jarra_brenna', name: 'jarra de barro con una muesca', aliases: ['jarra', 'jarra de barro', 'jarra con muesca', 'jarra de brenna'], type: 'misc', size: 'small', weight_lb: 1, value: 0, unique: true, description: 'Una jarra de barro vieja, con una muesca en el asa. Brenna la seca cuando piensa; cuanto más le duele lo que oye, más deprisa.', origin: 'custom' },
-  { id: 'it_guante_ascua', name: 'guante de cuero con un ascua', aliases: ['guante', 'guante de cuero', 'ascua', 'guante del ascua'], type: 'quest', size: 'small', weight_lb: 0.5, value: 0, unique: true, equip_slot: 'hands', description: 'Un guante de trabajo de cuero, remendado mil veces y demasiado grande para la mano que lo lleva. Dentro brilla un ascua de la Brasa que no se apaga: quema a quien la toca sin el guante.', origin: 'custom' },
+  { id: 'it_guante_ascua', name: 'guante de cuero con un ascua', aliases: ['guante', 'guante de cuero', 'ascua', 'guante del ascua'], type: 'quest', size: 'small', weight_lb: 0.5, value: 0, unique: true, equip_slot: 'hands', description: 'Un guante de trabajo de cuero, remendado mil veces y demasiado grande para la mano que lo lleva. Dentro brilla un ascua de la Brasa que no se apaga: quema a quien la toca sin el guante.', rarity: 'uncommon',
+    effects: [{ kind: 'resist', damage_type: 'fire' }, { kind: 'light', radius_ft: 10 }, { kind: 'note', text: 'Con él puesto, el ascua de la Brasa no quema a quien lo lleva; sin él, el ascua quema.' }],
+    unidentified: { name: 'guante de cuero remendado', description: 'Demasiado grande, tibio por dentro aunque haga frío.' },
+    origin: 'custom' },
   { id: 'it_cuerda_ursula', name: 'cuerda trenzada a mano', aliases: ['cuerda', 'cuerda trenzada', 'cuerda de úrsula', 'cuerda de ursula', 'soga'], type: 'gear', subtype: 'adventuring', size: 'medium', weight_lb: 8, value: 0, unique: true, description: 'Una cuerda trenzada a mano, gastada en los nudos. Úrsula se ata con ella a la cerca para entrar en la niebla.', origin: 'custom' },
   { id: 'it_botas_doro', name: 'botas nuevas', aliases: ['botas', 'botas de cuero', 'botas de doro'], type: 'gear', subtype: 'clothes', size: 'small', weight_lb: 2, value: 300, unique: true, equip_slot: 'feet', description: 'Botas de cuero nuevas, sin una mancha de barro. En la suela, el sello del zapatero de la casona.', origin: 'custom' },
   { id: 'it_anillos_osric', name: 'anillos de plata', aliases: ['anillos', 'anillos de plata', 'sortijas'], type: 'treasure', size: 'tiny', weight_lb: 0.1, value: 3000, unique: true, equip_slot: 'ring2', description: 'Dos anillos de plata maciza, de la de antes. Más plata de la que gana un regidor de aldea.', origin: 'custom' },

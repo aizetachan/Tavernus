@@ -166,6 +166,8 @@ Bloques SRD de los arquetipos del generador (`ARCHETYPES`, mismos rangos que val
 | Lucio | 6 de oro (escrita en `items.ts`) | manojo de llaves del buhonero (abre la trastienda), libreta de cuentas, llave de hierro, pañuelo | la tapa de hierro frío del cuenco de cuna (`it_tapa_cuna`, mágica, no está a la venta); sus existencias no las lleva encima: están en sus estantes |
 | los tres animales | | | nada |
 
+**Magia en Brezal** **[nuevo, 2026-11-06]**: poca, enigmática y del lore (Miguel). Tres objetos, todos de la historia y ninguno a la venta: el **guante del ascua** de Ysolde (poco común: resistencia al fuego y luz a 10 pies; sin identificar, «guante de cuero remendado»; con él puesto el ascua no quema), los **eslabones de hierro frío** bajo la losa de Hugo (poco común: resistencia al fuego; sin identificar, «eslabones de hierro viejo») y la **tapa de hierro frío** del cuenco de cuna que lleva Lucio para Ysolde (bloque E). La magia del catálogo SRD no llega a Brezal (`syncCatalog`, bloque B). Riesgo anotado: si un PJ le roba el guante a Ysolde, ella queda sin protección y el acto III cuenta con que se lo quite ella.
+
 ### 2.6 Lugares **[cambia]**
 
 **Una zona jugable** (Aldea de Brezal), **once lugares** (la taberna cuenta con su sótano) y 69 puntos. Los planos salen de mapgen con las coordenadas, tags y alias de cada punto. Las ids de siempre se conservan: el Soto es `loc_claro`, el Granero Quemado es `loc_ruinas`, la madriguera es `sp_cs_cueva` y el mojón del Lindero es `sp_cs_mojon`.
