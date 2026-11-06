@@ -24,11 +24,11 @@ Pasa todos los días, a la misma hora.
 
 | Hora | Qué | Dónde | Quién |
 |---|---|---|---|
-| 9:00 - 13:00 | **El mercado.** Los buhoneros atrapados por la niebla montan puestos cada vez más vacíos. Mateo vende la harina gris que queda y Úrsula, huevos. Buen sitio para oír rumores. | El pozo, [[Plaza del Pozo]] | [[Mateo]], [[Úrsula]], unos 20 vecinos y 4 buhoneros |
+| 9:00 - 13:00 | **El mercado.** Los buhoneros atrapados por la niebla montan puestos cada vez más vacíos. Mateo vende la harina gris que queda y Úrsula, huevos. Buen sitio para oír rumores. | El pozo, [[Plaza del Pozo]] | [[Mateo]], [[Úrsula]], Marta, Lucio y Pía ([[Vecinos de Brezal]]), unos 17 vecinos más y 4 buhoneros |
 | 13:00 - 14:00 | **El cobro del diezmo.** Garrán planta una mesa junto al tablón y cobra el «diezmo de la ceniza». Doro hace de pared. Quien no puede pagar deja algo en prenda. | El tablón, [[Plaza del Pozo]] | [[Garrán]], [[Doro]], una fila de vecinos |
-| 19:00 - 21:00 | **La cena del Jabalí.** Guiso, pan gris y cerveza. Se habla de la tos, de los lobos, de las luces del granero y, sobre todo, de la niebla. La mejor hora para oír Brezal entero. | La barra, [[Taberna del Jabalí]] | [[Hugo]] y unos diez vecinos |
-| 20:00 - 21:00 | **La misa del pozo.** Velas en el brocal y un rezo por los que no volvieron de Vharn. Si alguien quiere decir algo delante de todo Brezal, es aquí. | El pozo, [[Plaza del Pozo]] | [[Ilse]] dirige; [[Brenna]] acude y no habla con nadie |
-| 22:00 - 23:00 | **Alguien prueba la niebla.** Tres vecinos con antorchas. Uno se ata una cuerda a la cintura y entra. Al rato sale por el mismo sitio, tosiendo ceniza. | La barricada, [[El Lindero]] | Vecinos |
+| 19:00 - 21:00 | **La cena del Jabalí.** Guiso, pan gris y cerveza. Se habla de la tos, de los lobos, de las luces del granero y, sobre todo, de la niebla. La mejor hora para oír Brezal entero. | La barra, [[Taberna del Jabalí]] | [[Hugo]]; Benito, Ciro, Gil, Lucio y Damián ([[Vecinos de Brezal]]), y unos cinco vecinos más |
+| 20:00 - 21:00 | **La misa del pozo.** Velas en el brocal y un rezo por los que no volvieron de Vharn. Si alguien quiere decir algo delante de todo Brezal, es aquí. | El pozo, [[Plaza del Pozo]] | [[Ilse]] dirige; [[Brenna]] acude y no habla con nadie; Remedios y Fermina ([[Vecinos de Brezal]]) y unos diez feligreses |
+| 22:00 - 23:00 | **Alguien prueba la niebla.** Tres vecinos con antorchas. Uno se ata una cuerda a la cintura y entra. Al rato sale por el mismo sitio, tosiendo ceniza. | La barricada, [[El Lindero]] | Ramiro, el de la cuerda, y Anselmo, el sereno ([[Vecinos de Brezal]]), con otro vecino |
 | 23:00 - 24:00 | **Una figura cruza el arroyo.** Pasos ligeros, sin antorcha, con un hatillo, hacia el granero viejo. | El arroyo, [[El Soto]] | Ver spoiler |
 
 > [!warning]- Spoiler: quién cruza el arroyo
@@ -51,6 +51,8 @@ Si una franja no tiene sitio propio, el vecino sigue donde estaba de día.
 | [[Ysolde]] | El pajar hundido, [[El Granero Quemado]] | El pajar hundido | La capilla derruida | |
 | [[Hal]] | La piedra grande, [[El Soto]] | La choza de pieles | La choza de pieles | |
 | [[Úrsula]] | El gallinero, [[Los Corrales]] | El huerto | La casa de la granja | Mercado, 9:00 |
+
+Los trece vecinos de relleno (el sereno, la panadera, los labradores…) tienen su propio horario: ver [[Vecinos de Brezal]].
 
 La historia puede cambiar estos horarios. Por ejemplo, si Garrán clava la herrería, Hugo pasa a beber en el Jabalí. Ver [[La amenaza]].
 

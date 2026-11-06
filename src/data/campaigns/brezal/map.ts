@@ -90,6 +90,10 @@ export const LOCATIONS: AuthoredLocation[] = [
       S('sp_pl_callejon', 'el callejón de las hierbas', ['callejón', 'callejon'], ['road'], -6, 14, 'Un callejón estrecho que huele a hierbas cocidas; al fondo, a veinte pasos de la plaza, la Casa de las hierbas, donde vive y cura Ilse.'),
       S('sp_pl_camino_molino', 'el camino del molino', ['camino del molino', 'huertos'], ['road'], 36, 6, 'Un camino de carro que baja entre huertos hacia el ruido del agua y la rueda del molino.'),
       S('sp_pl_corrales', 'el camino de los corrales', ['camino de los corrales', 'cercas'], ['road'], -10, -6, 'Un camino de tierra entre cercas de piedra que huele a gallinero y lleva a la granja de la viuda Úrsula.'),
+      // Relleno (extras.ts): el horno de Marta y las casas donde duermen los vecinos. Las casas son por dentro y están
+      // cerradas: quien está dentro no se ve desde la plaza (perception.ts, isDwelling) y el PJ no entra sin forzar.
+      S('sp_pl_horno', 'el horno', ['horno', 'tahona', 'panadería', 'panaderia'], ['counter', 'fireplace'], 10, -6, 'Un horno de leña con un mostrador de tabla a la calle; huele a pan de centeno y a ceniza, y cada día salen menos hogazas.'),
+      S('sp_pl_casas', 'las casas del callejón', ['casas', 'casas del callejón', 'casas del callejon', 'viviendas', 'casas de los vecinos'], ['building', 'dwelling'], -14, 20, 'Una hilera de casas bajas de piedra y adobe con las puertas cerradas y las contraventanas echadas; de alguna chimenea sale humo.', { state: { locked: true, key_item_id: 'it_llave_casas' } }),
     ],
   },
   {

@@ -22,6 +22,7 @@ import type { EncounterTable } from '../engine/travel.js';
 import type { TagDef } from '../engine/model.js';
 import { validateReactions, type WorldRule } from '../engine/worldrules.js';
 import type { ChatterDef } from '../engine/chatter.js';
+import { extraProblems } from '../engine/extras.js';
 
 const norm = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const blank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
@@ -254,5 +255,7 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
     for (const id of d.npc_ids ?? []) if (!npcs.has(id)) errs.push(`comentarios ${d.id}: el NPC ${id} no existe.`);
     if (!d.texts.length) errs.push(`comentarios ${d.id}: sin frases.`);
   }
+  // Relleno (extras.ts): oficio, a quién remite, casa, tope por punto y franja.
+  errs.push(...extraProblems(snap));
   return errs;
 }
