@@ -61,7 +61,7 @@ import { RUMOR_KINDS, type Rumor, type RumorKind } from './rumors.js';
 import type { NpcRoutine, ScheduledEvent } from './schedule.js';
 import { money, receive } from './money.js';
 import { hasTag, opinionOf } from './standing.js';
-import { hasFact } from './worldfacts.js';
+import { hasFact, setFact } from './worldfacts.js';
 import { adjustTrust, TRUST_LABEL, TRUST_THRESHOLD, trustAtLeast, type TrustChange, type TrustResult, trustNotice } from './trust.js';
 import type { World } from './world.js';
 
@@ -114,6 +114,10 @@ export type StoryCondition =
   | { kind: 'tag'; tag: Id }
   /** Opinión de ese NPC con el PJ dentro de estos límites (standing.ts). */
   | { kind: 'opinion'; npc_id: Id; at_least?: number; at_most?: number }
+  /** El PJ dio ese objetivo por esa vía (fases y vías, abajo). */
+  | { kind: 'way'; quest_id: Id; step_id: Id; way_id: Id }
+  /** El PJ cerró esa fase de esa misión. */
+  | { kind: 'phase'; quest_id: Id; phase_id: Id }
   /** Lo decide el máster con advance_story; `how` le dice cuándo. */
   | { kind: 'narrative'; how: string }
   | { kind: 'any'; of: StoryCondition[] }
@@ -179,6 +183,10 @@ export interface StoryStep {
   optional?: boolean;
   /** Lo que apunta el Diario al darlo, en primera persona del grupo («Ilse nos habló del sello»). */
   journal?: string;
+  /** Fase a la que pertenece (`StoryQuest.phases`). En una misión con fases, todos los pasos llevan la suya. */
+  phase?: Id;
+  /** Formas conocidas de lograrlo (fases y vías, abajo). `done_when` es la meta: cualquier forma que la cumpla vale. */
+  ways?: StoryWay[];
 }
 
 /**
@@ -243,6 +251,79 @@ export interface StoryQuest {
   deadline?: StoryDeadline;
   /** Final de la campaña: lo que queda del valle. Para el Diario y el máster. */
   ending?: string;
+  /** Fases en orden (y secundarias, que se abren solas). Sin ellas, una lista de pasos como siempre. */
+  phases?: StoryPhase[];
+  /** Desenlaces según cómo quedó el mundo al cumplirla: el primero cuyo `when` se cumple; el último, sin `when`. */
+  outcomes?: StoryOutcome[];
+}
+
+// ---------------------------------------------------------------------------
+// Fases, vías y desenlaces (misiones por fases)
+// ---------------------------------------------------------------------------
+//
+// Una misión puede ir por fases, como las de los MMO: cada fase tiene uno o más objetivos (pasos con `phase`), que
+// se cumplen en cualquier orden; al cerrarse todos, se abre la siguiente. Las fases secundarias (`secondary`) no hacen
+// falta para cumplirla: se abren cuando pasa algo (`opens_when`) y dan su recompensa. El objetivo es cómo queda el
+// mundo (`done_when`), no cómo se consigue: las vías (`ways`) son las formas que el mundo conoce, para dar pistas,
+// pedir la tirada justa y dejar consecuencias distintas (efectos y hechos para las reglas del mundo). Si el jugador
+// inventa otra, vale si logra la meta: el máster la marca como `improvisada`. Fallar una vía no cierra la misión: deja
+// una complicación (`on_fail`). Al cumplirla, el desenlace sale del estado del mundo (`outcomes`).
+
+/** Tipo de vía, para que siempre haya más de una forma y no todas sean pelear. */
+export type WayKind = 'force' | 'stealth' | 'word' | 'lore' | 'item' | 'help' | 'magic' | 'coin' | 'detour';
+export const WAY_KINDS: readonly WayKind[] = ['force', 'stealth', 'word', 'lore', 'item', 'help', 'magic', 'coin', 'detour'];
+/** La vía que el máster marca cuando el jugador logra la meta de una forma que la misión no tenía prevista. */
+export const IMPROVISED_WAY = 'improvisada';
+
+export type StoryReward = StoryQuest['reward'];
+
+export interface StoryWay {
+  id: Id;
+  kind: WayKind;
+  /** Lo que sabe el grupo, en primera persona, para el Diario: «Hal nos dijo que los lobos temen el fuego». */
+  text: string;
+  /** Para el máster: cómo se hace y qué pasa. */
+  how: string;
+  /** Se conoce cuando se cumple (alguien la sugiere, se ve algo). Sin él, en cuanto se ve el objetivo. */
+  revealed_by?: StoryCondition;
+  /** Lo que pide además de la tirada: un objeto, una etiqueta, confianza, una hora. */
+  requires?: StoryCondition;
+  /** Tirada que pide (la hace el máster con roll). */
+  check?: { skill: string; dc: number };
+  /** El motor la reconoce solo (la loba muerta). Sin él, la marca el máster con advance_story y su `way_id`. */
+  done_when?: StoryCondition;
+  on_done?: StoryEffect[];
+  /** Hechos del mundo que deja (worldfacts.ts), para que las reglas y los desenlaces los recojan. */
+  facts?: Id[];
+  /** Si sale mal: la complicación, en primera persona, y lo que cambia. La misión sigue. */
+  on_fail?: { text: string; effects?: StoryEffect[]; facts?: Id[] };
+}
+
+export interface StoryPhase {
+  id: Id;
+  /** Lo que lee el jugador como título de la fase: «Encontrar el rastro». */
+  title: string;
+  /** Opcional: no hace falta para cumplir la misión. Se abre cuando se cumple `opens_when`. */
+  secondary?: boolean;
+  opens_when?: StoryCondition;
+  /** Lo que apunta el Diario al cerrarla, en primera persona del grupo. */
+  journal?: string;
+  reward?: StoryReward;
+  on_done?: StoryEffect[];
+}
+
+export interface StoryOutcome {
+  id: Id;
+  /** Cómo lo ve el jugador: «Ceniza en casa sin que la loba se entere». */
+  title: string;
+  /** Cuándo vale (al cumplirla). Sin él, el de por defecto: va el último. */
+  when?: StoryCondition;
+  /** Lo que apunta el Diario, en primera persona del grupo. */
+  journal: string;
+  /** Se suma a la recompensa de la misión. */
+  reward?: StoryReward;
+  on_complete?: StoryEffect[];
+  facts?: Id[];
 }
 
 /** Escalón de la amenaza que avanza sola si nadie interviene. */
@@ -310,6 +391,15 @@ export interface CharacterStory {
   log?: QuestLogEntry[];
   /** Pistas (`quest/paso`) que una regla del mundo ha abierto o cerrado (worldrules.ts, efecto `lead`). Cerrada: ni se ve ni cuenta. */
   leads?: Record<Id, 'open' | 'closed'>;
+  /** Por qué vía dio cada objetivo (`quest/paso` → vía). */
+  ways?: Record<Id, Id>;
+  /** Vías que salieron mal (`quest/paso/vía`). */
+  failed_ways?: Id[];
+  /** Fases secundarias abiertas y fases cerradas (`quest/fase`). */
+  phases_open?: Id[];
+  phases_done?: Id[];
+  /** Desenlace de cada misión cumplida con desenlaces. */
+  outcomes?: Record<Id, Id>;
 }
 
 /** De dónde le viene una misión al PJ. `heard` solo queda en partidas de antes de los rumores. */
@@ -324,7 +414,12 @@ export interface QuestOrigin {
 export interface QuestLogEntry {
   quest_id: Id;
   /** `open`: aceptada (o la principal, al empezar). */
-  kind: 'rumor' | 'offered' | 'declined' | 'open' | 'step' | 'ready' | 'changed' | 'warned' | 'done' | 'failed' | 'expired';
+  kind: 'rumor' | 'offered' | 'declined' | 'open' | 'step' | 'ready' | 'changed' | 'warned' | 'done' | 'failed' | 'expired'
+    /** Fases: una cerrada, una secundaria que se abre y una vía que salió mal. */
+    | 'phase' | 'phase_open' | 'way_failed';
+  /** En `phase` y `phase_open`, la fase; en `way_failed`, la vía. */
+  phase_id?: Id;
+  way_id?: Id;
   step_id?: Id;
   game_s: number;
   /** Por qué, en palabras del jugador («conseguiste la pista «La Brasa de Vharn»»). */
@@ -449,6 +544,8 @@ export function holds(world: World, c: Character | null, cond: StoryCondition): 
       const v = n ? opinionOf(n, c!.id) : 0;
       return !!n && (cond.at_least === undefined || v >= cond.at_least) && (cond.at_most === undefined || v <= cond.at_most);
     }
+    case 'way': return characterStory(c!).ways?.[`${cond.quest_id}/${cond.step_id}`] === cond.way_id;
+    case 'phase': return characterStory(c!).phases_done?.includes(`${cond.quest_id}/${cond.phase_id}`) ?? false;
     case 'narrative': return false;
     case 'any': return cond.of.some((x) => holds(world, c, x));
     case 'all': return cond.of.every((x) => holds(world, c, x));
@@ -508,6 +605,8 @@ export function explain(world: World, c: Character, cond: StoryCondition): strin
     case 'fact': return 'ha pasado lo que tenía que pasar';
     case 'tag': return 'por lo que se sabe de ti';
     case 'opinion': return `por lo que ${npc(cond.npc_id)} piensa de ti`;
+    case 'way': return wayOf(world, cond)?.text ?? 'lo hicisteis a vuestra manera';
+    case 'phase': return `cerrasteis «${quest(world, cond.quest_id)?.phases?.find((p) => p.id === cond.phase_id)?.title ?? cond.phase_id}»`;
     case 'narrative': return 'lo has hecho en la escena';
     case 'any': {
       const hit = cond.of.find((x) => credited(world, c, x)) ?? cond.of.find((x) => holds(world, c, x)) ?? cond.of[0];
@@ -789,7 +888,77 @@ export function leadOf(c: Character, q: StoryQuest, s: StoryStep): 'open' | 'clo
 /** Paso en curso de una misión abierta: el primero sin dar de los que hacen falta (las pistas opcionales y las cerradas, no). */
 export function currentStep(c: Character, q: StoryQuest): StoryStep | null {
   const st = characterStory(c);
-  return stepsOf(c, q).find((s) => !s.optional && leadOf(c, q, s) !== 'closed' && !st.steps.includes(stepKey(q, s))) ?? null;
+  // Con fases: el primero de la fase en curso (las secundarias no hacen falta).
+  const ph = q.phases?.length ? currentPhase(c, q)?.id ?? null : undefined;
+  return stepsOf(c, q).find((s) => isRequired(q, s) && leadOf(c, q, s) !== 'closed' && !st.steps.includes(stepKey(q, s)) && (ph === undefined || !s.phase || s.phase === ph)) ?? null;
+}
+
+// --- Fases y vías: lectura -------------------------------------------------
+
+const phaseKey = (q: StoryQuest, p: StoryPhase) => `${q.id}/${p.id}`;
+
+/** Fase de un paso (null sin fases, o en un camino de `on_npc_dead` sin ellas). */
+export function phaseOfStep(q: StoryQuest, s: StoryStep): StoryPhase | null {
+  return s.phase ? q.phases?.find((p) => p.id === s.phase) ?? null : null;
+}
+
+/** ¿Hace falta para cumplir la misión? Las pistas opcionales y los objetivos de una fase secundaria, no. */
+function isRequired(q: StoryQuest, s: StoryStep): boolean {
+  return !s.optional && !phaseOfStep(q, s)?.secondary;
+}
+
+/** Fase principal en curso: la primera con objetivos que hacen falta sin dar. null sin fases o con todas cerradas. */
+export function currentPhase(c: Character, q: StoryQuest): StoryPhase | null {
+  if (!q.phases?.length) return null;
+  const st = characterStory(c);
+  const steps = stepsOf(c, q);
+  return q.phases.find((p) => !p.secondary && steps.some((s) => s.phase === p.id && !s.optional && leadOf(c, q, s) !== 'closed' && !st.steps.includes(stepKey(q, s)))) ?? null;
+}
+
+export function phaseOpen(c: Character, q: StoryQuest, p: StoryPhase): boolean { return characterStory(c).phases_open?.includes(phaseKey(q, p)) ?? false; }
+export function phaseDone(c: Character, q: StoryQuest, p: StoryPhase): boolean { return characterStory(c).phases_done?.includes(phaseKey(q, p)) ?? false; }
+
+/** ¿Se puede dar ya este paso? Sin fases, sí; con fases, si es de la fase en curso o de una secundaria abierta. */
+function stepInPlay(c: Character, q: StoryQuest, s: StoryStep): boolean {
+  const p = phaseOfStep(q, s);
+  if (!p) return true;
+  if (p.secondary) return phaseOpen(c, q, p) && !phaseDone(c, q, p);
+  return currentPhase(c, q)?.id === p.id;
+}
+
+/** La vía de una condición `way` (null si es la improvisada o no existe). */
+function wayOf(world: World, cond: { quest_id: Id; step_id: Id; way_id: Id }): StoryWay | null {
+  const q = quest(world, cond.quest_id);
+  const steps = q ? [...q.steps, ...(q.on_npc_dead ?? []).flatMap((r) => (r.outcome === 'reroute' ? r.steps ?? [] : []))] : [];
+  return steps.find((s) => s.id === cond.step_id)?.ways?.find((w) => w.id === cond.way_id) ?? null;
+}
+
+/** Vía con la que se dio (o se eligió) un objetivo, o null. */
+export function wayUsed(c: Character, q: StoryQuest, s: StoryStep): Id | null {
+  return characterStory(c).ways?.[stepKey(q, s)] ?? null;
+}
+
+/** ¿Conoce el grupo esta vía? La ha usado o probado, alguien se la ha sugerido (`revealed_by`) o no hace falta que nadie lo haga. */
+export function wayKnown(world: World, c: Character, q: StoryQuest, s: StoryStep, w: StoryWay): boolean {
+  const st = characterStory(c);
+  const key = stepKey(q, s);
+  if (st.ways?.[key] === w.id || st.failed_ways?.includes(`${key}/${w.id}`)) return true;
+  return !w.revealed_by || holds(world, c, w.revealed_by);
+}
+
+/** Las vías de un objetivo que conoce el grupo, con si se usó o salió mal (para el Diario). */
+export function knownWays(world: World, c: Character, q: StoryQuest, s: StoryStep): { way: StoryWay; used: boolean; failed: boolean }[] {
+  const st = characterStory(c);
+  const key = stepKey(q, s);
+  return (s.ways ?? []).filter((w) => wayKnown(world, c, q, s, w))
+    .map((w) => ({ way: w, used: st.ways?.[key] === w.id, failed: st.failed_ways?.includes(`${key}/${w.id}`) ?? false }));
+}
+
+/** Desenlace con el que se cumplió (o con el que se cumpliría ahora), o null si la misión no tiene desenlaces. */
+export function outcomeOf(world: World, c: Character, q: StoryQuest): StoryOutcome | null {
+  const id = characterStory(c).outcomes?.[q.id];
+  if (id) return q.outcomes?.find((o) => o.id === id) ?? null;
+  return q.outcomes?.find((o) => !o.when || holds(world, c, o.when)) ?? null;
 }
 
 /** ¿Alguien cumplió ya una misión de este grupo excluyente? */
@@ -888,6 +1057,8 @@ export function stepVisible(world: World, c: Character, q: StoryQuest, s: StoryS
   if (characterStory(c).steps.includes(stepKey(q, s))) return true;
   const lead = leadOf(c, q, s);
   if (lead) return lead === 'open';
+  // Con fases: los objetivos de la fase en curso y de las secundarias abiertas, todos a la vez; los de después, no.
+  if (q.phases?.length && phaseOfStep(q, s)) return stepInPlay(c, q, s) && (!s.revealed_by || holds(world, c, s.revealed_by));
   if (s.revealed_by) return holds(world, c, s.revealed_by);
   if (!q.any_order) return currentStep(c, q)?.id === s.id;
   return stepsOf(c, q).find((x) => !x.revealed_by && !characterStory(c).steps.includes(stepKey(q, x)))?.id === s.id;
@@ -1022,10 +1193,14 @@ function npcDeaths(world: World, c: Character, q: StoryQuest, nowS: number, o: S
 /** Pasos y entrega de una misión abierta. */
 function progress(world: World, c: Character, q: StoryQuest, nowS: number, o: StoryOutput): void {
   const st = characterStory(c);
-  if (q.any_order) {
-    for (const s of stepsOf(c, q)) if (!st.steps.includes(stepKey(q, s)) && leadOf(c, q, s) !== 'closed' && credited(world, c, s.done_when)) markStep(world, c, q, s, nowS, o, explain(world, c, s.done_when));
+  if (q.phases?.length) progressPhases(world, c, q, nowS, o);
+  else if (q.any_order) {
+    for (const s of stepsOf(c, q)) {
+      const hit = !st.steps.includes(stepKey(q, s)) && leadOf(c, q, s) !== 'closed' ? stepHit(world, c, s) : null;
+      if (hit) markStep(world, c, q, s, nowS, o, hit.why, hit.way);
+    }
   } else {
-    for (let s = currentStep(c, q); s && credited(world, c, s.done_when); s = currentStep(c, q)) markStep(world, c, q, s, nowS, o, explain(world, c, s.done_when));
+    for (let s = currentStep(c, q), hit = s && stepHit(world, c, s); s && hit; s = currentStep(c, q), hit = s && stepHit(world, c, s)) markStep(world, c, q, s, nowS, o, hit.why, hit.way);
   }
   if (currentStep(c, q) || !st.open.includes(q.id)) return;
   const t = turnInOf(c, q);
@@ -1109,14 +1284,17 @@ function companionsOf(world: World, c: Character): Character[] {
   return [...world.characters.values()].filter((o) => o.id !== c.id && o.status === 'active' && !o.away && !o.transit && world.characterSpot(o)?.location_id === loc);
 }
 
-function markStep(world: World, c: Character, q: StoryQuest, s: StoryStep, nowS: number, o: StoryOutput, why: string): void {
+function markStep(world: World, c: Character, q: StoryQuest, s: StoryStep, nowS: number, o: StoryOutput, why: string, way: StoryWay | null = null): void {
   const key = stepKey(q, s);
+  // La vía: la que lo ha dado o, si no, la que el máster dijo que eligieron (advance_story con way_id).
+  const chosen = way ?? (s.ways ?? []).find((w) => w.id === characterStory(c).ways?.[key]) ?? null;
   characterStory(c).steps.push(key);
   logStory(world, c, { quest_id: q.id, kind: 'step', step_id: s.id, game_s: nowS, why });
   if (stepsOf(c, q).length > 1 || turnInOf(c, q)) tellTo(o, c, [{ kind: 'story', text: `✔ «${q.title}»: ${s.journal ?? s.text}`, quest: change(q, 'step', why, s.text) }]);
   // Crédito compartido: quien estaba presente y va por ese mismo paso de la misión, lo da también.
   const st = stateOf(world);
-  const shared = companionsOf(world, c).filter((p) => characterStory(p).open.includes(q.id) && currentStep(p, q)?.id === s.id);
+  const shared = companionsOf(world, c).filter((p) => characterStory(p).open.includes(q.id)
+    && (q.phases?.length || q.any_order ? !characterStory(p).steps.includes(key) && stepInPlay(p, q, s) : currentStep(p, q)?.id === s.id));
   if (!st.credits?.[key]) { st.credits = { ...(st.credits ?? {}), [key]: { by: c.id, with: companionsOf(world, c).map((p) => p.id), game_s: nowS } }; world.touch('campaign', world.campaign.id); }
   for (const p of shared) {
     characterStory(p).steps.push(key);
@@ -1126,6 +1304,96 @@ function markStep(world: World, c: Character, q: StoryQuest, s: StoryStep, nowS:
     tellTo(o, p, [{ kind: 'story', text: `✔ «${q.title}»: ${s.text} (con ${c.name})`, quest: change(q, 'step', withWhy, s.text) }]);
   }
   applyEffects(world, c, s.on_done, key, nowS, o);
+  if (chosen) useWay(world, c, q, s, chosen, [c, ...shared], nowS, o);
+}
+
+// --- Fases y vías: avance --------------------------------------------------
+
+/** ¿Está dado este objetivo? Por una vía que el motor reconoce (`done_when` de la vía) o por su meta. */
+function stepHit(world: World, c: Character, s: StoryStep): { why: string; way: StoryWay | null } | null {
+  for (const w of s.ways ?? []) if (w.done_when && credited(world, c, w.done_when)) return { why: explain(world, c, w.done_when), way: w };
+  return credited(world, c, s.done_when) ? { why: explain(world, c, s.done_when), way: null } : null;
+}
+
+/** Apunta la vía con la que se dio un objetivo (a quien lo dio y a quien estaba con él) y aplica lo que deja, una vez. */
+function useWay(world: World, c: Character, q: StoryQuest, s: StoryStep, w: StoryWay, who: Character[], nowS: number, o: StoryOutput): void {
+  const key = stepKey(q, s);
+  for (const p of who) { const st = characterStory(p); st.ways = { ...(st.ways ?? {}), [key]: w.id }; world.touch('characters', p.id); }
+  applyEffects(world, c, w.on_done, `${key}~${w.id}`, nowS, o);
+  setFacts(world, c, w.facts, q.id, nowS);
+}
+
+/** Hechos del mundo que deja una vía, una fase o un desenlace (para las reglas y los desenlaces). No corren de boca en boca. */
+function setFacts(world: World, c: Character, ids: readonly Id[] | undefined, subject: Id, nowS: number): void {
+  const loc = c.transit ? null : world.characterSpot(c)?.location_id ?? null;
+  for (const id of ids ?? []) if (!hasFact(world, id)) setFact(world, { id, by: c.id, subject, location_id: loc, game_s: nowS, spreads: false });
+}
+
+/** Paga una recompensa (la de la misión, la de una fase o la de un desenlace). Devuelve lo que se dio, para el aviso. */
+function payReward(world: World, c: Character, r: StoryReward | undefined): string[] {
+  const bits: string[] = [];
+  if (!r) return bits;
+  if (r.coins) { receive(world, c.id, r.coins); bits.push(`+${money(world, r.coins)}`); }
+  if (r.xp) { c.xp += r.xp; world.touch('characters', c.id); bits.push(`+${r.xp} PX`); }
+  if (r.reputation) bits.push(`reputación en ${world.campaign.factions.find((f) => f.id === world.campaign.achievement.faction_id)?.name ?? 'la aldea'}: ${addReputation(world, c, world.campaign.achievement.faction_id, r.reputation)}`);
+  if (r.item_id && world.itemDefs.has(r.item_id)) {
+    const spot = world.characterSpot(c);
+    const placed = spawnItem(world, r.item_id, 1, { type: 'character', id: c.id, slot: { kind: 'pocket' } }).ok
+      || spawnItem(world, r.item_id, 1, { type: 'character', id: c.id, slot: { kind: 'hand', which: 'off' } }).ok
+      || spawnItem(world, r.item_id, 1, { type: 'character', id: c.id, slot: { kind: 'hand', which: 'main' } }).ok
+      || (!!spot && spawnItem(world, r.item_id, 1, { type: 'spot', id: spot.id }).ok);
+    if (placed) bits.push(world.itemDef(r.item_id).name);
+  }
+  return bits;
+}
+
+/** Misión con fases: abre las secundarias, da los objetivos en juego (en cualquier orden) y cierra las fases, hasta que no cambie nada. */
+function progressPhases(world: World, c: Character, q: StoryQuest, nowS: number, o: StoryOutput): void {
+  const st = characterStory(c);
+  for (let guard = 0; guard < 16; guard++) {
+    let moved = openSecondary(world, c, q, nowS, o);
+    for (const s of stepsOf(c, q)) {
+      if (st.steps.includes(stepKey(q, s)) || leadOf(c, q, s) === 'closed' || !stepInPlay(c, q, s)) continue;
+      const hit = stepHit(world, c, s);
+      if (hit) { markStep(world, c, q, s, nowS, o, hit.why, hit.way); moved = true; }
+    }
+    if (closePhases(world, c, q, nowS, o)) moved = true;
+    if (!moved) return;
+  }
+}
+
+/** Fases secundarias que se abren ahora (pasa lo que las abre). true si se abrió alguna. */
+function openSecondary(world: World, c: Character, q: StoryQuest, nowS: number, o: StoryOutput): boolean {
+  const st = characterStory(c);
+  let opened = false;
+  for (const p of q.phases ?? []) {
+    if (!p.secondary || !p.opens_when || phaseOpen(c, q, p) || phaseDone(c, q, p) || !holds(world, c, p.opens_when)) continue;
+    st.phases_open = [...(st.phases_open ?? []), phaseKey(q, p)];
+    const why = `se abre «${p.title}» (no hace falta para cumplirla)`;
+    logStory(world, c, { quest_id: q.id, kind: 'phase_open', phase_id: p.id, game_s: nowS, why });
+    tellTo(o, c, [{ kind: 'story', text: `✦ «${q.title}»: ${why}.`, quest: change(q, 'changed', why) }]);
+    opened = true;
+  }
+  return opened;
+}
+
+/** Fases con todos sus objetivos dados: se cierran, con su recompensa y lo que dejan. true si se cerró alguna. */
+function closePhases(world: World, c: Character, q: StoryQuest, nowS: number, o: StoryOutput): boolean {
+  const st = characterStory(c);
+  let closed = false;
+  for (const p of q.phases ?? []) {
+    if (phaseDone(c, q, p) || (p.secondary && !phaseOpen(c, q, p))) continue;
+    const goals = stepsOf(c, q).filter((s) => s.phase === p.id && !s.optional && leadOf(c, q, s) !== 'closed');
+    if (!goals.length || !goals.every((s) => st.steps.includes(stepKey(q, s)))) continue;
+    st.phases_done = [...(st.phases_done ?? []), phaseKey(q, p)];
+    const bits = payReward(world, c, p.reward);
+    const text = p.journal ?? `Cerramos «${p.title}».`;
+    logStory(world, c, { quest_id: q.id, kind: 'phase', phase_id: p.id, game_s: nowS, why: text });
+    tellTo(o, c, [{ kind: 'story', text: `✔ «${q.title}»: ${text}${bits.length ? ` (${bits.join(', ')})` : ''}`, quest: change(q, 'step', text, p.title) }]);
+    applyEffects(world, c, p.on_done, `${q.id}:phase:${p.id}`, nowS, o);
+    closed = true;
+  }
+  return closed;
 }
 
 /** Cumplida: entregada a `byNpc` (que da la recompensa) o, sin entrega, al dar el último paso. */
@@ -1141,31 +1409,23 @@ function complete(world: World, c: Character, q: StoryQuest, nowS: number, o: St
   st.open = st.open.filter((x) => x !== q.id);
   st.done.push(q.id);
   const r = q.reward;
-  const bits: string[] = [];
-  if (r.coins) { receive(world, c.id, r.coins); bits.push(`+${money(world, r.coins)}`); }
-  if (r.xp) { c.xp += r.xp; bits.push(`+${r.xp} PX`); }
-  if (r.reputation) bits.push(`reputación en ${world.campaign.factions.find((f) => f.id === world.campaign.achievement.faction_id)?.name ?? 'la aldea'}: ${addReputation(world, c, world.campaign.achievement.faction_id, r.reputation)}`);
-  if (r.item_id && world.itemDefs.has(r.item_id)) {
-    const spot = world.characterSpot(c);
-    const placed = spawnItem(world, r.item_id, 1, { type: 'character', id: c.id, slot: { kind: 'pocket' } }).ok
-      || spawnItem(world, r.item_id, 1, { type: 'character', id: c.id, slot: { kind: 'hand', which: 'off' } }).ok
-      || spawnItem(world, r.item_id, 1, { type: 'character', id: c.id, slot: { kind: 'hand', which: 'main' } }).ok
-      || (!!spot && spawnItem(world, r.item_id, 1, { type: 'spot', id: spot.id }).ok);
-    if (placed) bits.push(world.itemDef(r.item_id).name);
-  }
-  const steps = stepsOf(c, q);
-  const why = byNpc ? `se lo contamos a ${nameFor(world, c, byNpc)}` : 'lo hemos conseguido';
+  // Desenlace: el primero que encaja con cómo ha quedado el mundo. Su recompensa se suma.
+  const oc = outcomeOf(world, c, q);
+  if (oc) st.outcomes = { ...(st.outcomes ?? {}), [q.id]: oc.id };
+  const bits = [...payReward(world, c, r), ...payReward(world, c, oc?.reward)];
+  const why = oc ? oc.journal : byNpc ? `se lo contamos a ${nameFor(world, c, byNpc)}` : 'lo hemos conseguido';
   logStory(world, c, { quest_id: q.id, kind: 'done', game_s: nowS, why });
   const head = byNpc ? `🏁 Misión entregada a ${nameFor(world, c, byNpc)}` : '🏁 Misión cumplida';
-  tellTo(o, c, [{ kind: 'story', text: `${head}: «${q.title}»${bits.length ? ` (${bits.join(', ')})` : ''}.`, quest: change(q, 'done', bits.length ? `${why} · ${bits.join(', ')}` : why), ...(q.ending ? { public: q.ending.replaceAll('{name}', c.name) } : {}) }]);
+  tellTo(o, c, [{ kind: 'story', text: `${head}: «${q.title}»${bits.length ? ` (${bits.join(', ')})` : ''}.${oc ? ` ${oc.title}.` : ''}`, quest: change(q, 'done', bits.length ? `${why} (${bits.join(', ')})` : why), ...(q.ending ? { public: q.ending.replaceAll('{name}', c.name) } : {}) }]);
   // Quien la encargó y quien la recibe se fían más (trust.ts): una misión cumplida pesa más que una charla.
   for (const id of new Set([q.giver_npc_id, byNpc].filter((x): x is Id => !!x))) {
     const n = world.npcs.get(id);
     if (n && n.status === 'alive') tellTrust(world, c, adjustTrust(world, n, c, 'quest', nowS), o);
   }
   applyEffects(world, c, q.on_complete, `${q.id}:done`, nowS, o);
+  if (oc) { applyEffects(world, c, oc.on_complete, `${q.id}:out:${oc.id}`, nowS, o); setFacts(world, c, oc.facts, q.id, nowS); }
   // La reputación de la recompensa también cuenta para el logro.
-  if (r.reputation) { const ach = checkAchievement(world, c); if (ach) tellTo(o, c, [ach]); }
+  if (r.reputation || oc?.reward?.reputation) { const ach = checkAchievement(world, c); if (ach) tellTo(o, c, [ach]); }
 }
 
 /** Escalones de la amenaza vencidos según su reloj (`dueS`): pasan (o se evitan) una sola vez. */
@@ -1235,20 +1495,68 @@ export function advanceNow(world: World, c: Character, nowS: number): StoryOutpu
 
 type StoryResult = { ok: true; output: StoryOutput } | { ok: false; error: string };
 
-/** El máster marca un paso narrativo (tool advance_story). Después avanza lo que haya detrás. */
-export function advanceStory(world: World, c: Character, questId: Id, stepId: Id, nowS: number, why?: string | null): StoryResult {
+/**
+ * El máster marca un paso narrativo (tool advance_story). Después avanza lo que haya detrás. Con `way_id`, dice por
+ * qué vía lo han hecho (o `improvisada`); si el objetivo lo detecta el motor por el estado del mundo, la vía queda
+ * elegida y cuenta al cumplirse. Con `failed`, la vía ha salido mal: se apunta su complicación y la misión sigue.
+ */
+export function advanceStory(world: World, c: Character, questId: Id, stepId: Id, nowS: number, why?: string | null, opts: { way_id?: Id | null; failed?: boolean } = {}): StoryResult {
   const q = quest(world, questId);
   if (!q) return { ok: false, error: `misión desconocida: ${questId}` };
   const st = characterStory(c);
   if (st.done.includes(q.id)) return { ok: false, error: 'esa misión ya está cumplida' };
   if (!st.open.includes(q.id)) return { ok: false, error: `esa misión no la tiene el actor (${questStatus(world, c, q)}): primero se la tienen que ofrecer y la tiene que aceptar` };
   const s = currentStep(c, q);
-  const target = q.any_order ? stepsOf(c, q).find((x) => x.id === stepId && !st.steps.includes(stepKey(q, x))) ?? null : s;
-  if (!target || target.id !== stepId) return { ok: false, error: `el paso en curso de «${q.title}» es ${s ? `${s.id} («${s.text}»)` : 'ninguno: está lista para entregar'}` };
+  const free = q.any_order || !!q.phases?.length;
+  const target = free ? stepsOf(c, q).find((x) => x.id === stepId && !st.steps.includes(stepKey(q, x)) && stepInPlay(c, q, x)) ?? null : s;
+  if (!target || target.id !== stepId) {
+    if (!free) return { ok: false, error: `el paso en curso de «${q.title}» es ${s ? `${s.id} («${s.text}»)` : 'ninguno: está lista para entregar'}` };
+    const inPlay = stepsOf(c, q).filter((x) => !st.steps.includes(stepKey(q, x)) && stepInPlay(c, q, x) && leadOf(c, q, x) !== 'closed');
+    return { ok: false, error: `en «${q.title}» ahora se puede dar ${inPlay.length ? inPlay.map((x) => `${x.id} («${x.text}»)`).join(', ') : 'nada más: está lista para entregar'}` };
+  }
+  if (opts.way_id || opts.failed) return wayAction(world, c, q, target, nowS, why ?? null, opts.way_id ?? null, opts.failed === true);
   if (!isNarrative(target.done_when)) return { ok: false, error: `ese paso lo detecta el servidor solo (${describeCondition(world, target.done_when)}); no hace falta advance_story` };
   if (!markable(world, c, target.done_when)) return { ok: false, error: `aún no se puede dar: ${describeCondition(world, target.done_when)}` };
   const o = out();
   markStep(world, c, q, target, nowS, o, why?.trim() || explain(world, c, target.done_when));
+  advanceCharacter(world, c, nowS, o);
+  world.touch('characters', c.id);
+  return { ok: true, output: o };
+}
+
+/** advance_story con vía: la elegida (o improvisada) da el objetivo o queda apuntada; la fallida deja su complicación. */
+function wayAction(world: World, c: Character, q: StoryQuest, s: StoryStep, nowS: number, why: string | null, wayId: Id | null, failed: boolean): StoryResult {
+  const st = characterStory(c);
+  const key = stepKey(q, s);
+  const known = (s.ways ?? []).map((w) => w.id);
+  const way: StoryWay | null = wayId === IMPROVISED_WAY
+    ? { id: IMPROVISED_WAY, kind: 'detour', text: why?.trim() || 'Lo resolvimos a nuestra manera.', how: 'la que se le ocurrió al jugador' }
+    : (s.ways ?? []).find((w) => w.id === wayId) ?? null;
+  if (wayId && !way) return { ok: false, error: `«${s.text}» no tiene la vía ${wayId}: ${known.length ? `usa ${known.join(', ')} o ` : ''}${IMPROVISED_WAY} si lo han hecho de otra forma` };
+  const o = out();
+  if (failed) {
+    const fail = way && way.id !== IMPROVISED_WAY ? way.on_fail : undefined;
+    const text = fail?.text ?? (why?.trim() || 'No salió como esperábamos.');
+    if (way) st.failed_ways = [...new Set([...(st.failed_ways ?? []), `${key}/${way.id}`])];
+    logStory(world, c, { quest_id: q.id, kind: 'way_failed', step_id: s.id, ...(way ? { way_id: way.id } : {}), game_s: nowS, why: text });
+    tellTo(o, c, [{ kind: 'story', text: `✗ «${q.title}»: ${text}`, quest: change(q, 'changed', text, s.text) }]);
+    if (fail && way) { applyEffects(world, c, fail.effects, `${key}~${way.id}:fail`, nowS, o); setFacts(world, c, fail.facts, q.id, nowS); }
+    advanceCharacter(world, c, nowS, o);
+    world.touch('characters', c.id);
+    return { ok: true, output: o };
+  }
+  if (!way) return { ok: false, error: 'falta way_id' };
+  if (way.done_when) return { ok: false, error: `la vía ${way.id} la detecta el servidor solo (${describeCondition(world, way.done_when)})` };
+  if (way.requires && !credited(world, c, way.requires)) return { ok: false, error: `la vía ${way.id} aún no se puede usar: falta ${describeCondition(world, way.requires)}` };
+  if (!isNarrative(s.done_when)) {
+    // La meta la ve el motor por el estado del mundo: la vía queda elegida y cuenta cuando se cumpla.
+    st.ways = { ...(st.ways ?? {}), [key]: way.id };
+    world.touch('characters', c.id);
+    progress(world, c, q, nowS, o);
+    return { ok: true, output: o };
+  }
+  if (!markable(world, c, s.done_when)) return { ok: false, error: `aún no se puede dar: ${describeCondition(world, s.done_when)}` };
+  markStep(world, c, q, s, nowS, o, why?.trim() || way.text, way);
   advanceCharacter(world, c, nowS, o);
   world.touch('characters', c.id);
   return { ok: true, output: o };
@@ -1392,6 +1700,8 @@ export function describeCondition(world: World, cond: StoryCondition): string {
     case 'fact': return `que haya pasado «${cond.id}» (hecho del mundo)`;
     case 'tag': return `que el actor tenga la etiqueta «${cond.tag}»`;
     case 'opinion': return `opinión de ${npc(cond.npc_id)} con el actor${cond.at_least !== undefined ? ` de ${cond.at_least} o más` : ''}${cond.at_most !== undefined ? ` de ${cond.at_most} o menos` : ''}`;
+    case 'way': return `que lo haya hecho por la vía ${cond.way_id} («${wayOf(world, cond)?.how ?? cond.way_id}»)`;
+    case 'phase': return `haber cerrado la fase «${quest(world, cond.quest_id)?.phases?.find((p) => p.id === cond.phase_id)?.title ?? cond.phase_id}»`;
     case 'narrative': return `lo decides tú con advance_story: ${cond.how}`;
     case 'any': return cond.of.map((x) => describeCondition(world, x)).join(' O ');
     case 'all': return cond.of.map((x) => describeCondition(world, x)).join(' Y ');
@@ -1468,7 +1778,8 @@ export function storyContext(world: World, c: Character, nowS: number): string |
     const q = v.quest;
     const by = q.main_for ? 'misión principal del actor' : `la pidió ${name(q.giver_npc_id)}${v.turn_in_npc_id && v.turn_in_npc_id !== q.giver_npc_id ? `; se entrega a ${name(v.turn_in_npc_id)}` : ''}`;
     L.push(`- En curso · acto ${q.act} · «${q.title}» [${q.id}] (nivel ${q.level}; ${by}): ${q.notes}`);
-    if (v.current) L.push(`  Paso en curso [${v.current.id}]: ${v.current.text}. Se cumple: ${describeCondition(world, v.current.done_when)}.`);
+    if (v.current && !q.phases?.length) L.push(`  Paso en curso [${v.current.id}]: ${v.current.text}. Se cumple: ${describeCondition(world, v.current.done_when)}.`);
+    L.push(...phaseLines(world, c, q, v.current));
   }
   for (const v of views.filter((x) => x.status === 'ready')) {
     L.push(`- Lista para entregar: «${v.quest.title}» [${v.quest.id}] a ${name(v.turn_in_npc_id)}. Cuando el actor hable con esa persona, ella le da la recompensa (story_quest turn_in, o lo hace el servidor al cerrar la charla): que se le oiga darla.`);
@@ -1500,6 +1811,40 @@ export function storyContext(world: World, c: Character, nowS: number): string |
   return L.join('\n');
 }
 
+/**
+ * Fases, objetivos en juego, vías y desenlaces de una misión en curso, para el máster: la meta de cada objetivo, las
+ * vías que el grupo conoce (con lo que piden) y las que aún no (para no regalarlas), y la regla de improvisar.
+ */
+function phaseLines(world: World, c: Character, q: StoryQuest, current: StoryStep | null): string[] {
+  const st = characterStory(c);
+  const L: string[] = [];
+  const ph = currentPhase(c, q);
+  const goals = q.phases?.length
+    ? stepsOf(c, q).filter((s) => !st.steps.includes(stepKey(q, s)) && stepInPlay(c, q, s) && leadOf(c, q, s) !== 'closed' && stepVisible(world, c, q, s))
+    : current?.ways?.length ? [current] : [];
+  if (ph) L.push(`  Fase en curso: «${ph.title}» (${(q.phases ?? []).filter((p) => !p.secondary).findIndex((p) => p.id === ph.id) + 1} de ${(q.phases ?? []).filter((p) => !p.secondary).length}). Sus objetivos, en cualquier orden:`);
+  for (const p of q.phases ?? []) if (p.secondary && phaseOpen(c, q, p) && !phaseDone(c, q, p)) L.push(`  Fase secundaria abierta (opcional): «${p.title}».`);
+  const req = (w: StoryWay) => [w.check ? `${w.check.skill} CD ${w.check.dc}` : '', w.requires ? describeCondition(world, w.requires) : ''].filter(Boolean).join(' y ');
+  let anyWay = false;
+  for (const s of goals) {
+    if (q.phases?.length) L.push(`  - [${s.id}]${phaseOfStep(q, s)?.secondary ? ' (secundaria)' : ''} ${s.text}. Meta: ${describeCondition(world, s.done_when)}.`);
+    const ways = s.ways ?? [];
+    if (!ways.length) continue;
+    anyWay = true;
+    const known = ways.filter((w) => wayKnown(world, c, q, s, w));
+    const unknown = ways.filter((w) => !wayKnown(world, c, q, s, w));
+    const failed = (w: StoryWay) => st.failed_ways?.includes(`${stepKey(q, s)}/${w.id}`);
+    const chosen = wayUsed(c, q, s);
+    if (known.length) L.push(`    Vías que conoce: ${known.map((w) => `[${w.id}] ${w.how}${req(w) ? ` (pide ${req(w)})` : ''}${w.done_when ? ' (la ve el servidor)' : ''}${failed(w) ? ' (ya le salió mal)' : ''}`).join('; ')}.`);
+    if (unknown.length) L.push(`    Vías que aún no conoce (no se las regales; se descubren en la ficción): ${unknown.map((w) => `[${w.id}] ${w.how}`).join('; ')}.`);
+    if (chosen) L.push(`    Han elegido la vía ${chosen}: cuenta cuando se cumpla la meta.`);
+  }
+  if (anyWay) L.push(`  Cómo marcarlo: advance_story con step_id y way_id cuando lo logren por una vía (o way_id «${IMPROVISED_WAY}» si lo logran de otra forma que también cumple la meta: vale); si la tirada de una vía sale mal, advance_story con esa way_id y failed true (la misión sigue, con su complicación).`);
+  const outs = (q.outcomes ?? []).filter((o) => o.when);
+  if (outs.length) L.push(`  Desenlaces posibles (salen solos al cumplirla): ${outs.map((o) => `«${o.title}» si ${describeCondition(world, o.when!)}`).join('; ')}; si no, «${q.outcomes!.at(-1)!.title}».`);
+  return L;
+}
+
 // ---------------------------------------------------------------------------
 // Validación (la usa src/worldgen/validate.ts)
 // ---------------------------------------------------------------------------
@@ -1525,7 +1870,7 @@ function npcsNeeded(c: StoryCondition, clueNpcs: (id: Id) => Id[]): Set<Id> {
 export interface StoryRefs { spot: (id: Id) => boolean; location: (id: Id) => boolean; npc: (id: Id) => boolean; item: (id: Id) => boolean; clue: (id: Id) => boolean; job: (id: Id) => boolean; exit: (id: Id) => boolean; clueNpcs?: (id: Id) => Id[]; clues?: Clue[] }
 
 /** Errores de referencias de una condición (también la usan las reglas del mundo). */
-export function conditionErrors(where: string, c: StoryCondition, has: StoryRefs, ids: { quests: ReadonlySet<Id>; escalations: ReadonlySet<Id>; steps?: ReadonlySet<string> }, errs: string[]): void {
+export function conditionErrors(where: string, c: StoryCondition, has: StoryRefs, ids: { quests: ReadonlySet<Id>; escalations: ReadonlySet<Id>; steps?: ReadonlySet<string>; ways?: ReadonlySet<string>; phases?: ReadonlySet<string> }, errs: string[]): void {
   const cond = (w: string, x: StoryCondition) => conditionErrors(w, x, has, ids, errs);
   switch (c.kind) {
     case 'clue': if (!has.clue(c.clue_id)) errs.push(`${where}: la pista ${c.clue_id} no existe.`); break;
@@ -1546,6 +1891,8 @@ export function conditionErrors(where: string, c: StoryCondition, has: StoryRefs
     case 'fact': if (!c.id.trim()) errs.push(`${where}: hecho sin id.`); break;
     case 'tag': if (!c.tag.trim()) errs.push(`${where}: etiqueta sin id.`); break;
     case 'opinion': if (!has.npc(c.npc_id)) errs.push(`${where}: el NPC ${c.npc_id} no existe.`); if (c.at_least === undefined && c.at_most === undefined) errs.push(`${where}: opinión sin límites.`); break;
+    case 'way': if (ids.ways && c.way_id !== IMPROVISED_WAY && !ids.ways.has(`${c.quest_id}/${c.step_id}/${c.way_id}`)) errs.push(`${where}: la vía ${c.quest_id}/${c.step_id}/${c.way_id} no existe.`); break;
+    case 'phase': if (ids.phases && !ids.phases.has(`${c.quest_id}/${c.phase_id}`)) errs.push(`${where}: la fase ${c.quest_id}/${c.phase_id} no existe.`); break;
     case 'narrative': if (!c.how.trim()) errs.push(`${where}: paso narrativo sin «how».`); break;
     case 'any': case 'all': if (!c.of.length) errs.push(`${where}: ${c.kind} vacío.`); c.of.forEach((x) => cond(where, x)); break;
     case 'not': cond(where, c.of); break;
@@ -1585,7 +1932,12 @@ export function validateStory(story: Story, has: StoryRefs): string[] {
     qids.add(q.id);
   }
   const stepIds = new Set(story.quests.flatMap((q) => [...q.steps, ...(q.on_npc_dead ?? []).flatMap((r) => (r.outcome === 'reroute' ? r.steps ?? [] : []))].map((x) => `${q.id}/${x.id}`)));
-  const ids = { quests: qids, escalations: new Set(story.escalation.map((e) => e.id)), steps: stepIds };
+  const allSteps = (q: StoryQuest) => [...q.steps, ...(q.on_npc_dead ?? []).flatMap((r) => (r.outcome === 'reroute' ? r.steps ?? [] : []))];
+  const ids = {
+    quests: qids, escalations: new Set(story.escalation.map((e) => e.id)), steps: stepIds,
+    ways: new Set(story.quests.flatMap((q) => allSteps(q).flatMap((s) => (s.ways ?? []).map((w) => `${q.id}/${s.id}/${w.id}`)))),
+    phases: new Set(story.quests.flatMap((q) => (q.phases ?? []).map((p) => `${q.id}/${p.id}`))),
+  };
   const cond = (where: string, c: StoryCondition): void => conditionErrors(where, c, has, ids, errs);
   const eff = (where: string, e: StoryEffect): void => effectErrors(where, e, has, errs);
   const steps = (w: string, list: StoryStep[], sids: Set<Id>, same: StoryStep[] = []): void => {
@@ -1630,7 +1982,7 @@ export function validateStory(story: Story, has: StoryRefs): string[] {
       const clueNpcs = has.clueNpcs;
       const needs = (list: StoryStep[], turnIn: Id | null | undefined): Map<Id, string> => {
         const m = new Map<Id, string>();
-        for (const s of list) if (!s.optional) for (const id of npcsNeeded(s.done_when, clueNpcs)) if (!m.has(id)) m.set(id, `el paso ${s.id}`);
+        for (const s of list) if (isRequired(q, s)) for (const id of npcsNeeded(s.done_when, clueNpcs)) if (!m.has(id)) m.set(id, `el paso ${s.id}`);
         if (turnIn && !m.has(turnIn)) m.set(turnIn, 'la entrega');
         return m;
       };
@@ -1657,6 +2009,7 @@ export function validateStory(story: Story, has: StoryRefs): string[] {
       (d.on_lost ?? []).forEach((e) => eff(w, e));
     }
     [...(q.on_accept ?? []), ...q.on_complete].forEach((e) => eff(w, e));
+    validatePhases(q, allSteps(q), w, cond, eff, has, errs);
   }
   if (has.clues) errs.push(...validateClueSources(story, has.clues, has, cond));
   const eids = new Set<Id>();
@@ -1674,6 +2027,75 @@ export function validateStory(story: Story, has: StoryRefs): string[] {
 }
 
 /**
+ * Fases, vías y desenlaces de una misión (Obsidian, «Propuesta misiones por fases y vías», §3):
+ *   - fases con id único y título; al menos una principal, la primera; las secundarias se abren con `opens_when`;
+ *     en una misión con fases, cada paso lleva una fase que existe y cada fase principal tiene un objetivo que hace falta;
+ *   - cada objetivo con vías tiene al menos dos, y al menos una que no es pelear;
+ *   - cada vía pide algo real: una tirada, un requisito o una meta que ve el motor ("lo consigue y ya", no);
+ *   - los desenlaces terminan en uno sin `when` (el de por defecto), y solo ese va sin él.
+ */
+function validatePhases(q: StoryQuest, steps: StoryStep[], w: string, cond: (where: string, c: StoryCondition) => void, eff: (where: string, e: StoryEffect) => void, has: StoryRefs, errs: string[]): void {
+  const phases = q.phases ?? [];
+  const pids = new Set<Id>();
+  for (const p of phases) {
+    const pw = `${w} (fase ${p.id})`;
+    if (pids.has(p.id)) errs.push(`${pw}: repetida.`);
+    pids.add(p.id);
+    if (!p.title.trim()) errs.push(`${pw}: sin título.`);
+    if (p.secondary && !p.opens_when) errs.push(`${pw}: una fase secundaria necesita opens_when (qué la abre).`);
+    if (!p.secondary && p.opens_when) errs.push(`${pw}: solo las secundarias llevan opens_when; las principales van en orden.`);
+    if (p.opens_when) cond(pw, p.opens_when);
+    (p.on_done ?? []).forEach((e) => eff(pw, e));
+    if (p.reward?.item_id && !has.item(p.reward.item_id)) errs.push(`${pw}: el premio ${p.reward.item_id} no existe.`);
+    const mine = q.steps.filter((s) => s.phase === p.id);
+    if (!mine.length) errs.push(`${pw}: sin objetivos.`);
+    else if (!p.secondary && mine.every((s) => s.optional)) errs.push(`${pw}: todos sus objetivos son opcionales.`);
+  }
+  if (phases.length) {
+    if (q.any_order) errs.push(`${w}: con fases no hace falta any_order (dentro de cada fase ya van en cualquier orden).`);
+    if (phases[0]!.secondary) errs.push(`${w}: la primera fase no puede ser secundaria.`);
+    for (const s of q.steps) if (!s.phase || !pids.has(s.phase)) errs.push(`${w}/${s.id}: en una misión con fases, cada paso lleva una fase que existe.`);
+  } else {
+    for (const s of steps) if (s.phase) errs.push(`${w}/${s.id}: lleva fase y la misión no tiene fases.`);
+  }
+  for (const s of steps) {
+    const sw = `${w}/${s.id}`;
+    const ways = s.ways ?? [];
+    const wids = new Set<Id>();
+    for (const x of ways) {
+      const ww = `${sw} (vía ${x.id})`;
+      if (wids.has(x.id) || x.id === IMPROVISED_WAY) errs.push(`${ww}: id repetido o reservado.`);
+      wids.add(x.id);
+      if (!WAY_KINDS.includes(x.kind)) errs.push(`${ww}: tipo no válido ${x.kind}.`);
+      if (!x.text.trim() || !x.how.trim()) errs.push(`${ww}: falta text (para el Diario) o how (para el máster).`);
+      if (x.check && (!x.check.skill.trim() || !(x.check.dc >= 5 && x.check.dc <= 30))) errs.push(`${ww}: tirada no válida (habilidad y CD de 5 a 30).`);
+      if (!x.check && !x.requires && !x.done_when) errs.push(`${ww}: no pide nada (una tirada, un requisito o una meta que vea el motor).`);
+      if (x.on_fail && !x.on_fail.text.trim()) errs.push(`${ww}: on_fail sin texto.`);
+      for (const c of [x.revealed_by, x.requires, x.done_when]) if (c) cond(ww, c);
+      [...(x.on_done ?? []), ...(x.on_fail?.effects ?? [])].forEach((e) => eff(ww, e));
+      for (const f of [...(x.facts ?? []), ...(x.on_fail?.facts ?? [])]) if (!f.trim()) errs.push(`${ww}: hecho sin id.`);
+    }
+    if (ways.length && isRequired(q, s)) {
+      if (ways.length < 2) errs.push(`${sw}: un objetivo con vías necesita al menos dos.`);
+      if (ways.every((x) => x.kind === 'force')) errs.push(`${sw}: todas sus vías son pelear; hace falta otra (sigilo, palabra, saber, ayuda…).`);
+    }
+  }
+  const outs = q.outcomes ?? [];
+  const oids = new Set<Id>();
+  outs.forEach((o, i) => {
+    const ow = `${w} (desenlace ${o.id})`;
+    if (oids.has(o.id)) errs.push(`${ow}: repetido.`);
+    oids.add(o.id);
+    if (!o.title.trim() || !o.journal.trim()) errs.push(`${ow}: falta título o la línea del Diario.`);
+    if (!o.when && i !== outs.length - 1) errs.push(`${ow}: solo el último va sin when (el de por defecto).`);
+    if (o.when) cond(ow, o.when);
+    (o.on_complete ?? []).forEach((e) => eff(ow, e));
+    if (o.reward?.item_id && !has.item(o.reward.item_id)) errs.push(`${ow}: el premio ${o.reward.item_id} no existe.`);
+  });
+  if (outs.length && outs.at(-1)!.when) errs.push(`${w}: el último desenlace va sin when, para que siempre haya uno.`);
+}
+
+/**
  * Las fuentes de cada pista: que existan su NPC y su sitio y que sus requisitos tengan sentido. Una pista clave
  * (`key`) necesita al menos dos caminos distintos (otra persona, otro sitio o una misión que la da), para que no
  * se cierre la historia si muere quien la sabe o no se fía nunca (Obsidian, «Investigación misiones y
@@ -1685,6 +2107,8 @@ function validateClueSources(story: Story, clues: Clue[], has: { npc: (id: Id) =
   const byQuest = new Map<Id, Set<Id>>();
   for (const q of story.quests) {
     const effects = [...q.steps.flatMap((s) => s.on_done ?? []), ...q.on_complete, ...(q.on_accept ?? []), ...(q.on_npc_dead ?? []).flatMap((r) => (r.outcome === 'reroute' ? (r.steps ?? []).flatMap((s) => s.on_done ?? []) : []))];
+    // Las vías, las fases y los desenlaces también pueden dar la pista (aunque no siempre: cuenta como un camino).
+    effects.push(...q.steps.flatMap((s) => (s.ways ?? []).flatMap((x) => x.on_done ?? [])), ...(q.phases ?? []).flatMap((p) => p.on_done ?? []), ...(q.outcomes ?? []).flatMap((o) => o.on_complete ?? []));
     for (const e of effects) if (e.kind === 'clue') (byQuest.get(e.clue_id) ?? byQuest.set(e.clue_id, new Set()).get(e.clue_id)!).add(q.id);
   }
   for (const clue of clues) {
