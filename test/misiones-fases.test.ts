@@ -13,11 +13,12 @@ import { MemoryRepository } from '../src/persistence/memory.js';
 import { executeTool, type ToolContext } from '../src/ai/tools.js';
 import { seededRng } from '../src/engine/dice.js';
 import {
-  advanceNow, advanceStory, characterStory, currentPhase, knownWays, outcomeOf, questStatus, questsOf, storyContext, storyOf,
+  addWorldQuest, advanceNow, advanceStory, characterStory, currentPhase, knownWays, outcomeOf, questStatus, questsOf, storyContext, storyOf,
   storyQuestAction, validateStory, type StoryQuest, type StoryRefs,
 } from '../src/engine/story.js';
 import { setFact } from '../src/engine/worldfacts.js';
 import { journalOf } from '../src/engine/journal.js';
+import { STORY } from '../src/data/campaigns/brezal/story.js';
 import type { Character } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
 
@@ -242,6 +243,55 @@ describe('misiones por fases: fases, vías y desenlaces', () => {
     expect(cs.open).not.toContain('q_retirada');
     expect(cs.expired).toContain('q_retirada');
     expect(cs.log?.at(-1)).toMatchObject({ quest_id: 'q_retirada', kind: 'expired' });
+  });
+
+  it('misiones de la partida: se validan al crearlas, van en la colección `quests` del mundo y vuelven al reabrir', async () => {
+    const time = fakeTime(EPOCH);
+    const repo = new MemoryRepository();
+    const seed = () => authoredSeed('brezal', { now: new Date(EPOCH) });
+    const engine = await Engine.boot({ repo, campaignId: 'brezal', seed: seed(), now: time.now, deterministic: false, fastTravel: false });
+    const w = engine.world;
+    // Repetir la id de una misión de la campaña, no.
+    expect(addWorldQuest(w, { ...prueba(), id: 'q_perro' }, { source: 'master', game_s: engine.gameNow() }).ok).toBe(false);
+    // Depender de Brenna sin decir qué pasa si muere, no: los mismos casos límite que las escritas.
+    const fragil = { ...prueba(), id: 'q_fragil', giver_npc_id: 'npc_brenna', turn_in_npc_id: undefined };
+    const bad = addWorldQuest(w, fragil, { source: 'ia', game_s: engine.gameNow() });
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.errors.join('\n')).toContain('on_npc_dead');
+    expect(w.quests.has('q_fragil')).toBe(false);
+    // La buena entra, se ve en la historia y se juega como las demás.
+    const ok = addWorldQuest(w, prueba(), { source: 'master', game_s: engine.gameNow() });
+    expect(ok.ok).toBe(true);
+    expect(w.quests.get('q_prueba')).toMatchObject({ source: 'master', rev: 1 });
+    expect(storyOf(w)!.quests.some((q) => q.id === 'q_prueba')).toBe(true);
+    expect(storyOf(w)!.quests.length).toBe(STORY.quests.length + 1);
+    const r = await engine.createCharacter('u_q', 'Quilla', { class_id: 'rogue' });
+    if (!r.ok) throw new Error(r.reason);
+    const c = r.character;
+    w.npc('npc_hal').location = { type: 'spot', id: w.characterSpot(c)!.id };
+    expect(storyQuestAction(w, c, 'q_prueba', 'accept', engine.nowFor(c)).ok).toBe(true);
+    // Corregirla sube su versión.
+    expect(addWorldQuest(w, { ...prueba(), title: 'La prueba de Hal (corregida)' }, { source: 'master', game_s: engine.gameNow() }).ok).toBe(true);
+    expect(w.quests.get('q_prueba')!.rev).toBe(2);
+    expect(storyOf(w)!.quests.find((q) => q.id === 'q_prueba')!.title).toBe('La prueba de Hal (corregida)');
+    // En el snapshot es una colección más (en PostgreSQL, una fila por misión); al reabrir, sigue ahí y la historia escrita no la pisa.
+    const snap = w.snapshot();
+    expect(snap.quests?.map((q) => q.id)).toEqual(['q_prueba']);
+    expect(((snap.campaign as { story?: { quests: { id: string }[] } }).story!.quests).some((q) => q.id === 'q_prueba')).toBe(false);
+    await repo.saveSnapshot(snap);
+    const again = await Engine.boot({ repo, campaignId: 'brezal', seed: seed(), now: time.now, deterministic: false, fastTravel: false });
+    expect(again.world.quests.get('q_prueba')!.rev).toBe(2);
+    expect(characterStory(again.world.character(c.id)).open).toContain('q_prueba');
+  });
+
+  it('un mundo sin historia escrita (generado) puede tener misiones de la partida', async () => {
+    const { engine } = await setup([]);
+    const w = engine.world;
+    delete (w.campaign as { story?: unknown }).story;
+    expect(storyOf(w)).toBeNull();
+    expect(addWorldQuest(w, prueba(), { source: 'ia', game_s: engine.gameNow() }).ok).toBe(true);
+    expect(storyOf(w)!.quests.map((q) => q.id)).toEqual(['q_prueba']);
+    expect(storyOf(w)!.escalation).toEqual([]);
   });
 
   it('el validador pide al menos dos vías, una que no sea pelear, que cada vía pida algo y un desenlace por defecto al final', async () => {
