@@ -161,6 +161,48 @@ export function servedRejection(phrase: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Efecto mágico narrado sin que el motor lo aplique (PLAN-OBJETOS §4.11)
+// ---------------------------------------------------------------------------
+
+/** Tools que aplican el efecto de un objeto mágico. */
+export const MAGIC_TOOLS = new Set(['use_item', 'use_scroll', 'cast_spell', 'heal', 'attune_item', 'add_condition']);
+
+/** Lo que el actor lleva que se puede usar con magia: solo eso se vigila, para no confundir un pergamino mágico con una carta. */
+export interface MagicAtHand { scroll: boolean; potion: boolean; charged: boolean; attunable: boolean }
+
+const MAGIC_PATTERNS: { kind: keyof MagicAtHand; re: RegExp }[] = [
+  { kind: 'scroll', re: /\b(lees|lee|recitas|recita|pronuncias|pronuncia|activas|activa)\b[^,.;]{0,40}\bpergamino\b|\bpergamino\b[^,.;]{0,30}\b(arde|se deshace|se consume|se convierte en ceniza|se desvanece|brilla)\b/ },
+  { kind: 'potion', re: /\b(bebes|te bebes|bebe|se bebe|apuras|apura|tragas|traga|vacias|vacia)\b[^,.;]{0,40}\b(pocion|elixir|frasco|frasquito|vial|redoma|brebaje)\b/ },
+  { kind: 'charged', re: /\b(la varita|la vara|el baston|el anillo|el amuleto|el cetro)\b[^,.;]{0,30}\b(escupe|lanza|dispara|suelta|despide|se activa|descarga|chisporrotea)\b|\b(agitas|agita|apuntas|apunta|activas|activa|blandes|blande)\b[^,.;]{0,30}\b(varita|vara|cetro)\b/ },
+  { kind: 'attunable', re: /\b(te sintonizas|se sintoniza|sintonizas|quedas sintonizad[oa]|queda sintonizad[oa]|te vinculas con|se vincula con)\b/ },
+];
+/** Lo que no llega a ocurrir: niega, se queda en intento u ocurre en otro momento. */
+const MAGIC_NOT_DONE = /\b(no|ni|nunca|sin|si|quieres|intentas|piensas|vas a|antes de|tampoco|podrias|podria|seria|guardas|guarda)\b/;
+
+/**
+ * La narración cuenta que un objeto mágico hace efecto (bebe la poción y se vuelve invisible, lee el pergamino,
+ * la varita escupe dardos, queda sintonizado) y en el turno no ha pasado por su tool: el motor no lo ha aplicado.
+ * Solo se mira lo que el actor tiene a mano (`atHand`). Las palabras entre «» no cuentan.
+ */
+export function magicWithoutTool(input: { narration: string; okTools: readonly string[]; atHand: MagicAtHand; pendingRoll?: boolean }): string | null {
+  if (input.pendingRoll || input.okTools.some((t) => MAGIC_TOOLS.has(t))) return null;
+  const acts = norm(input.narration).replace(/«[^»]*»/g, ' . ');
+  for (const c of clauses(acts)) {
+    if (MAGIC_NOT_DONE.test(c)) continue;
+    for (const { kind, re } of MAGIC_PATTERNS) {
+      if (!input.atHand[kind]) continue;
+      const m = re.exec(c);
+      if (m) return m[0];
+    }
+  }
+  return null;
+}
+
+export function magicRejection(phrase: string): string {
+  return `La narración da por hecho un efecto mágico («${phrase}») que el motor no ha aplicado: lo que no pasa por un tool no ha ocurrido. Usa use_item (poción, varita, objeto con cargas), use_scroll (pergamino), attune_item (sintonizarse o identificar) o cast_spell, y narra lo que devuelva; o narra que no llega a usarlo. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
 // Golpe declarado sin tirada de ataque
 // ---------------------------------------------------------------------------
 

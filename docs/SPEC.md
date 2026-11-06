@@ -406,8 +406,8 @@ Todos los pesos en `campaign.progression` para tunearlos con la validación.
 
 El modelo de objetos 5e (PLAN-OBJETOS §2) está en `src/engine/model.ts`; las tablas y ayudas puras, en
 `src/engine/items.ts`. Todo lo nuevo es opcional: un objeto sencillo sigue siendo nombre, tipo, tamaño, peso y valor.
-Las reglas que usan estos datos (bonos en la tirada, sintonizar, gastar cargas o munición, pergaminos) son el
-bloque C del plan; el modelo solo dice qué es cada cosa y qué ve cada personaje.
+Las reglas que usan estos datos (bonos en la tirada, sintonizar, gastar cargas o munición, pergaminos) están en
+§5.1.1; el modelo solo dice qué es cada cosa y qué ve cada personaje.
 
 | Campo | Detalle |
 |---|---|
@@ -441,6 +441,57 @@ la web (`packView`) y la hoja usan el mismo nombre. **Migración:** `migrate` re
 partida guardada no tiene (sin pisar nada; el tipo, solo si era uno de los genéricos viejos) y deduce de sus datos
 la lista de propiedades del arma y la categoría de la armadura. `validate.ts` comprueba subtipos, propiedades,
 alcance, munición, que la magia lleve rareza, cargas, conjuros y el estado de cada ejemplar.
+
+### 5.1.1 Reglas de los objetos — DECIDIDO (PLAN-OBJETOS §4, bloque C, 2026-11-06)
+
+Las aplica `src/engine/itemrules.ts` con los datos de §5.1 y las competencias de clase y raza
+(`ClassDef.weapons`/`armor`, `RaceDef.weapons`/`size` en `src/data/srd/index.ts`). Sin datos, como antes: un arma
+sin `subtype` se usa con competencia; una armadura sin `str_min` no frena. El máster no aplica efectos: los narra.
+
+- **Competencia.** Arma: por categoría (`simple`/`martial`) o por arma concreta (`base_id ?? id`). Sin ella, el
+  ataque no suma el bono de competencia. Armadura o escudo sin competencia: desventaja en las tiradas de FUE y DES
+  (ataques incluidos: `gearAdvantage`, `attackProfile`) y no lanza conjuros (`armorBlocksSpells`: `cast_spell`,
+  `use_scroll` y las varitas lo rechazan).
+- **El ataque del PJ** (`attackProfile`, usado por `resolveAttack` y la línea de ataque de la hoja): característica
+  (DES a distancia, la mejor con sutil), competencia, estilo, bono mágico del arma y de la munición. Versátil a dos
+  manos o con la otra libre; pesada con desventaja para un pequeño; ligera: ataque con la otra mano
+  (`requires_roll_key: off_hand`) sin la característica positiva al daño salvo el estilo `two_weapon`. `loading` no
+  cambia nada mientras cada tirada sea un solo ataque.
+- **Alcance** (`reachCheck`, en `resolveAttack` y en el `attack` del máster): cuerpo a cuerpo, el mismo punto; `reach`,
+  hasta 3 m; arrojadiza o a distancia, `range` en pies (más allá del normal, desventaja; más allá del largo, no
+  llega); un arma a distancia contra quien está en el mismo punto, desventaja. Otra localización, no.
+- **Munición.** Cada disparo gasta una (`spendAmmo`); sin munición del `ammo_type` del arma, no hay disparo. Uno de
+  cada dos disparos deja la pieza en el suelo del punto del objetivo (la mitad recuperable del SRD, como objeto real).
+  El arma arrojadiza lanzada cae allí también (`throwWeapon`).
+- **Fuerza mínima.** Armadura con `str_min` por encima de la FUE: −10 pies (`armorSpeedPenalty`, en `speedMps` y la
+  hoja). Los efectos `speed` de lo que lleva suman o restan ahí mismo.
+- **Bonos mágicos.** `bonus.attack`/`damage` en el ataque; `bonus.ac` de la armadura puesta, el escudo embrazado y lo
+  equipado (anillo, capa) en `armorClass`; `save_dc`/`spell_attack` de lo que lleva activo en `castSpell` (opción
+  `bonus`); `save_bonus` en las salvaciones (`characterCheck` con el mundo).
+- **Objetos activos.** Lo que lleva en las manos o puesto (no en bolsillos ni mochila) y, si pide sintonía,
+  sintonizado con él. Sus `effects` cuentan: `advantage`/`disadvantage` en la tirada, `save_bonus`, `speed`,
+  `resist`/`immune` en el daño (`damageAfterResistance`, en el ataque y en `apply_damage`); los de la maldición, en
+  cuanto se sintoniza. `light`, `darkvision`, `ability_score` y `condition_immunity` los lee el máster en la ficha
+  (`gearLines`); el motor aún no los aplica.
+- **Sintonización** (`attune_item` mode `attune`): un descanso corto de verdad (`restByMaster`, con su tiempo y sus
+  interrupciones) con el objeto a mano; si no le interrumpen, `state.attuned_to`. Tres como mucho (`MAX_ATTUNED`), con
+  la condición del objeto (clases, lanzador). `end` la deja, salvo maldito. Sintonizarse identifica.
+- **Identificar** (`attune_item` mode `identify`, o `cast_spell` Identificar con `target_id` = el ejemplar): añade al
+  PJ a `state.identified_by`. Leer un pergamino o usar una varita también lo identifica.
+- **Pergaminos** (`use_scroll`, `useScroll`): el conjuro es `spell.spell_id` o, en los pergaminos genéricos por nivel,
+  `state.spell_id` del ejemplar. Fuera de su lista o sin lanzar conjuros: no, y no se gasta. De nivel mayor que el que
+  lanza: prueba de su característica CD 10 + nivel; si falla, se gasta sin efecto. CD y ataque: `spell.save_dc` /
+  `attack_bonus` o la tabla del SRD (`SCROLL_TABLE`). Sin componentes ni espacio. `mode: 'copy'` (mago): Arcanos
+  CD 10 + nivel, 2 h y 50 de oro por nivel; el pergamino se pierde salga o no.
+- **Cargas** (`use_item` con `quantity` = cargas): gasta cargas y, si tiene `spell`, lo lanza (una carga de más sube
+  un nivel); CD y ataque del objeto o del PJ. Se recargan al alba o al anochecer al ir a usarlas o al descansar
+  (`refreshCharges`, tirando `recharge.amount` por cada vez), y con descanso corto o largo según `recharge.at`
+  (`rechargeOnRest`, en `applyRest`). Con `destroy_on_empty`, al gastar la última, 1d20: con un 1 se deshace.
+- **Pociones** (`use_item`): se gasta y su `effect` queda como condición con `duration_s` (`applyItemEffect`). La de
+  curar sigue yendo por `heal` con `item_instance_id`.
+- **Cierre** (`magicWithoutTool`, closecheck.ts): si la narración da por hecho un efecto mágico (bebe la poción, lee el
+  pergamino, la varita dispara, queda sintonizado) de lo que el actor tiene a mano y en el turno no ha pasado por
+  `use_item`, `use_scroll`, `attune_item`, `cast_spell`, `heal` o `add_condition`, se rechaza una vez.
 
 ### 5.2 Inventario (`inventory`)
 `character_id`, `item_id`, `quantity`, `equipped` (slot: main_hand, off_hand, armor, ring1…), `attuned`, `identified` (para magia desconocida), `notes`.
@@ -553,6 +604,8 @@ Dados (el servidor tira):
 Escritura (efectos):
 - `apply_damage(target_id, amount, type, source)` / `heal(target_id, amount)`
 - `add_condition(target_id, condition, duration)` / `remove_condition(...)`
+- `use_item(instance_id, quantity, target_id)` — gasta un consumible; poción con efecto, varita con cargas (§5.1.1)
+- `use_scroll(instance_id, mode: cast|copy, target_id)` / `attune_item(instance_id, mode: attune|identify|end)` (§5.1.1)
 - `use_resource(character_id, feature|spell_slot, level?)`
 - `move_to(character_id, target_spot_id, pace)` — el servidor calcula tiempo y ruta (§3.2.3)
 - `update_location_state(location_id, patch)`

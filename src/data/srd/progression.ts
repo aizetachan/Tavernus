@@ -43,6 +43,8 @@ export interface FeatureEffect {
   armored_ac?: number;
   /** Bonificador a los ataques a distancia con arma (estilo Tiro con arco). */
   ranged_attack?: number;
+  /** Suma la característica al daño del ataque con la otra mano (estilo Combate con dos armas). */
+  two_weapon?: boolean;
 }
 
 export interface FeatureDef {
@@ -138,7 +140,7 @@ const FIGHTING_STYLES: OptionDef[] = [
   { id: 'dueling', name: 'Duelo', text: '+2 al daño con un arma cuerpo a cuerpo a una mano y nada en la otra.' },
   { id: 'great_weapon', name: 'Arma a dos manos', text: 'Con un arma a dos manos, repites los 1 y 2 de los dados de daño.' },
   { id: 'protection', name: 'Protección', text: 'Con escudo, tu reacción impone desventaja a un ataque contra un aliado a tu lado.' },
-  { id: 'two_weapon', name: 'Combate con dos armas', text: 'Sumas tu modificador al daño del ataque con la segunda arma.' },
+  { id: 'two_weapon', name: 'Combate con dos armas', text: 'Sumas tu modificador al daño del ataque con la segunda arma.', effects: { two_weapon: true } },
 ];
 const style = (level: number, ids: string[], prefer: string): ChoiceDef => ({
   key: 'fighting_style', level, kind: 'option', name: 'Estilo de combate', text: 'Una forma de luchar que dominas.', count: 1,
