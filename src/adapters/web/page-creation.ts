@@ -257,6 +257,7 @@ function tavernusChargen(root, o) {
       .catch(function () { if (ask === previewAsk) { fields.innerHTML = ''; errBox.textContent = 'No hay conexión con el servidor.'; } });
   }
   function tile(label, value, extra) { return '<div class="cg-tile"><small>' + esc(label) + '</small><b>' + esc(value) + '</b>' + (extra ? '<span>' + esc(extra) + '</span>' : '') + '</div>'; }
+  function gear(list, from) { return list.filter(function (e) { return (e.from || 'class') === from; }).map(function (e) { return e.name + (e.quantity > 1 ? ' ×' + e.quantity : ''); }).join(', '); }
   function row(label, inner) { return '<div class="cg-row"><span>' + esc(label) + '</span><div>' + inner + '</div></div>'; }
   function drawSheet(p) {
     var look = s.look.trim(), hook = o.showHook() ? s.hook.trim() : '';
@@ -266,7 +267,8 @@ function tavernusChargen(root, o) {
       '<div class="cg-tiles six">' + p.abilities.map(function (a) { return tile(a.short, a.total, signed(a.modifier)); }).join('') + '</div>' +
       row('Salvaciones', p.saves.map(function (x) { return '<span class="cg-tag' + (x.proficient ? ' on' : '') + '">' + esc(x.name) + ' ' + signed(x.modifier) + '</span>'; }).join('')) +
       row('Habilidades', p.skills.map(function (x) { return '<span class="cg-tag on">' + esc(x.name) + ' ' + signed(x.modifier) + '</span>'; }).join('')) +
-      row('Equipo inicial', '<span>' + esc(p.equipment.map(function (e) { return e.name + (e.quantity > 1 ? ' ×' + e.quantity : ''); }).join(', ')) + '</span>') +
+      row('Equipo inicial', '<span>' + esc(gear(p.equipment, 'class')) + '</span>') +
+      (gear(p.equipment, 'background') ? row('Del trasfondo', '<span>' + esc(gear(p.equipment, 'background')) + '</span>') : '') +
       row('Si muere', '<span>' + esc(DEATH[p.death_mode].name + '. ' + DEATH[p.death_mode].text) + '</span>') +
       (look ? row('Cómo se ve', '<span>' + esc(look) + '</span>') : '') +
       (hook ? row('Qué le trae aquí', '<span>' + esc(hook) + '</span>') : '');

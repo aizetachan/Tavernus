@@ -116,7 +116,8 @@ Lo que cambia en la partida va en el ejemplar, no en la definición:
 > del SRD y se reconoce: no sale «sin identificar»); las monturas y los vehículos, tabla aparte; +1/+2/+3 solo de unas
 > pocas bases (daga, espada larga, maza, arco largo, cuero, cota de malla, escudo, flechas, virotes), con `base_id` y
 > `unidentified` (se ven como la base); un pergamino por nivel, con el conjuro en el ejemplar; `TRADE_ITEMS` sigue
-> siendo la lista corta de antes.
+> siendo la lista corta de antes. La magia del SRD solo en los mundos generados: una campaña escrita no la recibe y
+> escribe la suya como objetos propios (Brezal: pocos, enigmáticos y del lore).
 
 - **Un módulo de contenido:** `src/data/srd/items.ts`, con todo el equipo del SRD 5.1 (licencia CC BY 4.0, ya
   usada para razas, clases y conjuros): 37 armas, 12 armaduras y el escudo, munición, unos 100 objetos de
@@ -237,6 +238,13 @@ cada vez más vacías». Uno de ellos se ha quedado con una casa vacía de la pl
 ---
 
 ## 7. Bloque F: lo que lleva cada personaje
+
+> **Hecho el 2026-11-06** (rama `claude/objetos-f-ajuar-63bf2a`). Lo que quedó, en SPEC §5.3.1: equipo de trasfondo y
+> ropa de los PJ (`src/data/srd/gear.ts`, `startingEquipment` en chargen.ts), ajuar con ropa puesta, `purse: false` y
+> versión (`OUTFIT_VERSION`), los objetos que nombra la historia de Brezal, el objeto propio de los mundos generados
+> (`ownItemOf`) y la tabla «Lleva encima» de la wiki generada al construir (`src/wiki/carries.ts`). La bolsa del
+> dinero del PJ sigue siendo del bloque D. Los objetos de Brezal que pueden ser pistas, pendientes de que Miguel los
+> revise uno por uno, están en Obsidian (Desarrollo/Decisiones.md, 2026-11-06).
 
 - **PJ:** el equipo de su clase, como ahora, más **el de su trasfondo** (SRD: el soldado lleva su insignia y un
   juego de dados; el acólito, su símbolo sagrado y su libro de oraciones…), más su bolsa con el dinero (bloque D) y

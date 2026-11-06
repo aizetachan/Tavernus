@@ -129,7 +129,7 @@ describe('n.º 6: nada sale de la nada', () => {
     const ilse = engine.world.npc('npc_ilse');
     c.location = { type: 'spot', id: ilse.location.id };
     c.knows.push(ilse.id);
-    expect(actionContext(engine, c, 'mirar la mesa')).toMatch(/Lleva: tónico de corteza ×3 \[ii_ilse_tonico\], poción de curación \[ii_ilse_pocion\]/);
+    expect(actionContext(engine, c, 'mirar la mesa')).toMatch(/Lleva \(solo esto[^)]*\): tónico de corteza ×3 \[ii_ilse_tonico\], poción de curación \[ii_ilse_pocion\]/);
     const ctx = ctxFor(engine, c);
     // Lo mismo que en el contexto, y además su bolsa con lo de dentro (ajuar, outfit.ts).
     const carriesList = tool(ctx, 'get_npc', { npc_id: 'npc_ilse' })['carries'] as string[];

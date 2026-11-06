@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: herrero
 lugar: "[[La herrería]]"
 actitud: neutral
+npc: npc_hugo
 ---
 
 > [!ficha] Hugo
@@ -69,9 +70,7 @@ Precios en monedas. Ver [[Objetos]].
 
 ## Lleva encima
 
-Una bolsa de cuero con 8 de plata y 7 de cobre. Dentro, un puñado de clavos, yesca y pedernal y una navaja. Y su martillo.
-
-Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

@@ -225,6 +225,9 @@ describe('el catálogo SRD', () => {
     const ids = new Set(CATALOG.map((d) => d.id));
     for (const id of old) expect(ids.has(id), id).toBe(true);
     for (const d of TRADE_ITEMS) expect(d.rarity, d.id).toBeUndefined();
+    // El catálogo de las campañas escritas, sin magia; el de los mundos generados, con ella.
+    expect(CATALOG.some((d) => d.rarity)).toBe(false);
+    expect(catalogFor('fantasy').some((d) => d.id === 'it_varita_proyectiles')).toBe(true);
     // Las cosas de la casa no pisan ids del SRD.
     const srd = new Set(SRD_ITEMS.map((d) => d.id));
     for (const d of COMMON_ITEMS) expect(srd.has(d.id), d.id).toBe(false);
@@ -251,7 +254,7 @@ describe('el catálogo en las partidas', () => {
     return { engine, repo };
   }
 
-  it('Brezal, la demo y un mundo generado arrancan con el catálogo entero y su versión', async () => {
+  it('Brezal, la demo y un mundo generado arrancan con el catálogo y su versión; la magia del SRD, solo en el generado', async () => {
     const seeds = [
       authoredSeed('brezal', { now: new Date(EPOCH) }),
       makeSeed(),
@@ -261,7 +264,10 @@ describe('el catálogo en las partidas', () => {
       const { engine } = await boot(seed);
       const w = engine.world;
       expect(w.campaign.catalog_version, seed.campaign.id).toBe(SRD_CATALOG_VERSION);
-      for (const d of SRD_ITEMS) expect(w.itemDefs.has(d.id), `${seed.campaign.id}: ${d.id}`).toBe(true);
+      // La magia del SRD es para los mundos generados; una campaña escrita escribe la suya como objetos propios
+      // (Miguel, 2026-11-06: en Brezal, pocos, enigmáticos y del lore). Así el máster no la saca con spawn_item.
+      const generated = !!seed.campaign.generation;
+      for (const d of SRD_ITEMS) expect(w.itemDefs.has(d.id), `${seed.campaign.id}: ${d.id}`).toBe(generated || !d.rarity);
       // Todo lo que hay en el mundo tiene su definición.
       for (const i of w.itemInstances.values()) expect(w.itemDefs.has(i.item_id), `${seed.campaign.id}: ${i.id}`).toBe(true);
     }
@@ -283,6 +289,8 @@ describe('el catálogo en las partidas', () => {
     const again = await boot(seed, repo);
     expect(again.engine.world.itemDefs.size).toBe(engine.world.itemDefs.size);
     expect(again.engine.world.itemDef('it_alabarda').weapon?.damage).toBe('1d10');
+    // Al volver a abrirla tampoco aparece la magia del SRD.
+    expect(again.engine.world.itemDefs.has('it_espada_larga_1')).toBe(false);
   });
 
   it('compactSnapshot guarda una definición SRD cambiada en la partida', () => {
