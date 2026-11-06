@@ -74,6 +74,7 @@ En el juego no necesitas saber cuál usar: describes lo que haces y el máster e
 - **CA:** armadura + DES (con su tope) + escudo.
 - Salvaciones, percepción pasiva, visión en la oscuridad y velocidad.
 - **Equipo inicial** de la clase, ya colocado: en las manos, puesto, en los bolsillos y en la mochila (antorchas, raciones, cuerda).
+- **Lo del trasfondo y la ropa.** El soldado lleva su insignia de rango, un trofeo y dados de hueso; el acólito, su símbolo sagrado, un libro de oraciones, incienso y sus vestiduras; el criminal, una palanca; el héroe del pueblo, herramientas de carpintero, una pala y una olla; el noble, su anillo de sello y su pergamino de linaje; el erudito, tinta, pluma, un cuchillo pequeño y la carta de un colega muerto. Todos llevan ropa: de viaje, fina el noble y oscura con capucha el criminal. Puesta si la clase no lleva armadura; si no, en la mochila. El resumen lo enseña en una fila aparte, «Del trasfondo».
 
 ## El flujo, entonces y ahora
 

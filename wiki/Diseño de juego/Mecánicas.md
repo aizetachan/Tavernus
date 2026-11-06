@@ -99,9 +99,13 @@ Toda persona lleva algo real que se le puede robar o que se encuentra al registr
 - **Una bolsa de cuero al cinto con unas monedas.** Cuántas depende de su oficio: el regidor lleva oro; el cazador, unos cobres. Si coges la bolsa, te llevas su dinero dentro; también puedes sacar solo unas monedas. Lo que pagas a un vecino va a su bolsa.
 - **Dentro, dos o tres cosas de su oficio.** La tabernera, un manojo de llaves; la curandera, hierbas secas y vendas; el herrero, clavos y yesca; el guardia, un silbato; el regidor, un anillo de sello.
 - **Su arma, si es de pelear.** La maza del alguacil, la lanza del guardia, el arco del cazador. Quien no pelea no la lleva a la vista.
-- Los animales no llevan nada.
+- **Su ropa, puesta.** El mandil del herrero, la sobreveste del guardia, la capa de buen paño del regidor. Se puede describir, manchar o quitar.
+- **Lo que la historia nombra.** En Brezal, la jarra con muesca de [[Brenna]], el guante con el ascua de [[Ysolde]], la cuerda trenzada de [[Úrsula]], las botas nuevas de [[Doro]] y los anillos de [[Osric Malvez]] son objetos de verdad. El martillo engrasado de [[La herrería]] cuelga en la fragua.
+- Los niños no llevan bolsa ni dinero, solo sus cosas. Los animales no llevan nada.
 
-Robar la bolsa o sacar algo de ella es robarle a esa persona: si alguien lo ve, es un robo, con sus testigos (ver [[#Crimen, testigos y ley]]). Lo que le quitas no vuelve a aparecer. Lo mismo vale para los mundos generados: la regla sale del oficio de cada uno, no de una lista escrita para Brezal.
+Lo que lleva cada uno sale en su ficha, en «Lleva encima», generado de los datos del juego.
+
+Robar la bolsa o sacar algo de ella es robarle a esa persona: si alguien lo ve, es un robo, con sus testigos (ver [[#Crimen, testigos y ley]]). Lo que le quitas no vuelve a aparecer. Lo mismo vale para los mundos generados: la regla sale del oficio de cada uno, no de una lista escrita para Brezal. Allí, además, cada persona lleva un objeto propio que inventa el generador (un relicario, una carta arrugada).
 
 ## Progreso
 

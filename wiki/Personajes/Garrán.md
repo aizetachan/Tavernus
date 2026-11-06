@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: alguacil y recaudador
 lugar: "[[Plaza del Pozo]]"
 actitud: desconfiado
+npc: npc_garran
 ---
 
 > [!ficha] Garrán
@@ -57,9 +58,7 @@ De 13:00 a 14:00 cobra el diezmo junto al tablón, con [[Doro]] detrás. Según 
 
 ## Lleva encima
 
-La bolsa del diezmo, de cuero, con lo cobrado: 4 de oro y 3 de plata. Dentro, una trenza de esparto a medio hacer, un silbato de hueso y un mendrugo de pan. Además, la llave del arcón del regidor y su maza corta. La bolsa y la trenza son de esta historia; lo demás lo pone el ajuar.
-
-Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

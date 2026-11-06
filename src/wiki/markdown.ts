@@ -12,6 +12,8 @@ export interface Frontmatter {
   description: string | null;
   aliases: string[];
   tags: string[];
+  /** Id del NPC de la ficha («npc_hugo»): su sección «Lleva encima» sale de los datos del juego (carries.ts). */
+  npc: string | null;
 }
 
 export interface PageRef {
@@ -57,7 +59,7 @@ export function escapeHtml(s: string): string {
 
 /** Separa la cabecera YAML (solo las claves que usa la wiki) del cuerpo. */
 export function frontmatter(source: string): { meta: Frontmatter; body: string } {
-  const meta: Frontmatter = { title: null, description: null, aliases: [], tags: [] };
+  const meta: Frontmatter = { title: null, description: null, aliases: [], tags: [], npc: null };
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(source);
   if (!m) return { meta, body: source };
   for (const line of m[1]!.split(/\r?\n/)) {
@@ -68,6 +70,7 @@ export function frontmatter(source: string): { meta: Frontmatter; body: string }
     else if (key === 'description') meta.description = yamlString(raw);
     else if (key === 'aliases') meta.aliases = yamlList(raw);
     else if (key === 'tags') meta.tags = yamlList(raw);
+    else if (key === 'npc') meta.npc = yamlString(raw);
   }
   return { meta, body: source.slice(m[0].length) };
 }

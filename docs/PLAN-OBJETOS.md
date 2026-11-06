@@ -228,6 +228,13 @@ cada vez más vacías». Uno de ellos se ha quedado con una casa vacía de la pl
 
 ## 7. Bloque F: lo que lleva cada personaje
 
+> **Hecho el 2026-11-06** (rama `claude/objetos-f-ajuar-63bf2a`). Lo que quedó, en SPEC §5.3.1: equipo de trasfondo y
+> ropa de los PJ (`src/data/srd/gear.ts`, `startingEquipment` en chargen.ts), ajuar con ropa puesta, `purse: false` y
+> versión (`OUTFIT_VERSION`), los objetos que nombra la historia de Brezal, el objeto propio de los mundos generados
+> (`ownItemOf`) y la tabla «Lleva encima» de la wiki generada al construir (`src/wiki/carries.ts`). La bolsa del
+> dinero del PJ sigue siendo del bloque D. Los objetos de Brezal que pueden ser pistas, pendientes de que Miguel los
+> revise uno por uno, están en Obsidian (Desarrollo/Decisiones.md, 2026-11-06).
+
 - **PJ:** el equipo de su clase, como ahora, más **el de su trasfondo** (SRD: el soldado lleva su insignia y un
   juego de dados; el acólito, su símbolo sagrado y su libro de oraciones…), más su bolsa con el dinero (bloque D) y
   ropa de viaje. Se ve en el paso «resumen» de la creación.

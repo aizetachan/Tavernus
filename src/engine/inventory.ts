@@ -266,13 +266,15 @@ export function transferItem(world: World, instanceId: Id, to: Placement, quanti
       world.touch('item_instances', moved.id);
     }
   }
+  // La ropa que alguien llevaba puesta (outfit.ts) deja de estarlo al cambiar de sitio.
+  if (moved.state['worn'] === true) { delete moved.state['worn']; world.touch('item_instances', moved.id); }
   const coins = coinsArriving(world, moved, carrierBefore);
   return { ok: true, moved, remaining, ...(coins ? { coins } : {}) };
 }
 
 /**
  * Lo que lleva un NPC, para el máster, con IDs para transfer_item: «bolsa de cuero con 3 de plata
- * [ii_x] (dentro: navaja [ii_y], yesca y pedernal [ii_z])». Sin esto el máster lo inventa.
+ * [ii_x] (dentro: navaja [ii_y], yesca y pedernal [ii_z])». Lo que lleva puesto (la ropa del ajuar), con «viste». Sin esto el máster lo inventa.
  */
 export function npcCarryList(world: World, npcId: Id): string[] {
   const label = (i: ItemInstance): string => {
@@ -280,7 +282,7 @@ export function npcCarryList(world: World, npcId: Id): string[] {
     const coins = i.state['coins'];
     const money = typeof coins === 'number' && coins > 0 ? ` con ${fmtMoney(coins, currencyOf(world.campaign))}` : '';
     const inside = d.container ? world.itemsIn({ type: 'container', id: i.id }) : [];
-    return `${d.name}${i.quantity > 1 ? ` ×${i.quantity}` : ''}${money} [${i.id}]${inside.length ? ` (dentro: ${inside.map(label).join(', ')})` : ''}`;
+    return `${i.state['worn'] === true ? 'viste ' : ''}${d.name}${i.quantity > 1 ? ` ×${i.quantity}` : ''}${money} [${i.id}]${inside.length ? ` (dentro: ${inside.map(label).join(', ')})` : ''}`;
   };
   return world.itemsIn({ type: 'npc', id: npcId }).map(label);
 }

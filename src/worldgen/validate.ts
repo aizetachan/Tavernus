@@ -149,6 +149,10 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
     const base = d.base_id ? defs.get(d.base_id) : undefined;
     if (d.base_id === d.id) errs.push(`${d.id}: base_id apunta a sí mismo.`);
     else if (base && base.type !== d.type) errs.push(`${d.id}: su base ${base.id} es de otro tipo (${base.type}).`);
+    // El objeto propio de un NPC (index.ts, `ownItemOf`): inventado por el relleno, así que custom, único y sin reglas.
+    if (d.id.startsWith('it_own_') && (d.origin !== 'custom' || !d.unique || (d.type !== 'misc' && d.type !== 'treasure') || d.weapon || d.armor || d.container || d.heals || d.rarity || d.bonus || d.charges || d.effects || d.spell || !d.name.trim())) {
+      errs.push(`${d.id}: el objeto propio de un NPC debe ser custom, único y de tipo misc o treasure, sin reglas.`);
+    }
   }
   const isWho = (id: unknown) => typeof id === 'string' && (chars.has(id) || npcs.has(id));
   for (const i of snap.item_instances) {
