@@ -1006,7 +1006,7 @@ const WHO_ARE_YOU = /\b(y tu quien eres|quien eres|quien (demonios|diablos|naric
 /** Decir que no le conoce. */
 const DOESNT_KNOW = /\b(no se quien eres|no te conozco|ni idea de quien eres|no tengo ni idea de quien|no se quien es usted|no le conozco)\b/;
 /** Dar por hecho que le han preguntado algo. */
-const PRESUMES = /\b(ya que (lo |me lo )?(preguntas|pregunta|mencionas|pides)|como me (pides|preguntas)|ya que me lo (pides|preguntas)|puesto que preguntas)\b/;
+export const PRESUMES = /\b(ya que (lo |me lo )?(preguntas|pregunta|mencionas|pides)|como me (pides|preguntas)|ya que me lo (pides|preguntas)|puesto que preguntas)\b/;
 /** Volver a preguntar para qué lo quiere. */
 const WHY_AGAIN = /\b(para que (lo )?(quieres|preguntas)|por que (lo )?(quieres saber|preguntas)|y tu (para|por) que)\b/;
 
@@ -1105,4 +1105,9 @@ export function talkProblems(p: TalkPlan, input: { lines: readonly DialogueLine[
   const n = words(said);
   if (n > max + WORDS_MARGIN) out.push(`${input.npcName} dice ${n} palabras y el guion pide ${max} como mucho: recórtalo.`);
   return out;
+}
+
+/** ¿El NPC contesta como si le hubieran preguntado algo («ya que lo preguntas»)? Para la línea del actor inventada (tools.ts). */
+export function npcPresumes(lines: readonly DialogueLine[], npcId: Id): boolean {
+  return PRESUMES.test(norm(lines.filter((l) => l.speaker === 'npc' && (!l.npc_id || l.npc_id === npcId)).map((l) => l.text).join(' ')));
 }

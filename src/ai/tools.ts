@@ -49,7 +49,7 @@ import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
 import { secondPersonSingular } from '../engine/turnwindow.js';
-import { askBlocked, endsTalk, introducesAs, offersNow, talkPlanWith, talkProblems, textSignals, TALK_SITUATIONS, withoutRefused, type TalkPlan } from '../engine/talk.js';
+import { askBlocked, endsTalk, introducesAs, npcPresumes, offersNow, talkPlanWith, talkProblems, textSignals, TALK_SITUATIONS, withoutRefused, type TalkPlan } from '../engine/talk.js';
 import { ALARM_KINDS, clearAlarm, setAlarm } from '../engine/alarm.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { CONFLICT_KINDS, conflictKindOf, refusedBefore, confrontButtons, confrontOf, conflictVerdict, createItem, resolveConflict, type ConflictKind, type ConflictPlan, type ConflictResult, type ConflictVerdict } from '../engine/conflict.js';
@@ -1948,7 +1948,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           const typed = textSignals(ctx.action_text ?? '');
           const leaning = talkLines.filter((l) => l.speaker === 'actor' && !saidByPlayer(l.text, ctx.action_text)).some((l) => {
             const x = textSignals(l.text);
-            return (x.asks_work && !typed.asks_work) || (x.trade && !typed.trade) || (x.question && !typed.question);
+            // Pedir trabajo o comprar mueven el juego (abren misiones, cobran): siempre. Una pregunta inventada, solo si el
+            // NPC le contesta como a una pregunta («ya que lo preguntas»); si no, el servidor la quita y no pasa nada.
+            return (x.asks_work && !typed.asks_work) || (x.trade && !typed.trade) || (x.question && !typed.question && npcPresumes(talkLines, plan.npc_id));
           });
           if (leaning) bad.push(`Pones en boca del actor algo que no ha dicho (una pregunta, pedir trabajo o comprar) y ${npcName} le contesta a eso. El actor solo ha escrito «${ctx.action_text}»: que ${npcName} responda a eso.`);
         }
