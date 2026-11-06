@@ -215,6 +215,35 @@ describe('misiones por fases: fases, vías y desenlaces', () => {
     void time;
   });
 
+  it('paquete versionado: al reabrir, la partida toma la historia del código sin perder el estado; lo que ya no está se cierra', async () => {
+    const time = fakeTime(EPOCH);
+    const repo = new MemoryRepository();
+    const engine = await Engine.boot({ repo, campaignId: 'brezal', seed: authoredSeed('brezal', { now: new Date(EPOCH) }), now: time.now, deterministic: false, fastTravel: false });
+    const r = await engine.createCharacter('u_viejo', 'Viejo', { class_id: 'rogue' });
+    if (!r.ok) throw new Error(r.reason);
+    const c = r.character;
+    // Una partida de antes: su copia de la historia era otra (un texto distinto y una misión que ya no existe).
+    const old = storyOf(engine.world)!;
+    old.version = 1;
+    old.quests.find((q) => q.id === 'q_perro')!.text = 'Texto viejo';
+    old.quests.push({ ...prueba(), id: 'q_retirada', phases: undefined, outcomes: undefined, steps: [{ id: 'x', text: 'Algo', done_when: fact('nunca') }] });
+    characterStory(c).open.push('q_retirada');
+    characterStory(c).steps.push('q_perro/rastro');
+    engine.world.touch('campaign', engine.world.campaign.id);
+    engine.world.touch('characters', c.id);
+    await repo.saveSnapshot(engine.world.snapshot());
+    const again = await Engine.boot({ repo, campaignId: 'brezal', seed: authoredSeed('brezal', { now: new Date(EPOCH) }), now: time.now, deterministic: false, fastTravel: false });
+    const s = storyOf(again.world)!;
+    expect(s.version).toBe(2);
+    expect(s.quests.find((q) => q.id === 'q_perro')!.text).not.toBe('Texto viejo');
+    expect(s.quests.some((q) => q.id === 'q_retirada')).toBe(false);
+    const cs = characterStory(again.world.character(c.id));
+    expect(cs.steps).toContain('q_perro/rastro');
+    expect(cs.open).not.toContain('q_retirada');
+    expect(cs.expired).toContain('q_retirada');
+    expect(cs.log?.at(-1)).toMatchObject({ quest_id: 'q_retirada', kind: 'expired' });
+  });
+
   it('el validador pide al menos dos vías, una que no sea pelear, que cada vía pida algo y un desenlace por defecto al final', async () => {
     const { engine } = await setup([]);
     const bad = prueba();

@@ -35,6 +35,7 @@ import { allIncidents, incidentText, lawTick, parseDesecration, parseInsult, par
 import { coinsOf, currencyOf, DEFAULT_STARTING_COINS, migrateLegacyCoins, money, newPurse, pay } from './money.js';
 import { tickOrders } from './npcorders.js';
 import { nameFor, storyQuestAction, tickStory, type StoryOutput } from './story.js';
+import { syncStoryPack, type Story } from './story.js';
 import { trustFromRoll, trustNotice } from './trust.js';
 import { fillSet, setsWanting, speakerLabel, tickChatter, type ChatterWriter } from './chatter.js';
 import { tickWorld } from './worldrules.js';
@@ -3862,6 +3863,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   }
   // Catálogo SRD (src/data/catalog.ts): definiciones a la versión del código y las que no se guardan, del código.
   if (syncCatalog(snapshot)) changed = true;
+  // Historia escrita: el paquete de la campaña a la versión del código, sin tocar el estado (story.ts, syncStoryPack).
+  if (syncStoryPack(snapshot, (seed?.campaign as (WorldSnapshot['campaign'] & { story?: Story }) | undefined)?.story)) changed = true;
   for (const c of snapshot.characters as (Character & { recap_from?: unknown })[]) {
     if (c.recap_from === undefined || c.race === undefined || c.hp_max === undefined) changed = true;
     if (c.recap_from === undefined) c.recap_from = null;

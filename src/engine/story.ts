@@ -53,7 +53,7 @@ import { GAME_HOUR } from '../clock/clock.js';
 import { attitudeOf } from './combat.js';
 import type { Hook } from './hooks.js';
 import { spawnItem } from './inventory.js';
-import type { Attitude, Character, Clue, ClueSource, Id, Npc, TrustTier } from './model.js';
+import type { Attitude, Character, Clue, ClueSource, Id, Npc, TrustTier, WorldSnapshot } from './model.js';
 import { keywords, properNameWords, sharedCount } from './keywords.js';
 import { roleLabel } from './narrate.js';
 import { addReputation, checkAchievement, grantClue, type ProgressEvent, type QuestChange } from './progress.js';
@@ -342,6 +342,9 @@ export interface StoryEscalation {
 }
 
 export interface Story {
+  /** Paquete de contenido y su versión (`brezal`, 2): la partida usa siempre el del código (syncStoryPack). */
+  pack?: Id;
+  version?: number;
   quests: StoryQuest[];
   escalation: StoryEscalation[];
 }
@@ -1843,6 +1846,34 @@ function phaseLines(world: World, c: Character, q: StoryQuest, current: StorySte
   const outs = (q.outcomes ?? []).filter((o) => o.when);
   if (outs.length) L.push(`  Desenlaces posibles (salen solos al cumplirla): ${outs.map((o) => `«${o.title}» si ${describeCondition(world, o.when!)}`).join('; ')}; si no, «${q.outcomes!.at(-1)!.title}».`);
   return L;
+}
+
+// ---------------------------------------------------------------------------
+// Paquete de contenido versionado (al abrir una partida)
+// ---------------------------------------------------------------------------
+
+/**
+ * La historia de una campaña escrita es contenido del código (un paquete con versión, `Story.pack`/`version`), no
+ * de cada partida: al abrirla (engine.ts, migrate) se pone la del código si ha cambiado, sin tocar el estado
+ * (`story_state`, `character.story`). Las misiones que ya no están se cierran para quien las tenía abiertas, con
+ * su porqué en el Diario. Las misiones creadas en la partida no van aquí (fase 4: `world_quests`). true si cambió.
+ */
+export function syncStoryPack(snapshot: WorldSnapshot, pack: Story | undefined): boolean {
+  const camp = snapshot.campaign as WorldSnapshot['campaign'] & StoryCampaign;
+  if (!pack || camp.story === pack || JSON.stringify(camp.story ?? null) === JSON.stringify(pack)) return false;
+  camp.story = structuredClone(pack);
+  const ids = new Set(pack.quests.map((q) => q.id));
+  const gs = camp.story_state?.last_game_s ?? camp.story_state?.started_game_s ?? camp.game_epoch_s;
+  for (const c of snapshot.characters) {
+    const st = (c as Character & { story?: CharacterStory }).story;
+    if (!st) continue;
+    for (const id of st.open.filter((x) => !ids.has(x))) {
+      st.open = st.open.filter((x) => x !== id);
+      st.expired.push(id);
+      st.log = [...(st.log ?? []), { quest_id: id, kind: 'expired' as const, game_s: gs, why: 'la historia ha cambiado y esta misión ya no está' }].slice(-MAX_LOG);
+    }
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
