@@ -9,6 +9,7 @@ import { ITEM_DEFS, ITEMS, RESOURCES } from './items.js';
 import { ENCOUNTERS, HOOKS, RUMORS, SCHEDULE } from './life.js';
 import { EXITS, LOCATIONS, REGIONS, ZONES } from './map.js';
 import { NPCS } from './people.js';
+import { EXTRAS } from './extras.js';
 import { ACHIEVEMENT, BIBLE, CLUES, CUSTOMS, FACTIONS, JOBS, LAW, LAWS, PREMISE, SITUATIONS, STARTING_POINTS, WELCOME } from './plot.js';
 import { STORY } from './story.js';
 import { CHATTER, REACTIONS, TAGS } from './reactions.js';
@@ -81,6 +82,8 @@ export const BREZAL: AuthoredCampaign = {
   locations: LOCATIONS,
   exits: EXITS,
   npcs: NPCS,
+  // Vecinos de relleno (extras.ts): gente de paso que hace pueblo.
+  extras: EXTRAS,
   vehicles: [
     { id: 'vh_mula', name: 'la mula de Brenna', kind: 'mount', location: { type: 'spot', id: 'sp_pl_taberna' }, speed_ft: 40, capacity: 1, owner_id: 'npc_brenna', terrain_allowed: [] },
   ],

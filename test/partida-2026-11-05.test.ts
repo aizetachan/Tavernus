@@ -161,8 +161,9 @@ describe('3. una misión entra cuando alguien la da', () => {
     const { engine, time, c } = await boot();
     await say(engine, time, c, 'npc_brenna', 'hablar con Brenna', BRENNA_SALUDO);
     await say(engine, time, c, 'npc_brenna', 'dame una jarra de cerveza', ['Cuatro de cobre. Y no la bebas de un trago.']);
-    expect(talkPlanFor(engine, c, '¿Por qué miras la puerta, Brenna?')!.state.ripe).toBe(true);
-    await say(engine, time, c, 'npc_brenna', '¿Por qué miras la puerta, Brenna?', BRENNA_PERRO);
+    // Madura, pero solo sale si el jugador muestra interés: preguntarle qué le pasa lo es (CONVERSACION-FLUJO).
+    expect(talkPlanFor(engine, c, '¿Qué te pasa, Brenna? No dejas de mirar la puerta')!.state.ripe).toBe(true);
+    await say(engine, time, c, 'npc_brenna', '¿Qué te pasa, Brenna? No dejas de mirar la puerta', BRENNA_PERRO);
     expect(status(engine, c, 'q_cena_doro')).toBe('available');
     expect(status(engine, c, 'q_perro')).toBe('active');
     expect(characterStory(c).origins!['q_perro']).toMatchObject({ kind: 'giver', text: 'Brenna nos lo pidió' });

@@ -44,6 +44,8 @@ import type { Rumor } from './rumors.js';
 import { crowdHere, routineOf } from './schedule.js';
 import { stabilize } from './death.js';
 import { opinionRefusal } from './standing.js';
+import { adjustTrust } from './trust.js';
+import { isDwelling } from './perception.js';
 import type { World } from './world.js';
 
 export type { IncidentKind } from './model.js';
@@ -293,7 +295,10 @@ export function witnessesAt(world: World, spot: Spot, kind: IncidentKind, exclud
     if (n.status !== 'alive' || exclude.includes(n.id)) return false;
     const s = world.spots.get(n.location.id);
     if (!s || s.location_id !== spot.location_id) return false;
-    if (loud(kind) || s.id === spot.id) return true;
+    if (s.id === spot.id) return true;
+    // En casa, con la puerta cerrada (perception.ts, isDwelling): lo violento se oye; lo callado, no.
+    if ((isDwelling(s) || isDwelling(spot)) && !loud(kind)) return false;
+    if (loud(kind)) return true;
     const link = spot.links.find((l) => l.to_spot_id === s.id) ?? s.links.find((l) => l.to_spot_id === spot.id);
     if (link?.blocks_sight) return false;
     return Math.hypot(s.x - spot.x, s.y - spot.y) <= NEAR_M;
@@ -305,7 +310,7 @@ export type ConflictProfile = 'child' | 'authority' | 'owner' | 'fighter' | 'bra
 
 /** El perfil, de los datos: el primero que cumple, de niño a gente corriente. */
 export function npcProfile(world: World, n: Npc, locationId: Id): ConflictProfile {
-  if (n.child) return 'child';
+  if (n.child || n.kit === 'child') return 'child';
   if (isEnforcer(world, n.id)) return 'authority';
   if (isOwner(world, n.id, locationId)) return 'owner';
   if (n.stats && !n.noncombatant) return 'fighter';
@@ -449,6 +454,10 @@ function learn(world: World, i: Incident, n: Npc, how: Knower['how'], from: Id |
     if (to) k.to = to.id; else k.response = 'shout';
   }
   if (prev) Object.assign(prev, k); else i.knowers.push(k);
+  // Quien lo ve con sus ojos se fía menos del autor (trust.ts), una vez por incidente. La víctima ya lo paga en
+  // conflict.ts y las muertes, en death.ts.
+  const pc = world.characters.get(i.perpetrator_id);
+  if (!prev && how === 'saw' && pc && n.id !== i.victim_id && i.kind !== 'murder' && i.severity >= 2) adjustTrust(world, n, pc, 'witnessed_crime', nowG);
   applyKnower(world, i, n, prev ?? k, nowG);
   return prev ?? k;
 }

@@ -10,7 +10,7 @@ import { rollD20, rollExpr, type Advantage, type CheckResult, type Rng, type Rol
 import { consumeItem, inventoryDetailed, inventoryView, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
 import type { Character, Id, Npc, Placement, ReactionKind } from '../engine/model.js';
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
-import { perceive, witnesses } from '../engine/perception.js';
+import { isDwelling, perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
@@ -40,12 +40,13 @@ import { debtHeldBy, debtTitle, noteDebtTerms, openDebts, pawnItem, setDebt, set
 import { inventedPlaces } from '../engine/places.js';
 import { money } from '../engine/money.js';
 import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
-import { coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
+import { coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, servedRejection, servedWithoutPay, stolenRejection, stolenWithoutTool, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
 import { secondPersonSingular } from '../engine/turnwindow.js';
-import { askBlocked, endsTalk, offersNow, talkPlanWith, talkProblems, TALK_SITUATIONS, withoutRefused, type TalkPlan } from '../engine/talk.js';
+import { askBlocked, endsTalk, introducesAs, offersNow, talkPlanWith, talkProblems, textSignals, TALK_SITUATIONS, withoutRefused, type TalkPlan } from '../engine/talk.js';
+import { ALARM_KINDS, clearAlarm, setAlarm } from '../engine/alarm.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { CONFLICT_KINDS, conflictKindOf, refusedBefore, confrontButtons, confrontOf, conflictVerdict, createItem, resolveConflict, type ConflictKind, type ConflictPlan, type ConflictResult, type ConflictVerdict } from '../engine/conflict.js';
 import { conflictCloseProblems } from '../engine/closecheck.js';
@@ -188,6 +189,12 @@ export const MASTER_TOOLS: Tool[] = [
   tool('attack', 'Ataque de un NPC (o de un PJ fuera del flujo de tirada del jugador). El servidor tira contra la CA, calcula y aplica el daño. Un NPC hace aquí su turno entero (con su multiataque, si lo tiene): una llamada por NPC y turno. Para el ataque del propio jugador usa requires_roll con kind=attack y requires_roll_target. A 0 PG un NPC cae inconsciente si el golpe es contundente o el jugador solo quiere pegar o reducir; muere si quiere matar o el arma corta o perfora (el servidor lo decide por la acción y el arma).', {
     attacker_id: str('ID del que ataca (NPC o personaje)'), target_id: str('ID del objetivo'), advantage: enm(ADV, 'Ventaja o desventaja'),
   }),
+  tool('set_alarm', 'Pone (o quita) una alarma en la localización del actor: fuego, derrumbe, inundación, una pelea que lo revuelve todo. Mientras dura, nadie de aquí está para charlas: los NPC solo reaccionan a eso (huyen, gritan, ayudan). Úsala cuando en la partida pase algo así (un candil que prende la paja); quítala (clear) cuando se apague o se acabe.', {
+    kind: enm(['fire', 'collapse', 'flood', 'fight', 'other'], 'Qué pasa'),
+    text: nstr('Qué pasa, en una frase para el máster: «arde el tejado de paja del establo». null solo con clear.'),
+    minutes: nnum('Cuánto dura sola, en minutos de juego; null hasta que se quite con clear.'),
+    clear: { type: ['boolean', 'null'], description: 'true para quitar la alarma de aquí (se ha apagado o acabado); null o false para ponerla' },
+  }),
   tool('restrain_npc', 'Atar (o soltar) a un NPC inconsciente que el actor tiene delante. Atado, aunque vuelva en sí, no se mueve ni pelea hasta que le suelten. A quien está despierto y se resiste no se le ata: primero hay que reducirle.', {
     npc_id: str('ID del NPC'), release: { type: ['boolean', 'null'], description: 'true para soltarle; null o false para atarle' },
   }),
@@ -326,6 +333,7 @@ export const MASTER_TOOLS: Tool[] = [
     places_learned: nstr('IDs (separados por comas) de localizaciones de las que el actor ha oído hablar en esta acción porque alguien nombró el sitio o lo leyó en un cartel o mapa. null si ninguna.'),
     introduces_self: bool('true si el actor ha dicho su propio nombre en voz alta en esta acción (los presentes lo aprenden).'),
     talk_situation: nstr(`Solo si el contexto trae «Cómo responde…» y el jugador busca otra cosa que la situación que dice: ${TALK_SITUATIONS.join(', ')}. El servidor la comprueba. null en cualquier otro caso.`),
+    talk_deescalate: nstr('Solo si el contexto dice que el NPC está molesto o harto y el actor le ha dado una salida perspicaz o creativa a lo que le molesta (una disculpa o un regalo ya cuentan solos): qué ha hecho, en una frase. Baja la tensión un escalón. El servidor lo comprueba. null en cualquier otro caso.'),
     target_character_id: nstr('Si la acción se dirige a otro JUGADOR presente (le habla, le mira, se le acerca, le tiende algo): su ID. Recibirá observable_target y opciones para responder. null si no.'),
     observable_target: nstr('Solo con target_character_id: lo que percibe ese jugador, en segunda persona («Kael se acerca a ti y te pregunta…»). Solo lo que hace el actor, nunca lo que hace o piensa ese jugador. null si no.'),
     lines: {
@@ -345,7 +353,7 @@ export const MASTER_TOOLS: Tool[] = [
 export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story', 'story_quest',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
-  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident', 'npc_trust', 'restrain_npc', 'conflict_act',
+  'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident', 'npc_trust', 'restrain_npc', 'set_alarm', 'conflict_act',
 ]);
 
 export const MEMORY_CAP_PER_CHARACTER = 8;
@@ -396,6 +404,8 @@ export interface ToolContext {
   receive_rejections?: number;
   /** Cierres rechazados por mover un objeto del actor solo de palabra (uno como mucho). */
   moved_rejections?: number;
+  stolen_rejections?: number;
+  served_rejections?: number;
   /** Cierres rechazados por dar monedas por pagadas sin moverlas (closecheck.ts; uno como mucho). */
   coins_rejections?: number;
   /** El PJ ha atacado en esta acción con el tool attack (el de un NPC no cuenta). */
@@ -430,6 +440,8 @@ export interface ToolContext {
   conflict?: { verdict: ConflictVerdict; result?: ConflictResult };
   /** Cierres rechazados por saltarse una acción conflictiva (closecheck.ts; uno como mucho). */
   conflict_rejections?: number;
+  /** Continuación de la tirada de una acción conflictiva: el motor ya lo ha resuelto (y movido lo que tocara). */
+  conflict_resolved?: boolean;
 }
 
 export interface LogEventInput {
@@ -1060,7 +1072,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         const at = world.characterSpot(actor);
         if (!arrival.arrived) return { ok: true, arrived: false, destination: goal.name, stopped_at: at?.name ?? null, hint: 'No ha llegado: algo le para por el camino y el servidor lo cuenta aparte. Narra solo que sale; lo que iba a hacer allí queda pendiente: no lo hagas ni lo narres hecho.' };
         const loc = world.location(goal.location_id);
-        const npcs = world.spotsOf(loc.id).flatMap((sp) => world.npcsAt(sp.id).filter((n) => n.status === 'alive').map((n) => `${n.name} [${n.id}] en ${sp.name}`));
+        // Los de las casas (perception.ts, isDwelling) no se ven desde fuera.
+        const npcs = world.spotsOf(loc.id).filter((sp) => sp.id === at?.id || !isDwelling(sp)).flatMap((sp) => world.npcsAt(sp.id).filter((n) => n.status === 'alive').map((n) => `${n.name} [${n.id}] en ${sp.name}`));
         const items = at ? world.itemsIn({ type: 'spot', id: at.id }).map((i) => `${world.itemDef(i.item_id).name} [${i.id}]`) : [];
         return {
           ok: true, arrived: true, destination: goal.name, location: loc.name, game_time: fmtDuration(r.total_s),
@@ -1489,6 +1502,17 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!r.ok) return { error: r.error };
       return { ok: true, used: def.name, left: r.left, ...(def.heals ? { hint: 'Esto cura: si se lo ha bebido para curarse, era heal con item_instance_id.' } : {}) };
     }
+    case 'set_alarm': {
+      const loc = world.characterSpot(actor)?.location_id;
+      if (!loc) return { error: 'el actor no está en ninguna localización' };
+      if (input['clear'] === true) return clearAlarm(world, loc) ? { ok: true, cleared: true } : { error: 'aquí no hay ninguna alarma' };
+      const kind = ALARM_KINDS.find((k) => k === input['kind']) ?? 'other';
+      const text = input['text'] == null ? '' : s('text').trim();
+      if (!text) return { error: 'falta text: qué pasa, en una frase' };
+      const minutes = typeof input['minutes'] === 'number' && input['minutes'] > 0 ? input['minutes'] : null;
+      setAlarm(world, loc, { kind, text, minutes, by: 'master' }, nowGameS);
+      return { ok: true, hint: 'Mientras dure, los NPC de aquí solo reaccionan a eso. Quítala con set_alarm clear cuando se acabe.' };
+    }
     case 'restrain_npc': {
       const n = world.npc(s('npc_id'));
       if (n.status === 'dead') return { error: `${n.name} está muerto` };
@@ -1703,11 +1727,27 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (ctx.talk && (ctx.talk_rejections ?? 0) < 1) {
         const plan = ctx.talk;
         const npc = world.npcs.get(plan.npc_id);
+        const talkLines = parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id));
+        const npcName = !npc ? 'el NPC' : actor.knows.includes(npc.id) ? npc.name : descriptorOf(world, npc.id);
         const bad = talkProblems(plan, {
-          lines: parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id)),
+          lines: talkLines,
           narration: s('narration_private'), declared: input['talk_situation'] ? s('talk_situation') : null, pendingRoll: req !== null,
-          npcName: !npc ? 'el NPC' : actor.knows.includes(npc.id) ? npc.name : descriptorOf(world, npc.id),
+          npcName,
         });
+        // Una salida creativa solo baja la tensión si la había (CONVERSACION-FLUJO, capa 3).
+        if (input['talk_deescalate'] != null && s('talk_deescalate').trim() && plan.state.escalation === 'calm' && plan.state.tier !== 'hostile') {
+          bad.push(`talk_deescalate: ${npcName} no estaba molesto; pon null.`);
+        }
+        // Lo que el máster pone en boca del actor sin que lo escribiera, y en lo que se apoya el NPC (preguntar por
+        // trabajo, comprar, preguntar): «Brenna, ¿tienes algo que hacer?» y «Ya que lo preguntas…» («Humo y ceniza»).
+        if (ctx.action_text !== undefined) {
+          const typed = textSignals(ctx.action_text ?? '');
+          const leaning = talkLines.filter((l) => l.speaker === 'actor' && !saidByPlayer(l.text, ctx.action_text)).some((l) => {
+            const x = textSignals(l.text);
+            return (x.asks_work && !typed.asks_work) || (x.trade && !typed.trade) || (x.question && !typed.question);
+          });
+          if (leaning) bad.push(`Pones en boca del actor algo que no ha dicho (una pregunta, pedir trabajo o comprar) y ${npcName} le contesta a eso. El actor solo ha escrito «${ctx.action_text}»: que ${npcName} responda a eso.`);
+        }
         if (bad.length) {
           ctx.talk_rejections = (ctx.talk_rejections ?? 0) + 1;
           return { error: `No sigue el guion de «Cómo responde…»: ${bad.join(' ')} Reescribe log_event.` };
@@ -1728,6 +1768,26 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (verb) {
           ctx.moved_rejections = (ctx.moved_rejections ?? 0) + 1;
           return { error: movedRejection(verb) };
+        }
+      }
+      // Robar solo de palabra (la bolsa que no existe «cae a tu mano»): se reescribe una vez.
+      if ((ctx.stolen_rejections ?? 0) < 1) {
+        // Lo que ha movido el motor (conflict_act, o la tirada de un robo ya resuelta) cuenta como movido (conflict.ts).
+        const movedByEngine = Boolean(ctx.conflict?.result?.moved || ctx.conflict_resolved);
+        const took = stolenWithoutTool({ action: ctx.action_text ?? '', narration: s('narration_private'), okTools: [...(ctx.ok_tools ?? []), ...(movedByEngine ? ['transfer_item'] : [])], pendingRoll: req !== null });
+        if (took) {
+          ctx.stolen_rejections = (ctx.stolen_rejections ?? 0) + 1;
+          return { error: stolenRejection(took) };
+        }
+      }
+      // Servir lo que se vende sin cobrarlo ni fiarlo (la jarra delante y nadie paga): se reescribe una vez.
+      if ((ctx.served_rejections ?? 0) < 1) {
+        const tagged = s('tags').split(/[,\s]+/).includes('trade');
+        const trade = tagged || ctx.talk?.situation === 'trade' || ctx.talk?.second === 'trade';
+        const served = servedWithoutPay({ narration: s('narration_private'), lines: parseLines(input['lines'], null, (id) => world.npcs.has(id)), okTools: ctx.ok_tools ?? [], trade, pendingRoll: req !== null });
+        if (served) {
+          ctx.served_rejections = (ctx.served_rejections ?? 0) + 1;
+          return { error: servedRejection(served) };
         }
       }
       // Monedas pagadas solo de palabra (pone 200 sobre la mesa y sigue con sus 200): se reescribe una vez.
@@ -1844,6 +1904,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         for (const w of witnessesOf(engine, at, nowGameS, actor.id)) {
           if (!w.knows.includes(actor.id)) { w.knows.push(actor.id); world.touch('characters', w.id); }
         }
+      }
+      // Se presenta a quien le habla (CONVERSACION-FLUJO, capa 2): ese NPC sabe su nombre desde ahora.
+      if (ctx.talk && (input['introduces_self'] === true || introducesAs(ctx.action_text ?? '', actor.name))) {
+        const n = world.npcs.get(ctx.talk.npc_id);
+        if (n && !(n.knows_name_of ?? []).includes(actor.id)) { n.knows_name_of = [...(n.knows_name_of ?? []), actor.id]; world.touch('npcs', n.id); }
       }
       const approached = ctx.approach && !/\bacerc/i.test(s('narration_private')) ? `Te acercas ${aEs(world.spot(ctx.approach.to_spot_id).name)}. ` : '';
       const closingNpc = input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null;

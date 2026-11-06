@@ -148,7 +148,7 @@ export class Master {
     const conflict = intro || scene || roll ? null : conflictPlanFor(engine, actor, text);
     const talk = intro || scene || roll || conflict ? null : talkPlanFor(engine, actor, text);
     const context = actionContext(engine, actor, text, roll, intro, scene, decisive, talk, conflict);
-    const ctx: ToolContext = { engine, actor, nowGameS: engine.nowFor(actor), rng: this.rng, closed: null, rolls: [], progress: [], action_text: roll?.original_text ?? (intro || scene ? null : text), roll_category: roll && !/^ataque/i.test(roll.result.label) ? rollCategory(roll.result) : null, ...(intro ? { intro: true } : {}), ...(talk ? { talk } : {}), ...(conflict ? { conflict_plan: conflict } : {}) };
+    const ctx: ToolContext = { engine, actor, nowGameS: engine.nowFor(actor), rng: this.rng, closed: null, rolls: [], progress: [], action_text: roll?.original_text ?? (intro || scene ? null : text), roll_category: roll && !/^ataque/i.test(roll.result.label) ? rollCategory(roll.result) : null, ...(intro ? { intro: true } : {}), ...(talk ? { talk } : {}), ...(conflict ? { conflict_plan: conflict } : {}), ...(roll?.conflict ? { conflict_resolved: true } : {}) };
     const calls: ToolCallRecord[] = [];
     const failures: ToolFailure[] = [];
     /** Cierre aceptado: con tool_failed y los errores si algo de escritura falló por el camino. */

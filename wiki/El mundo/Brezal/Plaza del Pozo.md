@@ -34,6 +34,8 @@ Es el cruce de todo el pueblo: desde aquí sale un camino a cada lugar.
 - **El callejón de las hierbas**: estrecho, huele a hierbas cocidas. Lleva a la casa de la curandera.
 - **El camino del molino**: un camino de carro que baja entre huertos hacia la rueda.
 - **El camino de los corrales**: tierra entre cercas de piedra. Huele a gallinero y lleva a la granja de Úrsula.
+- **El horno**: un horno de leña con un mostrador de tabla a la calle. Huele a pan de centeno y a ceniza; aquí vende Marta el **pan gris**.
+- **Las casas del callejón**: una hilera de casas bajas con las puertas cerradas, donde duermen los [[Vecinos de Brezal|vecinos]]. Desde fuera no se ve a quien está dentro, y no se entra sin la llave.
 
 > [!warning]- Spoiler: lo que trae el agua
 > El agua del pozo trae ceniza. La echa [[Tobías]] cada noche por encargo de [[Ysolde]]. Además, el manantial que alimenta el pozo pasa por debajo del granero de Vharn, donde duerme enterrada la Brasa.
@@ -52,6 +54,7 @@ Ver [[Costumbres#El pozo]].
 - [[Garrán]]: en el tablón de día.
 - [[Doro]]: en el portón norte de día.
 - [[Osric Malvez]]: en el tablón por la tarde.
+- Vecinos de relleno ([[Vecinos de Brezal]]): Marta en el horno todo el día; Remedios y Pía junto al pozo por la mañana; Benito, Ciro y Ramiro en los caminos de los huertos y de los corrales; Anselmo dormido en el banco del tablón por la tarde y en el portón de noche; Fermina y Herminia en el pozo por la tarde.
 
 La plaza tiene tres citas diarias (ver [[Vida del pueblo]]):
 

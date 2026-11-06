@@ -428,7 +428,9 @@ casona), Hugo 11 (matón, dueño de la herrería), Brenna 12 (`noncombatant`, du
   - `Npc.guard`, `Npc.confront`, `Npc.child` y `Npc.contest`.
   - `Character.sneak`.
   - El tipo de incidente nuevo `theft_attempt` («intento de robo», gravedad 2).
-  - En el ejemplar robado, `state.stolen` (a quién, cuándo, la tirada y quién estaba cerca) y `state.owner_id`.
+  - En el ejemplar robado, `state.stolen` con la forma `StolenMark` de `src/engine/stolen.ts` (`from_npc_id`, `game_s`, `roll_total`, `near`; los demás campos los pone el flujo de charla al echarlo en falta) y `state.owner_id`.
+  - Los testigos que lo ven (no la víctima) pierden confianza con el autor (`witnessed_crime`, crime.ts).
+  - Niño: `child: true` o el ajuar de niño (`kit: 'child'`).
   - Los objetos creados en partida llevan el prefijo `it_new_` y van en `item_defs` del mundo.
 - **Crimen** (`crime.ts`):
   - `npcProfile`, que es el perfil.

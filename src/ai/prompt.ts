@@ -3,6 +3,7 @@
  * por campaña y va cacheado; todo lo que cambia va en el mensaje de usuario.
  */
 
+import { alarmAt, alarmLine } from '../engine/alarm.js';
 import type { Engine } from '../engine/engine.js';
 import type { CheckResult } from '../engine/dice.js';
 import type { Campaign, Character, Clue, GameEvent, Id, Npc } from '../engine/model.js';
@@ -296,6 +297,9 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
 
   // La luz real ya va en Tiempo; el estado solo si hay algo.
   L.push(`## Localización: ${loc.name} (${loc.id})\n${loc.description_base}\nAmbiente: ruido ${loc.ambience.noise}${loc.ambience.smell ? `, olor a ${loc.ambience.smell}` : ''}.${Object.keys(loc.state).length ? ` Estado: ${JSON.stringify(loc.state)}` : ''}`);
+  // Alarma del sitio (alarm.ts): fuego, derrumbe… Va aparte del estado para que se lea.
+  const alarm = alarmLine(alarmAt(world, loc.id, nowG));
+  if (alarm) L.push(alarm);
   // Solo los rincones que el actor conoce (spots.ts); los demás van aparte, sin descripción.
   const spots = knownSpots(world, actor, loc.id);
   L.push('Puntos que el actor conoce:\n' + spots.map((s) => {
@@ -621,10 +625,15 @@ export function talkPlanFor(engine: Engine, actor: Character, text: string): Tal
   return talkPlan(engine.world, engine.events.all(), actor, text, engine.nowFor(actor));
 }
 
-/** Lo que lleva encima un NPC (con IDs, para transfer_item): sin esto el máster lo inventa con spawn_item. */
+/**
+ * Lo que lleva encima un NPC (con IDs, para transfer_item), y que no lleva nada más: sin esto el máster lo inventa
+ * (la bolsa de cuero de Garrán, que se robó con éxito y nunca existió; partida «Humo y ceniza», 05-11).
+ */
 function carriedBy(world: Engine['world'], npcId: Id): string {
   const items = world.itemsIn({ type: 'npc', id: npcId });
-  return items.length ? `  Lleva: ${items.map((i) => `${world.itemDef(i.item_id).name}${i.quantity > 1 ? ` ×${i.quantity}` : ''} [${i.id}]`).join(', ')}` : '';
+  return items.length
+    ? `  Lleva (solo esto; nada más que se pueda ver de cerca, coger o robar): ${items.map((i) => `${world.itemDef(i.item_id).name}${i.quantity > 1 ? ` ×${i.quantity}` : ''} [${i.id}]`).join(', ')}`
+    : '  No lleva nada que se pueda coger o robar: ni bolsas, ni monedas, ni llaves.';
 }
 
 /** Lo último que ha dicho un NPC aquí: para que no repita la misma frase (closecheck.ts lo rechaza). */

@@ -95,7 +95,8 @@ describe('la charla con quien cobra la deuda', () => {
   it('«¿qué trabajo tienes?»: Garrán, receloso, lleva su trato en el guion y lo cuenta claro', async () => {
     const { engine, c } = await deudor();
     const p = plan(engine, c, 'Garrán, ¿qué trabajo tienes para mí?');
-    expect([p.situation, p.second, p.state.tier]).toEqual(['cold', 'offer', 'wary']);
+    // Receloso ya no es una situación que gane a la pregunta: es un filtro de tono (CONVERSACION-FLUJO, capa 3).
+    expect([p.situation, p.second, p.state.tier]).toEqual(['offer', 'question', 'wary']);
     expect(p.state.terms).toContain('ir al Granero Quemado a «apagar las luces»');
     // Un título de misión que es el nombre de un sitio no es secreto; las principales de otras situaciones, tampoco.
     expect(p.state.locked).not.toContain('El Granero Quemado');

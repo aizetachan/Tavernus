@@ -22,6 +22,7 @@ import { DEFAULT_STARTING_COINS } from './money.js';
 import type { Character, ConflictKind, GameEvent, Id, ItemDef, ItemInstance, ItemSize, ItemType, Npc, NpcConfront, NpcGuard, Placement } from './model.js';
 import { descriptorOf } from './narrate.js';
 import { npcTarget } from './scene.js';
+import type { StolenMark } from './stolen.js';
 import { changeOpinion, opinionOf } from './standing.js';
 import { adjustTrust, type TrustChange } from './trust.js';
 import type { World } from './world.js';
@@ -401,13 +402,8 @@ export function namesItem(text: string, def: ItemDef): boolean {
 // Lo robado: a la mochila, marcado, y si no existía, se crea
 // ---------------------------------------------------------------------------
 
-/** Lo que guarda un ejemplar robado (`state.stolen`): a quién era, cuándo, con qué tirada y quién estaba cerca. */
-export interface StolenMark { from_npc_id: Id; game_s: number; total: number | null; near: Id[] }
-
-export function stolenOf(inst: ItemInstance): StolenMark | null {
-  const s = inst.state['stolen'] as StolenMark | undefined;
-  return s && typeof s.from_npc_id === 'string' ? s : null;
-}
+/** Lo que guarda un ejemplar robado (`state.stolen`): la forma es la de stolen.ts, que lo lee para echarlo en falta. */
+export { stolenMark as stolenOf } from './stolen.js';
 
 /**
  * Dónde guarda el PJ lo que roba: en la mochila (el contenedor que lleva a la
@@ -455,7 +451,8 @@ export function stealInto(world: World, pc: Character, npc: Npc, inst: ItemInsta
   if (!r.ok) return { ok: false, reason: 'reason' in r.error && r.error.reason ? String(r.error.reason) : r.error.code };
   const moved = r.moved;
   moved.state['owner_id'] ??= npc.id;
-  const mark: StolenMark = { from_npc_id: npc.id, game_s: nowG, total, near: nearOf(world, pc, npc) };
+  // Sin tirada (estaba indefenso), lo nota en cuanto pueda: 0 contra su pasiva.
+  const mark: StolenMark = { from_npc_id: npc.id, game_s: nowG, roll_total: total ?? 0, near: nearOf(world, pc, npc) };
   moved.state['stolen'] = mark;
   delete moved.state['on'];
   world.touch('item_instances', moved.id);
@@ -466,7 +463,7 @@ export function stealInto(world: World, pc: Character, npc: Npc, inst: ItemInsta
 export interface NewItemSpec { name: string; type?: ItemType; size?: ItemSize; worn?: boolean; in_hand?: boolean }
 
 /** Riqueza de un NPC (dato `wealth` del ajuar, si lo hay): multiplica lo que puede valer lo que lleva. */
-const WEALTH: Record<string, number> = { poor: 0.5, modest: 1, wealthy: 3, rich: 10 };
+const WEALTH: Record<NonNullable<Npc['wealth']>, number> = { none: 0.2, poor: 0.5, modest: 1, comfortable: 3, rich: 10 };
 const BASE_VALUE: Partial<Record<ItemType, number>> = { treasure: 0.2, weapon: 0.1, tool: 0.05, misc: 0.02, consumable: 0.02, container: 0.02 };
 const FORBIDDEN = /(m[aá]gic|encantad|hechizad|maldit|legendari|reliquia|artefacto|divin|sagrad|de poder)/i;
 /** Cuántos objetos nuevos se le pueden crear a un mismo NPC: no es un almacén. */
@@ -476,8 +473,7 @@ export const NEW_PREFIX = 'it_new_';
 
 /** Lo que vale como mucho lo que lleva este NPC: su riqueza por lo que lleva un PJ al empezar. */
 export function wealthCap(world: World, npc: Npc): number {
-  const w = (npc as Npc & { wealth?: string }).wealth;
-  return Math.round((world.campaign.starting_coins ?? DEFAULT_STARTING_COINS) * (WEALTH[w ?? ''] ?? 1));
+  return Math.round((world.campaign.starting_coins ?? DEFAULT_STARTING_COINS) * (npc.wealth ? WEALTH[npc.wealth] : 1));
 }
 
 let made = 0;

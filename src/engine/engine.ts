@@ -6,6 +6,7 @@
  * plana desde los datos. En fase 2 el mismo punto de entrada llama al master.
  */
 
+import { noticeThefts } from './stolen.js';
 import { GameClock, Ticker, GAME_DAY, GAME_MINUTE } from '../clock/clock.js';
 import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
@@ -56,6 +57,7 @@ import { World } from './world.js';
 import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, NPC_DOWN_HINT, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, wakeNpcs, type DeathSave } from './death.js';
 import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
+import { migrateExtras } from './extras.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
 import { discoverSpot, lookAround, migrateSpotSight, noteSight, searchableSpots, seeFrom } from './spots.js';
 import { absence, absenceRule, acceptPrologue, acceptRecap, forPrologue, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
@@ -372,6 +374,8 @@ export class Engine {
       for (const n of engine.world.npcs.values()) engine.world.touch('npcs', n.id);
       for (const sp of engine.world.spots.values()) engine.world.touch('spots', sp.id);
       for (const d of engine.world.itemDefs.values()) engine.world.touch('item_defs', d.id);
+      // Y los ejemplares (lo que lleva el relleno que acaba de entrar, extras.ts).
+      for (const i of engine.world.itemInstances.values()) engine.world.touch('item_instances', i.id);
       await engine.flush();
     }
     return engine;
@@ -3373,6 +3377,8 @@ export class Engine {
    * los tools del máster, que no emiten.
    */
   private announceIncidents(): void {
+    // Lo robado sin testigos: el dueño lo echa en falta al cambiar de actividad (stolen.ts, CONVERSACION-FLUJO).
+    noticeThefts(this.world, this.gameNow());
     const notices = lawTick(this.world, this.gameNow(), (c) => this.nowFor(c));
     for (const i of allIncidents(this.world)) {
       if (i.status !== 'open' || i.severity < 2 || i.announced >= i.severity) continue;
@@ -3827,7 +3833,10 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     if (n.home_spot_id === undefined && seedNpc?.home_spot_id) { n.home_spot_id = seedNpc.home_spot_id; changed = true; }
     n.stats ??= seedNpc?.stats ?? null; n.attitude ??= seedNpc?.attitude ?? { default: 'neutral', by_character: {} };
   }
+  const hadNpcs = new Set(snapshot.npcs.map((n) => n.id));
   for (const n of seed?.npcs ?? []) if (!snapshot.npcs.some((x) => x.id === n.id)) { snapshot.npcs.push(structuredClone(n)); changed = true; }
+  // Relleno nuevo en una partida empezada (extras.ts): lo que lleva escrito y su sitio en los eventos.
+  if (migrateExtras(snapshot, seed, hadNpcs)) changed = true;
   // Datos de la demo (pistas, encargos, logro, nodos, objetos nuevos): se toman de la semilla si faltan.
   if (seed) {
     const c2 = snapshot.campaign;

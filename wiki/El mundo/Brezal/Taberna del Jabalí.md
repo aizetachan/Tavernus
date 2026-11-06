@@ -54,6 +54,7 @@ Ver [[Costumbres]].
 - [[Garrán]]: en la barra por la tarde. Además entra a la hora y media de empezar la partida, pide cerveza sin pagar y mira a los forasteros uno por uno.
 - [[Doro]]: bebe en la barra de noche.
 - [[Hugo]]: en la mesa del fondo de noche.
+- Vecinos de relleno ([[Vecinos de Brezal]]): Damián, el viejo, pegado a la chimenea todo el día; en la cena, Benito, Ciro y Gil.
 - [[Ceniza]]: vuelve a la chimenea si alguien lo saca de la madriguera.
 
 **La cena del Jabalí** (19:00-21:00): guiso, pan gris y cerveza, con Hugo y una decena de vecinos. Ver [[Vida del pueblo]].
