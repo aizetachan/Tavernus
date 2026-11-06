@@ -709,6 +709,13 @@ export interface Npc {
   opinion?: Record<Id, OpinionEntry>;
   /** Cómo reacciona a las etiquetas del PJ (standing.ts). Datos de campaña. */
   tag_reactions?: TagReaction[];
+  /**
+   * Nivel del NPC (docs/PLAN-NPC-RELLENO.md). Sin campo, principal: personaje de la historia. `extra`: vecino de
+   * relleno, montado desde una plantilla de oficio (extras.ts), sin secretos ni misiones, con un guion corto.
+   */
+  tier?: 'extra';
+  /** Guion corto del relleno (extras.ts): solo con `tier: 'extra'`. Datos de campaña. */
+  script?: ExtraScript;
   /** No habla (un animal): ni comenta al pasar ni cuenta noticias, aunque vea lo que pasa (chatter.ts, worldrules.ts). */
   mute?: boolean;
   /**
@@ -718,13 +725,31 @@ export interface Npc {
   kit?: string;
   /** Lo que lleva en la bolsa (outfit.ts): sin campo, la riqueza de su ajuar. Datos de campaña. */
   wealth?: 'none' | 'poor' | 'modest' | 'comfortable' | 'rich';
-  /**
-   * Nivel del NPC (docs/PLAN-NPC-RELLENO.md). Sin campo, principal: personaje de la historia. `extra`: vecino de
-   * relleno, montado desde una plantilla de oficio (extras.ts), sin secretos ni misiones, con un guion corto.
-   */
-  tier?: 'extra';
-  /** Guion corto del relleno (extras.ts): solo con `tier: 'extra'`. Datos de campaña. */
-  script?: ExtraScript;
+  /** Ya tiene su ajuar (outfit.ts): no se le vuelve a dar, aunque le roben. Estado de partida. */
+  outfitted?: boolean;
+}
+
+/** Opinión de un NPC con un PJ: de −100 a 100, con los últimos motivos; y las etiquetas a las que ya ha reaccionado. */
+export interface OpinionEntry { value: number; log: { delta: number; why: string; game_s: number }[]; tags_seen?: Id[] }
+
+/**
+ * Reacción de un NPC a una etiqueta del PJ (datos de campaña), cuando sabe que la tiene: un cambio de opinión la
+ * primera vez (±1, ±5, ±10), lo que el máster tiene que saber y, si se da, una opción con tirada (botón de sugerencia).
+ */
+export interface TagReaction {
+  tag: Id;
+  opinion?: number;
+  /** Para el máster: «le tiene miedo y no le da la espalda». */
+  note: string;
+  /** Opción de diálogo con tirada, como las de BG3 con etiqueta: «Hablarle de tú a tú, entre soldados» (Persuasión CD 12). */
+  option?: { text: string; skill: string; dc: number };
+}
+
+/** Un vínculo de un NPC con otro. `reaction`: qué hace si le hacen daño (sin ella, se deduce). */
+export interface NpcBond {
+  npc_id: Id;
+  kind: 'kin' | 'friend' | 'patron' | 'rival';
+  reaction?: 'fight' | 'mourn';
 }
 
 /** Carácter del relleno: cómo suena su guion. */
@@ -770,29 +795,6 @@ export interface ExtraScript {
   story: string;
   /** Puntos por los que se mueve dentro de su franja (paseos, fase 2). */
   wander?: Id[];
-}
-
-/** Opinión de un NPC con un PJ: de −100 a 100, con los últimos motivos; y las etiquetas a las que ya ha reaccionado. */
-export interface OpinionEntry { value: number; log: { delta: number; why: string; game_s: number }[]; tags_seen?: Id[] }
-
-/**
- * Reacción de un NPC a una etiqueta del PJ (datos de campaña), cuando sabe que la tiene: un cambio de opinión la
- * primera vez (±1, ±5, ±10), lo que el máster tiene que saber y, si se da, una opción con tirada (botón de sugerencia).
- */
-export interface TagReaction {
-  tag: Id;
-  opinion?: number;
-  /** Para el máster: «le tiene miedo y no le da la espalda». */
-  note: string;
-  /** Opción de diálogo con tirada, como las de BG3 con etiqueta: «Hablarle de tú a tú, entre soldados» (Persuasión CD 12). */
-  option?: { text: string; skill: string; dc: number };
-}
-
-/** Un vínculo de un NPC con otro. `reaction`: qué hace si le hacen daño (sin ella, se deduce). */
-export interface NpcBond {
-  npc_id: Id;
-  kind: 'kin' | 'friend' | 'patron' | 'rival';
-  reaction?: 'fight' | 'mourn';
 }
 
 export interface NpcDeath {
