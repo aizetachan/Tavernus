@@ -353,7 +353,7 @@ export const NOVEL_JS = String.raw`
   var cast = { master: { id: 'master', name: 'El Narrador', avatar: null }, me: { id: '', name: '', avatar: null } };
   /** Retratos ya hechos por id (NPC, PJ o «master»); llegan en los mensajes y por el evento «portrait». */
   var portraits = {};
-  var MOMENT_LABEL = { portrait: 'Retrato', item: 'Objeto', combat: 'Combate', discovery: 'Descubrimiento', manual: 'Momento' };
+  var MOMENT_LABEL = { talk: 'Charla', item: 'Objeto', combat: 'Combate', discovery: 'Descubrimiento', manual: 'Momento' };
   var NPC_COLORS = ['#e6a587', '#8fc7a0', '#9bb8ef', '#d7a6e3', '#e3c27a', '#7fd0d0', '#ef9a9a'];
   function npcColor(id) { var h = 0; for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return NPC_COLORS[h % NPC_COLORS.length]; }
 
@@ -1098,29 +1098,28 @@ export const NOVEL_JS = String.raw`
   /** Momentos que llegaron (stream) antes que su mensaje: entran en su burbuja cuando se pinta, por número de turno. */
   var momentWait = {};
   /**
-   * La burbuja donde va la imagen de un momento del turno seq. Retrato: la del propio NPC si habla en el turno; si no,
-   * y para todo lo demás (objeto, combate, hallazgo, momento a mano), la del narrador. Sin burbujas (un aviso), el propio mensaje.
+   * La burbuja donde va la imagen de un momento del turno seq: la del narrador (charla, objeto, combate, hallazgo,
+   * momento a mano). Sin burbujas (un aviso), el propio mensaje.
    */
-  function momentHost(kind, npcId, seq) {
+  function momentHost(seq) {
     var els = [];
     log.querySelectorAll('[data-turn="' + Number(seq) + '"]').forEach(function (e) { els.push(e); });
     if (!els.length) log.querySelectorAll('[data-seq="' + Number(seq) + '"]').forEach(function (e) { els.push(e); });
     if (!els.length) return null;
     var rows = els.filter(function (e) { return e.classList.contains('row') && !e.classList.contains('mine'); });
     var pick = null;
-    if (kind === 'portrait') rows.forEach(function (e) { if (!pick && e.getAttribute('data-who') === 'npc:' + npcId) pick = e; });
-    if (!pick) rows.forEach(function (e) { if (!pick && e.classList.contains('master')) pick = e; });
+    rows.forEach(function (e) { if (!pick && e.classList.contains('master')) pick = e; });
     return pick || rows[0] || els[els.length - 1];
   }
-  /** Mete la figura de un momento al final del cuerpo de su burbuja (a todo el ancho salvo el retrato). */
-  function momentInto(fig, host, kind) {
+  /** Mete la figura de un momento al final del cuerpo de su burbuja, a todo el ancho. */
+  function momentInto(fig, host) {
     (host.querySelector('.body') || host).appendChild(fig);
-    if (kind !== 'portrait') host.classList.add('has-wide');
+    host.classList.add('has-wide');
   }
   /** Quita la figura de un momento que no cargó; la burbuja vuelve a su ancho si no le queda otra imagen ancha. */
   function momentGone(fig, host) {
     fig.remove();
-    if (!host.querySelector('.moment:not(.portrait), .place-shot')) host.classList.remove('has-wide');
+    if (!host.querySelector('.moment, .place-shot')) host.classList.remove('has-wide');
   }
   /** Los textos de la interfaz no se separan con el punto medio: el pie de la imagen lo cambia por una coma. */
   function momentName(n) { return String(n || '').replace(/\s*[·•]\s*/g, ', '); }
@@ -1129,12 +1128,13 @@ export const NOVEL_JS = String.raw`
    * Una vez por clave. Si el mensaje aún no está pintado, espera a su turno.
    */
   function showMoment(x, seq) {
-    if (!x || !x.src) return;
+    // Los retratos ya no salen en el hilo (partidas de antes): son los avatares de quien habla.
+    if (!x || !x.src || x.kind === 'portrait') return;
     var dup = false;
     log.querySelectorAll('[data-moment]').forEach(function (f) { if (f.getAttribute('data-moment') === x.key) dup = true; });
     var waiting = momentWait[seq] || [];
     if (dup || waiting.some(function (w) { return w.key === x.key; })) return;
-    var host = momentHost(x.kind, x.entity_id, seq);
+    var host = momentHost(seq);
     if (!host) { momentWait[seq] = waiting.concat([x]); return; }
     var fig = document.createElement('figure');
     fig.className = 'moment ' + x.kind;
@@ -1142,16 +1142,16 @@ export const NOVEL_JS = String.raw`
     fig.innerHTML = '<button type="button" class="shot" title="Ver en grande"><img alt=""><figcaption><b></b><span></span></figcaption></button>';
     var img = fig.querySelector('img'), name = momentName(x.name);
     fig.querySelector('figcaption b').textContent = name;
-    // Un retrato lleva el oficio de quien sale («tabernera»); el resto, qué clase de momento es.
-    var label = (x.kind === 'portrait' && x.role) || MOMENT_LABEL[x.kind] || 'Ilustración';
+    // La charla lleva el oficio de quien sale («tabernera»); el resto, qué clase de momento es.
+    var label = (x.kind === 'talk' && x.role) || MOMENT_LABEL[x.kind] || 'Ilustración';
     fig.querySelector('figcaption span').textContent = label;
-    img.alt = (x.kind === 'portrait' ? 'Retrato' : label) + ': ' + name + (x.kind === 'portrait' && x.role ? ', ' + x.role : '');
+    img.alt = (x.kind === 'talk' ? 'Charla con ' : label + ': ') + name + (x.kind === 'talk' && x.role ? ', ' + x.role : '');
     var atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
     img.addEventListener('load', function () { fig.classList.add('ready'); if (atEnd) scroll(); });
     img.addEventListener('error', function () { momentGone(fig, host); });
     fig.querySelector('.shot').addEventListener('click', function () { openLightbox({ src: x.src, name: name }); });
     img.src = x.src;
-    momentInto(fig, host, x.kind);
+    momentInto(fig, host);
     // La imagen pintada a mano sustituye al marcador «Pintando…» (paint.ts).
     if (typeof paintDone === 'function' && String(x.key).indexOf('manual:') === 0) paintDone(x.key);
   }

@@ -23,6 +23,8 @@ import type { TagDef } from '../engine/model.js';
 import { validateReactions, type WorldRule } from '../engine/worldrules.js';
 import type { ChatterDef } from '../engine/chatter.js';
 import { KITS } from '../engine/outfit.js';
+import { itemDefErrors, needsAttunement } from '../engine/items.js';
+import { spellById } from '../data/srd/spells.js';
 
 const norm = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const blank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
@@ -142,13 +144,33 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
   // Objetos
   for (const d of snap.item_defs) {
     if (d.service && !defs.has(d.service.gives_item_id)) errs.push(`${d.id}: el servicio entrega ${d.service.gives_item_id}, que no existe.`);
+    errs.push(...itemDefErrors(d, (id) => !!spellById(id)));
+    // La base puede no estar en la partida (el catálogo SRD se lee del código); si está, es del mismo tipo.
+    const base = d.base_id ? defs.get(d.base_id) : undefined;
+    if (d.base_id === d.id) errs.push(`${d.id}: base_id apunta a sí mismo.`);
+    else if (base && base.type !== d.type) errs.push(`${d.id}: su base ${base.id} es de otro tipo (${base.type}).`);
     // El objeto propio de un NPC (index.ts, `ownItemOf`): inventado por el relleno, así que custom, único y sin reglas.
-    if (d.id.startsWith('it_own_') && (d.origin !== 'custom' || !d.unique || (d.type !== 'misc' && d.type !== 'treasure') || d.weapon || d.armor || d.container || d.heals || !d.name.trim())) {
+    if (d.id.startsWith('it_own_') && (d.origin !== 'custom' || !d.unique || (d.type !== 'misc' && d.type !== 'treasure') || d.weapon || d.armor || d.container || d.heals || d.rarity || d.bonus || d.charges || d.effects || d.spell || !d.name.trim())) {
       errs.push(`${d.id}: el objeto propio de un NPC debe ser custom, único y de tipo misc o treasure, sin reglas.`);
     }
   }
+  const isWho = (id: unknown) => typeof id === 'string' && (chars.has(id) || npcs.has(id));
   for (const i of snap.item_instances) {
     if (!defs.has(i.item_id)) errs.push(`${i.id}: el objeto ${i.item_id} no existe.`);
+    const def = defs.get(i.item_id);
+    const st = i.state;
+    if (st.identified_by !== undefined && !(Array.isArray(st.identified_by) && st.identified_by.every(isWho))) errs.push(`${i.id}: identified_by tiene a alguien que no existe.`);
+    if (st.attuned_to !== undefined && st.attuned_to !== null && !isWho(st.attuned_to)) errs.push(`${i.id}: sintonizado con ${String(st.attuned_to)}, que no existe.`);
+    if (st.attuned_to && def && !needsAttunement(def)) errs.push(`${i.id}: sintonizado, pero ${def.id} no pide sintonía.`);
+    if (st.charges !== undefined && !(def?.charges && Number.isInteger(st.charges) && st.charges >= 0 && st.charges <= def.charges.max)) errs.push(`${i.id}: cargas ${String(st.charges)} fuera de lo que admite ${i.item_id}.`);
+    if (st.owner_id !== undefined && !isWho(st.owner_id)) errs.push(`${i.id}: su dueño ${String(st.owner_id)} no existe.`);
+    if (st.spell_id !== undefined && def) {
+      // El conjuro del ejemplar: solo si la definición no lo fija, existe y es del nivel del pergamino.
+      const sp = typeof st.spell_id === 'string' ? spellById(st.spell_id) : undefined;
+      if (!def.spell || def.spell.spell_id !== undefined) errs.push(`${i.id}: lleva spell_id, pero ${def.id} no deja el conjuro al ejemplar.`);
+      else if (!sp) errs.push(`${i.id}: el conjuro ${String(st.spell_id)} no está en el catálogo.`);
+      else if (sp.level !== def.spell.level) errs.push(`${i.id}: ${sp.id} es de nivel ${sp.level} y el pergamino de nivel ${def.spell.level}.`);
+    }
     if (!(i.quantity > 0)) errs.push(`${i.id}: cantidad no positiva.`);
     const at = i.location;
     const ok = at.type === 'spot' ? spots.has(at.id) : at.type === 'npc' ? npcs.has(at.id) : at.type === 'container' ? insts.has(at.id) : at.type === 'character' ? chars.has(at.id) : snap.vehicles.some((v) => v.id === at.id);

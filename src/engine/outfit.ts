@@ -48,7 +48,7 @@ type Concept =
 type Base = Omit<ItemDef, 'id' | 'name' | 'aliases' | 'origin' | 'unique'>;
 const tiny = (type: ItemDef['type'], weight_lb: number, value: number, extra: Partial<ItemDef> = {}): Base => ({ type, size: 'tiny', weight_lb, value, ...extra });
 /** Ropa: se lleva en el cuerpo (un PJ puede ponérsela). */
-const wear = (weight_lb: number, value: number): Base => ({ type: 'misc', size: 'medium', weight_lb, value, equip_slot: 'body' });
+const wear = (weight_lb: number, value: number): Base => ({ type: 'gear', subtype: 'clothes', size: 'medium', weight_lb, value, equip_slot: 'body' });
 
 /** Nombre (y alias) en cada género; sin variante, el de fantasía. */
 type Names = Record<'fantasy', [string, string[]]> & Partial<Record<Exclude<Genre, 'fantasy'>, [string, string[]]>>;

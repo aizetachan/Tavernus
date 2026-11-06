@@ -7,7 +7,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { Engine } from '../engine/engine.js';
 import type { World } from '../engine/world.js';
 import { rollD20, rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
-import { carrierOf, consumeItem, inventoryDetailed, inventoryView, npcCarryList, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
+import { carrierOf, consumeItem, inventoryDetailed, inventoryView, itemView, npcCarryList, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
 import type { Character, Id, Npc, Placement, ReactionKind } from '../engine/model.js';
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
 import { perceive, witnesses } from '../engine/perception.js';
@@ -40,7 +40,7 @@ import { debtHeldBy, debtTitle, noteDebtTerms, openDebts, pawnItem, setDebt, set
 import { inventedPlaces } from '../engine/places.js';
 import { money } from '../engine/money.js';
 import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
-import { coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
+import { coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, servedRejection, servedWithoutPay, stolenRejection, stolenWithoutTool, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
@@ -387,6 +387,8 @@ export interface ToolContext {
   receive_rejections?: number;
   /** Cierres rechazados por mover un objeto del actor solo de palabra (uno como mucho). */
   moved_rejections?: number;
+  stolen_rejections?: number;
+  served_rejections?: number;
   /** Cierres rechazados por dar monedas por pagadas sin moverlas (closecheck.ts; uno como mucho). */
   coins_rejections?: number;
   /** El PJ ha atacado en esta acción con el tool attack (el de un NPC no cuenta). */
@@ -837,7 +839,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const pos = positionOf(world, c, nowGameS);
       const pub = { id: c.id, name: c.name, race: c.race, class_name: c.class_name, appearance: c.appearance, status: c.status, spot_id: pos.spot_id, hands: inv.hands, equipped: inv.equipped, conditions: c.conditions.map((x) => x.name), hp_hint: c.hp_current >= c.hp_max ? 'ileso' : c.hp_current > c.hp_max / 2 ? 'herido' : 'malherido' };
       if (c.id !== actor.id) return pub;
-      return { ...pub, level: c.level, abilities: c.abilities, hp: `${c.hp_current}/${c.hp_max}`, proficiencies: c.proficiencies, inventory: inventoryDetailed(world, c.id), coins: c.coins, encumbrance: inv.encumbrance.level, backstory: c.backstory, facts: characterFacts(c).map((f) => f.text) };
+      return { ...pub, level: c.level, abilities: c.abilities, hp: `${c.hp_current}/${c.hp_max}`, proficiencies: c.proficiencies, inventory: inventoryDetailed(world, c.id).map(({ item_id, ...x }) => (x.unidentified ? x : { item_id, ...x })), coins: c.coins, encumbrance: inv.encumbrance.level, backstory: c.backstory, facts: characterFacts(c).map((f) => f.text) };
     }
     case 'get_npc': {
       const n = world.npc(s('npc_id'));
@@ -858,9 +860,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       };
     }
     case 'get_item': {
-      const i = world.itemInstance(s('instance_id'));
-      const d = world.itemDef(i.item_id);
-      return { instance_id: i.id, item_id: d.id, name: d.name, type: d.type, size: d.size, weight_lb: d.weight_lb, quantity: i.quantity, state: i.state, location: i.location, container: d.container ?? null };
+      return itemView(world, s('instance_id'), actor.id);
     }
     case 'who_is_here': {
       const pos = positionOf(world, actor, nowGameS);
@@ -1649,6 +1649,24 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (verb) {
           ctx.moved_rejections = (ctx.moved_rejections ?? 0) + 1;
           return { error: movedRejection(verb) };
+        }
+      }
+      // Robar solo de palabra (la bolsa que no existe «cae a tu mano»): se reescribe una vez.
+      if ((ctx.stolen_rejections ?? 0) < 1) {
+        const took = stolenWithoutTool({ action: ctx.action_text ?? '', narration: s('narration_private'), okTools: ctx.ok_tools ?? [], pendingRoll: req !== null });
+        if (took) {
+          ctx.stolen_rejections = (ctx.stolen_rejections ?? 0) + 1;
+          return { error: stolenRejection(took) };
+        }
+      }
+      // Servir lo que se vende sin cobrarlo ni fiarlo (la jarra delante y nadie paga): se reescribe una vez.
+      if ((ctx.served_rejections ?? 0) < 1) {
+        const tagged = s('tags').split(/[,\s]+/).includes('trade');
+        const trade = tagged || ctx.talk?.situation === 'trade' || ctx.talk?.second === 'trade';
+        const served = servedWithoutPay({ narration: s('narration_private'), lines: parseLines(input['lines'], null, (id) => world.npcs.has(id)), okTools: ctx.ok_tools ?? [], trade, pendingRoll: req !== null });
+        if (served) {
+          ctx.served_rejections = (ctx.served_rejections ?? 0) + 1;
+          return { error: servedRejection(served) };
         }
       }
       // Monedas pagadas solo de palabra (pone 200 sobre la mesa y sigue con sus 200): se reescribe una vez.

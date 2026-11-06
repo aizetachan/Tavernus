@@ -7,7 +7,7 @@ import type { GameEvent } from '../src/engine/model.js';
 import { parseLines } from '../src/ai/tools.js';
 import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
-import { attachIllustrator, entityKey, Illustrator, illustratorOf, itemPrompt, Limiter, PollinationsQueue, portraitPrompt, sceneSeed, styleBible, STYLE } from '../src/ai/illustrate.js';
+import { attachIllustrator, entityKey, Illustrator, illustratorOf, itemPrompt, Limiter, PollinationsQueue, portraitPrompt, sceneSeed, styleBible, STYLE, talkPrompt } from '../src/ai/illustrate.js';
 import { spawnItem } from '../src/engine/inventory.js';
 import { seededRng } from '../src/engine/dice.js';
 import { bootEngine, fakeTime, waitUntil } from './helpers.js';
@@ -27,14 +27,14 @@ const master = (...calls: ReturnType<typeof call>[]) => ({ model: 'stub', usage:
 const kinds = (ms: Moment[]) => ms.map((m) => m.kind);
 
 describe('clasificador de momentos', () => {
-  it('primera conversación con un NPC: retrato, una vez por NPC y personaje', () => {
+  it('primera conversación con un NPC: la imagen de la charla, una vez por NPC y personaje', () => {
     const talk = ev({ payload: { npc_id: 'npc_brenna', master: master() } });
     const first = classifyMoments(talk, new Set(), NONE);
-    expect(first).toEqual([{ kind: 'portrait', key: 'portrait:ch_kael:npc_brenna', character_id: 'ch_kael', entity_id: 'npc_brenna' }]);
+    expect(first).toEqual([{ kind: 'talk', key: 'talk:ch_kael:npc_brenna', character_id: 'ch_kael', entity_id: 'npc_brenna' }]);
     // Turnos siguientes de la misma conversación: nada.
     expect(classifyMoments(talk, new Set([first[0]!.key]), NONE)).toEqual([]);
     // Otro PJ que habla con ella por primera vez sí tiene su momento.
-    expect(kinds(classifyMoments({ ...talk, actor_id: 'ch_mira' }, new Set([first[0]!.key]), NONE))).toEqual(['portrait']);
+    expect(kinds(classifyMoments({ ...talk, actor_id: 'ch_mira' }, new Set([first[0]!.key]), NONE))).toEqual(['talk']);
   });
 
   it('el NPC que habla en los parlamentos también cuenta, sin repetir', () => {
@@ -95,8 +95,8 @@ describe('clasificador de momentos', () => {
 
   it('sin actor (tablón, anuncios) no hay momentos; las claves se recuperan de eventos pasados', () => {
     expect(classifyMoments(ev({ actor_id: null, payload: { npc_id: 'npc_brenna' } }), new Set(), NONE)).toEqual([]);
-    const past = [ev({ payload: { moments: [{ kind: 'portrait', key: 'portrait:ch_kael:npc_brenna', character_id: 'ch_kael', entity_id: 'npc_brenna' }] } }), ev({})];
-    expect([...seenFromEvents(past)]).toEqual(['portrait:ch_kael:npc_brenna']);
+    const past = [ev({ payload: { moments: [{ kind: 'talk', key: 'talk:ch_kael:npc_brenna', character_id: 'ch_kael', entity_id: 'npc_brenna' }] } }), ev({})];
+    expect([...seenFromEvents(past)]).toEqual(['talk:ch_kael:npc_brenna']);
   });
 });
 
@@ -141,14 +141,14 @@ describe('en el motor', () => {
     const r = await engine.act('ch_kael', 'Hablo con Brenna: «Una cerveza, por favor»');
     expect(r.event!.payload['npc_id']).toBe('npc_brenna');
     expect(r.event!.payload['lines']).toEqual([{ speaker: 'actor', text: 'Una cerveza, por favor' }, { speaker: 'npc', npc_id: 'npc_brenna', text: expect.stringContaining('Bienvenido') }]);
-    expect(r.event!.payload['moments']).toEqual([{ kind: 'portrait', key: 'portrait:ch_kael:npc_brenna', character_id: 'ch_kael', entity_id: 'npc_brenna' }]);
-    expect(kinds(moments)).toEqual(['item', 'portrait']);
+    expect(r.event!.payload['moments']).toEqual([{ kind: 'talk', key: 'talk:ch_kael:npc_brenna', character_id: 'ch_kael', entity_id: 'npc_brenna' }]);
+    expect(kinds(moments)).toEqual(['item', 'talk']);
 
     const again = await engine.act('ch_kael', 'Le pregunto a Brenna por el incendio');
     expect(again.event!.payload['moments']).toBeUndefined();
     const look = await engine.act('ch_kael', 'mirar alrededor');
     expect(look.event?.payload['moments']).toBeUndefined();
-    expect(kinds(moments)).toEqual(['item', 'portrait']);
+    expect(kinds(moments)).toEqual(['item', 'talk']);
   });
 
   it('al reabrir la partida no se repiten los momentos ya dados', async () => {
@@ -228,7 +228,7 @@ describe('ilustrador por entidad', () => {
     expect(order).toEqual(['scene', 'portrait', 'item', 'scene']);
   });
 
-  it('enganchado al motor: el primer encuentro trae el retrato del NPC (con su evento) y el del PJ', async () => {
+  it('enganchado al motor: la primera charla trae la imagen grande (con su evento) y, sin mostrarlos, los retratos de avatar', async () => {
     const { engine } = await bootEngine(fakeTime(), { deterministic: true, rng: () => 0.99 });
     engine.attachMaster(new Master(engine, { client: offlineClient() }));
     const f = fake();
@@ -236,13 +236,23 @@ describe('ilustrador por entidad', () => {
     const got: { kind?: string; entity?: string; seq: number | null }[] = [];
     ill.onEntity((r) => got.push({ kind: r.image.kind, entity: r.image.entity_id, seq: r.event_seq }));
     const r = await engine.act('ch_kael', 'Hablo con Brenna');
-    await waitUntil(() => expect(got).toHaveLength(2));
-    // Los dos a la vez: cualquiera puede llegar antes.
-    expect(got).toEqual(expect.arrayContaining([{ kind: 'portrait', entity: 'npc_brenna', seq: r.event!.seq }, { kind: 'portrait', entity: 'ch_kael', seq: null }]));
+    await waitUntil(() => expect(got).toHaveLength(3));
+    // A la vez: cualquiera puede llegar antes. Solo la de la charla va al hilo (lleva su turno).
+    expect(got).toEqual(expect.arrayContaining([
+      { kind: 'talk', entity: 'npc_brenna', seq: r.event!.seq },
+      { kind: 'portrait', entity: 'npc_brenna', seq: null },
+      { kind: 'portrait', entity: 'ch_kael', seq: null },
+    ]));
     await engine.act('ch_kael', 'mirar alrededor');
     await engine.act('ch_kael', 'Hablo con Brenna otra vez');
     await new Promise((res) => setTimeout(res, 20));
-    expect(got).toHaveLength(2);
+    expect(got).toHaveLength(3);
+  });
+
+  it('la imagen de la charla: el NPC en su sitio, visto por quien le habla, sin el PJ', () => {
+    const p = talkPrompt({ place: 'Taberna del Jabalí (interior)', who: 'Brenna, tabernera: Mujer recia, de brazos fuertes.', light: 'twilight' }, 'S');
+    expect(p).toMatch(/^Taberna del Jabalí \(interior\)\. Brenna, tabernera: Mujer recia, de brazos fuertes, mid-conversation, looking at the viewer\./);
+    expect(p).toContain('point of view');
   });
 });
 
