@@ -15,7 +15,7 @@ import type { World } from '../engine/world.js';
 import { DEFAULT_MASTER, makeSeed } from '../data/seed/demo.js';
 import { buildSkeleton, type Skeleton, type Tone } from './skeleton.js';
 import { lockedRoomState, ROOM_NIGHT_ITEM_ID, ROOM_NIGHT_PRICE, roomSeller } from './rooms.js';
-import { CATALOG, DEFAULT_WORLDGEN_MODEL, FillError, fillWorld, GENRE_DEFAULT, liveFillClient, type FillClient, type PcBrief, type WorldFill } from './fill.js';
+import { catalogFor, DEFAULT_WORLDGEN_MODEL, FillError, fillWorld, GENRE_DEFAULT, liveFillClient, type FillClient, type PcBrief, type WorldFill } from './fill.js';
 import { validateSnapshot } from './validate.js';
 import { setDebt } from '../engine/debts.js';
 import { spawnItem } from '../engine/inventory.js';
@@ -181,7 +181,8 @@ export function buildSnapshot(sk: Skeleton, f: WorldFill, generation: Generation
       };
     }),
     vehicles: [],
-    item_defs: [...structuredClone(CATALOG as ItemDef[]), reward],
+    // El catálogo común con los nombres del género (pistola de rayos en vez de ballesta ligera, mismas reglas).
+    item_defs: [...structuredClone(catalogFor(sk.genre) as ItemDef[]), reward],
     item_instances: sk.items.map((i) => ({
       id: i.id, item_id: i.item_id, quantity: i.quantity,
       location: { type: 'spot' as const, id: i.spot_id }, state: {},

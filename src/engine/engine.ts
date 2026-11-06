@@ -56,6 +56,7 @@ import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, i
 import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
+import { compactSnapshot, syncCatalog } from '../data/catalog.js';
 import { outfitNpcs } from './outfit.js';
 import { discoverSpot, lookAround, migrateSpotSight, noteSight, searchableSpots, seeFrom } from './spots.js';
 import { absence, absenceRule, acceptPrologue, acceptRecap, forPrologue, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
@@ -343,7 +344,7 @@ export class Engine {
     if (!snapshot) {
       if (!opts.seed) throw new Error(`no snapshot for campaign ${opts.campaignId} and no seed`);
       snapshot = opts.seed;
-      await opts.repo.saveSnapshot(snapshot);
+      await opts.repo.saveSnapshot(compactSnapshot(snapshot));
     }
     const migrated = migrate(snapshot, opts.seed);
     const past = await opts.repo.loadEvents(opts.campaignId, 0);
@@ -835,7 +836,8 @@ export class Engine {
     const changes = [...this.pending.values()];
     this.pending.clear();
     await this.repo.write(this.world.campaign.id, changes);
-    if (this.repo.flush) await this.repo.flush(this.world.snapshot());
+    // Sin las definiciones del catálogo SRD que son las del código (src/data/catalog.ts): se leen de él al arrancar.
+    if (this.repo.flush) await this.repo.flush(compactSnapshot(this.world.snapshot()));
   }
 
   // -------------------------------------------------------------------------
@@ -3734,6 +3736,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     delete camp.starting_spot_id;
     delete camp.starting_spot_ids;
   }
+  // Catálogo SRD (src/data/catalog.ts): definiciones a la versión del código y las que no se guardan, del código.
+  if (syncCatalog(snapshot)) changed = true;
   for (const c of snapshot.characters as (Character & { recap_from?: unknown })[]) {
     if (c.recap_from === undefined || c.race === undefined || c.hp_max === undefined) changed = true;
     if (c.recap_from === undefined) c.recap_from = null;

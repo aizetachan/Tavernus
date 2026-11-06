@@ -6,10 +6,12 @@
  * escrita de src/data/campaigns/brezal (once lugares, historia en tres actos).
  * Esto queda como fixture pequeño y estable de los tests (Kael y Mira), como
  * semilla de la partida principal heredada (CAMPAIGN_ID=demo, REPL) y como
- * fuente de DEFAULT_MASTER y del catálogo común de objetos (worldgen/fill.ts).
+ * fuente de DEFAULT_MASTER. Ya no es el catálogo de objetos: ese es
+ * src/data/catalog.ts (SRD en src/data/srd/items.ts); aquí solo se colocan.
  */
 
-import type { MasterConfig, WorldSnapshot } from '../../engine/model.js';
+import type { ItemDef, MasterConfig, WorldSnapshot } from '../../engine/model.js';
+import { CATALOG } from '../catalog.js';
 import type { NpcRoutine, ScheduledEvent } from '../../engine/schedule.js';
 
 /** Instante real de arranque del reloj: fijo para que los tests sean deterministas. */
@@ -219,40 +221,10 @@ const SEED: WorldSnapshot = {
   vehicles: [
     { id: 'vh_mula', name: 'la mula de Brenna', kind: 'mount', location: { type: 'spot', id: 'sp_pl_taberna' }, speed_ft: 40, capacity: 1, owner_id: null, terrain_allowed: [] },
   ],
+  // El catálogo común (src/data/catalog.ts: SRD y cosas de la casa) más lo único de esta semilla.
   item_defs: [
-    { id: 'it_mochila', name: 'mochila', aliases: ['backpack', 'bolsa'], type: 'container', size: 'medium', weight_lb: 5, value: 400, unique: false, container: { slots: 20, max_weight_lb: 60, max_size: 'medium' }, equip_slot: 'back', origin: 'srd' },
-    { id: 'it_antorcha', name: 'antorcha', aliases: ['torch', 'tea'], type: 'misc', size: 'small', weight_lb: 1, value: 1, unique: false, light_source: true, origin: 'srd' },
-    { id: 'it_cuerda', name: 'cuerda de cáñamo', aliases: ['cuerda', 'rope'], type: 'tool', size: 'medium', weight_lb: 10, value: 100, unique: false, origin: 'srd' },
-    { id: 'it_daga', name: 'daga', aliases: ['dagger', 'cuchillo'], type: 'weapon', size: 'small', weight_lb: 1, value: 200, unique: false, weapon: { damage: '1d4', damage_type: 'piercing', finesse: true }, origin: 'srd' },
-    { id: 'it_hacha', name: 'hacha de leñador', aliases: ['hacha', 'axe'], type: 'tool', size: 'medium', weight_lb: 4, value: 500, unique: false, weapon: { damage: '1d6', damage_type: 'slashing' }, origin: 'srd' },
-    { id: 'it_madera', name: 'leña', aliases: ['madera', 'tronco', 'wood', 'leños'], type: 'misc', size: 'medium', weight_lb: 5, value: 5, unique: false, origin: 'custom' },
-    { id: 'it_bayas', name: 'bayas', aliases: ['baya', 'berries', 'frutos'], type: 'consumable', size: 'tiny', weight_lb: 0.1, value: 2, unique: false, origin: 'custom' },
-    { id: 'it_pocion', name: 'poción de curación', aliases: ['poción', 'pocion', 'potion'], type: 'consumable', size: 'small', weight_lb: 0.5, value: 2500, unique: false, heals: '2d4+2', origin: 'srd' },
-    { id: 'it_cofre', name: 'cofre de la posada', aliases: ['cofre', 'arcón', 'chest'], type: 'container', size: 'bulky', weight_lb: 60, value: 0, unique: false, container: { slots: 30, max_weight_lb: 200, max_size: 'large', fixed: true }, origin: 'custom' },
-    { id: 'it_barril', name: 'barril', aliases: ['barrel', 'tonel'], type: 'misc', size: 'bulky', weight_lb: 40, value: 50, unique: false, origin: 'custom' },
-    { id: 'it_pescado', name: 'trucha', aliases: ['pescado', 'pez', 'truchas', 'fish'], type: 'consumable', size: 'small', weight_lb: 1, value: 5, unique: false, origin: 'custom' },
+    ...structuredClone(CATALOG as ItemDef[]),
     { id: 'it_llave_vharn', name: 'llave vieja con el sello de Vharn', aliases: ['llave', 'llave de vharn', 'key'], type: 'quest', size: 'tiny', weight_lb: 0.1, value: 0, unique: true, origin: 'custom' },
-    { id: 'it_cerveza', name: 'jarra de cerveza', aliases: ['cerveza', 'jarra', 'beer'], type: 'consumable', size: 'small', weight_lb: 1, value: 4, unique: false, origin: 'custom' },
-    // Equipo inicial de clase (SRD)
-    { id: 'it_racion', name: 'ración', aliases: ['raciones', 'comida', 'ration'], type: 'consumable', size: 'small', weight_lb: 2, value: 10, unique: false, origin: 'srd' },
-    { id: 'it_armadura_cuero', name: 'armadura de cuero', aliases: ['cuero', 'leather armor'], type: 'armor', size: 'large', weight_lb: 10, value: 1000, unique: false, equip_slot: 'body', armor: { ac_base: 11, dex_max: null, stealth_disadvantage: false }, origin: 'srd' },
-    { id: 'it_cota_escamas', name: 'cota de escamas', aliases: ['escamas', 'scale mail'], type: 'armor', size: 'large', weight_lb: 45, value: 5000, unique: false, equip_slot: 'body', armor: { ac_base: 14, dex_max: 2, stealth_disadvantage: true }, origin: 'srd' },
-    { id: 'it_cota_malla', name: 'cota de malla', aliases: ['malla', 'chain mail'], type: 'armor', size: 'large', weight_lb: 55, value: 15000, unique: false, equip_slot: 'body', armor: { ac_base: 16, dex_max: 0, stealth_disadvantage: true }, origin: 'srd' },
-    { id: 'it_escudo', name: 'escudo', aliases: ['shield'], type: 'armor', size: 'medium', weight_lb: 6, value: 1000, unique: false, shield_bonus: 2, origin: 'srd' },
-    { id: 'it_espada_larga', name: 'espada larga', aliases: ['espada', 'longsword'], type: 'weapon', size: 'medium', weight_lb: 3, value: 1500, unique: false, weapon: { damage: '1d8', damage_type: 'slashing' }, origin: 'srd' },
-    { id: 'it_espada_corta', name: 'espada corta', aliases: ['espada', 'shortsword'], type: 'weapon', size: 'medium', weight_lb: 2, value: 1000, unique: false, weapon: { damage: '1d6', damage_type: 'piercing', finesse: true }, origin: 'srd' },
-    { id: 'it_estoque', name: 'estoque', aliases: ['rapier'], type: 'weapon', size: 'medium', weight_lb: 2, value: 2500, unique: false, weapon: { damage: '1d8', damage_type: 'piercing', finesse: true }, origin: 'srd' },
-    { id: 'it_maza', name: 'maza', aliases: ['mace'], type: 'weapon', size: 'medium', weight_lb: 4, value: 500, unique: false, weapon: { damage: '1d6', damage_type: 'bludgeoning' }, origin: 'srd' },
-    { id: 'it_baston', name: 'bastón', aliases: ['vara', 'quarterstaff', 'staff'], type: 'weapon', size: 'large', weight_lb: 4, value: 20, unique: false, weapon: { damage: '1d6', damage_type: 'bludgeoning' }, origin: 'srd' },
-    { id: 'it_gran_hacha', name: 'gran hacha', aliases: ['hacha grande', 'greataxe'], type: 'weapon', size: 'large', weight_lb: 7, value: 3000, unique: false, weapon: { damage: '1d12', damage_type: 'slashing', two_handed: true }, origin: 'srd' },
-    { id: 'it_hacha_mano', name: 'hacha de mano', aliases: ['hachuela', 'handaxe'], type: 'weapon', size: 'small', weight_lb: 2, value: 500, unique: false, weapon: { damage: '1d6', damage_type: 'slashing' }, origin: 'srd' },
-    { id: 'it_arco_corto', name: 'arco corto', aliases: ['arco', 'shortbow'], type: 'weapon', size: 'large', weight_lb: 2, value: 2500, unique: false, weapon: { damage: '1d6', damage_type: 'piercing', ranged: true, two_handed: true }, origin: 'srd' },
-    { id: 'it_flechas', name: 'flecha', aliases: ['flechas', 'arrows'], type: 'misc', size: 'tiny', weight_lb: 0.05, value: 5, unique: false, origin: 'srd' },
-    { id: 'it_ganzuas', name: 'herramientas de ladrón', aliases: ['ganzuas', 'ganzúas', 'thieves tools'], type: 'tool', size: 'small', weight_lb: 1, value: 2500, unique: false, origin: 'srd' },
-    { id: 'it_libro_conjuros', name: 'libro de conjuros', aliases: ['libro', 'grimorio', 'spellbook'], type: 'tool', size: 'small', weight_lb: 3, value: 5000, unique: false, origin: 'srd' },
-    { id: 'it_bolsa_componentes', name: 'bolsa de componentes', aliases: ['componentes', 'component pouch'], type: 'tool', size: 'small', weight_lb: 2, value: 2500, unique: false, origin: 'srd' },
-    { id: 'it_simbolo_sagrado', name: 'símbolo sagrado', aliases: ['simbolo', 'holy symbol'], type: 'tool', size: 'tiny', weight_lb: 1, value: 500, unique: false, origin: 'srd' },
-    { id: 'it_laud', name: 'laúd', aliases: ['laud', 'lute', 'instrumento'], type: 'tool', size: 'medium', weight_lb: 2, value: 3500, unique: false, origin: 'srd' },
     { id: 'it_espada_mira', name: 'espada de Mira', aliases: ['espada', 'sword'], type: 'weapon', size: 'medium', weight_lb: 3, value: 3000, unique: true, weapon: { damage: '1d8', damage_type: 'slashing' }, origin: 'custom' },
   ],
   item_instances: [

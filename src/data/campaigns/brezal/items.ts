@@ -1,6 +1,6 @@
 /**
- * Brezal: objetos. El catálogo común del generador (equipo SRD, leña, bayas,
- * truchas, la noche de posada y su llave) más lo propio de esta historia: las
+ * Brezal: objetos. El catálogo común (src/data/catalog.ts: el equipo del SRD,
+ * leña, bayas, truchas, la noche de posada y su llave) más lo propio de esta historia: las
  * pruebas, la llave de los Vharn y los eslabones de hierro frío; y lo de la
  * granja de Úrsula (huevos y coles). Dónde está cada cosa al empezar y qué dan
  * el Soto y los Corrales. Lo que cada vecino lleva encima (bolsa, monedas, cosas
@@ -9,7 +9,7 @@
  */
 
 import type { ItemDef, ResourceNode } from '../../../engine/model.js';
-import { CATALOG } from '../../../worldgen/fill.js';
+import { CATALOG } from '../../catalog.js';
 import { kitItemDef } from '../../../engine/outfit.js';
 import type { AuthoredInstance } from '../format.js';
 

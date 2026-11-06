@@ -21,10 +21,10 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { Attitude, Id, ItemDef } from '../engine/model.js';
-import { makeSeed } from '../data/seed/demo.js';
+import { CATALOG } from '../data/catalog.js';
 import { PLACES, type Genre } from './catalog.js';
 import { offlineFill } from './offline.js';
-import { ROOM_ITEMS } from './rooms.js';
+import { ROOM_NIGHT_ITEM_ID } from './rooms.js';
 import { ARCHETYPES, skeletonSpots, SRD_STAT_RANGES, type Skeleton, type SkLocation, type SkNpc, type Tone } from './skeleton.js';
 
 export { offlineFill } from './offline.js';
@@ -79,14 +79,21 @@ export type WorldFill = WorldPart & PeoplePart & SituationsPart;
 export type PartName = 'world' | 'people' | 'situations';
 
 // ---------------------------------------------------------------------------
-// Catálogo: los objetos de la semilla demo que se pueden comprar y vender.
+// Catálogo: el común (SRD y cosas de la casa, src/data/catalog.ts). Lo que se
+// compra y vende en un mundo generado es una lista corta de cosas de pueblo: el
+// catálogo entero en el prompt de la gente serían unos 250 objetos más.
 // ---------------------------------------------------------------------------
 
-const DEMO_ITEMS = makeSeed().item_defs;
-/** Objetos del catálogo común (todo menos lo único de la demo). */
-export const CATALOG: readonly ItemDef[] = [...DEMO_ITEMS.filter((d) => !d.unique), ...ROOM_ITEMS];
-/** Lo que un NPC puede comprar o vender. */
-export const TRADE_ITEMS: readonly ItemDef[] = CATALOG.filter((d) => d.value > 0 && !d.container?.fixed && !d.service);
+export { CATALOG, catalogFor } from '../data/catalog.js';
+
+/** Lo que un NPC de un mundo generado puede comprar o vender: equipo de diario, nada mágico. */
+const VILLAGE_GOODS: readonly Id[] = [
+  'it_mochila', 'it_antorcha', 'it_cuerda', 'it_daga', 'it_hacha', 'it_madera', 'it_bayas', 'it_pocion', 'it_barril', 'it_pescado',
+  'it_cerveza', 'it_racion', 'it_armadura_cuero', 'it_cota_escamas', 'it_cota_malla', 'it_escudo', 'it_espada_larga', 'it_espada_corta',
+  'it_estoque', 'it_maza', 'it_baston', 'it_gran_hacha', 'it_hacha_mano', 'it_arco_corto', 'it_flechas', 'it_ganzuas', 'it_libro_conjuros',
+  'it_bolsa_componentes', 'it_simbolo_sagrado', 'it_laud', ROOM_NIGHT_ITEM_ID,
+];
+export const TRADE_ITEMS: readonly ItemDef[] = VILLAGE_GOODS.map((id) => CATALOG.find((d) => d.id === id)!).filter((d) => d.value > 0);
 
 export const ATTITUDES: readonly Attitude[] = ['hostile', 'unfriendly', 'neutral', 'friendly', 'allied'];
 
