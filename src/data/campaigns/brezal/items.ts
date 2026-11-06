@@ -47,6 +47,10 @@ export const ITEM_DEFS: ItemDef[] = [
   kitItemDef('ring', 'fantasy'),
   { id: 'it_martillo_maestro', name: 'martillo engrasado', aliases: ['martillo', 'martillo engrasado', 'martillo del hijo', 'martillo del maestro'], type: 'weapon', subtype: 'simple_melee', size: 'small', weight_lb: 2, value: 200, unique: true, weapon: { damage: '1d4', damage_type: 'bludgeoning' }, description: 'Un martillo de herrero bien equilibrado, colgado aparte de los demás. Es el único que brilla de grasa: alguien lo cuida.', origin: 'custom' },
   { id: 'it_esparto', name: 'trenza de esparto', aliases: ['esparto', 'trenza', 'trenza de esparto'], type: 'misc', size: 'tiny', weight_lb: 0.1, value: 0, unique: true, description: 'Una trenza de esparto a medio hacer, de las que se hacen a la luz de una vela para no dormirse.', origin: 'custom' },
+  // Lo que venden o llevan los vecinos de relleno (extras.ts).
+  { id: 'it_pan_gris', name: 'pan gris', aliases: ['pan', 'hogaza', 'pan de centeno', 'bread'], type: 'consumable', size: 'small', weight_lb: 1, value: 2, unique: false, origin: 'custom' },
+  { id: 'it_farol_aceite', name: 'farol de aceite', aliases: ['farol de aceite', 'farol del sereno', 'candil'], type: 'tool', size: 'small', weight_lb: 2, value: 50, unique: false, light_source: true, origin: 'custom' },
+  { id: 'it_llave_casas', name: 'llave de las casas del callejón', aliases: ['llave de casa', 'llave de las casas', 'llave de hierro'], type: 'tool', size: 'tiny', weight_lb: 0.1, value: 1, unique: false, origin: 'custom' },
 ];
 
 export const ITEMS: AuthoredInstance[] = [
@@ -84,6 +88,14 @@ export const ITEMS: AuthoredInstance[] = [
   { id: 'ii_hacha_suelo', item_id: 'it_hacha', quantity: 1, at: { spot: 'sp_cl_sendero' } },
   { id: 'ii_cuerda_torre', item_id: 'it_cuerda', quantity: 1, at: { spot: 'sp_ca_torre' } },
   { id: 'ii_antorchas_ruinas', item_id: 'it_antorcha', quantity: 2, at: { spot: 'sp_ru_torre' } },
+  // Vecinos de relleno: lo que venden lo llevan encima (se compra o se roba de aquí) y lo que es solo suyo.
+  { id: 'ii_anselmo_farol', item_id: 'it_farol_aceite', quantity: 1, at: { npc: 'npc_x_anselmo' } },
+  { id: 'ii_marta_pan', item_id: 'it_pan_gris', quantity: 6, at: { npc: 'npc_x_marta' } },
+  { id: 'ii_gil_lena', item_id: 'it_madera', quantity: 4, at: { npc: 'npc_x_gil' } },
+  // Las casas del callejón están cerradas: la llave la llevan Marta y Fermina (robarla abre la puerta).
+  { id: 'ii_marta_llave', item_id: 'it_llave_casas', quantity: 1, at: { npc: 'npc_x_marta' } },
+  { id: 'ii_fermina_llave', item_id: 'it_llave_casas', quantity: 1, at: { npc: 'npc_x_fermina' } },
+  { id: 'ii_ramiro_cuerda', item_id: 'it_cuerda', quantity: 1, at: { npc: 'npc_x_ramiro' } },
 ];
 
 const node = (id: string, spot_id: string, name: string, aliases: string[], item: string, yield_max: number, skill: string, dc: number, destructive = false, tool: string | null = null): ResourceNode =>

@@ -25,6 +25,7 @@ import type { ChatterDef } from '../engine/chatter.js';
 import { KITS } from '../engine/outfit.js';
 import { itemDefErrors, needsAttunement } from '../engine/items.js';
 import { spellById } from '../data/srd/spells.js';
+import { extraProblems } from '../engine/extras.js';
 
 const norm = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const blank = (v: unknown) => typeof v !== 'string' || v.trim() === '';
@@ -282,5 +283,7 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
     for (const id of d.npc_ids ?? []) if (!npcs.has(id)) errs.push(`comentarios ${d.id}: el NPC ${id} no existe.`);
     if (!d.texts.length) errs.push(`comentarios ${d.id}: sin frases.`);
   }
+  // Relleno (extras.ts): oficio, a quién remite, casa, tope por punto y franja.
+  errs.push(...extraProblems(snap));
   return errs;
 }

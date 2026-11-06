@@ -59,9 +59,10 @@ describe('cuándo hay combate (partida del 04-11-2026)', () => {
     // La tirada de Juego de manos (falla) y la narración del máster, etiquetada «combat» a mano.
     engine.events.emit({ actor_id: maikol.id, action_type: 'roll', narration_private: '🎲 Juego de manos: 11', observable: null, tags: ['roll'], payload: { roll: { skill: 'sleight_of_hand', total: 11, success: false } } });
     master(maikol, [], ['master', 'combat', 'crime']);
-    // El robo pillado es un incidente: Hugo, la víctima, grita (crime.ts no le hace pelear por un robo).
+    // El robo pillado es un incidente: Hugo, la víctima, no pelea por un robo. En su herrería es el dueño y corre a
+    // avisar a la autoridad (docs/CONFLICTOS-NPC.md §9: a quien le roban reacciona según su perfil).
     const i = reportIncident(engine.world, { kind: 'theft', perpetrator_id: maikol.id, victim_id: hugo.id, spot_id: hugo.location.id }, engine.gameNow());
-    expect(i?.knowers.find((k) => k.npc_id === hugo.id)?.response).toBe('shout');
+    expect(i?.knowers.find((k) => k.npc_id === hugo.id)?.response).toBe('alert');
     await engine.tick();
     expect(engine.events.all().some((e) => e.action_type === 'incident')).toBe(true);
     expect(hostileTo(hugo, maikol)).toBe(false);

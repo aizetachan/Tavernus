@@ -64,6 +64,11 @@ export const TRUST_CHANGES = {
    */
   calm: { delta: 0, talk: false },
   attacked: { delta: -5, talk: false },
+  /** Acciones conflictivas (conflict.ts): tocarle sin permiso, empujarle o agarrarle, pillarle hurtando, arrebatarle algo. */
+  touched: { delta: -1, talk: false },
+  shoved: { delta: -2, talk: false },
+  caught_stealing: { delta: -3, talk: false },
+  snatched: { delta: -4, talk: false },
 } as const satisfies Record<string, { delta: number; talk: boolean }>;
 export type TrustChange = keyof typeof TRUST_CHANGES;
 
