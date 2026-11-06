@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: regidor
 lugar: "[[La casona]]"
 actitud: neutral
+npc: npc_osric
 ---
 
 > [!ficha] Osric Malvez
@@ -62,9 +63,7 @@ No dice «diezmo», dice «ofrenda de vecindad». Ver [[Costumbres#Saludos y man
 
 ## Lleva encima
 
-Una bolsa de cuero con 6 de oro, 4 de plata y 4 de cobre. Dentro, un anillo de sello, el manojo de llaves de la casona y un pañuelo. Al cinto, un estoque.
-
-Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

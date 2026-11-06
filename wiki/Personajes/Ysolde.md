@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: mujer del ascua
 lugar: "[[El Granero Quemado]]"
 actitud: desconfiada
+npc: npc_ysolde
 ---
 
 > [!ficha] Ysolde
@@ -64,9 +65,7 @@ Precios en monedas. Ver [[Objetos]].
 
 ## Lleva encima
 
-Una bolsa de cuero sin una moneda. Dentro, un amuleto de hueso y yesca y pedernal.
-
-Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

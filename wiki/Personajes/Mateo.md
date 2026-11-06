@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: molinero
 lugar: "[[El molino]]"
 actitud: amistoso
+npc: npc_mateo
 ---
 
 > [!ficha] Mateo
@@ -64,9 +65,7 @@ Precios en monedas. Ver [[Objetos]].
 
 ## Lleva encima
 
-Una bolsa de cuero con 1 de plata. Dentro, una navaja, yesca y pedernal y un mendrugo de pan.
-
-Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

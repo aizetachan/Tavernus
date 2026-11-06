@@ -718,8 +718,11 @@ export interface Npc {
   kit?: string;
   /** Lo que lleva en la bolsa (outfit.ts): sin campo, la riqueza de su ajuar. Datos de campaña. */
   wealth?: 'none' | 'poor' | 'modest' | 'comfortable' | 'rich';
-  /** Ya tiene su ajuar (outfit.ts): no se le vuelve a dar, aunque le roben. Estado de partida. */
-  outfitted?: boolean;
+  /**
+   * Ya tiene su ajuar (outfit.ts): no se le vuelve a dar, aunque le roben. El número es la versión del ajuar
+   * (`OUTFIT_VERSION`); `true`, la 1. Estado de partida.
+   */
+  outfitted?: boolean | number;
 }
 
 /** Opinión de un NPC con un PJ: de −100 a 100, con los últimos motivos; y las etiquetas a las que ya ha reaccionado. */

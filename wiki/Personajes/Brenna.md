@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: tabernera
 lugar: "[[Taberna del Jabalí]]"
 actitud: neutral
+npc: npc_brenna
 ---
 
 > [!ficha] Brenna
@@ -80,9 +81,7 @@ Precios en monedas. Ver [[Objetos]].
 
 ## Lleva encima
 
-Una bolsa de cuero con 1 de oro, 5 de plata y 2 de cobre. Dentro, el manojo de llaves de la taberna y un pañuelo.
-
-Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

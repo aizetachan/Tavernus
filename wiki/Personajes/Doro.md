@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: guardia
 lugar: "[[Plaza del Pozo]]"
 actitud: neutral
+npc: npc_doro
 ---
 
 > [!ficha] Doro
@@ -57,9 +58,7 @@ A las 13:00 acompaña a Garrán en el cobro del diezmo, haciendo de pared. Ver [
 
 ## Lleva encima
 
-Una bolsa de cuero con 8 de plata y 9 de cobre. Dentro, un silbato de hueso y un mendrugo de pan. Y su lanza.
-
-Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

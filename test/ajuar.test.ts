@@ -12,7 +12,7 @@ import { executeTool, type ToolContext } from '../src/ai/tools.js';
 import { seededRng } from '../src/engine/dice.js';
 import { allIncidents } from '../src/engine/crime.js';
 import { carrierOf, npcCarryList, transferItem } from '../src/engine/inventory.js';
-import { KIT_PURSE_ID, kitOf, outfitNpcs, purseCoins, weaponFor } from '../src/engine/outfit.js';
+import { KIT_PURSE_ID, kitOf, OUTFIT_VERSION, outfitNpcs, purseCoins, weaponFor } from '../src/engine/outfit.js';
 import { killNpc } from '../src/engine/death.js';
 import { generateSeed } from '../src/worldgen/index.js';
 import { makeSeed } from '../src/data/seed/demo.js';
@@ -50,7 +50,7 @@ describe('el ajuar de Brezal', () => {
   it('toda persona con estadísticas lleva algo robable; los animales, nada', async () => {
     const { engine } = await boot();
     for (const n of engine.world.npcs.values()) {
-      expect(n.outfitted, n.id).toBe(true);
+      expect(n.outfitted, n.id).toBe(OUTFIT_VERSION);
       if (n.mute) { expect(carried(engine, n.id), n.id).toEqual([]); continue; }
       if (!n.stats) continue;
       const purse = purseOf(engine, n.id);

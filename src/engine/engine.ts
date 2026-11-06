@@ -11,7 +11,7 @@ import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, takeAmount, transferItem, type InventoryView, type TransferError } from './inventory.js';
-import type { Character, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
+import type { CarrySlot, Character, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
 import { EQUIP_SLOTS } from './model.js';
 import { approachSpot, interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
 import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswered, parseGive, parseOfferAnswer, parseParty, parseSay, pcName, SAY_LOUDNESS, type SayMode } from './party.js';
@@ -49,7 +49,7 @@ import { attackRoll, checkRoll, rollAudience, rollTextForOthers, rollTextForRoll
 import { passivePerception, type Ability } from './rules.js';
 import { casterOf, initClass, levelUp, levelUpText, makeChoice, setSpells } from './levels.js';
 import { spellById } from '../data/srd/spells.js';
-import { characterNameProblem, cleanCharacterName, newCharacter, resolveCharacterSpec } from './chargen.js';
+import { characterNameProblem, cleanCharacterName, newCharacter, resolveCharacterSpec, startingEquipment, startingItemDef } from './chargen.js';
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
 import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, NPC_DOWN_HINT, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, wakeNpcs, type DeathSave } from './death.js';
@@ -1721,21 +1721,30 @@ export class Engine {
     loc.discovery[c.id] = 'visited';
     this.world.touch('locations', loc.id);
 
-    // Equipo inicial de la clase.
+    // Equipo inicial: el de su clase, su ropa y lo de su trasfondo (chargen.ts, `startingEquipment`). Lo que la
+    // partida no tiene en su catálogo (ropa, objetos de trasfondo) se añade de gear.ts; si no está en ninguno, no se da.
     let pack: Id | null = null;
     const pending: { item_id: Id; quantity: number }[] = [];
-    for (const eq of klass.equipment) {
-      if (!this.world.itemDefs.has(eq.item_id)) continue;
+    for (const eq of startingEquipment(klass, check.resolved.background)) {
+      if (!this.world.itemDefs.has(eq.item_id)) {
+        const d = startingItemDef(eq.item_id, this.world.itemDefs);
+        if (!d) continue;
+        this.world.itemDefs.set(d.id, d);
+        this.world.touch('item_defs', d.id);
+      }
       const qty = eq.quantity ?? 1;
-      const to = eq.slot === 'body' ? { type: 'character' as const, id: c.id, slot: { kind: 'equipped' as const, slot: 'body' as const } }
-        : eq.slot === 'back' ? { type: 'character' as const, id: c.id, slot: { kind: 'equipped' as const, slot: 'back' as const } }
-        : eq.slot === 'hand_main' ? { type: 'character' as const, id: c.id, slot: { kind: 'hand' as const, which: 'main' as const } }
-        : eq.slot === 'hand_off' ? { type: 'character' as const, id: c.id, slot: { kind: 'hand' as const, which: 'off' as const } }
-        : eq.slot === 'pocket' ? { type: 'character' as const, id: c.id, slot: { kind: 'pocket' as const } }
+      const at = (slot: CarrySlot) => ({ type: 'character' as const, id: c.id, slot });
+      const to = eq.slot === 'body' ? at({ kind: 'equipped', slot: 'body' })
+        : eq.slot === 'back' ? at({ kind: 'equipped', slot: 'back' })
+        : eq.slot === 'ring' ? at({ kind: 'equipped', slot: 'ring1' })
+        : eq.slot === 'hand_main' ? at({ kind: 'hand', which: 'main' })
+        : eq.slot === 'hand_off' ? at({ kind: 'hand', which: 'off' })
+        : eq.slot === 'pocket' ? at({ kind: 'pocket' })
         : null;
       if (to === null) { pending.push({ item_id: eq.item_id, quantity: qty }); continue; }
       const r = spawnItem(this.world, eq.item_id, qty, to);
       if (r.ok && eq.slot === 'back') pack = r.moved.id;
+      // Sin sitio (la ropa con armadura puesta, bolsillos llenos): a la mochila.
       if (!r.ok) pending.push({ item_id: eq.item_id, quantity: qty });
     }
     for (const p of pending) {

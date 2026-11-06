@@ -142,6 +142,10 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
   // Objetos
   for (const d of snap.item_defs) {
     if (d.service && !defs.has(d.service.gives_item_id)) errs.push(`${d.id}: el servicio entrega ${d.service.gives_item_id}, que no existe.`);
+    // El objeto propio de un NPC (index.ts, `ownItemOf`): inventado por el relleno, así que custom, único y sin reglas.
+    if (d.id.startsWith('it_own_') && (d.origin !== 'custom' || !d.unique || (d.type !== 'misc' && d.type !== 'treasure') || d.weapon || d.armor || d.container || d.heals || !d.name.trim())) {
+      errs.push(`${d.id}: el objeto propio de un NPC debe ser custom, único y de tipo misc o treasure, sin reglas.`);
+    }
   }
   for (const i of snap.item_instances) {
     if (!defs.has(i.item_id)) errs.push(`${i.id}: el objeto ${i.item_id} no existe.`);

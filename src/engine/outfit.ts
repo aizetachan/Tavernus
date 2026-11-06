@@ -9,7 +9,10 @@
  *    más pequeña), según lo rico que sea su oficio;
  *  - dentro, dos o tres cosas personales de su oficio (navaja, yesca, llaves,
  *    hierbas, silbato, anillo de sello…);
- *  - su arma, si pelea y su ataque es un arma del catálogo («maza corta» → maza).
+ *  - su arma, si pelea y su ataque es un arma del catálogo («maza corta» → maza);
+ *  - su ropa, puesta (`state.worn`), si su ajuar la dice: el mandil del herrero, la capa del regidor.
+ *
+ * Quien no lleva bolsa (`purse: false`, los niños) lleva sus cosas sueltas encima y ningún dinero.
  *
  * Regla agnóstica, generada de los datos: el ajuar sale del oficio (`Npc.role`,
  * por palabras) o de `Npc.kit` si la campaña lo dice; la riqueza, del ajuar o de
@@ -21,7 +24,9 @@
  *
  * Se aplica una vez por NPC al arrancar la partida (engine.ts, `migrate`), sea
  * campaña escrita, demo, mundo generado o partida ya empezada, y queda marcado
- * (`Npc.outfitted`): lo que le roben no se repone.
+ * (`Npc.outfitted`, con la versión del ajuar): lo que le roben no se repone. Un NPC
+ * equipado con una versión anterior solo recibe lo nuevo de la versión actual (la
+ * ropa y lo que la campaña escrita le pone encima y la partida no tenía).
  *
  * Las monedas de una bolsa pasan al dinero del PJ en cuanto la coge
  * (inventory.ts, `transferItem`).
@@ -36,10 +41,14 @@ export type Genre = 'fantasy' | 'scifi' | 'postapoc';
 type Concept =
   | 'purse' | 'knife' | 'fire' | 'food' | 'key' | 'keyring' | 'kerchief' | 'dice' | 'ring' | 'herbs' | 'bandage'
   | 'nails' | 'whistle' | 'beads' | 'charm' | 'ledger' | 'hook' | 'needle'
+  | 'toy'
+  | 'clothes' | 'fine' | 'apron' | 'robe' | 'tabard' | 'cloak' | 'rags'
   | 'spear' | 'club' | 'scimitar' | 'hammer' | 'pitchfork';
 
 type Base = Omit<ItemDef, 'id' | 'name' | 'aliases' | 'origin' | 'unique'>;
 const tiny = (type: ItemDef['type'], weight_lb: number, value: number, extra: Partial<ItemDef> = {}): Base => ({ type, size: 'tiny', weight_lb, value, ...extra });
+/** Ropa: se lleva en el cuerpo (un PJ puede ponérsela). */
+const wear = (weight_lb: number, value: number): Base => ({ type: 'misc', size: 'medium', weight_lb, value, equip_slot: 'body' });
 
 /** Nombre (y alias) en cada género; sin variante, el de fantasía. */
 type Names = Record<'fantasy', [string, string[]]> & Partial<Record<Exclude<Genre, 'fantasy'>, [string, string[]]>>;
@@ -67,6 +76,15 @@ const KIT_ITEMS: Record<Concept, { base: Base; names: Names; description: string
   ledger: { base: { type: 'misc', size: 'small', weight_lb: 0.5, value: 5 }, names: { fantasy: ['libreta de cuentas', ['libreta', 'cuentas', 'cuaderno']], scifi: ['tableta de cuentas', ['tableta', 'cuentas']], postapoc: ['cuaderno de cuentas', ['cuaderno', 'cuentas']] }, description: 'Quién debe qué y cuánto.' },
   hook: { base: tiny('tool', 0.1, 2), names: { fantasy: ['sedal y anzuelos', ['sedal', 'anzuelos', 'anzuelo']] }, description: 'Para pescar.' },
   needle: { base: tiny('tool', 0.1, 2), names: { fantasy: ['hilo y aguja', ['aguja', 'hilo']] }, description: 'Para remendar.' },
+  toy: { base: tiny('misc', 0.1, 1), names: { fantasy: ['peonza de madera', ['peonza', 'trompo', 'juguete']], scifi: ['canicas de cristal', ['canicas', 'juguete']], postapoc: ['muñeco de trapo', ['muñeco', 'juguete']] }, description: 'Un juguete gastado de tanto usarlo.' },
+  // Ropa: la lleva puesta (`state.worn`), para que se pueda describir, manchar o quitar.
+  clothes: { base: wear(3, 50), names: { fantasy: ['ropa de diario', ['ropa', 'blusón', 'camisa']], scifi: ['mono de trabajo', ['mono', 'ropa']], postapoc: ['ropa remendada', ['ropa', 'harapos']] }, description: 'La ropa de todos los días.' },
+  fine: { base: wear(6, 1500), names: { fantasy: ['capa de buen paño', ['capa', 'ropa fina', 'paño']], scifi: ['traje de corte caro', ['traje', 'ropa']], postapoc: ['abrigo de cuero bueno', ['abrigo', 'ropa']] }, description: 'Ropa que dice cuánto tiene su dueño.' },
+  apron: { base: wear(3, 100), names: { fantasy: ['mandil de cuero', ['mandil', 'delantal']], scifi: ['delantal de trabajo', ['delantal', 'mandil']], postapoc: ['mandil de cuero', ['mandil', 'delantal']] }, description: 'Mandil de trabajo, con las manchas del oficio.' },
+  robe: { base: wear(4, 100), names: { fantasy: ['hábito', ['habito', 'túnica', 'tunica', 'sotana']], scifi: ['túnica', ['tunica', 'hábito']], postapoc: ['túnica', ['tunica', 'hábito']] }, description: 'La ropa de su fe.' },
+  tabard: { base: wear(3, 100), names: { fantasy: ['sobreveste de guardia', ['sobreveste', 'uniforme', 'jubón']], scifi: ['uniforme', ['uniforme', 'chaqueta']], postapoc: ['chaleco con brazalete', ['chaleco', 'brazalete', 'uniforme']] }, description: 'Lo que le distingue de un vecino cualquiera.' },
+  cloak: { base: wear(4, 100), names: { fantasy: ['capa con capucha', ['capa', 'capucha', 'manto']], scifi: ['gabardina con capucha', ['gabardina', 'capucha']], postapoc: ['poncho con capucha', ['poncho', 'capucha']] }, description: 'Para no dejarse ver la cara.' },
+  rags: { base: wear(2, 0), names: { fantasy: ['harapos', ['ropa', 'andrajos']] }, description: 'Lo que le queda de ropa.' },
   // Armas que el catálogo común no trae y los bloques SRD sí nombran (skeleton.ts, ARCHETYPES).
   spear: { base: { type: 'weapon', size: 'large', weight_lb: 3, value: 100, weapon: { damage: '1d6', damage_type: 'piercing' } }, names: { fantasy: ['lanza', ['spear', 'pica']] }, description: '' },
   club: { base: { type: 'weapon', size: 'small', weight_lb: 2, value: 10, weapon: { damage: '1d4', damage_type: 'bludgeoning' } }, names: { fantasy: ['garrote', ['porra', 'club', 'cachiporra']] }, description: '' },
@@ -96,29 +114,34 @@ export interface KitDef {
   items: (Concept | `it_${string}`)[];
   /** Sin nada encima: animales. */
   empty?: boolean;
+  /** Sin bolsa ni dinero (niños): sus cosas van sueltas encima. */
+  purse?: false;
+  /** La ropa que lleva puesta, si su oficio la distingue. */
+  clothes?: Concept;
 }
 
 /** Por orden: gana el primero cuyo patrón casa con el oficio. El último es el de cualquier vecino. */
 export const KITS: readonly KitDef[] = [
   { id: 'animal', match: /\b(lob[oa]|perr[oa]|jabali|os[oa]|rata|cuervo|bestia|caballo|yegua|mula|gat[oa]|serpiente|arana|zorr[oa]|ciervo)\b/, wealth: 'none', items: [], empty: true },
-  { id: 'prisoner', match: /\b(pres[oa]|prisioner[oa]|cautiv[oa]|esclav[oa])\b/, wealth: 'none', items: ['food'] },
-  { id: 'money', match: /(recaudador|cobrador|pagador|cambista|prestamista|usurer|banquer|tesorer)/, wealth: 'rich', items: ['ledger', 'keyring'] },
-  { id: 'noble', match: /(regidor|alcald|\bsenor|\bnoble|baron|condes?a?\b|jef[ea] de puerto|gobernador|mayordom)/, wealth: 'rich', items: ['ring', 'keyring', 'kerchief'] },
-  { id: 'merchant', match: /(mercader|comerciant|buhoner|tender[oa]|vendedor|patron|jef[ea] de (?:la )?caravana|jef[ea] del refugio)/, wealth: 'comfortable', items: ['ledger', 'key', 'kerchief'] },
-  { id: 'innkeeper', match: /(tabern|posader|mesoner|cantiner|cociner|venter[oa])/, wealth: 'comfortable', items: ['keyring', 'kerchief'] },
-  { id: 'jailer', match: /(carceler)/, wealth: 'modest', items: ['keyring', 'whistle'] },
-  { id: 'thief', match: /(ladron|ratero|carterista|bandid|salteador|contrabandist)/, wealth: 'modest', items: ['dice', 'it_ganzuas', 'knife'] },
-  { id: 'guard', match: /(guardia|alguacil|soldad|sargento|capitan|centinela|escolta|agente|vigilante|guardian)/, wealth: 'modest', items: ['whistle', 'food'] },
-  { id: 'healer', match: /(curander|medic|sanador|boticari|herborist|partera|enfermer)/, wealth: 'modest', items: ['herbs', 'bandage'] },
-  { id: 'priest', match: /(sacerdot|capellan|\babad|monj|fraile|herman[oa] |sacristan|prior)/, wealth: 'modest', items: ['beads', 'food'] },
-  { id: 'scholar', match: /(bibliotecari|escriban|maestr[oa]|erudit|sabi[oa]|copista)/, wealth: 'modest', items: ['ledger', 'fire'] },
-  { id: 'smith', match: /(herrer|mecanic|carpinter|herrador|calderer|artesan|alfarer|zapater)/, wealth: 'modest', items: ['nails', 'fire', 'knife'] },
-  { id: 'traveler', match: /(foraster|viajer|peregrin|buscavidas)/, wealth: 'modest', items: ['charm', 'food', 'fire'] },
-  { id: 'mystic', match: /(hechicer|bruj[oa]|adivin|chaman|ermitan|vidente)/, wealth: 'none', items: ['charm', 'fire'] },
-  { id: 'hunter', match: /(cazador|trampero|explorador|batidor|guardabosque|chatarrer|carroner)/, wealth: 'poor', items: ['knife', 'hook', 'fire'] },
-  { id: 'fisher', match: /(pescador|lonjer|farer|mariner|barquer)/, wealth: 'poor', items: ['hook', 'knife'] },
-  { id: 'laborer', match: /(granjer|campesin|labrador|molinero|miner[oa]|pastor|mozo|enterrador|lenador|jornaler|capataz|superviviente)/, wealth: 'poor', items: ['knife', 'fire', 'food'] },
-  { id: 'commoner', match: null, wealth: 'poor', items: ['knife', 'food'] },
+  { id: 'child', match: /\b(nin[oa]s?|chiquill[oa]s?|zagal(?:a)?|rapaz(?:a)?|chaval(?:a)?|crio|cria)\b/, wealth: 'none', items: ['toy', 'food'], purse: false, clothes: 'clothes' },
+  { id: 'prisoner', match: /\b(pres[oa]|prisioner[oa]|cautiv[oa]|esclav[oa])\b/, wealth: 'none', items: ['food'], clothes: 'rags' },
+  { id: 'money', match: /(recaudador|cobrador|pagador|cambista|prestamista|usurer|banquer|tesorer)/, wealth: 'rich', items: ['ledger', 'keyring'], clothes: 'fine' },
+  { id: 'noble', match: /(regidor|alcald|\bsenor|\bnoble|baron|condes?a?\b|jef[ea] de puerto|gobernador|mayordom)/, wealth: 'rich', items: ['ring', 'keyring', 'kerchief'], clothes: 'fine' },
+  { id: 'merchant', match: /(mercader|comerciant|buhoner|tender[oa]|vendedor|patron|jef[ea] de (?:la )?caravana|jef[ea] del refugio)/, wealth: 'comfortable', items: ['ledger', 'key', 'kerchief'], clothes: 'clothes' },
+  { id: 'innkeeper', match: /(tabern|posader|mesoner|cantiner|cociner|venter[oa])/, wealth: 'comfortable', items: ['keyring', 'kerchief'], clothes: 'apron' },
+  { id: 'jailer', match: /(carceler)/, wealth: 'modest', items: ['keyring', 'whistle'], clothes: 'tabard' },
+  { id: 'thief', match: /(ladron|ratero|carterista|bandid|salteador|contrabandist)/, wealth: 'modest', items: ['dice', 'it_ganzuas', 'knife'], clothes: 'cloak' },
+  { id: 'guard', match: /(guardia|alguacil|soldad|sargento|capitan|centinela|escolta|agente|vigilante|guardian)/, wealth: 'modest', items: ['whistle', 'food'], clothes: 'tabard' },
+  { id: 'healer', match: /(curander|medic|sanador|boticari|herborist|partera|enfermer)/, wealth: 'modest', items: ['herbs', 'bandage'], clothes: 'clothes' },
+  { id: 'priest', match: /(sacerdot|capellan|\babad|monj|fraile|herman[oa] |sacristan|prior)/, wealth: 'modest', items: ['beads', 'food'], clothes: 'robe' },
+  { id: 'scholar', match: /(bibliotecari|escriban|maestr[oa]|erudit|sabi[oa]|copista)/, wealth: 'modest', items: ['ledger', 'fire'], clothes: 'clothes' },
+  { id: 'smith', match: /(herrer|mecanic|carpinter|herrador|calderer|artesan|alfarer|zapater)/, wealth: 'modest', items: ['nails', 'fire', 'knife'], clothes: 'apron' },
+  { id: 'traveler', match: /(foraster|viajer|peregrin|buscavidas)/, wealth: 'modest', items: ['charm', 'food', 'fire'], clothes: 'cloak' },
+  { id: 'mystic', match: /(hechicer|bruj[oa]|adivin|chaman|ermitan|vidente)/, wealth: 'none', items: ['charm', 'fire'], clothes: 'cloak' },
+  { id: 'hunter', match: /(cazador|trampero|explorador|batidor|guardabosque|chatarrer|carroner)/, wealth: 'poor', items: ['knife', 'hook', 'fire'], clothes: 'cloak' },
+  { id: 'fisher', match: /(pescador|lonjer|farer|mariner|barquer)/, wealth: 'poor', items: ['hook', 'knife'], clothes: 'clothes' },
+  { id: 'laborer', match: /(granjer|campesin|labrador|molinero|miner[oa]|pastor|mozo|enterrador|lenador|jornaler|capataz|superviviente)/, wealth: 'poor', items: ['knife', 'fire', 'food'], clothes: 'clothes' },
+  { id: 'commoner', match: null, wealth: 'poor', items: ['knife', 'food'], clothes: 'clothes' },
 ];
 
 /** Monedas por riqueza, en veces lo que lleva un PJ al empezar: [mínimo, máximo]. */
@@ -187,12 +210,27 @@ function carriedBy(snap: WorldSnapshot, npcId: Id): ItemInstance[] {
 }
 
 /**
- * Da el ajuar a los NPC que aún no lo tienen. Antes, en partidas ya empezadas, les
- * devuelve lo que la campaña escrita les pone encima y la partida no tenía (`seed`).
- * Idempotente. Devuelve si ha cambiado algo.
+ * Versión del ajuar. 1: bolsa, cosas del oficio y arma. 2: la ropa puesta y lo nuevo que la campaña escrita pone
+ * encima de cada NPC (la jarra de Brenna, el guante de Ysolde). Un NPC equipado con una versión anterior recibe solo
+ * lo de las versiones que le faltan: lo que ya le dieron, si se lo robaron, no se repone.
+ */
+export const OUTFIT_VERSION = 2;
+
+/** Con qué versión del ajuar va equipado un NPC (`true`: la 1, de antes de numerarlas). */
+export function outfitLevel(n: Pick<Npc, 'outfitted'>): number {
+  return n.outfitted === true ? 1 : typeof n.outfitted === 'number' ? n.outfitted : 0;
+}
+
+/** Si un ejemplar es ropa que alguien lleva puesta. */
+export function isWorn(i: ItemInstance): boolean { return i.state['worn'] === true; }
+
+/**
+ * Da el ajuar a los NPC que aún no lo tienen, o lo que les falta de la versión actual. Antes, en partidas ya
+ * empezadas, les devuelve lo que la campaña escrita les pone encima y la partida no tenía (`seed`). Idempotente.
+ * Devuelve si ha cambiado algo.
  */
 export function outfitNpcs(snap: WorldSnapshot, seed?: WorldSnapshot): boolean {
-  const pending = snap.npcs.filter((n) => !n.outfitted);
+  const pending = snap.npcs.filter((n) => outfitLevel(n) < OUTFIT_VERSION);
   if (!pending.length) return false;
   const genre = genreOf(snap);
   const defs = new Map(snap.item_defs.map((d) => [d.id, d]));
@@ -214,13 +252,17 @@ export function outfitNpcs(snap: WorldSnapshot, seed?: WorldSnapshot): boolean {
     for (let k = 2; ids.has(id); k++) id = `${base}_${k}`;
     return id;
   };
+  const onNpc = (n: Npc, def: ItemDef, state: Record<string, unknown> = {}): ItemInstance =>
+    ({ id: newId(n.id, def.id.replace(/^it_(?:kit_)?/, '')), item_id: def.id, quantity: 1, location: { type: 'npc', id: n.id }, state });
 
   for (const n of pending) {
-    n.outfitted = true;
+    const level = outfitLevel(n);
+    n.outfitted = OUTFIT_VERSION;
     // Muerto o desaparecido: lo que llevaba ya cayó (death.ts) o se fue con él.
     if (n.status === 'dead' || n.status === 'missing') continue;
 
-    // 1. Lo que la campaña escrita le pone encima y esta partida no tiene (partidas de antes del ajuar).
+    // 1. Lo que la campaña escrita le pone encima y esta partida no tiene (partidas de antes del ajuar, o de antes
+    //    de que la campaña se lo pusiera).
     if (seed) {
       const fromSeed = carriedBy(seed, n.id).filter((i) => !ids.has(i.id));
       for (const i of fromSeed) {
@@ -235,37 +277,47 @@ export function outfitNpcs(snap: WorldSnapshot, seed?: WorldSnapshot): boolean {
     const carried = carriedBy(snap, n.id);
     const has = (itemId: Id) => carried.some((i) => i.item_id === itemId);
 
-    // 2. La bolsa con sus monedas, si no lleva ya un contenedor.
-    let purse = carried.find((i) => defs.get(i.item_id)?.container && !defs.get(i.item_id)!.container!.fixed);
-    if (!purse) {
-      const def = ensureDef(kitItemDef('purse', genre));
-      const coins = purseCoins(n.id, n.wealth ?? kit.wealth, start);
-      purse = { id: newId(n.id, 'bolsa'), item_id: def.id, quantity: 1, location: { type: 'npc', id: n.id }, state: coins > 0 ? { coins } : {} };
-      add(purse);
-      carried.push(purse);
+    if (level < 1) {
+      // 2. La bolsa con sus monedas, si no lleva ya un contenedor. Sin bolsa (niños), nada de dinero.
+      let purse = carried.find((i) => defs.get(i.item_id)?.container && !defs.get(i.item_id)!.container!.fixed) ?? null;
+      if (!purse && kit.purse !== false) {
+        const def = ensureDef(kitItemDef('purse', genre));
+        const coins = purseCoins(n.id, n.wealth ?? kit.wealth, start);
+        purse = { id: newId(n.id, 'bolsa'), item_id: def.id, quantity: 1, location: { type: 'npc', id: n.id }, state: coins > 0 ? { coins } : {} };
+        add(purse);
+        carried.push(purse);
+      }
+
+      // 3. Sus cosas personales: dentro de la bolsa si caben (cosas menudas), si no, encima.
+      const box = purse ? defs.get(purse.item_id)!.container : undefined;
+      for (const what of kit.items) {
+        const def = what.startsWith('it_') ? defs.get(what) : ensureDef(kitItemDef(what as Concept, genre));
+        if (!def || has(def.id)) continue;
+        const inPurse = purse ? carried.filter((i) => i.location.type === 'container' && i.location.id === purse!.id).length : 0;
+        const fits = purse && box && def.size === 'tiny' && inPurse < box.slots;
+        const inst = onNpc(n, def);
+        if (fits) inst.location = { type: 'container', id: purse!.id };
+        add(inst);
+        carried.push(inst);
+      }
+
+      // 4. Su arma, si pelea y la lleva a la vista: la de su ataque, si es un arma de verdad.
+      if (n.stats && !n.noncombatant && !carried.some((i) => defs.get(i.item_id)?.weapon && defs.get(i.item_id)!.type === 'weapon')) {
+        const pool = [...defs.values(), ...WEAPON_CONCEPTS.map((c) => kitItemDef(c, genre))];
+        const w = weaponFor(n.stats.attack_name, pool);
+        if (w) {
+          const inst = onNpc(n, ensureDef(w));
+          add(inst);
+          carried.push(inst);
+        }
+      }
     }
 
-    // 3. Sus cosas personales: dentro de la bolsa si caben (cosas menudas), si no, encima.
-    const purseDef = defs.get(purse.item_id)!;
-    for (const what of kit.items) {
-      const def = what.startsWith('it_') ? defs.get(what) : ensureDef(kitItemDef(what as Concept, genre));
-      if (!def || has(def.id)) continue;
-      const inPurse = carried.filter((i) => i.location.type === 'container' && i.location.id === purse!.id).length;
-      const fits = purseDef.container && def.size === 'tiny' && inPurse < purseDef.container.slots;
-      const inst: ItemInstance = { id: newId(n.id, def.id.replace(/^it_(?:kit_)?/, '')), item_id: def.id, quantity: 1, location: fits ? { type: 'container', id: purse.id } : { type: 'npc', id: n.id }, state: {} };
+    // 5. Su ropa, puesta, si su ajuar la dice y no lleva ya algo puesto en el cuerpo.
+    if (level < 2 && kit.clothes && !carried.some((i) => isWorn(i) && defs.get(i.item_id)?.equip_slot === 'body')) {
+      const inst = onNpc(n, ensureDef(kitItemDef(kit.clothes, genre)), { worn: true });
       add(inst);
       carried.push(inst);
-    }
-
-    // 4. Su arma, si pelea y la lleva a la vista: la de su ataque, si es un arma de verdad.
-    if (n.stats && !n.noncombatant && !carried.some((i) => defs.get(i.item_id)?.weapon && defs.get(i.item_id)!.type === 'weapon')) {
-      const pool = [...defs.values(), ...WEAPON_CONCEPTS.map((c) => kitItemDef(c, genre))];
-      const w = weaponFor(n.stats.attack_name, pool);
-      if (w) {
-        const def = ensureDef(w);
-        const inst: ItemInstance = { id: newId(n.id, def.id.replace(/^it_(?:kit_)?/, '')), item_id: def.id, quantity: 1, location: { type: 'npc', id: n.id }, state: {} };
-        add(inst);
-      }
     }
   }
   return true;
