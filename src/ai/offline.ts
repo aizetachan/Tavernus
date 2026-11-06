@@ -174,9 +174,21 @@ const TALK_REPLIES: Record<string, string> = {
   farewell: 'Ve con cuidado.',
 };
 
+/**
+ * Con el flujo de cinco capas (docs/CONVERSACION-FLUJO.md) el guion trae huecos: el máster offline rellena los que
+ * mandan con una plantilla, para probar la estructura sin modelo. Lo urgente y cortar van antes que la situación.
+ */
 export function talkReply(context: string): string | null {
   const s = /^## Cómo responde .+? en este turno \(situación: (\w+)\)/m.exec(context)?.[1];
   if (!s) return null;
+  const hole = (k: string) => new RegExp(`^${k} \\([^)]*\\): (.*)$`, 'm').exec(context)?.[1] ?? '';
+  if (/Nada de charla, comercio ni misiones/.test(hole('A'))) return '¡Ahora no! ¿No ves lo que pasa?';
+  if (/^Corta la charla/.test(hole('E'))) return 'Se acabó. Déjame en paz.';
+  const knows = /Qué sabe de él: ([^,.]+)/.exec(context)?.[1] ?? '';
+  const intent = /^Lo que le dice el actor: ([^.]+)\./m.exec(context)?.[1] ?? '';
+  const stranger = /no le conoce de nada/.test(knows);
+  if (intent === 'quién es quién') return /^Se le presenta/.test(hole('C')) ? 'Bien. Lo recordaré.' : /^Sabe quién es/.test(hole('C')) ? 'Claro que sé quién eres.' : 'No te conozco. ¿Quién eres?';
+  if (intent === 'abre la charla') return stranger ? 'Buenas. ¿Qué te trae?' : 'Hombre, tú otra vez. ¿Qué quieres?';
   if (s === 'greeting') return /^Situación: .*Primera vez que hablan/m.test(context) ? 'Buenas. No te había visto por aquí. ¿Qué te trae?' : 'Hombre, tú otra vez. ¿Qué tal?';
   return TALK_REPLIES[s] ?? null;
 }
