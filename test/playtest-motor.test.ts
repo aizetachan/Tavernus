@@ -17,6 +17,7 @@ import { coinsWithoutTool, dealWithoutState, declaredStrike, strikeWithoutAttack
 import type { Character, GameEvent } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
 
+import { coinsOf, setCoins } from '../src/engine/money.js';
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 
 async function boot(master?: Parameters<typeof Engine.boot>[0]['master']) {
@@ -178,13 +179,13 @@ describe('monedas', () => {
     const c = await newPc(engine);
     const hugo = engine.world.npc('npc_hugo');
     c.location = { type: 'spot', id: hugo.location.id };
-    c.coins = 100;
+    setCoins(engine.world, c.id, 100);
     const ctx = ctxFor(engine, c, 'Le doy diez a Hugo');
     expect(out(executeTool(ctx, 'give_coins', { npc_id: hugo.id, amount: 1000, reason: 'soborno' })).error).toBe('not_enough_coins');
-    expect(c.coins).toBe(100);
+    expect(coinsOf(engine.world, c.id)).toBe(100);
     expect(out(executeTool(ctx, 'give_coins', { npc_id: hugo.id, amount: 0, reason: 'soborno' })).error).toBeTruthy();
     expect(out(executeTool(ctx, 'give_coins', { npc_id: hugo.id, amount: 30, reason: 'soborno' })).ok).toBe(true);
-    expect(c.coins).toBe(70);
+    expect(coinsOf(engine.world, c.id)).toBe(70);
     expect(out(executeTool(ctx, 'log_event', close({ narration_private: 'Le das treinta monedas y las coge sin mirar.' }))).ok).toBe(true);
   });
 });

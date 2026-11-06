@@ -3,9 +3,10 @@
  * decide si algo cabe; el master solo narra el resultado.
  */
 
-import type { CarrySlot, Character, EquipSlot, Id, ItemDef, ItemInstance, ItemSize, Placement, Spot } from './model.js';
+import type { CarrySlot, Character, EquipSlot, Id, ItemDef, ItemInstance, ItemRarity, ItemSize, ItemType, Placement, Spot } from './model.js';
 import { EQUIP_SLOTS } from './model.js';
-import { coinPieces, currencyOf, fmtMoney } from './money.js';
+import { DAMAGE_ES, RARITY_ES, WEAPON_PROPERTIES, magicView, WEAPON_PROPERTY_ES, attunementText, bonusText, chargesLeft, chargesText, effectText, isIdentifiedBy, isMagic, itemName, needsAttunement, spellText, weaponProperties } from './items.js';
+import { coinPieces, coinsAt, coinsOf, coinsWithin, currencyOf, fmtMoney } from './money.js';
 import { samePlacement, slotKey, type World } from './world.js';
 
 const SIZE_RANK: Record<ItemSize, number> = { tiny: 0, small: 1, medium: 2, large: 3, bulky: 4 };
@@ -19,7 +20,7 @@ export type TransferError =
   | { code: 'invalid_slot'; reason: string };
 
 export type TransferResult =
-  | { ok: true; moved: ItemInstance; remaining: ItemInstance | null; /** Monedas que había dentro y pasan al PJ que lo coge (outfit.ts). */ coins?: number }
+  | { ok: true; moved: ItemInstance; remaining: ItemInstance | null; /** Monedas que hay dentro (una bolsa) y lleva ahora el PJ que lo coge; se quedan en la bolsa (money.ts). */ coins?: number }
   | { ok: false; error: TransferError };
 
 /** Quién lleva algo que está en `p`, subiendo por los contenedores: un PJ, un NPC o nadie (suelo, vehículo). */
@@ -36,24 +37,13 @@ export function carrierOf(world: World, p: Placement): { type: 'character' | 'np
 }
 
 /**
- * Las monedas sueltas en una bolsa (`state.coins`, outfit.ts) son dinero: cuando la bolsa llega a
- * un PJ (en la mano, al cinto o dentro de su mochila) pasan a sus monedas. Mira también lo que va
- * dentro. Devuelve cuántas.
+ * Monedas que lleva dentro lo que acaba de llegar a un PJ (una bolsa, o la mochila con una bolsa dentro):
+ * se quedan donde están, pero la narración lo cuenta. 0 si no va a un PJ o ya lo llevaba él.
  */
-function pocketCoins(world: World, inst: ItemInstance): number {
-  const who = carrierOf(world, inst.location);
-  if (who?.type !== 'character') return 0;
-  const c = world.characters.get(who.id);
-  if (!c) return 0;
-  let total = 0;
-  const walk = (i: ItemInstance, depth: number) => {
-    const n = i.state['coins'];
-    if (typeof n === 'number' && n > 0) { total += n; delete i.state['coins']; world.touch('item_instances', i.id); }
-    if (depth < 8) for (const inner of world.itemsIn({ type: 'container', id: i.id })) walk(inner, depth + 1);
-  };
-  walk(inst, 0);
-  if (total > 0) { c.coins += total; world.touch('characters', c.id); }
-  return total;
+function coinsArriving(world: World, inst: ItemInstance, from: { type: string; id: Id } | null): number {
+  const to = carrierOf(world, inst.location);
+  if (to?.type !== 'character' || (from && from.type === to.type && from.id === to.id)) return 0;
+  return coinsWithin(world, inst);
 }
 
 export function sizeFits(item: ItemSize, max: ItemSize): boolean {
@@ -64,6 +54,9 @@ export function sizeFits(item: ItemSize, max: ItemSize): boolean {
 export function instanceWeight(world: World, i: ItemInstance): number {
   const def = world.itemDef(i.item_id);
   let w = def.weight_lb * i.quantity;
+  // Las monedas de una bolsa pesan con ella: las piezas (15 de oro), no el valor en cobre (1500).
+  const coins = coinsAt(i);
+  if (coins) w += coinPieces(coins, currencyOf(world.campaign)) / world.campaign.capacity_rules.coins_per_lb;
   if (def.container) for (const inner of world.itemsIn({ type: 'container', id: i.id })) w += instanceWeight(world, inner);
   return w;
 }
@@ -77,8 +70,8 @@ export interface Encumbrance {
 
 export function encumbrance(world: World, c: Character): Encumbrance {
   const rules = world.campaign.capacity_rules;
-  // Pesan las piezas (15 de oro), no el valor en cobre (1500).
-  let weight = coinPieces(c.coins, currencyOf(world.campaign)) / rules.coins_per_lb;
+  // Las monedas pesan dentro de sus bolsas (instanceWeight).
+  let weight = 0;
   for (const i of directlyCarried(world, c.id)) weight += instanceWeight(world, i);
   const str = c.abilities.str;
   const max = str * rules.carry_per_str;
@@ -222,6 +215,7 @@ export function transferItem(world: World, instanceId: Id, to: Placement, quanti
   if (!Number.isInteger(qty) || qty < 1 || qty > inst.quantity) return { ok: false, error: { code: 'bad_quantity' } };
   if (def.container?.fixed) return { ok: false, error: { code: 'fixed' } };
   if (samePlacement(inst.location, to)) return { ok: false, error: { code: 'not_reachable', reason: 'ya está ahí' } };
+  const carrierBefore = carrierOf(world, inst.location);
 
   const fromSpot = world.spotOfItem(inst);
   const toSpot = spotOfPlacement(world, to);
@@ -272,7 +266,7 @@ export function transferItem(world: World, instanceId: Id, to: Placement, quanti
       world.touch('item_instances', moved.id);
     }
   }
-  const coins = pocketCoins(world, moved);
+  const coins = coinsArriving(world, moved, carrierBefore);
   return { ok: true, moved, remaining, ...(coins ? { coins } : {}) };
 }
 
@@ -334,19 +328,30 @@ export function consumeItem(world: World, instanceId: Id, quantity = 1): { ok: t
   return { ok: true, left: inst.quantity };
 }
 
-/** Inventario con identificadores, para el master: dónde está cada ejemplar. */
-export function inventoryDetailed(world: World, characterId: Id): { instance_id: Id; item_id: Id; name: string; quantity: number; where: string }[] {
-  const out: { instance_id: Id; item_id: Id; name: string; quantity: number; where: string }[] = [];
+/** « con 15 de oro» detrás del nombre de una bolsa con monedas (money.ts); nada si no lleva. */
+function withCoins(world: World, i: ItemInstance): string {
+  const n = coinsAt(i);
+  return n ? ` con ${fmtMoney(n, currencyOf(world.campaign))}` : '';
+}
+
+/**
+ * Inventario con identificadores, para el master: dónde está cada ejemplar. El nombre es el que ve el PJ (un objeto
+ * mágico sin identificar sale con su nombre genérico y `unidentified: true`).
+ */
+export interface DetailedItem { instance_id: Id; item_id: Id; name: string; quantity: number; where: string; unidentified?: true }
+export function inventoryDetailed(world: World, characterId: Id): DetailedItem[] {
+  const out: DetailedItem[] = [];
   const label = (s: CarrySlot) => s.kind === 'hand' ? (s.which === 'both' ? 'ambas manos' : s.which === 'main' ? 'mano principal' : 'mano secundaria') : s.kind === 'pocket' ? 'bolsillo' : `equipado:${s.slot}`;
+  const entry = (i: ItemInstance, where: string): DetailedItem => {
+    const d = world.itemDef(i.item_id);
+    return { instance_id: i.id, item_id: d.id, name: itemName(d, i, characterId) + withCoins(world, i), quantity: i.quantity, where, ...(isIdentifiedBy(d, i, characterId) ? {} : { unidentified: true as const }) };
+  };
   for (const i of directlyCarried(world, characterId)) {
     if (i.location.type !== 'character') continue;
     const def = world.itemDef(i.item_id);
-    out.push({ instance_id: i.id, item_id: def.id, name: def.name, quantity: i.quantity, where: label(i.location.slot) });
+    out.push(entry(i, label(i.location.slot)));
     if (def.container) {
-      for (const inner of world.itemsIn({ type: 'container', id: i.id })) {
-        const d = world.itemDef(inner.item_id);
-        out.push({ instance_id: inner.id, item_id: d.id, name: d.name, quantity: inner.quantity, where: `dentro de ${def.name} [${i.id}]` });
-      }
+      for (const inner of world.itemsIn({ type: 'container', id: i.id })) out.push(entry(inner, `dentro de ${itemName(def, i, characterId)} [${i.id}]`));
     }
   }
   return out;
@@ -373,11 +378,7 @@ export interface InventoryView {
   encumbrance: Encumbrance;
 }
 
-/** Daño en español, para la ficha de los objetos y las respuestas de info.ts. */
-export const DAMAGE_ES: Record<string, string> = {
-  bludgeoning: 'contundente', piercing: 'perforante', slashing: 'cortante', fire: 'fuego', cold: 'frío', lightning: 'rayo',
-  thunder: 'trueno', poison: 'veneno', acid: 'ácido', necrotic: 'necrótico', radiant: 'radiante', force: 'fuerza', psychic: 'psíquico',
-};
+export { DAMAGE_ES };
 
 /** Icono con que la web pinta un objeto: sale de sus datos (tipo y propiedades), nunca de su nombre. */
 export type PackIcon = 'weapon' | 'bow' | 'shield' | 'armor' | 'light' | 'potion' | 'food' | 'container' | 'tool' | 'quest' | 'treasure' | 'misc' | EquipSlot;
@@ -402,6 +403,14 @@ export interface PackItem {
   about: string;
   /** Imagen escrita del objeto (la pone la web, src/adapters/web/itemart.ts); sin ella, el icono. */
   art?: string;
+  /** Objeto mágico identificado: su rareza (la web puede teñir el borde). */
+  rarity?: ItemRarity;
+  /** Objeto mágico que el PJ aún no ha identificado: nombre genérico y sin sus propiedades mágicas. */
+  unidentified?: true;
+  /** Pide sintonía, y si la tiene con este PJ. */
+  attunement?: { attuned: boolean };
+  /** Cargas que le quedan y su máximo. */
+  charges?: { left: number; max: number };
 }
 export interface PackView {
   hands: { main: PackItem | null; off: PackItem | null; both: boolean };
@@ -414,6 +423,34 @@ const EQUIP_AT: Record<EquipSlot, string> = { head: 'la cabeza', body: 'el cuerp
 const SIZE_ES: Record<ItemSize, string> = { tiny: 'diminuto', small: 'pequeño', medium: 'mediano', large: 'grande', bulky: 'voluminoso: ocupa las dos manos' };
 const thousands = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
+const TYPE_ICON: Record<ItemType, PackIcon> = {
+  weapon: 'weapon', armor: 'armor', ammunition: 'bow', gear: 'misc', tool: 'tool', focus: 'treasure', consumable: 'food',
+  scroll: 'quest', wand: 'weapon', rod: 'weapon', staff: 'weapon', ring: 'ring1', wondrous: 'treasure',
+  treasure: 'treasure', coin: 'treasure', quest: 'quest', container: 'container', misc: 'misc',
+};
+
+/** Para qué sirve un objeto sin descripción propia, por su tipo. */
+const TYPE_ABOUT: Record<ItemType, string> = {
+  weapon: 'Un arma: empúñala para atacar con ella.',
+  armor: 'Una armadura: póntela en el cuerpo y cambia tu CA.',
+  ammunition: 'Munición: la gasta un arma a distancia al disparar.',
+  gear: 'Equipo de viaje.',
+  tool: 'Una herramienta: sirve para hacer algo con ella.',
+  focus: 'Un foco para lanzar conjuros.',
+  consumable: 'Se gasta al usarlo.',
+  scroll: 'Un pergamino con un conjuro escrito: se gasta al leerlo.',
+  wand: 'Una varita: guarda un poder que se gasta y se recupera.',
+  rod: 'Un cetro con un poder propio.',
+  staff: 'Un bastón con un poder propio.',
+  ring: 'Un anillo: se lleva en un dedo.',
+  wondrous: 'Un objeto con un poder propio.',
+  quest: 'Tiene que ver con una historia: guárdalo bien.',
+  treasure: 'Un objeto de valor: se puede vender o cambiar.',
+  coin: 'Dinero.',
+  container: 'Guarda otras cosas dentro.',
+  misc: 'Un objeto corriente.',
+};
+
 function packIcon(def: ItemDef): PackIcon {
   if (def.weapon) return def.weapon.ranged ? 'bow' : 'weapon';
   if (def.shield_bonus) return 'shield';
@@ -422,51 +459,89 @@ function packIcon(def: ItemDef): PackIcon {
   if (def.container) return 'container';
   if (def.heals) return 'potion';
   if (def.equip_slot) return def.equip_slot;
-  return ({ consumable: 'food', tool: 'tool', quest: 'quest', treasure: 'treasure', weapon: 'weapon', armor: 'armor', container: 'container', misc: 'misc' } as const)[def.type];
+  if (def.subtype === 'potion') return 'potion';
+  return TYPE_ICON[def.type];
 }
 
-/** La ficha de un objeto, sacada de sus datos: vale para cualquier campaña. */
-function packItem(world: World, i: ItemInstance): PackItem {
+/**
+ * La ficha de un objeto, sacada de sus datos: vale para cualquier campaña. `viewerId` es quien lo mira: un objeto
+ * mágico que no ha identificado sale con su nombre genérico y sin lo mágico (rareza, bonos, cargas, efectos).
+ */
+function packItem(world: World, i: ItemInstance, viewerId: Id): PackItem {
   const d = world.itemDef(i.item_id);
+  const known = isIdentifiedBy(d, i, viewerId);
+  const name = itemName(d, i, viewerId);
   const props: string[] = [];
   let stat: string | undefined;
+  const magic: Pick<PackItem, 'rarity' | 'unidentified' | 'attunement' | 'charges'> = {};
+  if (isMagic(d) && !known) {
+    magic.unidentified = true;
+    props.push('mágico: sin identificar');
+  } else if (isMagic(d)) {
+    magic.rarity = d.rarity!;
+    props.push(`mágico, ${RARITY_ES[d.rarity!]}`);
+  }
   if (d.weapon) {
-    stat = `Daño ${d.weapon.damage} ${DAMAGE_ES[d.weapon.damage_type] ?? d.weapon.damage_type}`;
-    if (d.weapon.finesse) props.push('sutil: con FUE o DES');
-    if (d.weapon.ranged) props.push('a distancia');
-    if (d.weapon.two_handed) props.push('a dos manos');
+    const v = d.weapon.versatile_damage ? ` (${d.weapon.versatile_damage} a dos manos)` : '';
+    stat = `Daño ${d.weapon.damage}${v} ${DAMAGE_ES[d.weapon.damage_type] ?? d.weapon.damage_type}`;
+    const wp = weaponProperties(d);
+    if (d.weapon.ranged && !wp.has('ammunition') && !wp.has('thrown')) props.push('a distancia');
+    for (const p of WEAPON_PROPERTIES) {
+      if (!wp.has(p)) continue;
+      const range = (p === 'thrown' || p === 'ammunition') && d.weapon.range ? ` (${d.weapon.range[0]}/${d.weapon.range[1]} pies)` : '';
+      props.push(WEAPON_PROPERTY_ES[p] + range);
+    }
   } else if (d.armor) {
     stat = `CA ${d.armor.ac_base}${d.armor.dex_max === null ? ' + DES' : d.armor.dex_max > 0 ? ` + DES (máx. ${d.armor.dex_max})` : ''}`;
     if (d.armor.stealth_disadvantage) props.push('desventaja en Sigilo');
+    if (d.armor.str_min) props.push(`pide FUE ${d.armor.str_min}`);
   } else if (d.shield_bonus) stat = `+${d.shield_bonus} a la CA en la mano`;
-  if (d.heals) props.push(`cura ${d.heals} PG`);
+  if (known) {
+    props.push(...bonusText(d));
+    if (needsAttunement(d)) {
+      const attuned = i.state.attuned_to === viewerId;
+      magic.attunement = { attuned };
+      props.push(attuned ? 'sintonizado contigo' : attunementText(d)!);
+    }
+    const left = chargesLeft(d, i);
+    if (left !== null && d.charges) { props.push(chargesText(d, i)!); magic.charges = { left, max: d.charges.max }; }
+    const sp = spellText(d, i);
+    if (sp) props.push(`conjuro: ${sp}`);
+    for (const e of d.effects ?? []) props.push(effectText(e));
+    if (d.effect) props.push(`al usarlo: ${effectText(d.effect)}${d.duration_s ? ` durante ${fmtDuration(d.duration_s)}` : ''}`);
+    if (d.heals) props.push(`cura ${d.heals} PG`);
+    if (d.cursed && i.state.attuned_to) props.push('maldito: no te lo puedes quitar');
+  }
   if (d.light_source) props.push(i.state.lit === true ? 'encendida: da luz' : 'da luz si la enciendes');
   if (d.container) props.push(`${d.container.slots} huecos, hasta ${d.container.max_weight_lb} lb`);
+  if (coinsAt(i)) props.push(`dentro: ${fmtMoney(coinsAt(i), currencyOf(world.campaign))}`);
   if (d.equip_slot) props.push(`se lleva en ${EQUIP_AT[d.equip_slot]}`);
   props.push(SIZE_ES[d.size]);
   if (d.unique) props.push('único');
-  if (d.value > 0) props.push(`vale ${thousands(d.value)} monedas`);
-  const about = d.description ?? (d.shield_bonus ? 'Un escudo: llévalo en la otra mano para defenderte.' : d.light_source ? 'Da luz donde está oscuro.' : ({
-    weapon: 'Un arma: empúñala para atacar con ella.',
-    armor: 'Una armadura: póntela en el cuerpo y cambia tu CA.',
-    consumable: d.heals ? 'Se gasta al usarla y te devuelve puntos de golpe.' : 'Se gasta al usarlo.',
-    tool: 'Una herramienta: sirve para hacer algo con ella.',
-    quest: 'Tiene que ver con una historia: guárdalo bien.',
-    treasure: 'Un objeto de valor: se puede vender o cambiar.',
-    container: 'Guarda otras cosas dentro.',
-    misc: 'Un objeto corriente.',
-  } as const)[d.type]);
+  if (d.value > 0 && known) props.push(`vale ${thousands(d.value)} monedas`);
+  const about = !known
+    ? (d.unidentified?.description ?? 'Hay algo raro en él: no sabes qué hace hasta identificarlo.')
+    : d.description ?? (d.shield_bonus ? 'Un escudo: llévalo en la otra mano para defenderte.' : d.light_source ? 'Da luz donde está oscuro.'
+      : d.type === 'consumable' && d.heals ? 'Se gasta al usarla y te devuelve puntos de golpe.' : TYPE_ABOUT[d.type]);
   return {
-    id: i.id, label: i.quantity > 1 ? `${d.name} ×${i.quantity}` : d.name, name: d.name, quantity: i.quantity,
+    id: i.id, label: i.quantity > 1 ? `${name} ×${i.quantity}` : name, name, quantity: i.quantity,
     icon: packIcon(d), weight_lb: Math.round(instanceWeight(world, i) * 100) / 100,
-    ...(d.equip_slot ? { equip_slot: d.equip_slot } : {}), ...(stat ? { stat } : {}), props, about,
+    ...(d.equip_slot ? { equip_slot: d.equip_slot } : {}), ...(stat ? { stat } : {}), props, about, ...magic,
   };
+}
+
+/** Una duración en segundos de juego, en palabras: «1 hora», «10 minutos». */
+function fmtDuration(s: number): string {
+  if (s % 86400 === 0) return s === 86400 ? '1 día' : `${s / 86400} días`;
+  if (s % 3600 === 0) return s === 3600 ? '1 hora' : `${s / 3600} horas`;
+  if (s % 60 === 0) return s === 60 ? '1 minuto' : `${s / 60} minutos`;
+  return `${s} segundos`;
 }
 
 /** La mochila con cada hueco (libres incluidos) y la ficha de cada objeto: la web la pinta y la reordena arrastrando. */
 export function packView(world: World, characterId: Id): PackView {
   const c = world.character(characterId);
-  const item = (i: ItemInstance): PackItem => packItem(world, i);
+  const item = (i: ItemInstance): PackItem => packItem(world, i, c.id);
   const view: PackView = { hands: { main: null, off: null, both: false }, equipped: EQUIP_SLOTS.map((slot) => ({ slot, item: null })), pockets: { items: [], slots: world.campaign.capacity_rules.pockets_slots }, containers: [] };
   for (const i of directlyCarried(world, c.id)) {
     if (i.location.type !== 'character') continue;
@@ -475,15 +550,15 @@ export function packView(world: World, characterId: Id): PackView {
     else if (s.kind === 'pocket') view.pockets.items.push(item(i));
     else { const e = view.equipped.find((x) => x.slot === s.slot); if (e) e.item = item(i); }
     const def = world.itemDef(i.item_id);
-    if (def.container) view.containers.push({ id: i.id, name: def.name, items: world.itemsIn({ type: 'container', id: i.id }).map(item), slots: def.container.slots, max_weight_lb: def.container.max_weight_lb });
+    if (def.container) view.containers.push({ id: i.id, name: itemName(def, i, c.id), items: world.itemsIn({ type: 'container', id: i.id }).map(item), slots: def.container.slots, max_weight_lb: def.container.max_weight_lb });
   }
   return view;
 }
 
 export function inventoryView(world: World, characterId: Id): InventoryView {
   const c = world.character(characterId);
-  const view: InventoryView = { hands: { main: null, off: null }, equipped: {}, pockets: [], containers: [], coins: c.coins, encumbrance: encumbrance(world, c) };
-  const label = (i: ItemInstance) => { const d = world.itemDef(i.item_id); return i.quantity > 1 ? `${d.name} ×${i.quantity}` : d.name; };
+  const view: InventoryView = { hands: { main: null, off: null }, equipped: {}, pockets: [], containers: [], coins: coinsOf(world, c.id), encumbrance: encumbrance(world, c) };
+  const label = (i: ItemInstance) => { const n = itemName(world.itemDef(i.item_id), i, c.id); return i.quantity > 1 ? `${n} ×${i.quantity}` : n; };
   for (const i of directlyCarried(world, c.id)) {
     if (i.location.type !== 'character') continue;
     const s = i.location.slot;
@@ -492,7 +567,27 @@ export function inventoryView(world: World, characterId: Id): InventoryView {
       if (s.which === 'both') { view.hands.main = label(i); view.hands.off = label(i); } else view.hands[s.which] = label(i);
     } else if (s.kind === 'pocket') view.pockets.push(label(i));
     else view.equipped[s.slot] = label(i);
-    if (def.container) view.containers.push({ name: def.name, id: i.id, items: world.itemsIn({ type: 'container', id: i.id }).map(label), slots: def.container.slots });
+    if (def.container) view.containers.push({ name: itemName(def, i, c.id), id: i.id, items: world.itemsIn({ type: 'container', id: i.id }).map(label), slots: def.container.slots });
   }
   return view;
+}
+
+/**
+ * Un ejemplar tal como lo ve el máster al examinarlo con un personaje (`get_item`): lo de siempre más categoría,
+ * cifra (daño o CA), propiedades y lo mágico. Lo que el personaje no ha identificado sale con su nombre genérico,
+ * `magic: 'objeto mágico sin identificar'` y sin `item_id` (que delataría qué es) ni el estado mágico del ejemplar.
+ */
+export function itemView(world: World, instanceId: Id, viewerId: Id): Record<string, unknown> {
+  const i = world.itemInstance(instanceId);
+  const d = world.itemDef(i.item_id);
+  const known = isIdentifiedBy(d, i, viewerId);
+  const card = packItem(world, i, viewerId);
+  const nameOf = (id: Id) => world.characters.get(id)?.name ?? world.npcs.get(id)?.name ?? id;
+  const { identified_by: _ib, attuned_to: _at, charges: _ch, ...plainState } = i.state;
+  return {
+    instance_id: i.id, ...(known ? { item_id: d.id } : {}), name: card.name, type: d.type, ...(d.subtype ? { subtype: d.subtype } : {}),
+    size: d.size, weight_lb: d.weight_lb, quantity: i.quantity, ...(card.stat ? { stat: card.stat } : {}), props: card.props,
+    ...(isMagic(d) ? { magic: magicView(d, i, viewerId, nameOf) } : {}),
+    state: plainState, location: i.location, container: d.container ?? null,
+  };
 }

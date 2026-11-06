@@ -2,18 +2,19 @@
  * Momentos ilustrables. Decide, sin IA y a partir del evento ya registrado, si
  * lo que acaba de pasar merece una imagen y de qué clase:
  *
- *   - portrait:  primera conversación de un PJ con un NPC concreto (su retrato).
+ *   - talk:      primera conversación de un PJ con un NPC concreto: una imagen grande de la escena con él, como la
+ *                del sitio o la del objeto (no su retrato, que solo sirve de avatar junto a sus frases).
  *   - item:      el PJ coge, compra o examina un objeto (el objeto en la mano), salvo los
  *                servicios y lo que los datos marcan `illustrate: false` (`itemIllustrable`).
  *   - scene:     llegada a un sitio que el PJ no había pisado (la vista; la genera la primera visita).
  *   - combat:    desenlace de un combate: alguien cae o muere, o el primer golpe que hiere a un rival.
  *                El rival es siempre el otro: si el golpe lo recibe el PJ, quien lo da.
  *   - discovery: un punto oculto descubierto o una pista encontrada. La pista que llega
- *                hablando con un NPC se *oye*: no es descubrimiento (queda el retrato de quien
- *                habla, si aún no lo tenía), salvo que sus datos digan qué se ve (`Clue.image`).
+ *                hablando con un NPC se *oye*: no es descubrimiento (queda la imagen de la charla con
+ *                quien habla, si aún no la tenía), salvo que sus datos digan qué se ve (`Clue.image`).
  *
  * Mirar alrededor, moverse dentro del lugar, esperar o seguir hablando con quien
- * ya tiene retrato no generan nada. Cada momento tiene una clave y no se repite:
+ * ya tiene su imagen no generan nada. Cada momento tiene una clave y no se repite:
  * el motor guarda las claves vistas y las recupera de `payload.moments` de los
  * eventos pasados al arrancar.
  */
@@ -21,7 +22,7 @@
 import type { Clue, GameEvent, Id, ItemDef } from './model.js';
 import type { World } from './world.js';
 
-export type MomentKind = 'portrait' | 'item' | 'scene' | 'combat' | 'discovery';
+export type MomentKind = 'talk' | 'item' | 'scene' | 'combat' | 'discovery';
 
 export interface Moment {
   kind: MomentKind;
@@ -29,7 +30,7 @@ export interface Moment {
   key: string;
   character_id: Id;
   /**
-   * Qué se ilustra: el NPC (portrait), el tipo de objeto (item), la localización
+   * Qué se ilustra: el NPC (talk), el tipo de objeto (item), la localización
    * (scene); en combat y discovery, el propio evento (una imagen por evento).
    */
   entity_id: Id;
@@ -127,7 +128,7 @@ export function classifyMoments(e: Draft, seen: ReadonlySet<string>, lookup: Mom
   const npcId = str(p['npc_id']);
   if (npcId) npcs.push(npcId);
   for (const l of (Array.isArray(p['lines']) ? p['lines'] : []) as DialogueLine[]) if (l?.speaker === 'npc' && l.npc_id) npcs.push(l.npc_id);
-  for (const id of npcs) add({ kind: 'portrait', key: `portrait:${actor}:${id}`, entity_id: id });
+  for (const id of npcs) add({ kind: 'talk', key: `talk:${actor}:${id}`, entity_id: id });
 
   // Objetos: coger (atajo, parser o transfer_item hacia el actor), comprar, o examinar con get_item.
   const items: Id[] = [];

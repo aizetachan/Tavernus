@@ -1,6 +1,6 @@
 # Plan: objetos con reglas de D&D, tienda en Brezal, lo que lleva cada personaje y dónde se guarda el mundo
 
-Propuesta del 2026-11-06, pendiente de que Miguel la apruebe. No hay nada implementado de lo que sigue; lo
+Propuesta del 2026-11-06, aprobada el mismo día (respuestas en §10); cada bloque va en su sesión. No hay nada implementado de lo que sigue; lo
 ya hecho (el ajuar de los NPC) está en SPEC §5.3.1.
 
 ## 0. Resumen
@@ -34,7 +34,8 @@ Miguel (sección 9).
 - **Catálogo:** unas 35 definiciones en `src/data/seed/demo.ts` (la semilla vieja), que reutilizan Brezal y el
   generador (`CATALOG` en `worldgen/fill.ts`). Más los objetos de la historia de Brezal y los del ajuar.
 - **Dinero:** `Character.coins`, un número en cobre. Pesa (50 monedas, 1 lb) pero no es un objeto. Los NPC lo
-  llevan en su bolsa (`state.coins`), que pasa al número del PJ al cogerla.
+  llevan en su bolsa (`state.coins`), que pasa al número del PJ al cogerla. (Así era al escribir el plan; el bloque D
+  ya está hecho: ver §5.)
 - **Comercio:** `Npc.sells` y `Npc.buys` con precios. Comprar crea el objeto de la nada (`spawnItem`). Si el NPC
   lleva ese objeto encima, se lo descuenta. Es decir, las existencias son infinitas salvo lo que lleva encima.
 - **Reglas que faltan:** rareza, sintonización, bonos mágicos, identificar, cargas, pergaminos, munición que se
@@ -161,6 +162,11 @@ Por partes, cada una con sus tests:
 ---
 
 ## 5. Bloque D: monedas de verdad
+
+**Hecho el 2026-11-06** (SPEC §5.3.2, `src/engine/money.ts`, `test/monedas.test.ts`): el dinero de PJ y NPC vive en
+bolsas; `coinsOf`, `pay` y `receive`; tool `take_coins`; la bolsa cae con el cuerpo; las partidas guardadas pasan su
+número a una bolsa al cinto. Robar a otro PJ (su bolsa o parte) pide su reacción. Comprar paga al vendedor; vender a
+un NPC aún crea el dinero (lo cambia la tienda, bloque E).
 
 Hoy el dinero de un PJ es un número que nadie le puede quitar. Propuesta: **el dinero vive en bolsas**, como el
 de los NPC.
@@ -359,7 +365,8 @@ cada vez más vacías». Uno de ellos se ha quedado con una casa vacía de la pl
 ## 10. Preguntas para Miguel
 
 1. **¿Monedas en bolsas también para los PJ (bloque D)?** Permite que les roben y que pierdan dinero; cambia unas
-   40 líneas. La alternativa es que el dinero del PJ siga siendo intocable.
+   40 líneas. La alternativa es que el dinero del PJ siga siendo intocable. **Decidido (2026-11-06): sí**, con la
+   recomendación del plan; a otro PJ solo se le roba en el desenlace de su reacción.
 2. **¿Objetos mágicos en Brezal?** El SRD da el reglamento, pero en Brezal la magia es escasa (la Brasa, Ilse). Se
    puede dejar el catálogo mágico para los mundos generados y poner en Brezal solo pociones y un pergamino en la
    tienda.
@@ -369,3 +376,12 @@ cada vez más vacías». Uno de ellos se ha quedado con una casa vacía de la pl
 5. **Persistencia:** ¿G0 ya y G después de los objetos, o G antes, aprovechando que habrá que migrar las
    partidas igualmente?
 6. **«Intuición»:** he entendido sintonización (*attunement*). Si era otra regla, hay que añadirla.
+
+### Respuestas de Miguel (2026-11-06)
+
+- **Monedas en bolsas también para los PJ:** sí.
+- **Magia en Brezal:** sí, pero pocos objetos, enigmáticos y ligados al lore. El lote mágico del SRD es para los mundos generados.
+- **El buhonero:** un personaje con lore, tan elaborado como los que ya hay en Brezal.
+- **La tienda:** se compra hablándole, y además un botón que ahorra tokens y enseña lo que tiene a la venta, o una burbuja de tienda en el chat.
+- **Persistencia:** la decide la sesión; G0 y después G, como recomienda §8.
+- **Sintonización:** explicada; se queda como en §4.6.

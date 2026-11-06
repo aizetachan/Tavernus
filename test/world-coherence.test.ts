@@ -26,6 +26,7 @@ import { addScheduledEvent, scheduleTitleProblem } from '../src/engine/schedule.
 import type { Character, GameEvent } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
 
+import { setCoins } from '../src/engine/money.js';
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 
 async function boot(fastTravel = false) {
@@ -124,7 +125,7 @@ describe('n.º 6: nada sale de la nada', () => {
   it('Ilse lleva lo que vende: el máster lo ve, se le puede robar y comprar le baja las existencias', async () => {
     const { engine } = await boot();
     const c = await newPc(engine, 'Teo');
-    c.coins = 10_000;
+    setCoins(engine.world, c.id, 10_000);
     const ilse = engine.world.npc('npc_ilse');
     c.location = { type: 'spot', id: ilse.location.id };
     c.knows.push(ilse.id);
@@ -269,7 +270,7 @@ describe('n.º 15: entre jugadores nada cambia de manos sin oferta', () => {
     const leo = await newPc(engine, 'Leodhin', 'rogue', false);
     const miau = await newPc(engine, 'Miau', 'rogue', false);
     for (const x of [leo, miau]) { x.location = { type: 'spot', id: 'sp_tab_barra' }; x.knows.push('npc_brenna'); }
-    leo.coins = 100;
+    setCoins(engine.world, leo.id, 100);
     expect(tool(ctxFor(engine, leo), 'buy_item', { character_id: leo.id, npc_id: 'npc_brenna', item_id: 'it_cerveza', quantity: 1 }).ok).toBe(true);
     const beer = engine.world.itemsCarriedBy(leo.id).find((i) => i.item_id === 'it_cerveza')!;
 

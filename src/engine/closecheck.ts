@@ -39,7 +39,7 @@ const DEAL = /\b((?:en|como|de) (?:prenda|fianza)|acept\w* (?:la|tu|su|el|esa|es
 /** Lo que niega, rechaza, pregunta u ofrece: no cierra nada. */
 const NOT_CLOSED = /\b(no|ni|nunca|jamas|sin|niega\w*|rechaza\w*|tampoco|nadie|nada|ofreces|ofrece|propones|propone|pides|pide|preguntas|pregunta|quieres|quiere|si|tal vez|quiza\w*|podria\w*|espera\w*|piensa\w*|pesando|ya tengo|ya guarda|sigue\w*|hablamos|al contado|algo|quien|cualquiera|cada uno)\b/;
 /** Tools que dejan estado de un trato. */
-export const DEAL_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'transfer_item', 'buy_item', 'sell_item', 'complete_job']);
+export const DEAL_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'take_coins', 'transfer_item', 'buy_item', 'sell_item', 'complete_job']);
 
 /**
  * Frases que dan un trato por cerrado sin tool que lo respalde. Mira lo que
@@ -76,7 +76,7 @@ export const DEAL_REJECTION = 'Has narrado un trato sin registrarlo: usa set_deb
 // ---------------------------------------------------------------------------
 
 /** Tools que mueven las monedas del actor. */
-export const COIN_TOOLS = new Set(['give_coins', 'settle_debt', 'buy_item', 'sell_item', 'set_debt', 'pawn_item', 'complete_job']);
+export const COIN_TOOLS = new Set(['give_coins', 'take_coins', 'settle_debt', 'buy_item', 'sell_item', 'set_debt', 'pawn_item', 'complete_job']);
 const COIN = String.raw`(?:monedas?|cobres?|platas?|oros?)`;
 /** El actor las suelta («dejas las monedas sobre la mesa», «le das diez de plata», «pagas la cuenta»). */
 const HANDS_COINS = new RegExp(String.raw`(?<!\bte )\b(dejas|pones|sueltas|entregas|das|pagas|tiendes|deslizas|empujas|pasas)\b[^,]{0,40}\b${COIN}\b|\b(pagas|saldas)\b`);
@@ -104,6 +104,60 @@ export function coinsWithoutTool(input: { action: string; narration: string; okT
 
 export function coinsRejection(phrase: string): string {
   return `La narración da monedas por pagadas («${phrase}») y en este turno no se ha movido ninguna: lo que no pasa por un tool no ha ocurrido. Usa give_coins (propina, soborno, un pago sin precio), settle_debt (una deuda) o buy_item (algo de su lista), o narra que no llega a pagar. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Robos y lo que se sirve, solo de palabra
+// ---------------------------------------------------------------------------
+
+/** El jugador quiere quitarle algo a alguien («robarle la bolsa», «birlar la llave», «le quito el cuchillo»). */
+const WANTS_THEFT = /\b(?:robar\w*|robo|roba|birl\w*|hurt\w*|sis\w*|mang\w*|quitarle|le quito|cortar(?:le)? la bolsa)\b/;
+/** La narración lo da por hecho: el objeto ya está en su mano, su manga o su bolsillo. */
+const TELLS_TAKEN = /\b(?:(?:cae|queda|esta)\w* (?:\w+ ){0,2}(?:a|en) tu (?:mano|palma|manga|bolsillo)|(?:te (?:lo|la|los|las) )?(?:guardas|escondes|metes)\b[^.;:]{0,30}\b(?:manga|bolsillo|cinto|mochila|zurron)|escondid[oa] (?:bajo|en) (?:la|tu) manga|(?:lo|la) sacas (?:del|de su)|se suelta del cinto|ya es tuy[oa]|te haces con)\b/;
+/** Tools que mueven objetos o monedas de verdad. */
+const MOVE_TOOLS = new Set(['transfer_item', 'take_coins', 'give_coins', 'spawn_item', 'buy_item', 'sell_item', 'pawn_item']);
+
+/**
+ * El jugador roba algo y la narración lo da por conseguido sin que nada haya cambiado de manos: o el objeto está en
+ * lo que lleva el otro y había que moverlo con transfer_item, o no existe (la bolsa de Garrán, partida «Humo y
+ * ceniza», 05-11). Devuelve la frase que lo da por hecho, o null. Con una tirada pendiente, todavía no ha pasado.
+ */
+export function stolenWithoutTool(input: { action: string; narration: string; okTools: readonly string[]; pendingRoll?: boolean }): string | null {
+  if (input.pendingRoll || input.okTools.some((t) => MOVE_TOOLS.has(t))) return null;
+  if (!WANTS_THEFT.test(norm(input.action).replace(/«[^»]*»/g, ' '))) return null;
+  for (const c of clauses(norm(input.narration).replace(/«[^»]*»/g, ' . '))) {
+    if (/\b(no|ni|nunca|sin|intentas|si)\b/.test(c)) continue;
+    const m = TELLS_TAKEN.exec(c);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+export function stolenRejection(phrase: string): string {
+  return `La narración da algo por robado («${phrase}») y en este turno no ha cambiado nada de manos. Si está en lo que lleva el otro («Lleva:» en el contexto), muévelo con transfer_item a quien lo roba (unas monedas de su bolsa, con take_coins); si no lo lleva, no existe: cuenta que no encuentra eso (ni bolsas, ni monedas, ni llaves que no estén en los datos). Reescribe log_event.`;
+}
+
+/** El NPC entrega algo a quien se lo pide («te la pone delante», «te sirve», «te tiende la jarra»). */
+const SERVES = /\b(?:te (?:lo |la |los |las )?(?:pone|planta|deja|sirve|tiende|alarga|acerca|pasa|da|entrega|empuja)\b|te (?:pone|sirve|deja|planta) (?:delante|en la barra|en la mesa))/;
+
+/**
+ * En un trato (comercio), el NPC sirve o entrega lo que vende y nadie lo cobra ni lo apunta: la cerveza de Brenna
+ * («Cuatro de cobre», y te la pone delante) sin buy_item ni set_debt, y el jugador se va sin pagar sin que pase
+ * nada. Lo que se sirve se cobra al servirlo (buy_item) o se fía (set_debt). Devuelve la frase, o null.
+ */
+export function servedWithoutPay(input: { narration: string; lines?: readonly DialogueLine[]; okTools: readonly string[]; trade: boolean; pendingRoll?: boolean }): string | null {
+  if (!input.trade || input.pendingRoll || input.okTools.some((t) => DEAL_TOOLS.has(t))) return null;
+  const said = (input.lines ?? []).filter((l) => l.speaker === 'npc').map((l) => l.text);
+  for (const c of clauses(norm([input.narration.replace(/«[^»]*»/g, ' . '), ...said].join(' . ')))) {
+    if (/\b(no|ni|nunca|sin|si|cuando|antes|primero|cuanto)\b/.test(c)) continue;
+    const m = SERVES.exec(c);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+export function servedRejection(phrase: string): string {
+  return `El NPC entrega lo que vende («${phrase}») y nadie lo cobra: lo que se sirve se paga al servirlo con buy_item (de su lista «Vende») o se fía con set_debt si no puede o no quiere pagar ahora. Si todavía no se lo da (solo dice el precio), cuéntalo así. Reescribe log_event.`;
 }
 
 // ---------------------------------------------------------------------------

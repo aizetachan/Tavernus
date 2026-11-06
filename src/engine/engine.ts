@@ -31,7 +31,7 @@ import { atBoard, dropQuest, readBoard, readsBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, plantBeat, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { activeIn, crowdHere, tickSchedule } from './schedule.js';
 import { allIncidents, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, surrender, type LawNotice } from './crime.js';
-import { currencyOf, DEFAULT_STARTING_COINS, money } from './money.js';
+import { coinsOf, currencyOf, DEFAULT_STARTING_COINS, migrateLegacyCoins, money, newPurse, pay } from './money.js';
 import { tickOrders } from './npcorders.js';
 import { nameFor, storyQuestAction, tickStory, type StoryOutput } from './story.js';
 import { trustFromRoll, trustNotice } from './trust.js';
@@ -57,6 +57,7 @@ import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPla
 import { hhmm } from './schedule.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
 import { outfitNpcs } from './outfit.js';
+import { fillItemDefFrom, normalizeItemDef } from './items.js';
 import { discoverSpot, lookAround, migrateSpotSight, noteSight, searchableSpots, seeFrom } from './spots.js';
 import { absence, absenceRule, acceptPrologue, acceptRecap, forPrologue, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
 
@@ -1247,10 +1248,10 @@ export class Engine {
       case 'take': {
         const inst = this.world.itemInstance(intent.instance_id);
         const def = this.world.itemDef(inst.item_id);
-        const before = c.coins;
+        const before = coinsOf(this.world, c.id);
         const where = this.takeToHands(c, inst.id, intent.quantity);
         if (!where) return null;
-        return this.emitTrivial(c, input, 'take', 'inventory', led(`Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.${foundCoins(this.world, c.coins - before)}`),
+        return this.emitTrivial(c, input, 'take', 'inventory', led(`Coges ${def.name}${where === 'pocket' ? ' y te lo guardas' : ''}.${foundCoins(this.world, coinsOf(this.world, c.id) - before)}`),
           `${c.name} coge ${def.name}.`, 'Una figura coge algo.', undefined, { item_id: def.id });
       }
       case 'drop': {
@@ -1716,7 +1717,7 @@ export class Engine {
     const klass = check.resolved.klass;
 
     const id = `ch_${clean.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_')}_${Date.now().toString(36)}`;
-    const c = newCharacter(id, userId, clean, check.resolved, { spot_id: this.pickStartingPoint().spot_id, coins: this.world.campaign.starting_coins ?? DEFAULT_STARTING_COINS });
+    const c = newCharacter(id, userId, clean, check.resolved, { spot_id: this.pickStartingPoint().spot_id });
     this.world.characters.set(c.id, c);
     this.world.touch('characters', c.id);
     opts.place?.(c);
@@ -1746,6 +1747,8 @@ export class Engine {
       const r = pack ? spawnItem(this.world, p.item_id, p.quantity, { type: 'container', id: pack }) : { ok: false as const };
       if (!r.ok) spawnItem(this.world, p.item_id, p.quantity, { type: 'spot', id: start.id });
     }
+    // Su dinero, en su bolsa al cinto (money.ts): se le puede robar, perder o esconder.
+    newPurse(this.world, c.id, this.world.campaign.starting_coins ?? DEFAULT_STARTING_COINS);
 
     this.events.emit({
       actor_id: c.id, action_type: 'character_joined', narration_private: this.master ? '' : `Llegas a ${loc.name}.`,
@@ -2096,7 +2099,8 @@ export class Engine {
     if (!here || !there || here.location_id !== there.location_id) return { ok: false, error: `${toName} no está aquí.` };
     if (to.status !== 'active') return { ok: false, error: `${toName} no está en condiciones de recibir nada.` };
     const coins = Math.max(0, Math.floor(what.coins));
-    if (coins > from.coins) return { ok: false, error: `No tienes ${money(this.world, coins)} (llevas ${money(this.world, from.coins)}).` };
+    const have = coinsOf(this.world, from.id);
+    if (coins > have) return { ok: false, error: `No tienes ${money(this.world, coins)} (llevas ${money(this.world, have)}).` };
     let label = '';
     let quantity = 0;
     if (what.instance_id) {
@@ -2159,12 +2163,16 @@ export class Engine {
     const mySpot = this.world.characterSpot(c);
     const theirSpot = this.world.characterSpot(from);
     if (!mySpot || !theirSpot || mySpot.location_id !== theirSpot.location_id || from.transit) return failed(`${fromName} ya no está aquí`);
-    if (offer.coins > from.coins) return failed(`${fromName} ya no tiene esas monedas`);
+    if (offer.coins > coinsOf(this.world, from.id)) return failed(`${fromName} ya no tiene esas monedas`);
     const inst = offer.instance_id ? this.world.itemInstances.get(offer.instance_id) : null;
     if (offer.instance_id && (!inst || !this.world.itemsCarriedBy(from.id).some((i) => i.id === inst.id) || inst.quantity < offer.quantity)) return failed(`${fromName} ya no lo tiene`);
     if (mySpot.id !== theirSpot.id) approachSpot(this.world, c, theirSpot.id);
-    if (inst && !this.takeToHands(c, inst.id, offer.quantity)) return failed('no tienes dónde llevarlo');
-    if (offer.coins) { from.coins -= offer.coins; c.coins += offer.coins; this.world.touch('characters', from.id); this.world.touch('characters', c.id); }
+    // Primero las monedas (de su bolsa a la tuya): si el objeto es su bolsa, lo que queda dentro va con ella.
+    if (offer.coins && !pay(this.world, from.id, offer.coins, c.id).ok) return failed(`${fromName} ya no tiene esas monedas`);
+    if (inst && !this.takeToHands(c, inst.id, offer.quantity)) {
+      if (offer.coins) pay(this.world, c.id, offer.coins, from.id);
+      return failed('no tienes dónde llevarlo');
+    }
     const e = emit('offer_accepted', `Aceptas ${offer.label} de ${fromName}.`, `${c.name} acepta ${offer.label} de ${from.name}.`, `${c.name} acepta lo que le ofreces: ${offer.label}.`);
     return done({ ok: true, text: e.narration_private, event: e });
   }
@@ -2196,10 +2204,16 @@ export class Engine {
   /** Peticiones que pidió el máster en esta acción: se anuncian después de su narración. */
   private unannounced = new Map<Id, Reaction[]>();
   /** Actores cuya narración del máster es el desenlace de una reacción (no se pide otra encima). */
-  private reactionOutcome = new Set<Id>();
+  /** Quien está narrando el desenlace de su reacción: contra quién y si le ha salido (take_coins y robar a otro PJ, tools.ts). */
+  private reactionOutcome = new Map<Id, { target_id: Id; success: boolean }>();
 
   /** ¿Está el máster narrando el desenlace de una reacción de este actor? (tools.ts no deja pedir otra.) */
   inReactionOutcome(characterId: Id): boolean { return this.reactionOutcome.has(characterId); }
+  /** ¿Le ha salido a `fromId` lo que intentaba con `targetId` (el otro lo aceptó o perdió la tirada)? Solo mientras se narra ese desenlace. */
+  reactionWon(fromId: Id, targetId: Id): boolean {
+    const r = this.reactionOutcome.get(fromId);
+    return Boolean(r && r.target_id === targetId && r.success);
+  }
 
   /** Lo que el actor intenta sobre otro PJ (reactions.ts), reconocido por el motor; null si no es eso. */
   private tryReaction(c: Character, text: string): ActionResult | null {
@@ -2467,7 +2481,7 @@ export class Engine {
     // Con máster: narra el desenlace para quien actuaba, como tras una tirada.
     if (this.master) {
       check.breakdown = `${check.breakdown}${effects.length ? ` Ya aplicado por el servidor (no lo repitas): ${effects.join('; ')}.` : ''} ${to.name} es otro jugador y ya ha decidido: narra el desenlace sin ponerle palabras, gestos ni intenciones que no estén aquí, y no pidas otra reacción para esto.`;
-      this.reactionOutcome.add(from.id);
+      this.reactionOutcome.set(from.id, { target_id: to.id, success });
       try { await this.resolveWithMaster(from, r.input ?? `(intenta ${r.attempt})`, { original_text: r.input ?? r.attempt, result: check }); } finally { this.reactionOutcome.delete(from.id); }
     }
     return done({ ok: true, text: e.narration_private, event: e });
@@ -3130,7 +3144,7 @@ export class Engine {
     if (!allowed.ok) return { ok: false, text: `No: ${allowed.reason}.` };
     const own = bodyStateOf(body)!.owner_id === c.id;
     const got = lootBody(this.world, c, body, (id) => this.takeToHands(c, id) !== null || this.world.itemsCarriedBy(c.id).some((k) => Boolean(this.world.itemDef(k.item_id).container) && transferItem(this.world, id, { type: 'container', id: k.id }).ok));
-    const list = [...got.taken, ...(got.coins ? [money(this.world, got.coins)] : [])];
+    const list = [...got.taken, ...(got.loose ? [money(this.world, got.loose)] : [])];
     if (!list.length) return { ok: false, text: got.left ? 'No te cabe nada más encima.' : `No queda nada en ${label}.` };
     return this.emitTrivial(c, text, own ? 'recover' : 'loot', 'death',
       `${own ? 'Recuperas' : 'Te llevas'} de ${label}: ${list.join(', ')}.${got.left ? ` Se queda${got.left > 1 ? 'n' : ''} ${got.left} ${got.left > 1 ? 'cosas' : 'cosa'} que no te caben.` : ''}`,
@@ -3799,6 +3813,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
       const cur = snapshot.item_defs.find((x) => x.id === d.id);
       if (!cur) { snapshot.item_defs.push(d); changed = true; }
       else if (d.weapon && !cur.weapon) { cur.weapon = d.weapon; changed = true; }
+      // Modelo de objetos 5e (items.ts): lo que la semilla trae y la partida guardada no (subtipo, magia, alcance…).
+      if (cur && fillItemDefFrom(cur, d)) changed = true;
       // Partidas de cuando la mochila aguantaba 30 lb y el equipo inicial ya pesaba 25: un contenedor no encoge.
       if (cur && d.container && cur.container && d.container.max_weight_lb > cur.container.max_weight_lb) { cur.container.max_weight_lb = d.container.max_weight_lb; changed = true; }
     }
@@ -3842,14 +3858,18 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   if (migrateRentableRooms(snapshot)) changed = true;
   // Partidas de antes de que los rincones se descubrieran: cada PJ conserva los de los sitios donde ha estado.
   if (migrateSpotSight(snapshot)) changed = true;
+  // Partidas de antes de las bolsas (money.ts): el dinero de cada PJ pasa de su número a una bolsa al cinto, una vez.
+  if (migrateLegacyCoins(snapshot)) changed = true;
   // Ajuar de los NPC (outfit.ts): bolsa con monedas, cosas de su oficio y su arma, una vez por NPC.
   if (outfitNpcs(snapshot, seed)) changed = true;
+  // Modelo de objetos 5e (items.ts): propiedades de arma en lista y categoría de la armadura, de sus propios datos.
+  for (const d of snapshot.item_defs) if (normalizeItemDef(d)) changed = true;
   return changed;
 }
 
-/** « Dentro hay 3 de plata: te las guardas.» al coger una bolsa con monedas (outfit.ts); nada si no había. */
+/** « Dentro hay 3 de plata.» al coger una bolsa con monedas (se quedan en ella: money.ts); nada si no había. */
 function foundCoins(world: World, n: number): string {
-  return n > 0 ? ` Dentro hay ${money(world, n)}: te las guardas.` : '';
+  return n > 0 ? ` Dentro hay ${money(world, n)}.` : '';
 }
 
 export function formatInventory(v: InventoryView): string {
