@@ -39,7 +39,8 @@ import { trustFromRoll, trustNotice } from './trust.js';
 import { fillSet, setsWanting, speakerLabel, tickChatter, type ChatterWriter } from './chatter.js';
 import { tickWorld } from './worldrules.js';
 import { aheadNotice, aheadUntil, caughtUp, clearAheadIfCaught, justBack, crossesLocations, encounterSuggestions, encounterTeaser, freezeClock, frozenAt, isWaypoint, journeyOf, nowFor, parseTravel, rollTravelEncounter, SAME_TIME_TOLERANCE_S, setAhead, setJourney, stopAtEncounter, thawClock, travelNote, type TravelEncounter, type TravelHint, type TravelIntent } from './travel.js';
-import { seededRng, type Rng } from './dice.js';
+import { rollD20, seededRng, type Rng } from './dice.js';
+import { confrontAnswer, confrontButtons, confrontIgnored, confrontOf, confrontRolled, noteSneak, resolveConflict, settleConfront, type ConflictVerdict } from './conflict.js';
 import { harvest } from './resources.js';
 import { spawnItem } from './inventory.js';
 import { classifyMoments, momentLookupOf, seenFromEvents, type DialogueLine, type Moment } from './moments.js';
@@ -74,7 +75,13 @@ export interface ActionResult {
   info?: InfoAnswer;
 }
 
-export interface RequiresRoll { kind: CheckKind; key: string; dc: number | null; advantage: Advantage; target?: Id }
+export interface RequiresRoll {
+  kind: CheckKind; key: string; dc: number | null; advantage: Advantage; target?: Id;
+  /** Acción conflictiva contra un NPC (conflict.ts): el veredicto del motor; tras la tirada, el motor lo resuelve. */
+  conflict?: ConflictVerdict;
+  /** Convencer o engañar en un careo (conflict.ts): el NPC que le encara. */
+  confront?: Id;
+}
 
 export interface PendingRoll { text: string; roll: RequiresRoll; event_id: Id; seq: number }
 
@@ -934,7 +941,7 @@ export class Engine {
       // Quien sigue a otro y se mueve por su cuenta deja de seguirle.
       if (c.following && (travel || this.isMove(c, clean))) { c.following = null; this.world.touch('characters', c.id); }
       // La ley delante (crime.ts): entregarse o resistirse a un alto; y lo que el motor ve como crimen antes de que narre el máster.
-      const law = this.tryLaw(c, clean);
+      const law = this.tryConfront(c, clean) ?? this.tryLaw(c, clean);
       const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryTrivial(c, clean));
       if (fast) {
         r = fast;
@@ -1314,6 +1321,7 @@ export class Engine {
       let result: CheckResult & { label: string };
       let roll: ShownRoll;
       let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean; damage: number; ko?: boolean } | undefined;
+      let conflictNote: string | null = null;
       if (pending.roll.kind === 'attack' && pending.roll.target) {
         // Lo que escribió el jugador decide si el golpe a 0 PG mata o deja inconsciente (combat.ts, lethalBlow).
         const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c), { intent: pending.text });
@@ -1325,9 +1333,33 @@ export class Engine {
           breakdown: `${atk.attack_breakdown}${atk.hit ? `. Daño: ${atk.damage_breakdown} (${atk.damage_type}). ${atk.target} queda a ${atk.target_hp} PG${atk.target_dead ? `, MUERTO${this.world.npcs.has(pending.roll.target!) ? ': su cuerpo se queda donde cae (el servidor lo anuncia); narra el golpe y cómo reaccionan los presentes' : ''}` : atk.knocked_out ? `, INCONSCIENTE (golpe no letal: no está muerto; respira y volverá en sí en unas horas). ${NPC_DOWN_HINT}` : atk.target_down ? ', CAE' : ''}. El daño ya está aplicado: no lo apliques otra vez.` : '. Falla.'}`,
         };
         roll = attackRoll(c.id, pending.roll.target, atk);
+      } else if (pending.roll.conflict) {
+        // Acción conflictiva (conflict.ts): contra la pasiva del NPC o contra una tirada suya (oculta), y el motor la
+        // resuelve antes de que narre el máster: el objeto se mueve, el NPC se pone en guardia, careo o delito.
+        const v = pending.roll.conflict;
+        let npcTotal: number | null = null;
+        if (v.roll?.against === 'contest') {
+          npcTotal = rollD20(v.roll.npc_mod, null, 'none', this.rng).total;
+          pending.roll = { ...pending.roll, dc: npcTotal + 1 };
+        }
+        result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage, this.rng);
+        roll = checkRoll(c.id, result);
+        const npc = this.world.npcs.get(v.npc_id);
+        if (npc) {
+          const res = resolveConflict(this.world, c, npc, v, { total: result.total, natural: result.natural ?? null, npc_total: npcTotal }, this.nowFor(c));
+          conflictNote = `${res.facts}${res.reaction ? ` Reacción de ${npc.name} (hecho): ${res.reaction}` : ''}${npcTotal !== null ? ` (${npc.name} sacó ${npcTotal} en su tirada.)` : ''}`;
+        }
+      } else if (pending.roll.confront) {
+        // Convencerle o engañarle en un careo: con éxito, un aviso; si falla, delito (conflict.ts).
+        result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage, this.rng);
+        roll = checkRoll(c.id, result);
+        const npc = this.world.npcs.get(pending.roll.confront);
+        if (npc) conflictNote = confrontRolled(this.world, c, npc, Boolean(result.success), this.nowFor(c)).text;
       } else {
         result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage);
         roll = checkRoll(c.id, result);
+        // Sigilo que sale bien: va a escondidas (conflict.ts), y quien no le supere con su pasiva no le ve.
+        if (pending.roll.kind === 'skill' && pending.roll.key === 'stealth' && result.success) noteSneak(this.world, c, result.total, this.nowFor(c));
       }
       if (helper) roll.note = `con la ayuda de ${pcName(this.world, c.id, helper)}`;
       const shown = rollTextForRoller(roll);
@@ -1342,7 +1374,7 @@ export class Engine {
         const told = t && trustNotice(nameFor(this.world, c, t.npc_id), t);
         if (told) this.emitProgress(c, [{ kind: 'trust', text: told }]);
       }
-      let r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result });
+      let r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result, ...(conflictNote ? { conflict: conflictNote } : {}) });
       if (!r.ok && r.text === '') r = { ok: false, text: `${shown}\nEl narrador no responde; inténtalo de nuevo.` };
       this.settleAll(this.gameNow());
       this.advanceStory(this.gameNow());
@@ -3405,6 +3437,37 @@ export class Engine {
       narration_private: 'Se abre la puerta del calabozo: has cumplido y eres libre. Lo que hiciste no se olvida.',
       observable: `${c.name} sale del calabozo.`, tags: ['crime', 'law', 'deterministic'], payload: { master: null },
     }, this.stampFor(c));
+  }
+
+  /**
+   * Un careo abierto (conflict.ts): un NPC le ha pillado y le exige que lo
+   * arregle. Devolverlo, disculparse o pagar lo resuelve el motor sin máster;
+   * convencerle o engañarle pide la tirada; huir, pelear o hacer otra cosa es no
+   * arreglarlo (delito) y la acción sigue su camino.
+   */
+  private tryConfront(c: Character, text: string): ActionResult | null {
+    const nowG = this.nowFor(c);
+    const o = confrontOf(this.world, c, nowG);
+    if (!o) return null;
+    const a = confrontAnswer(text);
+    if (!a) { confrontIgnored(this.world, c, o.npc, nowG); return null; }
+    const s = settleConfront(this.world, c, o.npc, a, nowG);
+    if (a === 'resist') return null;
+    const who = c.knows.includes(o.npc.id) ? o.npc.name : descriptorOf(this.world, o.npc.id);
+    if (s.roll) {
+      const roll: RequiresRoll = { kind: 'skill', key: s.roll.key, dc: s.roll.dc, advantage: 'none', confront: o.npc.id };
+      const priv = `${a === 'persuade' ? 'Intentas convencer' : 'Intentas engañar'} a ${who} para que lo deje en un aviso.`;
+      const event = this.events.emit({
+        actor_id: c.id, action_type: 'confront', input_text: text, narration_private: priv, observable: `${c.name} habla con ${o.npc.name}.`,
+        tags: ['deterministic', 'conflict'], payload: { master: null, requires_roll: roll, suggested_actions: [] },
+      }, this.stampFor(c));
+      this.pendingRolls.set(c.id, { text, roll, event_id: event.id, seq: event.seq });
+      return { ok: true, text: priv, event, requires_roll: roll };
+    }
+    const buttons = s.closed ? null : confrontButtons(this.world, c, nowG);
+    const r = this.emitTrivial(c, text, 'confront', 'conflict', s.text, s.observable || null, null, undefined, buttons ? { suggested_actions: buttons } : {});
+    if (buttons) r.suggested_actions = buttons;
+    return r;
   }
 
   /**

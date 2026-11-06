@@ -22,6 +22,7 @@ Las mecánicas grandes tienen su propia página:
 | Combate y ventanas decisivas | [[Combate]] |
 | Caer a 0 PG, morir, volver y descansar | [[Muerte y descanso]] |
 | Crímenes, testigos, alto y calabozo | [[#Crimen, testigos y ley]] |
+| Robar, empujar y tocar a un NPC | [[#Robar, empujar y tocar a un NPC]] |
 | Crear el personaje | [[Creación de personaje]] |
 
 ## Acciones: con IA y sin IA
@@ -178,6 +179,22 @@ Lo que haces delante de la gente tiene consecuencias. Las decide el motor, no el
 > [!example] Hugo, en la partida del 27 de octubre
 > Leodhin mató a [[Hugo]] en la barra del Jabalí delante de [[Brenna]], [[Garrán]] y la cena, y Brenna le alquiló un cuarto. Ahora, en el acto: Brenna retrocede y no le atiende, Garrán le da el alto y los vecinos gritan. Leodhin queda buscado, sin experiencia y con infamia, y no duerme en el Jabalí. Ver [[Revisión partida 2026-10-27]].
 
+## Robar, empujar y tocar a un NPC
+
+Quitarle algo a alguien, empujarle, agarrarle o tocarle sin permiso lo decide el motor, con reglas de D&D 5e y la manera de *Baldur's Gate 3* y *Divinity: Original Sin 2*. El máster solo lo cuenta. Detalle en `docs/CONFLICTOS-NPC.md`.
+
+- **Hurtar a escondidas** es Juego de manos contra la Percepción del NPC: contra su pasiva si no te ve venir, contra una tirada suya si está atento. Ir a escondidas antes (Sigilo) da ventaja.
+- **Depende de dónde lo lleve y de si te mira.** Lo de un bolsillo o el cinto se puede; lo de dentro de una bolsa, con desventaja; lo que lleva **puesto** (un anillo, un collar) o en la mano, no, salvo que esté inconsciente o atado. Lo grande (un martillo de fragua) solo se arrebata, a la vista. Si te está hablando, cuesta más; si ya te pilló una vez, no se puede.
+- **Arrebatar, empujar o agarrar** es Atletismo contra el Atletismo o la Acrobacia del NPC, y lo ve siempre. **Tocar sin permiso** no lleva tirada: la primera vez te advierte; la segunda, es una agresión.
+- **Un fallo tiene consecuencias.** Si fallas por poco, lo nota y se pone en guardia. Si fallas por más, te pilla. Lo que no se puede no se tira, y si insistes, te pilla.
+- **La relación decide cómo se lo toma.** Con un amigo íntimo, una broma (la primera vez). Con un amigo, te lo echa en cara. Con un conocido, te encara (el careo). Con quien no te conoce o no te aprecia, es un **delito**: robo o agresión, con el alto, el calabozo o la multa de siempre. Y quien es de pelear te agarra de la muñeca.
+- **El careo**, como en *Baldur's Gate 3*: devolvérselo, disculparte o pagarle lo deja en un aviso; convencerle o engañarle pide tirada; huir o pelear lo convierte en delito.
+- **Lo robado existe.** Va a tu mochila, marcado como robado y con su dueño. Si no estaba en los datos y es razonable que lo lleve (los anillos de un regidor), se crea, con imagen provisional. Nada mágico ni único.
+- **Lo absurdo** («le arranco la cabeza y salgo volando») no pasa: el máster te contesta con ironía.
+
+> [!example] Los anillos de Osric, en «Humo y ceniza» (6 de noviembre)
+> Pillin intentó cuatro veces quitarle a [[Osric Malvez]] los anillos de los dedos mientras hablaban, y a la cuarta le salió. Ahora la primera no se puede (los lleva puestos y le está mirando), la segunda le pilla y, sin relación, es delito: Osric le agarra de la muñeca. La tercera y la cuarta ya no se pueden.
+
 ## Confianza: lo que te cuenta cada uno
 
 Cada vecino se fía de ti en uno de cuatro niveles: **extraño**, **conocido**, **amigo** o **aliado**. Lo que sabe va repartido en esos niveles, y el narrador solo recibe lo del nivel que tienes con él. Lo demás no le llega, así que no te lo puede soltar aunque saques un 20.
@@ -225,4 +242,7 @@ Fuera de la ficción y sin IA: `/look`, `/where`, `/who`, `/inventory`, `/recap`
 
 ## Relacionado
 
-- [[Diseño de juego]] · [[El máster IA]] · [[Multijugador]] · [[Brezal]]
+- [[Diseño de juego]]
+- [[El máster IA]]
+- [[Multijugador]]
+- [[Brezal]]

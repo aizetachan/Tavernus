@@ -210,6 +210,9 @@ export function offlineCalls(context: string): { name: string; input: Record<str
   const order = p.scene === 'action' && p.action && !ATTACK_RE.test(p.action) ? orderAsked(p.action) : null;
   const npc = order ? addressed(p) : undefined;
   const calls: { name: string; input: Record<string, unknown> }[] = [];
+  // Acción conflictiva (conflict.ts): el contexto dice a qué llamar; el servidor decide.
+  const act = p.scene === 'action' ? /^Veredicto: (?:SE PUEDE|LE PILLA).*?conflict_act \{npc_id: "([\w-]+)", kind: "(\w+)"(?:, instance_id: "([\w-]+)")?\}/m.exec(context) : null;
+  if (act) calls.push({ name: 'conflict_act', input: { npc_id: act[1], kind: act[2], instance_id: act[3] ?? null, new_item_name: null, new_item_worn: null } });
   if (order && npc) {
     calls.push({ name: 'set_npc_order', input: {
       npc_id: npc.id, order, character_id: p.actor_id, target_spot_id: null, target_location_id: null,

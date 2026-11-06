@@ -105,7 +105,7 @@ export interface Campaign {
 }
 
 /** Tipos de incidente que el motor reconoce (crime.ts), de menos a más grave. */
-export type IncidentKind = 'insult' | 'theft' | 'assault' | 'armed_assault' | 'desecration' | 'murder';
+export type IncidentKind = 'insult' | 'theft_attempt' | 'theft' | 'assault' | 'armed_assault' | 'desecration' | 'murder';
 
 /**
  * La ley de una campaña (crime.ts). Datos de campaña: el motor no sabe quién
@@ -510,6 +510,11 @@ export interface Character {
   infamy?: number;
   /** Etiquetas ganadas con lo que ha hecho (standing.ts): *asesino*, *salvó a Ceniza*. Las de raza, clase y trasfondo salen de la ficha. */
   tags?: EarnedTag[];
+  /**
+   * Va a escondidas (conflict.ts): el total de su última tirada de Sigilo que salió bien, cuándo y dónde. Contra la
+   * Percepción pasiva de cada NPC dice quién no le ha visto acercarse; caduca al moverse de punto o con el tiempo.
+   */
+  sneak?: { total: number; game_s: number; spot_id: Id } | null;
 }
 
 /** Una etiqueta ganada (standing.ts): cuál, cuándo, por qué y el hecho que la dio (quien lo sabe, sabe la etiqueta). */
@@ -735,6 +740,34 @@ export interface Npc {
    * (`OUTFIT_VERSION`); `true`, la 1. Estado de partida.
    */
   outfitted?: boolean | number;
+  /** Es un niño (datos): ante un robo o un empujón llora y corre a por los suyos, no reacciona como un adulto (conflict.ts). */
+  child?: boolean;
+  /** Atletismo o Acrobacias para las tiradas enfrentadas (conflict.ts). Sin campo, sale de su ataque: `attack_bonus − 2`. */
+  contest?: number;
+  /** En guardia con cada PJ (conflict.ts): le pilló, o casi, o le empujó. Mientras dure no se le puede hurtar. Estado de partida. */
+  guard?: Record<Id, NpcGuard>;
+  /** Careo abierto con cada PJ (conflict.ts): le ha pillado y le exige algo. Estado de partida. */
+  confront?: Record<Id, NpcConfront>;
+}
+
+/** Un NPC en guardia con un PJ: desde cuándo, hasta cuándo y por qué («le pilló metiéndole la mano»). */
+export interface NpcGuard { since_game_s: number; until_game_s: number; reason: string }
+
+/** Lo que hizo el PJ contra un NPC (conflict.ts). */
+export type ConflictKind = 'steal' | 'snatch' | 'shove' | 'grab' | 'touch';
+
+/** Un careo: el NPC ha pillado al PJ y le exige que lo arregle (devolverlo, disculparse, pagar). */
+export interface NpcConfront {
+  kind: ConflictKind;
+  /** Lo que intentó quitarle (si lo tiene ya el PJ, se lo exige). */
+  instance_id: Id | null;
+  since_game_s: number;
+  /** CD de convencerle (Persuasión o Engaño). */
+  dc: number;
+  /** Ya lo ha intentado convencer en este careo. */
+  argued?: boolean;
+  /** Ya es delito (le agarró de la muñeca): arreglarlo evita la pelea, no el incidente. */
+  crime?: boolean;
 }
 
 /** Opinión de un NPC con un PJ: de −100 a 100, con los últimos motivos; y las etiquetas a las que ya ha reaccionado. */
