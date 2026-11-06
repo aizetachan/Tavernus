@@ -153,6 +153,8 @@ export const MASTER_TOOLS: Tool[] = [
   tool('advance_story', 'Campañas escritas: marca como dado el paso NARRATIVO en curso de una misión del actor (lo dice «Historia escrita» en el contexto: «lo decides tú con advance_story»), SOLO cuando se ha cumplido de verdad en la ficción. Los demás pasos los detecta el servidor solo.', {
     quest_id: str('ID de la misión (q_…)'), step_id: str('ID del paso en curso'),
     why: nstr('Qué ha hecho el jugador para darlo, en una frase para su Diario («sacaste a Ceniza mientras la loba dormía»), o null'),
+    way_id: nstr('Misiones con vías (las lista «Historia escrita»): por qué vía lo han hecho, «improvisada» si lo han logrado de otra forma que cumple la meta, o null'),
+    failed: bool('true si la tirada o el intento de esa vía ha salido mal (la misión sigue con su complicación); si no, false'),
   }),
   tool('story_quest', 'Campañas escritas: el ciclo de una misión (q_…) con quien la da delante. ask: quien la da se la pide al actor en la charla (solo las que «Historia escrita» dice que puede pedir, y nunca en un primer saludo si el actor no pregunta por ello) y entra en su Diario, sin preguntar si acepta. Pídela con su voz y por partes: el gancho, el problema, los detalles solo si los pide, y al final la tarea concreta (qué hacer y a quién); sin más de lo que dice su texto. decline: el jugador ha dicho que no (antes de empezar). accept: el jugador se ofrece o cambia de idea. turn_in: entrega una lista para entregar a quien la recibe, que le da la recompensa en la charla. Nunca abras una misión de otra forma.', {
     quest_id: str('ID de la misión (q_…)'), action: enm(['ask', 'accept', 'decline', 'turn_in'], 'Qué pasa'),
@@ -1313,7 +1315,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return { ok: true, events: r.events.map((e) => e.text) };
     }
     case 'advance_story': {
-      const r = advanceStory(world, actor, s('quest_id'), s('step_id'), nowGameS, input['why'] == null ? null : cleanText(s('why')));
+      const r = advanceStory(world, actor, s('quest_id'), s('step_id'), nowGameS, input['why'] == null ? null : cleanText(s('why')),
+        { way_id: typeof input['way_id'] === 'string' && input['way_id'].trim() ? input['way_id'].trim() : null, failed: input['failed'] === true });
       if (!r.ok) return { error: r.error };
       const told = storyTold(ctx, r.output);
       return { ok: true, events: told?.changes ?? [], ...(told?.tell_now ? { tell_now: told.tell_now } : {}) };
