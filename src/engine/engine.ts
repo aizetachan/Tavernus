@@ -57,6 +57,7 @@ import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPla
 import { hhmm } from './schedule.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
 import { outfitNpcs } from './outfit.js';
+import { fillItemDefFrom, normalizeItemDef } from './items.js';
 import { discoverSpot, lookAround, migrateSpotSight, noteSight, searchableSpots, seeFrom } from './spots.js';
 import { absence, absenceRule, acceptPrologue, acceptRecap, forPrologue, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
 
@@ -3808,6 +3809,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
       const cur = snapshot.item_defs.find((x) => x.id === d.id);
       if (!cur) { snapshot.item_defs.push(d); changed = true; }
       else if (d.weapon && !cur.weapon) { cur.weapon = d.weapon; changed = true; }
+      // Modelo de objetos 5e (items.ts): lo que la semilla trae y la partida guardada no (subtipo, magia, alcance…).
+      if (cur && fillItemDefFrom(cur, d)) changed = true;
       // Partidas de cuando la mochila aguantaba 30 lb y el equipo inicial ya pesaba 25: un contenedor no encoge.
       if (cur && d.container && cur.container && d.container.max_weight_lb > cur.container.max_weight_lb) { cur.container.max_weight_lb = d.container.max_weight_lb; changed = true; }
     }
@@ -3855,6 +3858,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   if (migrateLegacyCoins(snapshot)) changed = true;
   // Ajuar de los NPC (outfit.ts): bolsa con monedas, cosas de su oficio y su arma, una vez por NPC.
   if (outfitNpcs(snapshot, seed)) changed = true;
+  // Modelo de objetos 5e (items.ts): propiedades de arma en lista y categoría de la armadura, de sus propios datos.
+  for (const d of snapshot.item_defs) if (normalizeItemDef(d)) changed = true;
   return changed;
 }
 

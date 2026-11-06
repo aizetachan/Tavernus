@@ -607,10 +607,16 @@ export function talkPlanFor(engine: Engine, actor: Character, text: string): Tal
   return talkPlan(engine.world, engine.events.all(), actor, text, engine.nowFor(actor));
 }
 
-/** Lo que lleva encima un NPC (con IDs, para transfer_item): sin esto el máster lo inventa con spawn_item. */
+/**
+ * Lo que lleva encima un NPC (con IDs, para transfer_item), y que no lleva nada más: sin esto el máster lo inventa
+ * (la bolsa de cuero de Garrán, que se robó con éxito y nunca existió; partida «Humo y ceniza», 05-11).
+ */
 function carriedBy(world: Engine['world'], npcId: Id): string {
+  // Con la bolsa del ajuar (outfit.ts), su dinero y lo que va dentro, cada cosa con su id.
   const items = npcCarryList(world, npcId);
-  return items.length ? `  Lleva: ${items.join(', ')}` : '';
+  return items.length
+    ? `  Lleva (solo esto; nada más que se pueda ver de cerca, coger o robar): ${items.join(', ')}`
+    : '  No lleva nada que se pueda coger o robar: ni bolsas, ni monedas, ni llaves.';
 }
 
 /** Lo último que ha dicho un NPC aquí: para que no repita la misma frase (closecheck.ts lo rechaza). */
