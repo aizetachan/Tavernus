@@ -16,6 +16,8 @@ import type { Calendar, ExtraLines, ExtraScript, ExtraService, ExtraTemper, Id, 
 import { AFTERNOON_H, type NpcRoutine, type ScheduledEvent } from './schedule.js';
 import type { Archetype, Genre } from '../worldgen/catalog.js';
 import { ARCHETYPES } from '../worldgen/skeleton.js';
+import { holdNpcAt } from './npcorders.js';
+import type { World } from './world.js';
 
 export type TradeId =
   | 'watchman' | 'devout' | 'baker' | 'laborer' | 'washer' | 'woodcutter' | 'peddler' | 'shepherd' | 'child' | 'servant' | 'regular';
@@ -83,7 +85,7 @@ export const TRADES: Record<TradeId, TradeDef> = {
     },
   }),
   baker: T('baker', { fantasy: { m: 'panadero', f: 'panadera' }, scifi: { m: 'cocinero', f: 'cocinera' }, postapoc: { m: 'panadero', f: 'panadera' } }, {
-    kit: 'commoner', wealth: 'modest', temper: 'seco', service: 'sell',
+    kit: 'baker', wealth: 'modest', temper: 'seco', service: 'sell',
     motivation: 'Vender el pan antes de que se ponga duro.',
     lines: {
       greet: ['¿Llevas o no?', '¿Qué va a ser?'],
@@ -101,7 +103,7 @@ export const TRADES: Record<TradeId, TradeDef> = {
     },
   }),
   washer: T('washer', { fantasy: { m: 'lavandero', f: 'lavandera' }, scifi: { m: 'operario de lavandería', f: 'operaria de lavandería' } }, {
-    kit: 'commoner', wealth: 'poor', temper: 'con prisa', service: 'hours',
+    kit: 'washer', wealth: 'poor', temper: 'con prisa', service: 'hours',
     motivation: 'Acabar la colada antes de que caiga la ceniza.',
     lines: {
       greet: ['¿Qué quieres, que se me enfría el agua?', '¿Sí?'],
@@ -130,7 +132,7 @@ export const TRADES: Record<TradeId, TradeDef> = {
     },
   }),
   shepherd: T('shepherd', { fantasy: { m: 'pastor', f: 'pastora' }, scifi: { m: 'cuidador de ganado', f: 'cuidadora de ganado' } }, {
-    kit: 'laborer', wealth: 'poor', perception: 12, temper: 'tímido', service: 'none',
+    kit: 'shepherd', wealth: 'poor', perception: 12, temper: 'tímido', service: 'none',
     motivation: 'Que no se le pierda ninguna oveja.',
     lines: {
       greet: ['¿Sí?', 'Hola.'],
@@ -152,7 +154,7 @@ export const TRADES: Record<TradeId, TradeDef> = {
     },
   }),
   servant: T('servant', { fantasy: { m: 'criado', f: 'criada' }, scifi: { m: 'asistente', f: 'asistente' } }, {
-    kit: 'commoner', wealth: 'poor', temper: 'receloso', service: 'hours',
+    kit: 'servant', wealth: 'poor', temper: 'receloso', service: 'hours',
     motivation: 'Que en la casa no haya quejas de ella.',
     lines: {
       greet: ['¿Qué se le ofrece?', '¿Busca a alguien de la casa?'],
@@ -359,5 +361,13 @@ export function migrateExtras(snap: WorldSnapshot, seed: WorldSnapshot | undefin
       thinCrowd(e);
     }
   }
+  return true;
+}
+
+/** Pone a un vecino de relleno en un punto (un encuentro de camino) y lo retiene allí media hora; luego, su horario. */
+export function placeExtraAt(world: World, n: Npc, spotId: Id, nowS: number): boolean {
+  if (!world.spots.has(spotId) || !holdNpcAt(world, n, spotId, nowS, 30)) return false;
+  n.location = { type: 'spot', id: spotId };
+  world.touch('npcs', n.id);
   return true;
 }

@@ -43,6 +43,7 @@ import { crimeContext, npcCrimeLine, recentIncidents } from '../engine/crime.js'
 import { TALK_RULES } from './actor.js';
 import { concernsLine } from '../engine/concerns.js';
 import { recentNpcLines } from '../engine/closecheck.js';
+import { isExtra, type ExtraNpc } from '../engine/extras.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { shopClosed, shopLines } from '../engine/shop.js';
 import { abilitiesForMaster } from '../engine/levels.js';
@@ -74,6 +75,7 @@ export function systemPrompt(c: Campaign, opts: { actor?: boolean } = {}): strin
     `Dificultad: ${m.difficulty}. CD orientativas: fácil 10, media 13, difícil 16, muy difícil 20.`,
     '',
     'PRINCIPIO RECTOR: la base de datos es la verdad. Solo existe lo que los tools devuelven. Nunca describas puntos, salidas, objetos, NPCs o personajes que no estén en los datos. Si el jugador menciona algo que no existe, dilo en ficción ("no ves nada así") en vez de inventarlo. Solo existen los puntos de las listas de puntos (los que el actor conoce, los que aún no ha visto y los ocultos) y las salidas: no hay cocinas, escaleras ni cuartos que no estén ahí. El actor solo conoce los de «Puntos que el actor conoce»: no le sugieras ir a los demás ni los des por vistos.',
+    'GENTE: solo existen las personas del contexto (los presentes, los de «Gente de relleno aquí» y los que nombran los datos). La multitud de la agenda («unos seis vecinos») no tiene cara: si alguien de ella tiene que contestar o hacer algo, que sea uno de «Gente de relleno aquí», con su ID en lines; si no hay ninguno, contesta la multitud como multitud (un murmullo, «eso es cosa de Brenna») sin darle oficio, nombre ni rasgos a nadie. Nunca mandes al actor a hablar con alguien que no está en los datos, ni en la narración ni en suggested_actions: si hace falta un «pregunta a…», que sea alguien de la lista.',
     `LEYES DEL MUNDO: ${worldLaws(c).join(' ')}`,
     c.customs?.length ? `COSTUMBRES DEL LUGAR (detalle de fondo: úsalas cuando vengan a cuento, sin explicarlas ni meter una en cada mensaje; no son pistas): ${c.customs.join(' ')}` : '',
     'LO IMPOSIBLE Y LO QUE AÚN NO EXISTE: lo que las leyes del mundo no permiten no ocurre, pero nunca lo despaches con un «no puedes» ni con una negativa seca: recházalo en ficción, con ingenio y con tu voz, dejando que el personaje lo intente y que el mundo responda como es (el cuerpo, la física, quien mira, el ridículo, el precio). Lo que es posible pero no está en los datos no se niega con desgana: se trata con curiosidad. Aquí no está, y eso no cambia; pero quizá alguien haya oído algo. Un rumor (plant_rumor) es algo que se dice, nunca algo que está: no lo describas como presente ni lo des por cierto.',
@@ -374,6 +376,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       present.push(`- ${contractArticles(`El cuerpo de ${label}`)} [${n.id}] en ${sp.name}: MUERTO${d ? ` desde las ${hhmm(d.died_game_s)}${d.by_name ? `, a manos de ${d.by_name}` : ''}` : ''}. No se levanta, no habla y no desaparece; quien esté y lo vea reacciona (miedo, rabia, avisar a alguien). Lo que llevaba está en el suelo.`);
     }
   }
+  const extrasHere: string[] = [];
   for (const n of world.npcs.values()) {
     const ns = world.spot(n.location.id);
     if (ns.location_id !== loc.id || n.status !== 'alive') continue;
@@ -381,6 +384,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     if (p.level === 'none') continue;
     presentNpcIds.push(n.id);
     if (p.sight !== 'full') { present.push(`- NPC: una figura en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m, percepción ${p.level}`); continue; }
+    // Relleno (extras.ts): una línea, no la ficha entera.
+    if (isExtra(n)) { extrasHere.push(extraLine(engine, n, actor, ns.name, Math.round(p.distance_m ?? 0), conv?.npc_id === n.id, nowG)); continue; }
     const mine = n.memory.filter((m) => m.character_id === actor.id).slice(-5).map((m) => `${m.note}`);
     // De otros personajes solo lo que no se olvida nunca; el resto, con get_npc.
     const others = n.memory.filter((m) => m.character_id !== actor.id && m.importance >= 3).slice(-3).map((m) => `${world.characters.get(m.character_id)?.name ?? 'alguien'}: ${m.note}`);
@@ -415,6 +420,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   // Testigos: otros PJs que percibirían al actor aunque gritara. Sin ninguno, observable no le llega a nadie y es salida tirada.
   if (!witnesses(world, engine.clock, pos, nowG, WITNESS_LOUDNESS, actor.id).length) present.push(NO_WITNESSES);
   L.push('## Presentes que el actor percibe\n' + (present.length ? present.join('\n') : 'Nadie.'));
+  if (extrasHere.length) L.push(`## Gente de relleno aquí (solo existen estos; no saben nada de la historia, no dan misiones, contestan dos frases como mucho y a la segunda pregunta que no es lo suyo se cierran)\n${extrasHere.join('\n')}`);
   // Crimen y ley (crime.ts): el incidente que hay que contar, y si el actor está buscado, detenido o preso.
   const law = crimeContext(world, actor, nowG);
   if (law) L.push(law);
@@ -641,6 +647,31 @@ function carriedBy(world: Engine['world'], npcId: Id): string {
   return items.length
     ? `  Lleva (solo esto; nada más que se pueda ver de cerca, coger o robar): ${items.join(', ')}`
     : '  No lleva nada que se pueda coger o robar: ni bolsas, ni monedas, ni llaves.';
+}
+
+/** Lo que hace cada servicio del relleno, en palabras para el máster. */
+const EXTRA_SERVICE: Record<ExtraNpc['script']['service'], string> = {
+  directions: 'dice dónde está alguien o algo (solo lo público)', hours: 'dice a qué hora es cada cosa de la agenda', sell: 'vende lo suyo', none: 'nada en especial',
+};
+
+/** Un vecino de relleno en una línea: quién es, qué vende, qué lleva y su guion corto (extras.ts). */
+function extraLine(engine: Engine, n: ExtraNpc, actor: Character, spotName: string, distance: number, talking: boolean, nowG: number): string {
+  const world = engine.world;
+  const known = actor.knows.includes(n.id);
+  const who = known ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor no sabe su nombre, que es ${n.name})`;
+  const look = n.description.split(/(?<=\.)\s/)[0] ?? '';
+  const refer = n.script.refer_to.map((id) => world.npcs.get(id)).filter((x): x is Npc => Boolean(x)).map((x) => (actor.knows.includes(x.id) ? x.name : descriptorOf(world, x.id)));
+  const att = attitudeOf(n, actor.id);
+  const crime = npcCrimeLine(world, n, actor, nowG);
+  const said = talking ? transcriptText(transcriptOf(engine.events.all(), actor.id, n.id, 6), 'Actor', 'NPC') : [];
+  return [
+    `- ${who}, en ${spotName}, ${distance} m. ${look}`,
+    crime ? `  ${crime}` : '',
+    `  Guion: ${n.script.temper}; sirve para: ${EXTRA_SERVICE[n.script.service]}${refer.length ? `; lo que no sabe, lo remite a ${refer.join(' o ')}` : ''}.${att !== 'neutral' ? ` Actitud: ${att}.` : ''}`,
+    n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, priceFor(n, actor.id, b.price, 'buy'))}`).join(', ')}` : '',
+    carriedBy(world, n.id),
+    said.length ? `  Lo último que se han dicho, literal:\n${said.map((l) => `    ${l}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n');
 }
 
 /** Lo último que ha dicho un NPC aquí: para que no repita la misma frase (closecheck.ts lo rechaza). */

@@ -285,11 +285,41 @@ export function tickSchedule(world: World, nowS: number, emit: ScheduleEmit): vo
   for (const n of world.npcs.values()) {
     // Con orden (sigue a alguien, ha ido a algo: npcorders.ts) el horario espera.
     if (n.status !== 'alive' || n.bound || attending.has(n.id) || n.talking_to || orderOf(n) || engaged(world, n)) continue;
-    const want = routineSpot(n, slot);
+    const want = n.tier === 'extra' ? extraSpotNow(world, n, nowS) : routineSpot(n, slot);
     if (want && want !== n.location.id && world.spots.has(want)) moveNpc(world, n, want, nowS, emit, null, false);
   }
 
   if (touched) world.touch('campaign', world.campaign.id);
+}
+
+// ---------------------------------------------------------------------------
+// Relleno (extras.ts, docs/PLAN-NPC-RELLENO.md): cada uno a su hora, y algunos pasean
+// ---------------------------------------------------------------------------
+
+/** Un número estable por NPC (su id), para que su hora y sus paseos no cambien de una partida a otra. */
+function idHash(id: Id): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+/** Cuánto se adelanta o se retrasa al cambiar de franja: entre 40 minutos antes y 40 después. Así no se mueve el pueblo entero a la vez. */
+export const EXTRA_STAGGER_S = 40 * GAME_MINUTE;
+export function extraStagger(n: Pick<Npc, 'id'>): number { return (idHash(n.id) % (2 * EXTRA_STAGGER_S / GAME_MINUTE + 1)) * GAME_MINUTE - EXTRA_STAGGER_S; }
+
+/** Cada cuánto cambia de punto quien pasea (`script.wander`): media hora de juego. */
+export const WANDER_S = 30 * GAME_MINUTE;
+
+/**
+ * Dónde quiere estar ahora un vecino de relleno: el punto de su franja (con su adelanto o retraso) y, si ese punto
+ * es uno de los de su paseo, el que le toca del paseo. Sin horario, null.
+ */
+export function extraSpotNow(world: World, n: Npc, nowS: number): Id | null {
+  const base = routineSpot(n, slotAt(world, nowS - extraStagger(n)));
+  const walk = n.script?.wander;
+  if (!base || !walk?.length || !walk.includes(base)) return base;
+  const k = Math.floor((nowS + (idHash(n.id) % WANDER_S)) / WANDER_S);
+  return walk[((k % walk.length) + walk.length) % walk.length]!;
 }
 
 function startRun(world: World, e: ScheduledEvent, run: ActiveRun, nowS: number, emit: ScheduleEmit): void {
@@ -345,7 +375,7 @@ function endRun(world: World, e: ScheduledEvent, run: ActiveRun, nowS: number, e
   for (const [npcId, home] of Object.entries(run.home)) {
     const n = world.npcs.get(npcId);
     if (!n || n.status !== 'alive' || n.bound || orderOf(n)) continue;
-    const back = routineSpot(n, slot) ?? home;
+    const back = (n.tier === 'extra' ? extraSpotNow(world, n, nowS) : routineSpot(n, slot)) ?? home;
     if (world.spots.has(back) && back !== n.location.id) moveNpc(world, n, back, at, emit, null, late);
   }
 }
@@ -381,7 +411,8 @@ function moveNpc(world: World, n: Npc, toId: Id, atS: number, emit: ScheduleEmit
   const to = world.spot(toId);
   n.location = { type: 'spot', id: to.id };
   world.touch('npcs', n.id);
-  if (quiet) return;
+  // El relleno va y viene sin aviso: se ve en el tablero (el servidor lo vuelve a pedir), no en el chat.
+  if (quiet || n.tier === 'extra') return;
   const base = { actor_id: null, action_type: 'npc_move', narration_private: '', tags: ['npc', 'schedule', 'deterministic'] };
   const payload = (vague: string) => ({ master: null, npc_id: n.id, ...(e ? { schedule_event_id: e.id } : {}), observable_vague: vague });
   if (from.location_id === to.location_id) {

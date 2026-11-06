@@ -1,7 +1,7 @@
 # NPC de relleno: gente de paso que hace pueblo (plan para revisar)
 
 Estado: **aprobado por Miguel el 06-11, con las propuestas de las preguntas del final y la sección «Cómo reaccionan».
-Fase 1 hecha (sin commit): ver «Fase 1: lo hecho» al final.** Se apoya en el flujo de charla propuesto en
+Fases 1 y 2 hechas (y de la 4, el control de gente inventada y los encuentros): ver «lo hecho» al final.** Se apoya en el flujo de charla propuesto en
 `CONVERSACION-FLUJO.md` (rama `claude/nervous-lederberg-e007cb`, aún sin fusionar) y en el ajuar de los NPC
 (`src/engine/outfit.ts`, rama `claude/amazing-mahavira-788ef2`, aún sin fusionar).
 
@@ -528,3 +528,39 @@ depende de la pregunta 2 de `CONVERSACION-FLUJO.md`, que se decide allí para to
   `merchant`, `commoner`).
 - **Ojo hasta la fase 2**: el contexto del máster trata al relleno como a un principal (su bloque entero), sin la regla
   GENTE ni la línea corta. No conviene desplegar la fase 1 sola.
+
+## Fase 2: lo hecho (06-11)
+
+Miguel aprobó la fase 2. Entra también lo que el plan tenía en la fase 4: el control de gente inventada y los
+encuentros con vecinos de relleno. Era el fallo que lo empezó todo, y la sesión principal lo dejó en esta sesión.
+
+- **Minimapa** (`board.ts`, `page.ts`): `BoardPresence.extra`. La ficha es más pequeña y apagada (color propio y
+  leyenda «vecino»), nunca lleva marca de misión, y con más de tres vecinos en un punto sale una sola ficha con el
+  número. Bajo el punto, los vecinos van al final («y 2 vecinos»). Quien cambia de punto en el mismo sitio se desliza
+  al nuevo (sin animación si el navegador pide menos movimiento). Fuera los «·» de la línea del sitio, por la regla
+  de la interfaz.
+- **Sin avisos** (`schedule.ts`, `server.ts`): el relleno se mueve sin `npc_move`. El servidor manda al navegador un
+  evento `board`, agrupado cada medio segundo, y el tablero se vuelve a pedir sin línea en el chat.
+- **Horario escalonado y paseos** (`schedule.ts`): `extraStagger` adelanta o retrasa a cada vecino entre 40 minutos
+  antes y 40 después del cambio de franja, según su id (estable). `extraSpotNow` le pasea por `script.wander` cada
+  media hora cuando el punto de su franja es uno de ellos: Pía por el pozo, el tablón y el callejón; Anselmo entre el
+  portón y la barricada.
+- **Contexto del máster** (`prompt.ts`): bloque «Gente de relleno aquí» con una línea por vecino (quién es, su
+  aspecto, su guion, lo que vende y lo que lleva con sus ids, y la charla literal si habla con él), en vez de la
+  ficha entera. Regla nueva **GENTE** en el prompt de sistema. `who_is_here` y `get_npc` llevan `tier: 'extra'` y el
+  guion.
+- **Gente inventada** (`src/engine/invented.ts`, cierre en `tools.ts`): se rechaza una vez, con la lista de quién hay
+  de verdad, en tres casos:
+  - «un/una + oficio» que habla y no hay nadie así en el sitio;
+  - mandar al actor a «un labrador» (indefinido: alguien de aquí) o a «el alcalde» (definido: alguien de cualquier sitio) que no existe;
+  - un nombre propio que no sale en ningún dato ni en lo que ha escrito el jugador («Tomás»).
+  El fondo sin cara pasa. En un encuentro de camino no se mira, porque ahí se puede sacar gente nueva.
+- **Encuentros** (`travel.ts`, `EncounterEntry.extra`): el motor elige un vecino de relleno libre, lo pone en el
+  camino media hora (`placeExtraAt`) y cambia `{extra}` por quién es. Sin ninguno libre, la entrada no sale. En Brezal,
+  «el vecino del camino» y «el que va cargado» (antes, «un buhonero de fuera»: el buhonero es ahora Lucio Cendal, el
+  tendero).
+- **Ajuares propios** (`outfit.ts`, antes de `laborer`): panadero (harina, mendrugo, mandil), lavandera (jabón,
+  pañuelo), criado (llave, pañuelo, mandil) y pastor (honda, navaja, mendrugo, capa con capucha).
+- **Tests**: 18 nuevos en `test/relleno.test.ts`, uno por cada punto de arriba.
+- **Pendiente**: la fase 3 (la charla sin IA con las plantillas, dentro del flujo de charla de cinco capas que ya está
+  en la integración) y la fase 5 (relleno en los mundos generados).

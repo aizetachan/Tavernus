@@ -42,6 +42,7 @@ type Concept =
   | 'purse' | 'knife' | 'fire' | 'food' | 'key' | 'keyring' | 'kerchief' | 'dice' | 'ring' | 'herbs' | 'bandage'
   | 'nails' | 'whistle' | 'beads' | 'charm' | 'ledger' | 'hook' | 'needle'
   | 'toy'
+  | 'flour' | 'soap' | 'sling'
   | 'clothes' | 'fine' | 'apron' | 'robe' | 'tabard' | 'cloak' | 'rags'
   | 'spear' | 'club' | 'scimitar' | 'hammer' | 'pitchfork';
 
@@ -77,6 +78,10 @@ const KIT_ITEMS: Record<Concept, { base: Base; names: Names; description: string
   hook: { base: tiny('tool', 0.1, 2), names: { fantasy: ['sedal y anzuelos', ['sedal', 'anzuelos', 'anzuelo']] }, description: 'Para pescar.' },
   needle: { base: tiny('tool', 0.1, 2), names: { fantasy: ['hilo y aguja', ['aguja', 'hilo']] }, description: 'Para remendar.' },
   toy: { base: tiny('misc', 0.1, 1), names: { fantasy: ['peonza de madera', ['peonza', 'trompo', 'juguete']], scifi: ['canicas de cristal', ['canicas', 'juguete']], postapoc: ['muñeco de trapo', ['muñeco', 'juguete']] }, description: 'Un juguete gastado de tanto usarlo.' },
+  // Oficios del relleno (extras.ts): panadero, lavandera, pastor.
+  flour: { base: tiny('misc', 1, 2), names: { fantasy: ['saquito de harina', ['harina', 'saquito', 'saquito de harina']], scifi: ['bolsa de harina sintética', ['harina', 'bolsa de harina']], postapoc: ['bolsa de harina', ['harina']] }, description: 'Harina para la próxima hornada.' },
+  soap: { base: tiny('misc', 0.3, 1), names: { fantasy: ['pastilla de jabón', ['jabón', 'jabon', 'pastilla de jabón']], scifi: ['bote de detergente', ['detergente', 'jabón']], postapoc: ['trozo de jabón', ['jabón', 'jabon']] }, description: 'Para la colada.' },
+  sling: { base: tiny('tool', 0.2, 2), names: { fantasy: ['honda de esparto', ['honda', 'honda de pastor']] }, description: 'Para espantar lobos y zorros.' },
   // Ropa: la lleva puesta (`state.worn`), para que se pueda describir, manchar o quitar.
   clothes: { base: wear(3, 50), names: { fantasy: ['ropa de diario', ['ropa', 'blusón', 'camisa']], scifi: ['mono de trabajo', ['mono', 'ropa']], postapoc: ['ropa remendada', ['ropa', 'harapos']] }, description: 'La ropa de todos los días.' },
   fine: { base: wear(6, 1500), names: { fantasy: ['capa de buen paño', ['capa', 'ropa fina', 'paño']], scifi: ['traje de corte caro', ['traje', 'ropa']], postapoc: ['abrigo de cuero bueno', ['abrigo', 'ropa']] }, description: 'Ropa que dice cuánto tiene su dueño.' },
@@ -140,6 +145,11 @@ export const KITS: readonly KitDef[] = [
   { id: 'mystic', match: /(hechicer|bruj[oa]|adivin|chaman|ermitan|vidente)/, wealth: 'none', items: ['charm', 'fire'], clothes: 'cloak' },
   { id: 'hunter', match: /(cazador|trampero|explorador|batidor|guardabosque|chatarrer|carroner)/, wealth: 'poor', items: ['knife', 'hook', 'fire'], clothes: 'cloak' },
   { id: 'fisher', match: /(pescador|lonjer|farer|mariner|barquer)/, wealth: 'poor', items: ['hook', 'knife'], clothes: 'clothes' },
+  // Oficios del relleno (extras.ts, docs/PLAN-NPC-RELLENO.md): antes de `laborer`, que casa con «pastor».
+  { id: 'baker', match: /(panader|horner|tahoner)/, wealth: 'modest', items: ['flour', 'food'], clothes: 'apron' },
+  { id: 'washer', match: /(lavander)/, wealth: 'poor', items: ['soap', 'kerchief'], clothes: 'clothes' },
+  { id: 'servant', match: /(criad[oa]|sirvient|doncell|lacay)/, wealth: 'poor', items: ['key', 'kerchief'], clothes: 'apron' },
+  { id: 'shepherd', match: /(pastor|cabrer|vaquer|porquer)/, wealth: 'poor', items: ['sling', 'knife', 'food'], clothes: 'cloak' },
   { id: 'laborer', match: /(granjer|campesin|labrador|molinero|miner[oa]|pastor|mozo|enterrador|lenador|jornaler|capataz|superviviente)/, wealth: 'poor', items: ['knife', 'fire', 'food'], clothes: 'clothes' },
   { id: 'commoner', match: null, wealth: 'poor', items: ['knife', 'food'], clothes: 'clothes' },
 ];

@@ -96,11 +96,11 @@ Cada uno tiene su teoría sobre [[El Cerco de Ceniza]]. Unas son pistas verdader
 
 Al ir de un sitio a otro del pueblo puede pasar algo:
 
-- **Un vecino con tos** (de día) te para a preguntar si vienes a arreglar lo del agua o si sabes algo de la niebla.
+- **Un vecino con tos** (de día) te para a preguntar si vienes a arreglar lo del agua o si sabes algo de la niebla. Es uno de los [[Vecinos de Brezal]] que ande por ahí, con nombre.
 - **La ronda de Garrán.** Unas botas pesadas se paran detrás de ti. Pregunta adónde vas y recuerda deudas.
 - **Ceniza que cae** (de noche). Cae algo blando del cielo y no es nieve. La niebla no deja que el viento se la lleve.
 - **Un lobo entre las cercas** (más probable de noche). Un lobo flaco te sigue a distancia. Huye del fuego. Ver [[Criaturas]].
-- **Un buhonero atrapado** (de día) vende barato lo que le queda o pregunta si alguien ha encontrado la salida.
+- **Alguien cargado** (de día), uno de los [[Vecinos de Brezal]], pregunta si alguien ha encontrado la salida de la niebla.
 - **Huellas en el barro.** Botas pequeñas hacia el Soto y, encima, las de un lobo enorme.
 
 ## Los días de la partida

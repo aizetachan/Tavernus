@@ -43,6 +43,13 @@ Al hablarles contestan poco: un par de frases frías y, a la segunda pregunta qu
 - **Damián**, viejo de nariz roja pegado a la chimenea del Jabalí. Cuenta lo de las luces del granero a quien le pague una cerveza, y siempre igual.
 - **Ramiro**, el marido de Fermina, con tos seca y ceniza en el pelo. Cada noche se ata la cuerda y entra en la niebla desde la barricada; sale tosiendo por el mismo sitio y no cuenta nada.
 
+## Cómo se mueven
+
+- **Cada uno a su hora.** Al cambiar de franja (a las 6, a las 14 y a las 20) no se mueve todo el pueblo de golpe: cada vecino llega o se va entre 40 minutos antes y 40 después.
+- **Algunos pasean.** Pía corretea entre el pozo, el tablón y el callejón; Anselmo hace la ronda del portón a la barricada del [[El Lindero|Lindero]] y vuelve.
+- **En el minimapa** salen con una ficha más pequeña y de color apagado, por su oficio («la panadera») hasta que sabes su nombre. Si hay más de tres juntos (en la cena), salen como una sola ficha con el número.
+- **Por el camino** puede pararte uno de ellos: el que pregunta si vienes a arreglar lo del agua, o el que va cargado y pregunta si alguien sabe salir de la niebla.
+
 ## Cómo reaccionan
 
 - **A lo que pasa:** las noticias les llegan de boca en boca, como a todos, y las comentan.
