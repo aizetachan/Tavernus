@@ -442,6 +442,34 @@ partida guardada no tiene (sin pisar nada; el tipo, solo si era uno de los gené
 la lista de propiedades del arma y la categoría de la armadura. `validate.ts` comprueba subtipos, propiedades,
 alcance, munición, que la magia lleve rareza, cargas, conjuros y el estado de cada ejemplar.
 
+**De dónde sale el catálogo** (PLAN-OBJETOS §3, bloque B). El equipo entero del SRD 5.1 (CC BY 4.0) está en
+`src/data/srd/items.ts`: 37 armas, 12 armaduras y el escudo, munición (por pieza: una flecha, 5 de cobre), equipo de
+aventurero, focos, herramientas, arreos, comida y bebida, mercancías, y un primer lote mágico (pociones de curación,
+pergamino de conjuro por nivel, arma, armadura, escudo y munición +1/+2/+3, anillo y capa de protección, bolsa de
+contención, varita de proyectiles mágicos, botas y capa élficas). Nombres en castellano con el inglés del SRD de
+primer alias; precios en cobre del SRD; la magia, que el SRD no pone precio, con un valor de la casa por rareza
+(`MAGIC_VALUE`). Las +N salen de su base (`base_id`) y sin identificar se ven como ella; el pergamino va por nivel, con
+su CD y su ataque, y el conjuro concreto en el ejemplar (`state.spell_id`); la poción de curación no tiene rareza (está en
+la lista de equipo y se reconoce a la vista). Monturas y vehículos van aparte (`SRD_MOUNTS`, `SRD_VEHICLES`): no son objetos que se lleven encima.
+**La magia del SRD es para los mundos generados**: una campaña escrita (sin `campaign.generation`) no la recibe, ni
+en su semilla ni al arrancar, y su magia, si la hay, la escribe ella como objetos propios, pocos y ligados a su
+historia (Brezal: «pocos, enigmáticos y que tengan que ver con el lore», Miguel, 2026-11-06). Así el máster no
+puede sacar una espada +1 en Brezal con `spawn_item`.
+`src/data/catalog.ts` lo junta con las cosas de la casa que el SRD no trae (leña, bayas, truchas, hacha de leñador,
+cofre de la posada) y los cuartos de alquiler: `CATALOG` para la demo, Brezal y la creación de personaje, y
+`catalogFor(genre)` para los mundos generados, con nombres de ciencia ficción o postapocalípticos y las mismas reglas
+(la pistola de rayos es la ballesta ligera). La demo (`src/data/seed/demo.ts`) ya no es el catálogo: solo coloca objetos.
+
+- **Versión** (`campaign.catalog_version`): al arrancar, `syncCatalog` (en `migrate`) cambia cada definición SRD de la
+  partida por la del código si la versión no es la misma (si cambia el nombre, el viejo queda de alias) y añade las
+  que falten. Las de la campaña (`origin: 'custom'`) no se tocan aunque usen un id del SRD. Cualquier cambio en
+  `items.ts` sube `SRD_CATALOG_VERSION`; los ids del catálogo no se borran nunca.
+- **Lo que se guarda**: cada partida guarda sus definiciones propias, las SRD que algún objeto del mundo usa y las que
+  la partida ha cambiado (`compactSnapshot`, al volcar); el resto se lee del código al arrancar. El catálogo entero en
+  cada mundo serían más de 100 KB por partida.
+- **Comercio en mundos generados**: el generador solo ofrece a la parte «gente» una lista corta de cosas de pueblo
+  (`TRADE_ITEMS`, sin magia), no el catálogo entero.
+
 ### 5.2 Inventario (`inventory`)
 `character_id`, `item_id`, `quantity`, `equipped` (slot: main_hand, off_hand, armor, ring1…), `attuned`, `identified` (para magia desconocida), `notes`.
 
@@ -524,7 +552,7 @@ El valor y el esfuerzo tienen que sentirse como en el mundo real: ni hacerse ric
 > **Cambiado el 27-10-2026** (revisión de la partida «La noche del Brezal»): un mago empezaba «cargado» con 1.500 monedas que pesaban 30 lb, y el tablón pagaba 900 por diez leños. Ahora se paga como en el SRD: una cerveza son unas monedas de cobre y un arma legendaria, unas 100 de oro. Código en `src/engine/money.ts`.
 
 - **Moneda**: oro, plata y cobre (1 de oro = 10 de plata = 100 de cobre; cada campaña puede traer las suyas en `campaign.currency`). El valor se guarda en cobre (lo que hay en cada bolsa, `state.coins` (§5.3.2), precios, recompensas, deudas) y se **enseña, se lee y se pesa en monedas**: 1.500 son «15 de oro», 125 son «1 de oro, 2 de plata y 5 de cobre». Se lleva siempre el menor número de piezas (el cambio se da solo); pesan esas piezas, 50 por libra (`coins_per_lb`). El jugador puede escribir «dar 3 de oro a Mira» o «20 monedas» (cobre).
-- **Precios**: los del catálogo SRD en cobre para el equipo (daga 2 de oro, espada corta 10, espada larga 15, cota de malla 150); lo de cada día, barato: cerveza 4 de cobre · ración 1 de plata · noche de posada 2 de plata (`ROOM_NIGHT_PRICE`) · antorcha 1–2 de cobre. Lo que compran los NPC, por debajo de lo que venden (un leño, 3 de cobre).
+- **Precios**: los del catálogo SRD en cobre para el equipo (daga 2 de oro, espada corta 10, espada larga 15, cota de malla 75, ración 5 de plata, poción de curación 50 de oro); lo que vende cada NPC lleva su precio en su lista (`sells`), y en un pueblo lo de cada día es barato: cerveza, 4 de cobre; ración, 1 de plata; noche de posada, 2 de plata (`ROOM_NIGHT_PRICE`); antorcha, 1 o 2 de cobre. Lo que compran los NPC, por debajo de lo que venden (un leño, 3 de cobre).
 - **Ingresos**: un encargo del tablón paga unas monedas de plata (15–60 de cobre en Brezal; 20–80 en los mundos generados): de una a tres noches de posada, no nueve. Misiones: de unas monedas de plata (acto I) a unas 10 de oro (el final). Botín de combate: lo que llevaban, no bolsas de oro mágicas.
 - **Sumideros**: alojamiento, comida, reparaciones, entrenamiento, monturas, alijos alquilados, impuestos/peajes de facción.
 - **Dinero inicial**: unas pocas monedas tras el equipo de clase: 1 de oro y 5 de plata (`campaign.starting_coins`, por defecto `DEFAULT_STARTING_COINS` = 150).

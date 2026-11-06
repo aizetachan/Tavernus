@@ -93,6 +93,11 @@ export interface Campaign {
   /** Procedencia: cómo y con qué se generó este mundo. */
   generation?: GenerationInfo;
   /**
+   * Versión del catálogo SRD de objetos con que se guardó la partida (src/data/srd/items.ts).
+   * Al arrancar, `syncCatalog` (src/data/catalog.ts) pone las definiciones SRD a la del código.
+   */
+  catalog_version?: number;
+  /**
    * Situaciones iniciales aún sin dueño: la de cada PJ anunciado al generar y alguna de reserva.
    * Campañas escritas: `for_classes` la reserva a esas clases (ids SRD) y `keep` la deja en la bolsa para el siguiente.
    */

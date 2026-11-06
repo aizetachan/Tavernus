@@ -108,6 +108,17 @@ Lo que cambia en la partida va en el ejemplar, no en la definición:
 
 ## 3. Bloque B: el catálogo SRD completo
 
+> **Hecho el 2026-11-06** (rama `claude/objetos-b-catalogo-82c5cb`): `src/data/srd/items.ts` (SRD),
+> `src/data/catalog.ts` (catálogo común, `syncCatalog`, `compactSnapshot`), test `test/catalogo.test.ts`. Detalle en
+> SPEC §5.1. Decisiones: cada definición tiene la forma del modelo del bloque A; precios del SRD aunque cambien los
+> de antes (mochila 2 de oro, cota de malla 75, ración 5 de plata, poción 50 de oro: lo que cobra cada NPC sigue en su
+> lista); la magia, con valor de la casa por rareza; la poción de curación, sin rareza (está en la lista de equipo
+> del SRD y se reconoce: no sale «sin identificar»); las monturas y los vehículos, tabla aparte; +1/+2/+3 solo de unas
+> pocas bases (daga, espada larga, maza, arco largo, cuero, cota de malla, escudo, flechas, virotes), con `base_id` y
+> `unidentified` (se ven como la base); un pergamino por nivel, con el conjuro en el ejemplar; `TRADE_ITEMS` sigue
+> siendo la lista corta de antes. La magia del SRD solo en los mundos generados: una campaña escrita no la recibe y
+> escribe la suya como objetos propios (Brezal: pocos, enigmáticos y del lore).
+
 - **Un módulo de contenido:** `src/data/srd/items.ts`, con todo el equipo del SRD 5.1 (licencia CC BY 4.0, ya
   usada para razas, clases y conjuros): 37 armas, 12 armaduras y el escudo, munición, unos 100 objetos de
   equipo, herramientas, focos, monturas y mercancías. De magia, un primer lote pequeño: pociones de curación (4),
