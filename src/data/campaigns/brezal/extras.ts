@@ -96,7 +96,7 @@ export const EXTRAS: AuthoredExtra[] = [
     attends: ['se_mercado'], refer_to: ['npc_ilse'], wander: ['sp_pl_pozo', 'sp_pl_tablon', 'sp_pl_callejon'],
   },
   {
-    id: 'npc_x_herminia', name: 'Herminia', trade: 'servant', gender: 'f', role: 'criada de la casona',
+    id: 'npc_x_herminia', name: 'Herminia', trade: 'servant', gender: 'f',
     look: 'Delantal almidonado, llavero pequeño a la cintura y la mirada en el suelo.',
     story: 'Sirve a Osric desde hace doce años. No dice nada de la casa, y se nota que lo tiene ensayado.',
     routine: { day: 'sp_ca_puerta', afternoon: 'sp_pl_pozo', night: 'sp_ca_banco' }, home_spot_id: 'sp_ca_banco',
@@ -107,7 +107,7 @@ export const EXTRAS: AuthoredExtra[] = [
     },
   },
   {
-    id: 'npc_x_damian', name: 'Damián', trade: 'regular', role: 'viejo del Jabalí',
+    id: 'npc_x_damian', name: 'Damián', trade: 'regular',
     look: 'Viejo de nariz roja, pipa de barro apagada entre los dientes y la espalda pegada a la chimenea.',
     story: 'Bebe a cuenta de una pensión que ya no llega. Cuenta lo de las luces del granero a quien le pague una cerveza, y siempre igual.',
     routine: { day: 'sp_tab_chimenea', afternoon: 'sp_tab_chimenea', night: CASAS }, home_spot_id: CASAS,

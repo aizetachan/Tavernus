@@ -126,9 +126,9 @@ export function stolenWithoutTool(input: { action: string; narration: string; ok
   if (input.pendingRoll || input.okTools.some((t) => MOVE_TOOLS.has(t))) return null;
   if (!WANTS_THEFT.test(norm(input.action).replace(/«[^»]*»/g, ' '))) return null;
   for (const c of clauses(norm(input.narration).replace(/«[^»]*»/g, ' . '))) {
-    if (/\b(no|ni|nunca|sin|intentas|si)\b/.test(c)) continue;
     const m = TELLS_TAKEN.exec(c);
-    if (m) return m[0];
+    // Lo niega o lo deja en intento justo antes («no cae a tu mano»); un «sin tirar de la correa» de un robo limpio no.
+    if (m && !/\b(no|ni|nunca|nada|nadie|intentas|si)\b[^,]{0,25}$/.test(c.slice(0, m.index))) return m[0];
   }
   return null;
 }

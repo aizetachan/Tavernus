@@ -513,8 +513,10 @@ depende de la pregunta 2 de `CONVERSACION-FLUJO.md`, que se decide allí para to
   nace el mundo.
 - **Casas** (`perception.ts`, `isDwelling`): un punto con la etiqueta `dwelling` no se ve ni se oye desde fuera, ni ve
   lo de fuera. En el crimen, desde casa se oye lo violento y no lo callado. `move_to` no lista a quien está en casa.
-- **Brezal** (`src/data/campaigns/brezal/extras.ts`): los doce (Lucio pasó a tendero, principal de la sesión de objetos E, y el farol del sereno es `it_farol_aceite` para no chocar con el `it_farol` de su tienda), con dos cambios sobre la tabla: Ciro es «jornalero»
-  y Ramiro «hortelano», para que «el labrador» sea solo Benito. Puntos nuevos: el horno y las casas del callejón
+- **Brezal** (`src/data/campaigns/brezal/extras.ts`): los doce (Lucio pasó a tendero, principal de la sesión de objetos E, y el farol del sereno es `it_farol_aceite` para no chocar con el `it_farol` de su tienda), con cambios sobre la tabla: Ciro es «jornalero»
+  y Ramiro «hortelano», para que «el labrador» sea solo Benito; Herminia es «criada» y Damián «parroquiano», porque un
+  oficio que nombra un sitio («criada de la casona», «viejo del Jabalí») hace que «voy a la casona» se lea como hablar
+  con alguien (el validador ya lo rechaza). Puntos nuevos: el horno y las casas del callejón
   (cerradas con `it_llave_casas`, que llevan Marta y Fermina: robarla abre la puerta). Objetos nuevos: pan gris, farol de
   aceite y la llave.
 - **Migración** (`engine.ts`, `migrate`): el relleno que falta entra en las partidas empezadas con lo que lleva y su

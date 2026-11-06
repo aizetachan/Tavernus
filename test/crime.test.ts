@@ -100,8 +100,9 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     const [inc] = allIncidents(engine.world);
     expect(inc).toMatchObject({ perpetrator_id: leo.id, victim_id: 'npc_hugo', location_id: 'loc_taberna', spot_id: 'sp_tab_barra' });
     expect(['assault', 'armed_assault']).toContain(inc!.kind);
-    // La cena: la gente sin nombre también lo ha visto.
-    expect(inc!.crowd).toMatch(/diez vecinos/);
+    // La cena: la gente sin nombre también lo ha visto. Son seis: los otros cuatro de antes son ahora vecinos de
+    // relleno con nombre (docs/PLAN-NPC-RELLENO.md), testigos como cualquier NPC.
+    expect(inc!.crowd).toMatch(/seis vecinos/);
     expect(Object.fromEntries(inc!.knowers.map((k) => [k.npc_id, [k.role, k.response]]))).toMatchObject({
       npc_hugo: ['victim', 'fight'], npc_brenna: ['owner', 'refuse'], npc_garran: ['authority', 'arrest'],
     });
@@ -144,7 +145,7 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     expect(incident.observable).toMatch(/^⚖ Lo han visto: Leodhin mató a Hugo\./);
     expect(incident.observable).toMatch(/Garrán se planta delante de Leodhin: «¡Alto! Quedas detenido\.»/);
     expect(incident.observable).toMatch(/Brenna retrocede sin quitarle ojo: no piensa atender a Leodhin\./);
-    expect(incident.observable).toMatch(/Unos diez vecinos gritan y se apartan/);
+    expect(incident.observable).toMatch(/Unos seis vecinos gritan y se apartan/);
     // Para él, con los nombres que sabe: no sabe cómo se llaman el herrero ni el alguacil.
     expect(incident.payload['observable_target']).toMatch(/^⚖ Te han visto: has matado al herrero\. El alguacil se planta delante de ti.*Desde ahora te buscan\./);
     expect(arrest.narration_private).toMatch(/^El alguacil se te planta delante: .*Te acusa de esto: Leodhin mató al herrero en la barra/);

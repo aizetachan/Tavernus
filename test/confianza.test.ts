@@ -291,7 +291,8 @@ describe('pistas con requisitos en los datos de Brezal', () => {
   it('cada persona de Brezal tiene su saber por niveles; el secreto del motor es la suma, solo para el análisis', async () => {
     const { engine } = await boot();
     for (const n of engine.world.npcs.values()) {
-      if (!n.stats || n.id === 'npc_lobo' || n.id === 'npc_loba') continue;
+      // El relleno (docs/PLAN-NPC-RELLENO.md) no guarda secretos: no tiene saber por niveles.
+      if (!n.stats || n.id === 'npc_lobo' || n.id === 'npc_loba' || n.tier === 'extra') continue;
       expect(n.knowledge?.length, n.id).toBeGreaterThanOrEqual(3);
       expect(n.knowledge![0]!.tier, n.id).toBe('stranger');
       expect(n.secret).toBe(n.knowledge!.map((k) => k.text).join(' '));
