@@ -58,7 +58,7 @@ describe('la tienda del buhonero en Brezal', () => {
     expect(carrierOf(engine.world, engine.world.itemInstance('ii_cendal_llaves').location)).toEqual({ type: 'npc', id: 'npc_lucio' });
     expect(coinsOf(engine.world, a.id)).toBe(600);
     expect(stockCount(engine.world, a, 'it_cuerda')).toBe(2);
-    expect(stockCount(engine.world, a, 'it_sal')).toBe(2);
+    expect(stockCount(engine.world, a, 'it_sal_valcruz')).toBe(2);
   });
 
   it('lo mágico es poco y del lore: la tapa del cuenco de cuna la lleva Lucio encima y no está a la venta', async () => {
@@ -101,12 +101,12 @@ describe('la tienda del buhonero en Brezal', () => {
     const c = await newPc(engine, 'Nia');
     const a = engine.world.npc('npc_lucio');
     setCoins(engine.world, c.id, 5000);
-    expect(buyFromNpc(engine.world, c, a.id, 'it_garfio', 2, OPEN)).toEqual({ ok: false, reason: 'a Lucio Cendal solo le queda 1 de garfio de abordaje' });
+    expect(buyFromNpc(engine.world, c, a.id, 'it_garfio', 2, OPEN)).toEqual({ ok: false, reason: 'a Lucio Cendal solo le queda 1 de garfio de escalada' });
     expect(buyFromNpc(engine.world, c, a.id, 'it_garfio', 1, OPEN).ok).toBe(true);
-    expect(buyFromNpc(engine.world, c, a.id, 'it_garfio', 1, OPEN)).toEqual({ ok: false, reason: 'a Lucio Cendal no le queda garfio de abordaje' });
+    expect(buyFromNpc(engine.world, c, a.id, 'it_garfio', 1, OPEN)).toEqual({ ok: false, reason: 'a Lucio Cendal no le queda garfio de escalada' });
     // Lo de la trastienda también se vende desde el mostrador (sin entrar).
-    expect(buyFromNpc(engine.world, c, a.id, 'it_sal', 1, OPEN).ok).toBe(true);
-    expect(stockCount(engine.world, a, 'it_sal')).toBe(1);
+    expect(buyFromNpc(engine.world, c, a.id, 'it_sal_valcruz', 1, OPEN).ok).toBe(true);
+    expect(stockCount(engine.world, a, 'it_sal_valcruz')).toBe(1);
     // La vista de la tienda ya no lo enseña.
     expect(shopLines(engine.world, a, c).map((l) => l.item_id)).not.toContain('it_garfio');
   });

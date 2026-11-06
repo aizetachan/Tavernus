@@ -25,8 +25,11 @@ import { encounterAt, hostilesAt, recentCombatTag } from '../engine/encounter.js
 import { INCIDENT_KINDS, incidentRejection, npcCrimeLine, pendingIncidents, reactionSentences, readsAsTheft, reportAssault, reportIncident, reportKill, unnarratedReactors, type IncidentKind } from '../engine/crime.js';
 import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, helplessNpc, isDying, killNpc, knockOutNpc, medicineDc, NPC_DOWN_HINT, reviveNpc, stabilize } from '../engine/death.js';
 import { spendResource } from '../engine/rest.js';
-import { castSpell } from '../engine/levels.js';
-import { ABILITY_ES, armorClass, characterCheck, normalizeSkill, SKILLS, type CheckKind } from '../engine/rules.js';
+import { castSpell, spellStats } from '../engine/levels.js';
+import { applyItemEffect, damageAfterResistance, gearLines, armorBlocksSpells, attackProfile, attune, canAttune, castFromCharges, copyCost, copyScroll, endAttunement, identify, reachCheck, spellItemBonus, spendCharges, useScroll, type ItemCast } from '../engine/itemrules.js';
+import { isIdentifiedBy } from '../engine/items.js';
+import { setAhead } from '../engine/travel.js';
+import { ABILITY_ES, armorClass, characterCheck, normalizeSkill, skillModifier, SKILLS, type CheckKind } from '../engine/rules.js';
 import { SOCIAL_SKILLS, socialDcShift } from '../engine/standing.js';
 import { freshTagOptions, tagOptions } from '../engine/worldrules.js';
 import { aEs, descriptorOf, fmtDuration, maskUnknownNames, nameRe, npcNameForms, unknownNpcsNamed } from '../engine/narrate.js';
@@ -41,7 +44,7 @@ import { debtHeldBy, debtTitle, noteDebtTerms, openDebts, pawnItem, setDebt, set
 import { inventedPlaces } from '../engine/places.js';
 import { addToPurse, coinsAt, coinsOf, money, pay, receive, takeFromPurse } from '../engine/money.js';
 import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
-import { coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, servedRejection, servedWithoutPay, stolenRejection, stolenWithoutTool, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
+import { magicRejection, magicWithoutTool, type MagicAtHand, coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, servedRejection, servedWithoutPay, stolenRejection, stolenWithoutTool, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
@@ -210,8 +213,16 @@ export const MASTER_TOOLS: Tool[] = [
     target_id: str('ID del personaje o NPC'), amount: num('PG curados (con un objeto que tiene dados de curación, los tira el servidor y esto se ignora)'), healer_id: nstr('Quién cura (ID de PJ o NPC); null = el actor'),
     item_instance_id: nstr('El ejemplar que se gasta al curar (poción, tónico, venda…), o null si es magia o cuidados'),
   }),
-  tool('use_item', 'Alguien gasta un objeto consumible que lleva encima o tiene delante (bebe la cerveza, se come la ración, quema la antorcha hasta el final): el servidor lo quita. Para curar con una poción usa heal con item_instance_id.', {
-    instance_id: str('ID del ejemplar'), quantity: nnum('Unidades que se gastan; null = 1'),
+  tool('use_item', 'Alguien gasta un objeto consumible que lleva encima o tiene delante (bebe la cerveza, se come la ración, quema la antorcha hasta el final): el servidor lo quita. Una poción con efecto (invisibilidad, resistencia…) se lo pone al actor con su duración. Una varita u objeto con cargas gasta quantity cargas y, si lanza un conjuro, el servidor lo tira (con target_id si es de ataque). Para curar con una poción usa heal con item_instance_id.', {
+    instance_id: str('ID del ejemplar'), quantity: nnum('Unidades (o cargas) que se gastan; null = 1'),
+    target_id: nstr('Solo varitas con conjuro de ataque: el objetivo (NPC o PJ); null si no'),
+  }),
+  tool('use_scroll', 'El actor lee un pergamino de conjuro (cast) o, si es mago, lo copia a su libro (copy: 2 h y 50 de oro por nivel, prueba de Arcanos; el pergamino se pierde salga o no). Solo si el conjuro es de su lista: si es de nivel mayor del que lanza, el servidor tira la prueba (CD 10 + nivel) y si falla se pierde sin efecto. Devuelve CD, ataque y dados: aplica tú el daño, la curación o la condición y narra.', {
+    instance_id: str('ID del pergamino'), mode: enm(['cast', 'copy'], 'cast: lanzarlo; copy: copiarlo al libro de conjuros'),
+    target_id: nstr('Objetivo de un ataque de conjuro (NPC o PJ); null si no ataca'),
+  }),
+  tool('attune_item', 'Objetos mágicos: attune sintoniza al actor con uno que lo pide (sin sintonía no da nada; 3 como mucho), identify le dice qué hace uno sin identificar, end deja la sintonía. attune e identify son un descanso corto (1 h) con el objeto en las manos: el servidor pasa el tiempo y, si no le interrumpen, lo aplica.', {
+    instance_id: str('ID del ejemplar'), mode: enm(['attune', 'identify', 'end'], 'attune (sintonizarse), identify (saber qué es), end (dejar la sintonía)'),
   }),
   tool('stabilize', 'Atender a un PJ que está a 0 PG cayendo (salvaciones contra muerte). Si lo atiende un PJ, el servidor tira su Medicina CD 10; un NPC lo logra. Estable: deja de tirar y recupera 1 PG en 1d4 h.', {
     target_id: str('ID del PJ caído'), healer_id: str('Quién le atiende: el actor u otro PJ presente, o un NPC'),
@@ -310,7 +321,7 @@ export const MASTER_TOOLS: Tool[] = [
     tags: str('Etiquetas separadas por comas: social, exploration, combat, milestone…'),
     suggested_actions: str('2-4 acciones sugeridas para ESTE personaje, separadas por " | ". Cadena vacía si no procede o si pides tirada (requires_roll): entonces solo se ofrece el dado.'),
     requires_roll_kind: nstr('Si la acción necesita una tirada del jugador antes de resolverse: skill/save/ability/attack. null si no.'),
-    requires_roll_key: nstr('Skill, característica o melee/ranged. null si no hay tirada.'),
+    requires_roll_key: nstr('Skill, característica o melee/ranged (off_hand: con el arma ligera de la otra mano). null si no hay tirada.'),
     requires_roll_dc: nnum('CD oculta. null si no hay tirada.'),
     requires_roll_advantage: nstr('none/advantage/disadvantage. null si no hay tirada.'),
     requires_roll_target: nstr('Si la tirada es un ataque: ID del objetivo (NPC o personaje). El servidor resolverá impacto y daño. null si no.'),
@@ -343,6 +354,7 @@ export const WRITE_TOOLS = new Set([
   'move_to', 'transfer_item', 'spawn_item', 'use_item', 'update_spot_state', 'update_location_state', 'discover_spot', 'harvest', 'grant_clue', 'complete_job', 'advance_story', 'story_quest',
   'give_quest', 'finish_quest', 'sell_item', 'buy_item', 'set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'take_coins', 'attack', 'apply_damage', 'heal', 'add_condition', 'remove_condition',
   'stabilize', 'take_rest', 'spend_resource', 'cast_spell', 'request_reaction', 'set_npc_order', 'report_incident', 'npc_trust', 'restrain_npc',
+  'use_scroll', 'attune_item',
 ]);
 
 export const MEMORY_CAP_PER_CHARACTER = 8;
@@ -397,6 +409,7 @@ export interface ToolContext {
   served_rejections?: number;
   /** Cierres rechazados por dar monedas por pagadas sin moverlas (closecheck.ts; uno como mucho). */
   coins_rejections?: number;
+  magic_rejections?: number;
   /** El PJ ha atacado en esta acción con el tool attack (el de un NPC no cuenta). */
   pc_attacked?: boolean;
   /** Cierres rechazados por dejar sin resolver un golpe que declara el jugador (closecheck.ts; uno como mucho). */
@@ -802,6 +815,48 @@ function fightingHere(ctx: ToolContext, tags: readonly string[] = []): boolean {
  * Saquear (death.ts): el cuerpo de quien murió en casual solo lo toca su dueño;
  * a un PJ vivo caído no se le quita nada sin su consentimiento (que te lo dé).
  */
+/**
+ * Lo que devuelve un conjuro lanzado desde un objeto (pergamino, varita): CD,
+ * ataque contra la CA del objetivo si lo tiene, y dados, como cast_spell.
+ */
+function itemCastOut(ctx: ToolContext, r: ItemCast, tgt: Id | null): Record<string, unknown> | { error: string } {
+  const world = ctx.engine.world;
+  const sp = r.spell;
+  const out: Record<string, unknown> = { spell: sp.name, level: sp.level === 0 ? 'truco' : r.cast_level, effect: sp.text, ...(sp.concentration ? { concentration: true } : {}) };
+  if (sp.save) out['save'] = `salvación de ${ABILITY_ES[sp.save]} CD ${r.save_dc}`;
+  if (sp.attack && tgt) {
+    const npc = world.npcs.get(tgt);
+    const pc = world.characters.get(tgt);
+    if (!npc?.stats && !pc) return { error: `objetivo desconocido o sin CA: ${tgt}` };
+    const ac = npc?.stats ? npc.stats.ac : armorClass(world, pc!);
+    const atk = rollD20(r.attack, ac, 'none', ctx.rng);
+    out['attack'] = `${atk.breakdown} contra CA ${ac}: ${atk.success ? (atk.natural === 20 ? 'impacta, crítico (dobla los dados de daño)' : 'impacta') : 'falla'}`;
+    out['hit'] = atk.success === true;
+    (ctx.shown_rolls ??= []).push({ roller_id: ctx.actor.id, target_id: tgt, label: `${sp.name} a ${npc?.name ?? pc!.name}`, dice: atk.breakdown, total: atk.total, outcome: atk.success ? 'impacta' : 'falla', ...(atk.natural ? { natural: atk.natural } : {}) });
+  } else if (sp.attack) out['attack'] = `ataque de conjuro ${r.attack >= 0 ? '+' : ''}${r.attack}: pásale target_id para tirarlo`;
+  if (r.roll && sp.dice) {
+    const what = sp.dice.kind === 'heal' ? 'curación' : sp.dice.kind === 'temp_hp' ? 'PG temporales' : sp.dice.kind === 'pool' ? (sp.dice.type ?? 'total') : `daño ${sp.dice.type ?? ''}`.trim();
+    out['roll'] = `${what}: ${r.roll.breakdown}`;
+    out['apply'] = sp.dice.kind === 'heal' ? 'aplícalo con heal' : sp.dice.kind === 'damage' ? (sp.attack ? 'si impacta, aplícalo con apply_damage' : sp.save ? 'aplícalo con apply_damage (mitad o nada si supera la salvación, según el conjuro)' : 'aplícalo con apply_damage') : 'resuélvelo al narrar';
+    if (!(sp.attack && tgt)) (ctx.shown_rolls ??= []).push({ roller_id: ctx.actor.id, label: `${sp.name} (${what})`, dice: r.roll.breakdown, total: r.roll.total, outcome: null });
+  }
+  return out;
+}
+
+/** Lo que el actor tiene a mano que se puede usar con magia: el cierre solo vigila eso (closecheck.ts, magicWithoutTool). */
+function magicAtHand(ctx: ToolContext): MagicAtHand {
+  const w = ctx.engine.world;
+  const out: MagicAtHand = { scroll: false, potion: false, charged: false, attunable: false };
+  for (const i of w.itemsCarriedBy(ctx.actor.id)) {
+    const d = w.itemDef(i.item_id);
+    if (d.spell && !d.charges) out.scroll = true;
+    if (d.charges) out.charged = true;
+    if (d.effect || d.heals) out.potion = true;
+    if (d.attunement) out.attunable = true;
+  }
+  return out;
+}
+
 function lootGuard(ctx: ToolContext, instanceId: Id): Record<string, unknown> | null {
   const w = ctx.engine.world;
   const body = bodyHolding(w, instanceId);
@@ -849,7 +904,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const pos = positionOf(world, c, nowGameS);
       const pub = { id: c.id, name: c.name, race: c.race, class_name: c.class_name, appearance: c.appearance, status: c.status, spot_id: pos.spot_id, hands: inv.hands, equipped: inv.equipped, conditions: c.conditions.map((x) => x.name), hp_hint: c.hp_current >= c.hp_max ? 'ileso' : c.hp_current > c.hp_max / 2 ? 'herido' : 'malherido' };
       if (c.id !== actor.id) return pub;
-      return { ...pub, level: c.level, abilities: c.abilities, hp: `${c.hp_current}/${c.hp_max}`, proficiencies: c.proficiencies, inventory: inventoryDetailed(world, c.id).map(({ item_id, ...x }) => (x.unidentified ? x : { item_id, ...x })), coins: coinsOf(world, c.id), encumbrance: inv.encumbrance.level, backstory: c.backstory, facts: characterFacts(c).map((f) => f.text) };
+      return { ...pub, level: c.level, abilities: c.abilities, hp: `${c.hp_current}/${c.hp_max}`, proficiencies: c.proficiencies, inventory: inventoryDetailed(world, c.id).map(({ item_id, ...x }) => (x.unidentified ? x : { item_id, ...x })), coins: coinsOf(world, c.id), encumbrance: inv.encumbrance.level, backstory: c.backstory, facts: characterFacts(c).map((f) => f.text), ...(gearLines(world, c).length ? { gear: gearLines(world, c) } : {}) };
     }
     case 'get_npc': {
       const n = world.npc(s('npc_id'));
@@ -1000,7 +1055,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     }
     case 'roll_check': {
       const c = world.character(s('character_id'));
-      const r: CheckResult & { label: string } = characterCheck(c, s('kind') as CheckKind, s('kind') === 'skill' ? normalizeSkill(s('key')) : s('key'), input['dc'] == null ? null : Number(input['dc']), (s('advantage') || 'none') as Advantage, ctx.rng);
+      const r: CheckResult & { label: string } = characterCheck(c, s('kind') as CheckKind, s('kind') === 'skill' ? normalizeSkill(s('key')) : s('key'), input['dc'] == null ? null : Number(input['dc']), (s('advantage') || 'none') as Advantage, ctx.rng, world);
       ctx.rolls.push(r);
       if (input['hidden'] !== true) (ctx.shown_rolls ??= []).push(checkRoll(c.id, r));
       return { character: c.name, check: r.label, breakdown: r.breakdown, total: r.total, success: r.success, natural: r.natural ?? null };
@@ -1154,7 +1209,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     case 'harvest': {
       const c = world.character(s('character_id'));
       const node = world.resourceNode(s('node_id'));
-      const check = characterCheck(c, 'skill', node.skill, node.dc, 'none', ctx.rng);
+      const check = characterCheck(c, 'skill', node.skill, node.dc, 'none', ctx.rng, world);
       ctx.rolls.push(check);
       (ctx.shown_rolls ??= []).push(checkRoll(c.id, check));
       const r = harvest(world, c, node.id, check.success === true, nowGameS);
@@ -1372,9 +1427,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (tgtSpot && mine && tgtSpot !== mine.id) {
           const t = world.spot(tgtSpot);
           const d = Math.round(distance(mine, t));
-          const ranged = world.itemsCarriedBy(atk.id).some((i) => i.location.type === 'character' && i.location.slot.kind === 'hand' && world.itemDef(i.item_id).weapon?.ranged);
           if (t.location_id !== mine.location_id) return { error: 'not_reachable', detail: { reason: 'el objetivo no está en esta localización', distance_m: null, go_to: null } };
-          if (!ranged) return { error: 'not_reachable', detail: { reason: `el objetivo está en ${t.name}, a ${d} m: fuera del alcance de un arma cuerpo a cuerpo`, distance_m: d, go_to: t.id }, hint: `move_to ${t.id} primero (o un arma a distancia); hasta que llegue, no ha atacado` };
+          // Con lo que lleva en la mano (itemrules.ts): cuerpo a cuerpo, alcance, arrojadiza o a distancia, con su alcance largo.
+          const p = attackProfile(world, atk, { mode: 'ranged' });
+          const reach = 'error' in p ? null : reachCheck(p, false, distance(mine, t));
+          if (!reach?.ok) return { error: 'not_reachable', detail: { reason: `el objetivo está en ${t.name}, a ${d} m: ${reach && !reach.ok ? reach.reason : 'fuera de su alcance'}`, distance_m: d, go_to: t.id }, hint: `move_to ${t.id} primero (o un arma a distancia); hasta que llegue, no ha atacado` };
         }
       }
       // Un NPC hace aquí su turno entero (multiataque incluido), y uno solo por acción.
@@ -1417,7 +1474,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const c = world.character(s('target_id'));
       if (c.veiled) return { error: `${c.name} está bajo el velo: no puede recibir daño` };
       if (c.status === 'dead') return { error: `${c.name} ya está muerto` };
-      const r = damageCharacter(world, c, Number(input['amount']) || 0, { cause: s('source') || s('damage_type') || 'daño', nowGameS, ...(nonLethalSource(world, c, s('source')) ? { nonLethal: true, rng: ctx.rng } : {}) });
+      // Resistencia o inmunidad por lo que lleva o se ha tomado (itemrules.ts): el motor la aplica, no el máster.
+      const r = damageCharacter(world, c, damageAfterResistance(world, c, Number(input['amount']) || 0, s('damage_type')), { cause: s('source') || s('damage_type') || 'daño', nowGameS, ...(nonLethalSource(world, c, s('source')) ? { nonLethal: true, rng: ctx.rng } : {}) });
       return {
         ok: true, hp: `${c.hp_current}/${c.hp_max}`, status: c.status,
         ...(r.down ? { down: true, note: c.away ? 'está ausente: cae y queda estable (no muere ausente)' : 'cae a 0 PG: inconsciente; el servidor tira sus salvaciones contra muerte' } : {}),
@@ -1465,12 +1523,82 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const inst = world.itemInstances.get(s('instance_id'));
       if (!inst || !usableBy(ctx, inst.id, [actor.id])) return { error: 'not_reachable', hint: `${s('instance_id')} no lo lleva el actor ni está a su alcance.` };
       const def = world.itemDef(inst.item_id);
-      if (def.type !== 'consumable' && !def.light_source) return { error: 'not_consumable', hint: `${def.name} no se gasta al usarlo: no lo quites.` };
       const guard = lootGuard(ctx, inst.id);
       if (guard) return guard;
+      // Varita, bastón u objeto con cargas: gasta cargas y, si lanza un conjuro, lo tira el servidor (itemrules.ts).
+      if (def.charges) {
+        const n = input['quantity'] == null ? 1 : Number(input['quantity']);
+        if (def.spell) {
+          const blocked = armorBlocksSpells(world, actor);
+          if (blocked) return { error: blocked };
+          const st = spellStats(actor);
+          const bonus = spellItemBonus(world, actor);
+          const r = castFromCharges(world, actor, inst, n, nowGameS, { save_dc: (st?.save_dc ?? 10) + bonus.save_dc, attack: (st?.attack ?? 0) + bonus.attack }, ctx.rng);
+          if (!r.ok) return { error: r.error };
+          identify(world, actor, inst);
+          const out = itemCastOut(ctx, r.cast, input['target_id'] ? s('target_id') : null);
+          if ('error' in out) return out;
+          return { ok: true, used: def.name, charges_left: r.left, ...(r.destroyed ? { destroyed: 'gasta la última carga y se deshace: ya no existe' } : {}), ...out };
+        }
+        const r = spendCharges(world, inst, n, nowGameS, ctx.rng);
+        if (!r.ok) return { error: r.error };
+        return { ok: true, used: def.name, charges_left: r.left, ...(r.destroyed ? { destroyed: 'gasta la última carga y se deshace: ya no existe' } : {}), ...(def.description ? { effect: def.description } : {}) };
+      }
+      if (def.type !== 'consumable' && !def.light_source) return { error: 'not_consumable', hint: `${def.name} no se gasta al usarlo: no lo quites.` };
       const r = consumeItem(world, inst.id, input['quantity'] == null ? 1 : Number(input['quantity']));
       if (!r.ok) return { error: r.error };
-      return { ok: true, used: def.name, left: r.left, ...(def.heals ? { hint: 'Esto cura: si se lo ha bebido para curarse, era heal con item_instance_id.' } : {}) };
+      // Poción con efecto: el motor pone la condición con su duración; el máster la narra.
+      const fx = applyItemEffect(world, actor, def, nowGameS);
+      return { ok: true, used: def.name, left: r.left, ...(fx ? { effect: `${actor.name} queda con «${fx.name}»${fx.expires_game_s ? ` hasta las ${engine.clock.format(fx.expires_game_s)}` : ''}: narra eso, ni más ni menos` } : {}), ...(def.heals ? { hint: 'Esto cura: si se lo ha bebido para curarse, era heal con item_instance_id.' } : {}) };
+    }
+    case 'use_scroll': {
+      const inst = world.itemInstances.get(s('instance_id'));
+      if (!inst || !usableBy(ctx, inst.id, [actor.id])) return { error: 'not_reachable', hint: `${s('instance_id')} no lo lleva el actor ni está a su alcance.` };
+      const guard = lootGuard(ctx, inst.id);
+      if (guard) return guard;
+      if (s('mode') === 'copy') {
+        const lvl = world.itemDef(inst.item_id).spell?.level ?? 1;
+        const cost = copyCost(lvl);
+        if (coinsOf(world, actor.id) < cost.coins) return { error: `Copiarlo al libro cuesta ${money(world, cost.coins)} en tintas y polvos: no le llega.` };
+        const r = copyScroll(world, actor, inst, skillModifier(actor, 'arcana'), ctx.rng);
+        if (!r.ok) return { error: r.error };
+        // Tintas y polvos: el dinero sale de su bolsa y del mundo (money.ts).
+        pay(world, actor.id, cost.coins);
+        setAhead(actor, nowGameS + cost.hours * 3600, engine.gameNow());
+        world.touch('characters', actor.id);
+        (ctx.shown_rolls ??= []).push({ roller_id: actor.id, label: `Arcanos para copiar ${r.spell.name}`, dice: r.check.breakdown, total: r.check.total, outcome: r.copied ? 'lo copia' : 'no lo consigue' });
+        return { ok: true, copied: r.copied, spell: r.spell.name, spent: money(world, cost.coins), hours: cost.hours, note: r.copied ? `${r.spell.name} queda en su libro; el pergamino se ha gastado` : 'no consigue copiarlo y el pergamino se ha gastado igual' };
+      }
+      const r = useScroll(world, actor, inst, ctx.rng);
+      if (!r.ok) {
+        if (r.check) (ctx.shown_rolls ??= []).push({ roller_id: actor.id, label: 'Leer un pergamino de nivel mayor', dice: r.check.breakdown, total: r.check.total, outcome: 'falla' });
+        return r.consumed ? { ok: true, failed: true, note: r.error } : { error: r.error };
+      }
+      world.touch('characters', actor.id);
+      if (r.cast.check) (ctx.shown_rolls ??= []).push({ roller_id: actor.id, label: 'Leer un pergamino de nivel mayor', dice: r.cast.check.breakdown, total: r.cast.check.total, outcome: 'lo consigue' });
+      const out = itemCastOut(ctx, r.cast, input['target_id'] ? s('target_id') : null);
+      if ('error' in out) return out;
+      return { ok: true, used: 'el pergamino se deshace al leerlo', ...out };
+    }
+    case 'attune_item': {
+      const inst = world.itemInstances.get(s('instance_id'));
+      if (!inst || !usableBy(ctx, inst.id, [actor.id])) return { error: 'not_reachable', hint: `${s('instance_id')} no lo lleva el actor ni está a su alcance.` };
+      const mode = s('mode');
+      if (mode === 'end') {
+        const r = endAttunement(world, actor, inst);
+        return r.ok ? { ok: true, note: `${actor.name} deja de estar sintonizado con ${world.itemDef(inst.item_id).name}` } : { error: r.error };
+      }
+      // Lo que no se puede no se intenta: antes de gastar la hora.
+      if (mode === 'attune') { const no = canAttune(world, actor, inst); if (no) return { error: no }; }
+      else if (isIdentifiedBy(world.itemDef(inst.item_id), inst, actor.id)) return { ok: true, already_known: true, ...itemView(world, inst.id, actor.id) };
+      const rest = engine.restByMaster(actor, 'short');
+      if ('error' in rest) return { error: rest.error };
+      if (!rest['completed'] || rest['interrupted_by']) return { ok: true, interrupted: true, note: 'le interrumpen antes de la hora: ni se sintoniza ni sabe más del objeto', rest };
+      if (mode === 'attune') {
+        const r = attune(world, actor, inst);
+        if (!r.ok) return { error: r.error };
+      } else identify(world, actor, inst);
+      return { ok: true, [mode === 'attune' ? 'attuned' : 'identified']: true, ...itemView(world, inst.id, actor.id), rest };
     }
     case 'restrain_npc': {
       const n = world.npc(s('npc_id'));
@@ -1500,7 +1628,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const npc = world.npcs.get(s('healer_id'));
       if (pc) {
         if (pc.status !== 'active') return { error: `${pc.name} no puede atenderle (${pc.status})` };
-        const roll = characterCheck(pc, 'skill', 'medicine', medicineDc(), 'none', ctx.rng);
+        const roll = characterCheck(pc, 'skill', 'medicine', medicineDc(), 'none', ctx.rng, world);
         ctx.rolls.push({ expr: 'medicine', total: roll.total, breakdown: roll.breakdown, rolls: [] });
         (ctx.shown_rolls ??= []).push({ ...checkRoll(pc.id, roll), target_id: c.id, label: `${roll.label} para estabilizar a ${c.name}` });
         if (!roll.success) return { ok: true, stabilized: false, roll: roll.breakdown, note: 'falla la Medicina: sigue cayendo (puede volver a intentarlo)' };
@@ -1515,8 +1643,19 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return 'error' in r ? { error: r.error } : r;
     }
     case 'cast_spell': {
-      const r = castSpell(actor, s('spell'), { slot_level: input['slot_level'] == null ? null : Number(input['slot_level']), ritual: input['ritual'] === true }, ctx.rng);
+      const blocked = armorBlocksSpells(world, actor);
+      if (blocked) return { error: blocked };
+      // Sobre un objeto (Identificar): es de toque, el objeto tiene que estar a su alcance.
+      const onItem = input['target_id'] ? world.itemInstances.get(s('target_id')) : undefined;
+      if (onItem && !usableBy(ctx, onItem.id, [actor.id])) return { error: 'not_reachable', hint: 'Es de toque: el objeto tiene que estar en sus manos o delante.' };
+      const r = castSpell(actor, s('spell'), { slot_level: input['slot_level'] == null ? null : Number(input['slot_level']), ritual: input['ritual'] === true, bonus: spellItemBonus(world, actor) }, ctx.rng);
       if (!r.ok) return { error: r.error };
+      // Identificar sobre un objeto: el motor se lo descubre al actor.
+      if (onItem && r.spell.id === 'identify') {
+        identify(world, actor, onItem);
+        world.touch('characters', actor.id);
+        return { ok: true, spell: r.spell.name, ...(r.slot ? { slot: `${r.slot.label}: le quedan ${r.slot.left}` } : {}), ...(r.ritual ? { ritual: 'lanzado como ritual' } : {}), ...itemView(world, onItem.id, actor.id) };
+      }
       world.touch('characters', actor.id);
       const sp = r.spell;
       const out: Record<string, unknown> = {
@@ -1728,6 +1867,14 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (paid) {
           ctx.coins_rejections = (ctx.coins_rejections ?? 0) + 1;
           return { error: coinsRejection(paid) };
+        }
+      }
+      // Un efecto mágico narrado sin su tool (bebe la poción y se vuelve invisible; la varita escupe dardos): se reescribe una vez.
+      if ((ctx.magic_rejections ?? 0) < 1) {
+        const fx = magicWithoutTool({ narration: s('narration_private'), okTools: ctx.ok_tools ?? [], atHand: magicAtHand(ctx), pendingRoll: req !== null });
+        if (fx) {
+          ctx.magic_rejections = (ctx.magic_rejections ?? 0) + 1;
+          return { error: magicRejection(fx) };
         }
       }
       // El jugador declara un golpe y nadie lo resuelve: se reescribe una vez, y si hay razón para no tirar, que la cuente.

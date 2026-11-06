@@ -93,6 +93,11 @@ export interface Campaign {
   /** Procedencia: cómo y con qué se generó este mundo. */
   generation?: GenerationInfo;
   /**
+   * Versión del catálogo SRD de objetos con que se guardó la partida (src/data/srd/items.ts).
+   * Al arrancar, `syncCatalog` (src/data/catalog.ts) pone las definiciones SRD a la del código.
+   */
+  catalog_version?: number;
+  /**
    * Situaciones iniciales aún sin dueño: la de cada PJ anunciado al generar y alguna de reserva.
    * Campañas escritas: `for_classes` la reserva a esas clases (ids SRD) y `keep` la deja en la bolsa para el siguiente.
    */
@@ -724,8 +729,11 @@ export interface Npc {
   kit?: string;
   /** Lo que lleva en la bolsa (outfit.ts): sin campo, la riqueza de su ajuar. Datos de campaña. */
   wealth?: 'none' | 'poor' | 'modest' | 'comfortable' | 'rich';
-  /** Ya tiene su ajuar (outfit.ts): no se le vuelve a dar, aunque le roben. Estado de partida. */
-  outfitted?: boolean;
+  /**
+   * Ya tiene su ajuar (outfit.ts): no se le vuelve a dar, aunque le roben. El número es la versión del ajuar
+   * (`OUTFIT_VERSION`); `true`, la 1. Estado de partida.
+   */
+  outfitted?: boolean | number;
 }
 
 /**
@@ -983,6 +991,8 @@ export interface ItemState {
   owner_id?: Id;
   /** El conjuro de este pergamino, si su definición no lo fija (`ItemDef.spell` sin `spell_id`). */
   spell_id?: string;
+  /** Lo lleva puesto un NPC (su ropa, el guante, las botas: outfit.ts). Deja de estarlo al cambiar de sitio. */
+  worn?: boolean;
 }
 
 /** Un ejemplar concreto en el mundo. Siempre en exactamente un `location`. */

@@ -1,34 +1,23 @@
 /**
- * Brezal: objetos. El catálogo común del generador (equipo SRD, leña, bayas,
- * truchas, la noche de posada y su llave) más lo propio de esta historia: las
+ * Brezal: objetos. El catálogo común (src/data/catalog.ts: el equipo del SRD,
+ * leña, bayas, truchas, la noche de posada y su llave) más lo propio de esta historia: las
  * pruebas, la llave de los Vharn y los eslabones de hierro frío; y lo de la
  * granja de Úrsula (huevos y coles). Dónde está cada cosa al empezar y qué dan
  * el Soto y los Corrales. Lo que cada vecino lleva encima (bolsa, monedas, cosas
- * de su oficio, su arma) lo pone el ajuar al arrancar (src/engine/outfit.ts); aquí
- * solo lo que es de esta historia: la bolsa del diezmo de Garrán.
+ * de su oficio, su arma, su ropa) lo pone el ajuar al arrancar (src/engine/outfit.ts);
+ * aquí solo lo que es de esta historia: la bolsa del diezmo de Garrán y lo que la
+ * historia nombra de cada vecino (PLAN-OBJETOS §7): la jarra de Brenna, el guante de
+ * Ysolde, la cuerda de Úrsula, las botas de Doro, los anillos de Osric y, en la fragua,
+ * el martillo del hijo del maestro de Hugo. Lo que se lleva puesto va con `state.worn`.
  */
 
 import type { ItemDef, ResourceNode } from '../../../engine/model.js';
-import { CATALOG } from '../../../worldgen/fill.js';
+import { CATALOG } from '../../catalog.js';
 import { kitItemDef } from '../../../engine/outfit.js';
 import type { AuthoredInstance } from '../format.js';
 
 const quest = (id: string, name: string, aliases: string[], extra: Partial<ItemDef> = {}): ItemDef =>
   ({ id, name, aliases, type: 'quest', size: 'small', weight_lb: 0.5, value: 0, unique: true, origin: 'custom', ...extra });
-
-/**
- * La tienda del buhonero (shop.ts): equipo de aventurero del SRD que el catálogo común aún no trae, a precios de
- * Brezal. Con los mismos ids que el catálogo SRD (PLAN-OBJETOS §3, bloque B): cuando el catálogo los traiga, mandan
- * los suyos y estos se dejan de añadir (el filtro de ITEM_DEFS), sin ids repetidos.
- */
-const SHOP_GOODS: ItemDef[] = [
-  { id: 'it_aceite', name: 'frasco de aceite', aliases: ['aceite', 'frasco de aceite', 'oil'], type: 'consumable', size: 'tiny', weight_lb: 1, value: 10, unique: false, origin: 'srd', description: 'Aceite de lámpara: llena un farol o se echa al suelo y se le prende fuego.' },
-  { id: 'it_farol', name: 'farol con capucha', aliases: ['farol', 'linterna', 'lámpara', 'lampara', 'lantern'], type: 'misc', size: 'small', weight_lb: 2, value: 500, unique: false, light_source: true, origin: 'srd', description: 'Alumbra más y mejor que una antorcha; se tapa para no ser visto.' },
-  { id: 'it_saco', name: 'saco', aliases: ['saco', 'saca', 'costal', 'sack'], type: 'container', size: 'small', weight_lb: 0.5, value: 1, unique: false, container: { slots: 8, max_weight_lb: 30, max_size: 'medium' }, origin: 'srd', description: 'Un saco de arpillera para cargar lo que sea.' },
-  { id: 'it_odre', name: 'odre', aliases: ['odre', 'cantimplora', 'bota de vino', 'waterskin'], type: 'misc', size: 'small', weight_lb: 5, value: 20, unique: false, origin: 'srd', description: 'Lleva agua para un día de camino.' },
-  { id: 'it_garfio', name: 'garfio de abordaje', aliases: ['garfio', 'gancho', 'rezón', 'grappling hook'], type: 'tool', size: 'small', weight_lb: 4, value: 200, unique: false, origin: 'srd', description: 'Se ata a una cuerda para trepar o engancharse a un muro.' },
-  { id: 'it_tiza', name: 'tiza', aliases: ['tiza', 'yeso', 'chalk'], type: 'misc', size: 'tiny', weight_lb: 0, value: 1, unique: false, origin: 'srd', description: 'Para marcar el camino o escribir en la piedra.' },
-];
 
 export const ITEM_DEFS: ItemDef[] = [
   ...structuredClone(CATALOG as ItemDef[]),
@@ -47,17 +36,24 @@ export const ITEM_DEFS: ItemDef[] = [
   { id: 'it_col', name: 'col', aliases: ['coles', 'repollo', 'verdura', 'nabos'], type: 'consumable', size: 'small', weight_lb: 2, value: 1, unique: false, origin: 'custom' },
   { id: 'it_piel', name: 'piel de lobo', aliases: ['piel', 'pellejo'], type: 'misc', size: 'medium', weight_lb: 5, value: 150, unique: false, origin: 'custom' },
   // La bolsa del ajuar (outfit.ts), para la de Garrán, que va escrita; las demás las pone el ajuar al arrancar.
+  // Lo que la historia nombra de cada vecino. Las descripciones solo dicen lo que se ve: lo que esconde cada cosa
+  // está en su ficha de la wiki (wiki/Personajes/) y en lo que el NPC cuenta según su confianza.
+  { id: 'it_jarra_brenna', name: 'jarra de barro con una muesca', aliases: ['jarra', 'jarra de barro', 'jarra con muesca', 'jarra de brenna'], type: 'misc', size: 'small', weight_lb: 1, value: 0, unique: true, description: 'Una jarra de barro vieja, con una muesca en el asa. Brenna la seca cuando piensa; cuanto más le duele lo que oye, más deprisa.', origin: 'custom' },
+  { id: 'it_guante_ascua', name: 'guante de cuero con un ascua', aliases: ['guante', 'guante de cuero', 'ascua', 'guante del ascua'], type: 'quest', size: 'small', weight_lb: 0.5, value: 0, unique: true, equip_slot: 'hands', description: 'Un guante de trabajo de cuero, remendado mil veces y demasiado grande para la mano que lo lleva. Dentro brilla un ascua de la Brasa que no se apaga: quema a quien la toca sin el guante.', origin: 'custom' },
+  { id: 'it_cuerda_ursula', name: 'cuerda trenzada a mano', aliases: ['cuerda', 'cuerda trenzada', 'cuerda de úrsula', 'cuerda de ursula', 'soga'], type: 'gear', subtype: 'adventuring', size: 'medium', weight_lb: 8, value: 0, unique: true, description: 'Una cuerda trenzada a mano, gastada en los nudos. Úrsula se ata con ella a la cerca para entrar en la niebla.', origin: 'custom' },
+  { id: 'it_botas_doro', name: 'botas nuevas', aliases: ['botas', 'botas de cuero', 'botas de doro'], type: 'gear', subtype: 'clothes', size: 'small', weight_lb: 2, value: 300, unique: true, equip_slot: 'feet', description: 'Botas de cuero nuevas, sin una mancha de barro. En la suela, el sello del zapatero de la casona.', origin: 'custom' },
+  { id: 'it_anillos_osric', name: 'anillos de plata', aliases: ['anillos', 'anillos de plata', 'sortijas'], type: 'treasure', size: 'tiny', weight_lb: 0.1, value: 3000, unique: true, equip_slot: 'ring2', description: 'Dos anillos de plata maciza, de la de antes. Más plata de la que gana un regidor de aldea.', origin: 'custom' },
+  kitItemDef('ring', 'fantasy'),
+  { id: 'it_martillo_maestro', name: 'martillo engrasado', aliases: ['martillo', 'martillo engrasado', 'martillo del hijo', 'martillo del maestro'], type: 'weapon', subtype: 'simple_melee', size: 'small', weight_lb: 2, value: 200, unique: true, weapon: { damage: '1d4', damage_type: 'bludgeoning' }, description: 'Un martillo de herrero bien equilibrado, colgado aparte de los demás. Es el único que brilla de grasa: alguien lo cuida.', origin: 'custom' },
   // (Si el catálogo común ya la trae, como desde las bolsas de los PJ de la demo, no se repite.)
   // Cosas del ajuar que el buhonero vende (outfit.ts): hilo y aguja, sedal y anzuelos.
   ...[kitItemDef('purse', 'fantasy'), kitItemDef('needle', 'fantasy'), kitItemDef('hook', 'fantasy')].filter((d) => !CATALOG.some((c) => c.id === d.id)),
-  // Lo que vende el buhonero y el catálogo común aún no trae (abajo, SHOP_GOODS).
-  ...SHOP_GOODS.filter((d) => !CATALOG.some((c) => c.id === d.id)),
   // Los estantes del buhonero: contenedores fijos con dueño (state.owner_id). Lo de dentro está a la venta.
   { id: 'it_estantes_cendal', name: 'estantes del buhonero', aliases: ['estantes', 'estante', 'baldas', 'género', 'mercancía'], type: 'container', size: 'bulky', weight_lb: 60, value: 0, unique: true, container: { slots: 30, max_weight_lb: 300, max_size: 'large', fixed: true }, origin: 'custom', description: 'Lo que le queda al buhonero, a la venta. Cogerlo sin pagar es robar.' },
   { id: 'it_arcon_cendal', name: 'arcón de la trastienda', aliases: ['arcón', 'arcon', 'baúl', 'baul'], type: 'container', size: 'bulky', weight_lb: 60, value: 0, unique: true, container: { slots: 10, max_weight_lb: 100, max_size: 'medium', fixed: true }, origin: 'custom', description: 'Lo caro del buhonero, bajo llave.' },
   { id: 'it_arcon_carro', name: 'arcón del carro', aliases: ['arcón del carro', 'arcon del carro', 'caja del carro', 'lona'], type: 'container', size: 'bulky', weight_lb: 80, value: 0, unique: true, container: { slots: 20, max_weight_lb: 300, max_size: 'large', fixed: true }, origin: 'custom', description: 'Lo que no cabe en la tienda, en el carro de la puerta.' },
-  // Sal de Valcruz: lo más caro de la trastienda en un valle donde ya no entra.
-  { id: 'it_sal', name: 'saquete de sal de Valcruz', aliases: ['sal', 'saquete de sal', 'saquete', 'salt'], type: 'treasure', size: 'small', weight_lb: 2, value: 300, unique: false, origin: 'custom', description: 'Sal gorda de las salinas de Valcruz. En un valle sellado, vale más que la plata.' },
+  // Sal de Valcruz: lo más caro de la trastienda en un valle donde ya no entra (el resto de lo que vende es del catálogo SRD).
+  { id: 'it_sal_valcruz', name: 'saquete de sal de Valcruz', aliases: ['sal', 'saquete de sal', 'saquete', 'sal de valcruz'], type: 'treasure', size: 'small', weight_lb: 2, value: 10, unique: false, origin: 'custom', description: 'Sal gorda de las salinas de Valcruz. En un valle sellado, vale más que la plata.' },
   // Lo único mágico del buhonero, y del lore (Biblia 1 y 4): la tapa del cuenco de cuna de Ysolde, de hierro frío.
   // Pocos efectos y ninguno mecánico: es una pista y un regalo, no un arma. No está a la venta: la lleva él encima.
   {
@@ -87,6 +83,16 @@ export const ITEMS: AuthoredInstance[] = [
   // que hace de noche junto a la vela (su secreto de amigo). El ajuar le añade el silbato y el mendrugo.
   { id: 'ii_garran_bolsa', item_id: 'it_kit_purse', quantity: 1, at: { npc: 'npc_garran' }, state: { coins: 430 } },
   { id: 'ii_garran_esparto', item_id: 'it_esparto', quantity: 1, at: { container: 'ii_garran_bolsa' } },
+  // Lo que la historia nombra de cada vecino (encima, o puesto). El ajuar completa el resto (bolsa, oficio, ropa).
+  { id: 'ii_brenna_jarra', item_id: 'it_jarra_brenna', quantity: 1, at: { npc: 'npc_brenna' } },
+  { id: 'ii_ysolde_guante', item_id: 'it_guante_ascua', quantity: 1, at: { npc: 'npc_ysolde' }, state: { worn: true } },
+  { id: 'ii_ursula_cuerda', item_id: 'it_cuerda_ursula', quantity: 1, at: { npc: 'npc_ursula' } },
+  { id: 'ii_doro_botas', item_id: 'it_botas_doro', quantity: 1, at: { npc: 'npc_doro' }, state: { worn: true } },
+  // Anillos en tres dedos: el de sello (el que el ajuar da a quien manda) y dos de plata.
+  { id: 'ii_osric_sello', item_id: 'it_kit_ring', quantity: 1, at: { npc: 'npc_osric' }, state: { worn: true } },
+  { id: 'ii_osric_anillos', item_id: 'it_anillos_osric', quantity: 1, at: { npc: 'npc_osric' }, state: { worn: true } },
+  // El martillo del hijo del maestro: colgado aparte en la fragua, no encima de Hugo. La herrería es suya (plot.ts, LAW).
+  { id: 'ii_martillo_maestro', item_id: 'it_martillo_maestro', quantity: 1, at: { spot: 'sp_he_fragua' } },
   // La tienda del buhonero (shop.ts): existencias contadas en sus estantes, en el arcón de la trastienda (lo caro) y en el
   // carro. No repone desde fuera (el valle está sellado): se acaban. Su bolsa, con lo que ha ido cobrando, y las llaves.
   { id: 'ii_cendal_estantes', item_id: 'it_estantes_cendal', quantity: 1, at: { spot: 'sp_ti_estantes' }, state: { owner_id: 'npc_lucio' } },
@@ -101,7 +107,7 @@ export const ITEMS: AuthoredInstance[] = [
   { id: 'ii_cendal_daga', item_id: 'it_daga', quantity: 1, at: { container: 'ii_cendal_estantes' } },
   { id: 'ii_cendal_farol', item_id: 'it_farol', quantity: 1, at: { container: 'ii_cendal_estantes' } },
   { id: 'ii_cendal_arcon', item_id: 'it_arcon_cendal', quantity: 1, at: { spot: 'sp_ti_trastienda' }, state: { owner_id: 'npc_lucio' } },
-  { id: 'ii_cendal_sal', item_id: 'it_sal', quantity: 2, at: { container: 'ii_cendal_arcon' } },
+  { id: 'ii_cendal_sal', item_id: 'it_sal_valcruz', quantity: 2, at: { container: 'ii_cendal_arcon' } },
   { id: 'ii_cendal_carro', item_id: 'it_arcon_carro', quantity: 1, at: { spot: 'sp_pl_carro' }, state: { owner_id: 'npc_lucio' } },
   { id: 'ii_cendal_sacos', item_id: 'it_saco', quantity: 3, at: { container: 'ii_cendal_carro' } },
   { id: 'ii_cendal_odres', item_id: 'it_odre', quantity: 2, at: { container: 'ii_cendal_carro' } },

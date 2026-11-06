@@ -45,12 +45,12 @@ Todo son existencias contadas: lo que se compra sale de sus estantes y no vuelve
 | Frasco de aceite | 4 | 1 de plata y 2 de cobre | estantes |
 | Ración | 4 | 1 de plata y 2 de cobre | estantes |
 | Cuerda de cáñamo | 2 | 1 de oro y 2 de plata | estantes |
-| Garfio de abordaje | 1 | 2 de oro y 5 de plata | estantes |
+| Garfio de escalada | 1 | 2 de oro y 5 de plata | estantes |
 | Daga | 1 | 2 de oro y 5 de plata | estantes |
-| Farol con capucha | 1 | 6 de oro | estantes |
+| Farol | 1 | 6 de oro | estantes |
 | Saco | 3 | 2 de cobre | el carro |
 | Odre | 2 | 2 de plata y 5 de cobre | el carro |
-| Saquete de sal de Valcruz | 2 | 3 de oro | la trastienda |
+| Saquete de sal de Valcruz | 2 | 1 de oro y 5 de plata | la trastienda |
 
 Lo de la trastienda también se compra desde el mostrador: él va a buscarlo. La sal es lo más caro que tiene: en un valle donde ya no entra, vale más que la plata.
 

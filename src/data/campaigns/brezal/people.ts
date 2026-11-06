@@ -299,7 +299,7 @@ export const NPCS: AuthoredNpc[] = [
       { item_id: 'it_tiza', price: 1 }, { item_id: 'it_antorcha', price: 2 }, { item_id: 'it_saco', price: 2 }, { item_id: 'it_aceite', price: 12 },
       { item_id: 'it_racion', price: 12 }, { item_id: 'it_odre', price: 25 }, { item_id: 'it_kit_needle', price: 5 }, { item_id: 'it_kit_hook', price: 5 },
       { item_id: 'it_cuerda', price: 120 }, { item_id: 'it_garfio', price: 250 }, { item_id: 'it_daga', price: 250 }, { item_id: 'it_farol', price: 600 },
-      { item_id: 'it_sal', price: 300 },
+      { item_id: 'it_sal_valcruz', price: 150 },
     ],
     // Tienda de verdad (shop.ts): sus estantes en la tienda, el arcón de la trastienda y el del carro; abre de 9 a 19 y no repone.
     shop: { location_id: 'loc_tienda', stock_spot_ids: ['sp_ti_estantes', 'sp_ti_trastienda', 'sp_pl_carro'], restock: 'none', hours: [9, 19], buys_any: 0.5 },

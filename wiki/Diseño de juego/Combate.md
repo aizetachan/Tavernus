@@ -22,6 +22,15 @@ tags: [diseño, mecánicas]
 3. El servidor tira contra la CA del enemigo, calcula el daño del arma que llevas en la mano (crítico con 20) y lo aplica.
 4. El máster narra el resultado.
 
+- **Lo que suma tu arma lo decide el servidor:** tu característica, tu competencia si sabes usarla, el bono mágico del
+  arma y de la munición, y la ventaja o desventaja que ponga tu equipo. Ver [[Mecánicas#Reglas de los objetos]].
+- **Hasta dónde llegas:** cuerpo a cuerpo, al que está en tu mismo punto; con un arma de alcance, a 3 m; con una
+  arrojadiza o a distancia, dentro de su alcance (en el largo, con desventaja). Si no llegas, primero te acercas.
+- **Disparar gasta munición.** La mitad queda en el suelo junto al objetivo y se puede recoger después. Lo que lanzas
+  (una daga, un hacha de mano) cae allí también.
+- **Con la otra mano:** con dos armas ligeras, el máster puede pedir el ataque con la segunda (`off_hand`).
+- **Resistencias:** si llevas o te has tomado algo que te hace resistente a un tipo de daño, el servidor lo parte a la
+  mitad antes de aplicarlo.
 - Los **enemigos** usan bloques del SRD (CA, PG, ataque, daño, experiencia). Sus tiradas son ocultas.
 - Un NPC muerto **suelta lo que lleva** y da experiencia a quien lo vence. Si no era hostil, no hay experiencia sino infamia, y es un crimen con testigos. Ver [[Mecánicas#Crimen, testigos y ley]].
 - Quien te ataca primero queda hostil contigo: devolverle el golpe no es un crimen.

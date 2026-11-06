@@ -11,7 +11,7 @@ import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, takeAmount, transferItem, type InventoryView, type TransferError } from './inventory.js';
-import type { Character, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
+import type { CarrySlot, Character, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
 import { EQUIP_SLOTS } from './model.js';
 import { approachSpot, interruptTransit, moveTo, positionOf, settleTransit, type MoveError } from './movement.js';
 import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswered, parseGive, parseOfferAnswer, parseParty, parseSay, pcName, SAY_LOUDNESS, type SayMode } from './party.js';
@@ -49,13 +49,14 @@ import { attackRoll, checkRoll, rollAudience, rollTextForOthers, rollTextForRoll
 import { passivePerception, type Ability } from './rules.js';
 import { casterOf, initClass, levelUp, levelUpText, makeChoice, setSpells } from './levels.js';
 import { spellById } from '../data/srd/spells.js';
-import { characterNameProblem, cleanCharacterName, newCharacter, resolveCharacterSpec } from './chargen.js';
+import { characterNameProblem, cleanCharacterName, newCharacter, resolveCharacterSpec, startingEquipment, startingItemDef } from './chargen.js';
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
 import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, NPC_DOWN_HINT, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, wakeNpcs, type DeathSave } from './death.js';
 import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
+import { compactSnapshot, syncCatalog } from '../data/catalog.js';
 import { outfitNpcs } from './outfit.js';
 import { openShops, restockShops, shopsFromSeed, stockOwnerOf } from './shop.js';
 import { fillItemDefFrom, normalizeItemDef } from './items.js';
@@ -345,7 +346,7 @@ export class Engine {
     if (!snapshot) {
       if (!opts.seed) throw new Error(`no snapshot for campaign ${opts.campaignId} and no seed`);
       snapshot = opts.seed;
-      await opts.repo.saveSnapshot(snapshot);
+      await opts.repo.saveSnapshot(compactSnapshot(snapshot));
     }
     const migrated = migrate(snapshot, opts.seed);
     const past = await opts.repo.loadEvents(opts.campaignId, 0);
@@ -839,7 +840,8 @@ export class Engine {
     const changes = [...this.pending.values()];
     this.pending.clear();
     await this.repo.write(this.world.campaign.id, changes);
-    if (this.repo.flush) await this.repo.flush(this.world.snapshot());
+    // Sin las definiciones del catálogo SRD que son las del código (src/data/catalog.ts): se leen de él al arrancar.
+    if (this.repo.flush) await this.repo.flush(compactSnapshot(this.world.snapshot()));
   }
 
   // -------------------------------------------------------------------------
@@ -1320,7 +1322,7 @@ export class Engine {
       let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean; damage: number; ko?: boolean } | undefined;
       if (pending.roll.kind === 'attack' && pending.roll.target) {
         // Lo que escribió el jugador decide si el golpe a 0 PG mata o deja inconsciente (combat.ts, lethalBlow).
-        const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c), { intent: pending.text });
+        const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c), { intent: pending.text, hand: pending.roll.key === 'off_hand' ? 'off' : 'main' });
         if ('error' in atk) return { ok: false, text: atk.error };
         attack = { target_id: pending.roll.target, hit: atk.hit, down: Boolean(atk.target_down), dead: Boolean(atk.target_dead), damage: atk.damage, ...(atk.knocked_out ? { ko: true } : {}) };
         result = {
@@ -1330,7 +1332,7 @@ export class Engine {
         };
         roll = attackRoll(c.id, pending.roll.target, atk);
       } else {
-        result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage);
+        result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage, undefined, this.world);
         roll = checkRoll(c.id, result);
       }
       if (helper) roll.note = `con la ayuda de ${pcName(this.world, c.id, helper)}`;
@@ -1725,21 +1727,30 @@ export class Engine {
     loc.discovery[c.id] = 'visited';
     this.world.touch('locations', loc.id);
 
-    // Equipo inicial de la clase.
+    // Equipo inicial: el de su clase, su ropa y lo de su trasfondo (chargen.ts, `startingEquipment`). Lo que la
+    // partida no tiene en su catálogo (ropa, objetos de trasfondo) se añade de gear.ts; si no está en ninguno, no se da.
     let pack: Id | null = null;
     const pending: { item_id: Id; quantity: number }[] = [];
-    for (const eq of klass.equipment) {
-      if (!this.world.itemDefs.has(eq.item_id)) continue;
+    for (const eq of startingEquipment(klass, check.resolved.background)) {
+      if (!this.world.itemDefs.has(eq.item_id)) {
+        const d = startingItemDef(eq.item_id, this.world.itemDefs);
+        if (!d) continue;
+        this.world.itemDefs.set(d.id, d);
+        this.world.touch('item_defs', d.id);
+      }
       const qty = eq.quantity ?? 1;
-      const to = eq.slot === 'body' ? { type: 'character' as const, id: c.id, slot: { kind: 'equipped' as const, slot: 'body' as const } }
-        : eq.slot === 'back' ? { type: 'character' as const, id: c.id, slot: { kind: 'equipped' as const, slot: 'back' as const } }
-        : eq.slot === 'hand_main' ? { type: 'character' as const, id: c.id, slot: { kind: 'hand' as const, which: 'main' as const } }
-        : eq.slot === 'hand_off' ? { type: 'character' as const, id: c.id, slot: { kind: 'hand' as const, which: 'off' as const } }
-        : eq.slot === 'pocket' ? { type: 'character' as const, id: c.id, slot: { kind: 'pocket' as const } }
+      const at = (slot: CarrySlot) => ({ type: 'character' as const, id: c.id, slot });
+      const to = eq.slot === 'body' ? at({ kind: 'equipped', slot: 'body' })
+        : eq.slot === 'back' ? at({ kind: 'equipped', slot: 'back' })
+        : eq.slot === 'ring' ? at({ kind: 'equipped', slot: 'ring1' })
+        : eq.slot === 'hand_main' ? at({ kind: 'hand', which: 'main' })
+        : eq.slot === 'hand_off' ? at({ kind: 'hand', which: 'off' })
+        : eq.slot === 'pocket' ? at({ kind: 'pocket' })
         : null;
       if (to === null) { pending.push({ item_id: eq.item_id, quantity: qty }); continue; }
       const r = spawnItem(this.world, eq.item_id, qty, to);
       if (r.ok && eq.slot === 'back') pack = r.moved.id;
+      // Sin sitio (la ropa con armadura puesta, bolsillos llenos): a la mochila.
       if (!r.ok) pending.push({ item_id: eq.item_id, quantity: qty });
     }
     for (const p of pending) {
@@ -3140,7 +3151,7 @@ export class Engine {
       if (!t) return null;
       if (t.status === 'dead') return { ok: false, text: `${t.name} está muerto: ya no hay nada que atender. Volverá por su cuenta.` };
       if (!isDying(t)) return { ok: false, text: t.hp_current > 0 ? `${t.name} no está malherido de muerte.` : `${t.name} ya está estable.` };
-      const roll = characterCheck(c, 'skill', 'medicine', 10, 'none', this.rng);
+      const roll = characterCheck(c, 'skill', 'medicine', 10, 'none', this.rng, this.world);
       const shown = `🎲 Medicina: ${roll.breakdown.replace(/ vs CD \d+$/, '')} → ${roll.success ? 'éxito' : 'fallo'}`;
       if (roll.success) stabilize(this.world, t, nowG, c.name, `estabilizado por ${c.name}`, this.rng);
       const r = this.emitTrivial(c, text, 'tend', 'death',
@@ -3563,7 +3574,7 @@ export class Engine {
       const skill = /^(registr|rebusc)/.test(lower) ? 'investigation' : 'perception';
       const hidden = searchableSpots(this.world, c);
       const dc = hidden.length ? Math.min(...hidden.map((s) => s.dc_to_find ?? 10)) : 15;
-      const check = characterCheck(c, 'skill', skill, dc, 'none', this.rng);
+      const check = characterCheck(c, 'skill', skill, dc, 'none', this.rng, this.world);
       const found = hidden.filter((s) => check.total >= (s.dc_to_find ?? 10) && discoverSpot(this.world, c, s));
       const priv = `${check.breakdown}\n${found.length ? `Encuentras ${listEs(found.map((s) => s.name))}.` : 'Buscas a conciencia, pero no encuentras nada fuera de lo normal.'}`;
       return this.emitPrivate(c, text, 'search', priv, `${c.name} busca algo por los rincones.`);
@@ -3778,6 +3789,8 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
     delete camp.starting_spot_id;
     delete camp.starting_spot_ids;
   }
+  // Catálogo SRD (src/data/catalog.ts): definiciones a la versión del código y las que no se guardan, del código.
+  if (syncCatalog(snapshot)) changed = true;
   for (const c of snapshot.characters as (Character & { recap_from?: unknown })[]) {
     if (c.recap_from === undefined || c.race === undefined || c.hp_max === undefined) changed = true;
     if (c.recap_from === undefined) c.recap_from = null;

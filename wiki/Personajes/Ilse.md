@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: curandera
 lugar: "[[Casa de las hierbas]]"
 actitud: neutral
+npc: npc_ilse
 ---
 
 > [!ficha] Ilse
@@ -74,9 +75,7 @@ Precios en monedas. Ver [[Objetos]].
 
 ## Lleva encima
 
-Tres tónicos de corteza y una poción de curación, lo que vende. Una bolsa de cuero con 7 de plata y 9 de cobre; dentro, un manojo de hierbas secas y vendas de lino.
-
-Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

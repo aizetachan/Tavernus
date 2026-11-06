@@ -5,6 +5,7 @@ tags: [personaje, brezal]
 rol: cazador
 lugar: "[[El Soto]]"
 actitud: neutral
+npc: npc_hal
 ---
 
 > [!ficha] Hal
@@ -60,9 +61,7 @@ Precios en monedas. Ver [[Objetos]].
 
 ## Lleva encima
 
-Una bolsa de cuero con 2 de plata y 2 de cobre. Dentro, una navaja, sedal y anzuelos y yesca y pedernal. Y su arco corto.
-
-Se le puede robar o encontrar al registrarle. Ver [[Mecánicas#Inventario y carga]].
+*Se rellena al construir la wiki con lo que el juego le pone encima (`npm run wiki`): no se escribe a mano.*
 
 ## Relaciones
 

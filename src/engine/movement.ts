@@ -11,6 +11,7 @@
 import type { Character, Id, Pace, Spot, Transit, TransitLeg, Vehicle } from './model.js';
 import type { World } from './world.js';
 import { encumbrance } from './inventory.js';
+import { armorSpeedPenalty } from './itemrules.js';
 
 export type MoveError =
   | { code: 'unknown_spot'; spot_id: Id }
@@ -41,7 +42,8 @@ const FT_PER_BASE = 30;
 /** m/s efectivos del PJ (o del vehículo que lo lleva). */
 export function speedMps(world: World, c: Character, pace: Pace): number {
   const rules = world.campaign.movement_rules;
-  let ft = Math.max(0, c.speed_ft - encumbrance(world, c).speed_penalty_ft);
+  // La armadura pesada sin la fuerza que pide: −10 pies (itemrules.ts).
+  let ft = Math.max(0, c.speed_ft - encumbrance(world, c).speed_penalty_ft - armorSpeedPenalty(world, c));
   let cond = c.condition_speed_factor;
   if (c.location.type === 'vehicle') {
     const v = world.vehicle(c.location.id);
