@@ -19,6 +19,8 @@ import {
 import { setFact } from '../src/engine/worldfacts.js';
 import { journalOf } from '../src/engine/journal.js';
 import { STORY } from '../src/data/campaigns/brezal/story.js';
+import { memoryDb } from '../src/db/db.js';
+import { PgRepository } from '../src/persistence/pg.js';
 import type { Character } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
 
@@ -282,6 +284,25 @@ describe('misiones por fases: fases, vías y desenlaces', () => {
     const again = await Engine.boot({ repo, campaignId: 'brezal', seed: seed(), now: time.now, deterministic: false, fastTravel: false });
     expect(again.world.quests.get('q_prueba')!.rev).toBe(2);
     expect(characterStory(again.world.character(c.id)).open).toContain('q_prueba');
+  });
+
+  it('PostgreSQL (el almacén por defecto): una fila por misión de la partida, escrita al crearla, y vuelve al reabrir', async () => {
+    const db = await memoryDb();
+    const time = fakeTime(EPOCH);
+    const boot = () => Engine.boot({ repo: new PgRepository(db, 'misiones'), campaignId: 'brezal', seed: authoredSeed('brezal', { now: new Date(EPOCH) }), now: time.now, deterministic: false, fastTravel: false });
+    const engine = await boot();
+    await engine.flush();
+    expect(addWorldQuest(engine.world, prueba(), { source: 'master', game_s: engine.gameNow() }).ok).toBe(true);
+    await engine.flush();
+    const rows = await db.query<{ id: string }>(`select id from world_entities where world_id = 'misiones' and collection = 'quests'`);
+    expect(rows.map((r) => r.id)).toEqual(['q_prueba']);
+    // La historia escrita sigue en su fila de campaña, sin las misiones de la partida.
+    const story = await db.query<{ doc: { quests: { id: string }[] } }>(`select doc from world_entities where world_id = 'misiones' and collection = '_campaign' and id = 'story'`);
+    expect(story[0]!.doc.quests.some((q) => q.id === 'q_prueba')).toBe(false);
+    const again = await boot();
+    expect(again.world.quests.get('q_prueba')).toMatchObject({ source: 'master', rev: 1 });
+    expect(storyOf(again.world)!.quests.some((q) => q.id === 'q_prueba')).toBe(true);
+    await db.close();
   });
 
   it('un mundo sin historia escrita (generado) puede tener misiones de la partida', async () => {
