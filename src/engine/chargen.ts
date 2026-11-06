@@ -70,8 +70,8 @@ export function resolveCharacterSpec(spec?: Partial<CharacterSpec>): { ok: true;
 
 const fixedSkills = (race: RaceDef, background: BackgroundDef) => [...new Set([...background.skills, ...race.skills])];
 
-/** El PJ recién nacido: derivados y lo de su clase. Falta colocarlo en el mundo y darle el equipo. */
-export function newCharacter(id: Id, userId: Id, name: string, r: ResolvedSpec, start: { spot_id: Id; coins: number }): Character {
+/** El PJ recién nacido: derivados y lo de su clase. Falta colocarlo en el mundo y darle el equipo y su bolsa con el dinero (money.ts). */
+export function newCharacter(id: Id, userId: Id, name: string, r: ResolvedSpec, start: { spot_id: Id }): Character {
   const abilities = Object.fromEntries(ABILITIES.map((a) => [a, r.base[a] + (r.race.ability_bonus[a] ?? 0)])) as Record<Ability, number>;
   const hp = r.klass.hit_die + abilityModifier(abilities.con);
   const c: Character = {
@@ -86,7 +86,7 @@ export function newCharacter(id: Id, userId: Id, name: string, r: ResolvedSpec, 
     location: { type: 'spot', id: start.spot_id },
     transit: null, status: 'active', speed_ft: r.race.speed_ft,
     abilities, passive_perception: 10, darkvision: r.race.darkvision, condition_speed_factor: 1,
-    coins: start.coins, last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
+    last_seen_event_id: null, recap_from: null, connected: true, veiled: false,
   };
   // Lo de su clase (levels.ts): conjuros, pericia, estilo… con sus valores por defecto.
   initClass(c);
@@ -112,7 +112,7 @@ export function previewCharacter(name: string, spec: Partial<CharacterSpec> | un
   const r = resolveCharacterSpec(spec);
   if (!r.ok) return r;
   const { race, klass, background, death_mode } = r.resolved;
-  const c = newCharacter('preview', 'preview', clean, r.resolved, { spot_id: 'preview', coins: 0 });
+  const c = newCharacter('preview', 'preview', clean, r.resolved, { spot_id: 'preview' });
   const byId = new Map(defs.map((d) => [d.id, d]));
   const owned = klass.equipment.filter((e) => byId.has(e.item_id));
   return {

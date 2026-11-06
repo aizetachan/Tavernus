@@ -34,7 +34,8 @@ Miguel (sección 9).
 - **Catálogo:** unas 35 definiciones en `src/data/seed/demo.ts` (la semilla vieja), que reutilizan Brezal y el
   generador (`CATALOG` en `worldgen/fill.ts`). Más los objetos de la historia de Brezal y los del ajuar.
 - **Dinero:** `Character.coins`, un número en cobre. Pesa (50 monedas, 1 lb) pero no es un objeto. Los NPC lo
-  llevan en su bolsa (`state.coins`), que pasa al número del PJ al cogerla.
+  llevan en su bolsa (`state.coins`), que pasa al número del PJ al cogerla. (Así era al escribir el plan; el bloque D
+  ya está hecho: ver §5.)
 - **Comercio:** `Npc.sells` y `Npc.buys` con precios. Comprar crea el objeto de la nada (`spawnItem`). Si el NPC
   lleva ese objeto encima, se lo descuenta. Es decir, las existencias son infinitas salvo lo que lleva encima.
 - **Reglas que faltan:** rareza, sintonización, bonos mágicos, identificar, cargas, pergaminos, munición que se
@@ -161,6 +162,11 @@ Por partes, cada una con sus tests:
 ---
 
 ## 5. Bloque D: monedas de verdad
+
+**Hecho el 2026-11-06** (SPEC §5.3.2, `src/engine/money.ts`, `test/monedas.test.ts`): el dinero de PJ y NPC vive en
+bolsas; `coinsOf`, `pay` y `receive`; tool `take_coins`; la bolsa cae con el cuerpo; las partidas guardadas pasan su
+número a una bolsa al cinto. Robar a otro PJ (su bolsa o parte) pide su reacción. Comprar paga al vendedor; vender a
+un NPC aún crea el dinero (lo cambia la tienda, bloque E).
 
 Hoy el dinero de un PJ es un número que nadie le puede quitar. Propuesta: **el dinero vive en bolsas**, como el
 de los NPC.
@@ -312,7 +318,8 @@ cada vez más vacías». Uno de ellos se ha quedado con una casa vacía de la pl
 ## 10. Preguntas para Miguel
 
 1. **¿Monedas en bolsas también para los PJ (bloque D)?** Permite que les roben y que pierdan dinero; cambia unas
-   40 líneas. La alternativa es que el dinero del PJ siga siendo intocable.
+   40 líneas. La alternativa es que el dinero del PJ siga siendo intocable. **Decidido (2026-11-06): sí**, con la
+   recomendación del plan; a otro PJ solo se le roba en el desenlace de su reacción.
 2. **¿Objetos mágicos en Brezal?** El SRD da el reglamento, pero en Brezal la magia es escasa (la Brasa, Ilse). Se
    puede dejar el catálogo mágico para los mundos generados y poner en Brezal solo pociones y un pergamino en la
    tienda.

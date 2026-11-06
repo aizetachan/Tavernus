@@ -13,7 +13,7 @@ import { conversationCheck, type Conversation } from '../src/engine/conversation
 import { Engine } from '../src/engine/engine.js';
 import { encumbrance } from '../src/engine/inventory.js';
 import type { Character } from '../src/engine/model.js';
-import { coinPieces, fmtMoney, parseMoney } from '../src/engine/money.js';
+import { coinPieces, coinsOf, fmtMoney, parseMoney, setCoins } from '../src/engine/money.js';
 import { inventedPlaces } from '../src/engine/places.js';
 import { aheadBy } from '../src/engine/travel.js';
 import { MemoryRepository } from '../src/persistence/memory.js';
@@ -57,11 +57,11 @@ describe('n.º 1: monedas de oro, plata y cobre', () => {
     const { engine } = await brezal();
     const leo = await leodhin(engine);
     leo.abilities.str = 9;
-    expect(leo.coins).toBe(150);
-    expect(fmtMoney(leo.coins)).toBe('1 de oro y 5 de plata');
+    expect(coinsOf(engine.world, leo.id)).toBe(150);
+    expect(fmtMoney(coinsOf(engine.world, leo.id))).toBe('1 de oro y 5 de plata');
     expect(encumbrance(engine.world, leo).level).toBe('ok');
     // Ni con las 1700 del final de la partida.
-    leo.coins = 1700;
+    setCoins(engine.world, leo.id, 1700);
     expect(encumbrance(engine.world, leo).level).toBe('ok');
   });
 
@@ -80,7 +80,7 @@ describe('n.º 1: monedas de oro, plata y cobre', () => {
   it('una partida guardada de antes coge las monedas y los precios nuevos; el dinero del PJ se queda', async () => {
     const { engine, repo, time } = await brezal();
     const leo = await leodhin(engine);
-    leo.coins = 1700;
+    setCoins(engine.world, leo.id, 1700);
     const snap = structuredClone(engine.world.snapshot());
     // Como estaba en el VPS: sin monedas en la campaña y con los precios viejos.
     delete snap.campaign.currency;
@@ -93,7 +93,7 @@ describe('n.º 1: monedas de oro, plata y cobre', () => {
     expect(again.world.campaign.currency?.map((d) => d.name)).toEqual(['oro', 'plata', 'cobre']);
     expect(again.world.npc('npc_brenna').sells.find((s) => s.item_id === 'it_cerveza')!.price).toBe(4);
     expect(again.world.campaign.jobs.find((j) => j.id === 'job_lena')!.reward_coins).toBe(60);
-    expect(again.world.character(leo.id).coins).toBe(1700);
+    expect(coinsOf(again.world, leo.id)).toBe(1700);
   });
 
   it('el máster ve el dinero en monedas y los precios igual', async () => {

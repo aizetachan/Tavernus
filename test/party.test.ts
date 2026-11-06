@@ -8,6 +8,7 @@ import { moveTo } from '../src/engine/movement.js';
 import { OFFER_TTL_MS, parseParty, parseSay, secondPerson } from '../src/engine/party.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
+import { coinsOf } from '../src/engine/money.js';
 /** Lo que recibe cada PJ, con el evento. */
 function collect(engine: Engine) {
   const by = new Map<string, Delivery[]>();
@@ -134,9 +135,9 @@ describe('ofertas con consentimiento', () => {
     const offer = mira.offers![0]!;
     expect(offer).toMatchObject({ from_id: kael.id, coins: 20, label: '2 de plata', instance_id: null });
     expect(seen(mira.id).at(-1)!.text).toBe('Kael te ofrece 2 de plata.');
-    const [k0, m0] = [kael.coins, mira.coins];
+    const [k0, m0] = [coinsOf(engine.world, kael.id), coinsOf(engine.world, mira.id)];
     await engine.answerOffer(mira.id, offer.id, true);
-    expect([kael.coins, mira.coins]).toEqual([k0 - 20, m0 + 20]);
+    expect([coinsOf(engine.world, kael.id), coinsOf(engine.world, mira.id)]).toEqual([k0 - 20, m0 + 20]);
     expect(mira.offers).toBeUndefined();
     expect((await engine.answerOffer(mira.id, offer.id, true)).text).toBe('Esa oferta ya no está en pie.');
   });

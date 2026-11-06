@@ -29,6 +29,7 @@ import { GameClock, GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
 import { abilityModifier, rollDie, type Rng } from './dice.js';
 import { directlyCarried } from './inventory.js';
 import type { CarrySlot, Character, DeathRules, Id, ItemDef, ItemInstance, Npc, RespawnPoint } from './model.js';
+import { coinsOf, coinsWithin, money, receive } from './money.js';
 import { ABILITY_ES, type Ability } from './rules.js';
 import { adjustTrust } from './trust.js';
 import type { World } from './world.js';
@@ -275,6 +276,7 @@ export function medicineDc(): number { return 10; }
 export interface BodyState {
   owner_id: Id;
   mode: 'casual' | 'hardcore';
+  /** Monedas sueltas: solo los cuerpos de antes de las bolsas (money.ts); ahora el dinero cae en su bolsa, dentro del cuerpo. */
   coins: number;
   /** Dónde lo llevaba (para devolverlo a su sitio si lo recoge él). */
   slots: Record<Id, CarrySlot>;
@@ -323,16 +325,17 @@ export function canLoot(world: World, actorId: Id, body: ItemInstance): { ok: tr
 }
 
 /**
- * Muere: el cuerpo queda en el sitio con todo lo que llevaba y sus monedas;
+ * Muere: el cuerpo queda en el sitio con todo lo que llevaba, sus bolsas con su dinero incluidas (money.ts);
  * el PJ pasa a `dead` y espera su vuelta. `respawn_real_ms` lo fija el motor
  * al anunciarlo (aquí no hay reloj real).
  */
 export function die(world: World, c: Character, nowG: number, cause: string): void {
   const spot = world.characterSpot(c) ?? world.spot(respawnSpotId(world));
   const def = bodyDef(world, c, false);
+  const coins = coinsOf(world, c.id);
   const body: ItemInstance = {
     id: `ii_body_${c.id}_${Math.floor(nowG)}`, item_id: def.id, quantity: 1, location: { type: 'spot', id: spot.id },
-    state: { body: { owner_id: c.id, mode: c.death_mode, coins: c.coins, slots: {}, died_game_s: nowG } satisfies BodyState },
+    state: { body: { owner_id: c.id, mode: c.death_mode, coins: 0, slots: {}, died_game_s: nowG } satisfies BodyState },
   };
   world.itemInstances.set(body.id, body);
   const left: string[] = [];
@@ -346,8 +349,7 @@ export function die(world: World, c: Character, nowG: number, cause: string): vo
   }
   (body.state['body'] as BodyState).slots = slots;
   world.touch('item_instances', body.id);
-  c.death = { died_game_s: nowG, died_real_ms: 0, respawn_real_ms: 0, mode: c.death_mode, spot_id: spot.id, body_instance_id: body.id, cause, left, coins_left: c.coins };
-  c.coins = 0;
+  c.death = { died_game_s: nowG, died_real_ms: 0, respawn_real_ms: 0, mode: c.death_mode, spot_id: spot.id, body_instance_id: body.id, cause, left, coins_left: coins };
   c.status = 'dead';
   c.hp_current = 0;
   c.hp_temp = 0;
@@ -418,26 +420,28 @@ export function respawn(world: World, c: Character): Respawn | null {
 /**
  * Recoge lo que hay en un cuerpo: el dueño lo devuelve a donde lo llevaba (si
  * el sitio sigue libre); quien saquea, a sus manos, bolsillos o contenedores.
- * Lo que no cabe se queda. Las monedas, siempre.
+ * Lo que no cabe se queda. Las bolsas van con su dinero dentro («bolsa de cuero
+ * con 15 de oro»); las monedas sueltas de los cuerpos de antes de las bolsas,
+ * a su bolsa (`loose`). `coins`: todo el dinero que se lleva.
  */
-export function lootBody(world: World, actor: Character, body: ItemInstance, put: (instanceId: Id) => boolean): { taken: string[]; coins: number; left: number } {
+export function lootBody(world: World, actor: Character, body: ItemInstance, put: (instanceId: Id) => boolean): { taken: string[]; coins: number; loose: number; left: number } {
   const b = bodyStateOf(body)!;
   const taken: string[] = [];
+  let coins = 0;
   for (const i of world.itemsIn({ type: 'container', id: body.id })) {
-    const name = world.itemDef(i.item_id).name;
+    const inside = coinsWithin(world, i);
+    const name = world.itemDef(i.item_id).name + (inside ? ` con ${money(world, inside)}` : '');
     const slot = b.owner_id === actor.id ? b.slots[i.id] : undefined;
     const back = slot && world.itemsIn({ type: 'character', id: actor.id, slot }).length === 0;
-    if (back) { i.location = { type: 'character', id: actor.id, slot: slot! }; world.touch('item_instances', i.id); taken.push(name); continue; }
-    if (put(i.id)) taken.push(name);
+    if (back) { i.location = { type: 'character', id: actor.id, slot: slot! }; world.touch('item_instances', i.id); taken.push(name); coins += inside; continue; }
+    if (put(i.id)) { taken.push(name); coins += inside; }
   }
-  const coins = b.coins;
-  actor.coins += coins;
-  b.coins = 0;
-  world.touch('characters', actor.id);
+  const loose = b.coins ?? 0;
+  if (loose > 0) { receive(world, actor.id, loose); b.coins = 0; coins += loose; }
   const left = world.itemsIn({ type: 'container', id: body.id }).length;
   if (left === 0 && world.characters.get(b.owner_id)?.status !== 'dead') world.remove('item_instances', body.id);
   else world.touch('item_instances', body.id);
-  return { taken, coins, left };
+  return { taken, coins, loose, left };
 }
 
 /** Cuerpos (o cosas dejadas) en un punto. */
