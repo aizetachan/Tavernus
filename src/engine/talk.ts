@@ -92,7 +92,7 @@ const RE = {
   farewell: /\b(adios|hasta luego|hasta manana|hasta otra|hasta pronto|nos vemos|me voy|me marcho|cuidate|me despido|despedirme)\b/,
   question: /\b(pregunto|preguntar|preguntarle|le pregunto|sabes|sabe usted|conoces|has visto|has oido)\b/,
   request: /\b(necesito|me das|me dejas|me prestas|ayudame|puedes|podrias|quiero)\b/,
-  trade: /\b(compr\w*|vend\w*|precio|cuanto (cuesta|vale|cobras|pides|es)|cuesta|me pones|ponme|pagar)\b/,
+  trade: /\b(compr\w*|vend\w*|precio|cuanto (cuesta|vale|cobras|pides|es)|cuesta|me pones|ponme|sirveme|me sirves|pagar|(?:pido|pedir|pide|pedimos|ponnos) (?:una|un|dos|tres|otra|otro|algo de))\b/,
   asks_work: /\b(trabajo|encargo|recado|faena|tarea|necesitas (algo|ayuda)|en que (puedo|te puedo) ayudar|puedo ayudar|te ayudo|ayudarte|ayudarle|algo que hacer|que te (pasa|preocupa|ocurre)|que le (pasa|preocupa|ocurre)|algun problema)\b/,
   delivery: /\b(traigo|aqui tienes|aqui esta|toma|ya esta hecho|lo tengo|la tengo|he encontrado|lo he hecho|cumplido|entrego|vengo a cobrar)\b/,
   hostile: /\b(amenaz\w*|te mato|te voy a matar|cabron\w*|imbecil|idiota|estupid\w*|callate|maldit\w*|escoria|basura|inutil)\b/,
@@ -543,7 +543,7 @@ function steps(s: TalkSituation, p: TalkPlan, npcName: string): string[] {
     ];
     case 'trade': return [
       'Primera frase: el precio exacto de su lista (Vende/Compra en su línea).',
-      'Regatear solo con tirada de Persuasión. Un trato no está cerrado sin buy_item o sell_item.',
+      'Si se lo da, lo cobra al servirlo: buy_item en el mismo turno; si no puede o no quiere pagar ya, se lo fía con set_debt o no se lo da. Regatear solo con tirada de Persuasión. Un trato no está cerrado sin buy_item o sell_item.',
     ];
     case 'offer': return !st.can_offer.length ? [
       'Lo que tiene para él es su trato («Lo suyo con el actor»): qué tiene que hacer, dónde y para quién, dicho claro y a su manera. Nada de «no lo cuento» ni «lo decide otro»: es suyo y el actor ya lo sabe.',
@@ -596,7 +596,7 @@ function forbidden(s: TalkSituation, p: TalkPlan): string[] {
   if (s === 'question' || s === 'lore') out.push('Dejar la pregunta sin contestar o contestar otra cosa.');
   if (s === 'lore') out.push('Recitar como un libro.');
   if (s === 'offer') out.push('Listar condiciones o preguntar «¿aceptas?».');
-  if (s === 'trade') out.push('Dar por cerrado un trato sin buy_item o sell_item.');
+  if (s === 'trade') out.push('Dar por cerrado un trato sin buy_item o sell_item. Servir o entregar lo que vende sin cobrarlo ni fiarlo.');
   if (s === 'cold') out.push('Lo delicado (secretos, lo que su trato no da). Negar lo público o lo suyo con el actor.');
   if (st.way_out.length && LADDER.includes(s)) out.push('Negarse sin dejar salida. «Mañana» o «ya veremos» no son una salida.');
   if (!st.new_talk) out.push('Volver a preguntarle para qué lo quiere.');
