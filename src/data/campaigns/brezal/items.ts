@@ -48,9 +48,9 @@ export const ITEM_DEFS: ItemDef[] = [
   { id: 'it_col', name: 'col', aliases: ['coles', 'repollo', 'verdura', 'nabos'], type: 'consumable', size: 'small', weight_lb: 2, value: 1, unique: false, origin: 'custom' },
   { id: 'it_piel', name: 'piel de lobo', aliases: ['piel', 'pellejo'], type: 'misc', size: 'medium', weight_lb: 5, value: 150, unique: false, origin: 'custom' },
   // La bolsa del ajuar (outfit.ts), para la de Garrán, que va escrita; las demás las pone el ajuar al arrancar.
-  kitItemDef('purse', 'fantasy'),
+  // (Si el catálogo común ya la trae, como desde las bolsas de los PJ de la demo, no se repite.)
   // Cosas del ajuar que el buhonero vende (outfit.ts): hilo y aguja, sedal y anzuelos.
-  kitItemDef('needle', 'fantasy'), kitItemDef('hook', 'fantasy'),
+  ...[kitItemDef('purse', 'fantasy'), kitItemDef('needle', 'fantasy'), kitItemDef('hook', 'fantasy')].filter((d) => !CATALOG.some((c) => c.id === d.id)),
   // Lo que vende el buhonero y el catálogo común aún no trae (abajo, SHOP_GOODS).
   ...SHOP_GOODS.filter((d) => !CATALOG.some((c) => c.id === d.id)),
   // Los estantes del buhonero: contenedores fijos con dueño (state.owner_id). Lo de dentro está a la venta.

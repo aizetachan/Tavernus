@@ -66,15 +66,14 @@ describe('la tienda del buhonero en Brezal', () => {
     const c = await newPc(engine, 'Nia');
     const a = engine.world.npc('npc_lucio');
     setCoins(engine.world, c.id, 1000);
-    const total = () => engine.world.itemInstances.size;
-    const before = total();
+    // Cuerdas que hay en el mundo: las mismas antes y después (pasan del estante a sus manos).
+    const ropes = () => [...engine.world.itemInstances.values()].filter((i) => i.item_id === 'it_cuerda').reduce((s, i) => s + i.quantity, 0);
+    const before = ropes();
     const r = buyFromNpc(engine.world, c, a.id, 'it_cuerda', 1, OPEN);
     expect(r).toMatchObject({ ok: true, item: 'cuerda de cáñamo', quantity: 1 });
     expect(stockCount(engine.world, a, 'it_cuerda')).toBe(1);
-    expect(engine.world.itemsCarriedBy(c.id).some((i) => i.item_id === 'it_cuerda')).toBe(true);
-    expect(total()).toBe(before + 1); // de una pila de 2 salen 2 pilas de 1: el mismo número de cuerdas
-    const cuerdas = [...engine.world.itemInstances.values()].filter((i) => i.item_id === 'it_cuerda' && i.id !== 'ii_cuerda_torre').reduce((s, i) => s + i.quantity, 0);
-    expect(cuerdas).toBe(2);
+    expect(engine.world.itemsCarriedBy(c.id).some((i) => i.item_id === 'it_cuerda' && i.location.type === 'character')).toBe(true);
+    expect(ropes()).toBe(before);
     if (!r.ok) throw new Error();
     expect(coinsOf(engine.world, c.id)).toBe(1000 - r.total);
     expect(coinsOf(engine.world, a.id)).toBe(600 + r.total);

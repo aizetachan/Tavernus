@@ -183,6 +183,8 @@ export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id,
   const inst = world.itemInstances.get(instanceId);
   if (!inst) return { ok: false, reason: 'ese objeto no existe' };
   if (!world.itemsCarriedBy(c.id).some((i) => i.id === inst.id)) return { ok: false, reason: 'eso no lo llevas encima' };
+  // Una bolsa con dinero dentro (money.ts) no se vende llena: el dinero iría con ella.
+  if (typeof inst.state['coins'] === 'number' && inst.state['coins'] > 0) return { ok: false, reason: `primero saca el dinero de ${world.itemDef(inst.item_id).name}` };
   const base = npc.shop ? buyPrice(world, npc, inst.item_id) : npc.buys.find((b) => b.item_id === inst.item_id)?.price ?? null;
   if (base === null) return { ok: false, reason: `${npc.name} no compra ${world.itemDef(inst.item_id).name}` };
   const q = quantity ?? inst.quantity;
