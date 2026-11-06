@@ -1,6 +1,7 @@
 # Flujo de conversación de los NPC (propuesta para revisar)
 
-Estado: **borrador revisado con Miguel; sus decisiones del 06-11 están al final. No hay nada implementado.** Sustituiría la elección de «una situación por
+Estado: **aprobado por Miguel e implementado el 06-11** (ver «Qué hay en la implementación», al final). Sus decisiones
+del 06-11 están en «Decidido por Miguel». Sustituiría la elección de «una situación por
 prioridad» de la v1 (`src/engine/talk.ts`, ver `CONVERSACION-REGLAS.md`) por un flujo de cinco capas que se evalúan
 siempre en el mismo orden y rellenan los huecos de una respuesta. Todo sale del estado y de los datos de campaña: el
 motor no sabe de Brezal ni de ningún NPC concreto.
@@ -410,3 +411,39 @@ Este flujo va el último (objetos, conflictos, relleno y después este), porque 
 Antes de implementar: `git merge claude/integracion-npc-objetos` en esta rama, que ya trae «pedir una jarra» como
 comercio, el cobro al servir en el guion y los controles `stolenWithoutTool` y `servedWithoutPay`. Un commit por fase,
 sin push ni PR. Los tests se pasan todos al final; mientras, como mucho `npx tsc --noEmit -p .`.
+
+## Qué hay en la implementación (06-11)
+
+- **`src/engine/talk.ts`**:
+  - Capa 2: `knows` (`talking`, `returning`, `known`, `heard`, `none`), `knows_pc_name` y `heard_of`. `situation.knows` es
+    recíproco y la apertura (`with_npc_ids`) cuenta como conocerse. `first_meeting` ya no es cierto para quien conoce al
+    PJ por su situación.
+  - Capa 1: `flags` (alarma, ataque, crimen grave o leve, robo notado o pillado, regalo, deuda vencida, ocupado). Las
+    bloqueantes dejan solo el hueco A.
+  - Capa 3: `escalation` (`calm`, `annoyed`, `fed_up`): insultos y amenazas suben, una disculpa, un regalo o
+    `talk_deescalate` bajan, y las negativas seguidas suman. Harto y otro insulto o amenaza: `cut`, corta la charla.
+  - Capa 4: `ripe` cuenta las respuestas de esta charla y nunca en su primer turno; la madura se insinúa (hueco D) y sale
+    con «pide trabajo» o con un «sí» a lo que dejó caer (`hinted`, `affirmative`).
+  - Capa 5: `intentOf` y `TALK_INTENTS`; señales nuevas: `opens`, `identity`, `introduces`, `asks_who`, `calm`,
+    `flattery`, `affirmative`.
+  - `talkHoles` (A a E) y `talkScript` por huecos. La situación (`situation`, `second`) se mantiene como etiqueta para
+    la puerta de las misiones (`askBlocked`, `offersNow`), la longitud y `talk_situation`.
+  - Control (`talkProblems`): «¿quién eres?» a quien conoce, decir que no le conoce cuando sí, usar el nombre del PJ
+    sin saberlo, contestar a lo que no ha dicho («ya que lo preguntas») y nombrar una misión que no le han pedido.
+  - Relleno (`npc.tier === 'extra'`): el mismo flujo con seis intenciones, sin hueco D y 25 palabras.
+- **`src/engine/alarm.ts`**: `location.state.alarm`. La ponen la tool `set_alarm` del máster y el efecto `alarm` de las
+  reglas del mundo (`worldrules.ts`). El contexto del máster la lleva en una línea propia.
+- **`src/engine/stolen.ts`**: lee `item.state.stolen` (forma `StolenMark`, compartida con el plan de conflictos), lo
+  nota una vez por hora de juego con la pasiva contra la tirada (`noticeThefts`, en la pasada de incidentes del motor)
+  y dice a la charla si lo echa en falta, sospecha del PJ o lo ve encima (`theftWith`).
+- **`src/ai/tools.ts`**: `set_alarm`; `talk_deescalate` en `log_event` (solo vale con tensión); la línea del actor
+  inventada en la que se apoya el NPC se reescribe; presentarse («me llamo…», `introduces_self`) apunta el nombre en
+  `npc.knows_name_of`.
+- **`src/ai/offline.ts`**: el máster offline lee los huecos (peligro, cortar, abrir charla, quién es quién).
+- **Tests** (`test/conversacion-flujo.test.ts`): los casos de «Humo y ceniza» y de la tabla, sin API. Ajustados los que
+  daban por hecho que la misión madura salía sola o que el receloso era una situación.
+
+**Pendiente o fuera:** el control de «gente inventada» (el guardia «Tomás») lo propone también el plan de relleno y se
+hace una sola vez, allí. `talk_situation` no se ha renombrado a `talk_intent` (la intención la decide el motor). La
+bandera «se acaba de enterar de una etiqueta» sigue en las líneas de reputación del NPC (`npcStandingLines`), no en la
+capa 1. Notar un robo «al ir a usarlo» se aproxima con el cambio de actividad (una vez por hora de juego).

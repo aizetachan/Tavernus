@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { actionContext } from '../src/ai/prompt.js';
 import { executeTool, type ToolContext } from '../src/ai/tools.js';
 import { talkReply } from '../src/ai/offline.js';
-import { endsTalk, situationsFor, socialOutcomeLine, talkPlan, talkProblems, talkScript, textSignals, withoutRefused, type TalkPlan } from '../src/engine/talk.js';
+import { endsTalk, situationsFor, talkHoles, socialOutcomeLine, talkPlan, talkProblems, talkScript, textSignals, withoutRefused, type TalkPlan } from '../src/engine/talk.js';
 import { Engine } from '../src/engine/engine.js';
 import { seededRng } from '../src/engine/dice.js';
 import { adjustTrust, trustFromRoll, trustTier } from '../src/engine/trust.js';
@@ -243,7 +243,9 @@ describe('negarse deja una salida', () => {
     const p = ilsePlan(engine, c, ASK);
     expect(p.state.can_offer.length).toBeGreaterThan(0);
     expect(p.state.ripe).toBe(true);
-    expect(p.second).toBe('offer');
+    // Madura: la insinúa y espera a que muestre interés (CONVERSACION-FLUJO, decisión del 06-11).
+    expect(p.second).not.toBe('offer');
+    expect(talkHoles(p).D).toContain('deja caer');
   });
 
   it('los botones no ofrecen lo que ya se le ha negado; entregar sigue valiendo', async () => {

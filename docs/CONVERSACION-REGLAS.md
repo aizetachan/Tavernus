@@ -1,5 +1,9 @@
 # Cómo responde un NPC: reglas por situación (propuesta)
 
+> Desde el 06-11 manda el flujo de cinco capas de `CONVERSACION-FLUJO.md`, que sustituye la elección de una sola
+> situación por prioridad. Lo de aquí sigue valiendo para las negativas, la salida, la tirada social y la puerta de las
+> misiones.
+
 Estado: **primera versión implementada** (`src/engine/talk.ts`; ver «Qué hay en la v1» al final). Sustituye a la idea
 del actor (una segunda IA que reescribe la voz, ver CONVERSACION.md), que queda apagada en producción
 (`ACTOR_MODEL=off`).
