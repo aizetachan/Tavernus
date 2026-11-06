@@ -609,7 +609,7 @@ export const GENRE_NAMES: Readonly<Record<string, Partial<Record<Exclude<Catalog
   it_cimitarra: { scifi: ['sable curvo', ['sable']], postapoc: ['machete', ['machete curvo']] },
   it_espada_corta: { scifi: ['cuchilla vibratoria', ['cuchilla']], postapoc: ['machete corto', ['machete']] },
   it_tridente: { scifi: ['tridente de pesca', ['tridente']], postapoc: ['tridente de pesca', ['tridente']] },
-  it_pico_guerra: { scifi: ['piqueta', ['pico']], postapoc: ['pico de minero', ['pico']] },
+  it_pico_guerra: { scifi: ['piqueta', ['pico']], postapoc: ['pico de combate', ['pico']] },
   it_martillo_guerra: { scifi: ['martillo de guerra', ['martillo']], postapoc: ['mazo de acero', ['mazo']] },
   it_latigo: { scifi: ['látigo eléctrico', ['látigo', 'latigo']], postapoc: ['cable de acero', ['cable', 'látigo']] },
   it_cerbatana: { scifi: ['pistola de dardos', ['pistola']], postapoc: ['cerbatana', ['tubo']] },

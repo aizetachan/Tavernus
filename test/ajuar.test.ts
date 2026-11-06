@@ -84,7 +84,7 @@ describe('el ajuar de Brezal', () => {
     const { engine } = await boot();
     expect(names(engine, 'npc_brenna')).toContain('manojo de llaves');
     expect(names(engine, 'npc_osric')).toEqual(expect.arrayContaining(['anillo de sello', 'manojo de llaves', 'estoque']));
-    expect(names(engine, 'npc_hugo')).toEqual(expect.arrayContaining(['martillo', 'puñado de clavos']));
+    expect(names(engine, 'npc_hugo')).toEqual(expect.arrayContaining(['martillo ligero', 'puñado de clavos']));
     expect(names(engine, 'npc_hal')).toEqual(expect.arrayContaining(['arco corto', 'sedal y anzuelos']));
     expect(names(engine, 'npc_doro')).toEqual(expect.arrayContaining(['lanza', 'silbato de hueso']));
     expect(names(engine, 'npc_ilse')).toEqual(expect.arrayContaining(['manojo de hierbas secas', 'tónico de corteza']));

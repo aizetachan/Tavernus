@@ -102,7 +102,7 @@ describe('el PJ lleva lo de su clase, su ropa y lo de su trasfondo', () => {
     const r = previewCharacter('Ana', { class_id: 'fighter', background_id: 'soldier' }, CATALOG);
     if (!r.ok) throw new Error(r.reason);
     const bg = r.preview.equipment.filter((e) => e.from === 'background').map((e) => e.name);
-    expect(bg).toEqual(['ropa de viaje', 'insignia de rango', 'trofeo de un enemigo', 'dados de hueso']);
+    expect(bg).toEqual(['ropa de viaje', 'insignia de rango', 'trofeo de un enemigo', 'juego de dados']);
     expect(r.preview.equipment.find((e) => e.name === 'cota de malla')?.from).toBe('class');
     // La ropa no cuenta para la CA: la misma que con cualquier otro trasfondo.
     const other = previewCharacter('Ana', { class_id: 'fighter', background_id: 'sage' }, CATALOG);

@@ -156,7 +156,7 @@ Bloques SRD de los arquetipos del generador (`ARCHETYPES`, mismos rangos que val
 | Osric | 6 de oro, 4 de plata y 4 de cobre | anillo de sello, manojo de llaves, pañuelo | estoque |
 | Garrán | 4 de oro y 3 de plata (el diezmo) | trenza de esparto, silbato de hueso, mendrugo | llave del arcón, maza |
 | Ilse | 7 de plata y 9 de cobre | hierbas secas, vendas de lino | 3 tónicos, 1 poción |
-| Hugo | 8 de plata y 7 de cobre | clavos, yesca y pedernal, navaja | martillo |
+| Hugo | 8 de plata y 7 de cobre | clavos, yesca y pedernal, navaja | martillo ligero |
 | Mateo | 1 de plata | navaja, yesca y pedernal, mendrugo | |
 | Tobías | 1 de plata y 2 de cobre | navaja, yesca y pedernal, mendrugo | |
 | Ysolde | nada | amuleto de hueso, yesca y pedernal | |
