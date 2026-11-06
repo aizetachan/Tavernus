@@ -59,6 +59,7 @@ import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, i
 import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
 import { migrateExtras, placeExtraAt } from './extras.js';
+import { extraReply, OFFTOPIC_TAG } from './extratalk.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
 import { compactSnapshot, syncCatalog } from '../data/catalog.js';
 import { outfitNpcs } from './outfit.js';
@@ -956,7 +957,7 @@ export class Engine {
       if (c.following && (travel || this.isMove(c, clean))) { c.following = null; this.world.touch('characters', c.id); }
       // La ley delante (crime.ts): entregarse o resistirse a un alto; y lo que el motor ve como crimen antes de que narre el máster.
       const law = this.tryConfront(c, clean) ?? this.tryLaw(c, clean);
-      const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryTrivial(c, clean));
+      const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? this.tryExtraTalk(c, clean) ?? await this.tryTrivial(c, clean));
       if (fast) {
         r = fast;
       } else if (this.master && c.status === 'active' && !this.isMechanical(c, clean)) {
@@ -1075,6 +1076,32 @@ export class Engine {
    * el camino de siempre. Aunque sea trivial va al master si la escena está
    * tensa, si salta un gancho o si sale la tirada de imprevisto.
    */
+  /**
+   * Charla simple con un vecino de relleno (extratalk.ts): la contesta el motor con su guion, sin máster. Saludo, lo
+   * suyo (vender, indicar, la hora), lo que no sabe, despedida, miedo o acusación. Lo demás, al máster.
+   */
+  private tryExtraTalk(c: Character, text: string): ActionResult | null {
+    if (!this.deterministic || c.status !== 'active' || c.decisive) return null;
+    const nowG = this.nowFor(c);
+    const r = extraReply(this.world, this.events.all(), c, text, nowG);
+    if (!r) return null;
+    const n = r.npc;
+    for (const id of r.names ?? []) if (!c.knows.includes(id)) { c.knows.push(id); this.world.touch('characters', c.id); }
+    if (r.bought) this.world.touch('characters', c.id);
+    const event = this.events.emit({
+      actor_id: c.id, action_type: 'master', input_text: text, narration_private: r.narration, observable: r.observable,
+      tags: ['deterministic', 'social', 'extra', ...(r.bought ? ['trade'] : []), ...(r.offtopic ? [OFFTOPIC_TAG] : [])],
+      payload: {
+        master: null, npc_id: n.id, observable_vague: 'Alguien cruza unas palabras.',
+        ...(r.line ? { lines: [{ speaker: 'npc', npc_id: n.id, text: r.line, to: c.id }] } : {}),
+        ...(r.bought ? { bought: r.bought } : {}),
+      },
+    }, this.stampFor(c));
+    // Le tiene miedo: se va a su casa un rato (extras.ts).
+    if (r.leaves && n.home_spot_id) placeExtraAt(this.world, n, n.home_spot_id, nowG);
+    return { ok: true, text: [r.narration, r.line ? `«${r.line}»` : ''].filter(Boolean).join(' '), event };
+  }
+
   private async tryTrivial(c: Character, text: string): Promise<ActionResult | null> {
     if (!this.deterministic || !this.master || c.status !== 'active') return null;
     const nowG = this.gameNow();

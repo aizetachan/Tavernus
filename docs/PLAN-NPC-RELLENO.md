@@ -1,7 +1,7 @@
 # NPC de relleno: gente de paso que hace pueblo (plan para revisar)
 
 Estado: **aprobado por Miguel el 06-11, con las propuestas de las preguntas del final y la sección «Cómo reaccionan».
-Fases 1 y 2 hechas (y de la 4, el control de gente inventada y los encuentros): ver «lo hecho» al final.** Se apoya en el flujo de charla propuesto en
+Fases 1, 2 y 3 hechas (y de la 4, el control de gente inventada y los encuentros): ver «lo hecho» al final.** Se apoya en el flujo de charla propuesto en
 `CONVERSACION-FLUJO.md` (rama `claude/nervous-lederberg-e007cb`, aún sin fusionar) y en el ajuar de los NPC
 (`src/engine/outfit.ts`, rama `claude/amazing-mahavira-788ef2`, aún sin fusionar).
 
@@ -564,3 +564,28 @@ encuentros con vecinos de relleno. Era el fallo que lo empezó todo, y la sesió
 - **Tests**: 18 nuevos en `test/relleno.test.ts`, uno por cada punto de arriba.
 - **Pendiente**: la fase 3 (la charla sin IA con las plantillas, dentro del flujo de charla de cinco capas que ya está
   en la integración) y la fase 5 (relleno en los mundos generados).
+
+## Fase 3: lo hecho (06-11)
+
+- **El flujo de charla** (talk.ts, sesión del algoritmo) ya traía el nivel `extra`: capas recortadas, nunca misiones,
+  seis intenciones y un guion corto de 25 palabras cuando contesta el máster. Aquí se añade la vía rápida.
+- **Charla sin IA** (`src/engine/extratalk.ts`, `extraReply`; en el motor, `tryExtraTalk`, con los demás atajos y
+  antes de `tryTrivial`): si el turno es una charla simple con un vecino de relleno, el motor elige la frase de su
+  guion, rellena los huecos con los datos y la emite como un turno de diálogo (`master` con `payload.master: null`,
+  etiqueta `extra`), sin llamar al máster:
+  - **lo urgente**: alarma o peligro (`scared`); le agredió o es hostil (`afraid`, y se va a su casa media hora); le
+    robó y lo sabe (`accuse`);
+  - **saludo**: el saludo de su oficio, una noticia reciente que sabe y no le ha contado (`news`, una vez) y, si vende,
+    lo que vende y a cuánto;
+  - **lo suyo**: vender (con `buyFromNpc`: monedas y existencias de verdad; «dame un pan» sin nombrarle vale si hablaba
+    con él hace nada), dónde está alguien o algo (desde los datos; solo lo público: quien tiene casa o anda por un sitio
+    que el PJ conoce, así que de Ysolde no dice nada) y a qué hora es algo de la agenda;
+  - **lo que no sabe**: `dunno`, remitiendo a uno de `refer_to` (el PJ aprende su nombre);
+  - **despedida**: `bye`;
+  - **lo demás**: `brush`.
+- **Paciencia**: lo que no es lo suyo cuenta (etiqueta `extra_offtopic`): la primera vez contesta, la segunda le
+  despacha y luego «ya no te hace caso». Vender, indicar, la hora y saludar no cansan.
+- **Al máster** (con el guion corto): insultos, amenazas, «¿sabes quién soy?» y lo que no es charla.
+- **Solo con los atajos del motor encendidos** (`deterministic`, como en la partida de verdad).
+- **Tests**: 10 nuevos en `test/relleno.test.ts`.
+- **Pendiente**: la fase 5 (relleno en los mundos generados) y la variedad opcional con el escritor barato.
