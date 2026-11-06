@@ -27,6 +27,7 @@ import type { Character, GameEvent } from '../src/engine/model.js';
 import type { QuestChange } from '../src/engine/progress.js';
 import { fakeTime, waitUntil } from './helpers.js';
 
+import { coinsOf } from '../src/engine/money.js';
 const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
 const H = 3600;
 
@@ -132,10 +133,10 @@ describe('una misión entra en el Diario al enterarse en escena', () => {
     expect(noticeOf({ action_type: 'progress_story', narration_private: ready.text, observable: null, payload: { quest: ready.quest } })).toMatchObject({ text: 'Lista para entregar · «La cena del portón»', quest: { why: 'Tenemos que volver con Brenna' } });
 
     // La recompensa la da Brenna, al hablar con ella. El Diario, en primera persona del grupo.
-    const coins = c.coins, xp = c.xp;
+    const coins = coinsOf(engine.world, c.id), xp = c.xp;
     await talkTo(engine, time, c, 'npc_brenna');
     expect(status(engine, c, 'q_cena_doro')).toBe('done');
-    expect(c.coins).toBe(coins + 20);
+    expect(coinsOf(engine.world, c.id)).toBe(coins + 20);
     expect(c.xp).toBe(xp + 75);
     const done = journalQuest(engine, c, 'q_cena_doro')!;
     expect(done.history.map((h) => [h.kind, h.text])).toEqual([

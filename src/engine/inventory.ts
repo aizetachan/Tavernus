@@ -5,7 +5,7 @@
 
 import type { CarrySlot, Character, EquipSlot, Id, ItemDef, ItemInstance, ItemSize, Placement, Spot } from './model.js';
 import { EQUIP_SLOTS } from './model.js';
-import { coinPieces, currencyOf, fmtMoney } from './money.js';
+import { coinPieces, coinsAt, coinsOf, coinsWithin, currencyOf, fmtMoney } from './money.js';
 import { samePlacement, slotKey, type World } from './world.js';
 
 const SIZE_RANK: Record<ItemSize, number> = { tiny: 0, small: 1, medium: 2, large: 3, bulky: 4 };
@@ -19,7 +19,7 @@ export type TransferError =
   | { code: 'invalid_slot'; reason: string };
 
 export type TransferResult =
-  | { ok: true; moved: ItemInstance; remaining: ItemInstance | null; /** Monedas que había dentro y pasan al PJ que lo coge (outfit.ts). */ coins?: number }
+  | { ok: true; moved: ItemInstance; remaining: ItemInstance | null; /** Monedas que hay dentro (una bolsa) y lleva ahora el PJ que lo coge; se quedan en la bolsa (money.ts). */ coins?: number }
   | { ok: false; error: TransferError };
 
 /** Quién lleva algo que está en `p`, subiendo por los contenedores: un PJ, un NPC o nadie (suelo, vehículo). */
@@ -36,24 +36,13 @@ export function carrierOf(world: World, p: Placement): { type: 'character' | 'np
 }
 
 /**
- * Las monedas sueltas en una bolsa (`state.coins`, outfit.ts) son dinero: cuando la bolsa llega a
- * un PJ (en la mano, al cinto o dentro de su mochila) pasan a sus monedas. Mira también lo que va
- * dentro. Devuelve cuántas.
+ * Monedas que lleva dentro lo que acaba de llegar a un PJ (una bolsa, o la mochila con una bolsa dentro):
+ * se quedan donde están, pero la narración lo cuenta. 0 si no va a un PJ o ya lo llevaba él.
  */
-function pocketCoins(world: World, inst: ItemInstance): number {
-  const who = carrierOf(world, inst.location);
-  if (who?.type !== 'character') return 0;
-  const c = world.characters.get(who.id);
-  if (!c) return 0;
-  let total = 0;
-  const walk = (i: ItemInstance, depth: number) => {
-    const n = i.state['coins'];
-    if (typeof n === 'number' && n > 0) { total += n; delete i.state['coins']; world.touch('item_instances', i.id); }
-    if (depth < 8) for (const inner of world.itemsIn({ type: 'container', id: i.id })) walk(inner, depth + 1);
-  };
-  walk(inst, 0);
-  if (total > 0) { c.coins += total; world.touch('characters', c.id); }
-  return total;
+function coinsArriving(world: World, inst: ItemInstance, from: { type: string; id: Id } | null): number {
+  const to = carrierOf(world, inst.location);
+  if (to?.type !== 'character' || (from && from.type === to.type && from.id === to.id)) return 0;
+  return coinsWithin(world, inst);
 }
 
 export function sizeFits(item: ItemSize, max: ItemSize): boolean {
@@ -64,6 +53,9 @@ export function sizeFits(item: ItemSize, max: ItemSize): boolean {
 export function instanceWeight(world: World, i: ItemInstance): number {
   const def = world.itemDef(i.item_id);
   let w = def.weight_lb * i.quantity;
+  // Las monedas de una bolsa pesan con ella: las piezas (15 de oro), no el valor en cobre (1500).
+  const coins = coinsAt(i);
+  if (coins) w += coinPieces(coins, currencyOf(world.campaign)) / world.campaign.capacity_rules.coins_per_lb;
   if (def.container) for (const inner of world.itemsIn({ type: 'container', id: i.id })) w += instanceWeight(world, inner);
   return w;
 }
@@ -77,8 +69,8 @@ export interface Encumbrance {
 
 export function encumbrance(world: World, c: Character): Encumbrance {
   const rules = world.campaign.capacity_rules;
-  // Pesan las piezas (15 de oro), no el valor en cobre (1500).
-  let weight = coinPieces(c.coins, currencyOf(world.campaign)) / rules.coins_per_lb;
+  // Las monedas pesan dentro de sus bolsas (instanceWeight).
+  let weight = 0;
   for (const i of directlyCarried(world, c.id)) weight += instanceWeight(world, i);
   const str = c.abilities.str;
   const max = str * rules.carry_per_str;
@@ -222,6 +214,7 @@ export function transferItem(world: World, instanceId: Id, to: Placement, quanti
   if (!Number.isInteger(qty) || qty < 1 || qty > inst.quantity) return { ok: false, error: { code: 'bad_quantity' } };
   if (def.container?.fixed) return { ok: false, error: { code: 'fixed' } };
   if (samePlacement(inst.location, to)) return { ok: false, error: { code: 'not_reachable', reason: 'ya está ahí' } };
+  const carrierBefore = carrierOf(world, inst.location);
 
   const fromSpot = world.spotOfItem(inst);
   const toSpot = spotOfPlacement(world, to);
@@ -272,7 +265,7 @@ export function transferItem(world: World, instanceId: Id, to: Placement, quanti
       world.touch('item_instances', moved.id);
     }
   }
-  const coins = pocketCoins(world, moved);
+  const coins = coinsArriving(world, moved, carrierBefore);
   return { ok: true, moved, remaining, ...(coins ? { coins } : {}) };
 }
 
@@ -334,18 +327,24 @@ export function consumeItem(world: World, instanceId: Id, quantity = 1): { ok: t
   return { ok: true, left: inst.quantity };
 }
 
-/** Inventario con identificadores, para el master: dónde está cada ejemplar. */
+/** « con 15 de oro» detrás del nombre de una bolsa con monedas (money.ts); nada si no lleva. */
+function withCoins(world: World, i: ItemInstance): string {
+  const n = coinsAt(i);
+  return n ? ` con ${fmtMoney(n, currencyOf(world.campaign))}` : '';
+}
+
+/** Inventario con identificadores, para el master: dónde está cada ejemplar (y lo que hay en cada bolsa). */
 export function inventoryDetailed(world: World, characterId: Id): { instance_id: Id; item_id: Id; name: string; quantity: number; where: string }[] {
   const out: { instance_id: Id; item_id: Id; name: string; quantity: number; where: string }[] = [];
   const label = (s: CarrySlot) => s.kind === 'hand' ? (s.which === 'both' ? 'ambas manos' : s.which === 'main' ? 'mano principal' : 'mano secundaria') : s.kind === 'pocket' ? 'bolsillo' : `equipado:${s.slot}`;
   for (const i of directlyCarried(world, characterId)) {
     if (i.location.type !== 'character') continue;
     const def = world.itemDef(i.item_id);
-    out.push({ instance_id: i.id, item_id: def.id, name: def.name, quantity: i.quantity, where: label(i.location.slot) });
+    out.push({ instance_id: i.id, item_id: def.id, name: def.name + withCoins(world, i), quantity: i.quantity, where: label(i.location.slot) });
     if (def.container) {
       for (const inner of world.itemsIn({ type: 'container', id: i.id })) {
         const d = world.itemDef(inner.item_id);
-        out.push({ instance_id: inner.id, item_id: d.id, name: d.name, quantity: inner.quantity, where: `dentro de ${def.name} [${i.id}]` });
+        out.push({ instance_id: inner.id, item_id: d.id, name: d.name + withCoins(world, inner), quantity: inner.quantity, where: `dentro de ${def.name} [${i.id}]` });
       }
     }
   }
@@ -442,6 +441,7 @@ function packItem(world: World, i: ItemInstance): PackItem {
   if (d.heals) props.push(`cura ${d.heals} PG`);
   if (d.light_source) props.push(i.state.lit === true ? 'encendida: da luz' : 'da luz si la enciendes');
   if (d.container) props.push(`${d.container.slots} huecos, hasta ${d.container.max_weight_lb} lb`);
+  if (coinsAt(i)) props.push(`dentro: ${fmtMoney(coinsAt(i), currencyOf(world.campaign))}`);
   if (d.equip_slot) props.push(`se lleva en ${EQUIP_AT[d.equip_slot]}`);
   props.push(SIZE_ES[d.size]);
   if (d.unique) props.push('único');
@@ -482,7 +482,7 @@ export function packView(world: World, characterId: Id): PackView {
 
 export function inventoryView(world: World, characterId: Id): InventoryView {
   const c = world.character(characterId);
-  const view: InventoryView = { hands: { main: null, off: null }, equipped: {}, pockets: [], containers: [], coins: c.coins, encumbrance: encumbrance(world, c) };
+  const view: InventoryView = { hands: { main: null, off: null }, equipped: {}, pockets: [], containers: [], coins: coinsOf(world, c.id), encumbrance: encumbrance(world, c) };
   const label = (i: ItemInstance) => { const d = world.itemDef(i.item_id); return i.quantity > 1 ? `${d.name} ×${i.quantity}` : d.name; };
   for (const i of directlyCarried(world, c.id)) {
     if (i.location.type !== 'character') continue;

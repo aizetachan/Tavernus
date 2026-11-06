@@ -463,7 +463,7 @@ export interface Character {
   darkvision: boolean;
   /** Multiplicador de condiciones (cargado, exhausto…). 1 = normal. */
   condition_speed_factor: number;
-  coins: number;
+  // El dinero no es un campo: vive en sus bolsas (`state.coins`) y se cuenta con money.ts `coinsOf`.
   decisive: DecisiveWindow | null;
   xp: number;
   last_seen_event_id: Id | null;

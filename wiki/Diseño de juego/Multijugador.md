@@ -75,7 +75,7 @@ Antes, si un jugador agarraba a otro y se lo llevaba a la taberna, el máster lo
 - **Con tus palabras:** «vale», «sí», «me dejo» es dejarse; lo demás es resistirse, y lo que dices acompaña.
 - **Si no responde en 90 s,** se resiste por instinto. Ausente, igual y al momento. Dormido o inconsciente, no puede resistirse. Bajo el velo, nadie le toca.
 - **Efectos:** si sale bien, los dos van al sitio, o queda agarrado o derribado, o recibe el daño. Con máster, este narra el desenlace a los dos.
-- **Dar algo** sigue siendo una oferta, no una reacción.
+- **Dar algo** sigue siendo una oferta, no una reacción. **Robarle** la bolsa o unas monedas a otro jugador sí lo es: decide él, y si se resiste es Juego de manos contra su Percepción.
 
 ## Varios a la vez en el mismo sitio
 

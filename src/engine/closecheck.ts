@@ -39,7 +39,7 @@ const DEAL = /\b((?:en|como|de) (?:prenda|fianza)|acept\w* (?:la|tu|su|el|esa|es
 /** Lo que niega, rechaza, pregunta u ofrece: no cierra nada. */
 const NOT_CLOSED = /\b(no|ni|nunca|jamas|sin|niega\w*|rechaza\w*|tampoco|nadie|nada|ofreces|ofrece|propones|propone|pides|pide|preguntas|pregunta|quieres|quiere|si|tal vez|quiza\w*|podria\w*|espera\w*|piensa\w*|pesando|ya tengo|ya guarda|sigue\w*|hablamos|al contado|algo|quien|cualquiera|cada uno)\b/;
 /** Tools que dejan estado de un trato. */
-export const DEAL_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'transfer_item', 'buy_item', 'sell_item', 'complete_job']);
+export const DEAL_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'give_coins', 'take_coins', 'transfer_item', 'buy_item', 'sell_item', 'complete_job']);
 
 /**
  * Frases que dan un trato por cerrado sin tool que lo respalde. Mira lo que
@@ -76,7 +76,7 @@ export const DEAL_REJECTION = 'Has narrado un trato sin registrarlo: usa set_deb
 // ---------------------------------------------------------------------------
 
 /** Tools que mueven las monedas del actor. */
-export const COIN_TOOLS = new Set(['give_coins', 'settle_debt', 'buy_item', 'sell_item', 'set_debt', 'pawn_item', 'complete_job']);
+export const COIN_TOOLS = new Set(['give_coins', 'take_coins', 'settle_debt', 'buy_item', 'sell_item', 'set_debt', 'pawn_item', 'complete_job']);
 const COIN = String.raw`(?:monedas?|cobres?|platas?|oros?)`;
 /** El actor las suelta («dejas las monedas sobre la mesa», «le das diez de plata», «pagas la cuenta»). */
 const HANDS_COINS = new RegExp(String.raw`(?<!\bte )\b(dejas|pones|sueltas|entregas|das|pagas|tiendes|deslizas|empujas|pasas)\b[^,]{0,40}\b${COIN}\b|\b(pagas|saldas)\b`);

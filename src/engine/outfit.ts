@@ -23,8 +23,8 @@
  * campaña escrita, demo, mundo generado o partida ya empezada, y queda marcado
  * (`Npc.outfitted`): lo que le roben no se repone.
  *
- * Las monedas de una bolsa pasan al dinero del PJ en cuanto la coge
- * (inventory.ts, `transferItem`).
+ * Las monedas se quedan en la bolsa: quien la coge (o la roba) lleva ese dinero
+ * mientras lleve la bolsa (money.ts, `coinsOf`). Los PJ también llevan la suya.
  */
 
 import type { Id, ItemDef, ItemInstance, Npc, WorldSnapshot } from './model.js';
@@ -167,9 +167,14 @@ export function weaponFor(attackName: string, defs: readonly ItemDef[]): ItemDef
   return best?.def ?? null;
 }
 
-function genreOf(snap: WorldSnapshot): Genre {
-  const g = snap.campaign.generation?.genre;
+/** El género del mundo, para los nombres del ajuar (fantasía si la campaña no dice otro). */
+export function genreOfCampaign(campaign: WorldSnapshot['campaign']): Genre {
+  const g = campaign.generation?.genre;
   return g === 'scifi' || g === 'postapoc' ? g : 'fantasy';
+}
+
+function genreOf(snap: WorldSnapshot): Genre {
+  return genreOfCampaign(snap.campaign);
 }
 
 /** Lo que lleva un NPC, bajando a sus contenedores. */

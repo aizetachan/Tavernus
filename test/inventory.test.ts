@@ -3,6 +3,7 @@ import { sheetView } from '../src/adapters/sheet-view.js';
 import { encumbrance, inventoryView, packView, spawnItem, transferItem } from '../src/engine/inventory.js';
 import { bootEngine, freshWorld } from './helpers.js';
 
+import { setCoins } from '../src/engine/money.js';
 const hand = (id: string, which: 'main' | 'off' | 'both') => ({ type: 'character' as const, id, slot: { kind: 'hand' as const, which } });
 const pocket = (id: string) => ({ type: 'character' as const, id, slot: { kind: 'pocket' as const } });
 
@@ -117,13 +118,13 @@ describe('inventario y capacidad', () => {
     transferItem(world, 'ii_kael_daga', pocket('ch_kael'));
     transferItem(world, 'ii_barril', hand('ch_kael', 'both')); // +40 → ~48 (las 1500 de cobre son 15 de oro: 0,3 lb)
     expect(encumbrance(world, kael).level).toBe('ok');
-    kael.coins = 150_000; // 1500 de oro: +30 lb
+    setCoins(world, kael.id, 150_000); // 1500 de oro: +30 lb
     expect(encumbrance(world, kael).level).toBe('encumbered');
-    kael.coins = 500_000; // 5000 de oro: +100 lb
+    setCoins(world, kael.id, 500_000); // 5000 de oro: +100 lb
     const e = encumbrance(world, kael);
     expect(e.level).toBe('heavily');
     expect(e.speed_penalty_ft).toBe(20);
-    kael.coins = 1_000_000;
+    setCoins(world, kael.id, 1_000_000);
     expect(encumbrance(world, kael).level).toBe('immobile');
   });
 
