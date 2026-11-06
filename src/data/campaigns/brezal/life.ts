@@ -95,6 +95,7 @@ export const RUMORS: AuthoredRumor[] = [
   { id: 'rm_cerco_doro', kind: 'rumor', name: 'El diezmo corto', hint: 'Doro, el guardia, repite que su tío dice que la niebla es «el castigo por cobrar poco diezmo»', where: null, location_id: 'loc_lindero', days: 30 },
   { id: 'rm_cerco_garran', kind: 'rumor', name: 'Deudores sin salida', hint: 'Garrán, el alguacil, se ríe de la niebla: «Los deudores no pueden huir. Mejor»', where: null, location_id: 'loc_plaza', days: 30 },
   { id: 'rm_cerco_mateo', kind: 'rumor', name: 'El grano que no llega', hint: 'Mateo, el molinero, dice que desde que bajó la niebla «el grano no llega ni sale» y vende la harina que queda', where: 'el molino', location_id: 'loc_molino', days: 30 },
+  { id: 'rm_cerco_lucio', kind: 'rumor', name: 'Ni la sal', hint: 'Lucio, el buhonero de la plaza, repite a quien entra en su tienda que en el valle «no entra nada, ni la sal»: lo que se le acaba no vuelve, y por eso no rebaja nada', where: 'la tienda del buhonero', location_id: 'loc_tienda', days: 30 },
   { id: 'rm_cerco_ursula', kind: 'person', name: 'Pol, al otro lado', hint: 'Úrsula, la viuda de los Corrales, dice que su hijo Pol salió al mercado de Valcruz la víspera de que bajara la niebla y está al otro lado', where: 'el camino de Valcruz, al otro lado de la niebla', location_id: 'loc_corrales', days: 30 },
 ];
 

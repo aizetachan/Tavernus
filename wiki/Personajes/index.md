@@ -1,11 +1,11 @@
 ---
 title: Personajes
 aliases: ["Personajes"]
-description: "La gente de Brezal: once vecinos atrapados por la niebla, un perro, dos lobos y la voz que lo cuenta todo."
+description: "La gente de Brezal: doce vecinos atrapados por la niebla, un perro, dos lobos y la voz que lo cuenta todo."
 tags: [personaje, brezal]
 ---
 
-En Brezal viven once personas con nombre, todas dentro de [[El Cerco de Ceniza]]. Cada una quiere algo, guarda un secreto y tiene su horario. Cada una es una puerta a la historia.
+En Brezal viven doce personas con nombre, todas dentro de [[El Cerco de Ceniza]]. Cada una quiere algo, guarda un secreto y tiene su horario. Cada una es una puerta a la historia.
 
 El secreto va por niveles de [[Mecánicas#Confianza: lo que te cuenta cada uno|confianza]]: a un extraño le cuentan lo que sabe todo el pueblo, y lo que abre la historia, solo a un amigo o a un aliado.
 
@@ -24,6 +24,7 @@ El secreto va por niveles de [[Mecánicas#Confianza: lo que te cuenta cada uno|c
 | ![[retrato-ysolde.jpg\|56]] | [[Ysolde]] | Mujer del ascua | Desconfiada |
 | ![[retrato-hal.jpg\|56]] | [[Hal]] | Cazador | Neutral |
 | ![[retrato-ursula.jpg\|56]] | [[Úrsula]] | Granjera | Neutral |
+| | [[Lucio Cendal]] | Buhonero, de fuera | Neutral |
 
 La actitud es la de partida. Cambia según lo que haga el jugador: por ejemplo, Brenna se vuelve amistosa si recupera a su perro. Dónde está cada uno, y a qué hora, lo dice su página; los horarios completos están en [[Vida del pueblo]].
 

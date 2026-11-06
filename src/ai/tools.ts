@@ -14,6 +14,7 @@ import { perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
+import { stockOwnerOf } from '../engine/shop.js';
 import { advanceNow, advanceStory, clueBlocked, clueReachable, nameFor, openSources, questStatus, storyOf, storyQuestAction, voicedQuest, type StoryOutput } from '../engine/story.js';
 import { adjustTrust, knowledgeFor, MASTER_TRUST_CHANGES, TRUST_LABEL, trustNotice, trustTier, type TrustResult } from '../engine/trust.js';
 import { barrierToward, bounceOff } from '../engine/barrier.js';
@@ -1080,10 +1081,16 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Al inconsciente se le registra sin tirada, pero quien lo vea lo ve como un robo.
       const stolen = Boolean(victim && toType === 'character' && s('to_id') === actor.id
         && ((victim.status === 'alive' && readsAsTheft(ctx.action_text) && !['exito_justo', 'exito_claro', 'critico'].includes(ctx.roll_category ?? '')) || victim.status === 'unconscious'));
+      // De un estante con dueño (shop.ts), sin pagar: un robo, salvo que la tirada lo haya hecho sin que se note. Para comprar, buy_item.
+      const heldInst = world.itemInstances.get(s('instance_id'));
+      const shopOwner = heldInst && toType === 'character' && s('to_id') === actor.id ? stockOwnerOf(world, heldInst) : null;
+      const shoplifted = Boolean(shopOwner && shopOwner.id !== actor.id && !['exito_justo', 'exito_claro', 'critico'].includes(ctx.roll_category ?? ''));
       // Del suelo, sin cantidad, se coge uno: «coger agua» no se lleva el agua entera del pozo.
       const fromFloor = held?.type === 'spot' && toType === 'character';
       const r = transferItem(world, s('instance_id'), to, input['quantity'] == null ? (fromFloor ? 1 : undefined) : Number(input['quantity']));
       if (r.ok && stolen) reportIncident(world, { kind: 'theft', perpetrator_id: actor.id, victim_id: victim!.id }, nowGameS);
+      // El tendero solo lo ve si está a la vista (crime.ts, witnessesAt): desde la trastienda, no; los que haya, sí.
+      if (r.ok && shoplifted) reportIncident(world, { kind: 'theft', perpetrator_id: actor.id, victim_id: shopOwner!.id, victim_present: false }, nowGameS);
       if (!r.ok && r.error.code === 'not_reachable' && r.error.reason === 'no está a tu alcance') {
         // Lo que no está en el punto del actor: dónde está y adónde ir.
         const inst = world.itemInstances.get(s('instance_id'));
@@ -1098,7 +1105,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!r.ok) return { error: r.error.code, detail: r.error, ...(r.error.code === 'no_space' && r.error.fits ? { hint: `Caben ${r.error.fits}: repite con quantity ${r.error.fits} si es lo que quiere.` } : {}) };
       // Darle algo a un NPC es un regalo (o una entrega): sube su confianza, con el tope de la charla.
       if (toType === 'npc') { const n = world.npc(s('to_id')); if (n.status === 'alive') trustProgress(ctx, adjustTrust(world, n, actor, 'gift', nowGameS)); }
-      return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity, ...(r.coins ? { coins_found: money(world, r.coins), hint_coins: `Dentro había ${money(world, r.coins)}: ya están en las monedas del actor. Dilo con esa cifra exacta.` } : {}), ...(stolen ? crimeNote(ctx) : {}) };
+      return { ok: true, item: world.itemDef(r.moved.item_id).name, quantity: r.moved.quantity, ...(r.coins ? { coins_found: money(world, r.coins), hint_coins: `Dentro había ${money(world, r.coins)}: ya están en las monedas del actor. Dilo con esa cifra exacta.` } : {}), ...(stolen || shoplifted ? crimeNote(ctx) : {}), ...(shopOwner && !shoplifted && shopOwner.id !== actor.id ? { hint_shop: `Es de la tienda de ${shopOwner.name} y nadie lo ha visto: se lo ha llevado sin pagar.` } : {}) };
     }
     case 'report_incident': {
       const kind = s('kind') as IncidentKind;
@@ -1241,13 +1248,13 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     case 'sell_item': {
       const missS = s('character_id') === actor.id ? reachNpc(ctx, world.npc(s('npc_id'))) : null;
       if (missS) return missS;
-      const r = sellToNpc(world, world.character(s('character_id')), s('npc_id'), s('instance_id'), input['quantity'] == null ? undefined : Number(input['quantity']));
+      const r = sellToNpc(world, world.character(s('character_id')), s('npc_id'), s('instance_id'), input['quantity'] == null ? undefined : Number(input['quantity']), nowGameS);
       return r.ok ? { ok: true, sold: `${r.item} ×${r.quantity}`, total: r.total } : { error: r.reason };
     }
     case 'buy_item': {
       const missB = s('character_id') === actor.id ? reachNpc(ctx, world.npc(s('npc_id'))) : null;
       if (missB) return missB;
-      const r = buyFromNpc(world, world.character(s('character_id')), s('npc_id'), s('item_id'), Number(input['quantity']) || 1);
+      const r = buyFromNpc(world, world.character(s('character_id')), s('npc_id'), s('item_id'), Number(input['quantity']) || 1, nowGameS);
       return r.ok ? { ok: true, bought: `${r.item} ×${r.quantity}`, total: r.total, ...(r.unlocked.length ? { unlocked: r.unlocked } : {}) } : { error: r.reason };
     }
     case 'set_debt': {

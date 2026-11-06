@@ -79,6 +79,7 @@ export const LAW: LawRules = {
     { npc_id: 'npc_ilse', location_ids: ['loc_curandera'] },
     { npc_id: 'npc_mateo', location_ids: ['loc_molino'] },
     { npc_id: 'npc_ursula', location_ids: ['loc_corrales'] },
+    { npc_id: 'npc_lucio', location_ids: ['loc_tienda'] },
   ],
   temperament: { npc_hal: 'brave', npc_ursula: 'brave', npc_mateo: 'timid', npc_tobias: 'timid', npc_ilse: 'timid' },
 };

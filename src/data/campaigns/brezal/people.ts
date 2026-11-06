@@ -1,5 +1,5 @@
 /**
- * Brezal sellada: la gente. Once personas y tres animales, todos dentro del
+ * Brezal sellada: la gente. Doce personas (con el buhonero) y tres animales, todos dentro del
  * Cerco de Ceniza. Cada persona con su
  * aspecto y manera de hablar, lo que quiere, lo que sabe y cuenta según
  * cuánto se fíe del PJ, lo que
@@ -269,6 +269,39 @@ export const NPCS: AuthoredNpc[] = [
     routine: { day: 'sp_co_gallinero', afternoon: 'sp_co_huerto', night: 'sp_co_casa' },
     home_spot_id: 'sp_co_casa',
     tag_reactions: [{ tag: 'trasfondo:folk-hero', opinion: 5, note: 'la gente sencilla le recuerda: le trata como a uno del pueblo' }],
+  },
+  {
+    // El buhonero (PLAN-OBJETOS §6.1): de fuera, atrapado por el Cerco, con tienda en la plaza (shop.ts). Su manojo de
+    // llaves abre la trastienda; lo que vende son existencias contadas (items.ts) y no repone: el valle está sellado.
+    id: 'npc_lucio', name: 'Lucio Cendal', role: 'buhonero', role_short: 'el buhonero', spot_id: 'sp_ti_mostrador', passive_perception: 13, attitude: 'neutral',
+    noncombatant: true,
+    description: 'Cincuenta años, flaco, con un sombrero de ala ancha, un chaleco de muchos bolsillos y una cinta métrica colgada del cuello como otros llevan un crucifijo. Habla deprisa y con gracia, de usted a todo el mundo, y a cada frase le pone un precio. Toca las cosas que vende como si las fuera a echar de menos. Cuando le preguntan por la niebla se ríe un poco tarde y cambia de tema hacia lo bien que se conserva la sal. Silba siempre la misma tonada de camino, y la corta en cuanto se da cuenta.',
+    motivation: 'Salir del valle con el carro y con algo que vender al otro lado. Mientras tanto, no malvender lo que le queda: cada cosa que vende es una que ya no tendrá.',
+    knowledge: [
+      { tier: 'stranger', text: 'Es buhonero de Valcruz y vino a Brezal con el carro, a vender agujas, sal y cacharros, la víspera de que bajara la niebla. Su mula se espantó y se metió en la niebla el primer día: no volvió. Se ha quedado con una casa vacía de la plaza y vende lo que le queda; compra lo que le sirva, sobre todo pieles, y casi cualquier cosa a la mitad de lo que vale. No repone: «aquí no entra nada, señor, ni la sal».' },
+      { tier: 'acquaintance', text: 'En Valcruz conoció a un muchacho de Brezal que vendía lana, Pol, que le dijo que volvía al pueblo al día siguiente; no sabe si llegó a salir del mercado. Garrán le cobra el diezmo doble «por forastero» y le apunta en un libro aparte. Duerme en la trastienda, con las llaves bajo la almohada.' },
+      { tier: 'friend', text: 'En el camino, un día antes de llegar, se cruzó con una mujer joven con capucha que llevaba un cuenco de barro tapado y envuelto en trapos, caliente aunque hacía frío; le preguntó si el granero de los Vharn seguía en pie y no quiso subir al carro. En la trastienda guarda un pergamino que compró a un fraile y no sabe leer, y una poción de curación: lo único que no vende barato.' },
+      { tier: 'ally', text: 'Ha probado a salir dos veces, de noche, con el carro vacío y una cuerda atada a la barricada: las dos ha vuelto por donde entró. Si alguien encuentra la manera de abrir el Cerco, le da lo que tenga en la trastienda a cambio de salir el primero.' },
+    ],
+    knows: 'Que vino de Valcruz la víspera de la niebla; que conoció a Pol en el mercado de Valcruz; que se cruzó en el camino con una mujer con un cuenco caliente que preguntó por el granero de Vharn (Ysolde, con el ascua). No sabe nada del incendio de hace veinte años.',
+    ties: 'Garrán le cobra el doble y le desprecia. Brenna le da la cena a cambio de sal. Úrsula le pregunta cada mañana por Pol. Hal le vende pieles.',
+    bonds: [{ npc_id: 'npc_garran', kind: 'rival' }, { npc_id: 'npc_ursula', kind: 'friend' }],
+    tag_reactions: [
+      { tag: 'trasfondo:criminal', note: 'no le quita ojo de las manos mientras está en la tienda' },
+      { tag: 'ladron', opinion: -10, note: 'cubre el mostrador con el brazo y le atiende desde lejos; no le fía nada' },
+    ],
+    buys: [{ item_id: 'it_piel', price: 120 }, { item_id: 'it_cuerda', price: 60 }, { item_id: 'it_antorcha', price: 1 }],
+    sells: [
+      { item_id: 'it_tiza', price: 1 }, { item_id: 'it_antorcha', price: 2 }, { item_id: 'it_saco', price: 2 }, { item_id: 'it_aceite', price: 12 },
+      { item_id: 'it_racion', price: 12 }, { item_id: 'it_odre', price: 25 }, { item_id: 'it_kit_needle', price: 5 }, { item_id: 'it_kit_hook', price: 5 },
+      { item_id: 'it_cuerda', price: 120 }, { item_id: 'it_garfio', price: 250 }, { item_id: 'it_daga', price: 250 }, { item_id: 'it_farol', price: 600 },
+      { item_id: 'it_pocion', price: 3000 }, { item_id: 'it_pergamino_curar', price: 3000 },
+    ],
+    // Tienda de verdad (shop.ts): sus estantes en la tienda y el arcón del carro; abre de 9 a 19 y no repone.
+    shop: { location_id: 'loc_tienda', stock_spot_ids: ['sp_ti_estantes', 'sp_ti_trastienda', 'sp_pl_carro'], restock: 'none', hours: [9, 19], buys_any: 0.5 },
+    stats: srd('commoner', 8, { attack_name: 'bastón' }),
+    routine: { day: 'sp_ti_mostrador', afternoon: 'sp_ti_mostrador', night: 'sp_ti_trastienda' },
+    home_spot_id: 'sp_ti_trastienda',
   },
   {
     id: 'npc_lobo', name: 'un lobo flaco', role: 'lobo', spot_id: 'sp_cl_arroyo', passive_perception: 13, attitude: 'hostile',

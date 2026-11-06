@@ -235,5 +235,18 @@ registro de Notion.
 | Salvapantallas del menú | 7 | `public/salvapantallas-N.jpg` | hechos |
 | Fondos de plano | 19 | `plano/<loc_id>.jpg` | 5 hechos; faltan 14 (ver «Fondos pintados») |
 
+### Pendiente: la tienda del buhonero (2026-11-06)
+
+Brezal tiene un lugar y un vecino nuevos (PLAN-OBJETOS §6; `docs/BREZAL.md` §2.5 y §2.6). Hace falta:
+
+| Activo | Fichero | Qué pintar |
+|---|---|---|
+| Vista de localización | `vista/loc_tienda.jpg` | Interior de una casa de una pieza en penumbra: estantes de tabla con más huecos que género, cada cosa con un papelito de precio; un mostrador hecho con una puerta vieja sobre dos barriles, con una balanza de platillos y una libreta; al fondo, una cortina de saco. Luz cálida de una vela sobre el mostrador; por la puerta abierta, la plaza gris y la rueda de un carro verde. |
+| Fondo de plano | `plano/loc_tienda.jpg` | El mismo local visto desde arriba, para el tablero (ver «Fondos pintados»). |
+| Retrato | `retrato/npc_lucio.jpg` | Lucio Cendal, buhonero de cincuenta años, flaco, con sombrero de ala ancha y un chaleco de muchos bolsillos y una cinta métrica colgada del cuello; sonrisa de vendedor y ojos cansados. |
+| Objetos | `objeto/png/<item_id>.png` | `it_aceite`, `it_farol`, `it_saco`, `it_odre`, `it_garfio`, `it_tiza`, `it_pergamino_curar`, `it_llaves_cendal`. Mientras no estén, se pintan solos la primera vez que se ven (`illustrate`). |
+
+El carro del buhonero (`sp_pl_carro`) es un punto de la plaza: no necesita vista propia. Si se rehace la vista de la plaza, que salga a un lado, verde y sin mula.
+
 Los iconos del tablero no hacen falta por ahora: el tablero dibuja muebles y fichas como vectores desde los
 datos. Si se quieren pintados, es una issue aparte que también toca el dibujo del tablero.
