@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rename, rm, truncate, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { GameEvent, Id, WorldSnapshot } from '../engine/model.js';
 import type { TickerState } from '../clock/clock.js';
@@ -108,8 +108,13 @@ export class JsonFileRepository implements Repository {
 
   private async append(name: string, line: string): Promise<void> {
     const f = this.file(name);
-    const fix = this.torn.delete(f) ? '\n' : '';
-    await writeFile(f, fix + line, { flag: 'a' });
+    // Una última línea a medias (el proceso murió escribiéndola) se corta antes de seguir: si se quedara, con un salto
+    // detrás, sería una línea rota en medio del fichero y el siguiente arranque lo daría por dañado.
+    if (this.torn.delete(f)) {
+      const raw = await readFile(f);
+      await truncate(f, raw.lastIndexOf(0x0a) + 1);
+    }
+    await writeFile(f, line, { flag: 'a' });
   }
 
   async loadEvents(campaignId: Id, afterSeq: number): Promise<GameEvent[]> {

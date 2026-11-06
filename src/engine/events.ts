@@ -152,7 +152,8 @@ export class EventLog {
       for (const l of this.deliveryListeners) l(d);
       // Solo cuenta como "visto" si el jugador está conectado (SPEC §4.4, /recap al volver).
       const c = this.world.characters.get(character_id);
-      if (c && c.connected) { c.last_seen_event_id = event.id; }
+      // Con touch: el almacén por entidad (PostgreSQL, G) solo escribe lo tocado; sin él, el recap volvía a empezar.
+      if (c && c.connected) { c.last_seen_event_id = event.id; this.world.touch('characters', c.id); }
     }
     return event;
   }

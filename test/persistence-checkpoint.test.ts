@@ -58,7 +58,8 @@ async function longGame(dir: string, turns = 60) {
 function bootState(e: Engine) {
   const pcs = ['ch_kael', 'ch_mira'];
   return {
-    world: JSON.parse(JSON.stringify(e.world.snapshot())) as unknown,
+    // Las definiciones de objetos, por id: el mundo se guarda sin el catálogo del código y lo repone al arrancar (bloque B), en otro orden.
+    world: JSON.parse(JSON.stringify({ ...e.world.snapshot(), item_defs: [...e.world.snapshot().item_defs].sort((a, b) => a.id.localeCompare(b.id)) })) as unknown,
     events: e.events.all().map((x) => JSON.parse(JSON.stringify(splitDiagnostics(x).event)) as unknown),
     lastSeq: e.events.lastSeq,
     pending: pcs.map((id) => e.pendingRoll(id)),
