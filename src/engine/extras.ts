@@ -20,7 +20,8 @@ import { holdNpcAt } from './npcorders.js';
 import type { World } from './world.js';
 
 export type TradeId =
-  | 'watchman' | 'devout' | 'baker' | 'laborer' | 'washer' | 'woodcutter' | 'peddler' | 'shepherd' | 'child' | 'servant' | 'regular';
+  | 'watchman' | 'devout' | 'baker' | 'laborer' | 'washer' | 'woodcutter' | 'peddler' | 'shepherd' | 'child' | 'servant' | 'regular'
+  | 'fisher' | 'miner';
 
 type Wealth = NonNullable<Npc['wealth']>;
 
@@ -162,6 +163,23 @@ export const TRADES: Record<TradeId, TradeDef> = {
       dunno: ['De la casa no hablo.', 'Eso pregúntelo a {refer}.'],
       brush: ['Me esperan dentro.', 'No puedo entretenerme.'],
       bye: ['Buenas.'],
+    },
+  }),
+  fisher: T('fisher', { fantasy: { m: 'pescador', f: 'pescadora' }, scifi: { m: 'recolector de algas', f: 'recolectora de algas' }, postapoc: { m: 'pescador', f: 'pescadora' } }, {
+    kit: 'fisher', wealth: 'poor', temper: 'seco', service: 'sell',
+    motivation: 'Vender la pesca del día antes de que se eche a perder.',
+    lines: {
+      greet: ['¿Pescado? Del de hoy.', '¿Qué?'],
+      service: ['{item}, {price}. Fresco.', '{item} a {price}.'],
+      brush: ['Tengo que remendar las redes.', 'Si no compras, aparta, que huele.'],
+    },
+  }),
+  miner: T('miner', { fantasy: { m: 'minero', f: 'minera' }, scifi: { m: 'perforador', f: 'perforadora' }, postapoc: { m: 'excavador', f: 'excavadora' } }, {
+    kit: 'laborer', wealth: 'poor', temper: 'seco', service: 'none',
+    motivation: 'Acabar el turno y no quedarse dentro.',
+    lines: {
+      greet: ['¿Qué?', 'Vengo del turno. ¿Qué quieres?'],
+      brush: ['Estoy molido. Déjame.', 'Eso no es cosa mía.'],
     },
   }),
   regular: T('regular', { fantasy: { m: 'parroquiano', f: 'parroquiana' }, scifi: { m: 'cliente', f: 'clienta' } }, {
