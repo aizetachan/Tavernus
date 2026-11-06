@@ -44,9 +44,10 @@ import { TALK_RULES } from './actor.js';
 import { concernsLine } from '../engine/concerns.js';
 import { recentNpcLines } from '../engine/closecheck.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
+import { shopClosed, shopLines } from '../engine/shop.js';
 import { abilitiesForMaster } from '../engine/levels.js';
 import { hhmm } from '../engine/schedule.js';
-import { currencyOf, money } from '../engine/money.js';
+import { coinsOf, currencyOf, money } from '../engine/money.js';
 import { priceFor } from '../engine/standing.js';
 import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
 import { socialOutcomeLine, talkPlan, talkScript, type TalkPlan } from '../engine/talk.js';
@@ -396,8 +397,10 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
       `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage})${(n.stats.multiattack ?? 1) > 1 ? `, multiataque ×${n.stats.multiattack}` : ''}.${n.bound ? ' ATADO: no se mueve ni pelea.' : ''}${n.noncombatant ? ' No es de pelear: se defiende si le atacan, pero no remata a nadie; le deja, le echa, pide ayuda o llama a la guardia.' : ''}` : ' No combate.'}`,
       // Opinión con el actor, temas que tiene en la cabeza y reacción a sus etiquetas (standing.ts, worldrules.ts).
       ...npcStandingLines(world, n, actor, nowG),
-      n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${money(world, priceFor(n, actor.id, b.price, 'sell'))}`).join(', ')}` : '',
-      n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, priceFor(n, actor.id, b.price, 'buy'))}`).join(', ')}` : '',
+      n.buys.length ? `  Compra: ${n.buys.map((b) => `${world.itemDef(b.item_id).name} a ${money(world, priceFor(n, actor.id, b.price, 'sell'))}`).join(', ')}${n.shop?.buys_any ? `; lo demás, a ${Math.round(n.shop.buys_any * 100)}% de lo que vale` : ''}` : '',
+      // Con tienda (shop.ts), lo que vende es lo que le queda: sin existencias no hay venta, y lo de los estantes no se coge sin pagar.
+      n.shop ? shopLine(world, n, actor, nowG)
+        : n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, priceFor(n, actor.id, b.price, 'buy'))}`).join(', ')}` : '',
       carriedBy(world, n.id),
       saidBy(engine.events.recentInLocation(loc.id, 60), n.id),
       knowledgeLine(n, actor),
@@ -644,4 +647,12 @@ function carriedBy(world: Engine['world'], npcId: Id): string {
 function saidBy(events: readonly GameEvent[], npcId: Id): string {
   const said = recentNpcLines(events, npcId).slice(-4);
   return said.length ? `  Ya ha dicho hace poco (no lo repitas; si vuelve al tema, dilo de otra manera o con algo nuevo): ${said.map((t) => `«${t}»`).join(' · ')}` : '';
+}
+
+/** Lo que tiene a la venta un tendero (shop.ts), con existencias y precio, y su horario. */
+function shopLine(world: World, n: Npc, actor: Character, nowG: number): string {
+  const lines = shopLines(world, n, actor);
+  const closed = shopClosed(n, nowG);
+  const list = lines.length ? lines.map((l) => `${l.name} [${l.item_id}]${l.service ? '' : ` ×${l.quantity}`} a ${money(world, l.price)}`).join(', ') : 'nada: no le queda género';
+  return `  Tienda (existencias reales, buy_item las saca; lo que no está aquí NO lo tiene): ${list}. Paga lo que compra con su bolsa (${money(world, coinsOf(world, n.id))}).${closed ? ` CERRADA: ${closed}.` : ''} Lo de sus estantes es suyo: cogerlo sin pagar es robo.`;
 }

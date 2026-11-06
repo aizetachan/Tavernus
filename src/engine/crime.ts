@@ -133,6 +133,8 @@ export interface IncidentInput {
   /** Dónde; sin él, donde está el autor. */
   spot_id?: Id | null;
   weapon?: string | null;
+  /** La víctima lo ve aunque no esté en el punto (le quitan algo de encima). false: solo si está allí (su tienda, shop.ts). */
+  victim_present?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -577,7 +579,7 @@ export function reportIncident(world: World, input: IncidentInput, nowG: number)
   i.crowd = crowdHere(world, spot.location_id, nowG) ?? i.crowd;
   // Quien lo ve, en este orden: víctima, autoridad, allegados, dueños, el resto (así el primero que puede, corre a avisar).
   const seen = witnessesAt(world, spot, input.kind, [c.id]);
-  if (victim && victim.status === 'alive' && !seen.includes(victim)) seen.unshift(victim);
+  if (victim && victim.status === 'alive' && input.victim_present !== false && !seen.includes(victim)) seen.unshift(victim);
   const order: CrimeRole[] = ['victim', 'authority', 'kin', 'owner', 'commoner'];
   seen.sort((a, b) => order.indexOf(roleOf(world, a, i!)) - order.indexOf(roleOf(world, b, i!)));
   for (const n of seen) learn(world, i, n, 'saw', null, nowG);

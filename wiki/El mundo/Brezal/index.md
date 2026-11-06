@@ -7,9 +7,9 @@ tags: [mundo, brezal, lugar]
 ![[ilustracion-portada-brezal.jpg]]
 *Brezal al anochecer, con la taberna encendida y la montaña de Vharn al fondo.*
 
-**Brezal** es una aldea pequeña del valle de Vharn, al pie de la montaña de los antiguos señores. Es el único sitio jugable de la demo: diez lugares, todos a menos de 600 metros de la plaza.
+**Brezal** es una aldea pequeña del valle de Vharn, al pie de la montaña de los antiguos señores. Es el único sitio jugable de la demo: once lugares, todos a menos de 600 metros de la plaza.
 
-El pueblo gira alrededor de la [[Plaza del Pozo]], con su tablón y su agua turbia. A dos pasos están la [[Taberna del Jabalí]], [[La herrería]] y [[La casona]] del regidor, y por un callejón, la [[Casa de las hierbas]] de la curandera. Dos caminos llevan a [[El molino]], junto al arroyo, y a la granja de [[Los Corrales]]. El portón norte da a [[El Soto]], la arboleda del borde, y por él se sube a [[El Lindero]]. Desde el Soto, una senda baja a las ruinas de [[El Granero Quemado]].
+El pueblo gira alrededor de la [[Plaza del Pozo]], con su tablón y su agua turbia. A dos pasos están la [[Taberna del Jabalí]], [[La herrería]], [[La tienda del buhonero]] y [[La casona]] del regidor, y por un callejón, la [[Casa de las hierbas]] de la curandera. Dos caminos llevan a [[El molino]], junto al arroyo, y a la granja de [[Los Corrales]]. El portón norte da a [[El Soto]], la arboleda del borde, y por él se sube a [[El Lindero]]. Desde el Soto, una senda baja a las ruinas de [[El Granero Quemado]].
 
 Desde hace tres semanas la aldea tose ceniza. El arroyo baja tibio y gris, las ovejas tosen y [[El Cerco de Ceniza]] cierra el valle a unos 600 metros de la plaza. Al otro lado queda el [[Camino de Valcruz]], adonde nadie llega.
 
@@ -25,6 +25,7 @@ Cada lugar tiene su página, con ficha, puntos de interés, quién está ahí y 
 | [[Taberna del Jabalí]] | Interior | Cerveza, humo y la manta vacía del perro de Brenna. Debajo, el [[Sótano del Jabalí]]. | [[Brenna]]; por la tarde [[Garrán]]; de noche [[Doro]] y [[Hugo]] |
 | [[Sótano del Jabalí]] | Interior | Techo bajo, olor a tierra y a vino agrio. Cajas tapadas con sacos y un sello que nadie nombra. Solo se baja por la trampilla de la taberna. | Nadie |
 | [[La herrería]] | Interior | Calor y hierro. El taller de Hugo. | [[Hugo]] |
+| [[La tienda del buhonero]] | Interior | Una casa vacía de la plaza con estantes medio vacíos y el carro sin mula a la puerta. Abre de 9:00 a 19:00. | [[Lucio Cendal]] |
 | [[La casona]] | Interior | La casa del regidor. Muebles demasiado buenos y una torre del reloj. | [[Osric Malvez]]; de noche [[Garrán]] |
 | [[Casa de las hierbas]] | Interior | Ilse hierve corteza para la tos. | [[Ilse]] |
 | [[El molino]] | Interior | El agua sale tibia y gris. | [[Mateo]] y [[Tobías]] |
@@ -52,6 +53,7 @@ Las salidas unen un punto de un lugar con un punto de otro. El tiempo es aproxim
 | [[Taberna del Jabalí]] | la trampilla | [[Sótano del Jabalí]] | la escalera | 3 m | normal | 2 s |
 | [[Plaza del Pozo]] | la puerta de la herrería | [[La herrería]] | la puerta | 3 m | normal | 2 s |
 | [[Plaza del Pozo]] | la puerta de la casona | [[La casona]] | la puerta | 4 m | normal | 3 s |
+| [[Plaza del Pozo]] | la puerta de la tienda del buhonero | [[La tienda del buhonero]] | la puerta | 3 m | normal | 2 s |
 | [[Plaza del Pozo]] | el callejón de las hierbas | [[Casa de las hierbas]] | la puerta | 25 m | normal | 17 s |
 | [[Plaza del Pozo]] | el camino del molino | [[El molino]] | la puerta | 150 m | normal | 1 min 40 s |
 | [[Plaza del Pozo]] | el camino de los corrales | [[Los Corrales]] | la cancela | 180 m | normal | 2 min |

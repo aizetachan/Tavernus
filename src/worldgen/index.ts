@@ -20,6 +20,7 @@ import { validateSnapshot } from './validate.js';
 import { setDebt } from '../engine/debts.js';
 import { spawnItem } from '../engine/inventory.js';
 import { holdNpcAt } from '../engine/npcorders.js';
+import { openShops } from '../engine/shop.js';
 
 export { buildSkeleton, TONES, type Skeleton, type Tone } from './skeleton.js';
 export { FillError, offlineFill, validateFill, type FillClient, type PcBrief, type WorldFill } from './fill.js';
@@ -229,6 +230,8 @@ export function buildSnapshot(sk: Skeleton, f: WorldFill, generation: Generation
     if (!seller) { room.state = {}; continue; }
     if (!seller.sells.some((x) => x.item_id === ROOM_NIGHT_ITEM_ID)) seller.sells.push({ item_id: ROOM_NIGHT_ITEM_ID, price: ROOM_NIGHT_PRICE });
   }
+  // Tiendas (shop.ts): mercaderes, posaderos y lonjeros venden de un estante suyo con lo que ya venden, y reponen.
+  openShops(snap);
   return snap;
 }
 

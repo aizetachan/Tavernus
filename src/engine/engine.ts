@@ -45,7 +45,7 @@ import { harvest } from './resources.js';
 import { spawnItem } from './inventory.js';
 import { classifyMoments, momentLookupOf, seenFromEvents, type DialogueLine, type Moment } from './moments.js';
 import { characterCheck, type CheckKind } from './rules.js';
-import { activeJobs, addPractice, rotateBoard, type ProgressEvent } from './progress.js';
+import { activeJobs, addPractice, buyFromNpc, rotateBoard, type ProgressEvent } from './progress.js';
 import { resolveAttack } from './combat.js';
 import { attackRoll, checkRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
 import { passivePerception, type Ability } from './rules.js';
@@ -61,6 +61,7 @@ import { migrateExtras } from './extras.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
 import { compactSnapshot, syncCatalog } from '../data/catalog.js';
 import { outfitNpcs } from './outfit.js';
+import { openShops, restockShops, shopsFromSeed, stockOwnerOf } from './shop.js';
 import { fillItemDefFrom, normalizeItemDef } from './items.js';
 import { discoverSpot, lookAround, migrateSpotSight, noteSight, searchableSpots, seeFrom } from './spots.js';
 import { absence, absenceRule, acceptPrologue, acceptRecap, forPrologue, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
@@ -416,6 +417,8 @@ export class Engine {
 
   /** Un día de juego: rota el tablón y lo anuncia en público. */
   private onDay(tickGameS: number): void {
+    // Las tiendas que reponen cada día (shop.ts); las de un valle sellado, no.
+    restockShops(this.world, tickGameS);
     const jobs = rotateBoard(this.world, tickGameS, this.world.campaign.board.active_job_ids.length === 0);
     if (!jobs) return;
     const anchor = this.world.spot(this.world.campaign.starting_points[0]!.spot_id);
@@ -2023,6 +2026,30 @@ export class Engine {
     if (!res.ok) return { ok: false, text: transferErrorText(res.error) };
     await this.flush();
     return { ok: true, text: done };
+  }
+
+  /**
+   * Comprar en una tienda con el botón de la web (shop.ts, PLAN-OBJETOS §6.2): el atajo determinista, sin máster ni
+   * tokens. Lo mismo que buy_item: existencias, horario, precio y bolsa. El regateo va por el chat, al máster.
+   */
+  async shopBuy(characterId: Id, npcId: Id, itemId: Id, quantity = 1): Promise<ActionResult> {
+    await this.tick();
+    const c = this.world.character(characterId);
+    if (c.status !== 'active') return { ok: false, text: c.status === 'asleep' ? 'Estás dormido.' : 'Ahora no puedes comprar.' };
+    if (c.transit) return { ok: false, text: 'Vas de camino: primero llega.' };
+    const npc = this.world.npcs.get(npcId);
+    if (!npc?.shop) return { ok: false, text: 'Aquí no hay tienda.' };
+    const locId = positionOf(this.world, c, this.gameNow()).location_id;
+    return this.runInLocation(locId, async () => {
+      this.lastAction.set(c.id, this.now());
+      const r = buyFromNpc(this.world, c, npc.id, itemId, quantity, this.nowFor(c));
+      if (!r.ok) return { ok: false, text: `${r.reason.charAt(0).toUpperCase()}${r.reason.slice(1)}.` };
+      const what = r.quantity > 1 ? `${r.quantity} × ${r.item}` : r.item;
+      const res = this.emitTrivial(c, `comprar ${what} a ${npc.name}`, 'buy', 'trade', `Compras ${what} a ${npc.name} por ${money(this.world, r.total)}.${r.unlocked.length ? ` Ya puedes entrar en ${r.unlocked.join(', ')}.` : ''}`,
+        `${c.name} le compra ${what} a ${npc.name}.`, 'Alguien paga algo en el mostrador.', undefined, { item_id: itemId, npc_id: npc.id, total: r.total });
+      await this.flush();
+      return res;
+    });
   }
 
   async say(characterId: Id, text: string, opts: { to?: Id | null; mode?: SayMode } = {}): Promise<ActionResult> {
@@ -3777,9 +3804,12 @@ export class Engine {
     if (item.kind === 'none' || (item.kind === 'one' && !inside.some((i) => i.id === item.value))) return { ok: false, text: `En ${contDef.name} no hay «${what}».` };
     if (item.kind === 'many') return this.ambiguous(item);
     const def = this.world.itemDef(this.world.itemInstance(item.value).item_id);
+    // De un estante con dueño (shop.ts): cogerlo sin pagar es robo.
+    const owner = stockOwnerOf(this.world, this.world.itemInstance(item.value));
     for (const which of ['main', 'off'] as const) {
       const res = transferItem(this.world, item.value, { type: 'character', id: c.id, slot: { kind: 'hand', which } });
-      if (res.ok) return this.emit(c, input, 'take_out', `Sacas ${def.name} de ${contDef.name}.`, `${c.name} saca ${def.name} de ${contDef.name}.`, 1, { item_id: def.id });
+      if (res.ok && owner && owner.id !== c.id) reportIncident(this.world, { kind: 'theft', perpetrator_id: c.id, victim_id: owner.id, victim_present: false }, this.nowFor(c));
+      if (res.ok) return this.emit(c, input, 'take_out', `Sacas ${def.name} de ${contDef.name}.${owner && owner.id !== c.id ? ` Es de ${owner.name}, y no lo has pagado.` : ''}`, `${c.name} saca ${def.name} de ${contDef.name}.`, 1, { item_id: def.id });
       if (res.error.code !== 'no_space') return { ok: false, text: transferErrorText(res.error) };
     }
     return { ok: false, text: 'Tienes las manos ocupadas.' };
@@ -3898,7 +3928,29 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
       if (cur && d.container && cur.container && d.container.max_weight_lb > cur.container.max_weight_lb) { cur.container.max_weight_lb = d.container.max_weight_lb; changed = true; }
     }
     for (const n of seed.resource_nodes) if (!snapshot.resource_nodes.some((x) => x.id === n.id)) { snapshot.resource_nodes.push(n); changed = true; }
-    for (const s of seed.spots) if (!snapshot.spots.some((x) => x.id === s.id)) { snapshot.spots.push(s); changed = true; }
+    // Sitios nuevos de la campaña escrita (la tienda del buhonero): el lugar, sus puntos, sus salidas y lo que hay en ellos.
+    for (const l of seed.locations) if (!snapshot.locations.some((x) => x.id === l.id)) { snapshot.locations.push(structuredClone(l)); changed = true; }
+    const newSpots = new Set<Id>();
+    for (const s of seed.spots) if (!snapshot.spots.some((x) => x.id === s.id)) { snapshot.spots.push(s); newSpots.add(s.id); changed = true; }
+    if (newSpots.size) {
+      for (const e of seed.exits) {
+        if (snapshot.exits.some((x) => x.id === e.id) || !snapshot.spots.some((x) => x.id === e.from_spot_id) || !snapshot.spots.some((x) => x.id === e.to_spot_id)) continue;
+        snapshot.exits.push(structuredClone(e)); changed = true;
+      }
+      const have = new Set(snapshot.item_instances.map((i) => i.id));
+      const inNewSpot = (i: WorldSnapshot['item_instances'][number]): boolean => {
+        let at = i.location;
+        for (let g = 0; g < 16 && at.type === 'container'; g++) { const box = seed.item_instances.find((x) => x.id === at.id); if (!box) return false; at = box.location; }
+        return at.type === 'spot' && newSpots.has(at.id);
+      };
+      for (const i of seed.item_instances) if (!have.has(i.id) && inNewSpot(i)) { snapshot.item_instances.push(structuredClone(i)); changed = true; }
+      // Los dueños de los locales nuevos (crime.ts): sin ellos, robar en la tienda no tendría dueño ofendido.
+      const law = snapshot.campaign.law;
+      for (const o of seed.campaign.law?.owners ?? []) {
+        if (!law || law.owners?.some((x) => x.npc_id === o.npc_id)) continue;
+        (law.owners ??= []).push(structuredClone(o)); changed = true;
+      }
+    }
   }
   const camp2 = snapshot.campaign;
   if (seed) {
@@ -3943,6 +3995,9 @@ function migrate(snapshot: WorldSnapshot, seed?: WorldSnapshot): boolean {
   if (outfitNpcs(snapshot, seed)) changed = true;
   // Modelo de objetos 5e (items.ts): propiedades de arma en lista y categoría de la armadura, de sus propios datos.
   for (const d of snapshot.item_defs) if (normalizeItemDef(d)) changed = true;
+  // Tiendas (shop.ts): las de la campaña escrita que la partida no tenía, y las de los mundos generados.
+  if (shopsFromSeed(snapshot, seed)) changed = true;
+  if (openShops(snapshot)) changed = true;
   return changed;
 }
 

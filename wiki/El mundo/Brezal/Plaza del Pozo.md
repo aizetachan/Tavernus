@@ -13,7 +13,7 @@ interior: false
 > | Zona | Aldea de [[Brezal]] |
 > | Luz | Natural |
 > | Gente | [[Garrán]] · [[Doro]] · [[Osric Malvez]] (tarde) |
-> | Salidas | [[Taberna del Jabalí]] · [[La herrería]] · [[La casona]] · [[Casa de las hierbas]] · [[El molino]] · [[Los Corrales]] · [[El Soto]] · [[El Lindero]] |
+> | Salidas | [[Taberna del Jabalí]], [[La herrería]], [[La tienda del buhonero]], [[La casona]], [[Casa de las hierbas]], [[El molino]], [[Los Corrales]], [[El Soto]], [[El Lindero]] |
 
 ## Descripción
 
@@ -36,6 +36,8 @@ Es el cruce de todo el pueblo: desde aquí sale un camino a cada lugar.
 - **El camino de los corrales**: tierra entre cercas de piedra. Huele a gallinero y lleva a la granja de Úrsula.
 - **El horno**: un horno de leña con un mostrador de tabla a la calle. Huele a pan de centeno y a ceniza; aquí vende Marta el **pan gris**.
 - **Las casas del callejón**: una hilera de casas bajas con las puertas cerradas, donde duermen los [[Vecinos de Brezal|vecinos]]. Desde fuera no se ve a quien está dentro, y no se entra sin la llave.
+- **La puerta de la tienda del buhonero**: una casa vacía del lado norte con un cartel escrito a carbón: «SE VENDE DE TODO. SE COMPRA LO QUE SIRVA». Lleva a [[La tienda del buhonero]].
+- **El carro del buhonero**: pintado de verde, sin mula, con un arcón con candado. Lo que hay dentro es de [[Lucio Cendal]] y está a la venta: cogerlo sin pagar es robar.
 
 > [!warning]- Spoiler: lo que trae el agua
 > El agua del pozo trae ceniza. La echa [[Tobías]] cada noche por encargo de [[Ysolde]]. Además, el manantial que alimenta el pozo pasa por debajo del granero de Vharn, donde duerme enterrada la Brasa.
@@ -69,6 +71,7 @@ La plaza tiene tres citas diarias (ver [[Vida del pueblo]]):
 - [[Taberna del Jabalí]]: 3 m.
 - [[La herrería]]: 3 m.
 - [[La casona]]: 4 m.
+- [[La tienda del buhonero]]: 3 m.
 - [[Casa de las hierbas]]: 25 m, por el callejón.
 - [[El molino]]: 150 m, por el camino del molino.
 - [[Los Corrales]]: 180 m, por el camino de los corrales.

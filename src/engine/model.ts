@@ -709,6 +709,11 @@ export interface Npc {
   /** Comercio (SPEC §5.6): qué compra y a qué precio; qué vende. */
   buys: { item_id: Id; price: number }[];
   sells: { item_id: Id; price: number }[];
+  /**
+   * Tienda (shop.ts): vende de existencias reales, en contenedores fijos suyos (`state.owner_id`) de esos puntos, y
+   * compra con el dinero de su bolsa. Sin campo, comercia como siempre (`sells`, sin existencias contadas).
+   */
+  shop?: NpcShop;
   /** Bloque de combate SRD simplificado (SPEC §3.3). null = no combate. */
   stats: NpcStats | null;
   /** Actitud por PJ; `default` para quien no conoce. */
@@ -774,6 +779,27 @@ export interface NpcConfront {
   argued?: boolean;
   /** Ya es delito (le agarró de la muñeca): arreglarlo evita la pelea, no el incidente. */
   crime?: boolean;
+}
+
+/**
+ * La tienda de un NPC (shop.ts, PLAN-OBJETOS §6.2). Datos de campaña, salvo `last_restock_day` (estado de partida).
+ * Las existencias no van aquí: son ejemplares en contenedores fijos con `state.owner_id` igual al NPC, en
+ * `stock_spot_ids`. Coger de ellos sin pagar es robo (crime.ts).
+ */
+export interface NpcShop {
+  /** El local: donde hay que estar para comprarle. */
+  location_id: Id;
+  /** Puntos con sus estantes (los contenedores fijos con sus existencias). */
+  stock_spot_ids: Id[];
+  /** `none`: no repone (solo lo que le venden); `daily`: cada día, hasta `restock_max` de cada cosa que vende. */
+  restock: 'none' | 'daily';
+  restock_max?: number;
+  /** Horas en que atiende, [abre, cierra) en hora del día (9, 19). Sin campo, siempre que esté. */
+  hours?: [number, number];
+  /** Compra lo que no está en `buys` a esta parte de su valor (0.5: la mitad). Sin campo, solo lo de `buys`. */
+  buys_any?: number;
+  /** Último día de juego en que repuso. */
+  last_restock_day?: number;
 }
 
 /** Opinión de un NPC con un PJ: de −100 a 100, con los últimos motivos; y las etiquetas a las que ya ha reaccionado. */

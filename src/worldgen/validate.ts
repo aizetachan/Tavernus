@@ -136,6 +136,16 @@ export function validateSnapshot(snap: WorldSnapshot): string[] {
       if (!defs.has(t.item_id)) errs.push(`comercio de ${n.id}: el objeto ${t.item_id} no está en el catálogo.`);
       if (!Number.isInteger(t.price) || t.price <= 0) errs.push(`comercio de ${n.id}: el precio de ${t.item_id} debe ser un entero positivo.`);
     }
+    // Tienda (shop.ts): su local existe, sus estantes son puntos y en ellos hay al menos un contenedor fijo suyo.
+    if (n.shop) {
+      const sh = n.shop;
+      if (!locs.has(sh.location_id)) errs.push(`tienda de ${n.id}: la localización ${sh.location_id} no existe.`);
+      for (const id of sh.stock_spot_ids) if (!spots.has(id)) errs.push(`tienda de ${n.id}: el punto ${id} no existe.`);
+      const shelves = snap.item_instances.filter((i) => i.state['owner_id'] === n.id && i.location.type === 'spot' && sh.stock_spot_ids.includes(i.location.id));
+      if (!shelves.some((i) => defs.get(i.item_id)?.container?.fixed)) errs.push(`tienda de ${n.id}: no tiene ningún estante (contenedor fijo con owner_id) en sus puntos.`);
+      if (sh.hours && (sh.hours.length !== 2 || sh.hours.some((h) => !Number.isFinite(h) || h < 0 || h > 24))) errs.push(`tienda de ${n.id}: horario no válido.`);
+      if (sh.buys_any !== undefined && !(sh.buys_any > 0 && sh.buys_any <= 1)) errs.push(`tienda de ${n.id}: buys_any debe estar entre 0 y 1.`);
+    }
     if (n.kit && !KITS.some((k) => k.id === n.kit)) errs.push(`${n.id}: el ajuar «${n.kit}» no existe (outfit.ts: ${KITS.map((k) => k.id).join(', ')}).`);
     const r = (n as typeof n & { routine?: NpcRoutine }).routine;
     for (const id of Object.values(r ?? {})) if (id && !spots.has(id)) errs.push(`horario de ${n.id}: el punto ${id} no existe.`);

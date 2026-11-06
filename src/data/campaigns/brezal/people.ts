@@ -1,5 +1,5 @@
 /**
- * Brezal sellada: la gente. Once personas y tres animales, todos dentro del
+ * Brezal sellada: la gente. Doce personas (con el buhonero) y tres animales, todos dentro del
  * Cerco de Ceniza. Cada persona con su
  * aspecto y manera de hablar, lo que quiere, lo que sabe y cuenta según
  * cuánto se fíe del PJ, lo que
@@ -130,7 +130,7 @@ export const NPCS: AuthoredNpc[] = [
       { tier: 'stranger', text: 'Cura la tos gris con tónicos y cobra algo pequeño, un huevo o un hilo. De la tos dice que viene «del agua, o de lo que trae el agua», sin más. Dirige la misa del pozo y nombra cada noche a un muerto de Vharn. Antes de curar pregunta «¿con quién estás reñido?».' },
       { tier: 'acquaintance', text: 'El agua del pozo baja tibia y huele raro desde que bajó la niebla, y quiere una muestra para mirarla con calma. La niebla no le parece una maldición: «es demasiado ordenada para eso». Tiene a Brenna por buena mujer con un peso dentro. La noche del incendio había bajado al Soto a atender un parto, lejos de su casa de las hierbas, que está junto a la plaza.' },
       { tier: 'friend', text: 'Fue la última sacerdotisa de la llama de Vharn. Los señores ataban en la cripta un fuego antiguo, la Brasa, con cadenas de hierro frío; la Brasa grande está enterrada bajo el granero y la tos gris es su ceniza. Una ascua suelta se templa en el agua fría del pozo, con los eslabones que forjó el maestro de Hugo sujetos y diciendo unas palabras que ella enseña. De la niebla: «Es un cerrojo. Y los cerrojos tienen llave»; es la Guarda de sus maestros, pero no sabe abrirla. Su casa es la única con la marca del dintel sin encalar: un signo de la Guarda.' },
-      { tier: 'ally', text: 'Las palabras del rito están repartidas en la rima de corro de los niños, la canción de amasar y una nana, y por eso no deja que se pierdan. Guarda el cuenco del ascua de cuna de la niña de Vharn, frío y sin devolver: sospecha que vive. Recuerda el nombre de cuna de Osric.' },
+      { tier: 'ally', text: 'Las palabras del rito están repartidas en la rima de corro de los niños, la canción de amasar y una nana, y por eso no deja que se pierdan. Guarda el cuenco del ascua de cuna de la niña de Vharn, frío y sin devolver: sospecha que vive. Al cuenco le falta su tapa de hierro frío, que se llevó una criada de Vharn la noche del incendio; sin ella, dice, «el ascua no duerme». Recuerda el nombre de cuna de Osric.' },
     ],
     knows: 'Qué es la Brasa y cómo se templa un ascua. Que la tos gris viene de la ceniza del agua. Que Hugo guarda eslabones. Que la niebla es un cerrojo. No sabe quién prendió el fuego.',
     ties: 'Dirige la misa del pozo. Cuida a Garrán aunque le asuste. Tiene a Brenna por buena mujer con un peso dentro.',
@@ -269,6 +269,43 @@ export const NPCS: AuthoredNpc[] = [
     routine: { day: 'sp_co_gallinero', afternoon: 'sp_co_huerto', night: 'sp_co_casa' },
     home_spot_id: 'sp_co_casa',
     tag_reactions: [{ tag: 'trasfondo:folk-hero', opinion: 5, note: 'la gente sencilla le recuerda: le trata como a uno del pueblo' }],
+  },
+  {
+    // El buhonero (PLAN-OBJETOS §6.1): de fuera, atrapado por el Cerco, con tienda en la plaza (shop.ts). Es el Lucio de
+    // los vecinos de relleno, hecho personaje entero. Su manojo de llaves abre la trastienda; lo que vende son
+    // existencias contadas (items.ts) y no repone: el valle está sellado. Su secreto le ata a Ysolde y a la Brasa: trae
+    // para ella, de parte de la carbonera que la crio, la tapa de hierro frío del cuenco de cuna que guarda Ilse.
+    id: 'npc_lucio', name: 'Lucio Cendal', role: 'buhonero', role_short: 'el buhonero', spot_id: 'sp_ti_mostrador', passive_perception: 13, attitude: 'neutral',
+    noncombatant: true,
+    description: 'Cincuenta años, flaco, con un sombrero de ala ancha, un chaleco de muchos bolsillos y una cinta métrica colgada del cuello como otros llevan un crucifijo. Habla deprisa y con gracia, de usted a todo el mundo, y a cada frase le pone un precio. Toca las cosas que vende como si las fuera a echar de menos y las vuelve a dejar torcidas, para que se note que alguien las ha mirado. Cuando le preguntan por la niebla se ríe un poco tarde y cambia de tema hacia lo bien que se conserva la sal. Silba siempre la misma tonada de camino, y la corta en cuanto se da cuenta: es la rima de corro de los niños del valle, y él no es del valle. Se lleva la mano al chaleco, a la altura del corazón, cuando alguien nombra el granero.',
+    motivation: 'Salir del valle con el carro y con algo que vender al otro lado. Mientras tanto, no malvender lo que le queda: cada cosa que vende es una que ya no tendrá. Y quitarse de encima un encargo que le pesa más que el carro.',
+    knowledge: [
+      { tier: 'stranger', text: 'Es buhonero de Valcruz y vino a Brezal con el carro, a vender agujas, sal y cacharros, la víspera de que bajara la niebla. El primer día su mula se espantó y se metió en la niebla; salió por donde entró, como todo, y Garrán se la quedó «a cuenta del diezmo del forastero». Se ha quedado con una casa vacía de la plaza y vende lo que le queda; compra lo que le sirva, sobre todo pieles, y casi cualquier cosa a la mitad de lo que vale. No repone: «aquí no entra nada, señor, ni la sal».' },
+      { tier: 'acquaintance', text: 'En Valcruz conoció a un muchacho de Brezal que vendía lana, Pol, que le dijo que volvía al pueblo al día siguiente; no sabe si llegó a salir del mercado. Cada otoño, desde hace veinte años, sube con el carro por los montes del sur, donde los carboneros, a venderles sal y agujas: allí aprendió la tonada que silba. Garrán le cobra el diezmo doble «por forastero» y le apunta en un libro aparte.' },
+      { tier: 'friend', text: 'No vino a Brezal a vender. Entre los carboneros del sur vivía una muchacha con la cara quemada a la que llamaban Tizne; se fue al valle con un cuenco de barro tapado con trapos, caliente aunque helaba, y él salió detrás con un encargo para ella. Se la cruzó en el camino, un día antes de llegar: le preguntó si el granero de los Vharn seguía en pie y no quiso subir al carro. Al día siguiente bajó la niebla. Desde entonces no se atreve a ir al granero, porque de allí sale humo y por la noche luz roja.' },
+      { tier: 'ally', text: 'El encargo era de la carbonera vieja que crio a Tizne y que había servido en Vharn, la dueña del guante, muerta el invierno pasado: una tapa redonda de hierro negro, fría aunque la tengas al fuego, con el sello de Vharn por dentro. «Dásela a la cría cuando vuelva al valle. Es la tapa de su cuenco de cuna. Que no lo abra sin ella.» La lleva encima, bajo el chaleco. No sabe qué es el cuenco ni lo que significa; sabe que la tapa se entibia cuando pasa junto al pozo y que de noche, cerca del granero, se le hiela la mano. A quien le ayude a dársela a Tizne, o a quien le saque del valle, se la da.' },
+    ],
+    knows: 'Que vino de Valcruz la víspera de la niebla; que conoció a Pol en Valcruz; que Ysolde es Tizne, la cría de los carboneros del sur, y que se la cruzó en el camino con el cuenco del ascua; que lleva para ella la tapa de hierro frío del cuenco de cuna (el cuenco lo guarda Ilse). No sabe nada del incendio de hace veinte años ni quién lo prendió.',
+    ties: 'Garrán le cobra el doble y le quitó la mula. Brenna le da la cena a cambio de sal. Úrsula le pregunta cada mañana por Pol. Hal le vende pieles y le mira raro cuando silba la tonada de los carboneros. Le da miedo Ysolde y le da más miedo no cumplir el encargo de una muerta.',
+    bonds: [{ npc_id: 'npc_garran', kind: 'rival' }, { npc_id: 'npc_ursula', kind: 'friend' }, { npc_id: 'npc_brenna', kind: 'friend' }],
+    tag_reactions: [
+      { tag: 'trasfondo:criminal', note: 'no le quita ojo de las manos mientras está en la tienda' },
+      { tag: 'ladron', opinion: -10, note: 'cubre el mostrador con el brazo y le atiende desde lejos; no le fía nada' },
+      { tag: 'clase:bard', opinion: 5, note: 'le cuenta historias del camino y le canta la tonada de los carboneros', option: { text: 'Cambiarle canciones del camino', skill: 'performance', dc: 12 } },
+      { tag: 'asesino', note: 'le vende lo que pida, deprisa y sin mirarle, para que se vaya cuanto antes' },
+    ],
+    buys: [{ item_id: 'it_piel', price: 120 }, { item_id: 'it_cuerda', price: 60 }, { item_id: 'it_antorcha', price: 1 }],
+    sells: [
+      { item_id: 'it_tiza', price: 1 }, { item_id: 'it_antorcha', price: 2 }, { item_id: 'it_saco', price: 2 }, { item_id: 'it_aceite', price: 12 },
+      { item_id: 'it_racion', price: 12 }, { item_id: 'it_odre', price: 25 }, { item_id: 'it_kit_needle', price: 5 }, { item_id: 'it_kit_hook', price: 5 },
+      { item_id: 'it_cuerda', price: 120 }, { item_id: 'it_garfio', price: 250 }, { item_id: 'it_daga', price: 250 }, { item_id: 'it_farol', price: 600 },
+      { item_id: 'it_sal_valcruz', price: 150 },
+    ],
+    // Tienda de verdad (shop.ts): sus estantes en la tienda, el arcón de la trastienda y el del carro; abre de 9 a 19 y no repone.
+    shop: { location_id: 'loc_tienda', stock_spot_ids: ['sp_ti_estantes', 'sp_ti_trastienda', 'sp_pl_carro'], restock: 'none', hours: [9, 19], buys_any: 0.5 },
+    stats: srd('commoner', 8, { attack_name: 'bastón' }),
+    routine: { day: 'sp_ti_mostrador', afternoon: 'sp_ti_mostrador', night: 'sp_ti_trastienda' },
+    home_spot_id: 'sp_ti_trastienda',
   },
   {
     id: 'npc_lobo', name: 'un lobo flaco', role: 'lobo', spot_id: 'sp_cl_arroyo', passive_perception: 13, attitude: 'hostile',
