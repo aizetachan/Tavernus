@@ -711,6 +711,65 @@ export interface Npc {
   tag_reactions?: TagReaction[];
   /** No habla (un animal): ni comenta al pasar ni cuenta noticias, aunque vea lo que pasa (chatter.ts, worldrules.ts). */
   mute?: boolean;
+  /**
+   * Ajuar (outfit.ts): qué lleva encima por su oficio (`KITS`: 'guard', 'healer', 'noble', 'animal'…). Datos de campaña;
+   * sin campo, sale de `role`.
+   */
+  kit?: string;
+  /** Lo que lleva en la bolsa (outfit.ts): sin campo, la riqueza de su ajuar. Datos de campaña. */
+  wealth?: 'none' | 'poor' | 'modest' | 'comfortable' | 'rich';
+  /**
+   * Nivel del NPC (docs/PLAN-NPC-RELLENO.md). Sin campo, principal: personaje de la historia. `extra`: vecino de
+   * relleno, montado desde una plantilla de oficio (extras.ts), sin secretos ni misiones, con un guion corto.
+   */
+  tier?: 'extra';
+  /** Guion corto del relleno (extras.ts): solo con `tier: 'extra'`. Datos de campaña. */
+  script?: ExtraScript;
+}
+
+/** Carácter del relleno: cómo suena su guion. */
+export type ExtraTemper = 'seco' | 'con prisa' | 'receloso' | 'parlanchín' | 'tímido';
+/** Lo que su papel le hace contestar: dónde está algo, a qué hora es algo, lo que vende, o nada. */
+export type ExtraService = 'directions' | 'hours' | 'sell' | 'none';
+
+/**
+ * Frases de un vecino de relleno, varias por hueco del guion; el motor elige una con la semilla. Huecos con
+ * `{item}`, `{price}`, `{where}`, `{refer}`, `{news}`, `{fame}`, que pone el motor.
+ */
+export interface ExtraLines {
+  /** Abrir charla o saludo: «¿Qué quieres?». */
+  greet: string[];
+  /** Lo que su papel le hace contestar: «{where}», «{item} a {price}». */
+  service: string[];
+  /** Lo que no sabe: «De eso no sé nada. Pregunta a {refer}.» */
+  dunno: string[];
+  /** No quiere más charla: «Tengo faena.» */
+  brush: string[];
+  /** Le conoce de oídas: «Tú eres el que {fame}.» */
+  known: string[];
+  /** Un hecho reciente que sabe: «{news}. Quién lo iba a decir.» */
+  news: string[];
+  /** Peligro o le amenazan: «¡Doro! ¡Aquí!». */
+  scared: string[];
+  /** Le ha pillado robando: «¡Al ladrón!». */
+  accuse: string[];
+  /** Le tiene miedo al PJ: «Déjame en paz.» */
+  afraid: string[];
+  bye: string[];
+}
+
+/** El guion corto de un vecino de relleno (extras.ts): su oficio, su carácter, lo que sirve, sus frases y a quién remite. */
+export interface ExtraScript {
+  trade: Id;
+  temper: ExtraTemper;
+  service: ExtraService;
+  lines: ExtraLines;
+  /** A quién remite lo que no sabe: NPC que existen. */
+  refer_to: Id[];
+  /** Su historia breve, en dos o tres frases (para el máster si se le pregunta por él y para la wiki). */
+  story: string;
+  /** Puntos por los que se mueve dentro de su franja (paseos, fase 2). */
+  wander?: Id[];
 }
 
 /** Opinión de un NPC con un PJ: de −100 a 100, con los últimos motivos; y las etiquetas a las que ya ha reaccionado. */

@@ -44,6 +44,7 @@ import type { Rumor } from './rumors.js';
 import { crowdHere, routineOf } from './schedule.js';
 import { stabilize } from './death.js';
 import { opinionRefusal } from './standing.js';
+import { isDwelling } from './perception.js';
 import type { World } from './world.js';
 
 export type { IncidentKind } from './model.js';
@@ -289,7 +290,10 @@ export function witnessesAt(world: World, spot: Spot, kind: IncidentKind, exclud
     if (n.status !== 'alive' || exclude.includes(n.id)) return false;
     const s = world.spots.get(n.location.id);
     if (!s || s.location_id !== spot.location_id) return false;
-    if (loud(kind) || s.id === spot.id) return true;
+    if (s.id === spot.id) return true;
+    // En casa, con la puerta cerrada (perception.ts, isDwelling): lo violento se oye; lo callado, no.
+    if ((isDwelling(s) || isDwelling(spot)) && !loud(kind)) return false;
+    if (loud(kind)) return true;
     const link = spot.links.find((l) => l.to_spot_id === s.id) ?? s.links.find((l) => l.to_spot_id === spot.id);
     if (link?.blocks_sight) return false;
     return Math.hypot(s.x - spot.x, s.y - spot.y) <= NEAR_M;

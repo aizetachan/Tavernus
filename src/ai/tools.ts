@@ -10,7 +10,7 @@ import { rollD20, rollExpr, type Advantage, type CheckResult, type Rng, type Rol
 import { consumeItem, inventoryDetailed, inventoryView, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
 import type { Character, Id, Npc, Placement, ReactionKind } from '../engine/model.js';
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
-import { perceive, witnesses } from '../engine/perception.js';
+import { isDwelling, perceive, witnesses } from '../engine/perception.js';
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
@@ -1038,7 +1038,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         const at = world.characterSpot(actor);
         if (!arrival.arrived) return { ok: true, arrived: false, destination: goal.name, stopped_at: at?.name ?? null, hint: 'No ha llegado: algo le para por el camino y el servidor lo cuenta aparte. Narra solo que sale; lo que iba a hacer allí queda pendiente: no lo hagas ni lo narres hecho.' };
         const loc = world.location(goal.location_id);
-        const npcs = world.spotsOf(loc.id).flatMap((sp) => world.npcsAt(sp.id).filter((n) => n.status === 'alive').map((n) => `${n.name} [${n.id}] en ${sp.name}`));
+        // Los de las casas (perception.ts, isDwelling) no se ven desde fuera.
+        const npcs = world.spotsOf(loc.id).filter((sp) => sp.id === at?.id || !isDwelling(sp)).flatMap((sp) => world.npcsAt(sp.id).filter((n) => n.status === 'alive').map((n) => `${n.name} [${n.id}] en ${sp.name}`));
         const items = at ? world.itemsIn({ type: 'spot', id: at.id }).map((i) => `${world.itemDef(i.item_id).name} [${i.id}]`) : [];
         return {
           ok: true, arrived: true, destination: goal.name, location: loc.name, game_time: fmtDuration(r.total_s),
