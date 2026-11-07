@@ -249,7 +249,9 @@ const CACHE_TTL: Anthropic.Beta.BetaCacheControlEphemeral = { type: 'ephemeral',
  */
 export function applyActorLines(engine: Engine, pc: Character, n: Npc, closed: LogEventInput, lines: readonly string[]): LogEventInput {
   const old = (closed.lines ?? []).filter((l) => l.speaker === 'npc' && l.npc_id === n.id);
-  const fresh: DialogueLine[] = lines.map((text) => ({ speaker: 'npc', npc_id: n.id, text }));
+  // El gesto del borrador (beat) sigue con la primera frase: el actor pone la voz, no la acotación.
+  const beat = old.find((l) => l.beat)?.beat;
+  const fresh: DialogueLine[] = lines.map((text, i) => ({ speaker: 'npc', npc_id: n.id, text, ...(i === 0 && beat ? { beat } : {}) }));
   const first = (closed.lines ?? []).findIndex((l) => l.speaker === 'npc' && l.npc_id === n.id);
   const kept = (closed.lines ?? []).filter((l) => !old.includes(l));
   const at = (closed.lines ?? []).slice(0, first).filter((l) => !old.includes(l)).length;

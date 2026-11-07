@@ -108,7 +108,7 @@ Si una tool falla, el motor devuelve el error y el máster lo vuelve a narrar. A
 
 - Tope: 8 recuerdos por personaje y 40 por NPC.
 - Un NPC habla con **uno cada vez**; los demás esperan turno o se unen a la conversación.
-- **Narrador ligero:** en plena conversación el narrador se aparta. Solo entra para presentar a quien habla, para una acción que cambia la escena o para algo relevante. Máximo unas 40 palabras de narración por turno.
+- **Si solo hablan, se ven las conversaciones** (desde el 04-11, `src/engine/narrator.ts`). En cada turno de charla el motor decide cuánto habla el narrador: **en silencio** si es charla sin más (solo las burbujas de los personajes), **una acotación** de 15 palabras como mucho si algo pequeño cambia (un regalo, un insulto, una compra, una misión que se da, una despedida) y **narración normal** cuando pasa algo más que hablar (el jugador hace algo, una tirada, un combate, un alto que llega, la charla empieza). El gesto de quien habla («baja la voz», «vuelve a gritar») va en cursiva dentro de su propia burbuja, encima de lo que dice. El servidor lo hace cumplir sin pedir otra llamada: recorta la narración y quita las frases que el narrador ya ha dicho en los últimos turnos («Ilse sigue sin decir nada», «la plaza espera»). Si hablan dos NPC, cada uno va en su burbuja, también cuando se hablan entre ellos.
 
 ## NPC que conversan
 

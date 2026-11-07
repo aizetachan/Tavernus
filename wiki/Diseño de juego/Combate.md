@@ -41,7 +41,7 @@ tags: [diseño, mecánicas]
 - **Cada turno, cada NPC hostil hace el suyo.** Un turno es tu acción, o la ronda entera si sois varios. Todo NPC hostil que sigue en pie, suelto y en tu mismo sitio ataca, con su **multiataque** si lo tiene (el matón, el explorador y el veterano del SRD dan dos golpes).
 - **Si el máster no lo hace, lo hace el motor.** Al cerrar el turno resuelve el ataque (el que pelea cuerpo a cuerpo se lanza hasta ti) y le pide al máster que lo cuente. Si aun así no lo cuenta, lo añade el motor al final de la narración. El máster lo narra, pero no se lo puede saltar.
 - **Un turno por NPC.** No ataca dos veces en el mismo turno.
-- **Cuándo no:** si el máster te pide una tirada (el turno acaba al tirar), si abre una ventana decisiva con ese enemigo, o si el enemigo ya ha caído.
+- **Cuándo no:** si el máster te pide una tirada (el turno acaba al tirar), si abre la primera ventana decisiva de ese enemigo en el combate (la segunda se rechaza y ataca), si el enemigo ya ha caído o si no te ve (estás escondido o tras una pared).
 - **Entran también los que se meten** por un crimen: la víctima que se defiende, el amigo que salta y la autoridad si te resistes. El resto de la autoridad **acude** como apoyo. Ver [[Mecánicas#Crimen, testigos y ley]].
 - **Quien pelea no sigue su horario:** el herrero no se vuelve al yunque en mitad de la pelea.
 - **No rematan al caído:** un PJ a 0 PG deja de ser objetivo y tira sus salvaciones. Ver [[Muerte y descanso]].
@@ -95,8 +95,17 @@ En un momento crítico (el hacha que cae, el puente que cede), el máster abre u
 | Más de 60 s | La amenaza se cumple contra ti, daño completo |
 
 - Solo se abre con **riesgo real e inmediato**, validado por el servidor.
-- Nunca dos seguidas al mismo personaje.
+- **Nunca dos seguidas** al mismo personaje: el servidor rechaza la segunda si entre medias no sacaste una tirada con éxito ni hubo un turno sin ventana. Y **una por enemigo en cada combate**: después, ese enemigo actúa.
+- **La amenaza la cumple el motor.** Si la abre un enemigo o la autoridad que te detiene y dejas pasar el tiempo, el motor la ejecuta sin preguntar al máster: el enemigo te ataca, o la autoridad te reduce y te ata. El máster solo lo cuenta, con el resultado que le da el motor. El aviso sale marcado como turno caducado.
 - No responder es perder de verdad. Un jugador **ausente** no queda indefenso: se defiende con su CA y sus salvaciones.
+- En la web el contador **cuenta hacia atrás** bajo la narración. A cero dice «Tiempo agotado» y, antes de lo que pasa después, sale el aviso «Se te acaba el tiempo: la amenaza se cumple», para que nadie se encuentre la consecuencia sin saber por qué. Si respondes antes, el contador se apaga. Desde la partida del 4 de noviembre de 2026.
+
+## Un rival que te sigue a otro sitio
+
+Si cruzas a otro lugar en mitad de una pelea (huyes por un callejón, te metes en una casa) y el mismo enemigo va detrás, **es el mismo combate**: el hilo dice «El combate sigue en…» y la ronda continúa donde iba, en vez de empezar otro en la ronda 1. Y todo cambio de sitio deja su línea gris en el hilo («Cruzas a la puerta (Casa de las hierbas)»), aunque el máster no lo cuente. Sale de la partida del 4 de noviembre de 2026: Doro siguió a Cat del callejón de la plaza a la puerta de la Casa de las hierbas.
+
+> [!example] Doro, en la partida del 4 de noviembre
+> Doro abrió una ventana de 60 s en cada turno («una más y te ato») y, cuando una caducó, el máster narró «Te acercas a la puerta». Ahora la segunda ventana seguida se rechaza y, si caduca la primera, Doro te ata de verdad. Ver [[Mecánicas#Crimen, testigos y ley]].
 
 ## Rondas en escenas tensas
 

@@ -25,6 +25,7 @@ import { npcTarget } from './scene.js';
 import type { StolenMark } from './stolen.js';
 import { changeOpinion, opinionOf } from './standing.js';
 import { adjustTrust, type TrustChange } from './trust.js';
+import { sneakingFrom } from './perception.js';
 import type { World } from './world.js';
 
 export type { ConflictKind } from './model.js';
@@ -51,8 +52,8 @@ export const RELATION_ES: Record<Relation, string> = { intimate: 'íntima', good
 export type { ConflictProfile } from './crime.js';
 export const PROFILE_ES: Record<ConflictProfile, string> = { child: 'niño', authority: 'autoridad', owner: 'dueño del local', fighter: 'de pelear', brave: 'valiente', timid: 'tímido', common: 'gente corriente' };
 
-/** Lo que dura ir a escondidas tras un Sigilo que sale bien, si no se mueve de punto. */
-export const SNEAK_S = 10 * GAME_MINUTE;
+/** Lo que dura ir a escondidas tras un Sigilo que sale bien, si no se mueve de punto (vive en perception.ts, que lo usa para quién ve a quién). */
+export { SNEAK_S } from './perception.js';
 /** Le está mirando: habla con él ahora, o se han dicho algo en estos minutos. */
 export const WATCHING_S = 5 * GAME_MINUTE;
 /** En guardia tras pillarle (o casi), un empujón o un toque. */
@@ -186,10 +187,7 @@ export function setGuard(world: World, npc: Npc, pcId: Id, nowG: number, reason:
 
 /** Va a escondidas y este NPC no le ha visto: su Sigilo reciente, en el mismo punto, supera la pasiva del NPC. */
 export function hiddenFrom(world: World, pc: Character, npc: Npc, nowG: number): boolean {
-  const s = pc.sneak;
-  if (!s || nowG - s.game_s > SNEAK_S) return false;
-  if (world.characterSpot(pc)?.id !== s.spot_id) return false;
-  return s.total >= npc.passive_perception;
+  return sneakingFrom(world, pc, npc, nowG);
 }
 
 /** Apunta un Sigilo que salió bien (lo llama el motor tras la tirada). */
@@ -604,7 +602,8 @@ export function resolveConflict(world: World, pc: Character, npc: Npc, v: Confli
     return result('near_miss', `No llegas a quitárselo: ${who} nota algo, se palpa y se vuelve. No te ha pillado, pero desde ahora no te quita ojo.`, `${who} se palpa y se vuelve, receloso: no sabe qué ha sido, pero no te quita ojo.`);
   }
 
-  // Lo nota: lo que ha hecho y lo que ha conseguido.
+  // Lo nota: lo que ha hecho y lo que ha conseguido. Y ya no va a escondidas: le han visto (perception.ts, npcSees).
+  if (pc.sneak) { pc.sneak = null; world.touch('characters', pc.id); }
   let deed: string;
   switch (v.kind) {
     case 'steal': deed = outcome === 'caught_red_handed' ? `${who} te pilla con la mano en ${what}.` : `${who} te pilla intentando quitarle ${what}.`; break;

@@ -3,8 +3,8 @@
  * servidor; degradación por bandas, no corte seco.
  */
 
-import type { GameClock } from '../clock/clock.js';
-import type { Character, Id, LightLevel, Location, PerceptionLevel, Spot } from './model.js';
+import { GAME_MINUTE, type GameClock } from '../clock/clock.js';
+import type { Character, Id, LightLevel, Location, Npc, PerceptionLevel, Spot } from './model.js';
 import { positionOf, type Position } from './movement.js';
 import type { World } from './world.js';
 
@@ -113,4 +113,59 @@ export function witnesses(world: World, clock: GameClock, at: Position, nowGameS
     if (p.level !== 'none') out.push({ character: c, perceived: p });
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Lo que ve un NPC (ley, combate): escondido y línea de visión
+// ---------------------------------------------------------------------------
+
+/**
+ * ¿Se ve a alguien que está en `to` desde `from` (misma localización)? Sí en el
+ * mismo punto; no si un enlace entre ambos tapa la vista, si `to` es un punto
+ * oculto o si la localización tiene la vista cortada hacia uno de los dos
+ * (`state.line_of_sight_blocked`). El resto de la estancia se ve.
+ */
+export function sightBetween(world: World, from: Spot, to: Spot): boolean {
+  if (from.id === to.id) return true;
+  if (from.location_id !== to.location_id) return false;
+  if (to.hidden) return false;
+  if (linkBetween(from, to).blocks_sight) return false;
+  const cut = world.locations.get(to.location_id)?.state['line_of_sight_blocked'];
+  return !(Array.isArray(cut) && ((cut as Id[]).includes(to.id) || (cut as Id[]).includes(from.id)));
+}
+
+/** Lo que dura ir a escondidas tras un Sigilo que sale bien, si no se mueve de punto (conflict.ts lo reexporta). */
+export const SNEAK_S = 10 * GAME_MINUTE;
+
+/**
+ * Va a escondidas (`Character.sneak`, lo apunta el motor al sacar bien una
+ * tirada de Sigilo): mientras siga en ese punto, sin irse de viaje y dentro
+ * de SNEAK_S. Sin `nowG`, no mira el tiempo. null si no.
+ */
+export function sneakNow(world: World, c: Character, nowG?: number): Character['sneak'] {
+  const s = c.sneak;
+  if (!s || c.transit) return null;
+  if (nowG !== undefined && nowG - s.game_s > SNEAK_S) return null;
+  return world.characterSpot(c)?.id === s.spot_id ? s : null;
+}
+
+/** El PJ va a escondidas y este NPC no le ha visto: su Sigilo supera (o iguala) la Percepción pasiva del NPC. */
+export function sneakingFrom(world: World, c: Character, n: Npc, nowG?: number): boolean {
+  const s = sneakNow(world, c, nowG);
+  return Boolean(s) && s!.total >= n.passive_perception;
+}
+
+/**
+ * ¿Ve este NPC al PJ? Vivo y en la misma localización, sin que el PJ vaya a
+ * escondidas de él (sneakingFrom, la misma regla que conflict.ts: su Sigilo
+ * contra la pasiva del NPC, también en su mismo punto) y con línea de visión
+ * entre sus puntos (sightBetween).
+ */
+export function npcSees(world: World, n: Npc, c: Character, nowG?: number): boolean {
+  if (n.status !== 'alive' || c.transit) return false;
+  const at = world.characterSpot(c);
+  const from = world.spots.get(n.location.id);
+  if (!at || !from || from.location_id !== at.location_id) return false;
+  if (sneakingFrom(world, c, n, nowG)) return false;
+  return sightBetween(world, from, at);
 }

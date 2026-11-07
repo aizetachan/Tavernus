@@ -84,7 +84,7 @@ import { soundCuesOf } from './soundmap.js';
 import { illustratorOf, MASTER_PORTRAIT_ID, masterPortraitOf, portraitOf, sceneOf, type EntityInput, type Illustrator, type SceneImage } from '../../ai/illustrate.js';
 import { type DialogueLine, type LineTo, type Moment } from '../../engine/moments.js';
 import { lineTargets, presentIds, viewOf } from '../../engine/audience.js';
-import { blocksSpeech, novelBlocks, type NovelBlock } from './novel.js';
+import { blocksSpeech, novelBlocks, withoutEcho, type NovelBlock } from './novel.js';
 import { handleJournalRequest, touchesJournal } from './journal.js';
 import { noticeOf, webNotice, type WebNotice } from './notice.js';
 import { handlePaintRequest } from './paint.js';
@@ -101,11 +101,11 @@ import { DbCatalog, ensureGameRow } from '../../db/catalog.js';
 import { PRESENCE_TIMING, PresenceTracker, REPEAT_NOTICE_MS, type PresenceTiming } from './presence.js';
 import { pcLabel, pcName, sayLooksLikeAction } from '../../engine/party.js';
 import { talkingWith } from '../../engine/scene.js';
-import { descriptorOf } from '../../engine/narrate.js';
+import { aEs, descriptorOf } from '../../engine/narrate.js';
 import { speakerLabel } from '../../engine/chatter.js';
 import type { SceneNotice } from '../../engine/engine.js';
 import { encounterAt, type Encounter } from '../../engine/encounter.js';
-import { combatView, type CombatEnd, type CombatView, type TurnContext } from './fight.js';
+import { combatView, FIGHT_FOLLOW_S, fightStart, type CombatEnd, type CombatView, type FightTrail, type TurnContext } from './fight.js';
 import { ActionLog, presenceLine, reportLine } from './servicelog.js';
 import { AWAY_CARD_MS, awayCard, awayCardEmpty, awayFor, awayText, unreadFrom, type AwayCard } from './whileaway.js';
 import { tablonView } from './tablon.js';
@@ -136,7 +136,7 @@ const PUBLIC_GAMES_PER_DAY = 20;
  * Un parlamento en modo novela: quién habla (nombre visible para este PJ) y su retrato pequeño si ya existe.
  * `pc`: otro jugador (lo que dice llega literal a quien lo oye bien); `to`: a quién se lo dice, si lo dirige.
  */
-export interface WebLine { speaker: 'npc' | 'actor' | 'pc'; id: Id; name: string; text: string; avatar?: string | null; to?: string }
+export interface WebLine { speaker: 'npc' | 'actor' | 'pc'; id: Id; name: string; text: string; avatar?: string | null; to?: string; /** Su gesto mientras lo dice (DialogueLine.beat). */ beat?: string }
 /** Momento ilustrado junto al evento (retrato, objeto, combate, descubrimiento); `src` cuando ya está en disco. */
 interface WebMoment { kind: Moment['kind']; key: string; entity_id: Id; name?: string; src?: string; /** Retrato de un NPC: su oficio («tabernera»), bajo el nombre. */ role?: string }
 
@@ -152,6 +152,12 @@ export interface WebMessage {
   dice?: 'mine' | 'other';
   suggested?: string[];
   decisive_s?: number;
+  /** Cuándo se cierra esa ventana decisiva (ms reales), si sigue abierta: la página cuenta hacia atrás hasta ahí. */
+  decisive_until_ms?: number;
+  /** El turno que resuelve una ventana decisiva caducada (etiqueta `decisive_timeout`): delante, el aviso de que se acabó el tiempo. */
+  timeout?: true;
+  /** El PJ está en otra localización desde su último evento sin que nada lo haya contado («Cruzas a la puerta (Casa de las hierbas)»). */
+  moved?: string;
   /** Modo novela (solo para el actor): la narración sin los parlamentos y, aparte, cada parlamento. */
   prose?: string;
   lines?: WebLine[];
@@ -321,7 +327,13 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     const placed = (d: Delivery, m: WebMessage): WebMessage => {
       const e = d.event, c = d.character_id;
       if (e.actor_id !== c || !e.location_id) return m;
-      if (lastLoc.get(c) !== e.location_id) { lastLoc.set(c, e.location_id); pendingPlace.set(c, e.location_id); }
+      const prev = lastLoc.get(c);
+      if (prev !== e.location_id) {
+        lastLoc.set(c, e.location_id); pendingPlace.set(c, e.location_id);
+        // Un cambio de sitio que ningún evento de movimiento ha contado (move_to del máster, partida del 04-11-2026): su línea.
+        const crossed = prev ? movedLine(engine, e) : null;
+        if (crossed) m.moved = crossed;
+      }
       const loc = pendingPlace.get(c);
       if (loc && loc === e.location_id && m.narrator && m.text && !m.notice && !m.chapter) { m.place = { location_id: loc }; pendingPlace.delete(c); }
       return m;
@@ -566,6 +578,16 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     /** Combate en el que está cada PJ (ya avisado) y lo último que se le mandó. */
     const fightIn = new Map<Id, string>();
     const fightSent = new Map<Id, string>();
+    /** El último combate de cada PJ (para saber si el rival le ha seguido a otro sitio) y lo que se suma a su ronda. */
+    const fightTrail = new Map<Id, FightTrail>();
+    const fightOffset = new Map<Id, { key: string; offset: number }>();
+    /** ¿Algún rival de ese combate (en pie) está ahora en la localización del PJ, y hace poco del último intercambio? */
+    const chasedBy = (t: FightTrail | undefined, loc: Id): boolean => Boolean(t && engine.gameNow() - t.game_s < FIGHT_FOLLOW_S
+      && t.rivals.some((id) => { const n = engine.world.npcs.get(id); return n?.status === 'alive' && engine.world.spots.get(n.location.id)?.location_id === loc; }));
+    const withOffset = (id: Id, view: CombatView): CombatView => {
+      const o = fightOffset.get(id);
+      return o && o.key === view.key && o.offset ? { ...view, round: view.round + o.offset } : view;
+    };
     const avatarOf = (id: Id): string | null => { const img = illustratorOf(engine)?.entityImage('portrait', id); return img ? imageSrc(img, slug) : null; };
     const encounterIn = (loc: Id): Encounter | null => encounterAt(engine.world, engine.events.recentInLocation(loc, 400), loc, engine.gameNow(), Boolean(engine.roundIn(loc)));
     const turnCtx = (loc: Id): TurnContext => ({
@@ -577,7 +599,8 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     const combatFor = (id: Id): CombatView | null => {
       const loc = locOf(id);
       const enc = loc ? encounterIn(loc) : null;
-      return enc && loc ? combatView(engine.world, enc, id, turnCtx(loc)) : null;
+      const view = enc && loc ? combatView(engine.world, enc, id, turnCtx(loc)) : null;
+      return view ? withOffset(id, view) : null;
     };
     const lastSeq = (id: Id) => history.get(id)?.at(-1)?.seq ?? 0;
     const syncFights = () => {
@@ -587,17 +610,23 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         if (c.status === 'retired' || opening.has(c.id)) continue;
         const loc = locOf(c.id);
         const e = loc ? enc(loc) : null;
-        const view = e && loc ? combatView(engine.world, e, c.id, turnCtx(loc)) : null;
+        const raw = e && loc ? combatView(engine.world, e, c.id, turnCtx(loc)) : null;
         const was = fightIn.get(c.id);
+        if (raw && e && was !== raw.key) {
+          // ¿Nuevo, o el mismo que le ha seguido desde otro sitio? (fight.ts, fightStart)
+          const start = fightStart(e, raw, fightTrail.get(c.id) ?? null, engine.gameNow());
+          fightOffset.set(c.id, { key: raw.key, offset: start.round_offset });
+          fightIn.set(c.id, raw.key);
+          record(c.id, { seq: lastSeq(c.id), kind: 'system', text: start.text, combat: { phase: 'start', text: start.text } });
+        }
+        const view = raw ? withOffset(c.id, raw) : null;
+        if (view && e) fightTrail.set(c.id, { key: view.key, location_id: e.location_id, rivals: e.fighters.filter((f) => f.kind === 'npc' && f.state !== 'dead' && f.state !== 'out').map((f) => f.id), round: view.round, game_s: engine.gameNow() });
         let data: CombatView | CombatEnd | { active: false } = view ?? { active: false };
-        if (view && was !== view.key) {
-          fightIn.set(c.id, view.key);
-          const fresh = e && engine.gameNow() - e.started_game_s < 120;
-          const text = fresh ? `⚔ Empieza el combate en ${view.place}` : `⚔ Hay un combate en curso en ${view.place}`;
-          record(c.id, { seq: lastSeq(c.id), kind: 'system', text, combat: { phase: 'start', text } });
-        } else if (!view && was) {
-          fightIn.delete(c.id);
+        if (!view && was) {
           const wloc = was.slice(0, was.lastIndexOf(':'));
+          // Ha cambiado de sitio y un rival le ha seguido: no ha acabado (en cuanto haya golpes allí, «El combate sigue»).
+          if (loc && loc !== wloc && chasedBy(fightTrail.get(c.id), loc)) continue;
+          fightIn.delete(c.id);
           const still = enc(wloc);
           const left = Boolean(still && `${still.location_id}:${still.started_seq}` === was);
           const text = left ? 'Sales del combate.' : 'Fin del combate.';
@@ -1784,6 +1813,8 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   // Lo informativo no es narración (notice.ts): sale como aviso de sistema de una línea, también en el historial
   // restaurado. El tablón y el progreso llevan al Diario. Sigue con sus botones, momentos y sonido.
   const notice = noticeOf(e, d.character_id, d.text);
+  // La ventana decisiva caducó sin que el jugador hiciera nada (Engine.expireDecisive): que se vea antes de lo que pasa.
+  if (e.tags.includes('decisive_timeout') && e.actor_id === d.character_id) m.timeout = true;
   // Tirada a la vista (rolls.ts): la propia anima el dado del botón; la de otro jugador es solo el aviso.
   if (e.payload['shown_roll']) m.dice = e.actor_id === d.character_id ? 'mine' : 'other';
   if (notice) { m.kind = 'system'; m.text = ''; m.notice = notice; }
@@ -1834,6 +1865,8 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   if (sfx.length) m.sfx = sfx;
   const novel = notice ? null : novelOf(e, engine, d.character_id, d.text);
   if (novel) { m.prose = novel.prose; m.lines = novel.lines; m.blocks = novel.blocks; m.speech = novel.speech; }
+  // El desenlace de una tirada no repite la frase del jugador aunque el máster la vuelva a poner en sus parlamentos.
+  if (novel && e.action_type === 'master_roll_outcome' && e.input_text) { const k = withoutEcho(novel.lines, novel.blocks, e.input_text); m.lines = k.lines; m.blocks = k.blocks; }
   const moments = (Array.isArray(e.payload['moments']) ? e.payload['moments'] as Moment[] : [])
     .filter((x) => x.kind !== 'scene' && x.character_id === d.character_id)
     .map((x) => ({ kind: x.kind, key: x.key, entity_id: x.entity_id }));
@@ -1842,9 +1875,25 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
   if (roll) m.roll = { kind: roll.kind, key: roll.key, dc: roll.dc };
   else if (Array.isArray(e.payload['suggested_actions'])) m.suggested = (e.payload['suggested_actions'] as string[]).slice(0, 4);
   const decisive = e.payload['decisive'] as { window_s: number } | undefined;
-  if (decisive) m.decisive_s = decisive.window_s;
+  if (decisive) {
+    m.decisive_s = decisive.window_s;
+    const open = engine.world.characters.get(d.character_id)?.decisive;
+    if (open && open.event_id === e.id) m.decisive_until_ms = open.opened_real_ms + open.window_s * 1000;
+  }
   reactionView(m, e, engine.world, d.character_id);
   return m;
+}
+
+/** Eventos que ya cuentan un cambio de sitio (llegadas, viajes, seguir a alguien, el calabozo): no llevan la línea de «Cruzas a…». */
+const MOVE_TYPES = /^(arrived|master_arrival|master_intro|prologue|recap|move|travel|follow|rebound|jailed|released|respawn|character_joined)/;
+
+/** La línea gris del cambio de sitio que no ha contado nadie: el punto donde está y la localización. */
+function movedLine(engine: Engine, e: GameEvent): string | null {
+  if (MOVE_TYPES.test(e.action_type) || e.tags.includes('movement') || !e.spot_id) return null;
+  const spot = engine.world.spots.get(e.spot_id);
+  const loc = spot ? engine.world.locations.get(spot.location_id) : undefined;
+  if (!spot || !loc) return null;
+  return `Cruzas ${aEs(spot.name)} (${loc.name})`;
 }
 
 /** El historial que recibe la página al abrir o reconectar el stream: la tirada aún pendiente lleva la marca para que su botón siga vivo. */
@@ -1943,7 +1992,7 @@ function witnessMessage(m: WebMessage, d: Delivery, engine: Engine): WebMessage 
       const npc = w.npcs.get(l.npc_id)!;
       const known = w.characters.get(reader)?.knows.includes(npc.id) ?? false;
       const to = manyReaders(e) ? toLabel(w, reader, l.to, e.location_id) : '';
-      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(to ? { to } : {}) });
+      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(to ? { to } : {}), ...(l.beat ? { beat: l.beat } : {}) });
     } else continue;
     kept.push(l);
   }
@@ -1989,7 +2038,7 @@ function novelOf(e: GameEvent, engine: Engine, characterId: Id, text: string): {
       const known = me?.knows.includes(npc.id) ?? false;
       // A quién va, cuando el turno lo leen varios (turno compartido, charla de grupo o algo para todos).
       const to = manyReaders(e) ? toLabel(w, characterId, l.to, e.location_id) : '';
-      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(to ? { to } : {}) });
+      lines.push({ speaker: 'npc', id: npc.id, name: known ? npc.name : npc.role.charAt(0).toUpperCase() + npc.role.slice(1), text: l.text, ...(to ? { to } : {}), ...(l.beat ? { beat: l.beat } : {}) });
     } else continue;
     kept.push(l);
   }

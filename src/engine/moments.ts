@@ -51,6 +51,11 @@ export interface DialogueLine {
    */
   to?: LineTo;
   text: string;
+  /**
+   * Solo `npc`: el gesto o la acción de quien habla mientras lo dice, sin comillas y en 12 palabras como mucho
+   * («baja la voz», «golpea el mostrador»). La web lo pinta en cursiva dentro de su burbuja (narrator.ts, novel.ts).
+   */
+  beat?: string;
 }
 
 /** Destinatario de una línea: un PJ, varios o todos los presentes. */
