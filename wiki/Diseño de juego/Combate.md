@@ -97,6 +97,11 @@ En un momento crítico (el hacha que cae, el puente que cede), el máster abre u
 - Solo se abre con **riesgo real e inmediato**, validado por el servidor.
 - Nunca dos seguidas al mismo personaje.
 - No responder es perder de verdad. Un jugador **ausente** no queda indefenso: se defiende con su CA y sus salvaciones.
+- En la web el contador **cuenta hacia atrás** bajo la narración. A cero dice «Tiempo agotado» y, antes de lo que pasa después, sale el aviso «Se te acaba el tiempo: la amenaza se cumple», para que nadie se encuentre la consecuencia sin saber por qué. Si respondes antes, el contador se apaga. Desde la partida del 4 de noviembre de 2026.
+
+## Un rival que te sigue a otro sitio
+
+Si cruzas a otro lugar en mitad de una pelea (huyes por un callejón, te metes en una casa) y el mismo enemigo va detrás, **es el mismo combate**: el hilo dice «El combate sigue en…» y la ronda continúa donde iba, en vez de empezar otro en la ronda 1. Y todo cambio de sitio deja su línea gris en el hilo («Cruzas a la puerta (Casa de las hierbas)»), aunque el máster no lo cuente. Sale de la partida del 4 de noviembre de 2026: Doro siguió a Cat del callejón de la plaza a la puerta de la Casa de las hierbas.
 
 ## Rondas en escenas tensas
 
