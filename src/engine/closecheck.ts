@@ -16,7 +16,7 @@
  * partidas del piloto (scripts/judge.ts las aplica a partidas grabadas).
  */
 
-import { addressedTo, type DialogueLine } from './moments.js';
+import { addressedTo, proseWithout, type DialogueLine } from './moments.js';
 import type { GameEvent } from './model.js';
 import { nameRe, npcNameForms } from './narrate.js';
 
@@ -718,6 +718,56 @@ export function repeatedLines(input: { lines: readonly DialogueLine[]; said: (np
     }
   }
   return out;
+}
+
+/** Turnos del narrador que se miran para no repetir una frase. */
+export const NARRATION_MEMORY_TURNS = 4;
+
+/**
+ * Lo que el narrador le ha contado a este PJ en sus últimos `n` turnos con máster (los suyos), sin lo dicho:
+ * las citas de `lines` que el cierre guarda en la narración no son del narrador.
+ */
+export function recentNarration(events: readonly GameEvent[], actorId: string, n = NARRATION_MEMORY_TURNS): string[] {
+  const out: string[] = [];
+  for (let i = events.length - 1; i >= 0 && out.length < n; i--) {
+    const e = events[i]!;
+    if (e.actor_id !== actorId || !e.action_type.startsWith('master') || !e.narration_private) continue;
+    const lines = Array.isArray(e.payload['lines']) ? e.payload['lines'] as DialogueLine[] : [];
+    out.push(proseWithout(e.narration_private, lines.filter((l) => typeof l?.text === 'string')).replace(/«[^»]*»/g, ' '));
+  }
+  return out.reverse();
+}
+
+/** ¿Esta frase ya estaba dicha? Igual, casi igual (sameSaying) o casi entera dentro de una de antes (80 % de sus palabras). */
+function saidBefore(w: string[], before: readonly string[][]): boolean {
+  return before.some((b) => {
+    if (sameSaying(w, b)) return true;
+    const B = new Set(b);
+    return w.length >= 4 && w.filter((x) => B.has(x)).length / w.length >= 0.8;
+  });
+}
+
+/**
+ * La narración sin las frases que el narrador ya dijo en los últimos turnos (normalizadas: «Ilse sigue sin
+ * decir nada.» por tercera vez, «La plaza espera.»). Sin reescritura: la frase se quita y ya. Las de menos de
+ * tres palabras no cuentan. Si no quedara nada, la narración se queda como estaba (el cierre no puede ir vacío).
+ */
+export function withoutRepeatedNarration(narration: string, said: readonly string[]): { narration: string; removed: string[] } {
+  const before = said.flatMap((t) => t.split(/[.!?¿¡…:]+/)).map(wordsOf).filter((w) => w.length >= 3);
+  if (!before.length || !narration.trim()) return { narration, removed: [] };
+  const removed: string[] = [];
+  const paras = narration.split('\n').map((para) => {
+    const parts = para.match(/[^.!?…]+(?:[.!?…]+[»”"]?|$)/g) ?? [];
+    return parts.filter((sentence) => {
+      if (/[«»“”"]/.test(sentence)) return true; // lo dicho no es del narrador
+      const w = wordsOf(sentence);
+      if (w.length < 3 || !saidBefore(w, before)) return true;
+      removed.push(sentence.trim());
+      return false;
+    }).map((x) => x.trim()).join(' ');
+  });
+  const out = paras.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return out ? { narration: out, removed } : { narration, removed: [] };
 }
 
 export function repeatedRejection(hits: readonly { who: string; text: string }[]): string {

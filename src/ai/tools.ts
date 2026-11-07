@@ -43,6 +43,8 @@ import { characterFacts, recordFact } from '../engine/facts.js';
 import type { DialogueLine, LineTo } from '../engine/moments.js';
 import { AUDIENCES, presentIds, type Audience } from '../engine/audience.js';
 import { debtHeldBy, debtTitle, noteDebtTerms, openDebts, pawnItem, setDebt, settleDebt, SETTLE_HOW } from '../engine/debts.js';
+import { applyNarratorMode, clipLineBeat, closingMode, speakerRefs, type NarratorMode } from '../engine/narrator.js';
+import { recentNarration, withoutRepeatedNarration } from '../engine/closecheck.js';
 import { inventedPlaces } from '../engine/places.js';
 import { addToPurse, coinsAt, coinsOf, money, pay, receive, takeFromPurse } from '../engine/money.js';
 import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
@@ -359,10 +361,10 @@ export const MASTER_TOOLS: Tool[] = [
     observable_target: nstr('Solo con target_character_id: lo que percibe ese jugador, en segunda persona («Kael se acerca a ti y te pregunta…»). Solo lo que hace el actor, nunca lo que hace o piensa ese jugador. null si no.'),
     lines: {
       type: ['array', 'null'],
-      description: 'Parlamentos literales de esta acción, en orden (modo novela). speaker "npc" con su npc_id, o "actor" (npc_id null). text: solo las palabras dichas, sin comillas ni acotaciones. null si nadie habla.',
+      description: 'Parlamentos literales de esta acción, en orden (modo novela). speaker "npc" con su npc_id, o "actor" (npc_id null). Si hablan dos NPC, cada uno en su línea con su npc_id. text: solo las palabras dichas, sin comillas ni acotaciones. null si nadie habla.',
       items: {
         type: 'object',
-        properties: { speaker: { type: 'string', enum: ['npc', 'actor', 'pc'] }, npc_id: { type: ['string', 'null'] }, text: { type: 'string' }, character_id: { type: ['string', 'null'], description: 'Solo en conversación de grupo o ronda: speaker "pc" con el ID del PJ que habla.' }, to: { type: ['string', 'array', 'null'], items: { type: 'string' }, description: 'Solo en líneas de NPC: a quién habla. ID de un PJ, lista de IDs o "all" (todos los PJ presentes). null: a quien lleva la charla con él.' } },
+        properties: { speaker: { type: 'string', enum: ['npc', 'actor', 'pc'] }, npc_id: { type: ['string', 'null'] }, text: { type: 'string' }, character_id: { type: ['string', 'null'], description: 'Solo en conversación de grupo o ronda: speaker "pc" con el ID del PJ que habla.' }, to: { type: ['string', 'array', 'null'], items: { type: 'string' }, description: 'Solo en líneas de NPC: a quién habla. ID de un PJ, lista de IDs o "all" (todos los PJ presentes). null: a quien lleva la charla con él.' }, beat: { type: ['string', 'null'], description: 'Solo speaker "npc": su gesto o acción mientras lo dice, en tercera persona y sin su nombre, 12 palabras como mucho, sin comillas («baja la voz», «da un paso hacia ti»). La web lo pinta dentro de su burbuja. null si no hace falta.' } },
         required: ['speaker', 'npc_id', 'text'],
         additionalProperties: false,
       },
@@ -491,7 +493,11 @@ export interface LogEventInput {
   observable_target?: string | null;
   /** Quién lee el turno entero (audience.ts): lo declara el máster y lo valida el motor. Sin declarar, `actor`. */
   audience?: Audience | null;
+  /** Lo que hizo el cierre con la narración (narrator.ts): el modo, lo descartado y las frases repetidas. Para depurar. */
+  narrator?: NarratorReport;
 }
+
+export interface NarratorReport { mode: NarratorMode; why: string | null; dropped?: string; to_beat?: string; repeated?: string[] }
 
 /** ¿Hay en la sala del actor un NPC hablando con otro PJ? */
 function busyHere(engine: Engine, actor: Character, nowGameS: number): boolean {
@@ -553,7 +559,9 @@ export function parseLines(raw: unknown, fallbackNpc: string | null, isNpc: (id:
     else if (r['speaker'] === 'pc' && typeof r['character_id'] === 'string' && isPc(r['character_id'])) out.push({ speaker: 'pc', character_id: r['character_id'], text });
     else if (r['speaker'] === 'npc') {
       const id = typeof r['npc_id'] === 'string' && isNpc(r['npc_id']) ? r['npc_id'] : fallbackNpc;
-      if (id) { const to = lineTo(r['to'], isAddressee); out.push({ speaker: 'npc', npc_id: id, text, ...(to ? { to } : {}) }); }
+      // Su gesto mientras lo dice (narrator.ts): sin comillas y corto, o nada.
+      const beat = typeof r['beat'] === 'string' ? clipLineBeat(cleanText(r['beat'])) : '';
+      if (id) { const to = lineTo(r['to'], isAddressee); out.push({ speaker: 'npc', npc_id: id, text, ...(to ? { to } : {}), ...(beat ? { beat } : {}) }); }
     }
     if (out.length >= 12) break;
   }
@@ -1838,6 +1846,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Control mínimo, sin límite de rechazos (los de abajo rechazan una vez y luego dejan pasar):
       // relleno en lugar de narración («placeholder», «x») y cierre sin nada que leer. Si el máster no sale de ahí, el motor dice que reintente.
       const opt = (k: string) => (input[k] == null ? null : s(k));
+      // Cuándo habla el narrador (narrator.ts): el modo del motor, subido por lo que ha pasado en el turno. En silent y beat la
+      // narración no se rechaza por larga ni por relleno: se recorta al final, sin pedir otra llamada.
+      const narrator = ctx.talk?.narrator ? closingMode(ctx.talk.narrator, { okTools: ctx.ok_tools ?? [], roll: req, approached: Boolean(ctx.approach), forcedTurns: ctx.forced_turns?.length ?? 0, decisive: Boolean(input['decisive_threat']) }) : null;
       const junk = placeholderFields({ narration_private: s('narration_private'), observable: opt('observable'), observable_vague: opt('observable_vague'), observable_target: opt('observable_target') });
       if (junk.length) return { error: placeholderRejection(junk) };
       const empty = !req && emptyClose({ narration: cleanText(s('narration_private')), lines: parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id), (id) => world.characters.has(id)).filter((l) => !isPlaceholder(l.text)) });
@@ -1911,7 +1922,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         }
       }
       // En conversación el narrador solo entra cuando aporta: relleno o narración larga se reescriben una vez; vacía con lines vale.
-      if ((ctx.conversation_rejections ?? 0) < 1) {
+      if ((ctx.conversation_rejections ?? 0) < 1 && (!narrator || narrator.mode === 'full')) {
         const conv = conversationOf(engine.events.all(), actor.id, positionOf(world, actor, nowGameS));
         const npcId = input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null;
         const lines = parseLines(input['lines'], npcId, (id) => world.npcs.has(id));
@@ -2169,6 +2180,15 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const sharedTurn = sharedIds.length > 0;
       const sharedTo = [...new Set(sharedIds)];
       const closingLines = parsedLines.filter((l) => !invented.includes(l)).map((l) => (sharedTurn && l.speaker === 'npc' && !l.to ? { ...l, to: sharedTo.length === 1 ? sharedTo[0]! : sharedTo } : l));
+      // La narración del narrador: sin las frases que ya dijo en sus últimos turnos (closecheck.ts) y, en una charla, según
+      // el modo del turno (narrator.ts): en silent, vacía (o la acotación de quien habla); en beat, una acotación.
+      const repeated = withoutRepeatedNarration(s('narration_private'), recentNarration(engine.events.all(), actor.id));
+      const finalMode: NarratorMode | null = narrator ? closingMode(narrator, { okTools: ctx.ok_tools ?? [], forcedTurns: ctx.forced_turns?.length ?? 0 }).mode : null;
+      const cut = finalMode && !forcedTail && !pendingCrime.length
+        ? applyNarratorMode(finalMode, repeated.narration, closingLines, (id) => { const n = world.npcs.get(id); return n ? speakerRefs(world, n) : []; })
+        : { narration: repeated.narration, dropped: '' };
+      if (cut.beat) { const l = closingLines.find((x) => x.speaker === 'npc' && x.npc_id === cut.beat!.npc_id); if (l) l.beat = cut.beat.text; }
+      const prose = cut.narration;
       // La tercera negativa corta la charla (talk.ts).
       if (ctx.talk && endsTalk(ctx.talk, closingLines)) world.npc(ctx.talk.npc_id).talking_to = null;
       const unsay = (t: string) => invented.reduce((acc, l) => acc.split(`«${l.text}»`).join('').replace(/[ \t]{2,}/g, ' ').trim(), t);
@@ -2180,7 +2200,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Conocidos (closecheck.ts): quien dice su nombre o es presentado delante del actor, y names_learned del máster si ese nombre ha sonado.
       // Lo aprenden el actor y los de su turno compartido, que oyen lo mismo.
       const named = namedNpcs(world, here());
-      const narration = s('narration_private');
+      // Lo que lee el actor: la narración que queda y los gestos de las líneas (lo descartado no lo ha leído).
+      const narration = [prose, ...closingLines.map((l) => l.beat ?? '')].filter(Boolean).join(' ');
       const learned = [...new Set([
         ...introducedIn({ npcs: named, lines: closingLines, narration, playerText: ctx.action_text }),
         ...confirmedNames(input['names_learned'] ? s('names_learned').split(',').map((x) => x.trim()) : [], named, [narration, ...closingLines.map((l) => l.text)]),
@@ -2204,7 +2225,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Turno compartido: cada uno lee lo suyo y lo común (narration_private es lo común). El actor, las dos cosas juntas.
       const byPc = sharedTurn ? Object.fromEntries(Object.entries(parseByPc(input['narration_by_pc'], (id) => id === actor.id || sharedIds.includes(id)))
         .map(([id, t]) => [id, withoutDeathPhrases(unsay(tidy(id === actor.id ? unname(t) : t)), deathHits)] as const).filter(([, t]) => t)) : {};
-      const common = narrationWithLines(withoutDeathPhrases(unsay(tidy(unname(s('narration_private')))), deathHits), closingLines) + (forcedTail ? `
+      const common = narrationWithLines(withoutDeathPhrases(unsay(tidy(unname(prose))), deathHits), closingLines) + (forcedTail ? `
 
 ${forcedTail}` : '');
       const mine = byPc[actor.id] ? masked(byPc[actor.id]!) : '';
@@ -2212,7 +2233,7 @@ ${forcedTail}` : '');
       // La narración de este turno, como la lee él: enmascarada. Un nombre que el máster suelta sin cita («esperando a
       // Ceniza») le llega como «el perro», así que no cuenta como oído.
       let seen: string | null = null;
-      const perceived = () => (seen ??= perceivedBy(engine, actor.id, [masked(s('narration_private')), mine, ...closingLines.filter((l) => l.speaker === 'npc').map((l) => l.text)]));
+      const perceived = () => (seen ??= perceivedBy(engine, actor.id, [masked(prose), mine, ...closingLines.filter((l) => l.speaker === 'npc').map((l) => l.text)]));
       const heardName = (n: Npc) => npcNameForms(n.name).some((f) => nameRe(f, 'u').test(perceived()));
       const heardOf = (n: Npc) => heardName(n) || nameRe(descriptorOf(world, n.id), 'iu').test(perceived());
       const presentHere = (n: Npc) => n.status === 'alive' && world.spot(n.location.id).location_id === here();
@@ -2250,6 +2271,7 @@ ${forcedTail}` : '');
         npc_id: closingNpc,
         lines: closingLines,
         audience: AUDIENCES.includes(s('audience') as Audience) ? s('audience') as Audience : null,
+        ...(narrator || repeated.removed.length ? { narrator: { mode: finalMode ?? 'full', why: narrator?.why ?? null, ...(cut.dropped ? { dropped: cut.dropped } : {}), ...(cut.beat ? { to_beat: cut.beat.text } : {}), ...(repeated.removed.length ? { repeated: repeated.removed } : {}) } } : {}),
         ...(targetPc ? { target_character_id: targetPc, observable_target: input['observable_target'] == null ? null : unsay(tidy(s('observable_target'))) || null } : {}),
       };
       return { ok: true, closed: true };

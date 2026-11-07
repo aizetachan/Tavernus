@@ -4,7 +4,7 @@
 > situación por prioridad. Lo de aquí sigue valiendo para las negativas, la salida, la tirada social y la puerta de las
 > misiones.
 
-Estado: **primera versión implementada** (`src/engine/talk.ts`; ver «Qué hay en la v1» al final). Sustituye a la idea
+Estado: **primera versión implementada** (`src/engine/talk.ts`; ver «Qué hay en la v1» al final; cuándo habla el narrador, en la v1.5). Sustituye a la idea
 del actor (una segunda IA que reescribe la voz, ver CONVERSACION.md), que queda apagada en producción
 (`ACTOR_MODEL=off`).
 
@@ -327,3 +327,56 @@ el PJ se fue sin pagar sin que pasara nada.
   Decir solo el precio sin darlo no salta.
 - **«Pedir una jarra» es comercio.** Las señales del texto cuentan como comercio «pido / pedir / pide / ponnos» seguido
   de «una, un, otra, algo de…». «Pedir trabajo» no.
+
+## v1.5 (04-11; sobre el flujo de cinco capas el 07-11): el narrador habla cuando pasa algo más que hablar
+
+Sale de la partida del 04-11 (Cat con Doro e Ilse bajo un alto, en Brezal): en cinco turnos de pura charla el
+narrador habló en todos, de 40 a 70 palabras, repitiendo «Ilse sigue sin decir nada» y «la plaza espera», y Doro solo
+habló en burbuja propia en tres. Lo que funcionó salió por accidente: una prosa acabada en dos puntos que la web pintó
+en cursiva dentro de la burbuja de Doro, encima de «¡Entrégate, Cat! ¡Las manos a la vista!». Eso pasa a ser la norma.
+
+- **Modo del narrador por turno** (`src/engine/narrator.ts`, `narratorMode`): el motor lo decide antes de llamar al
+  máster y lo pone al final de «Cómo responde…», tras el hueco E y la longitud del flujo de cinco capas
+  (`CONVERSACION-FLUJO.md`): «Narrador en este turno: …». La regla CONVERSACIÓN del prompt remite a él en vez de dar un
+  tope de palabras. Sobre el flujo: una alarma o un ataque (capa 1) son `full`; ver encima lo que le robaron o que la
+  escalada corte la charla, `beat`; saber de un crimen o echar algo en falta, no cambian el modo. Si hay guion lo
+  decide `soundsLikeTalk` (talk.ts); el narrador mira además `physicalAction`, más estricto: «Saco la daga y le digo
+  "quieta"» le habla, pero el narrador cuenta la daga.
+- **Vecinos de relleno sin máster** (`extratalk.ts`): su gesto («La panadera contesta sin levantar la vista.») va en el
+  `beat` de su línea, dentro de su burbuja, y no como burbuja del narrador.
+
+  | Modo | Cuándo | Qué hace el narrador |
+  |---|---|---|
+  | `full` | no es charla; el jugador hace algo físico (no `soundsLikeTalk`); tirada, apertura, llegada o gancho; un NPC hostil que actúa; ventana decisiva; un alto que llega o al que se resistió; incidente pendiente; la charla empieza (presentación); se acerca a quien habla; imprevisto, viaje, recado o descanso cortado | narración normal |
+  | `beat` | es charla y algo pequeño cambia: regalo, insulto o amenaza, entrega, compra o venta, pide trabajo a quien lo tiene, despedida | una acotación de 15 palabras como mucho |
+  | `silent` | charla sin más (también bajo un alto que no se ha resistido) | nada: solo `lines` |
+
+- **Acotación dentro de la burbuja** (`DialogueLine.beat`): el gesto de quien habla mientras lo dice, sin comillas y en
+  12 palabras como mucho (`clipLineBeat`). La web lo pinta como la presentación con dos puntos: en cursiva dentro de
+  su burbuja (`novelBlocks` mete un bloque `lead`). Si el narrador ya presenta la línea con dos puntos, manda la del
+  narrador; los dos puntos siguen funcionando como antes. El actor de voz (`ai/actor.ts`) conserva el `beat`.
+- **El cierre lo hace cumplir sin reescrituras** (`ai/tools.ts`, `log_event`): el modo se recalcula con lo que ha pasado
+  (`closingMode`; solo sube): `attack`, `move_to`, daño, curas, un acercamiento o el turno forzado de un NPC lo pasan a
+  `full`; `npc_trust`, dinero u objetos que cambian de mano, misiones que se dan o se cierran o una orden a un NPC, a
+  `beat`; una tirada de ataque, a `full`, y otra, a `beat`. Después (`applyNarratorMode`):
+  - `silent`: la narración se vacía. Si es una sola frase de 15 palabras como mucho que nombra a quien habla o acaba
+    en dos puntos, pasa a `beat` de la primera línea de ese NPC. Lo descartado queda en `payload.master.narrator`.
+  - `beat`: la primera frase que no sea relleno, recortada a la última pausa que quepa en 15 palabras.
+  - `full`: como hoy. Sin ninguna línea de NPC tampoco se toca: la narración es lo único que hay.
+  - En `silent` y `beat` el control de conversación (narración larga o de relleno) ya no pide otra llamada.
+- **Frases repetidas del narrador** (`closecheck.ts`, `withoutRepeatedNarration`): una frase que el narrador ya dijo a
+  ese PJ en sus últimos 4 turnos (igual, casi igual o casi entera dentro de otra) se quita, en cualquier modo y sin
+  reescritura. Las citas no cuentan. Si no quedara nada, la narración se queda como estaba.
+- **Personajes que hablan entre sí**: dos NPC presentes van cada uno en su línea con su `npc_id`, también cuando se
+  hablan entre ellos; el narrador no resume lo que dicen ni cuenta que alguien sigue sin decir nada (eso es relleno y
+  se quita en `beat`). Las amenazas y órdenes de un NPC («¡Quieto!») son líneas suyas. A quién va cada línea (`to`)
+  lo trae la rama de audiencia, aún sin fusionar; `beat` es un campo aparte y encaja con ella.
+- **Medir** (`npm run narrator-count -- --all [--simulate]`, `scripts/narrator-count.ts`): burbujas del narrador por
+  cada 10 turnos de charla, tal como las pinta la web. Sobre las 12 partidas grabadas en `data/games` (80 turnos de
+  charla): **14** antes, 31 palabras de narrador por turno. Con `--simulate` (lo que haría hoy el cierre, sin saber de
+  combates ni incidentes): **2,9**, 9 palabras por turno. Con el máster offline, una charla de cinco turnos queda en 0
+  burbujas del narrador y una acotación dentro de la primera burbuja.
+
+**Sin probar con Haiku.** Lo que falta ver con el modelo de verdad: si rellena `beat` en las líneas o lo sigue
+poniendo en la narración (el cierre lo recoge si es una frase corta que nombra a quien habla), y si dos NPC se hablan
+entre ellos en `lines`. Comando y coste en el diario del 04-11.
