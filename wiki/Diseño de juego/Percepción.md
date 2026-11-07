@@ -54,6 +54,7 @@ El radio marca hasta dónde percibes **bien**. Más allá, no hay corte seco: el
 - El máster **solo narra hasta ese nivel**.
 - Acercarse o una tirada de Percepción suben de banda.
 - Dentro de `full`, lo sutil (un susurro, alguien escondido) sigue pidiendo tirada.
+- **Escondido.** Tras una tirada de Sigilo superada vas a escondidas un rato (unos 10 minutos de juego, sin moverte de sitio): un NPC no te ve si tu tirada iguala o supera su percepción pasiva, aunque esté a tu lado (es lo que deja hurtar sin que se entere). Y nadie te ve a través de una pared o desde un rincón sin línea de visión. Quien no te ve no te habla, no te da el alto ni te ataca. Ver [[Mecánicas#Crimen, testigos y ley]].
 
 ```mermaid
 flowchart LR

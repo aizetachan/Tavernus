@@ -513,6 +513,8 @@ export interface Character {
   wanted?: Wanted | null;
   /** Encerrado en el calabozo (crime.ts) hasta ese instante de juego (el suyo). */
   jailed?: { until_game_s: number; spot_id: Id; reason: string } | null;
+  /** Ventanas decisivas abiertas contra él (las últimas): para no abrir dos seguidas ni más de una por NPC y combate (SPEC §9.3). */
+  decisive_log?: DecisiveLogEntry[];
   /** Infamia: muertes de quien no era hostil y cadáveres profanados (crime.ts). En lugar de PX. */
   infamy?: number;
   /** Etiquetas ganadas con lo que ha hecho (standing.ts): *asesino*, *salvó a Ceniza*. Las de raza, clase y trasfondo salen de la ficha. */
@@ -541,9 +543,20 @@ export interface Wanted {
   last_seen: { location_id: Id; spot_id: Id; game_s: number } | null;
   /** Quien le busca activamente (va a donde le vieron). */
   hunter_id?: Id | null;
-  /** Le están deteniendo: quién, desde cuándo, si el motor ya dio el alto y si se ha resistido. */
-  arrest: { npc_id: Id; since_game_s: number; announced: boolean; resisted: boolean } | null;
+  /**
+   * Le están deteniendo: quién, desde cuándo, si el motor ya dio el alto y si se ha resistido. Bajo el alto,
+   * cada acción que no sea entregarse ni resistirse es un intento de ganar tiempo (`attempts`): el primero se
+   * tolera; al siguiente (o en cuanto falla una tirada suya) la autoridad actúa. Una tirada social con éxito
+   * compra un intento más (`bought`, uno como mucho). `last_attempt`: lo último que intentó y cómo acabó.
+   */
+  arrest: { npc_id: Id; since_game_s: number; announced: boolean; resisted: boolean; attempts?: number; bought?: number; last_attempt?: ArrestAttempt | null } | null;
+  /** Autoridades a las que ya se resistió: no le dan el alto otra vez; en cuanto le ven, van a por él. */
+  resisted_by?: Id[];
 }
+
+/** Un intento de ganar tiempo bajo el alto (crime.ts): hablar, gritar a otro, una tirada; o dejar pasar la ventana. */
+export interface ArrestAttempt { kind: 'stall' | 'roll_failed' | 'roll_ok' | 'timeout'; text: string; game_s: number }
+
 
 /**
  * Conjuros de un PJ (ids de src/data/srd/spells.ts). `known`: los que aprende
@@ -1156,7 +1169,17 @@ export interface DecisiveWindow {
   /** NPC que amenaza, si lo hay. */
   npc_id: Id | null;
   event_id: Id;
+  /**
+   * Lo que el motor cumple sin IA si caduca (SPEC §9.3): `attack`, el NPC hostil ataca (npcTurn); `arrest`, la
+   * autoridad que le detiene le reduce y le ata (o ataca, si ya es hostil). null o ausente: prosa, la cuenta el máster.
+   */
+  consequence?: DecisiveConsequence | null;
 }
+
+export interface DecisiveConsequence { kind: 'attack' | 'arrest'; npc_id: Id }
+
+/** Una ventana decisiva que se abrió: de quién, dónde, cuándo y si una tirada con éxito del PJ la dejó atrás. */
+export interface DecisiveLogEntry { npc_id: Id | null; location_id: Id; game_s: number; cleared: boolean }
 
 // ---------------------------------------------------------------------------
 // Snapshot completo (lo que carga el motor en RAM y persiste)

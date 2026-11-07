@@ -397,34 +397,44 @@ describe('combate', () => {
     expect(kael.status).toBe('unconscious');
   });
 
-  it('ventana decisiva: si el jugador no responde en 60 s, la amenaza se ejecuta; si responde rápido, tiene ventaja', async () => {
+  it('ventana decisiva: si el jugador no responde en 60 s, la amenaza la cumple el servidor; nunca dos seguidas; si responde rápido, tiene ventaja', async () => {
     const time = fakeTime();
-    const { engine } = await bootEngine(time);
+    const { engine } = await bootEngine(time, { rng: () => 0.5 }); // d20 = 11: el lobo impacta sin crítico
     const kael = engine.world.character('ch_kael');
     kael.location = { type: 'spot', id: 'sp_cl_arroyo' };
+    kael.hp_max = 40; kael.hp_current = 40; // aguanta los dos mordiscos
     const { client, requests } = fakeClient([
       msg([logEvent('El lobo se agazapa para saltar.', 'El lobo se agazapa.', { decisive_threat: 'el lobo te salta al cuello', decisive_npc_id: 'npc_lobo' })]),
-      // Expira: el master ejecuta la amenaza.
-      msg([use('attack', { attacker_id: 'npc_lobo', target_id: 'ch_kael', advantage: 'none' })]),
-      msg([logEvent('Te muerde.', 'El lobo muerde a Kael.')]),
-      // Segunda ventana y respuesta rápida con tirada.
+      // Expira: el servidor hace atacar al lobo (SPEC §9.3); el máster solo lo cuenta.
+      msg([logEvent('El lobo te muerde.', 'El lobo muerde a Kael.')]),
+      // Otra ventana seguida (y del mismo lobo, en el mismo combate): se rechaza; el lobo actúa y hay que contarlo.
       msg([logEvent('Vuelve a la carga.', null, { decisive_threat: 'otro salto', decisive_npc_id: 'npc_lobo' })]),
-      msg([logEvent('Golpeas.', null, { requires_roll_kind: 'attack', requires_roll_key: 'melee', requires_roll_dc: null, requires_roll_advantage: 'none', requires_roll_target: 'npc_lobo' })]),
+      msg([logEvent('Te preparas.', null)]),
+      msg([logEvent('Te preparas; el lobo vuelve a lanzarte un mordisco.', null)]),
+      // Tras un turno sin ventana, una amenaza de otra cosa (prosa) sí vale; respuesta rápida con ventaja.
+      msg([logEvent('La orilla se agrieta bajo tus botas.', null, { decisive_threat: 'la orilla se hunde contigo', decisive_npc_id: null })]),
+      msg([logEvent('Saltas.', null, { requires_roll_kind: 'skill', requires_roll_key: 'athletics', requires_roll_dc: 12, requires_roll_advantage: 'none', requires_roll_target: null })]),
     ]);
-    engine.attachMaster(new Master(engine, { client, rng: () => 0.5 })); // d20 = 11: impacta sin crítico
+    engine.attachMaster(new Master(engine, { client, rng: () => 0.5 }));
     await engine.act('ch_kael', 'miro al lobo');
     expect(kael.decisive?.threat).toBe('el lobo te salta al cuello');
+    expect(kael.decisive?.consequence).toEqual({ kind: 'attack', npc_id: 'npc_lobo' });
     time.advanceReal(61);
     await engine.tick();
     await engine.act('ch_kael', 'inventario'); // vacía la cola
     expect(kael.decisive).toBeNull();
     expect(requests[1]!.messages[0]!.content as string).toContain('## Ventana decisiva expirada');
-    expect(kael.hp_current).toBeLessThan(12);
+    expect(requests[1]!.messages[0]!.content as string).toMatch(/El servidor YA ha ejecutado la amenaza: .*lobo/);
+    expect(kael.hp_current).toBeLessThan(40);
+    expect(engine.events.all().find((e) => e.tags.includes('decisive_timeout'))).toBeTruthy();
     await engine.act('ch_kael', 'me preparo');
-    expect(kael.decisive).not.toBeNull();
+    expect(JSON.stringify(requests[3]!.messages.at(-1)!.content)).toContain('nunca dos seguidas');
+    expect(kael.decisive).toBeNull();
+    await engine.act('ch_kael', 'me fijo en la orilla');
+    expect(kael.decisive?.threat).toBe('la orilla se hunde contigo');
     time.advanceReal(5);
-    const r = await engine.act('ch_kael', 'le clavo la daga');
-    expect(requests[4]!.messages[0]!.content as string).toContain('RÁPIDA');
+    const r = await engine.act('ch_kael', 'salto a la roca');
+    expect(requests.at(-1)!.messages[0]!.content as string).toContain('RÁPIDA');
     expect(r.requires_roll?.advantage).toBe('advantage');
     expect(kael.decisive).toBeNull();
   });

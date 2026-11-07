@@ -410,6 +410,11 @@ casona), Hugo 11 (matón, dueño de la herrería), Brenna 12 (`noncombatant`, du
 - **Ajuar de los NPC** (`claude/amazing-mahavira-788ef2`): sus bolsas y su `wealth` dan los límites del objeto nuevo.
 - **Rama de los NPC**: echar en falta, buscar y reconocer lo robado, con `state.stolen`.
 - **NPC de relleno**: el perfil sale de datos que pueden traer (`temperament`, `noncombatant`, `child`).
+- **Ley y sigilo** (`claude/ley-sigilo-2`, 07-11): `Character.sneak` es también lo que mira la ley para dar el alto
+  (`npcSees` en perception.ts, con la misma regla que `hiddenFrom`, que ahora la llama; `SNEAK_S` vive allí). Que le
+  pillen (`resolveConflict`, todo lo que no es un hurto que sale bien o un «casi») borra `sneak`: si no, el alto del
+  delito no llegaría. Atacar, gritar o moverse sin sigilo también lo borran; hurtar a escondidas no. Las tiradas de
+  hurto y de careo no cuentan como «tirada fallada bajo el alto» (SPEC §9.4): las resuelve este flujo.
 
 ## Qué hay implementado (06-11)
 

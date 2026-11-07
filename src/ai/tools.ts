@@ -8,11 +8,17 @@ import type { Engine } from '../engine/engine.js';
 import type { World } from '../engine/world.js';
 import { rollD20, rollExpr, type Advantage, type CheckResult, type Rng, type RollResult } from '../engine/dice.js';
 import { carrierOf, consumeItem, inventoryDetailed, inventoryView, itemView, npcCarryList, spawnItem, spotOfPlacement, transferItem } from '../engine/inventory.js';
-import type { Character, Id, ItemInstance, Npc, Placement, ReactionKind } from '../engine/model.js';
+
+import type { Character, DecisiveConsequence, Id, ItemInstance, Npc, Placement, ReactionKind } from '../engine/model.js';
+
 import { approachSpot, distance, moveTo, positionOf, type Approach } from '../engine/movement.js';
-import { isDwelling, perceive, witnesses } from '../engine/perception.js';
+
+import { isDwelling, npcSees, perceive, sneakNow, witnesses } from '../engine/perception.js';
+
 import { isExtra } from '../engine/extras.js';
+
 import { inventedPeople, inventedRejection, nameVocabulary, playerWords, rolesFor } from '../engine/invented.js';
+
 import type { Position } from '../engine/movement.js';
 import { harvest, regenState } from '../engine/resources.js';
 import { activeJobs, addPractice, buyFromNpc, completeJob, grantClue, sellToNpc, type ProgressEvent } from '../engine/progress.js';
@@ -22,8 +28,11 @@ import { adjustTrust, knowledgeFor, MASTER_TRUST_CHANGES, TRUST_LABEL, trustNoti
 import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
 import { finishQuest, giveQuest, hasGivenQuest } from '../engine/quests.js';
-import { attitudeOf, forcedTurnText, forceNpcTurns, intentOf, lethalBlow, nonLethalSource, npcTurn, resolveAttack, type ForcedTurn } from '../engine/combat.js';
+
+import { attitudeOf, decisiveConsequence, decisiveRefusal, forcedTurnText, forceNpcTurns, intentOf, lethalBlow, nonLethalSource, npcTurn, resolveAttack, type ForcedTurn } from '../engine/combat.js';
+
 import { encounterAt, hostilesAt, recentCombatTag } from '../engine/encounter.js';
+
 import { INCIDENT_KINDS, incidentRejection, npcCrimeLine, pendingIncidents, reactionSentences, readsAsTheft, reportAssault, reportIncident, reportKill, unnarratedReactors, type IncidentKind } from '../engine/crime.js';
 import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, helplessNpc, isDying, killNpc, knockOutNpc, medicineDc, NPC_DOWN_HINT, reviveNpc, stabilize } from '../engine/death.js';
 import { spendResource } from '../engine/rest.js';
@@ -457,6 +466,10 @@ export interface ToolContext {
   forced_turns?: ForcedTurn[];
   /** Cierres rechazados para que cuente esos turnos (uno como mucho; luego los añade el motor). */
   npc_turn_rejections?: number;
+  /** Cierres rechazados por abrir una ventana decisiva que no toca (dos seguidas, o una más del mismo NPC; uno como mucho, luego se ignora). */
+  decisive_rejections?: number;
+  /** Cierres rechazados porque un NPC que no ve al actor escondido le habla o le detiene (uno como mucho). */
+  hidden_rejections?: number;
   /** La narración que se rechazó por no contarlos: si vuelve igual, el motor los añade. */
   untold_narration?: string;
   /** Tools que ha resuelto el motor por su cuenta (los ataques de esos turnos): el máster los guarda con los suyos. */
@@ -483,7 +496,9 @@ export interface LogEventInput {
   tags: string[];
   suggested_actions: string[];
   requires_roll: { kind: CheckKind; key: string; dc: number | null; advantage: Advantage; target?: string; conflict?: ConflictVerdict } | null;
-  decisive: { threat: string; npc_id: string | null } | null;
+
+  decisive: { threat: string; npc_id: string | null; consequence?: DecisiveConsequence | null } | null;
+
   /** NPC con quien ha hablado el actor (para el retrato del primer encuentro). */
   npc_id?: string | null;
   /** Parlamentos literales (modo novela); narration_private sigue siendo el texto completo. */
@@ -1551,6 +1566,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const r = npcAtk ? npcTurn(world, npcAtk.id, s('target_id'), adv, ctx.rng, nowGameS) : resolveAttack(world, s('attacker_id'), s('target_id'), adv, ctx.rng, nowGameS, { intent: ctx.action_text ?? null });
       if ('error' in r) return { error: r.error };
       if (npcAtk) acted.add(npcAtk.id);
+      // Atacar descubre al que iba a escondidas (perception.ts, sneakNow).
+      const pcAtk = world.characters.get(s('attacker_id'));
+      if (pcAtk?.sneak) { pcAtk.sneak = null; world.touch('characters', pcAtk.id); }
       ctx.rolls.push({ expr: 'attack', total: r.attack_total, breakdown: r.attack_breakdown, rolls: [] });
       // Las tiradas de los enemigos son ocultas (SPEC §9.3); la del PJ que ataca, a la vista.
       if (world.characters.has(s('attacker_id'))) (ctx.shown_rolls ??= []).push(attackRoll(s('attacker_id'), s('target_id'), r));
@@ -2084,10 +2102,40 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: incidentRejection(world, bad.i, bad.missing, actor) };
         }
       }
+      // Escondido (perception.ts): un NPC que no le ve no le habla, no le da el alto ni le detiene. Se reescribe una vez.
+      const hid = sneakNow(world, actor, nowGameS);
+      if (hid && (ctx.hidden_rejections ?? 0) < 1) {
+        const narr = s('narration_private');
+        const said = parseLines(input['lines'], null, (id) => world.npcs.has(id));
+        const blind = [...world.npcs.values()].filter((n) => n.status === 'alive' && world.spot(n.location.id).location_id === here() && !npcSees(world, n, actor, nowGameS));
+        const toActor = (l: DialogueLine) => { const to = (l as { to?: unknown }).to; return to == null || to === actor.id || to === 'all' || (Array.isArray(to) && to.includes(actor.id)); };
+        const caught = /quedas detenido|¡alto!|\balto ahi\b|\bte (?:ve|ven|descubre|descubren|ha visto|han visto|agarra|prende|detiene)\b/i.test(narr);
+        const bad = blind.filter((n) => said.some((l) => l.speaker === 'npc' && l.npc_id === n.id && toActor(l)) || (caught && mentionsNpc(world, [narr], n)));
+        if (bad.length) {
+          ctx.hidden_rejections = (ctx.hidden_rejections ?? 0) + 1;
+          const names = bad.map((n) => npcLabel(world, actor, n.id)).join(', ');
+          return { error: `El actor está ESCONDIDO (Sigilo ${hid.total}) y ${names} no le ve${bad.length > 1 ? 'n' : ''}: no le habla, no le da el alto, no le detiene ni le ataca. Narra lo que hace sin verle (pasa de largo, sigue buscando, grita a otros) y reescribe log_event.` };
+        }
+      }
+      // Ventana decisiva (SPEC §9.3): nunca dos seguidas al mismo PJ y como mucho una por NPC en cada combate. Se rechaza
+      // una vez con el motivo; si insiste, se ignora (sin ventana). Con un NPC hostil o la autoridad que le detiene, lleva
+      // la consecuencia que cumple el motor si caduca (engine.ts, fulfilDecisive).
+      let decisiveNpc = input['decisive_threat'] ? (input['decisive_npc_id'] ? s('decisive_npc_id') : '*') : null;
+      let decisiveOut: LogEventInput['decisive'] = null;
+      if (decisiveNpc) {
+        const npcId = decisiveNpc === '*' ? null : decisiveNpc;
+        const why = decisiveRefusal(world, actor, npcId && world.npcs.has(npcId) ? npcId : null, here(), nowGameS);
+        if (why && (ctx.decisive_rejections ?? 0) < 1) {
+          ctx.decisive_rejections = (ctx.decisive_rejections ?? 0) + 1;
+          return { error: why };
+        }
+        if (why) decisiveNpc = null;
+        else decisiveOut = { threat: cleanText(s('decisive_threat')), npc_id: npcId, consequence: decisiveConsequence(world, actor, npcId && world.npcs.has(npcId) ? npcId : null, nowGameS) };
+      }
       // Los NPC hostiles del combate actúan en cada turno (combat.ts): el que no ha atacado, lo hace ahora el motor y
       // el máster lo cuenta (se reescribe una vez; si aun así no lo nombra, el motor lo añade a la narración).
-      // No con una tirada pendiente (el turno acaba al tirar) ni con la amenaza que se abre (la ventana decisiva).
-      const decisiveNpc = input['decisive_threat'] ? (input['decisive_npc_id'] ? s('decisive_npc_id') : '*') : null;
+      // No con una tirada pendiente (el turno acaba al tirar) ni el NPC de la ventana que se abre: su primera (y única)
+      // ventana en este combate es su turno; si caduca, ataca el motor.
       if (!req && !ctx.intro && decisiveNpc !== '*' && fightingHere(ctx, s('tags').split(',').map((t) => t.trim()))) {
         const acted = (ctx.npc_turns ??= new Set());
         if (decisiveNpc) acted.add(decisiveNpc);
@@ -2267,7 +2315,7 @@ ${forcedTail}` : '');
           .filter(() => !confrontOf(world, actor, nowGameS))
           .concat(req ? [] : confrontButtons(world, actor, nowGameS)),
         requires_roll: req,
-        decisive: input['decisive_threat'] ? { threat: cleanText(s('decisive_threat')), npc_id: input['decisive_npc_id'] ? s('decisive_npc_id') : null } : null,
+        decisive: decisiveOut,
         npc_id: closingNpc,
         lines: closingLines,
         audience: AUDIENCES.includes(s('audience') as Audience) ? s('audience') as Audience : null,

@@ -242,11 +242,16 @@ Lo que haces delante de la gente tiene consecuencias. Las decide el motor, no el
 
 - **En el acto.** Tras tu acción sale un aviso con la reacción de cada uno. Quien se lanza contra ti entra en el combate. Si la autoridad está delante, te da el alto con tres botones: **Entregarme**, **Resistirme** y **Huir**.
 - **Entregarte.** Lo grave (matar, atacar con arma, profanar un cuerpo) es **calabozo**: en Brezal, el de [[La casona]], 24 horas por una muerte. Lo leve es **multa**. Preso no sales hasta cumplir; dormir hace pasar el tiempo.
-- **Resistirte o huir.** La autoridad pasa a hostil y va a por ti; el resto de la autoridad acude a ayudar. Todos los que se meten pelean solos en cada turno (ver [[Combate#Los enemigos actúan siempre]]). Si te tumban, despiertas en el calabozo.
+- **Un intento como mucho.** Con el alto encima, lo que no sea entregarte ni resistirte (hablar, persuadir, gritarle a otro, «todo ha sido una confusión») es ganar tiempo. El primero se tolera: la autoridad te escucha y te avisa. Al segundo, en cuanto falla una tirada tuya o si dejas pasar el tiempo, la autoridad **te reduce, te ata y te lleva** al calabozo (o te cobra la multa), sin que te entregues. Una tirada social con éxito te compra un intento más, uno solo: hablar no anula la detención.
+- **Resistirte o huir.** La autoridad pasa a hostil y va a por ti; el resto de la autoridad acude a ayudar. Todos los que se meten pelean solos en cada turno (ver [[Combate#Los enemigos actúan siempre]]). Si te tumban, despiertas en el calabozo. **Se acuerda:** si te vuelve a ver, no te da el alto, viene a por ti. Entregarte sigue valiendo.
+- **Escondido no te ven.** Si superas una tirada de Sigilo, vas a escondidas un rato: no te ve nadie cuya percepción no llegue a tu tirada. Nadie te da el alto ni te ataca si no te ve, tampoco a través de una pared. Atacar, gritar, hablar en voz alta, moverte sin sigilo, salir de ahí o que te pillen hurtando te descubre.
 - **Buscado.** En cuanto la autoridad lo sabe, tienes la condición «buscado» con su motivo. La autoridad va a donde te vieron por última vez.
 - **La noticia corre.** Quien llega al sitio y ve el cuerpo se entera. Quien coincide con alguien que lo sabe, también. El rumor viaja con ellos de un lugar a otro.
 - **Lo que pierdes.** Reputación con el pueblo (tanta como la gravedad). Quien lo sabe no te vende, no te compra, no te fía ni te aloja. No duermes tranquilo, ni con llave, donde alguien que lo sabe te haya visto: vienen a por ti.
 - **El máster no puede ignorarlo.** Lee primero lo que vio cada testigo («vio cómo Leodhin mataba al herrero y le tiene miedo»). Si su narración no cuenta la reacción, el motor se la devuelve para que la reescriba.
+
+> [!example] Cat, en la partida del 4 de noviembre
+> Cat se escondió en el callejón (Sigilo 20) y [[Doro]], que pasaba sin verle, le dio el alto igual. Luego, bajo el alto, Cat persuadió dos veces con fallo, gritó a [[Ilse]] y huyó con una Acrobacias fallida, y Doro solo repetía «una más y te ato». Ahora Doro no ve a quien está escondido y, al primer fallo, le ata y se lo lleva.
 
 > [!example] Hugo, en la partida del 27 de octubre
 > Leodhin mató a [[Hugo]] en la barra del Jabalí delante de [[Brenna]], [[Garrán]] y la cena, y Brenna le alquiló un cuarto. Ahora, en el acto: Brenna retrocede y no le atiende, Garrán le da el alto y los vecinos gritan. Leodhin queda buscado, sin experiencia y con infamia, y no duerme en el Jabalí. Ver [[Revisión partida 2026-10-27]].
