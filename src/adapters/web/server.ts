@@ -14,6 +14,7 @@
  *   GET  /api/characters            personajes de la campaña
  *   GET  /api/stream?character=ID   entregas de ese PJ (Server-Sent Events)
  *   GET  /api/sheet?character=ID    hoja viva
+ *   GET  /api/combats?character=ID  registro de combates de ese PJ (Ajustes), del más reciente al más antiguo
  *   GET  /api/journal?character=ID  diario: misiones, conversaciones, crónica y lugares (journal.ts)
  *   GET  /api/board?character=ID    tablero
  *   GET  /api/tablon?character=ID   encargos del tablón (tablon.ts)  ·  POST /api/tablon/read {character}   abrirlo es leerlo
@@ -104,8 +105,8 @@ import { talkingWith } from '../../engine/scene.js';
 import { aEs, descriptorOf } from '../../engine/narrate.js';
 import { speakerLabel } from '../../engine/chatter.js';
 import type { SceneNotice } from '../../engine/engine.js';
-import { encounterAt, type Encounter } from '../../engine/encounter.js';
-import { combatView, FIGHT_FOLLOW_S, fightStart, type CombatEnd, type CombatView, type FightTrail, type TurnContext } from './fight.js';
+import { combatHistory, encounterAt, type Encounter } from '../../engine/encounter.js';
+import { combatRecordsView, combatView, FIGHT_FOLLOW_S, fightStart, type CombatEnd, type CombatView, type FightTrail, type TurnContext } from './fight.js';
 import { ActionLog, presenceLine, reportLine } from './servicelog.js';
 import { AWAY_CARD_MS, awayCard, awayCardEmpty, awayFor, awayText, unreadFrom, type AwayCard } from './whileaway.js';
 import { tablonView } from './tablon.js';
@@ -1033,6 +1034,11 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     if (req.method === 'GET' && url.pathname === '/api/shop') {
       const id = characterOr404(engine, characterParam, res);
       if (id) json(res, 200, shopView(engine, id));
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/combats') {
+      const id = characterOr404(engine, characterParam, res);
+      if (id) json(res, 200, { combats: combatRecordsView(engine.world, combatHistory(engine.world, engine.events.all(), id), id, (s) => engine.clock.format(s)) });
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/sheet') {

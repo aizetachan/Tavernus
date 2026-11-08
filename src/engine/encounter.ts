@@ -297,3 +297,40 @@ export function encounterAt(world: World, events: readonly GameEvent[], location
     log: log.slice(-COMBAT_LOG_MAX),
   };
 }
+
+/** Un combate ya visto por un PJ, para el registro (Ajustes → Registro de combates). */
+export interface PastEncounter {
+  key: string;
+  location_id: Id;
+  started_game_s: number;
+  /** Todo lo que pasó, del más antiguo al más reciente (sin recortar). */
+  log: EncounterEntry[];
+}
+
+/**
+ * Los combates en los que ha estado un PJ, del más reciente al más antiguo: cada cadena de eventos de combate
+ * hostiles (hostilityOf) de una localización sin huecos mayores que COMBAT_WINDOW_S (como encounterAt) en la que ese PJ golpeó, recibió
+ * o actuó. Como todo aquí, sale del log: no guarda nada aparte.
+ */
+export function combatHistory(world: World, events: readonly GameEvent[], viewerId: Id, max = 30): PastEncounter[] {
+  const chains = new Map<Id, GameEvent[][]>();
+  for (const e of events) {
+    if (!hostilityOf(world, e).open) continue;
+    const list = chains.get(e.location_id) ?? [];
+    const cur = list.at(-1);
+    if (cur && e.timestamp_game_s - cur.at(-1)!.timestamp_game_s < COMBAT_WINDOW_S) cur.push(e);
+    else list.push([e]);
+    chains.set(e.location_id, list);
+  }
+  const out: PastEncounter[] = [];
+  for (const [loc, list] of chains) {
+    for (const chain of list) {
+      const first = chain[0]!, last = chain.at(-1)!;
+      const span = events.filter((e) => e.location_id === loc && e.seq >= first.seq && e.seq <= last.seq);
+      const log = span.flatMap(entriesOf);
+      const mine = log.some((x) => x.actor_id === viewerId || x.target_id === viewerId) || chain.some((e) => e.actor_id === viewerId);
+      if (mine && log.length) out.push({ key: `${loc}:${first.seq}`, location_id: loc, started_game_s: first.timestamp_game_s, log });
+    }
+  }
+  return out.sort((a, b) => b.started_game_s - a.started_game_s).slice(0, max);
+}

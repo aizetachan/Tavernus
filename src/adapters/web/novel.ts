@@ -353,6 +353,20 @@ export const NOVEL_STYLE = String.raw`
   @keyframes roll-load { from { background-position: 100% 0; } to { background-position: -150% 0; } }
   @keyframes roll-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .msg.notice .roll-load b, .msg.notice .roll-load i { animation: none; } }
+  /* Tirada a la vista (rolls.ts) como tarjeta: el dado natural en una pastilla sobre el borde, qué se tiró y el veredicto;
+     al tocarla se despliega el desglose y al volver a tocarla se pliega. Verde si sale bien, roja si sale mal. */
+  .msg.notice.roll { --rc: #8a847a; position: relative; width: min(92%, 360px); max-width: min(92%, 360px); margin-top: 14px; padding: 10px 10px 5px; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; cursor: pointer; -webkit-user-select: none; user-select: none; }
+  .msg.notice.roll.tone-good { --rc: #6b9c7f; background: #0e1511; border-color: #6b9c7f; color: #6b9c7f; }
+  .msg.notice.roll.tone-bad { --rc: #e0604f; background: #241311; border-color: rgba(224,96,79,.4); color: rgba(240,150,140,.78); }
+  .msg.notice.roll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .msg.notice.roll + .msg.notice.roll { margin-top: 14px; }
+  .msg.notice.roll .rc { display: flex; flex-direction: column; align-items: center; }
+  .msg.notice.roll .rc[hidden] { display: none; }
+  .msg.notice.roll .rc-n { position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; background: var(--rc); color: rgba(255,255,255,.85); font-size: 10px; font-weight: 600; line-height: 12px; white-space: nowrap; }
+  .msg.notice.roll .rc-v { font-weight: 700; }
+  .msg.notice.roll .rc-d { display: none; margin-top: 1px; }
+  .msg.notice.roll.open .rc-d { display: block; }
+  .msg.notice.roll.rolling { padding-top: 6px; }
   .moment.portrait .shot { width: 110px; aspect-ratio: 1; border-radius: 14px; }
   .moment.portrait img { object-position: 50% 50%; }
   .moment.portrait figcaption { left: 8px; right: 8px; bottom: 7px; }
@@ -599,7 +613,20 @@ export const NOVEL_JS = String.raw`
     div.className = 'msg notice' + (n.tone ? ' tone-' + n.tone : '') + (n.quest ? ' quest q-' + n.quest.event : '') + (n.level ? ' quest q-level' : '');
     div.setAttribute('role', 'status');
     var s = document.createElement('span');
-    s.textContent = n.text;
+    var roll = /^🎲\s/.test(n.text) ? rollCard(n.text) : null;
+    if (roll) {
+      // Tirada: tarjeta plegada (qué se tiró y el veredicto); tocarla despliega el desglose.
+      div.classList.add('roll');
+      div.tabIndex = 0;
+      div.setAttribute('aria-expanded', 'false');
+      s.className = 'rc';
+      s.innerHTML = '<span class="rc-n" aria-hidden="true">🎲 ' + escapeHtml(roll.natural) + '</span><span class="rc-t">' + escapeHtml(roll.title) + '</span>'
+        + '<span class="rc-v">' + escapeHtml(roll.verdict) + '</span><span class="rc-d">' + escapeHtml(roll.detail) + '</span>';
+      s.setAttribute('aria-label', n.text.replace(/^🎲\s*/, 'Tirada: '));
+      var flip = function () { var open = div.classList.toggle('open'); div.setAttribute('aria-expanded', open ? 'true' : 'false'); };
+      div.addEventListener('click', function () { if (!div.classList.contains('rolling')) flip(); });
+      div.addEventListener('keydown', function (ev) { if ((ev.key === 'Enter' || ev.key === ' ') && !div.classList.contains('rolling')) { ev.preventDefault(); flip(); } });
+    } else s.textContent = n.text;
     div.appendChild(s);
     if (n.link) {
       var b = document.createElement('button');
@@ -643,6 +670,27 @@ export const NOVEL_JS = String.raw`
     } else if (!other) diceShown(n.text);
     scroll();
     return div;
+  }
+  /**
+   * Las partes de una tirada a la vista (rolls.ts: «🎲 [Quién · ]Para qué: d20 [14] + 5 = 19 → impacta: 4 de daño · nota»):
+   * el dado natural (el primero entre corchetes), el título, el veredicto corto y el desglose entero.
+   */
+  function rollCard(text) {
+    var body = text.replace(/^🎲\s*/, '');
+    var colon = body.indexOf(': ');
+    if (colon < 0) return null;
+    var title = body.slice(0, colon), detail = body.slice(colon + 2);
+    var nat = /\[(\d+)\]/.exec(detail);
+    var arrow = detail.indexOf(' → ');
+    var out = arrow >= 0 ? detail.slice(arrow + 3).split(' · ')[0] : '';
+    var verdict;
+    if (/^impacta/.test(out)) {
+      var dmg = out.replace(/^impacta(\s*\(crítico\))?:?\s*/, '');
+      verdict = 'IMPACTA' + (/crítico/.test(out) ? ' (CRÍTICO)' : '') + (dmg ? ' · ' + dmg : '');
+    } else if (/^falla/.test(out)) verdict = 'FALLA' + (/1 natural/.test(out) ? ' (1 NATURAL)' : '');
+    else if (out) verdict = out.replace(/\s*\(\d+ natural\)$/, '').toUpperCase();
+    else { var tot = /=\s*(-?\d+)/.exec(detail); verdict = tot ? 'TOTAL ' + tot[1] : ''; }
+    return { natural: nat ? nat[1] : '?', title: title, verdict: verdict, detail: detail };
   }
   /** Muestra el resultado de una tirada retenida: cuando acaba el sonido del dado (entre 0,9 y 4 s). */
   function revealRoll(div, n, other) {
