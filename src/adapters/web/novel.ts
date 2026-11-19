@@ -331,7 +331,6 @@ export const NOVEL_STYLE = String.raw`
   .actions.join { align-self: center; justify-content: center; margin-top: 2px; }
   .msg.system .body { padding: 8px 12px; border-radius: 14px; font-size: 12.5px; }
   /* Toda imagen (la vista del sitio, el retrato, el objeto, el combate, el hallazgo) va dentro de la burbuja de su mensaje, como una foto en WhatsApp. */
-  .msg.scene { margin: 4px 0 0 42px; animation: nv-in .5s ease-out; width: min(560px, calc(100% - 42px)); }
   /* La vista del sitio dentro de la burbuja del narrador que cuenta la llegada, como una foto en un mensaje. */
   /* Con foto: debajo del texto, con el mismo margen abajo que a los lados (4 px); un clic en la foto la amplía.
      Sus esquinas de abajo siguen las de la burbuja (18 − 4 px); las de arriba, más cerradas. */
@@ -361,10 +360,10 @@ export const NOVEL_STYLE = String.raw`
   .moment.portrait .shot::after { inset: 35% 0 0; }
   .moment img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .7s; }
   .moment.ready img { opacity: 1; }
-  .moment .shot::after { content: ''; position: absolute; inset: 55% 0 0; background: linear-gradient(transparent, rgba(0,0,0,.65)); pointer-events: none; }
-  .moment figcaption { position: absolute; left: 14px; right: 14px; bottom: 12px; z-index: 1; text-align: left; }
-  .moment figcaption b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .moment figcaption span { font-size: 12px; font-weight: 500; color: var(--muted); }
+  /* Pie pequeño bajo la imagen, alineado con el texto de la burbuja: el nombre y, detrás, qué clase de momento es. */
+  .moment figcaption { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin: 5px 8px 1px; font-size: 11.5px; line-height: 1.3; color: var(--muted); text-align: left; }
+  .moment figcaption b { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .moment figcaption span { flex: none; font-weight: 500; }
   #log > .actions { margin: 6px 0 0 42px; }
   /* Prólogo y «Donde lo dejamos»: página de libro, centrada, con título de capítulo. */
   .msg.chapter { position: relative; align-self: center; width: min(600px, 100%); margin: 18px 0 14px; padding: 22px 28px 14px; border-radius: 8px;
@@ -383,7 +382,7 @@ export const NOVEL_STYLE = String.raw`
   @media (max-width: 820px) {
     .msg.row { max-width: 100%; }
     .nv-av { width: 30px; height: 30px; }
-    .msg.scene, #log > .actions { margin-left: 38px; }
+    #log > .actions { margin-left: 38px; }
     .moment.portrait .shot { width: 96px; }
   }
 `;
@@ -428,7 +427,8 @@ export const NOVEL_JS = String.raw`
     var div = document.createElement('div');
     div.className = 'msg row ' + kind + (extra && extra.act ? ' act' : '') + (extra && extra.pending ? ' pending' : '');
     var key = kind + ':' + who.id;
-    var prev = log.lastElementChild;
+    // Con «after», la burbuja entra detrás de ese elemento en vez de al final (la imagen de un aviso, novel.ts showMoment).
+    var after = extra && extra.after, prev = after || log.lastElementChild;
     if (prev && prev.getAttribute('data-who') === key) div.classList.add('cont');
     div.setAttribute('data-who', key);
     if (kind === 'npc') div.style.setProperty('--npc', npcColor(who.id));
@@ -447,7 +447,9 @@ export const NOVEL_JS = String.raw`
     body.insertAdjacentHTML('beforeend', html);
     col.appendChild(body);
     div.appendChild(col);
-    log.appendChild(div);
+    if (after) after.parentNode.insertBefore(div, after.nextSibling); else log.appendChild(div);
+    // Lo propio baja el hilo aunque se estuviera leyendo arriba (page.ts scroll).
+    if (kind === 'mine') scrollMine = true;
     return div;
   }
   function meWho() { return { id: cast.me.id || current, name: cast.me.name || '', avatar: cast.me.avatar }; }
@@ -621,7 +623,7 @@ export const NOVEL_JS = String.raw`
       var row = box.firstChild;
       row.addEventListener('click', function (ev) {
         var b = ev.target.closest('[data-answer]');
-        if (b) answerQuest(b.getAttribute('data-answer'), b.getAttribute('data-accept') === '1', Array.prototype.slice.call(row.querySelectorAll('button')));
+        if (b) { b.classList.add('chosen'); b.blur(); answerQuest(b.getAttribute('data-answer'), b.getAttribute('data-accept') === '1', Array.prototype.slice.call(row.querySelectorAll('button'))); }
       });
       div.appendChild(row);
     }
@@ -680,6 +682,12 @@ export const NOVEL_JS = String.raw`
     scroll();
   }
 
+  /** Opción pulsada: marcada (.chosen) y sin foco, para que no se quede con el aspecto de pulsada; su fila, gastada (.spent, atenuada). */
+  function choose(b) {
+    b.classList.add('chosen'); b.blur();
+    var row = b.closest('.actions');
+    if (row) row.classList.add('spent');
+  }
   /** Opciones ya usadas: queda marcada la que coincide con lo que hizo el jugador (también al restaurar el historial). */
   function markChosen(text) {
     var rows = log.querySelectorAll('.actions'), row = rows[rows.length - 1], t = String(text).trim().toLowerCase();
@@ -741,7 +749,7 @@ export const NOVEL_JS = String.raw`
     var before = log.lastElementChild;
     var lines = m.lines || [], main = null, held = null;
     var say = function (l, lead) {
-      // A quién se lo dice (modo Decir dirigido): una línea pequeña encima de la frase.
+      // A quién se lo dice (modo Chat dirigido): una línea pequeña encima de la frase.
       if (l.to && !lead) lead = 'a ' + l.to;
       if (l.speaker === 'actor') return chatRow('mine', meWho(), (l.to ? '<div class="lead">a ' + escapeHtml(l.to) + '</div>' : '') + escapeHtml(l.text));
       if (l.avatar) portraits[l.id] = l.avatar;
@@ -827,7 +835,7 @@ export const NOVEL_JS = String.raw`
       jr.setAttribute('data-npc', m.join.npc);
       var jb = document.createElement('button');
       jb.type = 'button'; jb.textContent = m.join.label;
-      jb.onclick = function () { jb.classList.add('chosen'); jb.disabled = true; act(m.join.label); };
+      jb.onclick = function () { choose(jb); jb.disabled = true; act(m.join.label); };
       jr.appendChild(jb);
       host.parentNode.insertBefore(jr, host.nextSibling);
       if (!live) jb.disabled = true;
@@ -849,13 +857,13 @@ export const NOVEL_JS = String.raw`
       b.className = 'roll';
       b.innerHTML = D20_ICON;
       b.title = 'Tirar d20' + (m.roll.dc ? ' · CD ' + m.roll.dc : ''); b.setAttribute('aria-label', 'Tirar el dado de veinte caras' + (m.roll.dc ? ', dificultad ' + m.roll.dc : ''));
-      b.onclick = function () { b.classList.add('chosen'); rollBtn = b; spendButtons(); roll(); };
+      b.onclick = function () { b.classList.add('chosen'); b.blur(); rollBtn = b; spendButtons(); roll(); };
       row.appendChild(b);
     } else {
       m.suggested.forEach(function (a) {
         var b = document.createElement('button');
         b.textContent = a;
-        b.onclick = function () { b.classList.add('chosen'); spendButtons(); act(a); };
+        b.onclick = function () { choose(b); spendButtons(); act(a); };
         row.appendChild(b);
       });
     }
@@ -871,7 +879,7 @@ export const NOVEL_JS = String.raw`
     var btn = function (label, fn, cls) {
       var b = document.createElement('button');
       b.type = 'button'; b.textContent = label; if (cls) b.className = cls;
-      b.onclick = function () { b.classList.add('chosen'); row.querySelectorAll('button').forEach(function (x) { x.disabled = true; }); fn(); };
+      b.onclick = function () { choose(b); row.querySelectorAll('button').forEach(function (x) { x.disabled = true; }); fn(); };
       row.appendChild(b);
     };
     btn('Aceptar', function () { answerOffer(m.offer.id, true); }, 'accept');
@@ -882,7 +890,7 @@ export const NOVEL_JS = String.raw`
 
   /**
    * Otro jugador te habla (party.ts): nada fijo debajo, como en WhatsApp. Sus burbujas de este turno llevan una
-   * flechita (⌄) en la esquina al pasar el ratón; abre un menú con «Responder» (modo Decir hacia él, con la cita
+   * flechita (⌄) en la esquina al pasar el ratón; abre un menú con «Responder» (modo Chat hacia él, con la cita
    * encima del cuadro) e «Ignorar» (quita la flechita; no hace nada en el juego). En el móvil, un toque o una
    * pulsación larga abren el mismo menú, y deslizar la burbuja a la derecha responde directamente.
    */
@@ -1125,9 +1133,17 @@ export const NOVEL_JS = String.raw`
     var btn = function (label, answer, cls) {
       var b = document.createElement('button');
       b.type = 'button'; b.textContent = label; if (cls) b.className = cls;
-      b.onclick = function () { b.classList.add('chosen'); send(answer, ''); };
+      b.onclick = function () { choose(b); send(answer, ''); };
       box.appendChild(b);
     };
+    // Primero, qué pasa con cada botón (la frase de qué te hacen ya va en la burbuja de encima); los botones, al final.
+    // El servidor puede traerlo hecho (reaction.explain) o solo la tirada enfrentada (reaction.contest).
+    var ex = document.createElement('div');
+    ex.className = 'explain';
+    ex.textContent = typeof r.explain === 'string' && r.explain ? r.explain
+      : typeof r.contest === 'string' && r.contest ? 'Dejarse: sale sin tirada. Resistirse: ' + r.contest
+      : 'Dejarse: sale sin tirada. Resistirse pide una tirada enfrentada.';
+    box.appendChild(ex);
     btn('Dejarse', 'accept', 'accept');
     btn('Resistirse', 'resist');
     // Sin <form>: el cuadro de la página habilita y deshabilita todos los botones de formulario al esperar.
@@ -1143,7 +1159,7 @@ export const NOVEL_JS = String.raw`
     box.appendChild(left);
     host.parentNode.insertBefore(box, host.nextSibling);
     if (!open) { closeReaction(r.id); return; }
-    countdown(r.id, left, r.expires_ms, function (t, s) { return s ? 'Decide en ' + t + ' · si no, te resistes por instinto' : 'Se acabó el tiempo: te resistes por instinto'; });
+    countdown(r.id, left, r.expires_ms, function (t, s) { return s ? 'Decide en ' + t + '. Si no, te resistes por instinto' : 'Se acabó el tiempo: te resistes por instinto'; });
   }
   function reactionWait(r, main) {
     var d = document.createElement('div');
@@ -1198,10 +1214,11 @@ export const NOVEL_JS = String.raw`
     (host.querySelector('.body') || host).appendChild(fig);
     host.classList.add('has-wide');
   }
-  /** Quita la figura de un momento que no cargó; la burbuja vuelve a su ancho si no le queda otra imagen ancha. */
+  /** Quita la figura de un momento que no cargó; la burbuja vuelve a su ancho si no le queda otra imagen ancha (o se va, si solo era para ella). */
   function momentGone(fig, host) {
     fig.remove();
-    if (!host.querySelector('.moment, .place-shot')) host.classList.remove('has-wide');
+    if (host.querySelector('.moment, .place-shot')) return;
+    if (host.hasAttribute('data-moment-only')) host.remove(); else host.classList.remove('has-wide');
   }
   /** Los textos de la interfaz no se separan con el punto medio: el pie de la imagen lo cambia por una coma. */
   function momentName(n) { return String(n || '').replace(/\s*[·•]\s*/g, ', '); }
@@ -1218,10 +1235,18 @@ export const NOVEL_JS = String.raw`
     if (dup || waiting.some(function (w) { return w.key === x.key; })) return;
     var host = momentHost(seq);
     if (!host) { momentWait[seq] = waiting.concat([x]); return; }
+    // Toda imagen va dentro de una burbuja del narrador o de un NPC: si el mensaje no la tiene (un aviso, una línea de
+    // sistema, un capítulo) o solo está la del propio PJ, se abre una del narrador detrás, solo con la imagen.
+    if (!host.classList.contains('row') || host.classList.contains('mine')) {
+      host = chatRow('master', cast.master, '', { after: host });
+      host.setAttribute('data-turn', String(Number(seq)));
+      host.setAttribute('data-moment-only', '');
+    }
     var fig = document.createElement('figure');
     fig.className = 'moment ' + x.kind;
     fig.setAttribute('data-moment', x.key);
-    fig.innerHTML = '<button type="button" class="shot" title="Ver en grande"><img alt=""><figcaption><b></b><span></span></figcaption></button>';
+    // Como la vista del sitio (placeShot): el botón con la imagen y, debajo, el pie pequeño con el nombre y la etiqueta.
+    fig.innerHTML = '<button type="button" class="shot" title="Ver en grande"><img alt=""></button><figcaption><b></b><span></span></figcaption>';
     var img = fig.querySelector('img'), name = momentName(x.name);
     fig.querySelector('figcaption b').textContent = name;
     // La charla lleva el oficio de quien sale («tabernera»); el resto, qué clase de momento es.

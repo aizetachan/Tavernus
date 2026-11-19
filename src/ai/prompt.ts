@@ -603,7 +603,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     L.push([`## Ronda ${r.n} (escena tensa): resuélvela entera, a la vez`,
       ...r.members.map((m) => `- ${m.name} [${m.id}]: ${m.text}`),
       r.hesitant.length ? `Dudan y pierden la ronda: ${r.hesitant.map((h) => `${h.name} [${h.id}]`).join(', ')} (solo ellos; los de arriba sí han actuado). No les inventes acciones: dudan.` : '',
-      `Un solo cierre: la acción de CADA uno, resuelta en su narration_by_pc (${r.members.map((m) => m.id).join(', ')}); si alguno pregunta algo (qué conjuros tiene, qué ve), la respuesta va en la suya. En narration_private, lo común: lo que hace el mundo en respuesta, sin «tú» a secas. No pidas requires_roll: las pruebas de cada PJ con roll_check (hidden=false: la ven todos) y los ataques de los PJ con attack (attacker_id = ese PJ). Lo que diga cada uno, en lines como speaker "pc" con su character_id y solo con sus palabras.`].filter(Boolean).join('\n'));
+      `Un solo cierre: la acción de CADA uno, resuelta en su narration_by_pc (${r.members.map((m) => m.id).join(', ')}); si alguno pregunta algo (qué conjuros tiene, qué ve), la respuesta va en la suya. En narration_private, lo común: lo que hace el mundo en respuesta, sin «tú» a secas. No pidas requires_roll: las pruebas de cada PJ con roll_check (hidden=false: la ven todos) y los ataques de los PJ con attack (attacker_id = ese PJ); un crimen o un agarrón de otro PJ, con report_incident o request_reaction y character_id = ese PJ (lo hace él, no el actor del turno). Lo que diga cada uno, en lines como speaker "pc" con su character_id y solo con sus palabras.`].filter(Boolean).join('\n'));
   }
   if (hints?.window) {
     const w = hints.window;

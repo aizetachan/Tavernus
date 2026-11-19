@@ -1067,7 +1067,28 @@ export function incidentText(world: World, i: Incident, you: boolean): string {
   const reader = you ? c ?? null : null;
   const head = you ? `⚖ Te han visto: ${deedYou({ ...i, victim_name: i.victim_id ? label(world, i.victim_id, reader) : i.victim_name })}.` : `⚖ Lo han visto: ${i.perpetrator_name} ${deedText(i)}.`;
   const wanted = you && c?.wanted?.incident_ids.includes(i.id) ? ' Desde ahora te buscan.' : '';
-  return `${head} ${reactionSentences(world, i, you, reader).join(' ')}${wanted}`.trim();
+  return `${head} ${mainReactions(world, i, you, reader).join(' ')}${wanted}`.trim();
+}
+
+/** Las reacciones que pesan, de más a menos: la ley, quien se lanza, quien le agarra, quien va a avisar, quien se niega a servirle. */
+const REACTION_RANK: Record<Knower['response'], number> = { arrest: 6, fight: 5, seize: 4, alert: 3, refuse: 2, flee: 1, shout: 1, mourn: 1, watch: 0 };
+
+/**
+ * Para el aviso que leen los jugadores: solo lo que pesa (la autoridad, la víctima que se lanza, quien le agarra),
+ * dos frases como mucho. La lista entera, un vecino tras otro gritando, es para el máster (`reactionSentences`), no
+ * para leerla en el hilo (reunión del 11-11-2026).
+ */
+export function mainReactions(world: World, i: Incident, you: boolean, reader?: Character | null): string[] {
+  const ranked = i.knowers
+    .filter((k) => k.how !== 'told' && world.npcs.get(k.npc_id)?.status === 'alive' && REACTION_RANK[k.response] >= 2)
+    .sort((a, b) => REACTION_RANK[b.response] - REACTION_RANK[a.response])
+    .slice(0, 2);
+  if (!ranked.length) {
+    // Nadie de peso: una sola frase por la sala, no una por cabeza.
+    const any = i.knowers.some((k) => k.how !== 'told' && world.npcs.get(k.npc_id)?.status === 'alive' && (k.response === 'shout' || k.response === 'flee'));
+    return any || i.crowd ? [you ? 'La gente se aparta de ti y alguno grita pidiendo ayuda.' : `La gente se aparta de ${i.perpetrator_name} y alguno grita pidiendo ayuda.`] : [];
+  }
+  return reactionSentences(world, { ...i, knowers: ranked, crowd: null }, you, reader);
 }
 
 /** Para el control de cierre: con qué palabras se nombra a cada testigo que reacciona (nombre, rol, cómo le ve el actor). */

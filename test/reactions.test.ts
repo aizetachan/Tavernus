@@ -54,7 +54,7 @@ describe('detectar lo que un PJ le hace a otro', () => {
 });
 
 describe('petición, respuesta y resolución', () => {
-  it('la petición le llega al afectado con quién, qué y lo que escribió; quien actúa espera y no hace otra cosa', async () => {
+  it('la petición le llega al afectado con quién y qué (nunca lo que escribió el otro) y con qué pasa con cada botón; quien actúa espera y no hace otra cosa', async () => {
     const { engine, kael, mira, seen } = await together();
     engine.attachMaster(noMaster);
     const r = await engine.act(kael.id, 'agarro a Mira y la llevo a la taberna para tomarnos una cerveza');
@@ -66,8 +66,11 @@ describe('petición, respuesta y resolución', () => {
     const got = seen(mira.id).at(-1)!;
     expect(got.event.action_type).toBe('reaction_request');
     expect(got.text).toContain('Kael intenta agarrarte y llevarte a');
-    expect(got.text).toContain('«agarro a Mira y la llevo a la taberna para tomarnos una cerveza»');
+    // Lo que tecleó Kael no lo lee Mira (reunión del 11-11-2026): ni en su texto ni en el evento que le llega.
+    expect(got.text).not.toContain('agarro a Mira y la llevo a la taberna para tomarnos una cerveza');
     expect(got.text).toContain('¿Te dejas o te resistes?');
+    // Y sabe qué pasa con cada botón (reactions.ts, reactionExplain).
+    expect((got.event.payload['reaction'] as { explain: string }).explain).toBe('Dejarse: te agarra y te lleva, sin tirada. Resistirse: tu Atletismo o Acrobacias contra su Atletismo.');
     // Quien actúa espera: otra acción se le rechaza con «Esperando a que Mira decida…».
     const again = await engine.act(kael.id, 'miro alrededor');
     expect(again.ok).toBe(false);

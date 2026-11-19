@@ -229,6 +229,7 @@ export const MASTER_TOOLS: Tool[] = [
     destination_spot_id: nstr('Si se lo quiere llevar a otro sitio: ID del punto (sp_…); el servidor mueve a los dos si sale bien. null si no'),
     actor_skill: nstr('Solo other: skill 5e de quien actúa (sleight_of_hand, athletics…); null = athletics'),
     target_skills: nstr('Solo other: skills con las que se resiste el afectado, separadas por comas (la mejor de las suyas); null = athletics,acrobatics'),
+    character_id: nstr('Solo en turno compartido: ID del PJ que lo hace, si no es el actor del turno. null = el actor'),
   }),
   tool('apply_damage', 'Quita puntos de golpe a un personaje o NPC por daño que no es un ataque (caída, fuego, trampa).', {
     target_id: str('ID del personaje o NPC'), amount: num('Daño'), damage_type: str('Tipo: slashing, fire, falling…'), source: str('Qué lo causa'),
@@ -282,6 +283,7 @@ export const MASTER_TOOLS: Tool[] = [
     kind: enm(['insult', 'theft', 'assault', 'armed_assault', 'desecration'], 'insult (insulto), theft (robo), assault (agresión sin arma), armed_assault (con arma), desecration (profanar o saquear un cadáver)'),
     victim_id: str('ID del NPC agraviado (o del muerto, si es un cadáver)'),
     weapon: nstr('Solo armed_assault: con qué; null si no'),
+    character_id: nstr('Solo en turno compartido: ID del PJ que lo comete, si no es el actor del turno (el crimen es de quien lo hace). null = el actor'),
   }),
   tool('conflict_act', 'El actor le hace a un NPC algo contra su voluntad: hurtarle algo sin que se note (steal), arrancárselo a la vista (snatch), empujarle (shove), agarrarle (grab) o tocarle sin permiso (touch). Es la ÚNICA forma de quitarle algo a un NPC despierto y de pedir la tirada de Juego de manos o Atletismo contra él: el servidor decide si se puede (dónde lo lleva, si le mira, si está en guardia), con qué tirada, y luego qué pasa y cómo se lo toma el NPC (broma, careo o delito, según su relación). Si lo que quiere quitarle no está en lo que «Lleva», usa new_item (solo si es razonable que lo lleve). Tú narras el intento y, después, lo que diga el servidor.', {
     npc_id: str('ID del NPC'),
@@ -526,6 +528,19 @@ function busyHere(engine: Engine, actor: Character, nowGameS: number): boolean {
 function sharedWith(engine: Engine, actorId: string): string[] {
   const h = engine.sceneHints(actorId);
   return [...(h?.group?.members ?? []), ...(h?.round?.members ?? []), ...(h?.round?.hesitant ?? []), ...(h?.window?.members ?? [])].map((m) => m.id);
+}
+
+/**
+ * Quién hace algo en este turno: el actor, o, en un turno compartido, otro de los que actúan si la tool trae su
+ * `character_id`. Un crimen o un agarrón se apuntan a quien lo hace, no a quien abrió el turno (partida del 11-11-2026:
+ * el bofetón de uno detuvo al otro).
+ */
+function whoActs(ctx: ToolContext, characterId: string): { ok: true; id: string } | { ok: false; error: string } {
+  const id = characterId.trim();
+  if (!id || id === 'null' || id === ctx.actor.id) return { ok: true, id: ctx.actor.id };
+  if (!ctx.engine.world.characters.has(id)) return { ok: false, error: `character_id ${id} no es un PJ` };
+  if (!sharedWith(ctx.engine, ctx.actor.id).includes(id)) return { ok: false, error: `${ctx.engine.world.character(id).name} no actúa en este turno: solo el actor o quien comparte el turno con él. Si lo hace el actor, character_id null.` };
+  return { ok: true, id };
 }
 
 /** Los que han actuado en el turno compartido del actor (grupo, ronda o ventana de turno), con lo que escribió cada uno. */
@@ -1293,8 +1308,11 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!v) return { error: `no existe el NPC ${s('victim_id')}` };
       if (world.spot(v.location.id).location_id !== here()) return { error: `${v.name} no está aquí` };
       if (kind === 'desecration' ? v.status !== 'dead' : v.status !== 'alive') return { error: kind === 'desecration' ? `${v.name} no está muerto` : `${v.name} no está vivo` };
-      const i = reportIncident(world, { kind, perpetrator_id: actor.id, victim_id: v.id, spot_id: v.location.id, weapon: input['weapon'] == null ? null : s('weapon') }, nowGameS);
-      if (!i) return { ok: true, note: 'ya constaba algo igual o más grave de este actor contra esa persona: nada nuevo' };
+      // En un turno compartido lo pudo hacer otro de los que actúan: el crimen es de quien lo hizo, no del actor del turno.
+      const who = whoActs(ctx, s('character_id'));
+      if (!who.ok) return { error: who.error };
+      const i = reportIncident(world, { kind, perpetrator_id: who.id, victim_id: v.id, spot_id: v.location.id, weapon: input['weapon'] == null ? null : s('weapon') }, nowGameS);
+      if (!i) return { ok: true, note: 'ya constaba algo igual o más grave de ese PJ contra esa persona: nada nuevo' };
       return { ok: true, incident: i.id, kind: i.kind, witnesses: i.knowers.map((k) => world.npcs.get(k.npc_id)?.name).filter(Boolean), ...crimeNote(ctx) };
     }
     case 'spawn_item': {
@@ -1516,8 +1534,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
     }
     case 'request_reaction': {
       if (engine.inReactionOutcome(actor.id)) return { error: 'Esto ya es el desenlace de una reacción: narra lo que ha pasado; no pidas otra.' };
+      const who = whoActs(ctx, s('character_id'));
+      if (!who.ok) return { error: who.error };
       const to = world.characters.get(s('target_character_id'));
-      if (!to || to.id === actor.id) return { error: 'target_character_id no es otro jugador presente. A un NPC no se le pide reacción: resuélvelo tú.' };
+      if (!to || to.id === who.id) return { error: 'target_character_id no es otro jugador presente. A un NPC no se le pide reacción: resuélvelo tú.' };
       const kind = ['grapple', 'shove', 'attack', 'other'].includes(s('kind')) ? s('kind') as ReactionKind : 'other';
       const dest = s('destination_spot_id') && s('destination_spot_id') !== 'null' ? s('destination_spot_id') : null;
       if (dest && !world.spots.has(dest)) return { error: 'unknown_spot', hint: `${dest} no es un punto. ${hereList(ctx)}` };
@@ -1526,9 +1546,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         ? { actor: skills(s('actor_skill'))[0] ?? 'athletics', target: skills(s('target_skills')).length ? skills(s('target_skills')) : ['athletics', 'acrobatics'] }
         : undefined;
       const attempt = s('attempt').trim() || 'ponerte las manos encima';
-      const r = engine.requestReaction(actor.id, to.id, { kind, attempt, input: ctx.action_text ?? null, dest_spot_id: dest, prone: kind === 'shove' && /suelo|derrib|tumb/i.test(attempt), ...(contest ? { contest } : {}) }, { announce: false });
+      const r = engine.requestReaction(who.id, to.id, { kind, attempt, input: ctx.action_text ?? null, dest_spot_id: dest, prone: kind === 'shove' && /suelo|derrib|tumb/i.test(attempt), ...(contest ? { contest } : {}) }, { announce: false });
       if (!r.ok) return { error: 'reaction_failed', hint: r.error };
-      return { ok: true, pending_reaction: true, hint: `Queda PEDIDO, no hecho: ${pcName(world, actor.id, to)} es otro jugador y decide si se deja o se resiste. Narra solo el intento; no narres su reacción ni el resultado. Cierra con log_event sin requires_roll.` };
+      return { ok: true, pending_reaction: true, hint: `Queda PEDIDO, no hecho: ${pcName(world, who.id, to)} es otro jugador y decide si se deja o se resiste. Narra solo el intento; no narres su reacción ni el resultado. Cierra con log_event sin requires_roll.` };
     }
     case 'attack': {
       const atk = world.characters.get(s('attacker_id'));

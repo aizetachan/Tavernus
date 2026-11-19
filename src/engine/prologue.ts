@@ -62,6 +62,8 @@ export interface PrologueFacts {
   origin: string | null;
   /** Nombres propios del mundo (NPC, sitios): no se les baja la inicial al encadenar frases. */
   names: string[];
+  /** Los otros jugadores de la partida: con él (`here`) o dónde andan. Quien entra sabe quién está (reunión del 11-11-2026). */
+  companions: { name: string; here: boolean; where: string }[];
 }
 
 /** Minúscula inicial para seguir una frase, salvo si empieza por un nombre propio («Tadeo Arenas se encarga…»). */
@@ -126,7 +128,21 @@ export function prologueFacts(engine: Engine, c: Character): PrologueFacts {
     antagonist: ant && named.includes(ant.id) ? { name: ant.name, role: ant.role } : null,
     origin: s || !origin ? null : m(origin),
     names: [...[...w.npcs.values()].flatMap((n) => [n.name, n.name.split(' ')[0]!]), ...[...w.locations.values()].map((l) => l.name)],
+    companions: [...w.characters.values()]
+      .filter((o) => o.id !== c.id && o.status !== 'retired' && o.status !== 'dead')
+      .map((o) => { const sp = w.characterSpot(o); const here = Boolean(sp && loc && sp.location_id === loc.id); return { name: o.name, here, where: here ? sp!.name : (sp ? w.locations.get(sp.location_id)?.name : null) ?? 'en camino' }; }),
   };
+}
+
+/** «Pillin está aquí contigo, en la mesa del fondo; Zhenzet anda por la plaza del Pozo.» Vacío sin otros jugadores. */
+export function companionsLine(f: PrologueFacts): string {
+  const here = f.companions.filter((o) => o.here);
+  const away = f.companions.filter((o) => !o.here);
+  const list = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs.at(-1)}`);
+  const parts: string[] = [];
+  if (here.length) parts.push(`${list(here.map((o) => o.name))} ${here.length === 1 ? 'está' : 'están'} aquí contigo${here[0]!.where ? `, en ${here[0]!.where}` : ''}`);
+  if (away.length) parts.push(list(away.map((o) => `${o.name} anda por ${o.where}`)));
+  return parts.length ? `${parts.join('; ')}.` : '';
 }
 
 /**
@@ -138,6 +154,9 @@ export function prologueTemplate(f: PrologueFacts): string {
   const placeLine = f.spot && f.location && f.spot !== f.location ? `${f.spot}, en ${f.location}` : f.location || f.spot;
   const third = f.why === null;
   const place = [`Es ${f.when}.`, placeLine ? `${third ? `${f.name} está en` : 'Estás en'} ${placeLine}.` : '', desc[0] ?? ''].filter(Boolean);
+  // Los otros jugadores, si los hay: quien entra sabe quién está y dónde.
+  const mates = third ? '' : companionsLine(f);
+  if (mates) place.push(mates);
   const paras: string[][] = [];
   if (!third) {
     const why = [dot(f.why!)];
@@ -169,6 +188,7 @@ export function prologuePrompt(f: PrologueFacts): { system: string; prompt: stri
     f.threat ? `Qué le amenaza: ${f.threat}` : '',
     f.clock ? `Plazo: ${f.clock.days} días; si vence, ${lowerFirst(f.clock.runs_out, f.names)}` : '',
     f.antagonist ? `Su antagonista: ${f.antagonist.name} (${f.antagonist.role}). Es el único que sale por su nombre, y la primera vez con lo que es.` : '',
+    f.companions.length ? `Otros jugadores (salen por su nombre, una frase que diga quién está con él y dónde): ${f.companions.map((o) => `${o.name}, ${o.here ? `aquí con él, en ${o.where}` : `en ${o.where}`}`).join('; ')}.` : '',
   ].filter(Boolean);
   const prompt = [
     '## Prólogo',
