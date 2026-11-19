@@ -913,6 +913,10 @@ export interface ExtraScript {
   refer_to: Id[];
   /** Su historia breve, en dos o tres frases (para el máster si se le pregunta por él y para la wiki). */
   story: string;
+  /** Cómo se le ve (una o dos frases): lo que contesta el motor a «mirar a X» (extratalk.ts). Sin campo, la descripción sin la historia. */
+  look?: string;
+  /** La vista ya la escribió el máster una vez (una llamada corta, cacheada aquí): no se vuelve a pedir. */
+  look_written?: boolean;
   /** Puntos por los que se mueve dentro de su franja (paseos, fase 2). */
   wander?: Id[];
 }

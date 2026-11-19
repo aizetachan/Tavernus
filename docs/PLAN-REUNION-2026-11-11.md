@@ -18,8 +18,11 @@ oculta y solo si lo nota decide él («Lo notas: …»). Tests en `test/percepci
 (PR #85) y desplegada en `20261119-102442`. **Fase 6 programada**: el prólogo lo escribe el máster con un segundo
 intento si el primero no vale (la plantilla solo después, con el motivo en el evento), la primera escena pasa a 120-180
 palabras con quién anda por aquí y los otros jugadores por su nombre, y los «Hemos oído…» de la presentación van al
-Diario y no al hilo (`on_join`). Tests en `test/arranque-2026-11-11.test.ts`. Queda la fase 5, con las decisiones 1 y 3
-del final.
+Diario y no al hilo (`on_join`). Tests en `test/arranque-2026-11-11.test.ts`. **Fase 5 programada** con la decisión 1 ya
+tomada («B más comillas», 19-11): tres modos en la web (Hacer, Decir y Chat), lo entrecomillado es lo dicho y el cierre lo
+hace cumplir, la acotación del narrador va dentro de la burbuja del NPC, «hablar con X» abre con el saludo y los vecinos de
+relleno contestan a «mirar» con cómo se les ve y cambian de gesto (`src/engine/speech.ts`, CONVERSACION-REGLAS v1.6).
+Tests en `test/conversacion-2026-11-11.test.ts`. Queda la decisión 3 del final.
 
 ## Lo que pasó en la partida
 
@@ -124,6 +127,9 @@ Sigue las tareas B y F de la revisión del 04-11 (la B aún no está hecha).
    - **Recomendación: A**, con B como atajo (pegar una frase con comillas en «Hago» la reparte sola). Es lo que
      acordasteis, no depende de que el jugador aprenda una convención, y el reparto sale igual al servidor.
    El Chat entre jugadores (antes Decir) queda aparte, como botón del modo.
+   **Decidido el 19-11: B más comillas**, con tres modos a la vista (Hacer, Decir y Chat), como AI Dungeon (Do / Say).
+   Sin el «¿Lo dices o lo haces?» antes de enviar: en Hacer sin comillas vale lo de siempre (el máster pone en primera
+   persona lo que suena a hablar, con las palabras del jugador).
 2. **Contraseña olvidada.** Recomendación: las dos vías de la fase 1. La del anfitrión resuelve el caso de la mesa de
    amigos al momento; el código de recuperación es la única forma de que el usuario lo haga solo sin correo.
 3. **Narración en los turnos compartidos.** Recomendación: lo de la fase 2 (una parte en segunda persona por jugador y

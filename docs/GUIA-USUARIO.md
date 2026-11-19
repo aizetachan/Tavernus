@@ -29,14 +29,17 @@ Es la conversación, en el centro. Las burbujas de **El Narrador** cuentan la hi
 
 Escribe con tus palabras: «me acerco a la barra», «le pregunto por el incendio». No hay que aprender ninguna fórmula.
 
-Si hay más jugadores en la partida, encima del cuadro aparece **Hacer | Chat**:
+Encima del cuadro eliges cómo va lo que escribes: **Hacer | Decir | Chat**.
 
-- **Hacer** es lo normal: el Narrador cuenta lo que haces. Para hablar con los personajes del mundo, usa Hacer.
-- **Chat** suelta tu frase tal cual a los demás jugadores, al momento y sin Narrador. Según el ajuste de la partida, llega a toda la mesa estén donde estén (lo normal) o solo a quien pueda oírte. Vuelve solo a Hacer si pasas un rato sin escribir.
+- **Hacer** es lo normal: lo que escribes es lo que hace tu personaje, y el Narrador lo cuenta. Si pones algo entre comillas («…», "…" o “…”), eso lo dices tal cual: «me acerco a Brenna y le digo "¿has visto a Hugo?"». Mientras escribes, debajo del cuadro se te recuerda qué parte se dirá palabra por palabra. El botón **“ ”** junto a los modos te pone las comillas con el cursor en medio.
+- **Decir** es para hablar sin rodeos: todo lo que escribes es tu frase, palabra por palabra, a la gente del mundo. El Narrador contesta por ellos. No hace falta poner comillas ni raya; si las pones, van tal cual.
+- **Chat** suelta tu frase a los demás jugadores, al momento y sin Narrador (solo se enciende si hay otros jugadores conectados). Según el ajuste de la partida, llega a toda la mesa estén donde estén (lo normal) o solo a quien pueda oírte.
+
+Decir y Chat vuelven solos a Hacer si pasas un rato sin escribir.
 
 Quien organiza la partida elige en sus ajustes la dificultad, qué pasa al morir (casual o hardcore) y hasta dónde llega el Chat. Si olvidas tu contraseña, en la pantalla de entrar puedes cambiarla con tu código de recuperación (te lo dimos al crear la cuenta; otro nuevo, desde el menú de tu cuenta), o pedir a quien organiza tu partida que te ponga una.
 
-También puedes decir algo sin cambiar de modo, empezando con raya o comillas: `— hola`, `— a Aren: ¿vienes?`, `— (susurra) cuidado`, `— (grita) ¡corre!`.
+Con otros jugadores conectados, también puedes chatear sin cambiar de modo: en Hacer, una frase que empieza con raya va al Chat: `— hola`, `— a Aren: ¿vienes?`, `— (susurra) cuidado`, `— (grita) ¡corre!`. En Decir, la raya va tal cual al Narrador.
 
 ### Los botones de acciones
 

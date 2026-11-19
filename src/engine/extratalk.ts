@@ -62,11 +62,53 @@ export interface ExtraReply {
   names?: Id[];
   /** No era lo suyo: cuenta para que se canse (`OFFTOPIC_TAG`). */
   offtopic?: boolean;
+  /** Le ha mirado: la narración es cómo se le ve (no es charla ni cansa). */
+  look?: boolean;
 }
 
-const GESTURE: Record<ExtraNpc['script']['temper'], string> = {
-  seco: 'sin levantar la vista', 'con prisa': 'sin pararse', receloso: 'mirándote de arriba abajo', parlanchín: 'enseguida', tímido: 'en voz baja',
+/** Cómo contesta, según su carácter: uno distinto cada vez (fase 5 del plan del 11-11: «un gesto distinto cada vez»). */
+const GESTURES: Record<ExtraNpc['script']['temper'], readonly string[]> = {
+  seco: ['sin levantar la vista', 'sin dejar lo que hace', 'con un gruñido', 'de mala gana', 'sin mirarte apenas'],
+  'con prisa': ['sin pararse', 'ya de espaldas', 'mientras recoge sus cosas', 'a medio paso', 'sin soltar lo que lleva'],
+  receloso: ['mirándote de arriba abajo', 'entornando los ojos', 'después de un silencio', 'con un paso atrás', 'sin fiarse'],
+  parlanchín: ['enseguida', 'encantado de que le hablen', 'acercándose un poco más', 'con una sonrisa ancha', 'antes de que acabes'],
+  tímido: ['en voz baja', 'sin mirarte a los ojos', 'casi en un susurro', 'con las manos ocupadas', 'tras dudar un momento'],
 };
+
+/** Lo que está haciendo, según su oficio: para la vista («mirar a X»). */
+const DOING: Record<ExtraNpc['script']['service'], readonly string[]> = {
+  sell: ['Atiende lo suyo sin perder de vista lo que vende.', 'Ordena la mercancía con las manos ocupadas.', 'Le echa un ojo a quien pasa, por si compra.'],
+  directions: ['Vigila la calle con cara de haberlo visto todo.', 'Mira a un lado y a otro, como quien está de servicio.', 'Se mantiene en su sitio, atento a quien pasa.'],
+  hours: ['Sigue con lo suyo, sin prisa.', 'Está pendiente de la hora, como si esperara algo.', 'Va de un lado a otro con faena.'],
+  none: ['Sigue con su faena.', 'Está en lo suyo, sin hacer caso a nadie.', 'Descansa un momento antes de volver a lo suyo.'],
+};
+
+/** Le mira: «miro al herrero», «¿qué lleva la panadera?», «cómo va vestido». */
+const LOOKS_AT = /^(?:me fijo en|miro|observo|examino|contemplo|estudio|mirar|observar|examinar|le echo un vistazo|echo un vistazo)\b|\b(?:que lleva|que llevan|como es|como va vestid\w*|que aspecto|que esta haciendo|que hace)\b/;
+
+/**
+ * Cómo se le ve: lo que escribió el máster la primera vez (`script.look`), o la frase de sus datos. Más lo que está
+ * haciendo. Sin la historia: eso no se ve mirando.
+ */
+export function lookOf(n: ExtraNpc, label: string, seed: number): string {
+  const look = (n.script.look ?? n.description.replace(n.script.story, '')).trim();
+  const doing = DOING[n.script.service] ?? DOING.none;
+  return `${cap(label)}: ${look} ${doing[seed % doing.length]!}`.replace(/\s+/g, ' ').trim();
+}
+
+/** La llamada corta al máster para escribir cómo se le ve (engine.ts, una vez por vecino). */
+export function lookPrompt(world: World, n: ExtraNpc): { system: string; prompt: string } {
+  return {
+    system: 'Escribes descripciones cortas para un juego de rol de texto en español. Contestas solo con el texto pedido, sin título ni comillas.',
+    prompt: [
+      `Describe cómo se ve a ${n.name}, ${roleLabel(n)}, para un jugador que le mira por primera vez: aspecto, ropa, lo que lleva a la vista y un gesto de lo que está haciendo ahora.`,
+      `Lo que ya se sabe de él: ${n.script.look ?? n.description}`,
+      `Su historia (NO la cuentes: no se ve mirando; sirve solo para que el aspecto encaje): ${n.script.story}`,
+      `Mundo: ${world.campaign.premise}`,
+      'Dos o tres frases, 60 palabras como mucho, en presente y en tercera persona. Nada que el jugador no pueda ver desde fuera: ni nombre, ni pensamientos, ni pasado.',
+    ].join('\n'),
+  };
+}
 
 /** Una frase del hueco, con sus huecos rellenos; solo las que tienen todo lo que piden. Estable para un mismo turno. */
 function say(lines: readonly string[], vars: Record<string, string | undefined>, seed: number): string | null {
@@ -178,12 +220,18 @@ export function extraReply(world: World, events: readonly GameEvent[], pc: Chara
   const reply = (line: string | null, narration: string, extra: Partial<ExtraReply> = {}): ExtraReply => ({
     npc: n, line, narration, observable: `${pc.name} habla con ${n.name}.`, ...extra,
   });
-  const answer = (line: string | null, extra: Partial<ExtraReply> = {}) => reply(line, line ? `${cap(label)} contesta ${GESTURE[n.script.temper]}.` : `${cap(label)} ya no te hace caso.`, extra);
+  const gestures = GESTURES[n.script.temper] ?? GESTURES.seco;
+  const answer = (line: string | null, extra: Partial<ExtraReply> = {}) => reply(line, line ? `${cap(label)} contesta ${gestures[seed % gestures.length]!}.` : `${cap(label)} ya no te hace caso.`, extra);
 
   // 1. Lo urgente: una alarma o peligro, el miedo al PJ, que le robó.
   if (plan.state.flags.some((f) => f.block)) return reply(say(L.scared, {}, seed), `${cap(label)} no está para charlas.`);
   if (afraidOf(world, n, pc)) return reply(say(L.afraid, {}, seed), `${cap(label)} se aparta de ti y se marcha.`, { leaves: true });
   if (robbedBy(world, n, pc)) return reply(say(L.accuse, {}, seed), `${cap(label)} te señala.`);
+
+  // Mirarle no es charla: cómo se le ve y qué está haciendo, sin que cuente para cansarle (fase 5 del plan del 11-11).
+  if (LOOKS_AT.test(norm(text).trim()) && plan.intent !== 'trade' && plan.intent !== 'greeting' && plan.intent !== 'farewell') {
+    return { npc: n, line: null, narration: lookOf(n, label, seed), observable: `${pc.name} mira a ${n.name}.`, look: true };
+  }
 
   // Lo que no es charla simple: al máster, con el guion corto.
   if (plan.intent === 'insult' || plan.intent === 'threat' || plan.intent === 'identity') return null;

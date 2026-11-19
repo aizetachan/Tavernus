@@ -72,7 +72,8 @@ import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, i
 import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
 import { migrateExtras, placeExtraAt } from './extras.js';
-import { extraReply, OFFTOPIC_TAG } from './extratalk.js';
+import { extraReply, lookPrompt, OFFTOPIC_TAG } from './extratalk.js';
+import { asSpeech } from './speech.js';
 import { migrateRentableRooms } from '../worldgen/rooms.js';
 import { compactSnapshot, syncCatalog } from '../data/catalog.js';
 import { outfitNpcs } from './outfit.js';
@@ -921,10 +922,16 @@ export class Engine {
   private inQueue = new Map<Id, number>();
 
   /** Punto de entrada de cualquier cliente: texto libre de un jugador. */
-  async act(characterId: Id, text: string): Promise<ActionResult> {
-    // Una frase dicha («— hola», «"hola"») no espera a la cola ni al máster.
-    const said = parseSay(text);
-    if (said) return this.say(characterId, text);
+  async act(characterId: Id, text: string, opts: { mode?: 'do' | 'say' } = {}): Promise<ActionResult> {
+    // Modo Decir (speech.ts): todo el texto es su frase, entre comillas, y sigue el camino de una acción (la contesta
+    // el narrador con quien le oiga). En Hacer, lo entrecomillado es lo que dice; una raya («— hola») es el Chat entre
+    // jugadores y no espera a la cola ni al máster.
+    if (opts.mode === 'say') {
+      text = asSpeech(text);
+      if (!text) return { ok: false, text: '¿Qué dices?' };
+    } else if (/^[—–-]/.test(text.trim()) && parseSay(text)) {
+      return this.say(characterId, text);
+    }
     await this.tick();
     const c = this.world.character(characterId);
     this.joining.delete(c.id); // ya juega: lo que le cuente la historia va al hilo como siempre
@@ -985,7 +992,7 @@ export class Engine {
       if (c.following && (travel || this.isMove(c, clean))) { c.following = null; this.world.touch('characters', c.id); }
       // La ley delante (crime.ts): entregarse o resistirse a un alto; y lo que el motor ve como crimen antes de que narre el máster.
       const law = this.tryConfront(c, clean) ?? this.tryLaw(c, clean);
-      const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? this.tryExtraTalk(c, clean) ?? await this.tryTrivial(c, clean));
+      const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryExtraTalk(c, clean) ?? await this.tryTrivial(c, clean));
       if (fast) {
         r = fast;
       } else if (this.master && c.status === 'active' && !this.isMechanical(c, clean)) {
@@ -1108,12 +1115,25 @@ export class Engine {
    * Charla simple con un vecino de relleno (extratalk.ts): la contesta el motor con su guion, sin máster. Saludo, lo
    * suyo (vender, indicar, la hora), lo que no sabe, despedida, miedo o acusación. Lo demás, al máster.
    */
-  private tryExtraTalk(c: Character, text: string): ActionResult | null {
+  private async tryExtraTalk(c: Character, text: string): Promise<ActionResult | null> {
     if (!this.deterministic || c.status !== 'active' || c.decisive) return null;
     const nowG = this.nowFor(c);
-    const r = extraReply(this.world, this.events.all(), c, text, nowG);
+    let r = extraReply(this.world, this.events.all(), c, text, nowG);
     if (!r) return null;
     const n = r.npc;
+    // Mirarle (fase 5 del plan del 11-11): la primera vez que alguien le mira, el máster escribe cómo se le ve en una
+    // llamada corta y se guarda en el vecino; sin máster (o si falla), la frase de sus datos. No se vuelve a pedir.
+    if (r.look && this.master?.write && !n.script.look_written) {
+      const req = lookPrompt(this.world, n);
+      const w = await this.master.write({ ...req, max_tokens: 300 });
+      const look = w?.text.replace(/\s+/g, ' ').trim();
+      if (look && look.split(/\s+/).length <= 80) {
+        n.script.look = look;
+        n.script.look_written = true;
+        this.world.touch('npcs', n.id);
+        r = extraReply(this.world, this.events.all(), c, text, nowG) ?? r;
+      }
+    }
     for (const id of r.names ?? []) if (!c.knows.includes(id)) { c.knows.push(id); this.world.touch('characters', c.id); }
     if (r.bought) this.world.touch('characters', c.id);
     // Si solo hablan, se ven las conversaciones (narrator.ts): el gesto del vecino va en su línea (`beat`), dentro de su

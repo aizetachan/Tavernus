@@ -128,11 +128,17 @@ describe('la narración según el modo (applyNarratorMode)', () => {
     expect(applyNarratorMode('silent', 'Ilse sigue sin decir nada. Doro gruñe.', lines, refs).beat?.text).toBe('Doro gruñe.');
   });
 
-  it('con acotación: una frase de 15 palabras como mucho, sin relleno', () => {
-    const cut = applyNarratorMode('beat', 'La plaza espera. Doro deja caer la bolsa en tu mano, pesada, y se aparta hacia la fuente mientras los vecinos murmuran entre ellos.', lines, refs);
-    expect(cut.narration).toBe('Doro deja caer la bolsa en tu mano, pesada.');
-    expect(cut.narration.split(/\s+/).length).toBeLessThanOrEqual(15);
-    expect(applyNarratorMode('beat', 'Doro sonríe.', lines, refs)).toEqual({ narration: 'Doro sonríe.', dropped: '' });
+  it('con acotación: la primera frase sin relleno, recortada, va al beat de quien habla; el narrador no tiene burbuja', () => {
+    const long = 'La plaza espera. Doro deja caer la bolsa en tu mano, pesada, y se aparta hacia la fuente mientras los vecinos murmuran entre ellos.';
+    const cut = applyNarratorMode('beat', long, lines, refs);
+    expect(cut.narration).toBe('');
+    expect(cut.beat).toEqual({ npc_id: 'npc_doro', text: 'Doro deja caer la bolsa en tu mano, pesada' });
+    expect(cut.beat!.text.split(/\s+/).length).toBeLessThanOrEqual(12);
+    expect(cut.dropped).toBe(long);
+    expect(applyNarratorMode('beat', 'Doro sonríe.', lines, refs)).toEqual({ narration: '', beat: { npc_id: 'npc_doro', text: 'Doro sonríe.' }, dropped: '' });
+    // Si el máster ya puso su gesto en la línea, manda el suyo: la narración se descarta.
+    const withBeat = [lines[0]!, { ...lines[1]!, beat: 'gruñe' }];
+    expect(applyNarratorMode('beat', 'Doro sonríe.', withBeat, refs)).toEqual({ narration: '', dropped: 'Doro sonríe.' });
   });
 
   it('narración normal, o sin nadie que hable: no se toca', () => {
@@ -201,7 +207,9 @@ describe('el cierre lo hace cumplir (tools)', () => {
     expect(full.closed!.narrator!.mode).toBe('full');
     const beat = close(engine, p, { narration_private: long, lines: [npc('Fuera.')] }, { ok_tools: ['npc_trust'] });
     expect(beat.closed!.narrator!.mode).toBe('beat');
-    expect(beat.closed!.narration_private).toBe('Brenna golpea la barra con la palma abierta, tan fuerte que las jarras tiemblan. «Fuera.»');
+    // La acotación va dentro de la burbuja de Brenna (fase 5 del plan del 11-11): el narrador no tiene burbuja propia.
+    expect(beat.closed!.narration_private).toBe('«Fuera.»');
+    expect(beat.closed!.lines).toEqual([npc('Fuera.', { beat: 'Brenna golpea la barra con la palma abierta' })]);
   });
 
   it('fuera de una charla (sin plan) la narración solo pierde lo que ya dijo antes', async () => {
