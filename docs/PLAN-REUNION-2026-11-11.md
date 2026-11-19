@@ -14,8 +14,12 @@ Difícil, «Ajustes…» a hardcore, biblioteca, contraseña de un invitado, rec
 pendiente 2 (contraseña) con las dos vías. **Fase 1 fusionada** (PR #84) y desplegada en `20261119-100609`. **Fase 3
 programada**: Percepción, Perspicacia, Investigación y Sigilo se tiran ocultas al cerrar el turno (chip «🎲 Percepción»
 sin número, el máster narra lo que nota y no delata el fallo); robar o espiar a otro jugador va por tirada enfrentada
-oculta y solo si lo nota decide él («Lo notas: …»). Tests en `test/percepcion-oculta.test.ts`. Las fases 5 y 6 están
-por hacer; quedan las decisiones 1 y 3 del final.
+oculta y solo si lo nota decide él («Lo notas: …»). Tests en `test/percepcion-oculta.test.ts`. **Fase 3 fusionada**
+(PR #85) y desplegada en `20261119-102442`. **Fase 6 programada**: el prólogo lo escribe el máster con un segundo
+intento si el primero no vale (la plantilla solo después, con el motivo en el evento), la primera escena pasa a 120-180
+palabras con quién anda por aquí y los otros jugadores por su nombre, y los «Hemos oído…» de la presentación van al
+Diario y no al hilo (`on_join`). Tests en `test/arranque-2026-11-11.test.ts`. Queda la fase 5, con las decisiones 1 y 3
+del final.
 
 ## Lo que pasó en la partida
 

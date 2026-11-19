@@ -348,7 +348,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       // Salvo los avisos de misión (la que se abre al llegar): van justo después del prólogo, como en vivo.
       const quests = start > 0 ? all.slice(0, start).filter((d) => d.event.actor_id === c.id && noticeOf(d.event)?.quest) : [];
       const ordered = start > 0 ? [all[start]!, ...quests, ...all.slice(start + 1)] : all;
-      const past = ordered.slice(-HISTORY).map((d) => placed(d, toMessage(d, engine)));
+      const past = ordered.slice(-HISTORY).filter((d) => !silentInThread(d.event)).map((d) => placed(d, toMessage(d, engine)));
       if (past.length) history.set(c.id, past);
     }
     /** PJ que se están presentando: hasta que llega su prólogo, su hilo no recibe nada. */
@@ -380,6 +380,8 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       journalTimers.set(characterId, setTimeout(() => { journalTimers.delete(characterId); send(characterId, 'journal', {}); }, 300));
     };
     const offDelivery = engine.onDelivery((d: Delivery) => {
+      // Lo que va al Diario y no al hilo (los rumores de la presentación): el punto de «nuevo» sí, la burbuja no.
+      if (silentInThread(d.event)) { if (touchesJournal(d.event)) notifyJournal(d.character_id); return; }
       const m = toMessage(d, engine);
       // Lo de antes del prólogo de un PJ que se presenta no se enseña: tampoco se lleva la vista del sitio.
       record(d.character_id, opening.has(d.character_id) && m.chapter?.kind !== 'prologue' ? m : placed(d, m));
@@ -1909,6 +1911,11 @@ const refused = (r: { ok: boolean }) => !r.ok;
 function reply(r: ActionResult): { ok: boolean; text: string | null; say_to?: { id: Id; name: string }; info?: InfoAnswer } {
   if (!r.ok) return { ok: false, text: r.text };
   return { ok: true, text: r.event ? null : r.text, ...(r.say_to ? { say_to: r.say_to } : {}), ...(r.info ? { info: r.info } : {}) };
+}
+
+/** Eventos que no van al hilo (sí al Diario): los rumores que la historia suelta mientras el PJ se presenta (`on_join`). */
+export function silentInThread(e: GameEvent): boolean {
+  return e.tags.includes('on_join');
 }
 
 export function toMessage(d: Delivery, engine: Engine): WebMessage {

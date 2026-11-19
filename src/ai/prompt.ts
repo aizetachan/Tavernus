@@ -520,11 +520,9 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
         : `Acaba de leer esta bienvenida, en tono místico: «${intro.welcome.replace(/\s+/g, ' ')}». No repitas sus imágenes ni sus ideas: empieza donde eso termina, con tono serio y concreto.`,
       'Quien lee no conoce todavía este mundo ni sus nombres, y quiere jugar YA. Por eso: nada de dichos, refranes, leyendas ni nombres de lugares como apertura. La primera frase es algo que le está pasando al personaje en este instante, en el cuerpo o en los sentidos (frío, hambre, un ruido, un olor, algo que ve moverse). Los nombres de sitios aparecen solo cuando importan y explicados por lo que son, no por lo que se cuenta de ellos.',
       intro.prologue
-        ? 'Un detalle concreto de lo que tiene delante (luz, quién anda por ahí) y un gancho: algo que acaba de ocurrir o está ocurriendo delante de él y que pide una decisión ahora mismo.'
-        : 'Sitúalo donde está tal como está ahora (luz, quién anda por ahí) con dos o tres detalles concretos, no un inventario. Termina con un gancho: algo que acaba de ocurrir o está ocurriendo delante de él y que pide una decisión ahora mismo. La premisa de la campaña puede asomar en ese gancho, nunca explicada.',
-      intro.prologue
-        ? 'Un solo párrafo corto, 50 palabras como máximo. Sin tirada. Con 3-4 acciones sugeridas, concretas y con verbo. No lo hagas actuar ni hablar; solo llega.'
-        : 'Exactamente dos párrafos cortos, 80 palabras en total como máximo. Sin tirada. Con 3-4 acciones sugeridas, concretas y con verbo. No lo hagas actuar ni hablar; solo llega.',
+        ? 'Tres cosas, en este orden: 1) lo que tiene delante ahora mismo (la luz, un detalle concreto del sitio). 2) Quién anda por aquí: la gente del sitio por su oficio (o por su nombre si ya lo conoce) y, si hay OTROS JUGADORES presentes, cada uno por su nombre y dónde está (solo lo que se ve de ellos: ni actos, ni palabras, ni intenciones). 3) Un gancho: algo que acaba de ocurrir o está ocurriendo delante de él y que pide una decisión ahora mismo.'
+        : 'Sitúalo donde está tal como está ahora (luz, quién anda por ahí: la gente del sitio por su oficio y los OTROS JUGADORES presentes por su nombre, solo dónde están) con dos o tres detalles concretos, no un inventario. Termina con un gancho: algo que acaba de ocurrir o está ocurriendo delante de él y que pide una decisión ahora mismo. La premisa de la campaña puede asomar en ese gancho, nunca explicada.',
+      'Dos o tres párrafos cortos, entre 120 y 180 palabras en total: que empiece narrando, no avisando. Sin tirada. Con 3-4 acciones sugeridas, concretas y con verbo. No lo hagas actuar ni hablar; solo llega.',
     ].join('\n'));
   } else if (scene === 'decisive_timeout') {
     L.push([
