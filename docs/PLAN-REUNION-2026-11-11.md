@@ -11,7 +11,11 @@ falta una partida a dos con Haiku). **Fase 4 fusionada** (PR #83) y desplegada e
 del asistente; biblioteca con plantilla e instancias; contraseña olvidada por el anfitrión desde Invitaciones y por
 código de recuperación), con tests en `test/ajustes-partida.test.ts` y probada en local (registro con código, crear con
 Difícil, «Ajustes…» a hardcore, biblioteca, contraseña de un invitado, recuperación con el código). Decidida la
-pendiente 2 (contraseña) con las dos vías. Las fases 3, 5 y 6 están por hacer; quedan las decisiones 1 y 3 del final.
+pendiente 2 (contraseña) con las dos vías. **Fase 1 fusionada** (PR #84) y desplegada en `20261119-100609`. **Fase 3
+programada**: Percepción, Perspicacia, Investigación y Sigilo se tiran ocultas al cerrar el turno (chip «🎲 Percepción»
+sin número, el máster narra lo que nota y no delata el fallo); robar o espiar a otro jugador va por tirada enfrentada
+oculta y solo si lo nota decide él («Lo notas: …»). Tests en `test/percepcion-oculta.test.ts`. Las fases 5 y 6 están
+por hacer; quedan las decisiones 1 y 3 del final.
 
 ## Lo que pasó en la partida
 

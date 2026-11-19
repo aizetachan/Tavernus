@@ -40,7 +40,7 @@ function bulkyMaster(): MasterLike {
         ok: true, usage: {}, calls: [], model: 'stub', context: `CONTEXTO-${n} ` + 'x'.repeat(2000),
         closed: {
           narration_private: `Narración de «${text}» (${n}).`, observable: `Algo pasa (${n}).`, observable_vague: null, loudness: 1,
-          tags: [], suggested_actions: [], requires_roll: n % 4 === 0 ? { kind: 'skill', key: 'perception', dc: 12, advantage: 'none' } : null,
+          tags: [], suggested_actions: [], requires_roll: n % 4 === 0 ? { kind: 'skill', key: 'athletics', dc: 12, advantage: 'none' } : null, // a la vista: Percepci�n se tira oculta al cerrar (19-11-2026)
         },
       };
     },

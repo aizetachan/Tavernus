@@ -11,9 +11,22 @@ import type { CheckResult } from './dice.js';
 import type { Id } from './model.js';
 import type { World } from './world.js';
 
+/**
+ * Skills que se tiran a escondidas del jugador (reunión del 11-11-2026, como en D&D): el máster las pide igual
+ * (requires_roll), el servidor las tira al momento sin botón de dado, el jugador ve solo un chip «🎲 Percepción» y la
+ * narración cuenta lo que nota; si falla, no nota nada (a lo sumo una ligera sensación).
+ */
+export const HIDDEN_SKILLS: ReadonlySet<string> = new Set(['perception', 'insight', 'investigation', 'stealth']);
+
+export function isHiddenRoll(roll: { kind: string; key: string }): boolean {
+  return roll.kind === 'skill' && HIDDEN_SKILLS.has(roll.key);
+}
+
 export interface ShownRoll {
   /** Quién tira: un PJ. */
   roller_id: Id;
+  /** Oculta: el jugador ve que se ha tirado (el chip con la etiqueta), no el dado ni el resultado; los demás, nada. */
+  hidden?: boolean;
   /** Para qué: «Atletismo», «Ataque con bastón a Doro», «Salvación contra muerte». */
   label: string;
   /** Dado, modificador y total: «d20 [6] + 1 = 7». */
@@ -32,6 +45,7 @@ export interface ShownRoll {
 
 /** Desglose con el resultado: «d20 [6] + 1 = 7 vs CD 12 → fallo (1 natural)». */
 function body(r: ShownRoll): string {
+  if (r.hidden) return r.label;
   const dice = r.dice.replace(/ vs CD \d+$/, '');
   const dc = r.dc != null ? ` vs CD ${r.dc}` : '';
   const out = r.outcome ? ` → ${r.outcome}` : '';
@@ -45,6 +59,11 @@ export function checkRoll(rollerId: Id, r: CheckResult & { label: string }): Sho
     roller_id: rollerId, label: r.label.charAt(0).toUpperCase() + r.label.slice(1), dice: r.breakdown, total: r.total,
     outcome: r.success === null ? null : r.success ? 'éxito' : 'fallo', ...(r.natural ? { natural: r.natural } : {}),
   };
+}
+
+/** Una prueba oculta: solo la etiqueta (el total va dentro, para el registro, pero no se enseña). */
+export function hiddenCheckRoll(rollerId: Id, r: CheckResult & { label: string }): ShownRoll {
+  return { roller_id: rollerId, hidden: true, label: r.label.charAt(0).toUpperCase() + r.label.slice(1), dice: '', total: r.total, outcome: null };
 }
 
 /** Un ataque resuelto por el servidor, como tirada a la vista (la CA del objetivo no se dice). */

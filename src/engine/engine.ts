@@ -61,7 +61,7 @@ import { activeJobs, addPractice, buyFromNpc, rotateBoard, type ProgressEvent } 
 import { decisiveConsequence, engineNpcTurn, forcedTurnText, resolveAttack, type ForcedTurn } from './combat.js';
 import { npcCanAct } from './death.js';
 
-import { attackRoll, checkRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
+import { attackRoll, checkRoll, hiddenCheckRoll, isHiddenRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
 import { passivePerception, type Ability } from './rules.js';
 import { casterOf, initClass, levelUp, levelUpText, makeChoice, setSpells } from './levels.js';
 import { spellById } from '../data/srd/spells.js';
@@ -1387,6 +1387,18 @@ export class Engine {
       const pending = this.pendingRolls.get(c.id);
       if (!pending) return { ok: false, text: 'No tienes ninguna tirada pendiente.' };
       this.pendingRolls.delete(c.id);
+      return this.resolveRoll(c, pending);
+    });
+  }
+
+  /**
+   * Tira la prueba pendiente y el máster narra la consecuencia. Lo llama rollPending (el jugador pulsó 🎲) o el
+   * cierre del máster al momento cuando la tirada es oculta (rolls.ts, HIDDEN_SKILLS: Percepción, Perspicacia,
+   * Investigación, Sigilo): sin botón, el jugador ve solo el chip «🎲 Percepción» y la narración de lo que nota.
+   */
+  private async resolveRoll(c: Character, pending: PendingRoll): Promise<ActionResult> {
+    {
+      const hiddenRoll = isHiddenRoll(pending.roll) && !pending.roll.conflict && !pending.roll.confront;
       // Ayuda de otro PJ (SRD): ventaja en esta tirada; con desventaja, se anulan.
       const helper = this.takeHelp(c);
       if (helper) pending.roll = { ...pending.roll, advantage: pending.roll.advantage === 'disadvantage' ? 'none' : 'advantage' };
@@ -1429,11 +1441,11 @@ export class Engine {
         if (npc) conflictNote = confrontRolled(this.world, c, npc, Boolean(result.success), this.nowFor(c)).text;
       } else {
         result = characterCheck(c, pending.roll.kind, pending.roll.key, pending.roll.dc, pending.roll.advantage, undefined, this.world);
-        roll = checkRoll(c.id, result);
+        roll = hiddenRoll ? hiddenCheckRoll(c.id, result) : checkRoll(c.id, result);
         // Sigilo que sale bien: va a escondidas (conflict.ts), y quien no le supere con su pasiva no le ve.
         if (pending.roll.kind === 'skill' && pending.roll.key === 'stealth' && result.success) noteSneak(this.world, c, result.total, this.nowFor(c));
       }
-      if (helper) roll.note = `con la ayuda de ${pcName(this.world, c.id, helper)}`;
+      if (helper && !roll.hidden) roll.note = `con la ayuda de ${pcName(this.world, c.id, helper)}`;
       const shown = rollTextForRoller(roll);
       this.announceRoll(roll, { roll: { ...result, dc: undefined }, ...(attack ? { attack } : {}) });
       // Una tirada con éxito deja atrás la ventana decisiva anterior: puede abrirse otra (SPEC §9.3).
@@ -1468,7 +1480,7 @@ export class Engine {
         const told = t && trustNotice(nameFor(this.world, c, t.npc_id), t);
         if (told) this.emitProgress(c, [{ kind: 'trust', text: told }]);
       }
-      let r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result, ...(conflictNote ? { conflict: conflictNote } : {}) });
+      let r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result, ...(conflictNote ? { conflict: conflictNote } : {}), ...(hiddenRoll ? { hidden: true } : {}) });
       if (!r.ok && r.text === '') r = { ok: false, text: `${shown}\nEl narrador no responde; inténtalo de nuevo.` };
       // Si el máster le llevó a otro punto al contarlo («te metes en el callejón»), se esconde allí.
       if (stealth && result.success && c.sneak && c.sneak.spot_id !== this.world.characterSpot(c)?.id) noteSneak(this.world, c, result.total, this.nowFor(c));
@@ -1477,7 +1489,34 @@ export class Engine {
       this.announceDeathStates();
       await this.flush();
       return r;
-    });
+    }
+  }
+
+  /**
+   * Un PJ le hace algo a otro a escondidas (robarle, registrarle, espiarle): tirada enfrentada oculta ahora mismo, sin
+   * preguntarle a la víctima lo que no notaría (reunión del 11-11-2026). Si sale bien, nadie se entera (quien actúa
+   * ve solo el chip de su tirada); si la víctima lo nota, se le pide la reacción de siempre, con «Lo notas» delante.
+   */
+  covertAttempt(fromId: Id, toId: Id, spec: { attempt: string; input: string | null; contest: { actor: string; target: string[] } }): { ok: true; success: boolean; detail: string } | { ok: false; error: string } {
+    const from = this.world.character(fromId);
+    const to = this.world.characters.get(toId);
+    if (!to || to.id === from.id) return { ok: false, error: 'No hay nadie así aquí.' };
+    const toName = pcName(this.world, from.id, to);
+    const here = this.world.characterSpot(from);
+    const there = this.world.characterSpot(to);
+    if (!here || !there || here.location_id !== there.location_id || to.transit) return { ok: false, error: `${toName} no está aquí.` };
+    if (to.status === 'dead' || to.status === 'retired') return { ok: false, error: `${toName} ya no está para eso.` };
+    if (to.veiled) return { ok: false, error: `${toName} está bajo el velo: su jugador no está y nadie puede tocarle.` };
+    if (here.id !== there.id) approachSpot(this.world, from, there.id);
+    const k = contest(from, to, { kind: 'other', contest: spec.contest }, this.rng, this.takeHelp(from) ? 'advantage' : 'none');
+    const show = (x: typeof k.actor) => `${x.label} ${x.breakdown}`;
+    // Quien actúa ve que ha tirado, no cuánto; la víctima no ve nada. Se guarda la enfrentada entera para el registro.
+    this.announceRoll(hiddenCheckRoll(from.id, k.actor), { contest: { actor: show(k.actor), target: show(k.target), success: k.success } });
+    if (!k.success) {
+      const r = this.requestReaction(from.id, to.id, { kind: 'other', attempt: spec.attempt, input: spec.input, contest: spec.contest, noticed: true }, { announce: false });
+      if (!r.ok) return { ok: false, error: r.error };
+    }
+    return { ok: true, success: k.success, detail: `tu ${show(k.actor)} contra su ${show(k.target)}` };
   }
 
   /**
@@ -1492,8 +1531,9 @@ export class Engine {
     const group = [...this.sharing.values()].filter((s) => s.ids.includes(pc.id) || (r.target_id && s.ids.includes(r.target_id))).flatMap((s) => s.ids);
     return this.events.emit({
       // «Ataque con bastón a la tabernera» si no sabe cómo se llama (a los demás se lo tapa la lectura, events.ts).
-      actor_id: pc.id, action_type, input_text: null, narration_private: maskUnknownNames(this.world, pc.id, rollTextForRoller(r)), observable: rollTextForOthers(this.world, r),
-      visibility: 'private', also_to: rollAudience(this.world, spot.location_id, pc.id, group, r.target_id), tags, payload: { master: null, shown_roll: r, ...payload },
+      // Una tirada oculta la ve solo quien tira (el chip), y nadie más.
+      actor_id: pc.id, action_type, input_text: null, narration_private: maskUnknownNames(this.world, pc.id, rollTextForRoller(r)), observable: r.hidden ? null : rollTextForOthers(this.world, r),
+      visibility: 'private', also_to: r.hidden ? [] : rollAudience(this.world, spot.location_id, pc.id, group, r.target_id), tags, payload: { master: null, shown_roll: r, ...payload },
     }, this.stampFor(pc));
   }
 
@@ -1762,7 +1802,8 @@ export class Engine {
     const payload: Record<string, unknown> = {
       observable_vague: k.observable_vague ?? undefined,
       suggested_actions: k.suggested_actions,
-      requires_roll: k.requires_roll ?? undefined,
+      // Una tirada oculta no se le pide al jugador (sin botón de dado): el servidor la tira al cerrar (abajo).
+      requires_roll: k.requires_roll && !(isHiddenRoll(k.requires_roll) && !k.requires_roll.conflict && !k.requires_roll.confront && !roll) ? k.requires_roll : undefined,
       master: { model: out.model, usage: out.usage, calls: out.calls, context: out.context, ...(out.actor ? { actor: out.actor } : {}), ...(k.narrator ? { narrator: k.narrator } : {}) },
       ...(this.hints.has(c.id) ? { scene_hints: this.hints.get(c.id) } : {}),
       ...(k.decisive ? { decisive: { threat: k.decisive.threat, window_s: Engine.DECISIVE_WINDOW_S } } : {}),
@@ -1789,6 +1830,12 @@ export class Engine {
     }, this.stampFor(c));
     // Lo que el máster pidió a otro jugador (request_reaction): la petición sale después de su narración.
     this.announcePending(c.id);
+    // Tirada oculta (Percepción, Sigilo…): no hay botón; el servidor la tira ahora y el máster sigue con el resultado.
+    if (k.requires_roll && isHiddenRoll(k.requires_roll) && !k.requires_roll.conflict && !k.requires_roll.confront && !roll) {
+      for (const sr of out.shown_rolls ?? []) this.announceRoll(sr);
+      if (out.progress?.length) this.emitProgress(c, out.progress);
+      return this.resolveRoll(c, { text, roll: k.requires_roll, event_id: event.id, seq: event.seq });
+    }
     if (k.requires_roll) this.pendingRolls.set(c.id, { text, roll: k.requires_roll, event_id: event.id, seq: event.seq });
     if (k.decisive && scene !== 'decisive_timeout' && c.status === 'active') this.openDecisive(c, k.decisive, event.id);
     // Un turno sin ventana ni tirada deja atrás la anterior: la siguiente ya no es «seguida».
@@ -2518,7 +2565,7 @@ export class Engine {
    * (request_reaction, y attack contra un PJ); con `announce: false` el evento
    * sale después de la narración del máster.
    */
-  requestReaction(fromId: Id, toId: Id, spec: { kind: ReactionKind; attempt: string; input: string | null; dest_spot_id?: Id | null; prone?: boolean; contest?: { actor: string; target: string[] } }, opts: { announce?: boolean } = {}): { ok: true; reaction: Reaction; result: ActionResult } | { ok: false; error: string } {
+  requestReaction(fromId: Id, toId: Id, spec: { kind: ReactionKind; attempt: string; input: string | null; dest_spot_id?: Id | null; prone?: boolean; contest?: { actor: string; target: string[] }; noticed?: boolean }, opts: { announce?: boolean } = {}): { ok: true; reaction: Reaction; result: ActionResult } | { ok: false; error: string } {
     const from = this.world.character(fromId);
     const to = this.world.characters.get(toId);
     if (!to || to.id === from.id) return { ok: false, error: 'No hay nadie así aquí.' };
@@ -2535,7 +2582,7 @@ export class Engine {
     const reaction: Reaction = {
       id: `rx_${nowMs.toString(36)}_${Math.floor(this.rng() * 1e6).toString(36)}`, from_id: from.id, to_id: to.id, kind: spec.kind,
       attempt: spec.attempt.trim().replace(/[.]+$/, ''), input: spec.input, dest_spot_id: spec.dest_spot_id ?? null,
-      ...(spec.prone ? { prone: true } : {}), ...(spec.contest ? { contest: spec.contest } : {}),
+      ...(spec.prone ? { prone: true } : {}), ...(spec.contest ? { contest: spec.contest } : {}), ...(spec.noticed ? { noticed: true } : {}),
       created_real_ms: nowMs, expires_real_ms: nowMs + REACTION_TTL_MS,
     };
     to.reactions = [...(to.reactions ?? []), reaction];
@@ -2580,7 +2627,7 @@ export class Engine {
       payload: {
         master: null, reaction: { id: r.id, to: to.id, from: from.id, kind: r.kind, attempt: r.attempt, explain, expires_real_ms: r.expires_real_ms },
         target_character_id: to.id,
-        observable_target: `${from.name} intenta ${r.attempt}. ¿Te dejas o te resistes? Si no decides a tiempo, te resistes por instinto.`,
+        observable_target: `${r.noticed ? 'Lo notas: ' : ''}${from.name} intenta ${r.attempt}. ¿Te dejas o te resistes? Si no decides a tiempo, te resistes por instinto.`,
         observable_vague: 'Una figura va a por otra.',
       },
     }, this.stampFor(from));
