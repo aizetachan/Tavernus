@@ -79,7 +79,7 @@ import { outfitNpcs } from './outfit.js';
 import { openShops, restockShops, shopsFromSeed, stockOwnerOf } from './shop.js';
 import { fillItemDefFrom, normalizeItemDef } from './items.js';
 import { discoverSpot, lookAround, migrateSpotSight, noteSight, searchableSpots, seeFrom } from './spots.js';
-import { absence, absenceRule, acceptPrologue, acceptRecap, forPrologue, forReader, prologueFacts, prologuePrompt, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
+import { absence, absenceRule, acceptRecap, checkPrologue, forPrologue, forReader, prologueFacts, prologuePrompt, prologueRetryLine, prologueTemplate, RECAP_TITLE, recapPrompt, recapTemplate } from './prologue.js';
 
 export interface ActionResult {
   ok: boolean;
@@ -927,6 +927,7 @@ export class Engine {
     if (said) return this.say(characterId, text);
     await this.tick();
     const c = this.world.character(characterId);
+    this.joining.delete(c.id); // ya juega: lo que le cuente la historia va al hilo como siempre
     this.lastAction.set(c.id, this.now());
     this.setConnected(c.id, true);
     // Pregunta sobre el juego («¿qué hechizos tengo?»): contesta el sistema ya, sin cola ni máster, y no gasta la tirada pendiente ni el turno de la ronda.
@@ -1673,9 +1674,14 @@ export class Engine {
    * Avisos de progreso como eventos de sistema: privados al PJ (los de otro no le llegan a nadie más), y
    * públicos en el tablón si procede. Si tocan una misión, llevan el cambio y su porqué (`payload.quest`).
    */
+  /** PJ que se están presentando (desde su alta hasta su primera escena o su primera acción). */
+  private joining = new Set<Id>();
+
   private emitProgress(c: Character, events: ProgressEvent[]): void {
     for (const e of events) {
-      this.events.emit({ actor_id: c.id, action_type: `progress_${e.kind}`, narration_private: e.text, observable: null, visibility: 'private', tags: ['progress', e.kind], payload: e.quest ? { quest: e.quest } : {} }, this.now());
+      // Un rumor de la historia mientras se presenta: al Diario, sin burbuja en el hilo (la web lo calla con `on_join`).
+      const onJoin = this.joining.has(c.id) && e.kind === 'story' && e.quest?.event === 'rumor';
+      this.events.emit({ actor_id: c.id, action_type: `progress_${e.kind}`, narration_private: e.text, observable: null, visibility: 'private', tags: ['progress', e.kind, ...(onJoin ? ['on_join'] : [])], payload: e.quest ? { quest: e.quest } : {} }, this.now());
       if (e.public) {
         const at = positionOf(this.world, c, this.gameNow());
         this.events.emit({ actor_id: null, at, action_type: 'announcement', narration_private: '', observable: e.public, visibility: 'public', tags: ['milestone', e.kind] }, this.now());
@@ -2021,6 +2027,9 @@ export class Engine {
     // Su dinero, en su bolsa al cinto (money.ts): se le puede robar, perder o esconder.
     newPurse(this.world, c.id, this.world.campaign.starting_coins ?? DEFAULT_STARTING_COINS);
 
+    // Hasta que acabe su presentación (introduce) o actúe, lo que la historia le cuente de pasada (los «Hemos oído…»)
+    // va al Diario, no al hilo: que el arranque sea el prólogo y la primera escena, no avisos (reunión del 11-11-2026).
+    this.joining.add(c.id);
     this.events.emit({
       actor_id: c.id, action_type: 'character_joined', narration_private: this.master ? '' : `Llegas a ${loc.name}.`,
       observable: `${c.name} llega ${aEs(start.name)}.`, tags: ['milestone:join'], payload: { observable_vague: 'Alguien llega.' },
@@ -2060,11 +2069,13 @@ export class Engine {
     const origin = this.world.campaign.starting_points.find((p) => p.spot_id === spot.id)?.origin ?? c.backstory;
     const locId = spot.location_id;
     return this.runInLocation(locId, async () => {
-      const prologue = await this.writePrologue(c);
-      if (!this.master) { await this.flush(); return null; }
-      const r = await this.resolveWithMaster(c, '(primera escena)', undefined, { origin, welcome: this.world.campaign.welcome.replaceAll('{name}', c.name), ...(prologue ? { prologue: prologue.narration_private } : {}) });
-      await this.flush();
-      return r.ok ? r : null;
+      try {
+        const prologue = await this.writePrologue(c);
+        if (!this.master) { await this.flush(); return null; }
+        const r = await this.resolveWithMaster(c, '(primera escena)', undefined, { origin, welcome: this.world.campaign.welcome.replaceAll('{name}', c.name), ...(prologue ? { prologue: prologue.narration_private } : {}) });
+        await this.flush();
+        return r.ok ? r : null;
+      } finally { this.joining.delete(c.id); }
     });
   }
 
@@ -2079,9 +2090,19 @@ export class Engine {
       let text: string | null = null;
       let meta: Record<string, unknown> = {};
       if (this.master?.write) {
-        const r = await this.master.write(prologuePrompt(facts)).catch(() => null);
-        text = acceptPrologue(r?.text);
-        if (text && r) meta = { master: { model: r.model, usage: r.usage } };
+        // El máster lo escribe; si no vale (vacío o fuera de medida), un segundo intento diciéndole por qué. Solo
+        // entonces la plantilla, y queda apuntado el motivo (partida del 11-11-2026: el del anfitrión salió de plantilla).
+        const req = prologuePrompt(facts);
+        let attempts = 0;
+        let retry: string | null = null;
+        while (attempts < 2 && !text) {
+          attempts++;
+          const r = await this.master.write(retry ? { ...req, prompt: `${req.prompt}\n${retry}` } : req).catch((e: Error) => { console.warn(`[master] prólogo: ${e.message}`); return null; });
+          const ok = checkPrologue(r?.text);
+          if (ok.text && r) { text = ok.text; meta = { master: { model: r.model, usage: r.usage, attempts } }; }
+          else { retry = prologueRetryLine(ok.reason ?? 'empty', ok.words); meta = { fallback: ok.reason ?? 'empty', attempts }; }
+        }
+        if (!text) console.warn(`[master] prólogo de ${c.name}: plantilla (${String(meta['fallback'])} tras ${attempts} intentos)`);
       }
       if (has()) return null;
       return this.events.emit({

@@ -63,8 +63,12 @@ viene en tercera persona («Llega a Brezal como viajero…») y la plantilla lo 
 nombre del personaje («Kael llega a Brezal como viajero…»), como la primera línea de una novela.
 
 El narrador de voz **lo lee en alto** (el bloque lleva el mismo altavoz que las burbujas del máster).
-Después vuelve el narrador con la primera escena, **más corta** (un párrafo, unas 50 palabras), que
-empieza en el instante siguiente y no repite nada del prólogo.
+Después vuelve el narrador con la primera escena (dos o tres párrafos, de 120 a 180 palabras desde el
+19-11-2026: lo que tiene delante, quién anda por aquí con los otros jugadores por su nombre, y el gancho),
+que empieza en el instante siguiente y no repite nada del prólogo. Si el máster no devuelve un prólogo que
+valga (vacío o fuera de medida), se le pide una segunda vez diciéndole por qué; solo entonces la plantilla, y el
+motivo queda en el evento (`fallback`). Los rumores que la historia suelta mientras el personaje se presenta
+(«Hemos oído…») van al Diario, no al hilo (`on_join`): el arranque es el prólogo y la primera escena.
 
 ## Cuánto mide
 

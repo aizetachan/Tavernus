@@ -207,9 +207,27 @@ export function prologuePrompt(f: PrologueFacts): { system: string; prompt: stri
 
 /** ¿Vale lo que devolvió el máster? Ni vacío ni fuera de medida (con margen). */
 export function acceptPrologue(text: string | null | undefined): string | null {
+  return checkPrologue(text).text;
+}
+
+/**
+ * Lo mismo, diciendo por qué no vale: `empty` (no hubo texto), `short` o `long` (fuera de medida, con margen). El
+ * motor reintenta una vez con ese motivo (partida del 11-11-2026: el prólogo del anfitrión salió de plantilla sin que
+ * nadie supiera por qué).
+ */
+export function checkPrologue(text: string | null | undefined): { text: string | null; reason: 'empty' | 'short' | 'long' | null; words: number } {
   const t = (text ?? '').replace(/^#+\s.*\n+/, '').trim();
   const n = wordCount(t);
-  return n >= PROLOGUE_WORDS.min - 20 && n <= PROLOGUE_WORDS.max + 40 ? t : null;
+  if (!t) return { text: null, reason: 'empty', words: 0 };
+  if (n < PROLOGUE_WORDS.min - 20) return { text: null, reason: 'short', words: n };
+  if (n > PROLOGUE_WORDS.max + 80) return { text: null, reason: 'long', words: n };
+  return { text: t, reason: null, words: n };
+}
+
+/** La línea que se añade al prompt al reintentar: qué falló y la medida pedida. */
+export function prologueRetryLine(reason: 'empty' | 'short' | 'long', words: number): string {
+  const why = reason === 'empty' ? 'no devolvió texto' : reason === 'short' ? `se quedó corto (${words} palabras)` : `se pasó de largo (${words} palabras)`;
+  return `El intento anterior ${why}. Escríbelo de nuevo, de ${PROLOGUE_WORDS.min} a ${PROLOGUE_WORDS.max} palabras, solo el texto del prólogo.`;
 }
 
 /** Cualquier nombre que el personaje no conoce, por su oficio (como en el resto de la partida). */

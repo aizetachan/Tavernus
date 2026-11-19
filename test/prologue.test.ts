@@ -78,11 +78,11 @@ describe('prólogo', () => {
     for (const path of s.paths) expect(text).not.toContain(path);
     expect(text).not.toContain(s.opening);
 
-    // La primera escena lo sabe, es más corta y no lo repite.
+    // La primera escena lo sabe y no lo repite (desde el 19-11-2026 es más larga: 120-180 palabras, con quién anda por aquí).
     const ctx = contexts.at(-1)!;
     expect(ctx).toContain('Acaba de leer este prólogo');
     expect(ctx).toContain('No repitas nada de él');
-    expect(ctx).toContain('50 palabras como máximo');
+    expect(ctx).toContain('entre 120 y 180 palabras');
     const shared = sentencesOf(firstScene.narration_private).filter((x) => sentencesOf(text).includes(x));
     expect(shared).toEqual([]);
 
