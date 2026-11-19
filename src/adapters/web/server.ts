@@ -606,11 +606,39 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       return view ? withOffset(id, view) : null;
     };
     const lastSeq = (id: Id) => history.get(id)?.at(-1)?.seq ?? 0;
+    /** Por qué acabó, para el aviso: lo que les pasó a los rivales que el PJ tenía delante (muertos, fuera, idos o calmados). */
+    const endReason = (readerId: Id, trail: FightTrail | undefined): string => {
+      const w = engine.world;
+      const me = w.characters.get(readerId);
+      const loc = trail?.location_id;
+      const parts: string[] = [];
+      for (const id of trail?.rivals ?? []) {
+        const n = w.npcs.get(id);
+        if (!n) continue;
+        const label = me?.knows.includes(id) ? n.name : descriptorOf(w, id);
+        const Label = label.charAt(0).toUpperCase() + label.slice(1);
+        if (n.status === 'dead') parts.push(`${Label} ha muerto`);
+        else if (n.status === 'unconscious') parts.push(`${Label} está fuera de combate`);
+        else if (loc && w.spots.get(n.location.id)?.location_id !== loc) parts.push(`${Label} se ha ido`);
+        else parts.push(`${Label} ya no va a por nadie`);
+      }
+      return parts.length ? `Fin del combate: ${parts.join('; ')}.` : 'Fin del combate.';
+    };
+    /** PJ con una petición de reacción abierta (de él o para él): mientras dure, su combate ni se abre ni se cierra. */
+    const inReaction = (): Set<Id> => {
+      const out = new Set<Id>();
+      const now = Date.now();
+      for (const o of engine.world.characters.values()) for (const r of o.reactions ?? []) if (r.expires_real_ms > now) { out.add(r.from_id); out.add(r.to_id); }
+      return out;
+    };
     const syncFights = () => {
       const encs = new Map<Id, Encounter | null>();
       const enc = (loc: Id) => { if (!encs.has(loc)) encs.set(loc, encounterIn(loc)); return encs.get(loc) ?? null; };
+      const waiting = inReaction();
       for (const c of engine.world.characters.values()) {
         if (c.status === 'retired' || opening.has(c.id)) continue;
+        // Una reacción pendiente entre dos jugadores se resuelve primero; después se mira la hostilidad (reunión del 11-11-2026).
+        if (waiting.has(c.id)) continue;
         const loc = locOf(c.id);
         const e = loc ? enc(loc) : null;
         const raw = e && loc ? combatView(engine.world, e, c.id, turnCtx(loc)) : null;
@@ -632,7 +660,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           fightIn.delete(c.id);
           const still = enc(wloc);
           const left = Boolean(still && `${still.location_id}:${still.started_seq}` === was);
-          const text = left ? 'Sales del combate.' : 'Fin del combate.';
+          const text = left ? 'Sales del combate.' : endReason(c.id, fightTrail.get(c.id));
           record(c.id, { seq: lastSeq(c.id), kind: 'system', text, combat: { phase: 'end', text } });
           data = { active: false, key: was, why: left ? 'left' : 'ended' };
         }

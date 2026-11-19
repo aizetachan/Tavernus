@@ -549,9 +549,11 @@ export interface Wanted {
    * tolera; al siguiente (o en cuanto falla una tirada suya) la autoridad actúa. Una tirada social con éxito
    * compra un intento más (`bought`, uno como mucho). `last_attempt`: lo último que intentó y cómo acabó.
    */
-  arrest: { npc_id: Id; since_game_s: number; announced: boolean; resisted: boolean; attempts?: number; bought?: number; last_attempt?: ArrestAttempt | null } | null;
+  arrest: { npc_id: Id; since_game_s: number; announced: boolean; resisted: boolean; attempts?: number; bought?: number; last_attempt?: ArrestAttempt | null; /** Ya le dio el alto hace poco y no respondió: esta vez no avisa, actúa (crime.ts, ALTO_REPEAT_S). */ repeat?: boolean } | null;
   /** Autoridades a las que ya se resistió: no le dan el alto otra vez; en cuanto le ven, van a por él. */
   resisted_by?: Id[];
+  /** Los altos que ya le han dado (quién, dónde y cuándo): uno por encuentro, no uno cada vez que la autoridad vuelve a verle. */
+  altos?: { npc_id: Id; location_id: Id; game_s: number }[];
 }
 
 /** Un intento de ganar tiempo bajo el alto (crime.ts): hablar, gritar a otro, una tirada; o dejar pasar la ventana. */

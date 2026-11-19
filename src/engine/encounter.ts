@@ -160,7 +160,10 @@ export function hostilityOf(world: World, e: GameEvent): Hostility {
   if (re?.kind === 'attack' && re.from && re.to && (e.action_type === 'reaction_accepted' || e.action_type === 'reaction_resisted')) hit(re.from, re.to, false);
   // Un incidente en el que alguien se lanza a pelear, o una resistencia a la autoridad (crime.ts). Los demás (gritar, avisar) no.
   const inc = e.payload['incident'] as IncidentPayload | undefined;
-  const fighters = (inc?.reactions ?? []).filter((r) => r.response === 'fight').map((r) => r.npc_id).filter(isNpc);
+  // Solo quien puede pelear de verdad (ficha y no es gente de paz): un parroquiano de relleno que «se lanza» no abre nada
+  // (partida del 11-11-2026). Y `hold` (se contiene porque la autoridad está delante) tampoco.
+  const canFight = (id: Id) => { const n = world.npcs.get(id); return Boolean(n?.stats) && !n!.noncombatant; };
+  const fighters = (inc?.reactions ?? []).filter((r) => r.response === 'fight').map((r) => r.npc_id).filter(canFight);
   if (fighters.length || inc?.resisted === true) {
     h.open = true;
     h.npcs.push(...fighters);

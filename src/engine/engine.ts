@@ -3658,6 +3658,11 @@ export class Engine {
       }, this.stampFor(c));
       return;
     }
+    if (n.kind === 'seize') {
+      // Ya le dio el alto hace poco y no respondió (crime.ts, ALTO_REPEAT_S): no lo repite; le reduce y cumple la pena.
+      this.enforceArrest(c, 'repeat', null);
+      return;
+    }
     if (n.kind === 'pursuit') {
       // Ya se resistió a esta autoridad (crime.ts, resisted_by): no hay alto ni aviso; va a por él.
       this.events.emit({
@@ -3766,7 +3771,7 @@ export class Engine {
    * si ya es hostil, le ataca de verdad (y sigue cada turno, por forceNpcTurns). Evento determinista, sin máster; el
    * máster lo lee en el hilo y en «## Ley». null si la autoridad no puede (caída, ida, sin verle).
    */
-  private enforceArrest(c: Character, why: 'stall' | 'roll' | 'timeout', input: string | null, extraTags: string[] = [], rollLabel?: string): ActionResult | null {
+  private enforceArrest(c: Character, why: 'stall' | 'roll' | 'timeout' | 'repeat', input: string | null, extraTags: string[] = [], rollLabel?: string): ActionResult | null {
     const a = c.wanted?.arrest;
     const by = a ? this.world.npcs.get(a.npc_id) : undefined;
     const from = this.world.characterSpot(c);
@@ -3774,7 +3779,7 @@ export class Engine {
     const name = this.labelFor(c, by.id);
     const By = name.charAt(0).toUpperCase() + name.slice(1);
     const mine = (t: string) => contract(maskUnknownNames(this.world, c.id, t));
-    const lead = why === 'stall' ? `${By} ya te ha avisado una vez y no te deja seguir.` : why === 'roll' ? `No te sale${rollLabel ? ` (${rollLabel})` : ''}.` : 'Se te acaba el tiempo.';
+    const lead = why === 'stall' ? `${By} ya te ha avisado una vez y no te deja seguir.` : why === 'roll' ? `No te sale${rollLabel ? ` (${rollLabel})` : ''}.` : why === 'repeat' ? `${By} te ve y no te da el alto otra vez: ya lo oíste.` : 'Se te acaba el tiempo.';
     const at = { spot_id: from.id, next_spot_id: null, progress: 0, x: from.x, y: from.y, location_id: from.location_id };
     if (arrestHostile(this.world, c)) {
       const f = engineNpcTurn(this.world, by.id, c.id, this.rng, this.nowFor(c));
