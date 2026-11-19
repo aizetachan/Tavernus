@@ -12,7 +12,7 @@ import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, takeAmount, transferItem, type InventoryView, type TransferError } from './inventory.js';
-import type { CarrySlot, Character, DecisiveConsequence, EquipSlot, GameEvent, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
+import type { CarrySlot, Character, DecisiveConsequence, EquipSlot, GameEvent, GameSettings, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
 
 import { EQUIP_SLOTS } from './model.js';
 
@@ -201,6 +201,8 @@ export type MomentListener = (m: MomentNotice) => void;
 
 export interface EngineOptions {
   repo: Repository;
+  /** Ajustes de la mesa (dificultad, muerte, chat); sin ellos, los valores por defecto. */
+  settings?: GameSettings;
   /** Reloj real inyectable para tests. */
   now?: () => number;
   /** Azar de la tirada de imprevisto; inyectable para tests. */
@@ -274,6 +276,9 @@ export class Engine {
   static readonly NO_CREDIT = 'El narrador se ha quedado sin crédito: la cuenta de la IA no tiene saldo. El anfitrión tiene que recargarla; en cuanto lo haga, podréis seguir donde lo dejasteis.';
 
   attachMaster(m: MasterLike | null): void { this.master = m; }
+
+  /** Los ajustes de la mesa cambian en caliente (el anfitrión, desde el menú): dificultad, muerte y alcance del chat. */
+  setSettings(s: GameSettings): void { this.world.settings = { ...s }; }
   /** Modelo barato para los comentarios del mundo que los datos no traen escritos (chatter.ts). Sin él, esos callan. */
   private chatterWriter: ChatterWriter | null = null;
   attachChatterWriter(w: ChatterWriter | null): void { this.chatterWriter = w; }
@@ -318,6 +323,7 @@ export class Engine {
     const tw = Number(process.env['TURN_WINDOW_S']);
     this.turnWindowMs = opts.turnWindowMs ?? (!this.realClock ? 0 : process.env['TURN_WINDOW_S'] !== undefined && Number.isFinite(tw) && tw >= 0 ? tw * 1000 : TURN_WINDOW_MS);
     this.world = new World(snapshot);
+    if (opts.settings) this.world.settings = { ...opts.settings };
     this.clock = GameClock.fromCampaign(this.world.campaign);
     this.events = new EventLog(this.world, this.clock, lastSeq, this.now);
     this.world.onChange((c) => this.pending.set(`${c.collection}/${c.id}`, c));
@@ -2241,11 +2247,15 @@ export class Engine {
     const parsed = parseSay(text, true);
     if (!parsed) return { ok: false, text: '¿Qué dices?' };
     const mode = opts.mode ?? parsed.mode;
+    // Chat a toda la mesa (ajuste de la partida): llega a todos los jugadores estén donde estén, sin pasar por la
+    // percepción; un susurro sigue siendo de cerca. Con «solo a quien oiga», como siempre.
+    const toAll = this.world.settings.chat_reach === 'all' && mode !== 'whisper';
     let target: Character | null = null;
     const toId = opts.to ?? null;
     if (toId || parsed.to) {
-      target = toId ? this.world.characters.get(toId) ?? null : findPresentPc(this.world, c, parsed.to!);
-      if (!target || target.id === c.id || this.world.characterSpot(target)?.location_id !== this.world.characterSpot(c)?.location_id) {
+      const anyPc = (q: string) => [...this.world.characters.values()].find((o) => o.id !== c.id && o.status !== 'retired' && o.status !== 'dead' && o.name.toLowerCase() === q.trim().toLowerCase()) ?? null;
+      target = toId ? this.world.characters.get(toId) ?? null : findPresentPc(this.world, c, parsed.to!) ?? (toAll ? anyPc(parsed.to!) : null);
+      if (!target || target.id === c.id || (!toAll && this.world.characterSpot(target)?.location_id !== this.world.characterSpot(c)?.location_id)) {
         return { ok: false, text: `No ves aquí a ${parsed.to ?? 'esa persona'}.` };
       }
     }
@@ -2265,6 +2275,8 @@ export class Engine {
     const toMe = target ? ` a ${pcName(this.world, c.id, target)}` : '';
     const event = this.events.emit({
       actor_id: c.id, action_type: mode, input_text: said, channel: 'sound', loudness,
+      // A toda la mesa: lo leen todos los jugadores tal cual (visibilidad pública); a quien se dirige, solo él y quien hable.
+      ...(toAll ? (target ? { also_to: [target.id], visibility: 'private' as const } : { visibility: 'public' as const }) : {}),
       narration_private: `${verb[0]}${toMe}: «${said}»`,
       observable: `${c.name} ${verb[1]}${target ? ` a ${target.name}` : ''}: «${said}»`,
       tags: ['deterministic', 'social', 'say'],

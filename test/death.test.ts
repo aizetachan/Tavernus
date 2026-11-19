@@ -241,7 +241,8 @@ describe('muerte y vuelta', () => {
 
   it('hardcore: espera 30 min, vuelve sin nada y con −1 en su mejor característica; su cuerpo se saquea libre', async () => {
     const { engine, time, kael, mira } = await bar();
-    kael.death_mode = 'hardcore';
+    // El modo de muerte es de la mesa (ajuste de la partida), no del personaje (reunión del 11-11-2026).
+    engine.setSettings({ ...engine.world.settings, death_mode: 'hardcore' });
     damageCharacter(engine.world, kael, 40, { cause: 'una roca' });
     await engine.tick();
     expect(kael.status).toBe('dead');

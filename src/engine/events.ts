@@ -114,6 +114,9 @@ export class EventLog {
       for (const c of this.world.characters.values()) {
         if (c.status !== 'dead' && c.status !== 'retired' && !delivered.has(c.id)) delivered.set(c.id, 'full');
       }
+      // Lo dicho a toda la mesa (chat_reach all) lo leen todos; quién lo oía de verdad se apunta igual (sound), para
+      // los nombres que se aprenden y para que la web sepa quién lo tenía al lado.
+      if (input.channel === 'sound') for (const w of witnesses(this.world, this.clock, at, nowGameS, input.loudness ?? 1, actor?.id)) heard.set(w.character.id, w.perceived.sound);
     } else if (visibility === 'location') {
       const channel = input.channel ?? 'any';
       for (const w of witnesses(this.world, this.clock, at, nowGameS, input.loudness ?? 1, actor?.id)) {

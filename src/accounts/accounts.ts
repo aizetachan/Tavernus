@@ -107,6 +107,18 @@ function checkUsername(name: unknown): string {
 }
 
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
+
+/** Sin vocales ni caracteres que se confunden (0/O, 1/I/L): 16 caracteres en cuatro grupos, «KX7P-9QMD-ZR4T-H2WB». */
+const RECOVERY_ALPHABET = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
+function newRecoveryCode(): string {
+  const bytes = randomBytes(16);
+  const chars = [...bytes].map((b) => RECOVERY_ALPHABET[b % RECOVERY_ALPHABET.length]!);
+  return [0, 4, 8, 12].map((i) => chars.slice(i, i + 4).join('')).join('-');
+}
+/** Como lo teclee el usuario: sin guiones ni espacios, en mayúsculas. */
+export function normalizeRecoveryCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
 const iso = (v: unknown): string | null => (v === null || v === undefined ? null : v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString());
 
 interface UserRow { id: string; username: string; is_admin: boolean; disabled_at: unknown; created_at: unknown; last_login_at: unknown; last_seen_at: unknown; password_hash?: string }
@@ -244,6 +256,53 @@ export class Accounts {
     const [row] = await this.db.query<{ password_hash: string }>('select password_hash from users where id = $1', [id]);
     if (!row || typeof current !== 'string' || !await verifyPassword(current, row.password_hash)) throw new AccountError('La contraseña actual no es esa.', 400, 'current');
     await this.setPassword(id, next, session);
+  }
+
+  // -------------------------------------------------------------------------
+  // Código de recuperación (reunión del 11-11-2026): sin correo, es la única forma de que el usuario cambie
+  // su contraseña solo. Se guarda su hash (como la contraseña); el código se enseña una vez.
+  // -------------------------------------------------------------------------
+
+  /** Genera un código nuevo (el anterior deja de valer) y lo devuelve en claro: es la única vez que se ve. */
+  async issueRecoveryCode(userId: string): Promise<string> {
+    const code = newRecoveryCode();
+    const hash = await hashPassword(normalizeRecoveryCode(code));
+    const r = await this.db.query('update users set recovery_hash = $2 where id = $1 returning id', [userId, hash]);
+    if (!r[0]) throw new AccountError('No existe ese usuario.', 404);
+    return code;
+  }
+
+  /** Con la contraseña actual, un código nuevo (para quien quiere tenerlo o perdió el anterior). */
+  async renewRecoveryCode(id: string, current: unknown): Promise<string> {
+    const [row] = await this.db.query<{ password_hash: string }>('select password_hash from users where id = $1', [id]);
+    if (!row || typeof current !== 'string' || !await verifyPassword(current, row.password_hash)) throw new AccountError('La contraseña actual no es esa.', 400, 'current');
+    return this.issueRecoveryCode(id);
+  }
+
+  /**
+   * Contraseña olvidada: usuario, código y contraseña nueva. Cierra sus sesiones, gasta el código y devuelve el usuario
+   * (quien llama le abre sesión y le da un código nuevo). Mismo mensaje si el usuario no existe, no tiene código o no
+   * coincide, y los intentos cuentan como los de entrar.
+   */
+  async recoverWithCode(username: unknown, code: unknown, password: unknown, ip = ''): Promise<User> {
+    const name = typeof username === 'string' ? username.trim() : '';
+    const key = `recover|${usernameKey(name)}|${ip}`;
+    const f = this.fails.get(key);
+    if (f && f.n >= LOGIN_FAILS && f.until > this.now()) throw new AccountError('Demasiados intentos. Espera unos minutos y vuelve a probar.', 429);
+    const pass = checkPassword(password);
+    const [row] = name ? await this.db.query<UserRow & { recovery_hash: string | null }>(`select ${USER_COLS}, recovery_hash from users where username_key = $1`, [usernameKey(name)]) : [];
+    const given = typeof code === 'string' ? normalizeRecoveryCode(code) : '';
+    const ok = row && row.recovery_hash && given.length >= 12 && await verifyPassword(given, row.recovery_hash);
+    if (!row || !ok) {
+      const prev = f && f.until > this.now() ? f.n : 0;
+      this.fails.set(key, { n: prev + 1, until: this.now() + LOGIN_WINDOW_MS });
+      throw new AccountError('Usuario o código de recuperación incorrectos.', 401, 'code');
+    }
+    if (row.disabled_at !== null) throw new AccountError('Esta cuenta está desactivada. Habla con quien administra el servidor.', 403);
+    this.fails.delete(key);
+    await this.setPassword(row.id, pass);
+    await this.db.query('update users set recovery_hash = null where id = $1', [row.id]);
+    return userOf(row);
   }
 
   async setAdmin(id: string, admin: boolean): Promise<void> {

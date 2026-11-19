@@ -166,6 +166,10 @@ export const MENU = String.raw`<!doctype html>
   .crow small { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
   .crow .acts { display: flex; gap: 6px; flex: none; }
   .crow .btn.danger.armed { color: #ff9d94; }
+  /* Biblioteca: cada personaje es una plantilla; debajo, en qué partidas juega una instancia suya. */
+  .crow b .tag { margin-left: 8px; padding: 1px 7px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(230,183,90,.45); font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); vertical-align: 2px; }
+  .crow small.inst { color: #c9c3b9; }
+  .crow small.inst.dead { color: var(--muted); }
   .filters.menu .acct-name { margin: 2px 12px 4px; font-size: 14px; font-weight: 600; color: var(--text); }
   .filters.menu .acct[hidden] { display: none; }
   #pc-host { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -175,13 +179,19 @@ export const MENU = String.raw`<!doctype html>
   #pc-host .pc-body button.pick:hover:not(:disabled) { box-shadow: inset 0 0 0 1.5px var(--accent); }
   #pc-host .pc-body button.pick .ini { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 50%; background: var(--accent-tint); color: var(--accent); font: 700 16px/1 var(--display); }
   #pc-host .pc-body button.pick small { display: block; color: var(--muted); font-size: 12.5px; }
-  #pw { width: min(400px, calc(100vw - 32px)); padding: 22px; border: 0; border-radius: 18px; background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
-  #pw::backdrop { background: rgba(0,0,0,.55); }
-  #pw h2 { margin: 0 0 10px; font: 700 18px/1.2 var(--display); }
-  #pw label { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
-  #pw input { display: block; width: 100%; height: 40px; margin-top: 4px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bubble); color: var(--text); font: inherit; }
-  #pw .foot { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 18px; flex-wrap: wrap; }
-  #pw .error { flex: 1; font-size: 13px; }
+  /* Diálogos pequeños de la cuenta y de la partida (contraseña, código de recuperación, ajustes de la partida). */
+  .dlg { width: min(400px, calc(100vw - 32px)); padding: 22px; border: 0; border-radius: 18px; background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+  .dlg::backdrop { background: rgba(0,0,0,.55); }
+  .dlg h2 { margin: 0 0 10px; font: 700 18px/1.2 var(--display); }
+  .dlg p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.45; color: var(--muted); }
+  .dlg label { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .dlg input, .dlg select { display: block; width: 100%; height: 40px; margin-top: 4px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bubble); color: var(--text); font: inherit; font-size: 14.5px; }
+  .dlg .foot { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+  .dlg .error { flex: 1; font-size: 13px; }
+  .dlg .ok-note { flex: 1; font-size: 13px; color: var(--ok); }
+  .dlg [hidden] { display: none !important; }
+  /* El código de recuperación, grande y fácil de copiar. */
+  .code { margin: 12px 0 0; padding: 14px 12px; border-radius: 12px; background: var(--bubble); box-shadow: inset 0 0 0 1px var(--line); text-align: center; font: 700 22px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .08em; color: var(--accent); user-select: all; -webkit-user-select: all; overflow-wrap: anywhere; }
   .error { color: #ff9d94; font-size: 14px; }
   #fab { display: none; }
 
@@ -457,6 +467,7 @@ ${CHARGEN_CSS}
       <div class="acct-name acct" id="acct-name" hidden></div>
       <button type="button" role="menuitem" class="acct" data-acct="admin" hidden><span>Administración</span></button>
       <button type="button" role="menuitem" class="acct" data-acct="password" hidden><span>Cambiar contraseña</span></button>
+      <button type="button" role="menuitem" class="acct" data-acct="recovery" hidden><span>Código de recuperación</span></button>
       <button type="button" role="menuitem" class="acct" data-acct="logout" hidden><span>Cerrar sesión</span></button>
       <div class="sep acct" role="separator" hidden></div>
       <div id="status" role="note" hidden></div>
@@ -516,6 +527,10 @@ ${CHARGEN_CSS}
             <div id="adv-pop" class="dd-menu pop" role="dialog" aria-label="Opciones avanzadas" hidden>
               <b>Opciones avanzadas</b>
               <label class="sub">Semilla de dados (vacía: al azar; al grabar se elige una sola)<input id="g-seed" type="number" min="0" max="4294967295" step="1" placeholder="p. ej. 1234"></label>
+              <label class="sub">Dificultad<select id="g-difficulty" data-default="normal"><option value="easy">Fácil</option><option value="normal" selected>Normal</option><option value="hard">Difícil</option><option value="deadly">Mortal</option></select></label>
+              <label class="sub">Si un personaje muere<select id="g-death" data-default="casual"><option value="casual" selected>Casual: vuelve pasado un rato, conserva lo suyo</option><option value="hardcore">Hardcore: muerte definitiva, vuelve con las manos vacías</option></select></label>
+              <label class="sub">Chat entre jugadores<select id="g-chat" data-default="all"><option value="all" selected>A toda la mesa, estén donde estén</option><option value="hearing">Solo a quien pueda oírte</option></select></label>
+              <p class="note">Estos tres ajustes son de la partida y valen para todos; luego se cambian en «Ajustes…» de la partida.</p>
             </div>
           </div>
         </div>
@@ -559,13 +574,37 @@ ${CHARGEN_CSS}
     <div id="cg-host" class="cg" hidden></div>
   </section>
 </main>
-<dialog id="pw" aria-labelledby="pw-title">
+<dialog id="pw" class="dlg" aria-labelledby="pw-title">
   <form method="dialog" id="pw-form">
     <h2 id="pw-title">Cambiar contraseña</h2>
     <label>Contraseña actual<input type="password" id="pw-cur" autocomplete="current-password" maxlength="200"></label>
     <label>Contraseña nueva<input type="password" id="pw-new" autocomplete="new-password" maxlength="200"></label>
     <label>Repítela<input type="password" id="pw-again" autocomplete="new-password" maxlength="200"></label>
     <div class="foot"><span class="error" id="pw-err" role="alert"></span><button class="btn ghost sm" type="button" id="pw-cancel">Cancelar</button><button class="btn primary sm" type="submit" id="pw-go">Guardar</button></div>
+  </form>
+</dialog>
+<dialog id="rc" class="dlg" aria-labelledby="rc-title">
+  <form method="dialog" id="rc-form">
+    <h2 id="rc-title">Código de recuperación</h2>
+    <div id="rc-ask">
+      <p>Es la única forma de cambiar la contraseña si la olvidas (no hay recuperación por correo). Generar uno nuevo anula el anterior.</p>
+      <label>Contraseña actual<input type="password" id="rc-cur" autocomplete="current-password" maxlength="200"></label>
+    </div>
+    <div id="rc-show" hidden>
+      <div class="code" id="rc-code" aria-live="polite"></div>
+      <p>Guárdalo: es la única forma de cambiar la contraseña si la olvidas. El anterior ya no vale.</p>
+    </div>
+    <div class="foot"><span class="error" id="rc-err" role="alert"></span><button class="btn ghost sm" type="button" id="rc-copy" hidden>Copiar</button><button class="btn ghost sm" type="button" id="rc-cancel">Cancelar</button><button class="btn primary sm" type="submit" id="rc-go">Generar código</button></div>
+  </form>
+</dialog>
+<dialog id="gs" class="dlg" aria-labelledby="gs-title">
+  <form method="dialog" id="gs-form">
+    <h2 id="gs-title">Ajustes de la partida</h2>
+    <p id="gs-name"></p>
+    <label>Dificultad<select id="gs-difficulty"><option value="easy">Fácil</option><option value="normal">Normal</option><option value="hard">Difícil</option><option value="deadly">Mortal</option></select></label>
+    <label>Si un personaje muere<select id="gs-death"><option value="casual">Casual: vuelve pasado un rato, conserva lo suyo</option><option value="hardcore">Hardcore: muerte definitiva, vuelve con las manos vacías</option></select></label>
+    <label>Chat entre jugadores<select id="gs-chat"><option value="all">A toda la mesa, estén donde estén</option><option value="hearing">Solo a quien pueda oírte</option></select></label>
+    <div class="foot"><span class="error" id="gs-err" role="alert"></span><button class="btn ghost sm" type="button" id="gs-cancel">Cancelar</button><button class="btn primary sm" type="submit" id="gs-go">Guardar</button></div>
   </form>
 </dialog>
 <div id="toast" role="alert" hidden></div>
@@ -625,6 +664,20 @@ ${CHARGEN_JS}
   function call(method, path) {
     return fetch(path, { method: method }).then(function (r) { return r.json(); }).catch(function () { return { ok: false, text: 'No hay conexión con el servidor.' }; });
   }
+  function post(path, body) {
+    return fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); }).catch(function () { return { ok: false, text: 'No hay conexión con el servidor.' }; });
+  }
+  /** Ajustes de la partida (los fija el anfitrión; GET /api/games los trae siempre): dificultad, qué pasa al morir y alcance del chat. */
+  var DIFF = { easy: 'Fácil', normal: 'Normal', hard: 'Difícil', deadly: 'Mortal' };
+  var DEATH = { casual: 'casual', hardcore: 'hardcore' };
+  var CHAT = { all: 'chat a toda la mesa', hearing: 'chat solo a quien oiga' };
+  function settingsOf(g) {
+    var s = (g && g.settings) || {};
+    return { difficulty: DIFF[s.difficulty] ? s.difficulty : 'normal', death_mode: DEATH[s.death_mode] ? s.death_mode : 'casual', chat_reach: CHAT[s.chat_reach] ? s.chat_reach : 'all' };
+  }
+  /** «Normal, casual, chat a toda la mesa». */
+  function settingsText(g) { var s = settingsOf(g); return DIFF[s.difficulty] + ', ' + DEATH[s.death_mode] + ', ' + CHAT[s.chat_reach]; }
   var toastTimer = null;
   function toast(text) { var t = $('toast'); t.textContent = text; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 5000); }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -758,14 +811,42 @@ ${CHARGEN_JS}
         b.disabled = true;
         call('POST', '/api/games/demo?game=' + encodeURIComponent(g.slug)).then(function (r) { if (!r.ok) toast(r.text); load(); });
       }),
+      settingsButton(g, cls),
       deleteButton(g, cls + ' danger'),
     ];
-    return [invitesButton(g, cls), deleteButton(g, cls + ' danger')];
+    return [invitesButton(g, cls), settingsButton(g, cls), deleteButton(g, cls + ' danger')];
   }
   /** Asientos y enlaces de invitación de la partida (page-access.ts). */
   function invitesButton(g, cls) {
     return button('Invitaciones', cls, function () { location.href = '/invitaciones?game=' + encodeURIComponent(g.slug); });
   }
+  /** Dificultad, muerte y chat de una partida ya creada (solo quien puede borrarla: su anfitrión o el administrador). */
+  function settingsButton(g, cls) {
+    return button('Ajustes…', cls, function () { closeMenus(); openSettings(g); });
+  }
+  var settingsGame = null;
+  function openSettings(g) {
+    settingsGame = g;
+    var s = settingsOf(g);
+    $('gs-name').textContent = g.name + '. Son de la partida y valen para todos los que juegan en ella.';
+    $('gs-difficulty').value = s.difficulty; $('gs-death').value = s.death_mode; $('gs-chat').value = s.chat_reach;
+    $('gs-err').textContent = ''; $('gs-go').disabled = false;
+    $('gs').showModal(); $('gs-difficulty').focus();
+  }
+  $('gs-cancel').addEventListener('click', function () { $('gs').close(); });
+  $('gs-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    if (!settingsGame) { $('gs').close(); return; }
+    var g = settingsGame;
+    $('gs-go').disabled = true; $('gs-err').textContent = '';
+    post('/api/games/settings?game=' + encodeURIComponent(g.slug), { difficulty: $('gs-difficulty').value, death_mode: $('gs-death').value, chat_reach: $('gs-chat').value })
+      .then(function (r) {
+        $('gs-go').disabled = false;
+        if (!r.ok) { $('gs-err').textContent = r.text || 'No se pudo guardar.'; return; }
+        if (r.settings) g.settings = r.settings;
+        $('gs').close(); toast('Ajustes guardados: ' + settingsText(g) + '.'); load();
+      });
+  });
 
   /**
    * El aro de cada partida: un color de la paleta sacado de su nombre interno (siempre el mismo para la misma
@@ -879,6 +960,8 @@ ${CHARGEN_JS}
     }
     meta.appendChild(el('span', 'facts', 'Creada el ' + day(g.created_at)));
     body.appendChild(meta);
+    // Los ajustes de la partida en una línea («Normal, casual, chat a toda la mesa»); en demos no mandan: se repite lo grabado.
+    if (tab !== 'demos') { var st = el('p', 'facts', settingsText(g)); st.style.margin = '0'; st.title = 'Dificultad, qué pasa si un personaje muere y a quién llega el chat entre jugadores'; body.appendChild(st); }
     hero2.appendChild(body);
   }
 
@@ -921,7 +1004,16 @@ ${CHARGEN_JS}
     document.addEventListener('click', function () { if (!pop.hidden) show(false); });
   }
   popover('adv-btn', 'adv-pop', 'g-seed');
-  $('g-seed').addEventListener('input', function () { $('adv-btn').classList.toggle('set', !!$('g-seed').value.trim()); });
+  // El botón se marca si hay semilla o algún ajuste de la partida distinto del de por defecto.
+  function advSet() {
+    var on = !!$('g-seed').value.trim();
+    ['g-difficulty', 'g-death', 'g-chat'].forEach(function (id) { if ($(id).value !== $(id).getAttribute('data-default')) on = true; });
+    $('adv-btn').classList.toggle('set', on);
+  }
+  $('g-seed').addEventListener('input', advSet);
+  ['g-difficulty', 'g-death', 'g-chat'].forEach(function (id) { $(id).addEventListener('change', advSet); });
+  /** Los tres ajustes de la partida nueva, tal como van en POST /api/games. */
+  function newSettings() { return { difficulty: $('g-difficulty').value, death_mode: $('g-death').value, chat_reach: $('g-chat').value }; }
   /** Cambia un select por el desplegable de la aplicación; el select sigue con el valor (y avisa con «change»). */
   function fancySelect(sel) {
     var wrap = el('div', 'fsel'); sel.parentNode.insertBefore(wrap, sel); wrap.appendChild(sel);
@@ -1038,7 +1130,7 @@ ${CHARGEN_JS}
   }
 
   // ---------------------------------------------------------------------------
-  // Personajes: la biblioteca de la cuenta (plantillas; cada partida juega con su copia)
+  // Personajes: la biblioteca de la cuenta (plantillas; en cada partida juega una instancia suya, con su propio nivel)
   // ---------------------------------------------------------------------------
   function loadLibrary() {
     return fetch('/api/library').then(function (r) { return r.json(); }).then(function (d) {
@@ -1070,9 +1162,15 @@ ${CHARGEN_JS}
       var r = el('div', 'crow');
       r.appendChild(el('span', 'ini', c.name.charAt(0).toUpperCase()));
       var tt = el('span', 'tt');
-      tt.appendChild(el('b', '', c.name));
+      var nm = el('b', '', c.name); nm.appendChild(el('em', 'tag', 'Plantilla')); tt.appendChild(nm);
       tt.appendChild(el('small', '', charWhat(c)));
-      if (c.games && c.games.length) tt.appendChild(el('small', '', 'Juega en ' + c.games.map(function (g) { return g.name; }).join(', ')));
+      // Sus instancias: «Juega en Reunión (nivel 2)», «… (nivel 1, muerto)»; sin nivel, solo la partida.
+      (c.games || []).forEach(function (g) {
+        var dead = g.status === 'dead', bits = [];
+        if (g.level != null) bits.push('nivel ' + g.level);
+        if (dead) bits.push('muerto');
+        tt.appendChild(el('small', 'inst' + (dead ? ' dead' : ''), 'Juega en ' + g.name + (bits.length ? ' (' + bits.join(', ') + ')' : '')));
+      });
       r.appendChild(tt);
       var acts = el('span', 'acts');
       acts.appendChild(button('Editar', 'btn ghost sm', function () { editChar(c); }));
@@ -1095,7 +1193,7 @@ ${CHARGEN_JS}
     var hero = el('div', 'hero');
     hero.innerHTML = '<div class="cap"><span class="eyebrow">Tus personajes</span><h2>Llévalos a cualquier partida</h2></div>';
     var intro = el('div', 'intro');
-    intro.appendChild(el('p', '', 'Cada partida juega con una copia del personaje: lo que le pase allí no cambia el de tu biblioteca, y editarlo aquí no cambia el que ya está jugando.'));
+    intro.appendChild(el('p', '', 'Cada personaje de tu biblioteca es una plantilla. Al entrar en una partida, esta crea su propia instancia a partir de ella: subir de nivel, ganar equipo o morir en una partida no sube ni cambia al personaje en las demás, ni a la plantilla. Y editar la plantilla aquí no toca a las instancias que ya están jugando.'));
     intro.appendChild(button('Nuevo personaje', 'btn primary', function () { editChar(null); }));
     hero.appendChild(intro);
     p.appendChild(hero);
@@ -1167,6 +1265,37 @@ ${CHARGEN_JS}
       if (a === 'admin') location.href = '/admin/usuarios';
       else if (a === 'logout') fetch('/api/auth/logout', { method: 'POST' }).then(function () { location.href = '/entrar'; }, function () { location.href = '/entrar'; });
       else if (a === 'password') { $('pw-err').textContent = ''; $('pw-form').reset(); $('pw').showModal(); $('pw-cur').focus(); }
+      else if (a === 'recovery') openRecovery();
+    });
+  });
+  // Código de recuperación: con la contraseña actual se genera uno nuevo (el anterior deja de valer) y se enseña una sola vez.
+  function openRecovery() {
+    $('rc-form').reset(); $('rc-err').textContent = ''; $('rc-code').textContent = '';
+    $('rc-ask').hidden = false; $('rc-show').hidden = true; $('rc-copy').hidden = true;
+    $('rc-go').hidden = false; $('rc-go').disabled = false; $('rc-cancel').textContent = 'Cancelar';
+    $('rc').showModal(); $('rc-cur').focus();
+  }
+  $('rc-cancel').addEventListener('click', function () { $('rc').close(); });
+  $('rc-copy').addEventListener('click', function (ev) {
+    var code = $('rc-code').textContent, b = ev.currentTarget;
+    (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(function () { b.textContent = 'Copiado'; }, function () {
+      var r = document.createRange(); r.selectNodeContents($('rc-code')); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      try { document.execCommand('copy'); b.textContent = 'Copiado'; } catch (e) { b.textContent = 'Cópialo a mano'; }
+    });
+    setTimeout(function () { b.textContent = 'Copiar'; }, 1800);
+  });
+  $('rc-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    if (!$('rc-show').hidden) { $('rc').close(); return; }
+    if (!$('rc-cur').value) { $('rc-err').textContent = 'Escribe tu contraseña actual.'; return; }
+    $('rc-go').disabled = true; $('rc-err').textContent = '';
+    post('/api/me/recovery', { password: $('rc-cur').value }).then(function (r) {
+      $('rc-go').disabled = false;
+      if (!r.ok) { $('rc-err').textContent = r.text || 'No se pudo.'; return; }
+      $('rc-code').textContent = r.recovery_code || '';
+      $('rc-ask').hidden = true; $('rc-show').hidden = false; $('rc-copy').hidden = false;
+      $('rc-go').hidden = true; $('rc-cancel').textContent = 'Lo he guardado';
+      $('rc-copy').focus();
     });
   });
   $('pw-cancel').addEventListener('click', function () { $('pw').close(); });
@@ -1261,7 +1390,7 @@ ${CHARGEN_JS}
   /** Crea la partida, con el personaje del asistente si lo hay. */
   function createGame(p, ui) {
     var gen = generated();
-    var body = Object.assign({}, p || {}, { name: $('g-name').value, mode: mode(), character: p && p.name ? p.name : '', dice_seed: $('g-seed').value, seats: Math.max(0, Math.min(7, parseInt($('g-seats').value, 10) || 0)) });
+    var body = Object.assign({}, p || {}, { name: $('g-name').value, mode: mode(), character: p && p.name ? p.name : '', dice_seed: $('g-seed').value, seats: Math.max(0, Math.min(7, parseInt($('g-seats').value, 10) || 0)), settings: newSettings() });
     if (gen) body.world = { seed: $('g-wseed').value, tone: $('g-tone').value, setting: $('g-setting').value };
     // Generar con Claude tarda: el botón lo dice y una nota explica cuánto.
     if (gen) ui.busy('Generando mundo…', mode() === 'offline' ? 'Mundo de prueba, sin API: es un momento.' : 'Claude está escribiendo el lugar, su gente y tu situación inicial. Suele tardar uno o dos minutos.');

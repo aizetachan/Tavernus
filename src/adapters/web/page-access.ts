@@ -210,7 +210,7 @@ export function seatsPage(slug: string): string {
   return HEAD('Invitaciones — Tavernus') + String.raw`<div class="box wide">
   <span class="eyebrow"><a href="/">← Partidas</a></span>
   <h1 id="title">Invitaciones</h1>
-  <p>Un enlace por asiento. Pásale a cada persona el suyo: al abrirlo con su cuenta, el asiento queda suyo (en cualquier dispositivo) y no puede actuar por otro. En un asiento libre entra con un personaje de su biblioteca o crea uno. «Renovar» cambia el enlace y el viejo deja de valer; «Liberar» quita el asiento a su usuario, y su personaje sigue en el mundo.</p>
+  <p>Un enlace por asiento. Pásale a cada persona el suyo: al abrirlo con su cuenta, el asiento queda suyo (en cualquier dispositivo) y no puede actuar por otro. En un asiento libre entra con un personaje de su biblioteca o crea uno. «Renovar» cambia el enlace y el viejo deja de valer; «Liberar» quita el asiento a su usuario, y su personaje sigue en el mundo. Si un invitado olvida su contraseña, puedes ponerle una nueva desde aquí.</p>
   <div id="seats"><p class="muted">Cargando…</p></div>
   <div class="foot"><span class="error" id="err" role="alert"></span><button class="btn ghost" type="button" id="add">Añadir asiento libre</button><a class="btn primary" id="play" href="/?game=">Ir a la partida</a></div>
 </div>
@@ -234,9 +234,13 @@ export function seatsPage(slug: string): string {
     ev.target.classList.add('armed'); ev.target.textContent = '¿Seguro?';
     return false;
   }
+  // Avisos en línea por asiento («Contraseña cambiada…»): sobreviven al repintado periódico un rato.
+  var notes = {};
   function load() {
     call('GET', '/api/seats?game=' + encodeURIComponent(slug)).then(function (d) {
       if (!d.ok) { $('seats').innerHTML = '<p class="error">' + esc(d.text) + '</p>'; return; }
+      // Con un cambio de contraseña a medio escribir, este repintado espera al siguiente.
+      if ($('seats').querySelector('.pwrow:not([hidden])')) return;
       $('title').textContent = 'Invitaciones: ' + d.game.name;
       document.title = 'Invitaciones: ' + d.game.name;
       var box = $('seats'); box.innerHTML = '';
@@ -252,7 +256,33 @@ export function seatsPage(slug: string): string {
           (s.host ? '<div class="link"><span class="muted">Tu asiento</span></div>'
             : '<div class="link"><input type="text" readonly value="' + esc(url) + '" aria-label="Enlace de ' + esc(s.character_name || s.label) + '">' +
               '<button class="btn ghost sm" data-copy>Copiar</button><button class="btn ghost sm" data-regen>Renovar</button>' +
-              (s.user ? '<button class="btn ghost sm" data-release>Liberar</button>' : '') + '</div>');
+              (s.user ? '<button class="btn ghost sm" data-release>Liberar</button><button class="btn ghost sm" data-pw aria-expanded="false">Contraseña</button>' : '') + '</div>') +
+          // Contraseña nueva para el invitado (si la ha olvidado): un campo que se despliega con «Contraseña».
+          (s.user && !s.host
+            ? '<div class="link pwrow" hidden><input type="password" autocomplete="new-password" maxlength="200" placeholder="Contraseña nueva" aria-label="Contraseña nueva para ' + esc(s.user) + '">' +
+              '<button class="btn primary sm" data-pw-save>Guardar</button><button class="btn ghost sm" data-pw-cancel>Cancelar</button></div>' +
+              '<span class="muted" data-pw-note role="status">' + (notes[s.id] && Date.now() - notes[s.id].at < 30000 ? esc(notes[s.id].text) : '') + '</span>'
+            : '');
+        var pwBtn = div.querySelector('[data-pw]'), pwRow = div.querySelector('.pwrow');
+        if (pwBtn) {
+          var pwIn = pwRow.querySelector('input'), pwNote = div.querySelector('[data-pw-note]');
+          var pwOpen = function (open) { pwRow.hidden = !open; pwBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); if (open) pwIn.focus(); else pwIn.value = ''; };
+          pwBtn.addEventListener('click', function () { pwNote.textContent = ''; pwNote.classList.remove('error'); pwOpen(pwRow.hidden); });
+          pwRow.querySelector('[data-pw-cancel]').addEventListener('click', function () { pwOpen(false); });
+          pwIn.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); pwRow.querySelector('[data-pw-save]').click(); } if (ev.key === 'Escape') pwOpen(false); });
+          pwRow.querySelector('[data-pw-save]').addEventListener('click', function (ev) {
+            var b = ev.target, pw = pwIn.value;
+            if (!pw) { pwNote.textContent = 'Escribe la contraseña nueva.'; pwNote.classList.add('error'); pwIn.focus(); return; }
+            b.disabled = true; pwNote.textContent = ''; pwNote.classList.remove('error');
+            call('POST', '/api/seats/password?game=' + encodeURIComponent(slug), { seat: s.id, password: pw }).then(function (r) {
+              b.disabled = false;
+              if (!r.ok) { pwNote.textContent = r.text || 'No se pudo.'; pwNote.classList.add('error'); pwIn.focus(); return; }
+              notes[s.id] = { text: 'Contraseña cambiada; sus sesiones abiertas se han cerrado.', at: Date.now() };
+              pwNote.textContent = notes[s.id].text;
+              pwOpen(false);
+            });
+          });
+        }
         var copy = div.querySelector('[data-copy]');
         if (copy) copy.addEventListener('click', function (ev) {
           var inp = div.querySelector('input'); inp.select();

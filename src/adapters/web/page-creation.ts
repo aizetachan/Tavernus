@@ -1,8 +1,9 @@
 /**
  * Asistente de creación de personaje de la web (SPEC §4.6, §4.8), el mismo para el
  * anfitrión en «Nueva partida» (page-menu.ts) y el invitado en su enlace
- * (page-access.ts): nombre, raza, clase, trasfondo, características, habilidades,
- * muerte y resumen. Solo ofrece opciones válidas, pero no decide nada: el resumen
+ * (page-access.ts): nombre, raza, clase, trasfondo, características, habilidades
+ * y resumen (siete pasos; la dificultad y el modo de muerte son ajustes de la partida,
+ * no del personaje). Solo ofrece opciones válidas, pero no decide nada: el resumen
  * lo calcula el servidor (POST /api/character/preview, chargen.ts) y el servidor
  * vuelve a validarlo todo al crear.
  *
@@ -86,10 +87,6 @@ export const CHARGEN_CSS = String.raw`
 export const CHARGEN_JS = String.raw`
 function tavernusChargen(root, o) {
   var C = o.options;
-  var DEATH = {
-    casual: { name: 'Casual', text: C.death_text.casual, pic: '/assets/muerte-casual.jpg' },
-    hardcore: { name: 'Hardcore', text: C.death_text.hardcore, pic: '/assets/muerte-hardcore.jpg' }
-  };
   var HINT = {};
   C.steps.forEach(function (x) { HINT[x.id] = x; });
   function fromCatalog(id, extra) { return { id: id, title: HINT[id].title, lead: HINT[id].hint + (extra || '') }; }
@@ -101,10 +98,9 @@ function tavernusChargen(root, o) {
     step(fromCatalog('background'), paintBackground, function () { return s.bg ? '' : 'Elige un trasfondo.'; }),
     step(fromCatalog('abilities', ' Si eliges un valor que ya tiene otra, se intercambian.'), paintAbilities, function () { return ''; }),
     step(fromCatalog('skills'), paintSkills, function () { var n = skillCount(); return s.skills.length === n ? '' : 'Elige ' + n + ' habilidades de ' + klass().name + '.'; }),
-    step(fromCatalog('death'), paintDeath, function () { return ''; }),
     { id: 'summary', title: 'Resumen', lead: 'Así entra en el mundo. Si algo no te convence, vuelve atrás.', paint: paintSummary, check: function () { return ''; } }
   ];
-  var s = { name: '', look: '', hook: '', race: null, klass: null, bg: null, bgTouched: false, ab: null, abTouched: false, skills: [], death: 'casual' };
+  var s = { name: '', look: '', hook: '', race: null, klass: null, bg: null, bgTouched: false, ab: null, abTouched: false, skills: [] };
   // Editar un personaje de la biblioteca: el asistente empieza con lo que ya tenía.
   if (o.initial) {
     var I = o.initial;
@@ -115,7 +111,7 @@ function tavernusChargen(root, o) {
     s.ab = I.abilities || null; s.abTouched = Boolean(I.abilities);
     if (s.klass && !s.ab) s.ab = recommended();
     if (s.klass && !s.bg) s.bg = klass().background;
-    s.skills = (I.skills || []).slice(); s.death = I.death_mode === 'hardcore' ? 'hardcore' : 'casual';
+    s.skills = (I.skills || []).slice();
   }
   var at = 0, ready = false, previewAsk = 0;
 
@@ -234,9 +230,6 @@ function tavernusChargen(root, o) {
     fields.appendChild(box); fields.appendChild(counter);
     fresh();
   }
-  function paintDeath() {
-    cards('death', ['casual', 'hardcore'].map(function (id) { return { id: id, name: DEATH[id].name, description: DEATH[id].text, pic: DEATH[id].pic }; }), s.death, function (id) { s.death = id; });
-  }
   function paintSummary() {
     var ask = ++previewAsk;
     ready = false; nextBtn.disabled = true;
@@ -269,20 +262,20 @@ function tavernusChargen(root, o) {
       row('Habilidades', p.skills.map(function (x) { return '<span class="cg-tag on">' + esc(x.name) + ' ' + signed(x.modifier) + '</span>'; }).join('')) +
       row('Equipo inicial', '<span>' + esc(gear(p.equipment, 'class')) + '</span>') +
       (gear(p.equipment, 'background') ? row('Del trasfondo', '<span>' + esc(gear(p.equipment, 'background')) + '</span>') : '') +
-      row('Si muere', '<span>' + esc(DEATH[p.death_mode].name + '. ' + DEATH[p.death_mode].text) + '</span>') +
       (look ? row('Cómo se ve', '<span>' + esc(look) + '</span>') : '') +
       (hook ? row('Qué le trae aquí', '<span>' + esc(hook) + '</span>') : '');
     if (o.summaryExtra) fields.appendChild(o.summaryExtra);
     var again = el('<div><button type="button" class="btn ghost sm">Empezar de nuevo</button></div>');
     again.querySelector('button').addEventListener('click', function () {
-      s.race = s.klass = s.bg = s.ab = null; s.bgTouched = s.abTouched = false; s.skills = []; s.death = 'casual';
+      s.race = s.klass = s.bg = s.ab = null; s.bgTouched = s.abTouched = false; s.skills = [];
       go(1);
     });
     fields.appendChild(again);
   }
 
   function payload() {
-    var out = { name: cleanName(), race: s.race, class: s.klass, background: s.bg, abilities: s.ab, skills: s.skills, death_mode: s.death, appearance: s.look.trim() };
+    // Sin death_mode: si un personaje muere lo decide la partida (ajustes del anfitrión), no el personaje.
+    var out = { name: cleanName(), race: s.race, class: s.klass, background: s.bg, abilities: s.ab, skills: s.skills, appearance: s.look.trim() };
     if (o.showHook()) out.hook = s.hook.trim();
     return out;
   }

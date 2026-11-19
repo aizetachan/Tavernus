@@ -129,4 +129,14 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    // Reunión del 11-11-2026 (fase 1): los ajustes de la partida (dificultad, muerte, chat) son de la mesa y los fija el
+    // anfitrión; y cada usuario puede tener un código de recuperación para cambiar la contraseña sin correo.
+    version: 3,
+    name: 'ajustes de partida y código de recuperación',
+    sql: [
+      'alter table games add column settings jsonb',
+      'alter table users add column recovery_hash text',
+    ],
+  },
 ];

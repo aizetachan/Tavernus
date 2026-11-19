@@ -428,6 +428,35 @@ export type CharacterStatus = 'active' | 'asleep' | 'unconscious' | 'dead' | 're
 
 export interface Condition { name: string; source: string; expires_game_s: number | null }
 
+/**
+ * Ajustes de la partida, que fija el anfitrión (reunión del 11-11-2026): la dificultad y qué pasa al morir son de la
+ * mesa, no del personaje; y hasta dónde llega el Chat entre jugadores.
+ */
+export interface GameSettings {
+  /** CD orientativas del máster. */
+  difficulty: 'easy' | 'normal' | 'hard' | 'deadly';
+  /** Al morir (SPEC §4.7): casual vuelve pasado un rato con lo suyo; hardcore, muerte definitiva del personaje. */
+  death_mode: 'casual' | 'hardcore';
+  /** Chat entre jugadores: a toda la mesa estén donde estén, o solo a quien pueda oírte (percepción). */
+  chat_reach: 'all' | 'hearing';
+}
+
+export const DEFAULT_GAME_SETTINGS: GameSettings = { difficulty: 'normal', death_mode: 'casual', chat_reach: 'all' };
+export const DIFFICULTIES = ['easy', 'normal', 'hard', 'deadly'] as const;
+export const DEATH_MODES = ['casual', 'hardcore'] as const;
+export const CHAT_REACHES = ['all', 'hearing'] as const;
+
+/** Ajustes completos a partir de lo que haya (lo que falte o no valga, por defecto). */
+export function gameSettingsOf(raw: unknown): GameSettings {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const pick = <T extends readonly string[]>(v: unknown, allowed: T, dflt: T[number]): T[number] => (typeof v === 'string' && (allowed as readonly string[]).includes(v) ? v as T[number] : dflt);
+  return {
+    difficulty: pick(r['difficulty'], DIFFICULTIES, DEFAULT_GAME_SETTINGS.difficulty),
+    death_mode: pick(r['death_mode'], DEATH_MODES, DEFAULT_GAME_SETTINGS.death_mode),
+    chat_reach: pick(r['chat_reach'], CHAT_REACHES, DEFAULT_GAME_SETTINGS.chat_reach),
+  };
+}
+
 export interface Character {
   id: Id;
   user_id: Id;
