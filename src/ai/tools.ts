@@ -88,6 +88,8 @@ function tool(name: string, description: string, properties: Record<string, unkn
 
 export const ROLL_KINDS = ['skill', 'save', 'ability', 'attack'];
 export const ADV = ['none', 'advantage', 'disadvantage'];
+/** Lo que un PJ le hace a otro a escondidas (robar, registrar, espiar): tirada enfrentada oculta, sin pedirle reacción (rolls.ts, HIDDEN_SKILLS). */
+export const COVERT_SKILLS: ReadonlySet<string> = new Set(['sleight_of_hand', 'stealth']);
 
 /** Orden fijo y determinista: los tools van al principio del prefijo cacheado. */
 export const MASTER_TOOLS: Tool[] = [
@@ -222,7 +224,7 @@ export const MASTER_TOOLS: Tool[] = [
   tool('restrain_npc', 'Atar (o soltar) a un NPC inconsciente que el actor tiene delante. Atado, aunque vuelva en sí, no se mueve ni pelea hasta que le suelten. A quien está despierto y se resiste no se le ata: primero hay que reducirle.', {
     npc_id: str('ID del NPC'), release: { type: ['boolean', 'null'], description: 'true para soltarle; null o false para atarle' },
   }),
-  tool('request_reaction', 'El actor hace algo con las manos a OTRO JUGADOR presente (agarrarlo, llevárselo a rastras, empujarlo, sujetarlo, quitarle algo, atacarlo). No lo resuelvas tú: el otro decide en su pantalla si se deja (sin tirada) o se resiste (tirada enfrentada que hace el servidor) y luego te toca narrar el desenlace. Narra SOLO el intento (alarga la mano, se lanza…), nunca cómo reacciona ni el resultado. Dar algo es transfer_item (oferta), no esto.', {
+  tool('request_reaction', 'El actor hace algo con las manos a OTRO JUGADOR presente (agarrarlo, llevárselo a rastras, empujarlo, sujetarlo, quitarle algo, atacarlo). Lo que se nota (agarrar, empujar, atacar, arrebatar): no lo resuelvas tú; el otro decide en su pantalla si se deja (sin tirada) o se resiste (tirada enfrentada que hace el servidor) y luego te toca narrar el desenlace. Lo que va a escondidas (robarle sin que lo note, registrarle, espiarle: kind other con actor_skill sleight_of_hand o stealth): el servidor lo resuelve AHORA con una tirada enfrentada oculta y te dice si salió bien (entonces coge lo suyo con transfer_item o take_coins en este turno) o si le ha pillado (entonces decide el otro). Narra SOLO el intento (alarga la mano, se lanza…), nunca cómo reacciona ni el resultado. Dar algo es transfer_item (oferta), no esto.', {
     target_character_id: str('ID del otro PJ (ch_…)'),
     kind: enm(['grapple', 'shove', 'attack', 'other'], 'grapple: agarrar, sujetar, llevárselo; shove: empujar, apartar, derribar; attack: golpear o herir (ataque contra su CA); other: otra cosa física (quitarle algo, taparle la boca…)'),
     attempt: str('Qué intenta, en infinitivo y en segunda persona para el afectado, concreto: «agarrarte del brazo y llevarte a la taberna», «quitarte la daga del cinto»'),
@@ -472,6 +474,8 @@ export interface ToolContext {
   decisive_rejections?: number;
   /** Cierres rechazados porque un NPC que no ve al actor escondido le habla o le detiene (uno como mucho). */
   hidden_rejections?: number;
+  /** Otros PJ a los que el actor acaba de robar o registrar a escondidas sin que lo noten (tirada enfrentada oculta): se les puede quitar algo en este turno. */
+  stealth_won?: Set<Id>;
   /** La narración que se rechazó por no contarlos: si vuelve igual, el motor los añade. */
   untold_narration?: string;
   /** Tools que ha resuelto el motor por su cuenta (los ataques de esos turnos): el máster los guarda con los suyos. */
@@ -947,8 +951,9 @@ function lootGuard(ctx: ToolContext, instanceId: Id): Record<string, unknown> | 
   const holder = [...w.characters.values()].find((o) => o.id !== ctx.actor.id && w.itemsCarriedBy(o.id).some((i) => i.id === inst.id));
   if (holder && holder.status === 'unconscious') return { error: 'not_allowed', hint: `${holder.name} es otro jugador y está vivo: sin su consentimiento no se le quita nada (que te lo dé cuando despierte).` };
   // Despierto, decide él (reactions.ts): quitarle algo (su bolsa) solo en el desenlace de su reacción, si la acepta o pierde la tirada.
-  if (holder && holder.status === 'active' && !ctx.engine.reactionWon(ctx.actor.id, holder.id)) {
-    return { error: 'needs_reaction', hint: `${pcName(w, ctx.actor.id, holder)} es otro jugador: no se le quita nada sin que lo decida él. Pide request_reaction (kind other, actor_skill sleight_of_hand, target_skills perception); si gana, transfer_item o take_coins en el desenlace.` };
+  // A escondidas (request_reaction con sleight_of_hand o stealth): si la tirada oculta salió bien, se lo quita sin que lo note.
+  if (holder && holder.status === 'active' && !ctx.engine.reactionWon(ctx.actor.id, holder.id) && !ctx.stealth_won?.has(holder.id)) {
+    return { error: 'needs_reaction', hint: `${pcName(w, ctx.actor.id, holder)} es otro jugador: no se le quita nada sin más. A escondidas: request_reaction (kind other, actor_skill sleight_of_hand, target_skills perception), que el servidor resuelve con una tirada oculta; si sale bien, transfer_item o take_coins en este mismo turno. A la vista (arrebatárselo): kind other con actor_skill athletics, y él decide.` };
   }
   return null;
 }
@@ -1546,6 +1551,17 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         ? { actor: skills(s('actor_skill'))[0] ?? 'athletics', target: skills(s('target_skills')).length ? skills(s('target_skills')) : ['athletics', 'acrobatics'] }
         : undefined;
       const attempt = s('attempt').trim() || 'ponerte las manos encima';
+      // A escondidas (robar, registrar, espiar: Juego de manos o Sigilo): no se le pregunta a la víctima lo que no notaría.
+      // Tirada enfrentada oculta ahora mismo (reunión del 11-11-2026); solo si lo nota, decide él (con «Lo notas» delante).
+      if (contest && COVERT_SKILLS.has(contest.actor)) {
+        const covert = engine.covertAttempt(who.id, to.id, { attempt, input: ctx.action_text ?? null, contest });
+        if (!covert.ok) return { error: 'reaction_failed', hint: covert.error };
+        if (covert.success) {
+          (ctx.stealth_won ??= new Set()).add(to.id);
+          return { ok: true, success: true, unnoticed: true, hint: `Le sale bien y ${pcName(world, who.id, to)} no nota nada (${covert.detail}). Si le quita algo, hazlo AHORA con transfer_item o take_coins. Narra solo lo que hace el actor; el otro no se entera y no le narres nada a él.` };
+        }
+        return { ok: true, success: false, noticed: true, pending_reaction: true, hint: `Le ha pillado: ${pcName(world, who.id, to)} lo nota (${covert.detail}). Narra solo el intento y que el otro se da cuenta; no narres el resultado. Ahora él decide si se deja o se resiste. Cierra con log_event sin requires_roll.` };
+      }
       const r = engine.requestReaction(who.id, to.id, { kind, attempt, input: ctx.action_text ?? null, dest_spot_id: dest, prone: kind === 'shove' && /suelo|derrib|tumb/i.test(attempt), ...(contest ? { contest } : {}) }, { announce: false });
       if (!r.ok) return { error: 'reaction_failed', hint: r.error };
       return { ok: true, pending_reaction: true, hint: `Queda PEDIDO, no hecho: ${pcName(world, who.id, to)} es otro jugador y decide si se deja o se resiste. Narra solo el intento; no narres su reacción ni el resultado. Cierra con log_event sin requires_roll.` };

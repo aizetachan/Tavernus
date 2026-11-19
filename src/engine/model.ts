@@ -677,6 +677,8 @@ export interface Reaction {
   prone?: boolean;
   /** Skills de la tirada enfrentada (claves 5e): la de quien actúa y las que puede usar el afectado (la mejor). Sin ella, Atletismo contra Atletismo o Acrobacias. */
   contest?: { actor: string; target: string[] };
+  /** Iba a escondidas (robar, espiar) y el afectado lo ha notado en la tirada oculta: por eso se le pregunta. */
+  noticed?: boolean;
   created_real_ms: number;
   expires_real_ms: number;
   /** Evento que la anuncia (para que la web ponga los botones en su sitio). */

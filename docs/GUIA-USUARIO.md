@@ -46,6 +46,8 @@ Debajo de cada respuesta salen sugerencias como «Hablar con Hugo» o «Salir ha
 
 Cuando lo que intentas puede salir mal, aparece un botón con un dado. Púlsalo (o escribe `tirar`): el servidor tira y verás algo como `🎲 d20 [19] + 5 = 24`. Si escribes otra cosa en vez de tirar, la acción se anula.
 
+Hay tiradas que no ves, como en la mesa: fijarte en algo, calar a alguien, buscar o moverte con sigilo. El servidor las tira solo, en tu hilo aparece «🎲 Percepción» sin número, y el Narrador te cuenta lo que notas. Si no notas nada, a lo mejor es que no había nada. Lo mismo si otro jugador intenta robarte sin que te des cuenta: solo si lo notas te preguntarán si te dejas o te resistes.
+
 A veces el tiempo aprieta:
 
 - **Amenaza inmediata.** «⏳ Tienes 60 segundos para reaccionar. Si no, la amenaza se cumple.» Si respondes en menos de 15 segundos, tu tirada va con ventaja (mejor probabilidad).

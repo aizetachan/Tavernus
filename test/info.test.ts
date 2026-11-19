@@ -164,7 +164,7 @@ describe('el sistema contesta sin narrador', () => {
         called++;
         return {
           ok: true, usage: {}, calls: [], context: '', model: 'stub',
-          closed: { narration_private: 'Tendrás que no hacer ruido.', observable: null, observable_vague: null, loudness: 1, tags: [], suggested_actions: [], requires_roll: { kind: 'skill', key: 'stealth', dc: 12, advantage: 'advantage' } },
+          closed: { narration_private: 'Tendrás que no hacer ruido.', observable: null, observable_vague: null, loudness: 1, tags: [], suggested_actions: [], requires_roll: { kind: 'skill', key: 'athletics', dc: 12, advantage: 'advantage' } },
         };
       },
     });
@@ -175,7 +175,7 @@ describe('el sistema contesta sin narrador', () => {
     const r = await engine.act('ch_kael', '¿cuántos dados tiro para esto?');
     expect(called).toBe(1);
     expect(r.info?.title).toBe('Tu tirada pendiente');
-    expect(r.info?.lines[0]).toBe('Sigilo: 1d20 + 1. Con ventaja: tira 2d20 y quédate con el mayor.');
+    expect(r.info?.lines[0]).toBe('Atletismo: 1d20 + 4. Con ventaja: tira 2d20 y quédate con el mayor.');
     expect(r.text).not.toMatch(/12/); // la CD no se dice
     expect(engine.pendingRoll('ch_kael')).not.toBeNull();
   });

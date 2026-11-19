@@ -31,7 +31,7 @@ function bulkyMaster(): MasterLike {
         closed: {
           narration_private: `El máster narra «${text}» (${n}).`, observable: `Alguien hace algo (${n}).`, observable_vague: null, loudness: 1,
           tags: ['test'], suggested_actions: ['Mirar alrededor'],
-          requires_roll: n % 5 === 0 ? { kind: 'skill', key: 'perception', dc: 12, advantage: 'none' } : null,
+          requires_roll: n % 5 === 0 ? { kind: 'skill', key: 'athletics', dc: 12, advantage: 'none' } : null, // a la vista: Percepción se tira oculta al cerrar (19-11-2026)
         },
       };
     },
