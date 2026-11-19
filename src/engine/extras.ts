@@ -271,7 +271,7 @@ export function extraNpc(def: ExtraDef, genre: Genre, spotId: Id): ExtraNpc & { 
     tier: 'extra',
     script: {
       trade: def.trade, temper: def.temper ?? t.temper, service: t.service, lines: structuredClone(lines),
-      refer_to: [...(def.refer_to ?? [])], story: def.story,
+      refer_to: [...(def.refer_to ?? [])], story: def.story, look: def.look,
       ...(def.wander?.length ? { wander: [...def.wander] } : {}),
     },
     routine: { ...def.routine },

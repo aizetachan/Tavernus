@@ -380,3 +380,39 @@ en cursiva dentro de la burbuja de Doro, encima de «¡Entrégate, Cat! ¡Las ma
 **Sin probar con Haiku.** Lo que falta ver con el modelo de verdad: si rellena `beat` en las líneas o lo sigue
 poniendo en la narración (el cierre lo recoge si es una frase corta que nombra a quien habla), y si dos NPC se hablan
 entre ellos en `lines`. Comando y coste en el diario del 04-11.
+
+## v1.6 (19-11): lo dicho va entre comillas, el narrador dentro de la burbuja, el saludo primero
+
+Fase 5 del plan de la reunión del 11-11 (`docs/PLAN-REUNION-2026-11-11.md`), con la decisión «B más comillas» de
+Miguel (19-11), tomada mirando cómo lo hacen AI Dungeon (Do / Say / Story), Foundry y Roll20 (`/ic`, `/ooc`,
+`/emote`) y las mesas de Discord (comillas para lo dicho, asteriscos para lo hecho). Tests en
+`test/conversacion-2026-11-11.test.ts`.
+
+- **Tres modos en la web: Hacer, Decir y Chat** (`src/engine/speech.ts`). En Hacer, lo que va entre comillas («…», "…",
+  “…”) es lo que dice el personaje, tal cual; lo demás es lo que hace. En Decir, todo el texto es su frase: el motor la
+  envuelve en «» (`asSpeech`) y sigue el camino de una acción (`POST /api/act` con `mode: "say"`). Chat es el canal entre
+  jugadores de siempre (antes se llamaba Decir), sin narrador; una raya en Hacer sigue abriéndolo; unas comillas ya no.
+- **El máster recibe lo dicho y lo hecho por separado** (`playerInputLines`, bloque «Acción del jugador»): «Dice: «…»»
+  y «Hace: …», con la regla de que lo dicho va a `lines` como `actor` palabra por palabra y es lo único que dice; con
+  solo comillas, que no le mueva ni le haga coger nada. Sin comillas, el texto entre «» como siempre.
+- **El cierre lo hace cumplir** (`tools.ts`, `log_event`): con comillas en lo escrito, una línea del actor que no es
+  uno de los fragmentos es inventada (fuera de `lines` y de la cita, que se va con su punto), y el fragmento que falte
+  se añade delante de la primera línea del NPC. En turno compartido, por jugador. Sin comillas, `saidByPlayer` como antes.
+- **El narrador no tiene burbuja propia en las charlas** (`applyNarratorMode`, modo `beat`): la primera frase sin relleno
+  de su narración, recortada a lo que cabe en una línea (`clipLineBeat`, 12 palabras), pasa al `beat` de la primera
+  línea del NPC, dentro de su burbuja; la narración queda vacía y lo demás en `payload.master.narrator.dropped`. Si el
+  máster ya puso su gesto en la línea, manda el suyo. Burbuja gris solo en `full`.
+- **«Hablar con X» empieza por el saludo** (`talk.ts`, `opensTalk`): cuando el texto solo abre la charla (`opens`) y la
+  charla es nueva (`new_talk`), la situación es `greeting` sin segunda, salvo peligro, reacción u hostilidad; `offersNow`
+  no da misión aunque el máster la declare, y el hueco C dice «ni misión, ni venta, ni encargo ni trato en este turno».
+  La venta, el encargo o la misión vienen cuando el jugador los pide o la charla llega a ello.
+- **Vecinos de relleno con vida** (`extratalk.ts`): «miro a la panadera», «¿qué lleva?», «cómo va vestido» ya no son
+  charla fuera de tema: el motor contesta con cómo se le ve (`script.look`, la frase de sus datos sin la historia) y
+  un gesto de lo que está haciendo según su oficio, sin línea suya y sin cansarle. Con máster, la primera mirada pide
+  la vista en una llamada corta (`lookPrompt`, `master.write`, Haiku: menos de medio céntimo) y se guarda en el vecino
+  (`look_written`); sin máster o si falla, la de sus datos. Y en sus respuestas, un gesto distinto cada vez según su
+  carácter (`GESTURES`), no siempre «sin levantar la vista».
+
+**Sin probar con Haiku.** Lo que falta ver con el modelo de verdad: si respeta «Dice» y «Hace» sin que el cierre tenga
+que quitar o añadir líneas, y cómo quedan los `beat` movidos desde la narración (si la frase elegida habla de otra cosa
+que de quien habla, saldrá en su burbuja igual).

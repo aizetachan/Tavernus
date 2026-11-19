@@ -1114,7 +1114,9 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
           const text = typeof body['text'] === 'string' ? body['text'].trim() : '';
           if (!text) { json(res, 400, { ok: false, text: 'Acción vacía.' }); return; }
           if (!rt.begin(id)) { json(res, 409, { ok: false, text: 'Ya tienes una acción en curso: espera a que el narrador responda.' }); return; }
-          try { json(res, 200, reply(await rt.actions.track(id, 'act', () => engine.act(id, text), refused))); } finally { rt.end(id); }
+          // Modo Decir de la web (speech.ts): todo el texto es su frase, dicha al mundo; la contesta el narrador.
+          const mode = body['mode'] === 'say' ? 'say' : 'do';
+          try { json(res, 200, reply(await rt.actions.track(id, 'act', () => engine.act(id, text, { mode }), refused))); } finally { rt.end(id); }
           return;
         }
         case '/api/say': {

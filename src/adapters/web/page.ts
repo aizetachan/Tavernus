@@ -12,7 +12,7 @@ import { AWAY_JS, AWAY_STYLE } from './whileaway.js';
 import { TABLON_JS, TABLON_STYLE } from './tablon.js';
 import { SHOP_JS, SHOP_STYLE } from './tienda.js';
 
-/** El modo Chat vuelve solo a Hacer tras este rato sin escribir ni decir nada (revisión de la partida del 2026-10-26, n.º 9). */
+/** Los modos Decir y Chat vuelven solos a Hacer tras este rato sin escribir ni decir nada (revisión de la partida del 2026-10-26, n.º 9). */
 export const SAY_IDLE_MS = 30_000;
 
 export const PAGE = String.raw`<!doctype html>
@@ -274,7 +274,7 @@ export const PAGE = String.raw`<!doctype html>
   .new-msgs { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); z-index: 4; height: 32px; padding: 0 14px; border: 1px solid rgba(230,183,90,.35); border-radius: 999px;
     background: #1f2426; color: #e6c98a; font: 500 13px/1 var(--sans); white-space: nowrap; box-shadow: var(--window-shadow); cursor: pointer; animation: nv-in .25s ease-out; }
   .new-msgs:hover { background: #22262a; }
-  /* Encima del cuadro: cómo va lo que escribes (Hacer / Chat) y, más adelante, otros modos del chat. Los comandos
+  /* Encima del cuadro: cómo va lo que escribes (Hacer, Decir o Chat) y el botón de comillas. Los comandos
      ya no se ven: salen al escribir «/» (#slash). Sin nada visible, la fila no ocupa sitio. */
   .chat-acts { display: flex; align-items: center; gap: 8px; padding: 8px max(16px, calc((100% - 980px) / 2)) 0; }
   .chat-acts:not(:has(> :not([hidden]))) { display: none; }
@@ -817,16 +817,31 @@ ${SHOP_STYLE}
   .sfx.on { background: transparent; }
   .sfx.on > .sfx-toggle, .tts > button.on { background: var(--accent-tint); }
   .tts-pop, .sfx-pop { top: 44px; border-radius: 16px; background: var(--bubble); box-shadow: var(--window-shadow); }
-  /* Hacer / Chat: lo que escribes lo hace tu personaje (al narrador) o lo dice tal cual (a los demás, sin narrador). */
+  /* Hacer, Decir y Chat (como en AI Dungeon): lo que escribes lo hace tu personaje (al narrador; lo entrecomillado lo
+     dice tal cual), lo dice palabra por palabra a la gente del mundo (al narrador) o se lo dice a los demás jugadores
+     (sin narrador). En el móvil, los tres caben en una línea. */
   .mode-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 16px; background: var(--control); }
   .mode-seg button { height: 28px; padding: 0 12px; border: 0; border-radius: 14px; background: transparent; color: #b8b1a6; font: 600 12.5px/1 var(--sans); letter-spacing: 0; white-space: nowrap; }
   .mode-seg button:hover:not(:disabled) { color: var(--text); }
   .mode-seg button.on { background: rgba(255,255,255,.1); color: var(--text); }
+  .mode-seg button[data-m="speak"].on { background: var(--accent-tint); color: var(--accent); }
   .mode-seg button[data-m="say"].on { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1.5px rgba(230,183,90,.45); }
   .mode-seg[hidden] { display: none; }
   .mode-seg button:disabled { opacity: .4; cursor: default; }
   .mode-seg .to { display: inline-block; max-width: 110px; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-weight: 500; }
-  form.say input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
+  form.say input, form.speak input { box-shadow: 0 0 0 1.5px rgba(230,183,90,.35); }
+  /* Comillas (solo en Hacer): el botón «“ ”» mete «» con el cursor en medio; con texto entrecomillado, una línea de
+     ayuda bajo la fila dice qué parte se dirá tal cual. */
+  .chat-acts > .quotes { width: 32px; padding: 0; justify-content: center; font: 600 15px/1 var(--display); color: var(--accent); letter-spacing: -.04em; }
+  .chat-acts > .quotes[hidden] { display: none; }
+  .qhint { padding: 6px max(24px, calc((100% - 980px) / 2)) 0; font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+  .qhint[hidden] { display: none; }
+  .qhint i { color: var(--accent); font-style: italic; }
+  @media (max-width: 820px) {
+    .mode-seg button { padding: 0 10px; }
+    .mode-seg .to { max-width: 64px; }
+    .qhint { padding: 6px 12px 0; }
+  }
   /* «Responder» a un mensaje: su frase citada encima del cuadro, como en WhatsApp; la ✕ deja de responder. */
   .quote { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px max(24px, calc((100% - 980px) / 2)) 0; background: var(--panel); border-top: 1px solid var(--sep); }
   .quote[hidden] { display: none; }
@@ -1244,11 +1259,14 @@ ${SHOP_STYLE}
     <div id="round" class="round-banner" hidden role="status"></div>
     <div id="typing" class="typing" hidden aria-live="polite"></div>
     <div class="chat-acts" id="chat-acts">
-      <div id="saymode" class="mode-seg" role="group" aria-label="Lo que escribes" hidden>
-        <button type="button" data-m="do" class="on" aria-pressed="true" title="Hacer: el narrador cuenta lo que haces">Hacer</button>
-        <button type="button" data-m="say" aria-pressed="false" disabled title="Chat: tu personaje lo dice tal cual, al instante y sin narrador (con otros jugadores)">Chat</button>
+      <div id="saymode" class="mode-seg" role="group" aria-label="Lo que escribes" title="Hacer: el narrador cuenta lo que haces (lo que va entre comillas lo dices tal cual). Decir: todo lo que escribes lo dice tu personaje, palabra por palabra, a la gente del mundo. Chat: a los demás jugadores, al instante y sin narrador.">
+        <button type="button" data-m="do" class="on" aria-pressed="true" title="Hacer: el narrador cuenta lo que haces. Lo que pongas entre comillas lo dices tal cual.">Hacer</button>
+        <button type="button" data-m="speak" aria-pressed="false" title="Decir: todo lo que escribes lo dice tu personaje, palabra por palabra, a la gente del mundo; contesta el narrador.">Decir</button>
+        <button type="button" data-m="say" aria-pressed="false" disabled title="Chat: a los demás jugadores, al instante y sin narrador (solo con otros jugadores conectados).">Chat</button>
       </div>
+      <button type="button" id="quotes" class="quotes" title="Poner comillas: lo que va entre comillas lo dices tal cual" aria-label="Poner comillas">“ ”</button>
     </div>
+    <div id="qhint" class="qhint" hidden aria-live="polite"></div>
     <div id="quote" class="quote" hidden><div><b></b><span></span></div><button type="button" aria-label="No responder" title="No responder"><svg class="i"><use href="#i-x"/></svg></button></div>
     <form id="form" autocomplete="off">
       <button type="button" id="gear" aria-haspopup="dialog" aria-expanded="false" aria-controls="gear-menu" title="Ajustes: sonido, narrador e imagen" aria-label="Ajustes: sonido, narrador e imagen"><svg class="i g"><use href="#i-gear"/></svg><svg class="i x"><use href="#i-x"/></svg></button>
@@ -1462,9 +1480,8 @@ ${SHOP_JS}
     presenceList = list || [];
     var box = $('presence'), group = $('group');
     box.innerHTML = ''; group.innerHTML = '';
-    // Hacer | Chat solo tiene sentido con más jugadores en la partida; en solitario no se ve y todo va al narrador.
+    // Hacer y Decir van al narrador y están siempre; Chat solo tiene sentido con más jugadores en la partida.
     alone = !list || !list.length;
-    $('saymode').hidden = alone;
     sayBtn().disabled = alone || busy;
     if (alone && sayMode) setSayMode(false);
     if (!list || !list.length) return;
@@ -1510,7 +1527,11 @@ ${SHOP_JS}
     // Sin burbuja de «prompt»: mientras piensa el narrador se ve atenuado; luego lo sustituye lo que el PJ dice o hace.
     pendingMine(text);
     setBusy(true);
-    post('/api/act', { text: text }).then(function (r) {
+    // En Decir, el texto es la frase literal del PJ (mode 'say'); va tal cual, aunque empiece con raya o comillas.
+    var body = { text: text };
+    if (speakMode) body.mode = 'say';
+    armSayIdle();
+    post('/api/act', body).then(function (r) {
       // Después de lo que el turno haya traído por el stream (y de sus puntos).
       afterChat(function () {
         // «hablar con <otro jugador>» sin frase: el servidor no lo narra; abre el modo Chat hacia él.
@@ -1522,29 +1543,83 @@ ${SHOP_JS}
     });
   }
 
-  // --- Entre jugadores: Hacer / Chat (party.ts) -----------------------------------
+  // --- Hacer, Decir y Chat (party.ts) ----------------------------------------------
   /** Chat: lo escrito es la frase literal del PJ; llega al instante a quien la oiga, sin narrador ni coste. */
   var sayMode = false, sayTo = null, sayIdle = null;
-  /** Chat dura mientras se charla: tras ${SAY_IDLE_MS / 1000} s sin escribir ni decir nada, vuelve solo a Hacer. */
+  /** Decir: todo lo escrito es la frase literal del PJ a la gente del mundo; la contesta el narrador (/api/act con mode 'say'). */
+  var speakMode = false;
+  /** Decir y Chat duran mientras se charla: tras ${SAY_IDLE_MS / 1000} s sin escribir ni decir nada, vuelven solos a Hacer. */
   function armSayIdle() {
     clearTimeout(sayIdle);
-    if (sayMode) sayIdle = setTimeout(function () { if (sayMode && !input.value.trim()) setSayMode(false, null, true); }, ${SAY_IDLE_MS});
+    if (sayMode || speakMode) sayIdle = setTimeout(function () {
+      if (input.value.trim()) return;
+      if (sayMode) setSayMode(false, null, true); else if (speakMode) setSpeakMode(false, true);
+    }, ${SAY_IDLE_MS});
   }
   function setSayMode(on, to, quiet) {
     // La cita solo sigue mientras se responde a esa misma persona.
     if (!on || !to || !sayTo || to.id !== sayTo.id) setQuote(null);
     sayMode = on; sayTo = on ? (to || null) : null;
+    if (on) speakMode = false;
     armSayIdle();
-    var doB = $('saymode').querySelector('[data-m="do"]'), b = sayBtn();
-    doB.classList.toggle('on', !on); doB.setAttribute('aria-pressed', on ? 'false' : 'true');
-    b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.innerHTML = 'Chat' + (sayTo ? '<span class="to"></span>' : '');
-    if (sayTo) b.querySelector('.to').textContent = 'con ' + sayTo.name;
-    $('form').classList.toggle('say', on);
-    input.placeholder = on ? (sayTo ? '¿Qué le dices a ' + sayTo.name + '?' : '¿Qué dices?') : '¿Qué haces?';
-    input.setAttribute('aria-label', on ? 'Lo que dices' : 'Acción');
+    paintModes();
     if (!quiet) input.focus();
   }
+  function setSpeakMode(on, quiet) {
+    if (on && sayMode) { sayMode = false; sayTo = null; setQuote(null); }
+    speakMode = on;
+    armSayIdle();
+    paintModes();
+    if (!quiet) input.focus();
+  }
+  /** Pinta el selector, el cuadro y su ayuda según el modo: Hacer (ninguno), Decir o Chat (con o sin destinatario). */
+  function paintModes() {
+    var seg = $('saymode'), doB = seg.querySelector('[data-m="do"]'), spB = seg.querySelector('[data-m="speak"]'), b = sayBtn();
+    var doing = !sayMode && !speakMode;
+    [[doB, doing], [spB, speakMode], [b, sayMode]].forEach(function (p) { p[0].classList.toggle('on', p[1]); p[0].setAttribute('aria-pressed', p[1] ? 'true' : 'false'); });
+    b.innerHTML = 'Chat' + (sayTo ? '<span class="to"></span>' : '');
+    if (sayTo) b.querySelector('.to').textContent = 'con ' + sayTo.name;
+    $('form').classList.toggle('say', sayMode);
+    $('form').classList.toggle('speak', speakMode);
+    input.placeholder = sayMode ? (sayTo ? '¿Qué le dices a ' + sayTo.name + '?' : '¿Qué dices?') : speakMode ? '¿Qué dices?' : '¿Qué haces?';
+    input.setAttribute('aria-label', sayMode ? 'Lo que dices a los demás jugadores' : speakMode ? 'Lo que dice tu personaje' : 'Acción');
+    // El botón de comillas y la ayuda de lo entrecomillado solo tienen sentido en Hacer.
+    $('quotes').hidden = !doing;
+    syncQuoteHint();
+  }
+  /** En Hacer, lo que va entre comillas («…», "…" o “…”) se dice tal cual: se avisa debajo de la fila con esos trozos en cursiva.
+   *  Una «/“ abierta sin cerrar cuenta hasta el final (se está escribiendo); las comillas rectas, solo por pares. */
+  function quotedBits(text) {
+    var re = /«([^»]*)(»|$)|“([^”]*)(”|$)|"([^"]*)"/g, out = [], m;
+    while ((m = re.exec(text))) {
+      var q = (m[1] != null ? m[1] : m[3] != null ? m[3] : m[5]).trim();
+      if (q) out.push(q);
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    return out;
+  }
+  function syncQuoteHint() {
+    var el = $('qhint'), bits = (sayMode || speakMode) ? [] : quotedBits(input.value);
+    el.hidden = !bits.length;
+    if (!bits.length) return;
+    el.innerHTML = 'Entre comillas lo dices tal cual: ' + bits.map(function (q) { return '<i>«' + escapeHtml(q) + '»</i>'; }).join(', ');
+  }
+  /** El botón «“ ”» (solo en Hacer): mete «» con el cursor en medio o, con texto seleccionado, lo deja entre comillas. */
+  function insertQuotes() {
+    if (busy || sayMode || speakMode) return;
+    var v = input.value, s = input.selectionStart == null ? v.length : input.selectionStart, e = input.selectionEnd == null ? s : input.selectionEnd;
+    var head = v.slice(0, s), sel = v.slice(s, e), tail = v.slice(e);
+    if (head && !/\s$/.test(head)) head += ' ';
+    if (tail && !/^[\s.,;:!?]/.test(tail)) tail = ' ' + tail;
+    input.value = head + '«' + sel + '»' + tail;
+    var pos = head.length + 1 + sel.length;
+    input.focus();
+    input.setSelectionRange(pos, pos);
+    syncQuoteHint();
+    $('form').classList.toggle('has-text', !!input.value.trim());
+  }
+  $('quotes').addEventListener('click', insertQuotes);
+  input.addEventListener('input', syncQuoteHint);
   /** «Responder» del menú de un mensaje (novel.ts): Chat hacia quien habló, con su frase citada encima del cuadro. */
   function replyTo(to, text) {
     setSayMode(true, to);
@@ -1581,7 +1656,7 @@ ${SHOP_JS}
     lastTyping = Date.now();
     post('/api/typing', {});
   });
-  // Ronda en escena tensa: «Ronda 2 · faltan Aren y Lys · 0:42».
+  // Ronda en escena tensa: «Ronda 2: faltan Aren y Lys (0:42)».
   var roundTimer = null, roundData = null;
   function showRound(r) {
     roundData = r && r.open ? r : null;
@@ -1598,7 +1673,7 @@ ${SHOP_JS}
     var who = roundData.acted ? (w.length ? 'faltan ' + w.join(' y ') : 'resolviendo') : 'te toca' + (w.length ? ' (y a ' + w.join(' y ') + ')' : '');
     el.hidden = false;
     el.classList.toggle('mine', !roundData.acted);
-    el.textContent = 'Ronda ' + roundData.n + ' · ' + who + ' · ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+    el.textContent = 'Ronda ' + roundData.n + ': ' + who + ' (' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ')';
     if (!left) clearInterval(roundTimer);
   }
   function say(text) {
@@ -3234,14 +3309,17 @@ ${SHOP_JS}
     // Ni las consultas ni la tirada salen como mensaje del jugador: solo su respuesta.
     // Los de depuración en offline llevan argumento («/time +2h», «/daño 5»); los demás, solo el nombre.
     if (text.charAt(0) === '/') command(/^\/(time|da[ñn]o)\s/i.test(text) ? text.trim() : text.split(/\s+/)[0]);
-    else if (sayMode || (!alone && /^[—–«"“-]/.test(text))) say(text);
-    else if (text === 'tirar' || text === 'roll') { spendButtons(); roll(); }
+    // En Decir, la raya o las comillas iniciales van tal cual al narrador; en Hacer con otros jugadores, abren Chat.
+    else if (sayMode || (!alone && !speakMode && /^[—–«"“-]/.test(text))) say(text);
+    else if (!speakMode && (text === 'tirar' || text === 'roll')) { spendButtons(); roll(); }
     else act(text);
   });
-  // Hacer ⇄ Chat; con destinatario, el primer toque lo quita y el segundo vuelve a Hacer.
+  // Hacer, Decir y Chat; en Chat con destinatario, el primer toque lo quita y el segundo vuelve a Hacer.
   $('saymode').addEventListener('click', function (ev) {
     var m = ev.target.closest('[data-m]'); if (!m || m.disabled) return;
-    if (m.getAttribute('data-m') === 'do') { if (sayMode) setSayMode(false); return; }
+    var k = m.getAttribute('data-m');
+    if (k === 'do') { if (sayMode) setSayMode(false); else if (speakMode) setSpeakMode(false); else input.focus(); return; }
+    if (k === 'speak') { if (speakMode) input.focus(); else setSpeakMode(true); return; }
     // Con destinatario, el primer toque lo quita (Chat con todos); si no, pasa a Chat.
     if (sayMode && sayTo) setSayMode(true, null); else if (!sayMode) setSayMode(true);
   });

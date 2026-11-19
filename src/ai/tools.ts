@@ -62,6 +62,7 @@ import { othersForCheck, pcName } from '../engine/party.js';
 import { npcsHere, talkersOf } from '../engine/scene.js';
 import { conversationCheck, conversationOf, conversationRejection, narrationWithLines } from '../engine/conversation.js';
 import { secondPersonSingular } from '../engine/turnwindow.js';
+import { isQuoted, missingQuotes, splitSaidDone } from '../engine/speech.js';
 import { askBlocked, endsTalk, introducesAs, npcPresumes, offersNow, talkPlanWith, talkProblems, textSignals, TALK_SITUATIONS, withoutRefused, type TalkPlan } from '../engine/talk.js';
 import { ALARM_KINDS, clearAlarm, setAlarm } from '../engine/alarm.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
@@ -2258,7 +2259,22 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Fuera de un turno compartido, igual con el actor: lo que dice sale de lo que escribió (una llegada o un gancho,
       // sin texto suyo: no dice nada). Sin action_text en el contexto (quien llama no lo dice), no se mira.
       const inputs = sharedInputs(engine, actor.id) ?? (ctx.action_text !== undefined ? new Map<string, string | null>([[actor.id, ctx.action_text]]) : null);
-      const invented = inputs ? parsedLines.filter((l) => (l.speaker === 'pc' || l.speaker === 'actor') && !saidByPlayer(l.text, inputs.get(l.speaker === 'pc' ? l.character_id! : actor.id))) : [];
+      // Con comillas en lo escrito (speech.ts, «B más comillas»), lo dicho es exactamente lo entrecomillado: una línea
+      // del actor que no sea uno de esos fragmentos es inventada, y el fragmento que falte se añade tal cual.
+      const ownOf = (l: DialogueLine) => (l.speaker === 'pc' ? l.character_id! : actor.id);
+      const quotesOf = (id: Id) => splitSaidDone(inputs?.get(id) ?? '').said;
+      const invented = inputs ? parsedLines.filter((l) => (l.speaker === 'pc' || l.speaker === 'actor') && (quotesOf(ownOf(l)).length ? !isQuoted(l.text, quotesOf(ownOf(l))) : !saidByPlayer(l.text, inputs.get(ownOf(l))))) : [];
+      if (inputs) {
+        for (const [id, text] of inputs) {
+          const said = splitSaidDone(text ?? '').said;
+          if (!said.length) continue;
+          const kept = parsedLines.filter((l) => !invented.includes(l) && (l.speaker === 'pc' || l.speaker === 'actor') && ownOf(l) === id).map((l) => l.text);
+          const missing = missingQuotes(said, kept).map((t): DialogueLine => (id === actor.id ? { speaker: 'actor', text: t } : { speaker: 'pc', character_id: id, text: t }));
+          // Delante de la primera línea de NPC: lo suyo se dice antes de que le contesten.
+          const at = parsedLines.findIndex((l) => l.speaker === 'npc');
+          parsedLines.splice(at < 0 ? parsedLines.length : at, 0, ...missing);
+        }
+      }
       // En turno compartido, la línea del NPC sin destinatario va a los del turno (no a toda la sala: `all` haría el
       // turno `present` y se lo leería también quien no está en la charla, audience.ts).
       const sharedTurn = sharedIds.length > 0;
@@ -2275,7 +2291,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const prose = cut.narration;
       // La tercera negativa corta la charla (talk.ts).
       if (ctx.talk && endsTalk(ctx.talk, closingLines)) world.npc(ctx.talk.npc_id).talking_to = null;
-      const unsay = (t: string) => invented.reduce((acc, l) => acc.split(`«${l.text}»`).join('').replace(/[ \t]{2,}/g, ' ').trim(), t);
+      // La cita inventada se va con el punto que la seguía («…». Brenna… → Brenna…), sin dejar un punto suelto.
+      const unsay = (t: string) => invented.reduce((acc, l) => acc.replace(new RegExp(`\\s*«${l.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}»[.,;:]?`, 'g'), ' ').replace(/[ \t]{2,}/g, ' ').trim(), t);
       // Arranques en falso que el modelo corrige sobre la marcha («MIAU Lenzo... no. MIAU se queda…»): se quitan.
       const tidy = (t: string) => withoutSelfCorrection(cleanText(t));
       const targetPc = input['target_character_id'] && world.characters.has(s('target_character_id')) && s('target_character_id') !== actor.id ? s('target_character_id') : null;

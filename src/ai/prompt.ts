@@ -51,6 +51,7 @@ import { hhmm } from '../engine/schedule.js';
 import { coinsOf, currencyOf, money } from '../engine/money.js';
 import { priceFor } from '../engine/standing.js';
 import { factsContext, npcStandingLines, tagsLine } from '../engine/worldrules.js';
+import { playerInputLines } from '../engine/speech.js';
 import { socialOutcomeLine, talkPlan, talkScript, type TalkPlan } from '../engine/talk.js';
 import { gearLines } from '../engine/itemrules.js';
 import { conflictBlock, conflictPlan, type ConflictPlan } from '../engine/conflict.js';
@@ -572,7 +573,8 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     // Charla con un NPC (talk.ts): la situación y el guion del turno, decididos por el motor.
     const fight = toOther ? null : conflict !== undefined ? conflict : conflictPlanFor(engine, actor, text);
     const plan = toOther || fight ? null : talk !== undefined ? talk : talkPlanFor(engine, actor, text);
-    L.push(`## Acción del jugador\n«${text}»${toOther}${decisive ? `\nRespondió a la ventana decisiva («${decisive.threat}») en ${decisive.seconds} s: ${decisive.speed === 'fast' ? 'RÁPIDA → actúa antes de que la amenaza se resuelva; si pides tirada, el servidor le dará ventaja' : 'normal → su acción y la amenaza se resuelven a la vez; decide el dado'}.` : ''}`);
+    // Lo dicho y lo hecho por separado si lleva comillas (speech.ts, fase 5 del plan del 11-11).
+    L.push(`## Acción del jugador\n${playerInputLines(text).join('\n')}${toOther}${decisive ? `\nRespondió a la ventana decisiva («${decisive.threat}») en ${decisive.seconds} s: ${decisive.speed === 'fast' ? 'RÁPIDA → actúa antes de que la amenaza se resuelva; si pides tirada, el servidor le dará ventaja' : 'normal → su acción y la amenaza se resuelven a la vez; decide el dado'}.` : ''}`);
     if (fight) L.push(conflictBlock(world, actor, fight));
     if (plan) L.push(talkScript(world, actor, plan));
   }

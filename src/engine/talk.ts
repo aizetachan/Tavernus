@@ -619,9 +619,14 @@ export function situationsFor(st: TalkState, tx: TextSignals, topics: readonly T
   return out;
 }
 
+/** «Hablar con X» (sin más) cuando la charla empieza: el turno es el saludo. */
+export function opensTalk(st: TalkState, tx: TextSignals): boolean {
+  return tx.opens && st.new_talk;
+}
+
 /** ¿Es este turno pedirle ya una misión? Sí, si ha llegado a eso o lo declara el máster con la charla empezada. */
 export function offersNow(p: TalkPlan, declared: unknown): boolean {
-  if (p.talky === false) return false;
+  if (p.talky === false || opensTalk(p.state, p.text)) return false;
   return p.situation === 'offer' || p.second === 'offer' || (declared === 'offer' && !p.state.first_meeting && p.state.can_offer.length > 0);
 }
 
@@ -725,7 +730,11 @@ function planWith(world: World, events: readonly GameEvent[], pc: Character, npc
   const intent = intentOf(state, tx, topics, text);
   const all = situationsFor(state, tx, topics, talky);
   // Relleno: nunca misiones (capa 4); lo que no es de las seis, le despacha.
-  const sits = level === 'extra' ? all.filter((s) => s !== 'offer' && s !== 'errand') : all;
+  const trimmed = level === 'extra' ? all.filter((s) => s !== 'offer' && s !== 'errand') : all;
+  // «Hablar con X» al empezar la charla (fase 5 del plan del 11-11): se abre con el saludo. La venta, el encargo o la
+  // misión vienen cuando la charla llega a eso (el jugador lo pide), no de golpe. Lo urgente (peligro, hostil) sí manda.
+  const urgent = trimmed.filter((s) => s === 'danger' || s === 'reaction' || s === 'cold');
+  const sits = opensTalk(state, tx) ? (urgent.length ? urgent : ['greeting' as TalkSituation]) : trimmed;
   if (!sits.length) sits.push('chat');
   const textual = Object.values(tx).some(Boolean) || topics.length > 0;
   // Corta: harto y le vuelve a insultar o amenazar; el relleno, ya a la segunda.
@@ -865,7 +874,7 @@ function holeC(p: TalkPlan): string | null {
   const join = (xs: (string | false | null | undefined)[]) => xs.filter(Boolean).join(' ');
   if (p.level === 'extra' && p.intent === 'chat') return 'Le despacha en una frase: tiene faena. No sabe de historias ni de misiones.';
   switch (p.intent ?? 'chat') {
-    case 'open': return 'Una invitación corta, según su oficio: qué quiere, qué le pone, qué le trae. Nada más.';
+    case 'open': return `Una invitación corta, según su oficio: qué quiere, qué le pone, qué le trae. Nada más${st.new_talk ? ': ni misión, ni venta, ni encargo ni trato en este turno; eso, cuando el jugador lo pida o la charla llegue a ello' : ''}.`;
     case 'greeting': return st.knows === 'talking' ? 'Devuelve el saludo, sin más.' : null;
     case 'identity':
       if (p.text.introduces) return 'Se le presenta: toma nota de su nombre y desde ahora lo usa.';

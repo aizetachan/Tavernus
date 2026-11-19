@@ -144,7 +144,7 @@ export function closingMode(before: NarratorPlan, turn: { okTools: readonly stri
 /** La línea del contexto del máster, dentro del bloque de la charla (prompt.ts). */
 export function narratorLine(p: NarratorPlan): string {
   if (p.mode === 'silent') return 'Narrador en este turno: en silencio, solo lines (narration_private ""). El gesto de quien habla, si hace falta, en el beat de su línea (12 palabras como mucho).';
-  if (p.mode === 'beat') return `Narrador en este turno: una acotación de ${BEAT_WORDS} palabras como mucho (${p.why}); lo dicho, en lines. El gesto de quien habla, en el beat de su línea.`;
+  if (p.mode === 'beat') return `Narrador en este turno: una acotación de ${BEAT_WORDS} palabras como mucho (${p.why}), que el servidor mete en la burbuja de quien habla; lo dicho, en lines. El gesto de quien habla, en el beat de su línea.`;
   return `Narrador en este turno: narración normal (${p.why}).`;
 }
 
@@ -212,17 +212,11 @@ export function applyNarratorMode(mode: NarratorMode, narration: string, lines: 
     if (presents && !first.beat) return { narration: '', beat: { npc_id: first.npc_id!, text: asBeat(one) }, dropped: '' };
     return { narration: '', dropped: text };
   }
+  // La acotación va dentro de la burbuja de quien habla (fase 5 del plan del 11-11): en el `beat` de su primera línea,
+  // recortada a lo que cabe en una línea. El narrador solo tiene burbuja propia en `full`. Si el máster ya puso su
+  // gesto en la línea, manda el suyo y la narración se descarta.
   const pick = kept[0] ?? '';
-  let out = pick;
-  if (wordCount(pick) > BEAT_WORDS) {
-    out = '';
-    for (const part of pick.split(/(?<=[,;:])\s+/)) {
-      const next = out ? `${out} ${part}` : part;
-      if (wordCount(next) > BEAT_WORDS) break;
-      out = next;
-    }
-    out = out.replace(/[,;]$/, '').trim();
-    if (out && !/[.!?…:]$/.test(out)) out = `${out}.`;
-  }
-  return { narration: out, dropped: text === out ? '' : text };
+  const beat = clipLineBeat(pick);
+  if (!beat || first.beat) return { narration: '', dropped: text };
+  return { narration: '', beat: { npc_id: first.npc_id!, text: beat }, dropped: text === pick ? '' : text };
 }
