@@ -335,7 +335,8 @@ export function die(world: World, c: Character, nowG: number, cause: string): vo
   const coins = coinsOf(world, c.id);
   const body: ItemInstance = {
     id: `ii_body_${c.id}_${Math.floor(nowG)}`, item_id: def.id, quantity: 1, location: { type: 'spot', id: spot.id },
-    state: { body: { owner_id: c.id, mode: c.death_mode, coins: 0, slots: {}, died_game_s: nowG } satisfies BodyState },
+    // El modo de muerte es de la mesa (ajuste de la partida), no del personaje.
+    state: { body: { owner_id: c.id, mode: world.settings.death_mode, coins: 0, slots: {}, died_game_s: nowG } satisfies BodyState },
   };
   world.itemInstances.set(body.id, body);
   const left: string[] = [];
@@ -349,7 +350,7 @@ export function die(world: World, c: Character, nowG: number, cause: string): vo
   }
   (body.state['body'] as BodyState).slots = slots;
   world.touch('item_instances', body.id);
-  c.death = { died_game_s: nowG, died_real_ms: 0, respawn_real_ms: 0, mode: c.death_mode, spot_id: spot.id, body_instance_id: body.id, cause, left, coins_left: coins };
+  c.death = { died_game_s: nowG, died_real_ms: 0, respawn_real_ms: 0, mode: world.settings.death_mode, spot_id: spot.id, body_instance_id: body.id, cause, left, coins_left: coins };
   c.status = 'dead';
   c.hp_current = 0;
   c.hp_temp = 0;

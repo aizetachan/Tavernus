@@ -139,7 +139,8 @@ describe('creación por la web', () => {
     expect(r.status).toBe(200);
     const p = ((await r.json()) as { preview: CharacterPreview }).preview;
     // Elfo: +2 DES → 17. Cuero 11 + 3. d8 + CON 1.
-    expect(p).toMatchObject({ name: 'Tam', race: 'Elfo', class_name: 'Pícaro', background: 'Criminal', death_mode: 'hardcore', hp_max: 9, ac: 14, speed_ft: 30, darkvision: true });
+    // El modo de muerte ya es de la mesa (ajustes de la partida): lo que mande el formulario se ignora y queda el de la ficha, casual.
+    expect(p).toMatchObject({ name: 'Tam', race: 'Elfo', class_name: 'Pícaro', background: 'Criminal', death_mode: 'casual', hp_max: 9, ac: 14, speed_ft: 30, darkvision: true });
     expect(p.abilities.find((a) => a.id === 'dex')).toMatchObject({ total: 17, modifier: 3 });
     expect(p.saves.filter((s) => s.proficient).map((s) => s.id)).toEqual(['dex', 'int']);
     expect(p.skills.map((s) => s.id).sort()).toEqual(['acrobatics', 'athletics', 'deception', 'insight', 'investigation', 'perception', 'stealth']);
@@ -154,7 +155,6 @@ describe('creación por la web', () => {
       [{ name: 'Tam', ...ROGUE, background: 'pirata' }, 'background'],
       [{ name: 'Tam', ...ROGUE, abilities: { ...ABILITIES, dex: '15' } }, 'abilities'],
       [{ name: 'Tam', ...ROGUE, skills: ['stealth', 'acrobatics', 'athletics', 'insight'] }, 'skills'],
-      [{ name: 'Tam', ...ROGUE, death_mode: 'inmortal' }, 'death'],
     ] as const) {
       const bad = await b.post('/api/character/preview', body);
       expect(bad.status, JSON.stringify(body)).toBe(400);
@@ -168,10 +168,10 @@ describe('creación por la web', () => {
     const made = (await (await b.post('/api/games', { name: 'Mesa', mode: 'offline', character: 'Tam', ...ROGUE })).json()) as { ok: boolean; game: { slug: string }; character_id: string };
     expect(made.ok).toBe(true);
     const c = (await games.open(made.game.slug)).world.character(made.character_id);
-    expect(c).toMatchObject({ name: 'Tam', race_id: 'elf', class_id: 'rogue', background_id: 'criminal', death_mode: 'hardcore', hp_max: 9, abilities: { ...ABILITIES, dex: 17 } });
+    expect(c).toMatchObject({ name: 'Tam', race_id: 'elf', class_id: 'rogue', background_id: 'criminal', death_mode: 'casual', hp_max: 9, abilities: { ...ABILITIES, dex: 17 } });
     expect(c.proficiencies.skills).toEqual(expect.arrayContaining(ROGUE.skills));
 
-    for (const bad of [{ race: 'orco' }, { abilities: { ...ABILITIES, str: 15 } }, { skills: ['stealth'] }, { background: 7 }, { death_mode: 'inmortal' }, { race: 0 }, { abilities: false }, { skills: 0 }, { character: 'X' }]) {
+    for (const bad of [{ race: 'orco' }, { abilities: { ...ABILITIES, str: 15 } }, { skills: ['stealth'] }, { background: 7 }, { race: 0 }, { abilities: false }, { skills: 0 }, { character: 'X' }]) {
       const r = await b.post('/api/games', { name: 'Mal', mode: 'offline', character: 'Tom', ...ROGUE, ...bad, world: {} });
       expect(r.status, JSON.stringify(bad)).toBe(400);
     }
@@ -214,10 +214,10 @@ describe('creación por la web', () => {
     const claim = (await (await friend.post(`/api/seat/claim${g}`, { name: 'Tam', ...ROGUE, near: made.character_id })).json()) as { ok: boolean; character_id: string };
     expect(claim.ok).toBe(true);
     const engine = await games.open(made.game.slug);
-    expect(engine.world.character(claim.character_id)).toMatchObject({ background_id: 'criminal', death_mode: 'hardcore', abilities: { ...ABILITIES, dex: 17 } });
+    expect(engine.world.character(claim.character_id)).toMatchObject({ background_id: 'criminal', death_mode: 'casual', abilities: { ...ABILITIES, dex: 17 } });
     expect(engine.world.characterSpot(engine.world.character(claim.character_id))!.id).toBe(engine.world.characterSpot(engine.world.character(made.character_id))!.id);
     // Y Tam queda en su biblioteca, completo.
     const lib = ((await (await friend.get('/api/library')).json()) as { characters: { name: string; background_id: string; death_mode: string; games: { slug: string }[] }[] }).characters;
-    expect(lib).toMatchObject([{ name: 'Tam', background_id: 'criminal', death_mode: 'hardcore', games: [{ slug: made.game.slug }] }]);
+    expect(lib).toMatchObject([{ name: 'Tam', background_id: 'criminal', death_mode: 'casual', games: [{ slug: made.game.slug }] }]);
   });
 });

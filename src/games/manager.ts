@@ -20,7 +20,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { chargenCatalog, previewCharacter, type ChargenCatalog } from '../engine/chargen.js';
 import { Engine, type CharacterSpec, type EngineOptions } from '../engine/engine.js';
 import { seededRng, type Rng } from '../engine/dice.js';
-import type { Id, WorldSnapshot } from '../engine/model.js';
+import { gameSettingsOf, type GameSettings, type Id, type WorldSnapshot } from '../engine/model.js';
 import { makeSeed } from '../data/seed/demo.js';
 import { authoredSeed, isAuthoredCampaign } from '../data/campaigns/index.js';
 import { chatterWriter } from '../ai/chatter-writer.js';
@@ -70,6 +70,8 @@ export interface GameManifest {
   character_id: Id | null;
   /** Mundo generado: de qué semilla y dónde está guardado. Sin él (o null), la semilla demo. */
   world?: GameWorld | null;
+  /** Ajustes de la mesa (dificultad, muerte, chat), del anfitrión. Sin ellos, los valores por defecto (gameSettingsOf). */
+  settings?: GameSettings | null;
 }
 
 export interface GameWorld { file: string; seed: number; tone: Tone; setting: string; model: string }
@@ -97,6 +99,8 @@ export interface GameInfo {
   open: boolean;
   /** Mundo generado (null: la semilla demo). */
   world: { seed: number; tone: Tone; /** Salió en modo plantilla (sin Claude). */ template: boolean } | null;
+  /** Ajustes de la mesa, siempre completos. */
+  settings: GameSettings;
   /** Dónde está la partida, para el menú: la última narración, en una o dos frases (null si aún no ha pasado nada). */
   synopsis: string | null;
   /** La última vista de un sitio pintada en la partida, para el menú (null si aún no hay ninguna). */
@@ -117,6 +121,8 @@ export interface CreateGameInput {
   campaign_id?: Id;
   /** Mundo nuevo generado en vez de la semilla demo. */
   world?: WorldInput | null;
+  /** Ajustes de la mesa; lo que falte, por defecto. */
+  settings?: Partial<GameSettings> | null;
 }
 
 /** Lo que el motor valida (chargen.ts); lo que no venga, sus valores por defecto. */
@@ -317,6 +323,7 @@ export class GameManager {
       slug: m.slug, name: m.name, created_at: m.created_at, last_opened_at: m.last_opened_at, mode: m.mode, demo: m.demo, main: m.main,
       dice_seed: m.dice_seed, characters, cache_entries: m.mode === 'record' || m.mode === 'replay' ? await countJson(p.cache) : 0, open,
       world: m.world ? { seed: m.world.seed, tone: m.world.tone, template: m.world.model === 'offline' } : null,
+      settings: gameSettingsOf(m.settings),
       synopsis: await this.worlds.synopsis(this.worldRef(m)).catch(() => null),
       cover: await coverOf(join(p.dir, 'images'), m.slug),
       obsolete: !open && await this.isObsolete(m),
@@ -377,6 +384,7 @@ export class GameManager {
     const engine = await Engine.boot({
       pauseOnBoot: true,
       ...this.engineOpts,
+      settings: gameSettingsOf(m.settings),
       repo: this.worlds.repo(ref), campaignId: m.campaign_id,
       ...(m.campaign_id === seed.campaign.id ? { seed } : {}),
       ...(m.dice_seed !== null ? { rng: seededRng(m.dice_seed) } : {}),
@@ -487,6 +495,7 @@ export class GameManager {
       version: 1, slug, name, created_at: this.now().toISOString(), last_opened_at: null,
       campaign_id: input.campaign_id ?? 'brezal', mode: input.mode, demo: false, main: false,
       data_dir: 'data', cache_dir: 'master-cache', dice_seed, initial_dir: null, character_id: null,
+      settings: gameSettingsOf(input.settings),
     };
     await this.writeManifest(game);
 
@@ -606,6 +615,17 @@ export class GameManager {
   private async writeManifest(m: GameManifest): Promise<void> {
     this.dirOf(m.slug); // valida el slug
     await this.catalog.put(m);
+  }
+
+  /** Los ajustes de la mesa (anfitrión): se guardan y, si la partida está abierta, el motor los aplica al momento. */
+  async updateSettings(slug: string, patch: Partial<GameSettings>): Promise<GameSettings> {
+    const m = await this.require(slug);
+    const settings = gameSettingsOf({ ...gameSettingsOf(m.settings), ...patch });
+    m.settings = settings;
+    await this.writeManifest(m);
+    const engine = this.engines.has(slug) ? await this.engines.get(slug)!.catch(() => null) : null;
+    if (engine) engine.setSettings(settings);
+    return settings;
   }
 }
 

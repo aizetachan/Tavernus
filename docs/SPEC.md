@@ -328,8 +328,8 @@ Entradas cortas: historia, religión, geografía, lenguas. Tag `common` (cualqui
 5. El PJ aparece en `starting_location` de la campaña y se emite `event: character_joined`.
 6. El jugador elige `death_mode` (§4.7). Solo se puede cambiar estando vivo.
 
-### 4.7 Modos de muerte — DECIDIDO
-Campo `death_mode` en el personaje, elegido al crearlo.
+### 4.7 Modos de muerte — DECIDIDO (revisado el 19-11-2026: es de la mesa)
+Desde el 19-11-2026 el modo es un **ajuste de la partida** (`GameSettings.death_mode`, lo fija el anfitrión; reunión del 11-11), no del personaje: el campo `death_mode` de la ficha sigue existiendo pero no se pide al crearlo ni cuenta al morir (`death.ts` usa `world.settings.death_mode`; un muerto conserva el modo con el que murió en `death.mode`).
 
 | | `casual` | `hardcore` |
 |---|---|---|

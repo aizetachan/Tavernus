@@ -176,7 +176,7 @@ export class Master {
           max_tokens: 4096,
           ...safeguards,
           output_config: { effort },
-          system: [{ type: 'text', text: systemPrompt(engine.world.campaign, { actor: Boolean(this.actor) }), cache_control: CACHE_TTL }],
+          system: [{ type: 'text', text: systemPrompt(engine.world.campaign, { actor: Boolean(this.actor), difficulty: engine.world.settings.difficulty }), cache_control: CACHE_TTL }],
           tools: MASTER_TOOLS,
           messages,
         });
@@ -236,7 +236,7 @@ export class Master {
         model, max_tokens: 2048,
         ...safeguards,
         output_config: { effort },
-        system: [{ type: 'text', text: systemPrompt(engine.world.campaign, { actor: Boolean(this.actor) }), cache_control: CACHE_TTL }],
+        system: [{ type: 'text', text: systemPrompt(engine.world.campaign, { actor: Boolean(this.actor), difficulty: engine.world.settings.difficulty }), cache_control: CACHE_TTL }],
         tools: MASTER_TOOLS.filter((t) => t.name === 'log_event'),
         tool_choice: { type: 'auto' },
         messages,

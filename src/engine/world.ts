@@ -3,9 +3,10 @@
  * avisa de cada cambio para que la capa de persistencia lo escriba.
  */
 
-import type {
-  Campaign, CarrySlot, Character, Exit, Id, ItemDef, ItemInstance, Location, Npc,
-  Placement, Region, ResourceNode, Spot, Vehicle, WorldSnapshot, Zone,
+import {
+  DEFAULT_GAME_SETTINGS,
+  type Campaign, type CarrySlot, type Character, type Exit, type GameSettings, type Id, type ItemDef, type ItemInstance, type Location, type Npc,
+  type Placement, type Region, type ResourceNode, type Spot, type Vehicle, type WorldSnapshot, type Zone,
 } from './model.js';
 import type { WorldQuest } from './story.js';
 
@@ -34,6 +35,8 @@ export class World {
   readonly resourceNodes = new Map<Id, ResourceNode>();
   /** Misiones creadas en la partida (story.ts, addWorldQuest). */
   readonly quests = new Map<Id, WorldQuest>();
+  /** Ajustes de la partida (dificultad, muerte, chat): los pone el gestor al abrirla; no son parte del mundo guardado. */
+  settings: GameSettings = { ...DEFAULT_GAME_SETTINGS };
 
   private listeners: ChangeListener[] = [];
 

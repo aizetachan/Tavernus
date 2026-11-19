@@ -29,10 +29,12 @@ Es la conversación, en el centro. Las burbujas de **El Narrador** cuentan la hi
 
 Escribe con tus palabras: «me acerco a la barra», «le pregunto por el incendio». No hay que aprender ninguna fórmula.
 
-Si hay más jugadores en la partida, encima del cuadro aparece **Hacer | Decir**:
+Si hay más jugadores en la partida, encima del cuadro aparece **Hacer | Chat**:
 
 - **Hacer** es lo normal: el Narrador cuenta lo que haces. Para hablar con los personajes del mundo, usa Hacer.
-- **Decir** suelta tu frase tal cual a los jugadores que te oyen, al momento y sin Narrador. Vuelve solo a Hacer si pasas un rato sin escribir.
+- **Chat** suelta tu frase tal cual a los demás jugadores, al momento y sin Narrador. Según el ajuste de la partida, llega a toda la mesa estén donde estén (lo normal) o solo a quien pueda oírte. Vuelve solo a Hacer si pasas un rato sin escribir.
+
+Quien organiza la partida elige en sus ajustes la dificultad, qué pasa al morir (casual o hardcore) y hasta dónde llega el Chat. Si olvidas tu contraseña, en la pantalla de entrar puedes cambiarla con tu código de recuperación (te lo dimos al crear la cuenta; otro nuevo, desde el menú de tu cuenta), o pedir a quien organiza tu partida que te ponga una.
 
 También puedes decir algo sin cambiar de modo, empezando con raya o comillas: `— hola`, `— a Aren: ¿vienes?`, `— (susurra) cuidado`, `— (grita) ¡corre!`.
 

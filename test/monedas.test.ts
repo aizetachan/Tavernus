@@ -211,7 +211,7 @@ describe('morir', () => {
     const mira = engine.world.character('ch_mira');
     mira.location = { type: 'spot', id: 'sp_tab_barra' };
     kael.location = { type: 'spot', id: 'sp_tab_barra' };
-    kael.death_mode = 'hardcore';
+    engine.setSettings({ ...engine.world.settings, death_mode: 'hardcore' }); // el modo de muerte es de la mesa (19-11-2026)
     damageCharacter(engine.world, kael, 40, { cause: 'una roca' });
     await engine.tick();
     expect(kael.status).toBe('dead');
@@ -230,7 +230,7 @@ describe('morir', () => {
     const kael = engine.world.character('ch_kael');
     const mira = engine.world.character('ch_mira');
     for (const c of [kael, mira]) c.location = { type: 'spot', id: 'sp_tab_barra' };
-    kael.death_mode = 'hardcore';
+    engine.setSettings({ ...engine.world.settings, death_mode: 'hardcore' }); // el modo de muerte es de la mesa (19-11-2026)
     damageCharacter(engine.world, kael, 40, { cause: 'una roca' });
     await engine.tick();
     const body = bodiesAt(engine.world, 'sp_tab_barra')[0]!;

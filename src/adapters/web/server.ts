@@ -5,7 +5,8 @@
  *
  *   GET    /                                   menú (sin ?game) o la partida (con ?game=SLUG)
  *   GET    /api/games                          partidas, opciones de personaje y si hay clave de API
- *   POST   /api/games          {name, mode, character?, race?, class?, hook?, dice_seed?, world?: {seed?, tone?, setting?}}
+ *   POST   /api/games          {name, mode, character?, race?, class?, hook?, dice_seed?, world?: {seed?, tone?, setting?}, settings?: {difficulty, death_mode, chat_reach}}
+ *   POST   /api/games/settings?game=SLUG {difficulty?, death_mode?, chat_reach?}   anfitrión: ajustes de la mesa
  *   DELETE /api/games?game=SLUG
  *   POST   /api/games/demo?game=SLUG           grabación → demo
  *   POST   /api/games/reset?game=SLUG          demo desde el principio
@@ -47,13 +48,13 @@
  *   GET  /i/<partida>/<token>       invitación: liga ese asiento a tu cuenta (sin cuenta, pasa por /entrar)
  *   GET  /admin/estado              administrador: versión, conectados, actividad, coste y reportes (page-status.ts)
  *   GET  /admin/usuarios[/<id>], /admin/partidas[/<slug>]   administrador: usuarios, partidas, personajes (page-admin.ts; /api/admin/…)
- *   GET  /entrar                    entrar o crear cuenta (page-account.ts); POST /api/auth/register|login|logout
- *   GET  /api/me, POST /api/me/password   quién soy; cambiar mi contraseña
+ *   GET  /entrar                    entrar o crear cuenta (page-account.ts); POST /api/auth/register|login|logout|recover (register devuelve recovery_code; recover: {username, code, password})
+ *   GET  /api/me, POST /api/me/password, POST /api/me/recovery   quién soy; cambiar mi contraseña; código de recuperación nuevo
  *   GET|POST /api/library, POST|DELETE /api/library/<id>   biblioteca de personajes de la cuenta
  *   GET  /api/health                salud para deploy/healthcheck.sh (web y base de datos), sin sesión
  *   GET  /invitaciones?game=SLUG    anfitrión: asientos y enlaces
  *   GET  /api/session?game=SLUG     quién soy: anfitrión o jugador, y mi PJ si estoy ligado
- *   GET|POST /api/seats?game=SLUG, POST /api/seats/regenerate|release   anfitrión: listar, añadir, renovar el enlace, liberar
+ *   GET|POST /api/seats?game=SLUG, POST /api/seats/regenerate|release|password   anfitrión: listar, añadir, renovar el enlace, liberar, contraseña nueva a un invitado
  *   POST /api/seat/claim?game=SLUG  asiento libre: el PJ del invitado, de su biblioteca ({template_id}) o nuevo
  *   POST /api/character/preview     resumen del asistente de creación: valida y calcula sin crear nada
  * Presencia: SSE «presence» con quién está en línea y dónde respecto a ti; avisos en el hilo al entrar y salir.
@@ -68,7 +69,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Engine, ActionResult, CharacterSpec } from '../../engine/engine.js';
 import type { InfoAnswer } from '../../engine/info.js';
-import type { Character, GameEvent, Id } from '../../engine/model.js';
+import { gameSettingsOf, type Character, type GameEvent, type GameSettings, type Id } from '../../engine/model.js';
 import type { Delivery } from '../../engine/events.js';
 import { GameError, GameManager, NEW_GAME_MODES, type CreateGameInput, type GameManifest, type NewGameMode, type WorldInput } from '../../games/manager.js';
 import { Master } from '../../ai/master.js';
@@ -821,7 +822,25 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
             }
           }
         }
-        json(res, 200, { ok: true, next, user: publicUser(u) });
+        // Al crear la cuenta, su código de recuperación: la única forma de cambiar la contraseña sin correo. Se ve una vez.
+        const recovery = registering ? await accounts.issueRecoveryCode(u.id) : null;
+        json(res, 200, { ok: true, next, user: publicUser(u), ...(recovery ? { recovery_code: recovery } : {}) });
+      } catch (e) {
+        if (e instanceof AccountError) { json(res, e.status, { ok: false, text: e.message, ...(e.field ? { field: e.field } : {}) }); return; }
+        throw e;
+      }
+      return;
+    }
+    // Contraseña olvidada: usuario, código de recuperación y contraseña nueva. Entra con ella y recibe un código nuevo.
+    if (req.method === 'POST' && url.pathname === '/api/auth/recover') {
+      const body = await readJson(req);
+      const accounts = await accountsOf();
+      try {
+        const u = await accounts.recoverWithCode(body['username'], body['code'], body['password'], clientIp(req));
+        await accounts.endSession(cookies(req)[USER_COOKIE]);
+        await startSession(req, res, u);
+        const recovery = await accounts.issueRecoveryCode(u.id);
+        json(res, 200, { ok: true, next: safeNext(typeof body['next'] === 'string' ? body['next'] : null) ?? '/', user: publicUser(u), recovery_code: recovery });
       } catch (e) {
         if (e instanceof AccountError) { json(res, e.status, { ok: false, text: e.message, ...(e.field ? { field: e.field } : {}) }); return; }
         throw e;
@@ -867,12 +886,21 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       await handleAdmin(req, res, url, user);
       return;
     }
-    if (url.pathname === '/api/me' || url.pathname === '/api/me/password') {
+    if (url.pathname === '/api/me' || url.pathname === '/api/me/password' || url.pathname === '/api/me/recovery') {
       if (req.method === 'GET' && url.pathname === '/api/me') {
         json(res, 200, { ok: true, access: access.mode, user: user ? publicUser(user) : null, admin, can_create: canCreate });
         return;
       }
       if (!user) { json(res, 401, { ok: false, text: 'Entra con tu cuenta.' }); return; }
+      // Un código de recuperación nuevo (con la contraseña actual); el anterior deja de valer.
+      if (req.method === 'POST' && url.pathname === '/api/me/recovery') {
+        const body = await readJson(req);
+        try { json(res, 200, { ok: true, recovery_code: await (await accountsOf()).renewRecoveryCode(user.id, body['password']) }); } catch (e) {
+          if (e instanceof AccountError) { json(res, e.status, { ok: false, text: e.message, ...(e.field ? { field: e.field } : {}) }); return; }
+          throw e;
+        }
+        return;
+      }
       if (req.method === 'POST' && url.pathname === '/api/me/password') {
         const body = await readJson(req);
         try { await (await accountsOf()).changeOwnPassword(user.id, body['current'], body['password'], cookies(req)[USER_COOKIE] ?? ''); } catch (e) {
@@ -1375,6 +1403,20 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       json(res, 200, { ok: true });
       return;
     }
+    // El anfitrión le pone una contraseña nueva a un invitado que la olvidó (sin correo no hay otra vía rápida).
+    if (req.method === 'POST' && url.pathname === '/api/seats/password') {
+      const body = await readJson(req);
+      const id = typeof body['seat'] === 'string' ? body['seat'] : '';
+      const s = await accounts.seat(slug, id);
+      if (!s || !s.user_id) { json(res, 404, { ok: false, text: 'Ese asiento no tiene usuario.' }); return; }
+      if (s.host) { json(res, 403, { ok: false, text: 'Tu propia contraseña se cambia desde tu cuenta.' }); return; }
+      try { await accounts.setPassword(s.user_id, body['password']); } catch (e) {
+        if (e instanceof AccountError) { json(res, e.status, { ok: false, text: e.message, ...(e.field ? { field: e.field } : {}) }); return; }
+        throw e;
+      }
+      json(res, 200, { ok: true });
+      return;
+    }
     if (req.method === 'POST' && (url.pathname === '/api/seats/regenerate' || url.pathname === '/api/seats/release')) {
       const body = await readJson(req);
       const id = typeof body['seat'] === 'string' ? body['seat'] : '';
@@ -1427,12 +1469,33 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
   }
 
   /** La biblioteca con las partidas en las que juega cada personaje (sus copias). */
+  /**
+   * La biblioteca: cada personaje es una plantilla y en cada partida juega una instancia (su copia, con su nivel y su
+   * estado). El nivel y el estado salen del mundo guardado en la base (world_entities); si la partida está abierta, del motor.
+   */
   async function libraryView(userId: string): Promise<unknown[]> {
     const accounts = await accountsOf();
     const lib = await accounts.library(userId);
-    const playing = await accounts.db.query<{ template_id: string; slug: string; name: string }>(
-      'select s.template_id, g.slug, g.name from seats s join games g on g.slug = s.game_slug where s.user_id = $1 and s.template_id is not null', [userId]);
-    return lib.map((c) => ({ ...c, games: playing.filter((p) => p.template_id === c.id).map((p) => ({ slug: p.slug, name: p.name })) }));
+    const playing = await accounts.db.query<{ template_id: string; slug: string; name: string; character_id: string | null }>(
+      'select s.template_id, g.slug, g.name, s.character_id from seats s join games g on g.slug = s.game_slug where s.user_id = $1 and s.template_id is not null', [userId]);
+    const instance = async (p: { slug: string; character_id: string | null }): Promise<{ level: number | null; status: string | null }> => {
+      if (!p.character_id) return { level: null, status: null };
+      const open = runtimes.has(p.slug) ? await runtimes.get(p.slug)!.catch(() => null) : null;
+      const live = open?.engine.world.characters.get(p.character_id);
+      if (live) return { level: live.level, status: live.status };
+      try {
+        const [row] = await accounts.db.query<{ doc: { level?: number; status?: string } }>(
+          "select doc from world_entities where world_id = $1 and collection = 'characters' and id = $2", [p.slug, p.character_id]);
+        return { level: typeof row?.doc?.level === 'number' ? row.doc.level : null, status: typeof row?.doc?.status === 'string' ? row.doc.status : null };
+      } catch { return { level: null, status: null }; }
+    };
+    const out = [];
+    for (const c of lib) {
+      const games = [];
+      for (const p of playing.filter((x) => x.template_id === c.id)) games.push({ slug: p.slug, name: p.name, ...(await instance(p)) });
+      out.push({ ...c, games });
+    }
+    return out;
   }
 
   /** Panel del administrador (page-admin.ts). */
@@ -1689,6 +1752,8 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
         character: picked?.input ?? null,
         // Mundo nuevo generado (src/worldgen); lo valida el gestor.
         world: body['world'] && typeof body['world'] === 'object' ? body['world'] as WorldInput : null,
+        // Ajustes de la mesa (dificultad, muerte, chat): lo que falte, por defecto.
+        settings: settingsPatch(body['settings']),
       });
       // Con máster, la llegada del PJ nuevo la narra él; llega por el stream.
       const rt = await runtime(created.game.slug);
@@ -1714,6 +1779,15 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
     if (url.pathname === '/api/games' && req.method === 'DELETE') {
       await games.delete(slug);
       json(res, 200, { ok: true });
+      return;
+    }
+    // Ajustes de la mesa (anfitrión): se guardan y, con la partida abierta, el motor los aplica al momento.
+    if (url.pathname === '/api/games/settings' && req.method === 'POST') {
+      const body = await readJson(req);
+      const patch = settingsPatch(body);
+      if (!Object.keys(patch).length) { json(res, 400, { ok: false, text: 'Nada que cambiar: dificultad (easy, normal, hard, deadly), muerte (casual, hardcore) o chat (all, hearing).' }); return; }
+      const settings = await games.updateSettings(slug, patch);
+      json(res, 200, { ok: true, settings });
       return;
     }
     if (url.pathname === '/api/games/demo' && req.method === 'POST') {
@@ -2149,7 +2223,8 @@ function json(res: ServerResponse, status: number, data: unknown): void {
 function characterFromBody(body: Record<string, unknown>, nameKey: string): NonNullable<CreateGameInput['character']> {
   const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '');
   const given = (k: string) => (body[k] === undefined || body[k] === null || body[k] === '' ? undefined : body[k]);
-  const race = given('race'), klass = given('class'), background = given('background'), abilities = given('abilities'), skills = given('skills'), death = given('death_mode');
+  const race = given('race'), klass = given('class'), background = given('background'), abilities = given('abilities'), skills = given('skills');
+  // El modo de muerte ya no es del personaje sino de la mesa (ajustes de la partida): lo que mande el formulario se ignora.
   return {
     name: str(nameKey),
     ...(race !== undefined ? { race_id: race as string } : {}),
@@ -2159,8 +2234,16 @@ function characterFromBody(body: Record<string, unknown>, nameKey: string): NonN
     ...(skills !== undefined ? { skills: skills as string[] } : {}),
     ...(str('hook') ? { hook: str('hook') } : {}),
     ...(str('appearance') ? { appearance: str('appearance') } : {}),
-    ...(death !== undefined ? { death_mode: death as 'casual' | 'hardcore' } : {}),
   };
+}
+
+/** Lo que el cuerpo trae de ajustes de la mesa, solo las claves válidas (gameSettingsOf completa el resto). */
+function settingsPatch(raw: unknown): Partial<GameSettings> {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const full = gameSettingsOf(r);
+  const out: Partial<GameSettings> = {};
+  for (const k of ['difficulty', 'death_mode', 'chat_reach'] as const) if (typeof r[k] === 'string' && r[k] === full[k]) (out as Record<string, string>)[k] = full[k];
+  return out;
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {

@@ -14,6 +14,7 @@ interface GameRow {
   slug: string; name: string; campaign_id: string; mode: string; demo: boolean; main: boolean;
   dice_seed: number | string | null; world: GameManifest['world'] | null; character_id: string | null;
   data_dir: string; cache_dir: string; initial_dir: string | null; created_at: Date | string; last_opened_at: Date | string | null;
+  settings: GameManifest['settings'] | null;
 }
 
 const iso = (v: Date | string | null): string | null => (v === null ? null : v instanceof Date ? v.toISOString() : new Date(v).toISOString());
@@ -24,21 +25,22 @@ function manifestOf(r: GameRow): GameManifest {
     campaign_id: r.campaign_id, mode: r.mode as GameManifest['mode'], demo: r.demo, main: r.main,
     data_dir: r.data_dir, cache_dir: r.cache_dir, dice_seed: r.dice_seed === null ? null : Number(r.dice_seed),
     initial_dir: r.initial_dir, character_id: r.character_id, ...(r.world ? { world: r.world } : {}),
+    ...(r.settings ? { settings: r.settings } : {}),
   };
 }
 
-const COLUMNS = 'slug, name, campaign_id, mode, demo, main, dice_seed, world, character_id, data_dir, cache_dir, initial_dir, created_at, last_opened_at';
+const COLUMNS = 'slug, name, campaign_id, mode, demo, main, dice_seed, world, character_id, data_dir, cache_dir, initial_dir, created_at, last_opened_at, settings';
 
 /** Alta o cambio de una partida sin tocar su dueño. */
 export async function upsertGame(q: Queryable, m: GameManifest): Promise<void> {
   await q.query(
-    `insert into games (${COLUMNS}) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    `insert into games (${COLUMNS}) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      on conflict (slug) do update set name = excluded.name, campaign_id = excluded.campaign_id, mode = excluded.mode,
        demo = excluded.demo, main = excluded.main, dice_seed = excluded.dice_seed, world = excluded.world,
        character_id = excluded.character_id, data_dir = excluded.data_dir, cache_dir = excluded.cache_dir,
-       initial_dir = excluded.initial_dir, last_opened_at = excluded.last_opened_at`,
+       initial_dir = excluded.initial_dir, last_opened_at = excluded.last_opened_at, settings = excluded.settings`,
     [m.slug, m.name, m.campaign_id, m.mode, m.demo, m.main, m.dice_seed, m.world ? JSON.stringify(m.world) : null,
-      m.character_id, m.data_dir, m.cache_dir, m.initial_dir, m.created_at, m.last_opened_at],
+      m.character_id, m.data_dir, m.cache_dir, m.initial_dir, m.created_at, m.last_opened_at, m.settings ? JSON.stringify(m.settings) : null],
   );
 }
 

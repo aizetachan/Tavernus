@@ -41,12 +41,14 @@ export function sheetView(engine: Engine, characterId: Id): SheetView {
   const spot = engine.world.spot(pos.spot_id);
   const inv = inventoryView(engine.world, c.id);
   const status = { active: 'despierto', asleep: c.veiled ? 'dormido (velo)' : 'dormido', unconscious: isStable(c) ? 'inconsciente, estable' : 'inconsciente, cayendo', dead: 'muerto', retired: 'retirado' }[c.status];
+  // El modo de muerte es de la mesa (ajuste de la partida); un muerto conserva el modo con el que murió.
+  const mode = c.status === 'dead' && c.death ? c.death.mode : engine.world.settings.death_mode;
   const death: SheetView['death'] = c.status === 'dead' && c.death
-    ? { mode: c.death_mode, state: 'dead', respawn_real_ms: c.death.respawn_real_ms, respawn_place: engine.world.spot(respawnSpotId(engine.world, c)).name }
-    : isDying(c) ? { mode: c.death_mode, state: 'dying', success: c.dying!.success, fail: c.dying!.fail }
-    : isStable(c) ? { mode: c.death_mode, state: 'stable', ...(c.dying?.stable_until_game_s ? { stable_until: hhmm(c.dying.stable_until_game_s) } : {}) }
-    : { mode: c.death_mode, state: 'alive' };
-  const deathLine = `Modo ${c.death_mode}${death.state === 'dying' ? ` · salvaciones: ${death.success} éxitos, ${death.fail} fallos` : death.state === 'stable' ? ` · estable${death.stable_until ? `, despierta hacia las ${death.stable_until}` : ''}` : death.state === 'dead' ? ` · muerto, vuelve en ${death.respawn_place}` : ''}`;
+    ? { mode, state: 'dead', respawn_real_ms: c.death.respawn_real_ms, respawn_place: engine.world.spot(respawnSpotId(engine.world, c)).name }
+    : isDying(c) ? { mode, state: 'dying', success: c.dying!.success, fail: c.dying!.fail }
+    : isStable(c) ? { mode, state: 'stable', ...(c.dying?.stable_until_game_s ? { stable_until: hhmm(c.dying.stable_until_game_s) } : {}) }
+    : { mode, state: 'alive' };
+  const deathLine = `Modo ${mode}${death.state === 'dying' ? `, salvaciones: ${death.success} éxitos, ${death.fail} fallos` : death.state === 'stable' ? `, estable${death.stable_until ? `, despierta hacia las ${death.stable_until}` : ''}` : death.state === 'dead' ? `, muerto, vuelve en ${death.respawn_place}` : ''}`;
   const transit = c.transit ? `\nDe camino a ${engine.world.spot(c.transit.destination_spot_id).name}` : '';
   const ab = c.abilities;
   const saves = (['str', 'dex', 'con', 'int', 'wis', 'cha'] as Ability[]).filter((a) => c.proficiencies.saves.includes(a)).map((a) => `${ABILITY_ES[a].slice(0, 3)} ${fmt(saveModifier(c, a))}`).join(' · ');
