@@ -118,6 +118,19 @@ export function contestOf(r: Pick<Reaction, 'kind' | 'contest'>): { actor: strin
   return { actor: 'athletics', target: ['athletics', 'acrobatics'] };
 }
 
+/**
+ * Lo que pasa con cada botón, para el afectado: «Dejarse: sale sin tirada. Resistirse: tu Atletismo o Acrobacias
+ * contra su Atletismo.» (reunión del 11-11-2026: que se explique qué le están haciendo y qué pasa si se resiste).
+ */
+export function reactionExplain(r: Pick<Reaction, 'kind' | 'contest' | 'dest_spot_id' | 'prone'>): string {
+  const es = (k: string) => SKILLS[k]?.es ?? k;
+  const c = contestOf(r);
+  const yours = [...new Set(c.target)].map(es).join(' o ');
+  const left = { attack: 'Dejarse: el golpe te alcanza.', grapple: r.dest_spot_id ? 'Dejarse: te agarra y te lleva, sin tirada.' : 'Dejarse: te agarra, sin tirada.', shove: r.prone ? 'Dejarse: te derriba, sin tirada.' : 'Dejarse: te aparta, sin tirada.', other: 'Dejarse: lo consigue, sin tirada.' }[r.kind];
+  const right = r.kind === 'attack' ? 'Resistirse: su tirada de ataque contra tu armadura.' : `Resistirse: tu ${yours} contra su ${es(c.actor)}.`;
+  return `${left} ${right}`;
+}
+
 export interface ContestOutcome {
   actor: CheckResult & { label: string };
   target: CheckResult & { label: string };

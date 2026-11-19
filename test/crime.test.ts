@@ -145,7 +145,10 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     expect(incident.observable).toMatch(/^⚖ Lo han visto: Leodhin mató a Hugo\./);
     expect(incident.observable).toMatch(/Garrán se planta delante de Leodhin: «¡Alto! Quedas detenido\.»/);
     expect(incident.observable).toMatch(/Brenna retrocede sin quitarle ojo: no piensa atender a Leodhin\./);
-    expect(incident.observable).toMatch(/Unos seis vecinos gritan y se apartan/);
+    // El aviso que leen los jugadores lleva solo lo que pesa (la ley, quien se niega a servirle); la gente que grita
+    // queda para el máster, en las reacciones del incidente (reunión del 11-11-2026).
+    expect(incident.observable).not.toMatch(/Unos seis vecinos gritan y se apartan/);
+    expect(incident.observable!.split(/(?<=\.»?)\s+/).length).toBeLessThanOrEqual(3);
     // Para él, con los nombres que sabe: no sabe cómo se llaman el herrero ni el alguacil.
     expect(incident.payload['observable_target']).toMatch(/^⚖ Te han visto: has matado al herrero\. El alguacil se planta delante de ti.*Desde ahora te buscan\./);
     expect(arrest.narration_private).toMatch(/^El alguacil se te planta delante: .*Te acusa de esto: Leodhin mató al herrero en la barra/);

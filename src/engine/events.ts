@@ -189,7 +189,8 @@ export function readerText(world: World, e: GameEvent, characterId: Id, level: P
   if (Array.isArray(group) && group.includes(characterId)) {
     const mine = (e.payload['narration_by_pc'] as Record<Id, string> | undefined)?.[characterId];
     const common = typeof e.payload['narration_common'] === 'string' ? e.payload['narration_common'] : null;
-    const text = common !== null ? [mine ?? '', common].filter((t) => t.trim()).join('\n\n') : e.narration_private;
+    // Con su parte, nunca la narración mezclada de todos (la segunda persona de otro no es para él).
+    const text = common !== null || mine ? [mine ?? '', common ?? ''].filter((t) => t.trim()).join('\n\n') : e.narration_private;
     return maskUnknownNames(world, characterId, text);
   }
   // Algo que afecta a todos los presentes (audience.ts): la misma narración para todos. Si el turno era compartido,

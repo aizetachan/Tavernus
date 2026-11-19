@@ -253,8 +253,10 @@ describe('presencia y cola en la web', () => {
     const kaelStream = await fetch(`${base}/api/stream${g}&character=${kael}`, { signal: ctrl.signal });
     const kaelFirst = await readSse(kaelStream, (t) => t.includes('event: presence'));
     expect(kaelFirst).toContain('"name":"Lia","online":true');
-    const joined = await readSse(miraStream, (t) => t.includes('ha entrado') && t.includes('"text":"Tor está aquí"'));
-    expect(joined).toContain('Tor ha entrado en la partida');
+    // Están en el mismo sitio: la llegada ya la contó el motor («Tor llega a…»); la web solo actualiza su circulito,
+    // sin un segundo aviso «ha entrado en la partida» (reunión del 11-11-2026: un mensaje de unión, no dos).
+    const joined = await readSse(miraStream, (t) => t.includes('"name":"Tor","online":true'));
+    expect(joined).not.toContain('Tor ha entrado en la partida');
     expect(joined).toContain('"online":true,"where":"here","text":"Tor está aquí"');
 
     ctrl.abort();
@@ -597,9 +599,10 @@ describe('varios a la vez en la web', () => {
     expect(toKael.text).toBe(`Le preguntas por el pozo.\n\n${common}`);
     expect(toMira.text).toBe(`Cuentas tus monedas.\n\n${common}`);
     expect(toMira.text).not.toContain('pozo');
-    // Su propia acción como entrada; la del otro, como línea suya delante.
+    // Su propia acción como entrada; lo que escribió el otro no se le enseña (reunión del 11-11-2026): lo que hizo sale de la narración.
     expect(toMira.input).toBe('contar mis monedas');
-    expect(toMira.lines!.find((l) => l.speaker === 'pc')).toMatchObject({ id: kael.id, text: 'preguntar a Brenna por el pozo' });
+    expect((toMira.lines ?? []).some((l) => l.speaker === 'pc')).toBe(false);
+    expect(JSON.stringify(toMira)).not.toContain('preguntar a Brenna por el pozo');
     // La línea a uno lleva «a ti» o su nombre; la de todos, «a todos» (como en «Quién lee qué en la sala»).
     expect(toKael.lines!.find((l) => l.text === 'En la plaza.')!.to).toBe('ti');
     expect(toMira.lines!.find((l) => l.text === 'En la plaza.')!.to).toBe('Kael');

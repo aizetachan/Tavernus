@@ -12,7 +12,7 @@ import { AWAY_JS, AWAY_STYLE } from './whileaway.js';
 import { TABLON_JS, TABLON_STYLE } from './tablon.js';
 import { SHOP_JS, SHOP_STYLE } from './tienda.js';
 
-/** El modo Decir vuelve solo a Hacer tras este rato sin escribir ni decir nada (revisión de la partida del 2026-10-26, n.º 9). */
+/** El modo Chat vuelve solo a Hacer tras este rato sin escribir ni decir nada (revisión de la partida del 2026-10-26, n.º 9). */
 export const SAY_IDLE_MS = 30_000;
 
 export const PAGE = String.raw`<!doctype html>
@@ -260,17 +260,7 @@ export const PAGE = String.raw`<!doctype html>
   .actions button, .chat-acts > button { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px; background: rgba(20,22,23,.9); color: #e6c98a; font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: 0 1px 1px rgba(0,0,0,.4); }
   .actions button:hover:not(:disabled), .chat-acts > button:hover:not(:disabled) { background: #22262a; }
   .actions button.roll { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 600; }
-  /* Ilustración de la escena: dentro del chat; un clic la abre en grande. */
-  .msg.scene { width: 100%; margin: 0; }
-  .scene .shot { position: relative; display: block; width: 100%; aspect-ratio: 16 / 9; padding: 0; border: 0; border-radius: 12px; overflow: hidden; background: var(--platter); cursor: zoom-in; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
-  .scene img { display: block; width: 100%; height: 100%; object-fit: cover; transition: opacity .4s; }
-  .scene.loading img { opacity: 0; }
-  .scene .shot::after { content: ''; position: absolute; inset: 55% 0 0; background: linear-gradient(transparent, rgba(0,0,0,.6)); pointer-events: none; }
-  .scene figcaption { position: absolute; left: 16px; bottom: 14px; z-index: 1; text-align: left; }
-  .scene figcaption b { display: block; font-weight: 600; }
-  .scene figcaption span { font-size: 12px; font-weight: 500; color: #d9d3c8; }
-  .scene.loading figcaption span::after { content: ' · ilustrando…'; }
-  .scene .zoom { position: absolute; top: 10px; right: 10px; z-index: 1; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: var(--text); }
+  /* La ilustración de la escena ya no es una tarjeta suelta: va dentro de una burbuja del narrador (placeShot, novel.ts). */
   #lightbox { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 72px 40px 40px; background: rgba(5,6,6,.85); }
   #lightbox[hidden] { display: none; }
   #lightbox img { max-width: min(1120px, 100%); max-height: calc(100% - 60px); border-radius: 16px; box-shadow: var(--window-shadow); }
@@ -280,7 +270,11 @@ export const PAGE = String.raw`<!doctype html>
 
   /* Redacción: atajos, cuadro de texto, micrófono y pincel, el cubo y Enviar. */
   .compose { position: relative; z-index: 3; flex: none; background: var(--chat); }
-  /* Encima del cuadro: cómo va lo que escribes (Hacer / Decir) y, más adelante, otros modos del chat. Los comandos
+  /* Pastilla «Mensajes nuevos»: flota sobre el cuadro cuando llega algo y el lector estaba leyendo arriba. */
+  .new-msgs { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); z-index: 4; height: 32px; padding: 0 14px; border: 1px solid rgba(230,183,90,.35); border-radius: 999px;
+    background: #1f2426; color: #e6c98a; font: 500 13px/1 var(--sans); white-space: nowrap; box-shadow: var(--window-shadow); cursor: pointer; animation: nv-in .25s ease-out; }
+  .new-msgs:hover { background: #22262a; }
+  /* Encima del cuadro: cómo va lo que escribes (Hacer / Chat) y, más adelante, otros modos del chat. Los comandos
      ya no se ven: salen al escribir «/» (#slash). Sin nada visible, la fila no ocupa sitio. */
   .chat-acts { display: flex; align-items: center; gap: 8px; padding: 8px max(16px, calc((100% - 980px) / 2)) 0; }
   .chat-acts:not(:has(> :not([hidden]))) { display: none; }
@@ -792,7 +786,6 @@ ${TABLON_STYLE}
 ${SHOP_STYLE}
   /* B5 sobre los módulos (novel, tts, sfx, voz, pincel, avatar): mismas piezas, otra piel. */
   .msg.row { gap: 8px; margin-top: 8px; max-width: min(760px, 100%); }
-  .msg.scene { width: min(640px, calc(100% - 42px)); }
   .msg.row .body { padding: 8px 12px 7px; border-radius: 18px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
   .msg.row:not(.cont):not(.mine) .body { border-top-left-radius: 4px; }
   .msg.row.mine:not(.cont) .body { border-top-right-radius: 4px; }
@@ -803,7 +796,6 @@ ${SHOP_STYLE}
   .nv-av { width: 34px; height: 34px; box-shadow: 0 1px 2px rgba(0,0,0,.5), inset 0 0 0 1.5px currentColor; }
   .msg.row.master .nv-av { background: #22262a; }
   .msg.row.mine .nv-av { background: #2a1d05; }
-  .scene .shot { border-radius: 12px; box-shadow: 0 1px 1px rgba(0,0,0,.45); }
   /* El prólogo, como la página de un libro: sin caja; al final, un ornamento dorado separa el libro del narrador. */
   .msg.chapter { border-radius: 0; background: none; box-shadow: none; }
   .msg.chapter .orn { display: flex; justify-content: center; margin: 14px 0 0; color: var(--accent); }
@@ -825,7 +817,7 @@ ${SHOP_STYLE}
   .sfx.on { background: transparent; }
   .sfx.on > .sfx-toggle, .tts > button.on { background: var(--accent-tint); }
   .tts-pop, .sfx-pop { top: 44px; border-radius: 16px; background: var(--bubble); box-shadow: var(--window-shadow); }
-  /* Hacer / Decir: lo que escribes lo hace tu personaje (al narrador) o lo dice tal cual (a los demás, sin narrador). */
+  /* Hacer / Chat: lo que escribes lo hace tu personaje (al narrador) o lo dice tal cual (a los demás, sin narrador). */
   .mode-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 16px; background: var(--control); }
   .mode-seg button { height: 28px; padding: 0 12px; border: 0; border-radius: 14px; background: transparent; color: #b8b1a6; font: 600 12.5px/1 var(--sans); letter-spacing: 0; white-space: nowrap; }
   .mode-seg button:hover:not(:disabled) { color: var(--text); }
@@ -858,6 +850,8 @@ ${SHOP_STYLE}
   .actions.reaction .reply { display: flex; gap: 6px; flex: 1 1 260px; min-width: 0; margin: 0; padding: 0; background: none; border: 0; box-shadow: none; }
   .actions.reaction .reply input { flex: 1; min-width: 0; height: 32px; padding: 0 12px; border: 1px solid rgba(230,183,90,.25); border-radius: 999px; background: rgba(20,22,23,.9); color: var(--text); font-size: 13px; }
   .actions.reaction .left { flex-basis: 100%; font-size: 12.5px; color: #ff9d94; }
+  /* Encima de los botones: qué pasa con cada uno (la frase de qué te hacen va en la burbuja de arriba). */
+  .actions.reaction .explain { flex-basis: 100%; margin-bottom: -2px; font-size: 12.5px; line-height: 1.35; color: var(--muted); }
   .actions.reaction.done .left { color: var(--muted); }
   .decisive.waiting { background: var(--accent-tint); color: var(--accent); }
   .decisive.waiting.done { background: none; color: var(--muted); padding-left: 0; }
@@ -964,6 +958,11 @@ ${SHOP_STYLE}
   .actions:not(.party) button.chosen:disabled:not(.roll) { display: none; }
   .actions:not(:has(button:enabled)):not(.party:has(button.chosen)):not(:has(button.roll.chosen)) { display: none; }
   .actions button.chosen:disabled { opacity: .75; border-color: rgba(230,183,90,.45); color: #e6c98a; }
+  /* Fila gastada (una opción pulsada, novel.ts choose): se atenúa entera; la elegida queda marcada sin foco ni fondo de
+     pulsación, también «Aceptar» y «Dejarse», que de activas van en el dorado del acento. */
+  .actions.spent { opacity: .6; }
+  .actions.spent button:focus { outline: none; }
+  .actions.party button.accept.chosen { background: var(--accent-tint); color: #e6c98a; border-color: rgba(230,183,90,.45); box-shadow: none; }
   .actions button.chosen:disabled:not(.roll)::before { content: '✓'; margin-right: 6px; color: var(--accent); }
   .actions button.roll.chosen:disabled { background: var(--accent-tint); color: #e6c98a; }
   .actions button.roll.landed.chosen:disabled { opacity: 1; background: var(--accent-tint); color: #e6c98a; }
@@ -1014,7 +1013,7 @@ ${SHOP_STYLE}
     .msg.notice, .msg.system { max-width: 92%; }
     .sfx > .sfx-toggle, .tts > .tts-auto { width: 32px; }
     .nv-av { width: 28px; height: 28px; }
-    .msg.scene, #log > .actions { margin-left: 36px; }
+    #log > .actions { margin-left: 36px; }
     form .mic, form .brush { width: 38px; }
   }
   /* Micrófono y Enviar en el mismo sitio y con la misma piel: sin texto, dictar; con texto (o al dictar), Enviar. */
@@ -1084,7 +1083,6 @@ ${SHOP_STYLE}
     #place .gn, #place-sub .sub-pl { display: inline; }
     /* Como en WhatsApp: ninguna burbuja llega al borde contrario; las dos dejan el mismo hueco. */
     #log .msg.row { max-width: calc(100% - 64px); }
-    #log .msg.scene { width: auto; max-width: calc(100% - 36px - 64px); }
     /* Letra del hilo en el móvil: la misma que el prólogo (13,5 px). */
     #log .msg.row .body { font-size: 13.5px; line-height: 1.5; }
     #log .msg.row .who { font-size: 12px; }
@@ -1242,12 +1240,13 @@ ${SHOP_STYLE}
     </section>
   </div>
   <div class="compose">
+    <button type="button" id="new-msgs" class="new-msgs" hidden>↓ Mensajes nuevos</button>
     <div id="round" class="round-banner" hidden role="status"></div>
     <div id="typing" class="typing" hidden aria-live="polite"></div>
     <div class="chat-acts" id="chat-acts">
       <div id="saymode" class="mode-seg" role="group" aria-label="Lo que escribes" hidden>
         <button type="button" data-m="do" class="on" aria-pressed="true" title="Hacer: el narrador cuenta lo que haces">Hacer</button>
-        <button type="button" data-m="say" aria-pressed="false" disabled title="Decir: tu personaje lo dice tal cual, al instante y sin narrador (con otros jugadores)">Decir</button>
+        <button type="button" data-m="say" aria-pressed="false" disabled title="Chat: tu personaje lo dice tal cual, al instante y sin narrador (con otros jugadores)">Chat</button>
       </div>
     </div>
     <div id="quote" class="quote" hidden><div><b></b><span></span></div><button type="button" aria-label="No responder" title="No responder"><svg class="i"><use href="#i-x"/></svg></button></div>
@@ -1321,7 +1320,7 @@ ${SHOP_STYLE}
     setTimeout(function () {
       document.body.classList.remove('boot');
       document.body.classList.add('entered');
-      setTimeout(function () { scroll(); input.focus(); }, 300);
+      setTimeout(function () { scroll(true); input.focus(); }, 300);
       setTimeout(function () { document.body.classList.remove('entered'); }, 2600);
     }, Math.max(0, 550 - (Date.now() - bootStart)));
   }
@@ -1337,7 +1336,21 @@ ${SHOP_STYLE}
     }).join('');
   }
 
-  function scroll() { if (!holdUnread()) log.scrollTop = log.scrollHeight; }
+  /**
+   * El hilo solo baja solo si el lector ya estaba al final (a menos de 80 px del fondo la última vez que se desplazó)
+   * o si lo que entra es suyo (su acción, su frase: scrollMine lo marca chatRow). Si estaba leyendo arriba, se queda
+   * donde está y sale la pastilla «Mensajes nuevos» sobre el cuadro, que baja al pulsarla o al llegar al fondo.
+   */
+  var stickToEnd = true, scrollMine = false, newPill = $('new-msgs');
+  function atLogEnd() { return log.scrollHeight - log.scrollTop - log.clientHeight < 80; }
+  log.addEventListener('scroll', function () { stickToEnd = atLogEnd(); if (stickToEnd) newPill.hidden = true; });
+  newPill.addEventListener('click', function () { scroll(true); input.focus(); });
+  function scroll(force) {
+    var mine = scrollMine; scrollMine = false;
+    if (holdUnread()) return;
+    if (force || mine || stickToEnd) { log.scrollTop = log.scrollHeight; stickToEnd = true; newPill.hidden = true; return; }
+    if (!atLogEnd()) newPill.hidden = false;
+  }
   // Las de una reacción pendiente no: siguen en pie hasta que se decide o se acaba el tiempo.
   function spendButtons() { log.querySelectorAll('.actions:not(.reaction) button').forEach(function (b) { b.disabled = true; }); }
 
@@ -1414,7 +1427,7 @@ ${SHOP_JS}
   }
   /** La última ilustración del sitio hace de foto del «chat» en la cabecera, como en WhatsApp. */
   function sceneDot() {
-    var imgs = log.querySelectorAll('.msg.scene img, .place-shot img'), last = imgs[imgs.length - 1], dot = $('scene-dot');
+    var imgs = log.querySelectorAll('.place-shot img'), last = imgs[imgs.length - 1], dot = $('scene-dot');
     var src = last && last.getAttribute('src');
     if (!src || dot.getAttribute('data-src') === src) return;
     dot.setAttribute('data-src', src);
@@ -1422,7 +1435,7 @@ ${SHOP_JS}
     dot.querySelector('img').src = src;
   }
 
-  /** Sin más jugadores conectados, Decir queda apagado (presence). */
+  /** Sin más jugadores conectados, Chat queda apagado (presence). */
   var alone = true;
   function sayBtn() { return $('saymode').querySelector('[data-m="say"]'); }
   function setBusy(on) {
@@ -1449,7 +1462,7 @@ ${SHOP_JS}
     presenceList = list || [];
     var box = $('presence'), group = $('group');
     box.innerHTML = ''; group.innerHTML = '';
-    // Hacer | Decir solo tiene sentido con más jugadores en la partida; en solitario no se ve y todo va al narrador.
+    // Hacer | Chat solo tiene sentido con más jugadores en la partida; en solitario no se ve y todo va al narrador.
     alone = !list || !list.length;
     $('saymode').hidden = alone;
     sayBtn().disabled = alone || busy;
@@ -1500,7 +1513,7 @@ ${SHOP_JS}
     post('/api/act', { text: text }).then(function (r) {
       // Después de lo que el turno haya traído por el stream (y de sus puntos).
       afterChat(function () {
-        // «hablar con <otro jugador>» sin frase: el servidor no lo narra; abre el modo Decir hacia él.
+        // «hablar con <otro jugador>» sin frase: el servidor no lo narra; abre el modo Chat hacia él.
         if (r.ok && r.say_to) { setSayMode(true, r.say_to); add('system', r.text); }
         else if (r.ok && r.info) { clearPending(); infoReply(text, r.info); }
         else handleReply(r);
@@ -1509,10 +1522,10 @@ ${SHOP_JS}
     });
   }
 
-  // --- Entre jugadores: Hacer / Decir (party.ts) -----------------------------------
-  /** Decir: lo escrito es la frase literal del PJ; llega al instante a quien la oiga, sin narrador ni coste. */
+  // --- Entre jugadores: Hacer / Chat (party.ts) -----------------------------------
+  /** Chat: lo escrito es la frase literal del PJ; llega al instante a quien la oiga, sin narrador ni coste. */
   var sayMode = false, sayTo = null, sayIdle = null;
-  /** Decir dura mientras se charla: tras ${SAY_IDLE_MS / 1000} s sin escribir ni decir nada, vuelve solo a Hacer. */
+  /** Chat dura mientras se charla: tras ${SAY_IDLE_MS / 1000} s sin escribir ni decir nada, vuelve solo a Hacer. */
   function armSayIdle() {
     clearTimeout(sayIdle);
     if (sayMode) sayIdle = setTimeout(function () { if (sayMode && !input.value.trim()) setSayMode(false, null, true); }, ${SAY_IDLE_MS});
@@ -1525,14 +1538,14 @@ ${SHOP_JS}
     var doB = $('saymode').querySelector('[data-m="do"]'), b = sayBtn();
     doB.classList.toggle('on', !on); doB.setAttribute('aria-pressed', on ? 'false' : 'true');
     b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.innerHTML = 'Decir' + (sayTo ? '<span class="to"></span>' : '');
-    if (sayTo) b.querySelector('.to').textContent = 'a ' + sayTo.name;
+    b.innerHTML = 'Chat' + (sayTo ? '<span class="to"></span>' : '');
+    if (sayTo) b.querySelector('.to').textContent = 'con ' + sayTo.name;
     $('form').classList.toggle('say', on);
     input.placeholder = on ? (sayTo ? '¿Qué le dices a ' + sayTo.name + '?' : '¿Qué dices?') : '¿Qué haces?';
     input.setAttribute('aria-label', on ? 'Lo que dices' : 'Acción');
     if (!quiet) input.focus();
   }
-  /** «Responder» del menú de un mensaje (novel.ts): Decir hacia quien habló, con su frase citada encima del cuadro. */
+  /** «Responder» del menú de un mensaje (novel.ts): Chat hacia quien habló, con su frase citada encima del cuadro. */
   function replyTo(to, text) {
     setSayMode(true, to);
     setQuote({ name: to.name, text: text });
@@ -1593,7 +1606,7 @@ ${SHOP_JS}
     setQuote(null);
     armSayIdle();
     post('/api/say', { text: text, to: sayTo ? sayTo.id : null }).then(function (r) {
-      // Una acción escrita en Decir («dar mis monedas»): no se dice; vuelve a Hacer y va al narrador.
+      // Una acción escrita en Chat («dar mis monedas»): no se dice; vuelve a Hacer y va al narrador.
       if (r.ok && r.as_action) { setSayMode(false, null, true); add('system', 'Eso es una acción: va al narrador. Para decirlo tal cual, empieza con «—».'); act(text); }
       else if (!r.ok) handleReply(r);
     });
@@ -2153,19 +2166,12 @@ ${SHOP_JS}
     if (!s) { sceneSrc = null; return; }
     if (s.src === sceneSrc) return;
     sceneSrc = s.src;
-    var fig = document.createElement('figure');
-    fig.className = 'msg scene loading';
-    fig.innerHTML = '<button type="button" class="shot" title="Ver en grande"><img alt=""><figcaption><b></b><span>Escena</span></figcaption>' +
-      '<span class="zoom glass"><svg class="i"><use href="#i-max"/></svg></span></button>';
-    var img = fig.querySelector('img');
-    fig.querySelector('figcaption b').textContent = s.name;
-    img.alt = 'Ilustración: ' + s.name;
-    img.addEventListener('load', function () { fig.classList.remove('loading'); scroll(); });
-    // La imagen la sirve el propio servidor (data/games/<slug>/images): si no carga, se quita.
-    img.addEventListener('error', function () { fig.remove(); });
-    fig.querySelector('.shot').addEventListener('click', function () { openLightbox(s); });
-    img.src = s.src;
-    log.appendChild(fig);
+    // Dentro de una burbuja del narrador, como la vista del sitio al llegar (placeShot, novel.ts): ninguna imagen suelta en el hilo.
+    var row = chatRow('master', cast.master, '');
+    placeShot(row, { src: s.src, name: s.name });
+    // La imagen la sirve el propio servidor (data/games/<slug>/images): si no carga, no queda una burbuja vacía.
+    var img = row.querySelector('.place-shot img');
+    if (img) img.addEventListener('error', function () { row.remove(); });
     scroll();
   }
   function openLightbox(s) {
@@ -2640,6 +2646,11 @@ ${SHOP_JS}
   }
 
   function mapNodeById(id) { var v = mapView === 'world' ? mapData.world : mapData.zone; return v.nodes.filter(function (n) { return n.id === id; })[0]; }
+  /** Hasta tres nombres y «y N más»: para las listas de presentes de los tooltips del mapa y del tablero. */
+  function fewNames(names) {
+    return names.slice(0, 3).join(', ') + (names.length > 3 ? ' y ' + (names.length - 3) + ' más' : '');
+  }
+  /** Tooltip corto del mapa: el nombre en negrita y una sola línea debajo (quién hay o, si no hay nadie, el estado). */
   function mapTipFor(target) {
     var m = mapData, ne = target.closest('[data-node]'), ee = target.closest('[data-edge]');
     if (ne) {
@@ -2647,14 +2658,9 @@ ${SHOP_JS}
       if (!n) return '';
       var isWorld = mapView === 'world';
       var state = n.here ? 'estás aquí' : n.known === 'visited' ? 'visitado' : 'de oídas';
-      var h = '<b>' + escapeHtml(n.name) + '</b> <span class="hint">· ' + state + '</span>';
-      var kind = isWorld ? '' : (KIND[n.kind] || KIND.place).name;
-      if (n.outside && n.zone_id) { var z = m.world.nodes.filter(function (w) { return w.id === n.zone_id; })[0]; kind += (kind ? ', ' : '') + 'en ' + (z ? z.name : 'otra zona'); }
-      if (kind) h += '<div class="hint">' + escapeHtml(kind) + '</div>';
       var who = m.presences.filter(function (p) { return p.relation !== 'self' && (isWorld ? p.zone_id === n.id : p.location_id === n.id) && !p.transit; });
-      if (who.length) h += '<div>' + (n.here ? 'Ves' : 'Allí') + ': ' + escapeHtml(who.map(function (p) { return p.label + (p.relation === 'hostile' ? ' (hostil)' : ''); }).join(', ')) + '</div>';
-      if (!n.here && !isWorld) h += '<div class="hint">Clic: ir allí</div>';
-      return h;
+      var line = who.length ? (n.here ? 'Ves' : 'Allí') + ': ' + fewNames(who.map(function (p) { return p.label + (p.relation === 'hostile' ? ' (hostil)' : ''); })) : state;
+      return '<b>' + escapeHtml(n.name) + '</b><div class="hint">' + escapeHtml(line) + '</div>';
     }
     if (ee) {
       var v = mapView === 'world' ? m.world : m.zone;
@@ -2707,25 +2713,19 @@ ${SHOP_JS}
     if (se) {
       var sp = spotById(se.getAttribute('data-spot'));
       if (!sp) return '';
+      // Corto: el nombre y una sola línea debajo (quién hay o, si no hay nadie, dónde queda).
       var here = isHere(sp);
       var ps = b.presences.filter(function (p) { return p.spot_id === sp.id && !p.moving; });
-      var h = '<b>' + escapeHtml(sp.name) + '</b> <span class="hint">· ' + (here ? 'estás aquí' : fmtM(Math.hypot(sp.x - b.actor.x, sp.y - b.actor.y))) + '</span>';
-      if (prop) h = '<b>' + escapeHtml(propName(prop)) + '</b> <span class="hint">· ' + escapeHtml(sp.name) + (here ? ', estás aquí' : ', ' + fmtM(Math.hypot(sp.x - b.actor.x, sp.y - b.actor.y))) + '</span>';
-      h += '<div>' + escapeHtml(sp.description) + '</div>';
-      if (sp.items.length) h += '<div>Objetos: ' + escapeHtml(sp.items.join(', ')) + '</div>';
-      if (sp.nodes.length) h += '<div>Recursos: ' + escapeHtml(sp.nodes.join(', ')) + '</div>';
-      if (ps.length) h += '<div>Ves: ' + escapeHtml(ps.map(function (p) { return p.label; }).join(', ')) + '</div>';
-      if (!here) h += '<div class="hint">Clic: ir allí</div>';
-      return h;
+      var state = here ? 'estás aquí' : fmtM(Math.hypot(sp.x - b.actor.x, sp.y - b.actor.y));
+      if (prop) return '<b>' + escapeHtml(propName(prop)) + '</b><div class="hint">' + escapeHtml(sp.name + ', ' + state) + '</div>';
+      var line = ps.length ? 'Ves: ' + fewNames(ps.map(function (p) { return p.label; })) : state;
+      return '<b>' + escapeHtml(sp.name) + '</b><div class="hint">' + escapeHtml(line) + '</div>';
     }
     if (ee) {
       var e = exitById(ee.getAttribute('data-exit'));
       if (!e) return '';
-      var from = spotById(e.from_spot_id);
-      var h2 = '<b>Salida a ' + escapeHtml(e.to_location_name) + '</b>';
-      h2 += '<div>Desde ' + escapeHtml(from ? from.name : '') + ' hasta ' + escapeHtml(e.to_spot_name) + ', ' + fmtM(e.distance_m) + '.</div>';
-      h2 += e.blocked ? '<div>Bloqueada: ' + escapeHtml(e.blocked_by || '') + '.</div>' : '<div class="hint">Clic: salir hacia allí</div>';
-      return h2;
+      var way = 'Hasta ' + e.to_spot_name + ', ' + fmtM(e.distance_m) + (e.blocked ? '. Bloqueada' + (e.blocked_by ? ': ' + e.blocked_by : '') : '');
+      return '<b>Salida a ' + escapeHtml(e.to_location_name) + '</b><div class="hint">' + escapeHtml(way) + '</div>';
     }
     return '';
   }
@@ -2934,7 +2934,7 @@ ${SHOP_JS}
     var hist = (q.history || []).slice(-6).reverse();
     if (hist.length) {
       var unseenKeys = changed.map(function (c) { return c.key; });
-      h += '<details class="hist"' + (changed.length || !LIVE[q.status] ? ' open' : '') + '><summary><b>Qué ha pasado</b><span>' + hist.length + (changed.length ? ' · ' + changed.length + ' sin leer' : '') + '</span>' + CHEV + '</summary><ul>' + hist.map(function (x) {
+      h += '<details class="hist" data-key="h:' + escapeHtml(q.id) + '"' + (changed.length || !LIVE[q.status] ? ' open' : '') + '><summary><b>Qué ha pasado</b><span>' + hist.length + (changed.length ? ' (' + changed.length + ' sin leer)' : '') + '</span>' + CHEV + '</summary><ul>' + hist.map(function (x) {
         return '<li class="' + x.kind + (unseenKeys.indexOf(x.key) >= 0 ? ' unseen' : '') + '"><span class="t" title="' + escapeHtml(x.when) + '">' + escapeHtml(x.short || x.when) + '</span><span>' + escapeHtml(x.text) + (x.why ? '<small>' + escapeHtml(x.why) + '</small>' : '') + '</span></li>';
       }).join('') + '</ul></details>';
     }
@@ -2953,13 +2953,13 @@ ${SHOP_JS}
     var changed = ctx ? ctx.unseen.some(function (c) { return (q.history || []).some(function (x) { return x.key === c.key; }); }) : false;
     var live = LIVE[q.status], next = live ? questNext(q) : '';
     var small = live && next ? '<svg class="i"><use href="#i-arrow"/></svg>' + escapeHtml(next)
-      : q.status === 'completed' ? escapeHtml([QKIND[q.kind] + (q.giver ? ' de ' + q.giver : ''), q.reward ? 'Recompensa: ' + q.reward : ''].filter(Boolean).join(' · '))
-      : QCLOSED[q.status] ? escapeHtml([JSTATUS[q.status], (q.history || []).slice(-1).map(function (x) { return x.why || ''; })[0] || questWhence(q)].filter(Boolean).join(' · '))
+      : q.status === 'completed' ? escapeHtml([QKIND[q.kind] + (q.giver ? ' de ' + q.giver : ''), q.reward ? 'Recompensa: ' + q.reward : ''].filter(Boolean).join(', '))
+      : QCLOSED[q.status] ? escapeHtml([JSTATUS[q.status], (q.history || []).slice(-1).map(function (x) { return x.why || ''; })[0] || questWhence(q)].filter(Boolean).join(', '))
       : questLevel(q) + escapeHtml(questWhence(q));
     var last = (q.history || []).slice(-1)[0], when = last ? last.short || last.when : q.completed || '';
     var right = q.status === 'completed' || QCLOSED[q.status] ? (when ? '<span class="when" title="' + escapeHtml(q.completed || (last ? last.when : '')) + '">' + escapeHtml(when) + '</span>' : '')
       : '<span class="r">' + questChip(q, isNew) + (q.steps.length > 1 ? '<span class="frac">' + q.steps.filter(function (s) { return s.done; }).length + ' de ' + q.steps.length + '</span>' : '') + '</span>';
-    return '<details class="q row ' + q.status + (q.kind === 'main' ? ' main' : '') + (isNew ? ' isnew' : '') + (QCLOSED[q.status] ? ' dim' : '') + '"' + (changed ? ' open' : '') + '><summary>' + questIcon(q, isNew) +
+    return '<details class="q row ' + q.status + (q.kind === 'main' ? ' main' : '') + (isNew ? ' isnew' : '') + (QCLOSED[q.status] ? ' dim' : '') + '" data-key="q:' + escapeHtml(q.id) + '"' + (changed ? ' open' : '') + '><summary>' + questIcon(q, isNew) +
       '<span class="tt"><b>' + escapeHtml(q.title) + '</b><small>' + small + '</small></span>' + right + CHEV + '</summary>' + questBody(q, ctx) + '</details>';
   }
   /** Tarjeta grande de la misión que sigues: siempre abierta, con el plazo arriba y todo el cuerpo a la vista. */
@@ -2985,16 +2985,16 @@ ${SHOP_JS}
   }
   function rumorHtml(r) {
     return '<div class="rumor"><b>' + (r.said_by ? 'Lo dice ' + escapeHtml(r.said_by) + ':' : 'Se dice:') + '</b> «' + escapeHtml(r.name) + '». ' + escapeHtml(r.hint) +
-      (r.where ? ' Dónde, según dicen: ' + escapeHtml(r.where) + '.' : '') + '<small>' + escapeHtml(r.when) + (r.mentions > 1 ? ' · ha salido ' + r.mentions + ' veces' : '') + '</small></div>';
+      (r.where ? ' Dónde, según dicen: ' + escapeHtml(r.where) + '.' : '') + '<small>' + escapeHtml(r.when) + (r.mentions > 1 ? ', ha salido ' + r.mentions + ' veces' : '') + '</small></div>';
   }
   function talkHtml(c, i) {
     var color = npcColor(c.npc_id);
     var pt = '<span class="pt" style="--npc:' + color + '">' + (c.portrait ? '<img alt="" src="' + escapeHtml(c.portrait) + '">' : escapeHtml(initial(c.name))) + '</span>';
     var last = c.exchanges[c.exchanges.length - 1];
-    var h = '<details class="talk" style="--npc:' + color + '"' + (i === 0 ? ' open' : '') + '><summary>' + pt + '<span class="tt"><b>' + escapeHtml(c.name) + '</b><small>' +
-      escapeHtml([c.known ? c.role : 'nombre desconocido', c.rapport, c.exchanges.length + (c.exchanges.length === 1 ? ' intercambio' : ' intercambios'), last ? last.when : ''].filter(Boolean).join(' · ')) + '</small></span>' + CHEV + '</summary><div class="ex">';
+    var h = '<details class="talk" style="--npc:' + color + '" data-key="t:' + escapeHtml(c.npc_id) + '"' + (i === 0 ? ' open' : '') + '><summary>' + pt + '<span class="tt"><b>' + escapeHtml(c.name) + '</b><small>' +
+      escapeHtml([c.known ? c.role : 'nombre desconocido', c.rapport, c.exchanges.length + (c.exchanges.length === 1 ? ' intercambio' : ' intercambios'), last ? last.when : ''].filter(Boolean).join(', ')) + '</small></span>' + CHEV + '</summary><div class="ex">';
     c.exchanges.forEach(function (x) {
-      h += '<div class="exh"><span class="when">' + escapeHtml(x.when + ' · ' + x.location) + '</span>' +
+      h += '<div class="exh"><span class="when">' + escapeHtml(x.when + ', ' + x.location) + '</span>' +
         x.said.map(function (s) { return '<div class="me">' + escapeHtml(s) + '</div>'; }).join('') +
         x.replied.map(function (s) { return '<div class="them">' + escapeHtml(s) + '</div>'; }).join('') + '</div>';
     });
@@ -3003,12 +3003,12 @@ ${SHOP_JS}
     return h + '</details>';
   }
   function dayHtml(d, i) {
-    return '<details class="day"' + (i === 0 ? ' open' : '') + '><summary><span class="tt"><b>' + escapeHtml(d.label) + '</b>' + (d.summary ? '<small>' + escapeHtml(d.summary) + '</small>' : '') + '</span>' + CHEV + '</summary>' +
+    return '<details class="day" data-key="d:' + escapeHtml(d.label) + '"' + (i === 0 ? ' open' : '') + '><summary><span class="tt"><b>' + escapeHtml(d.label) + '</b>' + (d.summary ? '<small>' + escapeHtml(d.summary) + '</small>' : '') + '</span>' + CHEV + '</summary>' +
       d.entries.map(function (e) { return '<div class="en ' + e.kind + '"><span class="t">' + escapeHtml(e.time) + '</span><span>' + escapeHtml(e.text) + '</span></div>'; }).join('') + '</details>';
   }
   /** Tarjeta de un lugar: portada (su ilustración o su plano; los de oídas, velada) y debajo nombre y estado. */
   function placeHtml(p) {
-    var sub = [p.zone, p.here ? 'estás aquí' : p.status === 'visited' ? 'visitado' : 'de oídas', p.first_visit ? 'desde ' + p.first_visit : ''].filter(Boolean).join(' · ');
+    var sub = [p.zone, p.here ? 'estás aquí' : p.status === 'visited' ? 'visitado' : 'de oídas', p.first_visit ? 'desde ' + p.first_visit : ''].filter(Boolean).join(', ');
     var cover = p.cover ? '<span class="cover" style="background-image:url(&quot;' + escapeHtml(p.cover) + '&quot;)"></span>' : '<span class="cover none"><svg class="i"><use href="#i-map"/></svg></span>';
     return '<div class="pl ' + p.status + (p.here ? ' here' : '') + '">' + cover + '<span class="pl-b"><i></i><span><b>' + escapeHtml(p.name) + '</b><small>' + escapeHtml(sub) + '</small></span></span></div>';
   }
@@ -3062,7 +3062,33 @@ ${SHOP_JS}
       h += '<h3>Lugares <span>' + j.places.length + '</span></h3>';
       h += j.places.length ? '<div class="pl-grid">' + j.places.map(placeHtml).join('') + '</div>' : '<p class="empty">No conoces ningún sitio.</p>';
     }
+    var before = journalOpenNow();
     journalEl.innerHTML = h;
+    journalReopen(before);
+  }
+  /**
+   * Al repintar, el Diario no cierra lo que tenías abierto: cada <details> lleva una clave estable (q:misión, h:su
+   * historial, t:charla por NPC, d:día). Lo que abriste o cerraste a mano (journalUser) manda siempre; lo que estaba
+   * abierto sigue abierto; lo nuevo entra como diga el repintado (abierto si trae cambios).
+   */
+  var journalUser = {}, journalSet = {};
+  journalEl.addEventListener('toggle', function (ev) {
+    var d = ev.target, k = d.getAttribute && d.getAttribute('data-key');
+    if (!k) return;
+    // El evento llega después (es asíncrono): el cambio que hicimos nosotros al restaurar no cuenta como del usuario.
+    if (k in journalSet && journalSet[k] === d.open) { delete journalSet[k]; return; }
+    journalUser[k] = d.open;
+  }, true);
+  function journalOpenNow() {
+    var o = {};
+    journalEl.querySelectorAll('details[data-key]').forEach(function (d) { o[d.getAttribute('data-key')] = d.open; });
+    return o;
+  }
+  function journalReopen(before) {
+    journalEl.querySelectorAll('details[data-key]').forEach(function (d) {
+      var k = d.getAttribute('data-key'), want = k in journalUser ? journalUser[k] : k in before ? before[k] || d.open : d.open;
+      if (d.open !== want) { journalSet[k] = want; d.open = want; }
+    });
   }
   journalEl.addEventListener('click', function (ev) {
     var ans = ev.target.closest('[data-answer]');
@@ -3116,6 +3142,7 @@ ${SHOP_JS}
     if (stream) stream.close();
     log.innerHTML = '';
     readSeq = 0; serverRead = null; lastShownSeq = 0; unreadHold = false;
+    stickToEnd = true; newPill.hidden = true; journalUser = {};
     fight = null; fightTurnKey = null; document.body.classList.remove('in-combat'); renderFight();
     board.innerHTML = ''; boardData = null; clearTimeout(boardTimer); document.body.classList.remove('board-big');
     mapEl.innerHTML = ''; mapData = null; document.body.classList.remove('map-big');
@@ -3211,11 +3238,11 @@ ${SHOP_JS}
     else if (text === 'tirar' || text === 'roll') { spendButtons(); roll(); }
     else act(text);
   });
-  // Hacer ⇄ Decir; con destinatario, el primer toque lo quita y el segundo vuelve a Hacer.
+  // Hacer ⇄ Chat; con destinatario, el primer toque lo quita y el segundo vuelve a Hacer.
   $('saymode').addEventListener('click', function (ev) {
     var m = ev.target.closest('[data-m]'); if (!m || m.disabled) return;
     if (m.getAttribute('data-m') === 'do') { if (sayMode) setSayMode(false); return; }
-    // Con destinatario, el primer toque lo quita (Decir a todos); si no, pasa a Decir.
+    // Con destinatario, el primer toque lo quita (Chat con todos); si no, pasa a Chat.
     if (sayMode && sayTo) setSayMode(true, null); else if (!sayMode) setSayMode(true);
   });
 

@@ -22,7 +22,7 @@ import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswe
 
 import { npcSees, witnesses } from './perception.js';
 
-import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, readsAsAccept, readsAsResist } from './reactions.js';
+import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, reactionExplain, readsAsAccept, readsAsResist } from './reactions.js';
 
 import { TURN_WINDOW_MS, windowClashes, type Clash } from './turnwindow.js';
 
@@ -1115,7 +1115,8 @@ export class Engine {
       actor_id: c.id, action_type: 'master', input_text: text, narration_private: r.line ? `«${r.line}»` : r.narration, observable: r.observable,
       tags: ['deterministic', 'social', 'extra', ...(r.bought ? ['trade'] : []), ...(r.offtopic ? [OFFTOPIC_TAG] : [])],
       payload: {
-        master: null, npc_id: n.id, observable_vague: 'Alguien cruza unas palabras.',
+        // Charla de uno con el vecino: los demás de la sala solo leen el aviso («Pillin habla con Damián»), no las frases.
+        master: null, npc_id: n.id, audience: 'actor', audience_ids: [], observable_vague: 'Alguien cruza unas palabras.',
         ...(r.line ? { lines: [{ speaker: 'npc', npc_id: n.id, text: r.line, to: c.id, ...(r.narration ? { beat: r.narration } : {}) }] } : {}),
         ...(r.bought ? { bought: r.bought } : {}),
       },
@@ -2556,16 +2557,18 @@ export class Engine {
     const toName = pcName(this.world, from.id, to);
     const ToName = toName.charAt(0).toUpperCase() + toName.slice(1);
     const verb = { attack: ['Te lanzas contra', 'se lanza contra'], grapple: ['Alargas las manos hacia', 'alarga las manos hacia'], shove: ['Cargas con el hombro contra', 'carga con el hombro contra'], other: ['Vas a por', 'va a por'] }[r.kind];
-    const said = r.input && !r.input.startsWith('(') ? ` Ha escrito: «${r.input.replace(/[«»]/g, '').trim()}».` : '';
+    // Lo que escribió el actor no se le enseña al afectado (lo que teclea un jugador no lo lee otro); sí qué le hace y
+    // qué pasa con cada botón.
+    const explain = reactionExplain(r);
     const event = this.events.emit({
       actor_id: from.id, action_type: 'reaction_request', input_text: r.input, also_to: [to.id],
       narration_private: `${verb[0]} ${toName}. ${ToName} decide si se deja o se resiste.`,
       observable: `${from.name} ${verb[1]} ${to.name}.`,
       tags: ['deterministic', 'party', 'reaction', ...(r.kind === 'attack' ? ['combat'] : [])],
       payload: {
-        master: null, reaction: { id: r.id, to: to.id, from: from.id, kind: r.kind, attempt: r.attempt, expires_real_ms: r.expires_real_ms },
+        master: null, reaction: { id: r.id, to: to.id, from: from.id, kind: r.kind, attempt: r.attempt, explain, expires_real_ms: r.expires_real_ms },
         target_character_id: to.id,
-        observable_target: `${from.name} intenta ${r.attempt}.${said} ¿Te dejas o te resistes? Si no decides a tiempo, te resistes por instinto.`,
+        observable_target: `${from.name} intenta ${r.attempt}. ¿Te dejas o te resistes? Si no decides a tiempo, te resistes por instinto.`,
         observable_vague: 'Una figura va a por otra.',
       },
     }, this.stampFor(from));

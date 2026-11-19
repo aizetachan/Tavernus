@@ -89,8 +89,8 @@ export function invitePage(reason: string | null = null): string {
 export interface JoinPageInput {
   game: { slug: string; name: string };
   options: ChargenCatalog;
-  /** PJ ya en la partida, para empezar a su lado. */
-  others: { id: string; name: string }[];
+  /** PJ ya en la partida (y si su jugador está conectado): quien entra ve quién está, y puede empezar a su lado. */
+  others: { id: string; name: string; online?: boolean }[];
   /** Biblioteca del usuario (null sin cuenta, en `open`); `taken`: su nombre ya está en la partida. */
   library?: { id: string; name: string; race_id: string | null; class_id: string | null; taken: boolean }[] | null;
   /** El administrador en una partida ajena: además de su biblioteca, el atajo del PJ por defecto con ese nombre. */
@@ -105,10 +105,14 @@ export function joinPage(input: JoinPageInput): string {
   .lib button:hover:not(:disabled) { box-shadow: inset 0 0 0 1.5px var(--accent); }
   .lib b { font-size: 15px; font-weight: 600; }
   .lib small { color: var(--muted); font-size: 12.5px; }
+  .who { margin: 0 0 4px; color: var(--muted); font-size: 13.5px; }
+  .who:empty { display: none; }
+  .who .on { color: var(--text); }
   #pick[hidden], #cg[hidden], #cg-lead[hidden] { display: none; }`;
   return HEAD(`${input.game.name} — tu personaje`, css) + String.raw`<div class="box">
   <span class="eyebrow">${esc(input.game.name)}</span>
   <h1>${input.admin ? 'Entras como administrador' : 'Te han invitado a la partida'}</h1>
+  <p class="who" id="who"></p>
   <div id="pick" hidden>
     <p>${input.admin
       ? 'Elige con quién entras: uno de tu biblioteca, uno nuevo o el personaje por defecto. Dentro podrás mirar y jugar con cualquier personaje de la partida.'
@@ -137,6 +141,17 @@ ${CHARGEN_JS}
     return near;
   }
   function nearValue(near) { return near && near.querySelector('input').checked ? near.querySelector('select').value : null; }
+  // Quién está ya en la partida, y quién tiene a su jugador conectado ahora (reunión del 11-11-2026).
+  (function who() {
+    var el = $('who');
+    if (!el || !D.others.length) return;
+    var on = D.others.filter(function (c) { return c.online; }), off = D.others.filter(function (c) { return !c.online; });
+    var h = 'En la partida: ';
+    h += D.others.map(function (c) { return (c.online ? '<b class="on">' : '<span>') + esc(c.name) + (c.online ? '</b>' : '</span>'); }).join(', ') + '.';
+    if (on.length) h += ' Conectad' + (on.length === 1 ? 'o' : 'os') + ' ahora: ' + on.map(function (c) { return esc(c.name); }).join(', ') + '.';
+    else if (off.length) h += ' Ahora no hay nadie conectado.';
+    el.innerHTML = h;
+  })();
   var slug = encodeURIComponent(D.game.slug);
   function claim(body) {
     return fetch('/api/seat/claim?game=' + slug, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
@@ -233,15 +248,19 @@ export function seatsPage(slug: string): string {
           (s.label !== s.character_name ? '<span class="muted">' + esc(s.label) + '</span>' : '') +
           '<span class="muted">' + (s.user ? 'de ' + esc(s.user) : 'sin usuario') + '</span>' +
           '<span class="muted">' + (s.online ? 'en línea' : 'último uso: ' + ago(s.last_seen_at)) + '</span></div>' +
-          '<div class="link"><input type="text" readonly value="' + esc(url) + '" aria-label="Enlace de ' + esc(s.character_name || s.label) + '">' +
-          '<button class="btn ghost sm" data-copy>Copiar</button><button class="btn ghost sm" data-regen>Renovar</button>' +
-          (s.user && !s.host ? '<button class="btn ghost sm" data-release>Liberar</button>' : '') + '</div>';
-        div.querySelector('[data-copy]').addEventListener('click', function (ev) {
+          // El asiento del anfitrión es el suyo: no se reparte, así que no lleva enlace ni botones.
+          (s.host ? '<div class="link"><span class="muted">Tu asiento</span></div>'
+            : '<div class="link"><input type="text" readonly value="' + esc(url) + '" aria-label="Enlace de ' + esc(s.character_name || s.label) + '">' +
+              '<button class="btn ghost sm" data-copy>Copiar</button><button class="btn ghost sm" data-regen>Renovar</button>' +
+              (s.user ? '<button class="btn ghost sm" data-release>Liberar</button>' : '') + '</div>');
+        var copy = div.querySelector('[data-copy]');
+        if (copy) copy.addEventListener('click', function (ev) {
           var inp = div.querySelector('input'); inp.select();
           (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).catch(function () { document.execCommand('copy'); });
           ev.target.textContent = 'Copiado'; setTimeout(function () { ev.target.textContent = 'Copiar'; }, 1500);
         });
-        div.querySelector('[data-regen]').addEventListener('click', function (ev) {
+        var regen = div.querySelector('[data-regen]');
+        if (regen) regen.addEventListener('click', function (ev) {
           if (!armed(ev)) return;
           ev.target.disabled = true;
           call('POST', '/api/seats/regenerate?game=' + encodeURIComponent(slug), { seat: s.id }).then(function (r) { if (!r.ok) $('err').textContent = r.text; load(); });

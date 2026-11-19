@@ -465,8 +465,11 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
      */
     const announce = (id: Id, online: boolean, inFiction = !online) => {
       if (quietNow.has(id)) { sendPresence(); return; }
-      const notice = webNotice(online ? `${nameOf(id)} ${seen.has(id) ? 'ha vuelto' : 'ha entrado en la partida'}` : `${nameOf(id)} se ha marchado`);
+      const first = online && !seen.has(id);
+      const notice = webNotice(online ? `${nameOf(id)} ${first ? 'ha entrado en la partida' : 'ha vuelto'}` : `${nameOf(id)} se ha marchado`);
       const where = locOf(id);
+      // La primera entrada ya la cuenta el motor a los de su sitio («X llega a la mesa del fondo»): un solo mensaje.
+      if (first) inFiction = true;
       for (const other of streams.keys()) {
         if (other === id || !presence.online(other) || (inFiction && where && locOf(other) === where)) continue;
         record(other, { seq: history.get(other)?.at(-1)?.seq ?? 0, kind: 'system', text: '', notice, presence: { id, online } });
@@ -866,10 +869,12 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
       // El administrador sin asiento recibe uno (abajo, `adminSeat`) y elige con qué PJ entra, como un invitado.
       if (adminUser && user && !seat && !manifest.demo) seat = await adminSeat(manifest, user);
       if (seat && !seat.character_id) {
-        const engine = (await runtime(manifest.slug)).engine;
+        const rt = await runtime(manifest.slug);
+        const engine = rt.engine;
         html(res, 200, joinPage({
           game: { slug: manifest.slug, name: manifest.name }, options: GameManager.characterOptions(),
-          others: [...engine.world.characters.values()].filter((c) => c.status !== 'retired' && c.status !== 'dead').map((c) => ({ id: c.id, name: c.name })),
+          // Quién está ya en la partida y si está conectado: quien entra lo ve antes de elegir personaje (reunión del 11-11-2026).
+          others: [...engine.world.characters.values()].filter((c) => c.status !== 'retired' && c.status !== 'dead').map((c) => ({ id: c.id, name: c.name, online: rt.online(c.id) })),
           library: user ? (await (await accountsOf()).library(user.id)).map((c) => ({ id: c.id, name: c.name, race_id: c.race_id ?? null, class_id: c.class_id ?? null, taken: engine.characterNameTaken(c.name) })) : null,
           ...(adminUser ? { admin: { name: adminCharacterName(engine) } } : {}),
         }));
@@ -1840,17 +1845,8 @@ export function toMessage(d: Delivery, engine: Engine): WebMessage {
     const own = inputs[d.character_id]; if (own) m.input = own;
     const novel = novelOf(e, engine, d.character_id, d.text);
     if (novel) { m.prose = novel.prose; m.lines = novel.lines; m.blocks = novel.blocks; m.speech = novel.speech; }
-    // Lo que hicieron o dijeron los demás en este turno, delante, con su avatar (si el máster no lo trae ya en lines).
-    const w = engine.world;
-    const others: WebLine[] = Object.entries(inputs)
-      .filter(([id]) => id !== d.character_id && w.characters.has(id) && !(m.lines ?? []).some((l) => l.id === id))
-      .map(([id, text]) => ({ speaker: 'pc', id, name: pcLabel(w, d.character_id, w.character(id)), text }));
-    if (others.length) {
-      const lines = [...others, ...(m.lines ?? [])];
-      const shift = (b: NovelBlock): NovelBlock => (b.kind === 'line' ? { ...b, line: b.line + others.length } : b);
-      m.lines = lines;
-      m.blocks = [...others.map((_, i): NovelBlock => ({ kind: 'line', line: i })), ...(m.blocks ? m.blocks.map(shift) : [{ kind: 'prose' as const, text: d.text }])];
-    }
+    // Lo que hicieron o dijeron los demás sale de la narración del máster (lo común y sus `lines`), nunca del texto
+    // literal que escribieron: lo que teclea un jugador no lo lee otro (reunión del 11-11-2026).
     if (Array.isArray(e.payload['suggested_actions'])) m.suggested = (e.payload['suggested_actions'] as string[]).slice(0, 4);
     return m;
   }
@@ -1907,7 +1903,7 @@ export function historyFor(engine: Engine, characterId: Id, history: readonly We
  * su espera con la cuenta atrás; a los dos, la marca de que ya se decidió (cierra lo anterior en vivo).
  */
 function reactionView(m: WebMessage, e: GameEvent, w: Engine['world'], reader: Id): void {
-  const r = e.payload['reaction'] as { id: Id; to: Id; from: Id; attempt?: string; expires_real_ms?: number } | undefined;
+  const r = e.payload['reaction'] as { id: Id; to: Id; from: Id; attempt?: string; explain?: string; expires_real_ms?: number } | undefined;
   if (!r) return;
   if (e.action_type !== 'reaction_request') { m.reaction_done = r.id; return; }
   const to = w.characters.get(r.to);
@@ -1915,7 +1911,7 @@ function reactionView(m: WebMessage, e: GameEvent, w: Engine['world'], reader: I
   if (!to || !from) return;
   const open = (to.reactions ?? []).some((x) => x.id === r.id);
   const expires = r.expires_real_ms ?? 0;
-  if (reader === r.to) m.reaction = { id: r.id, from: pcName(w, reader, from), attempt: r.attempt ?? '', expires_ms: expires, open };
+  if (reader === r.to) m.reaction = { id: r.id, from: pcName(w, reader, from), attempt: r.attempt ?? '', ...(r.explain ? { explain: r.explain } : {}), expires_ms: expires, open };
   else if (reader === r.from) m.reaction_wait = { id: r.id, name: pcName(w, reader, to), expires_ms: expires, open };
 }
 

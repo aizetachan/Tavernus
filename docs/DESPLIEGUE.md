@@ -100,7 +100,10 @@ Con `--remote-build` se compila en el servidor.
    - Crea `/etc/tavernus/env` (permisos 600, solo root) a partir de `deploy/env.example`, con
      `SESSION_SECRET` al azar y `PUBLIC_URL=https://<dominio>`.
    - Configura Caddy para el dominio, con el certificado de Let's Encrypt automático y renovado
-     solo.
+     solo. Si la web debe responder también con `www.` (o con varios nombres), pon todos en
+     `TAVERNUS_DOMAIN` separados por comas (`tavernus.com, www.tavernus.com`) y recarga Caddy:
+     con un solo nombre, el otro da `ERR_SSL_PROTOCOL_ERROR` porque no hay certificado para él
+     (le pasó a tavernus.com hasta el 10-11-2026).
    - Instala la unidad `tavernus-web.service` y los temporizadores de salud y de copias.
    - Activa ufw con SSH, 80 y 443. Detecta tu puerto SSH para no dejarte fuera.
 
