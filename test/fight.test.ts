@@ -250,7 +250,8 @@ describe('combate en la web (SSE «combat»)', () => {
     engine.world.touch('npcs', brenna.id);
     for (const s of [torStream, liaStream]) {
       const end = await readSse(s, (t) => t.includes('"why":"ended"'));
-      expect(end).toContain('"combat":{"phase":"end","text":"Fin del combate."}');
+      // El aviso dice por qué acabó (reunión del 11-11-2026): aquí, porque el único rival ha muerto.
+      expect(end).toMatch(/"combat":\{"phase":"end","text":"Fin del combate: (?:Brenna|La tabernera) ha muerto\."\}/);
       expect(combats(end).at(-1)).toMatchObject({ active: false, why: 'ended', key: forTor.key });
     }
     await torStream.body!.cancel();

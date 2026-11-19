@@ -3,13 +3,13 @@
 Sale de las notas de las pruebas de Miguel y Santi (partida «Megaprueba mañanera 11/11», Pillin y Zhenzet en la
 Taberna del Jabalí, 504 eventos en la base del servidor) y de la reunión de ese día.
 
-**Estado (19-11-2026):** fases 0 y 2 programadas en el árbol de trabajo, sin commit; suite completa en verde (1585
-tests) y probado en local con dos personajes (offline): un solo mensaje al entrar, el prólogo nombra a quien ya está,
-la reacción explica cada botón y no enseña lo que tecleó el otro, «Chat», la pastilla «↓ Mensajes nuevos», el Diario
-que recuerda lo cerrado, tooltips de una línea y la página de entrar con «En la partida: …». Sin ver en pantalla
-(IMAGES=off en local): las imágenes dentro de la burbuja. Sin probar con modelo real: el `character_id` de
-`report_incident` y `request_reaction` en turnos compartidos (lo dice el prompt; falta una partida con Haiku). Las
-fases 1 y 3 a 6 están por hacer; quedan las tres decisiones de diseño del final, con recomendación.
+**Estado (19-11-2026):** fases 0 y 2 fusionadas (PR #82) y desplegadas en `20261119-084501`; probadas en local con
+dos personajes (offline). Sin ver en pantalla: las imágenes dentro de la burbuja (IMAGES=off en local). Sin probar con
+modelo real: el `character_id` de `report_incident` y `request_reaction` en turnos compartidos (lo dice el prompt;
+falta una partida a dos con Haiku). **Fase 4 programada** (combate y ley: solo pelea quien puede, `hold` con la
+autoridad delante, fin del combate con motivo, un alto por encuentro, reacción pendiente antes que el combate), con
+sus tests en `test/combate-ley-2026-11-11.test.ts`. Las fases 1, 3, 5 y 6 están por hacer; quedan las tres decisiones
+de diseño del final, con recomendación.
 
 ## Lo que pasó en la partida
 

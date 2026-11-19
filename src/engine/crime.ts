@@ -84,7 +84,8 @@ export const SEEN_S = 12 * GAME_HOUR;
 /** Papel de un NPC ante un incidente. */
 export type CrimeRole = 'victim' | 'authority' | 'kin' | 'owner' | 'commoner';
 /** Lo que hace en el acto. */
-export type CrimeResponse = 'arrest' | 'fight' | 'seize' | 'alert' | 'flee' | 'shout' | 'refuse' | 'mourn' | 'watch';
+/** `hold`: podría pelear, pero la autoridad está delante y se contiene (no abre combate). */
+export type CrimeResponse = 'arrest' | 'fight' | 'hold' | 'seize' | 'alert' | 'flee' | 'shout' | 'refuse' | 'mourn' | 'watch';
 /** Cómo queda con el autor. */
 export type CrimeStance = 'outraged' | 'hostile' | 'afraid' | 'mourning' | 'wary';
 
@@ -279,6 +280,7 @@ const STANCE_ES: Record<CrimeStance, string> = {
 const RESPONSE_ES: Record<CrimeResponse, string> = {
   arrest: 'da el alto y le detiene',
   fight: 'se lanza contra él',
+  hold: 'aprieta los puños, pero se contiene: la autoridad está delante',
   seize: 'le agarra de la muñeca y le exige que se lo devuelva',
   alert: 'corre a avisar a la autoridad',
   flee: 'huye',
@@ -329,6 +331,11 @@ export function npcProfile(world: World, n: Npc, locationId: Id): ConflictProfil
   return 'common';
 }
 
+/** ¿Hay una autoridad viva en la localización del incidente (que no sea ese NPC)? Entonces la víctima se contiene. */
+function lawPresent(world: World, i: Incident, except: Id): boolean {
+  return enforcerIds(world).some((id) => { const e = world.npcs.get(id); return Boolean(e) && e!.id !== except && e!.status === 'alive' && world.spot(e!.location.id).location_id === i.location_id; });
+}
+
 function roleOf(world: World, n: Npc, i: Incident): CrimeRole {
   if (n.id === i.victim_id) return 'victim';
   if (isEnforcer(world, n.id)) return 'authority';
@@ -349,7 +356,13 @@ function reactionOf(world: World, n: Npc, i: Incident, how: Knower['how'], alert
   }
   switch (role) {
     case 'victim': {
-      if (i.kind !== 'theft' && i.kind !== 'theft_attempt') return { role, response: n.stats ? 'fight' : 'shout', stance: 'hostile' };
+      if (i.kind !== 'theft' && i.kind !== 'theft_attempt') {
+        // Se lanza a pelear solo quien puede (ficha y no es gente de paz: el parroquiano de relleno grita y se aparta, no
+        // abre un combate). Y con la autoridad delante, se contiene y deja que ella se encargue, salvo que vaya de muerte.
+        const fighter = Boolean(n.stats) && !n.noncombatant;
+        if (!fighter) return { role, response: 'shout', stance: 'hostile' };
+        return { role, response: present && i.severity < 3 && lawPresent(world, i, n.id) ? 'hold' : 'fight', stance: 'hostile' };
+      }
       // A quien le roban (o se lo intentan) reacciona según quién es (docs/CONFLICTOS-NPC.md §9).
       const p = npcProfile(world, n, i.location_id);
       if (p === 'authority') return { role: 'authority', response: 'arrest', stance: 'outraged' };
@@ -708,7 +721,8 @@ function authoritiesWhoKnow(world: World, c: Character): Npc[] {
  * la que ya se resistió, no hay alto: va a por él, hostil (`resisted`).
  */
 function checkArrest(world: World, c: Character, nowG: number): void {
-  if (!c.wanted || c.wanted.arrest || c.jailed || c.status === 'dead' || c.status === 'retired' || c.transit) return;
+  // Con su jugador ausente, nadie le detiene: la ley espera a que esté.
+  if (!c.wanted || c.wanted.arrest || c.jailed || c.status === 'dead' || c.status === 'retired' || c.transit || c.away) return;
   const here = world.characterSpot(c);
   if (!here) return;
   const seeing = authoritiesWhoKnow(world, c).filter((n) => npcSees(world, n, c, nowG));
@@ -717,7 +731,11 @@ function checkArrest(world: World, c: Character, nowG: number): void {
   const enf = seeing.find((n) => resisted.has(n.id)) ?? seeing[0];
   if (!enf) return;
   const chase = resisted.has(enf.id);
-  c.wanted.arrest = { npc_id: enf.id, since_game_s: nowG, announced: false, resisted: chase, attempts: 0 };
+  // Un alto por encuentro: si este mismo le dio el alto hace poco en este mismo sitio y el PJ sigue aquí sin haber
+  // respondido (la autoridad se fue a lo suyo y ha vuelto), no lo repite: actúa (partida del 11-11-2026: Garrán repitió
+  // el alto once veces, una cada hora). Si el PJ se fue y vuelve a aparecer en otro sitio, es otro encuentro: alto otra vez.
+  const repeat = !chase && (c.wanted.altos ?? []).some((a) => a.npc_id === enf.id && a.location_id === here.location_id && nowG - a.game_s < ALTO_REPEAT_S);
+  c.wanted.arrest = { npc_id: enf.id, since_game_s: nowG, announced: false, resisted: chase, attempts: 0, ...(repeat ? { repeat: true } : {}) };
   if (chase) { enf.attitude.by_character[c.id] = 'hostile'; world.touch('npcs', enf.id); }
   // Se le acerca.
   if (enf.location.id !== here.id) setNpcOrder(world, { npc_id: enf.id, order: 'go', spot_id: here.id, minutes: 30 }, nowG);
@@ -837,6 +855,8 @@ export function resist(world: World, c: Character, nowG: number): Npc[] {
 
 /** Intentos de ganar tiempo que la autoridad tolera bajo el alto (el primero; luego actúa). */
 export const ARREST_PATIENCE = 1;
+/** Tras un alto sin respuesta, la misma autoridad no lo repite durante este tiempo de juego: al verle otra vez, actúa. */
+export const ALTO_REPEAT_S = 6 * GAME_HOUR;
 
 /**
  * Apunta lo que hace bajo el alto y no es entregarse ni resistirse. Devuelve
@@ -869,8 +889,11 @@ export function arrestHostile(world: World, c: Character): boolean {
 }
 
 export interface LawNotice {
-  /** pursuit: le ve una autoridad a la que ya se resistió: sin alto, va a por él. */
-  kind: 'arrest' | 'pursuit' | 'jailed' | 'released';
+  /**
+   * pursuit: le ve una autoridad a la que ya se resistió: sin alto, va a por él. seize: ya le dio el alto hace poco y
+   * no respondió; esta vez no avisa: le reduce y cumple la pena (Engine.enforceArrest).
+   */
+  kind: 'arrest' | 'pursuit' | 'seize' | 'jailed' | 'released';
   character: Character;
   npc: Npc | null;
   sentence?: Sentence;
@@ -922,12 +945,15 @@ export function lawTick(world: World, nowG: number, nowFor: (c: Character) => nu
         continue;
       }
     }
-    if (c.status !== 'active') continue;
+    // Dormido o con su jugador ausente, nadie le da el alto (ni lo repite): la ley espera a que esté.
+    if (c.status !== 'active' || c.away) continue;
     checkArrest(world, c, nowG);
     if (c.wanted?.arrest && !c.wanted.arrest.announced) {
-      c.wanted.arrest.announced = true;
+      const a = c.wanted.arrest;
+      a.announced = true;
+      if (!a.resisted && !a.repeat && here) c.wanted.altos = [...(c.wanted.altos ?? []).filter((x) => x.npc_id !== a.npc_id), { npc_id: a.npc_id, location_id: here.location_id, game_s: nowG }];
       world.touch('characters', c.id);
-      out.push({ kind: c.wanted.arrest.resisted ? 'pursuit' : 'arrest', character: c, npc: world.npcs.get(c.wanted.arrest.npc_id) ?? null });
+      out.push({ kind: a.resisted ? 'pursuit' : a.repeat ? 'seize' : 'arrest', character: c, npc: world.npcs.get(a.npc_id) ?? null });
       continue;
     }
     // Si se ha ido de delante de quien le detenía (o ya no le ve: se ha escondido), la detención queda en el aire
@@ -1044,6 +1070,7 @@ export function reactionSentences(world: World, i: Incident, you: boolean, reade
     switch (k.response) {
       case 'arrest': out.push(`${name} se planta delante de ${p}: «¡Alto! Quedas detenido.»`); break;
       case 'fight': out.push(`${name} se lanza contra ${p}.`); break;
+      case 'hold': out.push(you ? `${name} aprieta los puños, pero no se mueve: deja que la autoridad se encargue de ti.` : `${name} aprieta los puños, pero no se mueve: deja que la autoridad se encargue.`); break;
       case 'seize': out.push(you ? `${name} te agarra de la muñeca: «Suelta eso. Ahora.»` : `${name} agarra de la muñeca a ${p} y le exige que lo suelte.`); break;
       case 'alert': out.push(`${name} sale corriendo a avisar ${al(k.to && world.npcs.has(k.to) ? label(world, k.to, reader) : 'la autoridad')}.`); break;
       case 'flee': out.push(`${name} huye de allí.`); break;
@@ -1071,7 +1098,7 @@ export function incidentText(world: World, i: Incident, you: boolean): string {
 }
 
 /** Las reacciones que pesan, de más a menos: la ley, quien se lanza, quien le agarra, quien va a avisar, quien se niega a servirle. */
-const REACTION_RANK: Record<Knower['response'], number> = { arrest: 6, fight: 5, seize: 4, alert: 3, refuse: 2, flee: 1, shout: 1, mourn: 1, watch: 0 };
+const REACTION_RANK: Record<Knower['response'], number> = { arrest: 6, fight: 5, seize: 4, alert: 3, hold: 2, refuse: 2, flee: 1, shout: 1, mourn: 1, watch: 0 };
 
 /**
  * Para el aviso que leen los jugadores: solo lo que pesa (la autoridad, la víctima que se lanza, quien le agarra),

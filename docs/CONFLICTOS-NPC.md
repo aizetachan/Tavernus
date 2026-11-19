@@ -272,7 +272,7 @@ Si tiene varios, manda el primero de la lista. Los **allegados** (`bonds`) reacc
 | **Hurto casi pillado** | En guardia | En guardia | En guardia, la mano en la bolsa | En guardia | En guardia | Se aparta | Se aparta |
 | **Hurto pillado** | Careo corto y alto | Careo; si no, «¡al ladrón!», le echa, avisa | Careo agarrándole la muñeca; si no, pelea | Careo; si no, le encara y grita | Careo; si no, «¡al ladrón!» y corre a avisar | Se aparta y avisa después | Grita y corre a los suyos |
 | **Arrebatar** | Alto; si huye, le persigue | «¡Al ladrón!», avisa a la guardia | Pelea por recuperarlo | Le persigue y grita | Grita y avisa | Huye | Llora y avisa a los suyos |
-| **Golpear** | Como hoy (`crime.ts`) | Como hoy | Como hoy | Como hoy | Como hoy | Como hoy | Como hoy |
+| **Golpear** | Alto (`crime.ts`) | Como hoy | Se lanza (`fight`); con la autoridad delante se contiene (`hold`, desde el 19-11-2026) | Como hoy | Grita y se aparta (la gente de paz, relleno incluido, no pelea ni abre combate) | Como hoy | Como hoy |
 
 Con relación íntima o buena, cada casilla baja un escalón (la broma o el reproche de la sección 4); a la segunda en el
 mismo día, vuelve a la tabla.
