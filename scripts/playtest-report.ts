@@ -66,10 +66,32 @@ export interface GameMetrics {
   quests: { statuses: Record<string, string>; rumors: string[]; opened: number; done: number; steps: number; clues: number; first_step_action: number | null; first_done_action: number | null; expired: string[] };
   combat: { pj_attacks: number; npc_attacks: number; unanswered: number; npc_down: number; npc_dead: string[]; pj_down: number; pj_dead: number; death_saves: number; respawns: number; hp_min_ratio: number; law: Record<string, number> };
   end: { final_quest: string | null; escalated: string[]; averted: string[]; epilogue: string };
+  /** Partida a dos: lo que hicieron juntos y cómo cerró el máster los turnos compartidos (plan del 11-11, «cada uno lee lo suyo»). */
+  pair?: { partner: string; partner_profile: string; together: number; chats: number; reactions: number; shared_turns: number; shared_without_part: number; shared_without_common: number; crimes_as_other: number };
   cost_usd: number | null;
 }
 
 const NPC_ID = /\bnpc_[a-z_]+\b/;
+
+/** Clave de un resumen en la tanda: a dos, los dos jugadores comparten slug. */
+export const keyOf = (g: GameSummary): string => (g.pair ? `${g.slug}#${g.character.id}` : g.slug);
+
+/** Lo que cuenta de una partida a dos para este jugador: sus turnos compartidos y si el cierre le dio su parte. */
+export function pairMetrics(g: GameSummary, events: readonly GameEvent[]): GameMetrics['pair'] | undefined {
+  if (!g.pair) return undefined;
+  const pc = g.character.id;
+  const shared = events.filter((e) => e.payload['master'] && Array.isArray(e.payload['group']) && (e.payload['group'] as string[]).includes(pc));
+  const without_part = shared.filter((e) => !(e.payload['narration_by_pc'] as Record<string, string> | undefined)?.[pc]?.trim()).length;
+  const without_common = shared.filter((e) => typeof e.payload['narration_common'] !== 'string' || !(e.payload['narration_common'] as string).trim()).length;
+  // Un incidente apuntado a este PJ en un turno compartido donde el golpe lo declaró el otro (11-11: el bofetón de Pillin se le apuntó a Zhenzet).
+  const crimes_as_other = shared.filter((e) => {
+    const calls = ((e.payload['master'] as { calls?: { name: string; input?: { character_id?: string } }[] }).calls ?? []);
+    const mine = calls.some((c) => c.name === 'report_incident' && c.input?.character_id === pc);
+    const inputs = e.payload['group_inputs'] as Record<string, string> | undefined;
+    return mine && inputs && !ATTACK_VERB.test(inputs[pc] ?? '') && Object.entries(inputs).some(([id, t]) => id !== pc && ATTACK_VERB.test(t));
+  }).length;
+  return { partner: g.pair.partner, partner_profile: g.pair.partner_profile, together: g.pair.together, chats: g.pair.chats, reactions: g.pair.reactions, shared_turns: shared.length, shared_without_part: without_part, shared_without_common: without_common, crimes_as_other };
+}
 
 export function analyzeGame(g: GameSummary, events: readonly GameEvent[], state: WorldSnapshot | null): GameMetrics {
   const pc = g.character.id;
@@ -152,8 +174,10 @@ export function analyzeGame(g: GameSummary, events: readonly GameEvent[], state:
   const first = actions[0]?.state;
   const statuses: Record<string, string> = {};
   for (const q of g.quests ?? []) statuses[q.id] = q.status;
+  const pair = pairMetrics(g, events);
   return {
-    slug: g.slug, profile: g.profile ?? '', character: `${g.character.name}, ${g.character.class}`, ended: g.ended ?? '', actions: actions.length,
+    slug: keyOf(g), profile: g.profile ?? '', character: `${g.character.name}, ${g.character.class}`, ended: g.ended ?? '', actions: actions.length,
+    ...(pair ? { pair } : {}),
     level: last?.level ?? 1, xp: last?.xp ?? 0, game_hours: last && first ? (last.game_s - first.game_s) / 3600 : 0,
     flow: {
       wall_mean_s: mean(walls), wall_p95_s: quantile(walls, 0.95), motor_share: actions.length ? actions.filter((a) => a.event_ids.length === 0).length / actions.length : 0,
@@ -254,9 +278,11 @@ export function digestOf(g: GameSummary, max = 320): string {
   }).join('\n\n');
 }
 
+const HOW_LABEL: Record<NonNullable<PlayerTurn['how']>, string> = { chat: 'chat', say: 'en voz alta', reaction: 'reacción', offer: 'oferta' };
+
 export function transcriptOf(g: GameSummary): string {
-  const head = [`# ${g.profile} · ${g.character.name}, ${g.character.race} ${g.character.class}`, '', `Fin: ${g.ended}. Situación: ${g.character.situation ?? '—'}`, ''];
-  const body = g.actions.map((a) => `## ${a.i}. ${a.mode === 'own' ? `propia, ${a.impulse ?? ''}` : 'sugerida'}${a.ok ? '' : ' · RECHAZADA'} · ${((a.wall_ms ?? 0) / 1000).toFixed(1)} s\n\n> ${a.text}\n\n${a.reply ?? a.engine_text ?? ''}\n${a.state ? `\n_PG ${a.state.hp}/${a.state.hp_max}, nivel ${a.state.level}, ${a.state.location}, misiones ${a.state.done}, pasos ${a.state.steps}, pistas ${a.state.clues}_\n` : ''}`);
+  const head = [`# ${g.profile} · ${g.character.name}, ${g.character.race} ${g.character.class}${g.pair ? ` · con ${g.pair.partner} (${g.pair.partner_profile})` : ''}`, '', `Fin: ${g.ended}. Situación: ${g.character.situation ?? '—'}`, ''];
+  const body = g.actions.map((a) => `## ${a.i}. ${a.mode === 'own' ? `propia, ${a.impulse ?? ''}` : 'sugerida'}${a.how ? `, ${HOW_LABEL[a.how]}` : ''}${a.together ? ', a la vez' : ''}${a.ok ? '' : ' · RECHAZADA'} · ${((a.wall_ms ?? 0) / 1000).toFixed(1)} s\n\n> ${a.text}\n\n${a.reply ?? a.engine_text ?? ''}\n${a.state ? `\n_PG ${a.state.hp}/${a.state.hp_max}, nivel ${a.state.level}, ${a.state.location}, misiones ${a.state.done}, pasos ${a.state.steps}, pistas ${a.state.clues}_\n` : ''}`);
   return [...head, ...body, '## Epílogo', '', g.epilogue ?? ''].join('\n');
 }
 
@@ -342,7 +368,7 @@ export async function judgeFun(g: GameSummary, m: GameMetrics, client: MasterCli
     talk = parseJson<TalkJudgement>(await ask(client, model, TALK_SYSTEM, prompt, usage));
     if (!talk) errors.push('juez de conversaciones: JSON inválido');
   }
-  return { slug: g.slug, fun, talk, errors, usage, cost_usd: costUsd(usage, model) };
+  return { slug: keyOf(g), fun, talk, errors, usage, cost_usd: costUsd(usage, model) };
 }
 
 export function dryFunClient(): MasterClient {
@@ -409,6 +435,11 @@ export function buildPlaytest(run: AutoplayRun, ms: readonly GameMetrics[], judg
   out.push('', '## Final', '', '| Perfil | Final | Amenazas que pasaron | Amenazas evitadas |', '|---|---|---|---|');
   for (const m of ms) out.push(`| ${m.profile} | ${m.end.final_quest ?? '—'} | ${m.end.escalated.join(', ') || '—'} | ${m.end.averted.join(', ') || '—'} |`);
 
+  if (ms.some((m) => m.pair)) {
+    out.push('', '## A dos', '', 'Turnos compartidos: los que el máster cerró para los dos a la vez (ventana de turno o ronda). «Sin su parte» y «sin lo común»: cierres donde a este jugador le faltó `narration_by_pc` o `narration_common`, y leyó la narración mezclada. «Crimen ajeno»: incidentes apuntados a este PJ cuando el golpe lo declaró el otro.', '', '| Perfil | Con quién | A la vez | Chats | Reacciones | Turnos compartidos | Sin su parte | Sin lo común | Crimen ajeno |', '|---|---|---:|---:|---:|---:|---:|---:|---:|');
+    for (const m of ms) if (m.pair) out.push(`| ${m.profile} | ${m.pair.partner} (${m.pair.partner_profile}) | ${m.pair.together} | ${m.pair.chats} | ${m.pair.reactions} | ${m.pair.shared_turns} | ${m.pair.shared_without_part} | ${m.pair.shared_without_common} | ${m.pair.crimes_as_other} |`);
+  }
+
   const funs = judges.map((j) => ({ slug: j.slug, f: j.fun })).filter((x): x is { slug: string; f: FunJudgement } => x.f !== null);
   if (funs.length) {
     const axis = ['ritmo', 'claridad', 'agencia', 'sorpresa', 'tension', 'coherencia', 'misiones', 'conversaciones', 'combate', 'final'];
@@ -455,15 +486,15 @@ async function main() {
     const loaded = loadGame(g.dir, g.character.id);
     const m = analyzeGame(g, loaded.events, loaded.state);
     ms.push(m);
-    writeFileSync(join(dir, 'transcripts', `${g.profile || g.n}.md`), transcriptOf(g));
+    writeFileSync(join(dir, 'transcripts', `${g.profile || g.n}${g.pair ? `-con-${g.pair.partner_profile}` : ''}.md`), transcriptOf(g));
     if (client) {
       // Si un juez falla, se pierde su partida, no lo ya pagado en las demás.
-      const j = await judgeFun(g, m, client, model).catch((e: unknown): GameJudge => ({ slug: g.slug, fun: null, talk: null, errors: [(e as Error).message.slice(0, 200)], usage: { input: 0, output: 0, cache_read: 0, cache_write: 0 }, cost_usd: 0 }));
+      const j = await judgeFun(g, m, client, model).catch((e: unknown): GameJudge => ({ slug: keyOf(g), fun: null, talk: null, errors: [(e as Error).message.slice(0, 200)], usage: { input: 0, output: 0, cache_read: 0, cache_write: 0 }, cost_usd: 0 }));
       judges.push(j);
       console.log(`  ${g.profile}: juez ${usd(j.cost_usd, 4)}${j.errors.length ? ` · ${j.errors.join('; ')}` : ''}`);
     }
   }));
-  const order = new Map(run.games.map((g, i) => [g.slug, i]));
+  const order = new Map(run.games.map((g, i) => [keyOf(g), i]));
   ms.sort((a, b) => order.get(a.slug)! - order.get(b.slug)!);
   judges.sort((a, b) => order.get(a.slug)! - order.get(b.slug)!);
   if (client) writeFileSync(judgeFile, JSON.stringify(judges, null, 2));

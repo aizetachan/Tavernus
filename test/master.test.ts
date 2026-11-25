@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
-import { Master, type MasterClient } from '../src/ai/master.js';
+import { effectiveModel, Master, type MasterClient } from '../src/ai/master.js';
 import { MASTER_TOOLS } from '../src/ai/tools.js';
 import { systemPrompt } from '../src/ai/prompt.js';
 import { seededRng } from '../src/engine/dice.js';
@@ -437,5 +437,18 @@ describe('combate', () => {
     expect(requests.at(-1)!.messages[0]!.content as string).toContain('RÁPIDA');
     expect(r.requires_roll?.advantage).toBe('advantage');
     expect(kael.decisive).toBeNull();
+  });
+});
+
+describe('modelo por escena (PROLOGUE_MODEL, FINAL_MODEL)', () => {
+  const cfg = { model: 'claude-haiku-5-5', effort: 'low' as const };
+  it('sin variables, manda la campaña; MASTER_MODEL la pisa; el de la escena pisa a los dos', () => {
+    expect(effectiveModel(cfg, {}).model).toBe('claude-haiku-5-5');
+    expect(effectiveModel(cfg, { MASTER_MODEL: 'claude-sonnet-5-5' }).model).toBe('claude-sonnet-5-5');
+    expect(effectiveModel(cfg, { MASTER_MODEL: 'claude-haiku-5-5', PROLOGUE_MODEL: 'claude-sonnet-5-5' }, 'prologue').model).toBe('claude-sonnet-5-5');
+    expect(effectiveModel(cfg, { MASTER_MODEL: 'claude-haiku-5-5', PROLOGUE_MODEL: 'claude-sonnet-5-5' }).model).toBe('claude-haiku-5-5');
+    expect(effectiveModel(cfg, { FINAL_MODEL: 'claude-opus-5-5' }, 'final').model).toBe('claude-opus-5-5');
+    expect(effectiveModel(cfg, { FINAL_MODEL: 'claude-opus-5-5' }, 'prologue').model).toBe('claude-haiku-5-5');
+    expect(effectiveModel(cfg, { PROLOGUE_MODEL: '  ' }, 'prologue').model).toBe('claude-haiku-5-5');
   });
 });

@@ -13,6 +13,7 @@ import { cleanText, executeTool, MASTER_TOOLS, WRITE_TOOLS, type LogEventInput, 
 import type { Approach } from '../engine/movement.js';
 import { isPlaceholder, rollCategory, withoutSelfCorrection } from '../engine/closecheck.js';
 import type { ProgressEvent } from '../engine/progress.js';
+import { characterStory, storyOf } from '../engine/story.js';
 import type { ShownRoll } from '../engine/rolls.js';
 import { actorConfigFromEnv, actorTurn, performNpc, type ActorConfig, type ActorUsage } from './actor.js';
 
@@ -68,15 +69,27 @@ function modelSupportsFallbacks(model: string): boolean {
   return !model.startsWith('claude-haiku');
 }
 
+/** Escenas con modelo propio: el prólogo y la primera escena (PROLOGUE_MODEL) y los turnos con un final de la historia en marcha (FINAL_MODEL). */
+export type MasterScene = 'prologue' | 'final';
+
 /**
  * Modelo y esfuerzo efectivos: la campaña manda, salvo que MASTER_MODEL / MASTER_EFFORT
- * los sobrescriban (pensado para partidas de prueba con un modelo barato).
+ * los sobrescriban (pensado para partidas de prueba con un modelo barato). Por encima de
+ * todo, el modelo de la escena si está puesto: PROLOGUE_MODEL para el prólogo y la primera
+ * escena, FINAL_MODEL mientras el PJ lleva un final activo (docs/PLAN-PRUEBAS-CREDITOS.md, 3b).
  */
-export function effectiveModel(cfg: { model: string; effort: 'low' | 'medium' | 'high' }, env: NodeJS.ProcessEnv = process.env): { model: string; effort: 'low' | 'medium' | 'high' } {
-  const model = env['MASTER_MODEL']?.trim() || cfg.model;
+export function effectiveModel(cfg: { model: string; effort: 'low' | 'medium' | 'high' }, env: NodeJS.ProcessEnv = process.env, scene?: MasterScene): { model: string; effort: 'low' | 'medium' | 'high' } {
+  const sceneModel = scene === 'prologue' ? env['PROLOGUE_MODEL']?.trim() : scene === 'final' ? env['FINAL_MODEL']?.trim() : undefined;
+  const model = sceneModel || env['MASTER_MODEL']?.trim() || cfg.model;
   const e = env['MASTER_EFFORT']?.trim();
   const effort = e === 'low' || e === 'medium' || e === 'high' ? e : cfg.effort;
   return { model, effort };
+}
+
+/** El PJ lleva en marcha uno de los finales de la historia (misiones `exclusive: 'final'`). */
+export function inFinale(engine: Engine, actor: Character): boolean {
+  const open = characterStory(actor).open;
+  return Boolean(storyOf(engine.world)?.quests.some((q) => q.exclusive === 'final' && open.includes(q.id)));
 }
 
 /** Cliente real contra la API (SDK de Anthropic). Lee la clave del entorno. */
@@ -118,8 +131,8 @@ export class Master {
    * Texto libre en una sola llamada, sin tools (prólogo, recapitulación; docs/PROLOGO.md).
    * null si no sale texto: el cliente offline solo cierra con log_event, y entonces el motor usa su plantilla.
    */
-  async write(req: { system: string; prompt: string; max_tokens?: number }): Promise<{ text: string; model: string; usage: { input: number; output: number } } | null> {
-    const { model } = effectiveModel(this.engine.world.campaign.master);
+  async write(req: { system: string; prompt: string; max_tokens?: number; scene?: 'prologue' }): Promise<{ text: string; model: string; usage: { input: number; output: number } } | null> {
+    const { model } = effectiveModel(this.engine.world.campaign.master, process.env, req.scene);
     try {
       const res = await this.client.create({
         // La familia 5 piensa siempre (Opus 5.5 no deja apagarlo): esfuerzo bajo y margen para que quede sitio al texto.
@@ -139,7 +152,7 @@ export class Master {
   async resolve(actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string; prologue?: string }, scene?: Scene, decisive?: DecisiveResponse): Promise<MasterOutcome> {
     const { engine } = this;
     const cfg = engine.world.campaign.master;
-    const { model, effort } = effectiveModel(cfg);
+    const { model, effort } = effectiveModel(cfg, process.env, intro ? 'prologue' : inFinale(engine, actor) ? 'final' : undefined);
     const safeguards: Partial<Pick<Anthropic.Beta.MessageCreateParamsNonStreaming, 'betas' | 'fallbacks'>> = modelSupportsFallbacks(model)
       ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' }
       : {};

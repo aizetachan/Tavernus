@@ -16,13 +16,19 @@
  * Luego scripts/playtest-report.ts analiza conversaciones, misiones, combate, final y fluidez.
  * Para probar los finales sin jugar los actos anteriores, --start-act 2|3 los deja hechos por tools y sin máster:
  *   npm run autoplay -- --profiles dirigido-templar,dirigido-verdad,dirigido-arder --start-act 3 --actions 60 --parallel 3 --no-judge --live
+ * Partidas a dos (PAIRS): dos jugadores automáticos juntos en la misma partida, que a veces actúan a la vez (ventana de
+ * turno, rondas de pelea), se hablan por el chat y en la escena, se dan cosas, se roban y contestan a las reacciones del otro.
+ * Un resumen por jugador (mismo slug); --actions cuenta por jugador:
+ *   npm run autoplay -- --pairs all --actions 100 --parallel 5 --live
+ *   npm run autoplay -- --pairs picaro:novato,violento:pausado --actions 60 --live
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type Anthropic from '@anthropic-ai/sdk';
-import type { Engine } from '../src/engine/engine.js';
-import type { Character, GameEvent } from '../src/engine/model.js';
+import type { ActionResult, Engine } from '../src/engine/engine.js';
+import type { Character, GameEvent, Offer, Reaction } from '../src/engine/model.js';
+import { readerText } from '../src/engine/events.js';
 import { journalOf } from '../src/engine/journal.js';
 import { choiceOptions, pendingChoices } from '../src/engine/levels.js';
 import { characterStory, questsOf, questStatus, storyOf } from '../src/engine/story.js';
@@ -48,6 +54,14 @@ const MAX_ROLLS_PER_ACTION = 2;
 export const STUCK_ACTIONS = 60;
 /** Horas de juego tras las que Brezal lanza su epílogo (108), con margen. */
 const EPILOGUE_H = 109;
+/** A dos: ventana de turno (tiempo real) para que lo mandado a la vez entre en la misma llamada al máster. */
+export const PAIR_WINDOW_MS = 2000;
+/** A dos: lo que espera una ronda de pelea al que no ha actuado (los dos mandan a la vez: no debería agotarse). */
+export const PAIR_ROUND_MS = 5000;
+/** A dos: probabilidad de que los dos actúen a la vez estando en el mismo sitio (en pelea, siempre). */
+export const TOGETHER_P = 0.3;
+/** A dos: probabilidad de que una acción propia vaya dirigida al compañero (chat, hablarle, darle algo, robarle…). */
+export const PAIR_WANT_P = 0.35;
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).replace(/[\uD800-\uDBFF]$/, '')}…` : s);
 
 /** Ganas de liarla: lo que el jugador intenta cuando escribe su propia acción. `dry` es lo que escribe el cliente falso. */
@@ -126,6 +140,30 @@ export const FINAL_PROFILES: PlayerProfile[] = ([
   prompt: `${DIRECTED_PROMPT} Quieres este final y solo este: ${aim}.`, wants: DIRECTED_WANTS,
 }));
 
+/**
+ * Partidas a dos (--pairs): dos jugadores automáticos en la misma partida, juntos desde el principio. Cada pareja junta
+ * dos maneras de jugar que se estorban o se complementan: el que sigue el Diario con el que habla sin parar, el pícaro
+ * con el novato al que robar, el violento con el que no tiene prisa, el que rompe el juego con el que quiere acabarlo.
+ */
+export const PAIRS: [string, string][] = [['metodico', 'charlatan'], ['picaro', 'novato'], ['violento', 'pausado'], ['rompejuegos', 'dirigido'], ['explorador', 'impredecible']];
+
+/** Lo que un jugador hace con su compañero (lo que las partidas del 4-11 y del 11-11 pusieron a prueba). */
+const PAIR_WANTS_ALL = [
+  want('chat', 'decirle algo a tu compañero por el chat de jugadores (qué hacer ahora, qué has visto, un plan), en una frase', '¿Vamos juntos a la plaza?'),
+  want('hablar', 'decirle algo a tu compañero en voz alta, delante de quien esté, como habla tu personaje', 'Ven, que esto no me gusta.'),
+  want('dar', 'darle o pasarle a tu compañero algo que lleves (una ración, unas monedas, un objeto)', 'Le doy una ración.'),
+  want('seguir', 'ir a donde está tu compañero, o pedirle que venga contigo', 'Voy a donde está mi compañero.'),
+];
+const PAIR_WANTS_BY_PROFILE: Record<string, { id: string; prompt: string; dry: string }[]> = {
+  picaro: [want('robar_pj', 'intentar robarle algo a tu compañero sin que se dé cuenta', 'Intento quitarle la bolsa a mi compañero sin que lo note.')],
+  rompejuegos: [want('robar_pj', 'intentar robarle algo a tu compañero sin que se dé cuenta', 'Le quito la bolsa a mi compañero.'), want('mandar', 'dar órdenes a tu compañero como si fuera tu criado', 'Tú, trae agua.')],
+  violento: [want('pegar_pj', 'empujar o pegar a tu compañero por algo que ha hecho o dicho', 'Le doy un empujón a mi compañero.')],
+  charlatan: [want('cotillear_pj', 'preguntarle a tu compañero por su vida o llevarle la contraria', 'No estoy de acuerdo contigo.')],
+};
+export function pairWantsFor(profile: PlayerProfile | null): { id: string; prompt: string; dry: string }[] {
+  return [...PAIR_WANTS_ALL, ...(profile ? PAIR_WANTS_BY_PROFILE[profile.id] ?? [] : [])];
+}
+
 /** Una negativa del NPC, con o sin frase dictada. También cuenta en scripts/playtest-report.ts. */
 export const REFUSAL = /no se le cuenta|no te lo (digo|cuento|voy a decir|repito)|eso no (te lo digo|se dice|se cuenta|te importa|es asunto tuyo)|no lo cuento|no es asunto tuyo|no te incumbe|ya te lo (he )?dich?o|ya te he dicho|no tengo nada que decirte/i;
 const LEAVE_NPC = { id: 'dejar', prompt: 'dejar a quien tienes delante, que no te va a decir más, e ir a otro sitio o a otra persona de lo que dice tu Diario', dry: 'Lo dejo estar y me voy a otra cosa del Diario.' };
@@ -147,6 +185,10 @@ export interface PlayerTurn {
   mode: 'suggested' | 'own';
   impulse: string | null;
   text: string;
+  /** A dos: qué fue (chat con el compañero, frase en la escena, respuesta a una reacción o a una oferta); sin esto, una acción normal. */
+  how?: 'chat' | 'say' | 'reaction' | 'offer';
+  /** A dos: entró a la vez que la del compañero (ventana de turno o ronda). */
+  together?: true;
   ok: boolean;
   /** Texto que vio el jugador cuando la acción no fue bien (máster sin respuesta, espera, etc.). */
   engine_text: string | null;
@@ -193,6 +235,43 @@ export interface GameSummary {
   /** Partida preparada: acto en el que empezó y misiones que ya traía. */
   start_act?: number;
   start_done?: number;
+  /** Partida a dos: con quién jugó (un resumen por jugador, mismo slug) y cuánto hicieron juntos. */
+  pair?: { n: number; partner: string; partner_profile: string; together: number; chats: number; reactions: number };
+}
+
+/** Un jugador automático dentro de una partida (uno, o dos en las partidas a dos). */
+interface Seat {
+  k: number;
+  c: Character;
+  profile: PlayerProfile | null;
+  startDone: number;
+  last: string;
+  suggested: string[];
+  refusals: number;
+  leaveNow: boolean;
+  actions: PlayerTurn[];
+  player: TokenUsage & { calls: number };
+  lastUsage?: TokenUsage;
+  history: string[];
+  ended: GameEnd | null;
+  downs: number;
+  progressKey: string;
+  progressAt: number;
+  finalAt: number | null;
+  together: number;
+  chats: number;
+  reactions: number;
+  pending?: { r: ActionResult; p: Planned; fresh: GameEvent[]; rolls: number; wall: number };
+}
+
+/** Lo que el jugador va a mandar en esta vuelta. */
+interface Planned {
+  mode: PlayerTurn['mode'];
+  impulse: string | null;
+  text: string;
+  how?: PlayerTurn['how'];
+  reaction?: Reaction;
+  offer?: Offer;
 }
 
 export interface AutoplayRun {
@@ -264,8 +343,8 @@ export function dryPlayerClient(): TextClient {
   return {
     async create(params) {
       const prompt = params.messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n');
-      const impulse = IMPULSES.find((x) => prompt.includes(x.prompt));
-      const text = /Responde SOLO con el número/.test(prompt) ? '1' : impulse?.dry ?? 'Miro alrededor con calma.';
+      const impulse = [...IMPULSES, ...pairWantsFor(null), ...Object.values(PAIR_WANTS_BY_PROFILE).flat()].find((x) => prompt.includes(x.prompt));
+      const text = /Responde SOLO con el número/.test(prompt) ? '1' : /«me dejo» o «me resisto»/.test(prompt) ? 'Me resisto.' : impulse?.dry ?? 'Miro alrededor con calma.';
       return fakeMessage(params.model, text, { input: 450, output: 20, cache_read: 0, cache_write: 0 });
     },
   };
@@ -284,13 +363,15 @@ export function playerSheet(engine: Engine, c: Character): string {
 
 export const PLAYER_SYSTEM = 'Juegas a un juego de rol por chat en castellano: eres el jugador, no el narrador. Contestas solo con lo que hace o dice tu personaje, en primera persona, en una o dos frases (25 palabras como mucho), sin comillas de apertura ni explicaciones. Juegas con ganas: quieres avanzar en tu situación y a veces pones a prueba al narrador.';
 
-export function playerPrompt(o: { sheet: string; situation: string | null; last: string; suggested: string[]; mode: 'suggested' | 'own'; impulse: { prompt: string } | null; profile?: string; diary?: string; history?: string[] }): string {
+export function playerPrompt(o: { sheet: string; situation: string | null; last: string; suggested: string[]; mode: 'suggested' | 'own'; impulse: { prompt: string } | null; profile?: string; diary?: string; history?: string[]; /** A dos: quién es el compañero y qué acaba de hacer. */ partner?: string; /** Sustituye la instrucción final (una reacción que decidir). */ question?: string }): string {
   const parts = [`## Tu personaje\n${o.sheet}`];
   if (o.profile) parts.unshift(`## Cómo juegas\n${o.profile}`);
+  if (o.partner) parts.push(`## Con quién juegas\n${o.partner}`);
   if (o.situation) parts.push(`## Tu situación\n${o.situation}`);
   if (o.diary) parts.push(`## Tu Diario\n${o.diary}`);
   if (o.history?.length) parts.push(`## Antes de eso\n${o.history.join('\n')}`);
   parts.push(`## Lo último que ha pasado\n${o.last || '(empieza la partida)'}`);
+  if (o.question) { parts.push(`## Te toca decidir\n${o.question}`); return parts.join('\n\n'); }
   if (o.suggested.length) parts.push(`## Acciones sugeridas\n${o.suggested.map((s, i) => `${i + 1}. ${s}`).join('\n')}`);
   parts.push(o.mode === 'suggested'
     ? 'Elige la acción sugerida que más te apetezca. Responde SOLO con el número.'
@@ -323,6 +404,8 @@ export interface AutoplayOptions {
   stamp: string;
   /** Una partida por perfil (y campaña escrita, no mundo generado). */
   profiles?: PlayerProfile[];
+  /** Una partida por pareja, con dos jugadores automáticos juntos; `actions` es por jugador. */
+  pairs?: [PlayerProfile, PlayerProfile][];
   campaign?: string;
   /** Partidas a la vez. */
   parallel?: number;
@@ -503,9 +586,9 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
   // Sin clave en el entorno de la partida en las campañas escritas: no hay comentarios del mundo con modelo, que no se miden aquí.
   const env = { ...process.env, IMAGES: 'off', WORLDGEN_MODEL: models.worldgen, ...(opts.campaign ? { ANTHROPIC_API_KEY: '' } : {}) };
   // Reloj y gestor por partida: pueden jugarse a la vez. Sin cupo diario: el de 200 acciones pasaría al máster offline a media partida.
-  const newManager = (now: () => number, client: MasterClient) => new GameManager({
+  const newManager = (now: () => number, client: MasterClient, engineOpts: { turnWindowMs?: number; roundMs?: number } = {}) => new GameManager({
     root: opts.gamesDir, env, log: (m) => log(`    ${m}`), budget: null,
-    engine: { now },
+    engine: { now, ...engineOpts },
     masterFor: (engine, _g, _p, rng) => new Master(engine, { client, ...(rng ? { rng } : {}) }),
     // Si el relleno con un modelo pequeño no valida, mundo offline: el piloto mide al máster, no al generador.
     worldgen: async (o) => {
@@ -527,13 +610,15 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
   const playOne = async (n: number): Promise<void> => {
     const t0 = Date.now();
     const rng = seededRng(opts.seed * 1000 + n);
-    const profile = opts.profiles?.[(n - 1) % opts.profiles.length] ?? null;
+    const pair = opts.pairs?.[(n - 1) % opts.pairs.length] ?? null;
+    const seatProfiles: (PlayerProfile | null)[] = pair ? [pair[0], pair[1]] : [opts.profiles?.[(n - 1) % opts.profiles.length] ?? null];
+    const profile = seatProfiles[0]!;
     const name = pick(rng, NAMES);
     const race = RACES.find((r) => r.id === profile?.race_id) ?? pick(rng, RACES);
     const klass = CLASSES.find((k) => k.id === profile?.class_id) ?? pick(rng, CLASSES);
     const hook = pick(rng, HOOKS);
     const tone = opts.campaign ? '' : TONES[(opts.seed + n) % TONES.length]!;
-    const tag = profile ? `[${profile.id}] ` : '';
+    const tag = pair ? `[${pair[0].id}+${pair[1].id}] ` : profile ? `[${profile.id}] ` : '';
     log(`${tag}partida ${n}/${opts.games}: ${name}, ${race.name} ${klass.name}${tone ? `, tono ${tone}` : ''}`);
     let clock = Date.now();
     // Todo lo que gasta el máster, también lo que no deja evento.
@@ -546,24 +631,37 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         return res;
       },
     };
-    const manager = newManager(() => clock, meter);
+    // A dos: ventana de turno corta (tiempo real) para que lo mandado a la vez vaya en la misma llamada, y rondas de pelea que no esperan medio minuto a nadie.
+    const manager = newManager(() => clock, meter, pair ? { turnWindowMs: PAIR_WINDOW_MS, roundMs: PAIR_ROUND_MS } : {});
     try {
+      if (opts.startAct && opts.campaign !== 'brezal') throw new Error('--start-act solo vale para Brezal.');
+      if (opts.startAct && pair) throw new Error('--start-act no vale para las partidas a dos.');
       const { game, character_id } = await manager.create({
-        name: `auto-${opts.stamp}-${profile?.id ?? n}`, mode: 'live', dice_seed: (opts.seed * 1000 + n) >>> 0,
+        name: `auto-${opts.stamp}-${pair ? `${pair[0].id}-${pair[1].id}` : profile?.id ?? n}`, mode: 'live', dice_seed: (opts.seed * 1000 + n) >>> 0,
         ...(opts.campaign
           ? { campaign_id: opts.campaign, character: { name, race_id: race.id, class_id: klass.id } }
           : { character: { name, race_id: race.id, class_id: klass.id, hook }, world: { seed: (opts.seed * 7919 + n) >>> 0, tone, setting: '' } }),
       });
+      const ids = [character_id!];
+      if (pair) {
+        const p2 = pair[1];
+        const name2 = pick(rng, NAMES.filter((x) => x !== name));
+        const race2 = RACES.find((r) => r.id === p2.race_id) ?? pick(rng, RACES);
+        const klass2 = CLASSES.find((k) => k.id === p2.class_id) ?? pick(rng, CLASSES);
+        ids.push(await manager.addCharacter(game.slug, 'auto:2', { name: name2, race_id: race2.id, class_id: klass2.id, ...(opts.campaign ? {} : { hook: pick(rng, HOOKS) }) }, { near: character_id }));
+        log(`${tag}segundo jugador: ${name2}, ${race2.name} ${klass2.name}`);
+      }
       const engine = await manager.open(game.slug);
-      const c = engine.world.character(character_id!);
       const gen = engine.world.campaign.generation;
 
-      const masterEvents = (): GameEvent[] => engine.events.all().filter((e) => e.actor_id === c.id && e.payload['master']);
+      const masterEvents = (c: Character): GameEvent[] => engine.events.all().filter((e) => e.actor_id === c.id && e.payload['master']);
+      /** Los cierres del máster que son de este jugador: los suyos y los compartidos en los que entró (`group`). */
+      const turnEvents = (c: Character): GameEvent[] => engine.events.all().filter((e) => e.payload['master'] && (e.actor_id === c.id || (Array.isArray(e.payload['group']) && (e.payload['group'] as string[]).includes(c.id))));
       const settle = async () => { if (profile) await engine.settle(60_000); else for (let k = 0; k < 5; k++) await new Promise((r) => setImmediate(r)); };
-      /** Lo que le ha llegado al jugador desde `seq`, sin lo que ya está en `seen`. */
-      const seenSince = (seq: number, seen: readonly string[]): string[] => engine.events.all()
+      /** Lo que le ha llegado a un jugador desde `seq`, sin lo que ya está en `seen`: lo suyo entero y, de los demás, lo que lee él (readerText). */
+      const seenSince = (c: Character, seq: number, seen: readonly string[]): string[] => engine.events.all()
         .filter((e) => e.seq > seq && (e.actor_id === c.id || e.delivered_to.some((d) => d.character_id === c.id && d.level === 'full')))
-        .map((e) => (e.actor_id === c.id ? e.narration_private : e.observable ?? ''))
+        .map((e) => (e.actor_id === c.id ? e.narration_private : readerText(engine.world, e, c.id, 'full') ?? e.observable ?? ''))
         .filter((t) => t && !seen.some((x) => x.includes(t)));
       const lastSeq = () => engine.events.all().at(-1)?.seq ?? 0;
       /** Pasa tiempo de juego a saltos de 5 minutos, como «/time» en offline (engine.command). */
@@ -578,140 +676,219 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         engine.world.touch('campaign', engine.world.campaign.id);
         await settle();
       };
-      const finalDone = () => characterStory(c).done.find((id) => id.startsWith('q_final_')) ?? null;
-      const stateNow = (): TurnState => {
+      const finalDone = (c: Character) => characterStory(c).done.find((id) => id.startsWith('q_final_')) ?? null;
+      const stateNow = (c: Character): TurnState => {
         const st = characterStory(c);
         return { game_s: engine.nowFor(c), status: c.status, hp: c.hp_current, hp_max: c.hp_max, level: c.level, xp: c.xp, coins: c.coins, location: engine.world.characterSpot(c)?.location_id ?? '', open: st.open.length, steps: st.steps.length, done: st.done.length, clues: c.clues.length };
       };
-      const diaryNow = (): string => {
+      const diaryNow = (c: Character): string => {
         const j = journalOf(engine, c.id);
         return j.quests.active.slice(0, 5).map((q) => `- ${q.title}${q.summary.next ? `: ${q.summary.next}` : ''}`).join('\n');
       };
       /** Lo que un jugador resuelve en la Hoja al subir de nivel: las primeras opciones. */
-      const chooseAtLevelUp = async () => {
+      const chooseAtLevelUp = async (c: Character) => {
         for (const ch of pendingChoices(c)) {
           const picks = choiceOptions(c, ch).slice(0, ch.count).map((o) => o.id);
           if (picks.length) await engine.choose(c.id, ch.key, picks);
         }
       };
 
-      // Partida preparada: sin escena de apertura, que ya ha pasado; se cuenta lo que trae hecho.
-      if (opts.startAct && opts.campaign !== 'brezal') throw new Error('--start-act solo vale para Brezal.');
-      const prepared = opts.startAct ? await prepareBrezalAct(engine, c, opts.startAct, (d) => { clock += engine.clock.gameToReal(d) * 1000; }) : null;
-      if (prepared) { await chooseAtLevelUp(); log(`${tag}preparado el acto ${opts.startAct}: ${prepared}`); }
-      const startDone = characterStory(c).done.length;
-      const intro = prepared ? null : await engine.introduce(c.id);
-      let last = prepared ?? intro?.text ?? c.situation?.opening ?? '';
-      let suggested = intro?.suggested_actions ?? [];
-      let refusals = 0;
-      let leaveNow = false;
-      const actions: PlayerTurn[] = [];
-      const player = { ...ZERO(), calls: 0 };
-      const history: string[] = [];
-      let ended: GameEnd = 'tope';
-      let downs = 0;
-      let progressKey = '';
-      let progressAt = 0;
-      let finalAt: number | null = null;
+      const seats: Seat[] = [];
+      for (const [k, id] of ids.entries()) {
+        const c = engine.world.character(id);
+        if (pair) engine.setPresence(c.id, true);
+        const p = seatProfiles[k] ?? null;
+        // Partida preparada: sin escena de apertura, que ya ha pasado; se cuenta lo que trae hecho.
+        const prepared = opts.startAct ? await prepareBrezalAct(engine, c, opts.startAct, (d) => { clock += engine.clock.gameToReal(d) * 1000; }) : null;
+        if (prepared) { await chooseAtLevelUp(c); log(`${tag}preparado el acto ${opts.startAct}: ${prepared}`); }
+        const startDone = characterStory(c).done.length;
+        const intro = prepared ? null : await engine.introduce(c.id);
+        seats.push({
+          k, c, profile: p, startDone, last: prepared ?? intro?.text ?? c.situation?.opening ?? '', suggested: intro?.suggested_actions ?? [],
+          refusals: 0, leaveNow: false, actions: [], player: { ...ZERO(), calls: 0 }, history: [], ended: null, downs: 0, progressKey: '', progressAt: 0, finalAt: null, together: 0, chats: 0, reactions: 0,
+        });
+      }
+      const partnerOf = (s: Seat): Seat | null => seats.find((x) => x !== s) ?? null;
+      const samePlace = (a: Seat, b: Seat) => engine.world.characterSpot(a.c)?.location_id === engine.world.characterSpot(b.c)?.location_id;
+      const playing = () => seats.filter((s) => s.ended === null);
+      const inFight = (s: Seat) => { const loc = engine.world.characterSpot(s.c)?.location_id; return Boolean(loc && engine.roundIn(loc)); };
 
-      for (let i = 1; i <= opts.actions; i++) {
-        // Caído o muerto no se juega: se espera a que se levante o reaparezca, como quien vuelve al cabo de un rato.
-        if (profile && c.status !== 'active') {
-          if (c.status !== 'asleep') downs++;
-          const seqDown = lastSeq();
-          const isUp = () => (c.status as string) === 'active';
-          for (let k = 0; k < 200 && !isUp(); k++) { clock += 60_000; await engine.tick(); }
-          await settle();
-          if (!isUp()) { ended = 'caido'; break; }
-          last = `${last}\n\n${seenSince(seqDown, [last]).join('\n')}`.trim();
-          suggested = [];
-        }
-        const mode: PlayerTurn['mode'] = !leaveNow && suggested.length && rng() < (profile?.suggested_p ?? SUGGESTED_P) ? 'suggested' : 'own';
-        const impulse = leaveNow ? LEAVE_NPC : mode === 'own' ? pick(rng, profile?.wants ?? IMPULSES) : null;
-        leaveNow = false;
+      /** Pide al jugador automático su texto: una acción, una respuesta a una reacción o una frase para el chat. */
+      const ask = async (s: Seat, o: { mode: PlayerTurn['mode']; impulse: { prompt: string } | null; question?: string }): Promise<string> => {
+        const other = partnerOf(s);
+        const partner = other ? `${other.c.name}, ${other.c.class_name.toLowerCase()}, es otro jugador (no un personaje del narrador)${samePlace(s, other) ? ', y está aquí contigo' : ', y ahora no está contigo'}.${other.actions.at(-1) ? ` Lo último que hizo: «${clip(other.actions.at(-1)!.text, 160)}».` : ''}` : undefined;
         const prompt = playerPrompt({
-          sheet: playerSheet(engine, c), situation: c.situation ? situationText(engine.world, c.situation) : null, last, suggested, mode, impulse,
-          ...(profile ? { profile: profile.prompt, diary: diaryNow(), history: history.slice(-5) } : {}),
+          sheet: playerSheet(engine, s.c), situation: s.c.situation ? situationText(engine.world, s.c.situation) : null, last: s.last, suggested: s.suggested, mode: o.mode, impulse: o.impulse,
+          ...(s.profile ? { profile: s.profile.prompt, diary: diaryNow(s.c), history: s.history.slice(-5) } : {}),
+          ...(partner ? { partner } : {}), ...(o.question ? { question: o.question } : {}),
         });
         // Sin pensamiento: Haiku 5.5 piensa por defecto y se comía el tope de salida sin llegar a escribir la acción.
         const res = await playerClient.create({ model: models.player, max_tokens: 200, thinking: { type: 'disabled' }, system: PLAYER_SYSTEM, messages: [{ role: 'user', content: prompt }] });
         const pu = usageOf(res);
-        addUsage(player, pu); player.calls++;
-        const text = mode === 'suggested' ? parseSuggestedChoice(textOf(res), suggested) : cleanOwnAction(textOf(res));
+        addUsage(s.player, pu); s.player.calls++;
+        s.lastUsage = pu;
+        return o.mode === 'suggested' ? parseSuggestedChoice(textOf(res), s.suggested) : cleanOwnAction(textOf(res));
+      };
 
-        const before = new Set(masterEvents().map((e) => e.id));
-        const seq = lastSeq();
-        const t1 = Date.now();
-        let r = await engine.act(c.id, text);
+      /** Qué va a hacer este jugador en esta vuelta, antes de mandarlo al motor. */
+      const decide = async (s: Seat): Promise<Planned> => {
+        const nowMs = clock;
+        const reaction = (s.c.reactions ?? []).find((x) => x.expires_real_ms > nowMs);
+        if (reaction) {
+          const who = engine.world.characters.get(reaction.from_id)?.name ?? 'Alguien';
+          const text = await ask(s, { mode: 'own', impulse: null, question: `${who} intenta ${reaction.attempt}. Decide si te dejas o te resistes: responde SOLO «me dejo» o «me resisto», según cómo sea tu personaje.` });
+          return { mode: 'own', impulse: 'reaccion', text, how: 'reaction', reaction };
+        }
+        const offer = (s.c.offers ?? []).find((o) => o.expires_real_ms > nowMs);
+        if (offer) return { mode: 'own', impulse: 'oferta', text: 'Acepto.', how: 'offer', offer };
+        const other = partnerOf(s);
+        const mode: PlayerTurn['mode'] = !s.leaveNow && s.suggested.length && rng() < (s.profile?.suggested_p ?? SUGGESTED_P) ? 'suggested' : 'own';
+        const pairWant = other && mode === 'own' && !s.leaveNow && rng() < PAIR_WANT_P ? pick(rng, pairWantsFor(s.profile)) : null;
+        const impulse = s.leaveNow ? LEAVE_NPC : pairWant ?? (mode === 'own' ? pick(rng, s.profile?.wants ?? IMPULSES) : null);
+        s.leaveNow = false;
+        const text = await ask(s, { mode, impulse });
+        const how: PlayerTurn['how'] | undefined = pairWant?.id === 'chat' ? 'chat' : pairWant?.id === 'hablar' ? 'say' : undefined;
+        return { mode, impulse: impulse?.id ?? null, text, ...(how ? { how } : {}) };
+      };
+
+      /** Manda lo decidido al motor: acción (con sus tiradas), frase en la escena, chat con el compañero o respuesta a una reacción. */
+      const send = async (s: Seat, p: Planned): Promise<{ r: ActionResult; texts: string[]; rolls: number }> => {
+        const other = partnerOf(s);
+        let r: ActionResult;
+        if (p.how === 'reaction') {
+          r = await engine.act(s.c.id, p.text);
+          if (!r.ok) r = await engine.answerReaction(s.c.id, p.reaction!.id, 'resist');
+          s.reactions++;
+        } else if (p.how === 'offer') {
+          r = await engine.answerOffer(s.c.id, p.offer!.id, true);
+        } else if (p.how === 'chat' && other) {
+          r = await engine.say(s.c.id, p.text, { to: other.c.id });
+          s.chats++;
+        } else {
+          r = await engine.act(s.c.id, p.text, p.how === 'say' ? { mode: 'say' } : {});
+        }
         const texts = [r.text];
         let rolls = 0;
-        for (; r.requires_roll && rolls < MAX_ROLLS_PER_ACTION; rolls++) { r = await engine.rollPending(c.id); texts.push(r.text); }
+        for (; r.requires_roll && rolls < MAX_ROLLS_PER_ACTION; rolls++) { r = await engine.rollPending(s.c.id); texts.push(r.text); }
+        return { r, texts, rolls };
+      };
+
+      for (let i = 1; i <= opts.actions && playing().length; i++) {
+        // Caído o muerto no se juega: se espera a que se levante o reaparezca, como quien vuelve al cabo de un rato.
+        for (const s of playing()) {
+          if (!s.profile || s.c.status === 'active') continue;
+          if (s.c.status !== 'asleep') s.downs++;
+          const seqDown = lastSeq();
+          const isUp = () => (s.c.status as string) === 'active';
+          for (let k = 0; k < 200 && !isUp(); k++) { clock += 60_000; await engine.tick(); }
+          await settle();
+          if (!isUp()) { s.ended = 'caido'; continue; }
+          s.last = `${s.last}\n\n${seenSince(s.c, seqDown, [s.last]).join('\n')}`.trim();
+          s.suggested = [];
+        }
+        const active = playing();
+        if (!active.length) break;
+        // A la vez: en pelea siempre (la ronda los espera a los dos); si no, de vez en cuando, estando en el mismo sitio.
+        const together = active.length === 2 && samePlace(active[0]!, active[1]!) && (inFight(active[0]!) || rng() < TOGETHER_P);
+        const before = new Map(active.map((s) => [s, new Set(turnEvents(s.c).map((e) => e.id))]));
+        const seq = lastSeq();
+        const t1 = Date.now();
+        const plans = new Map<Seat, Planned>();
+        const results = new Map<Seat, { r: ActionResult; texts: string[]; rolls: number }>();
+        if (together) {
+          for (const s of active) plans.set(s, await decide(s));
+          const rs = await Promise.all(active.map((s) => send(s, plans.get(s)!)));
+          active.forEach((s, k) => results.set(s, rs[k]!));
+        } else {
+          for (const s of active) {
+            plans.set(s, await decide(s));
+            results.set(s, await send(s, plans.get(s)!));
+            if (active.length > 1) await settle();
+          }
+        }
         clock += STEP_REAL_S * 1000;
         await engine.tick();
-        for (let k = 0; c.transit && k < 120; k++) { clock += 5000; await engine.tick(); }
+        for (let k = 0; active.some((s) => s.c.transit) && k < 120; k++) { clock += 5000; await engine.tick(); }
         await settle();
         const wall = Date.now() - t1;
-        const fresh = masterEvents().filter((e) => !before.has(e.id));
-        const moreEvents = profile ? seenSince(seq, texts) : [];
-        const combat = fresh.some((e) => e.tags.includes('combat') || ((e.payload['master'] as { calls?: { name: string }[] }).calls ?? []).some((x) => x.name === 'attack'));
-        last = [...texts, ...moreEvents].join('\n\n');
-        suggested = r.suggested_actions ?? [];
+        let combat = false;
+        for (const s of active) {
+          const { r, texts, rolls } = results.get(s)!;
+          const p = plans.get(s)!;
+          const fresh = turnEvents(s.c).filter((e) => !before.get(s)!.has(e.id));
+          const moreEvents = s.profile ? seenSince(s.c, seq, texts) : [];
+          combat ||= fresh.some((e) => e.tags.includes('combat') || ((e.payload['master'] as { calls?: { name: string }[] }).calls ?? []).some((x) => x.name === 'attack'));
+          s.last = [...texts, ...moreEvents].join('\n\n');
+          s.suggested = r.suggested_actions ?? [];
+          if (together) s.together++;
+          s.pending = { r, p, fresh, rolls, wall };
+        }
         const seqAfter = lastSeq();
         // Entre acciones pasa el rato (no en plena pelea ni con la respuesta decisiva o la tirada en el aire).
-        if (profile && c.status === 'active' && !c.decisive && !r.requires_roll && !combat) {
-          await passGame(profile.game_min);
-          const later = seenSince(seqAfter, [last]);
-          if (later.length) last = `${last}\n\n${later.join('\n')}`;
+        const calm = active.every((s) => s.profile && s.c.status === 'active' && !s.c.decisive && !s.pending!.r.requires_roll) && !combat;
+        if (calm) {
+          await passGame(Math.max(...active.map((s) => s.profile!.game_min)));
+          for (const s of active) { const later = seenSince(s.c, seqAfter, [s.last]); if (later.length) s.last = `${s.last}\n\n${later.join('\n')}`; }
         }
-        if (profile) await chooseAtLevelUp();
-        const state = stateNow();
-        actions.push({ i, mode, impulse: impulse?.id ?? null, text, ok: r.ok, engine_text: r.ok ? null : r.text, rolls, usage: pu, event_ids: fresh.map((e) => e.id), ...(profile ? { reply: last, wall_ms: wall, state } : {}) });
-        log(`${tag}${String(i).padStart(3)} ${r.ok ? '✓' : '✗'} [${mode === 'own' ? impulse!.id : 'sugerida'}] ${text.slice(0, 70)}${rolls ? ` · 🎲×${rolls}` : ''}`);
-        if (!profile) continue;
-
-        history.push(`Tú: ${text}\nRespuesta: ${clip(last, 260)}`);
-        refusals = REFUSAL.test(last) ? refusals + 1 : 0;
-        if (profile.leaves_after_refusals && refusals >= profile.leaves_after_refusals) { leaveNow = true; refusals = 0; }
-        const key = `${state.steps}/${state.done}/${state.open}/${state.clues}/${state.xp}/${state.level}/${state.location}`;
-        if (key !== progressKey) { progressKey = key; progressAt = i; }
-        if (finalAt === null && finalDone()) finalAt = i;
-        // Tras el final, unas pocas acciones para ver si el mundo lo refleja.
-        if (finalAt !== null && i >= finalAt + 5) { ended = 'final'; break; }
-        if (i - progressAt >= STUCK_ACTIONS) { ended = 'atasco'; break; }
-        if (opts.maxUsdPerGame && metered !== null && metered >= opts.maxUsdPerGame) { ended = 'presupuesto'; break; }
+        for (const s of active) {
+          const { r, p, fresh, rolls, wall: w } = s.pending!;
+          if (s.profile) await chooseAtLevelUp(s.c);
+          const state = stateNow(s.c);
+          s.actions.push({ i, mode: p.mode, impulse: p.impulse, text: p.text, ok: r.ok, engine_text: r.ok ? null : r.text, rolls, usage: s.lastUsage ?? ZERO(), event_ids: fresh.map((e) => e.id), ...(p.how ? { how: p.how } : {}), ...(together ? { together: true as const } : {}), ...(s.profile ? { reply: s.last, wall_ms: w, state } : {}) });
+          log(`${tag}${String(i).padStart(3)}${pair ? ` ${s.c.name.padEnd(7).slice(0, 7)}` : ''} ${r.ok ? '✓' : '✗'} [${p.how ?? (p.mode === 'own' ? p.impulse : 'sugerida')}${together ? ', a la vez' : ''}] ${p.text.slice(0, 70)}${rolls ? ` · 🎲×${rolls}` : ''}`);
+          if (!s.profile) continue;
+          s.history.push(`Tú: ${p.text}\nRespuesta: ${clip(s.last, 260)}`);
+          s.refusals = REFUSAL.test(s.last) ? s.refusals + 1 : 0;
+          if (s.profile.leaves_after_refusals && s.refusals >= s.profile.leaves_after_refusals) { s.leaveNow = true; s.refusals = 0; }
+          const key = `${state.steps}/${state.done}/${state.open}/${state.clues}/${state.xp}/${state.level}/${state.location}`;
+          if (key !== s.progressKey) { s.progressKey = key; s.progressAt = i; }
+          if (s.finalAt === null && finalDone(s.c)) s.finalAt = i;
+          // Tras el final, unas pocas acciones para ver si el mundo lo refleja.
+          if (s.finalAt !== null && i >= s.finalAt + 5) s.ended = 'final';
+          else if (i - s.progressAt >= STUCK_ACTIONS) s.ended = 'atasco';
+        }
+        if (opts.maxUsdPerGame && metered !== null && metered >= opts.maxUsdPerGame) { for (const s of playing()) s.ended = 'presupuesto'; }
       }
+      for (const s of seats) s.ended ??= 'tope';
 
-      const finalQuest = profile ? finalDone() : null;
-      const quests = profile ? questsOf(engine.world, c).map((v) => ({ id: v.quest.id, title: v.quest.title, status: v.status })) : undefined;
       // Hasta el epílogo: los escalones que falten saltan al adelantar el reloj.
-      let epilogue: string | undefined;
+      let epilogueFrom: number | null = null;
       const story = engine.world.campaign as { story_state?: { started_game_s: number; escalated: string[] } };
       if (profile && story.story_state) {
-        const seq = lastSeq();
+        epilogueFrom = lastSeq();
         const left = (story.story_state.started_game_s + EPILOGUE_H * 3600 - engine.gameNow()) / 60;
         if (left > 0) await passGame(Math.ceil(left));
-        epilogue = engine.events.all().filter((e) => e.seq > seq && (e.action_type === 'announcement' || e.action_type === 'story' || e.payload['master'] || (e.action_type === 'progress_story' && e.actor_id === c.id))).map((e) => e.narration_private || e.observable || '').filter(Boolean).join('\n\n');
       }
       await engine.flush();
 
-      // Coste del máster: todos sus eventos de la partida (intro, acciones, tiradas, llegadas).
-      const master = masterTally(masterEvents());
-      const playerCost = costUsd(player, models.player);
       const worldCost = gen?.cost_usd ?? 0;
-      const summary: GameSummary = {
-        n, slug: game.slug, dir: manager.paths(game).dir, campaign_id: game.campaign_id,
-        world: { seed: game.world?.seed ?? 0, tone, model: gen?.model ?? (opts.campaign ?? 'offline'), cost_usd: worldCost },
-        character: { id: c.id, name, race: race.name, class: klass.name, hook: opts.campaign ? '' : hook, situation: c.situation ? situationText(engine.world, c.situation) : null },
-        actions, master, player: { ...player, cost_usd: playerCost },
-        cost_usd: sumCost([profile ? metered : master.cost_usd, playerCost, worldCost]),
-        failures: actions.filter((a) => !a.ok).length,
-        wall_ms: Date.now() - t0,
-        ...(profile ? { profile: profile.id, ended, metered_usd: metered, quests: quests!, escalated: story.story_state?.escalated ?? [], final_quest: finalQuest, epilogue: epilogue ?? '', downs } : {}),
-        ...(opts.startAct ? { start_act: opts.startAct, start_done: startDone } : {}),
-      };
-      run.games.push(summary);
+      // A dos, lo que no es de un PJ en concreto (lo medido y el mundo) se reparte a partes iguales.
+      const share = seats.length;
+      for (const s of seats) {
+        const c = s.c;
+        const quests = s.profile ? questsOf(engine.world, c).map((v) => ({ id: v.quest.id, title: v.quest.title, status: v.status })) : undefined;
+        const epilogue = epilogueFrom === null ? undefined : engine.events.all().filter((e) => e.seq > epilogueFrom && (e.action_type === 'announcement' || e.action_type === 'story' || e.payload['master'] || (e.action_type === 'progress_story' && e.actor_id === c.id))).map((e) => e.narration_private || e.observable || '').filter(Boolean).join('\n\n');
+        // Coste del máster: todos sus eventos de la partida (intro, acciones, tiradas, llegadas).
+        const master = masterTally(masterEvents(c));
+        const playerCost = costUsd(s.player, models.player);
+        const meteredShare = metered === null ? null : metered / share;
+        const other = partnerOf(s);
+        const summary: GameSummary = {
+          n, slug: game.slug, dir: manager.paths(game).dir, campaign_id: game.campaign_id,
+          world: { seed: game.world?.seed ?? 0, tone, model: gen?.model ?? (opts.campaign ?? 'offline'), cost_usd: worldCost / share },
+          character: { id: c.id, name: c.name, race: RACES.find((r) => r.id === c.race_id)?.name ?? c.race_id, class: c.class_name, hook: opts.campaign ? '' : s.k === 0 ? hook : '', situation: c.situation ? situationText(engine.world, c.situation) : null },
+          actions: s.actions, master, player: { ...s.player, cost_usd: playerCost },
+          cost_usd: sumCost([s.profile ? meteredShare : master.cost_usd, playerCost, worldCost / share]),
+          failures: s.actions.filter((a) => !a.ok).length,
+          wall_ms: Date.now() - t0,
+          ...(s.profile ? { profile: s.profile.id, ended: s.ended!, metered_usd: meteredShare, quests: quests!, escalated: story.story_state?.escalated ?? [], final_quest: finalDone(c), epilogue: epilogue ?? '', downs: s.downs } : {}),
+          ...(opts.startAct ? { start_act: opts.startAct, start_done: s.startDone } : {}),
+          ...(other ? { pair: { n, partner: other.c.name, partner_profile: other.profile?.id ?? '', together: s.together, chats: s.chats, reactions: s.reactions } } : {}),
+        };
+        run.games.push(summary);
+        log(`${tag}→ ${summary.slug}${other ? ` (${c.name})` : ''}: máster ${usd(s.profile ? meteredShare : master.cost_usd)} (${master.calls} llamadas), jugador ${usd(playerCost)}, mundo ${usd(worldCost / share)}; ${summary.failures} fallos${s.profile ? `; fin: ${s.ended}` : ''}${other ? `; a la vez ${s.together}, chats ${s.chats}, reacciones ${s.reactions}` : ''}`);
+      }
       await manager.close(game.slug);
-      log(`${tag}→ ${summary.slug}: máster ${usd(profile ? metered : master.cost_usd)} (${master.calls} llamadas), jugador ${usd(playerCost)}, mundo ${usd(worldCost)}; ${summary.failures} fallos${profile ? `; fin: ${ended}` : ''}`);
       save();
     } catch (e) {
       await manager.closeAll().catch(() => undefined);
@@ -745,14 +922,15 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
  * Estimación previa con lo medido: 0,13 céntimos por llamada al máster con Haiku y ~1,4 llamadas por acción
  * (tiradas y llegadas); mundo con Haiku ~0,6 céntimos; jugador y juez, migajas.
  */
-export function estimate(games: number, actions: number, models: AutoplayRun['models'], authored = false): { total: number | null; master: number | null; worldgen: number | null; player: number | null; judge: number | null } {
+export function estimate(games: number, actions: number, models: AutoplayRun['models'], authored = false, seats = 1): { total: number | null; master: number | null; worldgen: number | null; player: number | null; judge: number | null } {
   const scale = (model: string) => { const c = costUsd({ input: 1e6, output: 0, cache_read: 0, cache_write: 0 }, model); return c === null ? null : c / 0.1; };
   const m = scale(models.master); const w = scale(models.worldgen); const p = scale(models.player); const j = scale(models.judge);
   // En Brezal, lo medido el 31-10-2026 (2.840 acciones): 0,27 céntimos por acción de máster y 0,024 de jugador, sin mundo que generar.
-  const master = m === null ? null : authored ? games * actions * 0.0027 * m : games * (actions + 1) * 1.4 * 0.0013 * m;
+  // A dos, cada jugador juega `actions`; lo que va a la vez comparte llamada, pero el contexto es mayor: se cuenta como una acción por jugador.
+  const master = m === null ? null : authored ? games * seats * actions * 0.0027 * m : games * seats * (actions + 1) * 1.4 * 0.0013 * m;
   const worldgen = w === null ? null : authored ? 0 : games * 0.006 * w;
-  const player = p === null ? null : games * actions * (authored ? 0.00024 : 0.0001) * p;
-  const judge = j === null ? null : games * Math.ceil(actions / 10) * 0.0015 * j;
+  const player = p === null ? null : games * seats * actions * (authored ? 0.00024 : 0.0001) * p;
+  const judge = j === null ? null : games * seats * Math.ceil(actions / 10) * 0.0015 * j;
   return { master, worldgen, player, judge, total: sumCost([master, worldgen, player, judge]) };
 }
 
@@ -767,21 +945,27 @@ async function main() {
       games: { type: 'string', default: '3' }, actions: { type: 'string', default: '10' }, seed: { type: 'string', default: '1' },
       'dry-run': { type: 'boolean', default: false }, live: { type: 'boolean', default: false }, 'no-judge': { type: 'boolean', default: false },
       'games-dir': { type: 'string' }, out: { type: 'string', default: 'data/local/autoplay' },
-      profiles: { type: 'string' }, campaign: { type: 'string' }, parallel: { type: 'string', default: '1' }, 'max-usd-game': { type: 'string' }, 'start-act': { type: 'string' },
+      profiles: { type: 'string' }, pairs: { type: 'string' }, campaign: { type: 'string' }, parallel: { type: 'string', default: '1' }, 'max-usd-game': { type: 'string' }, 'start-act': { type: 'string' },
     },
   });
+  const known = [...PROFILES, ...FINAL_PROFILES];
+  const profileOf = (id: string): PlayerProfile => { const p = known.find((x) => x.id === id); if (!p) throw new Error(`Perfil desconocido: ${id} (${known.map((x) => x.id).join(', ')})`); return p; };
   const wanted = values.profiles?.split(',').map((x) => x.trim()) ?? null;
-  const profiles = wanted ? (wanted[0] === 'all' ? PROFILES : wanted.map((id) => { const known = [...PROFILES, ...FINAL_PROFILES]; const p = known.find((x) => x.id === id); if (!p) throw new Error(`Perfil desconocido: ${id} (${known.map((x) => x.id).join(', ')})`); return p; })) : null;
-  const games = profiles ? profiles.length : Number(values.games); const actions = Number(values.actions); const seed = Number(values.seed);
-  const campaign = values.campaign ?? (profiles ? 'brezal' : undefined);
+  const profiles = wanted ? (wanted[0] === 'all' ? PROFILES : wanted.map(profileOf)) : null;
+  // --pairs all | metodico:charlatan,picaro:novato
+  const wantedPairs = values.pairs?.split(',').map((x) => x.trim()) ?? null;
+  const pairs = wantedPairs ? (wantedPairs[0] === 'all' ? PAIRS : wantedPairs.map((x) => { const [a, b] = x.split(':'); if (!a || !b) throw new Error(`Pareja mal escrita: ${x} (perfil:perfil)`); return [a, b] as [string, string]; })).map(([a, b]) => [profileOf(a), profileOf(b)] as [PlayerProfile, PlayerProfile]) : null;
+  if (profiles && pairs) throw new Error('--profiles y --pairs no van juntos.');
+  const games = pairs ? pairs.length : profiles ? profiles.length : Number(values.games); const actions = Number(values.actions); const seed = Number(values.seed);
+  const campaign = values.campaign ?? (profiles || pairs ? 'brezal' : undefined);
   if (![games, actions, seed].every((x) => Number.isInteger(x) && x >= 0) || games < 1 || actions < 1) throw new Error('--games, --actions y --seed deben ser enteros positivos');
   const dryRun = values['dry-run'];
   const env = (k: string) => process.env[k]?.trim() || DEFAULT_MODEL;
   const models = { master: env('MASTER_MODEL'), player: env('PLAYER_MODEL'), worldgen: env('WORLDGEN_MODEL'), judge: env('JUDGE_MODEL') };
   if (values['start-act'] && !['2', '3'].includes(values['start-act'])) throw new Error('--start-act debe ser 2 o 3');
   const startAct = values['start-act'] ? Number(values['start-act']) as 2 | 3 : undefined;
-  const est = estimate(games, actions, models, Boolean(campaign));
-  console.log(`${games} partidas × ${actions} acciones · máster ${models.master} · jugador ${models.player} · mundo ${models.worldgen} · juez ${models.judge}`);
+  const est = estimate(games, actions, models, Boolean(campaign), pairs ? 2 : 1);
+  console.log(`${games} partidas${pairs ? ' a dos' : ''} × ${actions} acciones${pairs ? ' por jugador' : ''} · máster ${models.master} · jugador ${models.player} · mundo ${models.worldgen} · juez ${models.judge}`);
   console.log(`Estimación: ${usd(est.total, 3)} (máster ${usd(est.master, 3)}, mundos ${usd(est.worldgen, 3)}, jugador ${usd(est.player, 3)}, juez ${usd(est.judge, 3)}).`);
   if (!dryRun && !values.live) {
     console.log('\nNo se ha llamado a la API. Para partidas reales añade --live (gasta dinero); para probar el montaje, --dry-run.');
@@ -793,7 +977,7 @@ async function main() {
   const outDir = resolve(values.out, stamp);
   // En dry-run las partidas van junto al resumen: no ensucian el menú de partidas de la web.
   const gamesDir = resolve(values['games-dir'] ?? (dryRun ? join(outDir, 'games') : process.env['GAMES_DIR'] ?? 'data/games'));
-  const run = await runAutoplay({ games, actions, seed, models, dryRun, gamesDir, outDir, stamp, log: (s) => console.log(s), parallel: Number(values.parallel), ...(profiles ? { profiles } : {}), ...(campaign ? { campaign } : {}), ...(values['max-usd-game'] ? { maxUsdPerGame: Number(values['max-usd-game']) } : {}), ...(startAct ? { startAct } : {}) });
+  const run = await runAutoplay({ games, actions, seed, models, dryRun, gamesDir, outDir, stamp, log: (s) => console.log(s), parallel: Number(values.parallel), ...(profiles ? { profiles } : {}), ...(pairs ? { pairs } : {}), ...(campaign ? { campaign } : {}), ...(values['max-usd-game'] ? { maxUsdPerGame: Number(values['max-usd-game']) } : {}), ...(startAct ? { startAct } : {}) });
   const t = run.totals;
   console.log(`\n${dryRun ? '[dry-run] ' : ''}${run.games.length} partidas, ${t.actions} acciones, ${t.master_calls} llamadas al máster, ${t.failures} fallos`);
   console.log(`  coste: ${usd(t.cost_usd, 4)} (máster ${usd(t.master_usd, 4)}, jugador ${usd(t.player_usd, 4)}, mundos ${usd(t.worldgen_usd, 4)})`);
