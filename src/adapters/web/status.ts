@@ -29,7 +29,7 @@ const PRICES: readonly (readonly [string, ModelPrice])[] = [
   ['claude-fable-5', { input: 10, output: 50, cache_read: 1, cache_write: 20 }],
   ['claude-opus-5-5', { input: 4, output: 20, cache_read: 0.2, cache_write: 8 }],
   ['claude-opus-5', { input: 5, output: 25, cache_read: 0.5, cache_write: 10 }],
-  ['claude-sonnet-5-5', { input: 2, output: 10, cache_read: 0.2, cache_write: 4 }],
+  ['claude-sonnet-5-5', { input: 2, output: 10, cache_read: 0.1, cache_write: 4 }],
   ['claude-sonnet-5', { input: 2, output: 10, cache_read: 0.2, cache_write: 4 }],
   ['claude-haiku-5-5', { input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.2 }],
 ];

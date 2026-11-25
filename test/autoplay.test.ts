@@ -7,8 +7,8 @@ import {
   buildReport, detectFailedToolNarrated, detectInventedPlace, detectLongNarration, detectNoResponse, detectNpcOutOfReach,
   detectPromiseWithoutState, detectRepeatedSuggestion, detectTrivialRoll, judgeRun, parseJudge, runDetectors, turnsFromEvents, type GameJudgement, type Turn,
 } from '../scripts/judge.js';
-import { cleanOwnAction, dryMasterClient, dryPlayerClient, estimate, FINAL_PROFILES, masterTally, parseSuggestedChoice, prepareBrezalAct, PROFILES, runAutoplay, type GameSummary } from '../scripts/autoplay.js';
-import { analyzeGame, buildPlaytest, buildWindowSection, dryFunClient, judgeFun, similar, windowMetrics } from '../scripts/playtest-report.js';
+import { cleanOwnAction, dryMasterClient, dryPlayerClient, estimate, FINAL_PROFILES, masterTally, parseSuggestedChoice, playerPrompt, prepareBrezalAct, PROFILES, runAutoplay, type GameSummary } from '../scripts/autoplay.js';
+import { analyzeGame, buildPlaytest, buildWindowSection, dryFunClient, judgeFun, keyOf, similar, windowMetrics } from '../scripts/playtest-report.js';
 import { authoredSeed } from '../src/data/campaigns/index.js';
 import { Engine } from '../src/engine/engine.js';
 import { questStatus, storyOf } from '../src/engine/story.js';
@@ -335,4 +335,64 @@ describe('autoplay en dry-run', () => {
     expect(md).toContain('| Tool fallido narrado como hecho (`tool_fallido_narrado`) | determinista | 1 | 1 | 50.0 |');
     expect(md.indexOf('turno 1 (gravedad 3)')).toBeLessThan(md.indexOf('turno 0 (gravedad 2)'));
   });
+});
+
+describe('partidas a dos', () => {
+  it('el jugador sabe con quién juega y una reacción sustituye la instrucción final', () => {
+    const base = { sheet: 'Bruno, pícaro', situation: null, last: 'Entras en la taberna.', suggested: ['Hablar con Brenna'], mode: 'own' as const, impulse: { prompt: 'regatear' } };
+    const p = playerPrompt({ ...base, partner: 'Ciro, guerrero, es otro jugador.' });
+    expect(p).toContain('## Con quién juegas\nCiro, guerrero, es otro jugador.');
+    expect(p).toContain('Escribe tu propia acción');
+    const q = playerPrompt({ ...base, question: 'Ciro intenta quitarte la bolsa. Responde SOLO «me dejo» o «me resisto».' });
+    expect(q).toContain('## Te toca decidir');
+    expect(q).not.toContain('Acciones sugeridas');
+    expect(q).not.toContain('Escribe tu propia acción');
+  });
+
+  it('la estimación a dos cuenta una acción por jugador', () => {
+    const models = { master: 'claude-haiku-5-5', player: 'claude-haiku-5-5', worldgen: 'claude-haiku-5-5', judge: 'claude-haiku-5-5' };
+    expect(estimate(1, 50, models, true, 2).master).toBeCloseTo(estimate(1, 50, models, true).master! * 2, 6);
+  });
+
+  it('juega una pareja en la misma partida, a veces a la vez, y el informe lo cuenta por jugador', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tavernus-pareja-'));
+    try {
+      const out = join(dir, 'run');
+      const models = { master: 'claude-haiku-5-5', player: 'claude-haiku-5-5', worldgen: 'claude-haiku-5-5', judge: 'claude-haiku-5-5' };
+      const pair = [PROFILES.find((p) => p.id === 'picaro')!, PROFILES.find((p) => p.id === 'novato')!] as [typeof PROFILES[number], typeof PROFILES[number]];
+      const run = await runAutoplay({ games: 1, actions: 6, seed: 11, models, dryRun: true, gamesDir: join(dir, 'games'), outDir: out, stamp: 'test', pairs: [pair], campaign: 'brezal' });
+      expect(run.errors).toEqual([]);
+      expect(run.games).toHaveLength(2);
+      const [a, b] = run.games as [GameSummary, GameSummary];
+      expect(a.slug).toBe(b.slug);
+      expect(a.character.id).not.toBe(b.character.id);
+      expect(a.profile).toBe('picaro');
+      expect(b.profile).toBe('novato');
+      expect(a.pair).toMatchObject({ partner: b.character.name, partner_profile: 'novato' });
+      expect(b.pair).toMatchObject({ partner: a.character.name, partner_profile: 'picaro' });
+      expect(a.actions).toHaveLength(6);
+      expect(b.actions).toHaveLength(6);
+      expect(a.pair!.together).toBe(b.pair!.together);
+      // Lo que va a la vez entra en la misma llamada: un solo cierre con los dos en `group`.
+      expect(a.actions.filter((x) => x.together)).toHaveLength(a.pair!.together);
+      expect(b.actions.filter((x) => x.together)).toHaveLength(b.pair!.together);
+      expect(keyOf(a)).not.toBe(keyOf(b));
+      const loaded = loadGame(a.dir, a.character.id);
+      const m = analyzeGame(a, loaded.events, loaded.state);
+      // Lo mandado a la vez se junta en un cierre con los dos en `group` (salvo lo que no pasa por el máster: el chat, un atajo del motor).
+      expect(m.pair!.shared_turns).toBeGreaterThanOrEqual(1);
+      expect(m.pair!.shared_turns).toBeLessThanOrEqual(a.pair!.together);
+      const shared = a.actions.find((x) => x.together && x.event_ids.length);
+      expect(shared).toBeDefined();
+      expect(b.actions.find((x) => x.i === shared!.i)!.event_ids).toEqual(expect.arrayContaining(shared!.event_ids));
+      const mb = analyzeGame(b, loadGame(b.dir, b.character.id).events, loaded.state);
+      const md = buildPlaytest(run, [m, mb], [], [], 0);
+      expect(md).toContain('## A dos');
+      expect(md).toContain(`| picaro | ${b.character.name} (novato) |`);
+      expect(md).toContain(`| novato | ${a.character.name} (picaro) |`);
+    } finally {
+      delete process.env['MASTER_MODEL'];
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
 });

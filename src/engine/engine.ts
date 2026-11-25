@@ -122,7 +122,7 @@ export interface CharacterSpec {
 export interface MasterLike {
   resolve(actor: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string; prologue?: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<MasterResolution>;
   /** Texto libre en una llamada corta y sin tools (prólogo, recapitulación). null si no hay texto (offline). */
-  write?(req: { system: string; prompt: string; max_tokens?: number }): Promise<{ text: string; model: string; usage: { input: number; output: number } } | null>;
+  write?(req: { system: string; prompt: string; max_tokens?: number; /** El prólogo puede ir con su propio modelo (PROLOGUE_MODEL). */ scene?: 'prologue' }): Promise<{ text: string; model: string; usage: { input: number; output: number } } | null>;
 }
 /** `hook`: salta un gancho sembrado (hooks.ts) sin acción del jugador. */
 export type MasterScene = 'arrival' | 'decisive_timeout' | 'hook';
@@ -2112,7 +2112,7 @@ export class Engine {
       if (this.master?.write) {
         // El máster lo escribe; si no vale (vacío o fuera de medida), un segundo intento diciéndole por qué. Solo
         // entonces la plantilla, y queda apuntado el motivo (partida del 11-11-2026: el del anfitrión salió de plantilla).
-        const req = prologuePrompt(facts);
+        const req = { ...prologuePrompt(facts), scene: 'prologue' as const };
         let attempts = 0;
         let retry: string | null = null;
         while (attempts < 2 && !text) {

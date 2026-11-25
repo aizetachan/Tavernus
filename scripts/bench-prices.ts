@@ -1,17 +1,19 @@
 /**
  * Precios del banco de medición del máster (USD por millón de tokens) y coste de un usage.
- * Tabla del dueño (2026-10): lectura de caché al 10 % de la entrada y escritura al 125 %.
+ * Tabla de la API (2026-11): la lectura de caché va por modelo (`cache_read`; el 10 % de la entrada en Haiku y Sonnet 5,
+ * el 5 % en Opus 5.5 y Sonnet 5.5) y la escritura al 125 %.
  * Ojo: master.ts escribe la caché con ttl '1h', que la API cobra a 2× la entrada, no a 1,25×;
  * --cache-write-mult 2 en los scripts recalcula con ese precio.
  */
 
-export interface Price { input: number; output: number }
+export interface Price { input: number; output: number; /** Lectura de caché por millón; si falta, el 10 % de la entrada. */ cache_read?: number }
 
 export const PRICES: Record<string, Price> = {
-  'claude-opus-5': { input: 5, output: 25 },
-  'claude-opus-5-5': { input: 4, output: 20 },
-  'claude-sonnet-5-5': { input: 2, output: 10 },
-  'claude-haiku-5-5': { input: 0.1, output: 0.5 },
+  'claude-opus-5': { input: 5, output: 25, cache_read: 0.5 },
+  'claude-opus-5-5': { input: 4, output: 20, cache_read: 0.2 },
+  'claude-sonnet-5': { input: 2, output: 10, cache_read: 0.2 },
+  'claude-sonnet-5-5': { input: 2, output: 10, cache_read: 0.1 },
+  'claude-haiku-5-5': { input: 0.1, output: 0.5, cache_read: 0.01 },
 };
 
 export const CACHE_READ_MULT = 0.1;
@@ -30,7 +32,7 @@ export function priceFor(model: string): Price | null {
 export function costUsd(u: TokenUsage, model: string, writeMult = CACHE_WRITE_MULT): number | null {
   const p = priceFor(model);
   if (!p) return null;
-  return (u.input * p.input + u.output * p.output + u.cache_read * p.input * CACHE_READ_MULT + u.cache_write * p.input * writeMult) / 1e6;
+  return (u.input * p.input + u.output * p.output + u.cache_read * (p.cache_read ?? p.input * CACHE_READ_MULT) + u.cache_write * p.input * writeMult) / 1e6;
 }
 
 /**
