@@ -7,11 +7,11 @@ import { Master } from '../src/ai/master.js';
 import { offlineClient } from '../src/ai/offline.js';
 import { resolveAttack } from '../src/engine/combat.js';
 import { seededRng } from '../src/engine/dice.js';
-import { COMBAT_SETTLE_S, COMBAT_WINDOW_S, encounterAt } from '../src/engine/encounter.js';
+import { COMBAT_SETTLE_S, COMBAT_WINDOW_S, combatHistory, encounterAt } from '../src/engine/encounter.js';
 import type { Engine } from '../src/engine/engine.js';
 import type { Id } from '../src/engine/model.js';
 import { GameManager } from '../src/games/manager.js';
-import { combatView, type CombatView, type TurnContext } from '../src/adapters/web/fight.js';
+import { combatRecordsView, combatView, type CombatView, type TurnContext } from '../src/adapters/web/fight.js';
 import { createWebServer, type WebServer } from '../src/adapters/web/server.js';
 import { bootEngine, fakeTime, readSse } from './helpers.js';
 
@@ -42,6 +42,26 @@ function strike(engine: Engine, attacker: Id, target: Id, seed = 7) {
 const idle: TurnContext = { round: null, busy: [], resolving: [] };
 
 describe('encuentro (encounter.ts)', () => {
+  it('el registro de combates guarda cada combate del PJ por separado, el más reciente primero, con los nombres que conoce', async () => {
+    const { engine, time, kael, mira, brenna } = await bar();
+    expect(combatHistory(engine.world, engine.events.all(), kael.id)).toEqual([]);
+    engine.events.emit({ actor_id: kael.id, action_type: 'master', narration_private: 'Te lanzas contra Brenna.', observable: null, tags: ['master', 'combat'] });
+    strike(engine, kael.id, brenna.id);
+    // Pasa la ventana: el siguiente golpe es otro combate.
+    time.advanceGame(COMBAT_WINDOW_S + 5);
+    strike(engine, kael.id, brenna.id, 3);
+    const h = combatHistory(engine.world, engine.events.all(), kael.id);
+    expect(h).toHaveLength(2);
+    expect(h[0]!.started_game_s).toBeGreaterThan(h[1]!.started_game_s);
+    expect(h.every((x) => x.log.some((e) => e.kind === 'attack' && e.actor_id === kael.id))).toBe(true);
+    // Mira estaba en el sitio pero no golpeó ni recibió: no es su combate.
+    expect(combatHistory(engine.world, engine.events.all(), mira.id)).toEqual([]);
+    const v = combatRecordsView(engine.world, h, kael.id, (s) => `t${s}`);
+    expect(v[0]!.place).toBe(engine.world.location(h[0]!.location_id).name);
+    expect(v[0]!.when).toBe(`t${h[0]!.started_game_s}`);
+    expect(v[0]!.entries[0]!.text).toMatch(/^Tú → |^Kael → /);
+  });
+
   it('sin hostilidad no hay combate: la etiqueta combat del máster sola no lo abre; un golpe entre PJ sí, con los PJ del sitio', async () => {
     const { engine, kael, mira, loc } = await bar();
     expect(at(engine, loc)).toBeNull();
