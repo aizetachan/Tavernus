@@ -315,7 +315,7 @@ Las imágenes, la caché del máster y `budget.json` siguen en la carpeta de la 
 
 1. **Variable:** ninguna. Sin `WORLD_STORE` en `/etc/tavernus/env`, la web ya usa la base. Si alguien la
    puso a `json` para probar, hay que quitarla.
-2. **Migración:** la crea la web sola al arrancar (la 2, tres tablas vacías). No hay que pasar ninguna partida. La 3 (19-11-2026: `games.settings` y `users.recovery_hash`) también la aplica la web sola; las partidas de antes juegan con los ajustes por defecto y los usuarios de antes no tienen código de recuperación hasta que se lo generen desde su cuenta.
+2. **Migración:** la crea la web sola al arrancar (la 2, tres tablas vacías). No hay que pasar ninguna partida. La 3 (19-11-2026: `games.settings` y `users.recovery_hash`) también la aplica la web sola; las partidas de antes juegan con los ajustes por defecto y los usuarios de antes no tienen código de recuperación hasta que se lo generen desde su cuenta. La 4 (25-11-2026: `seats.n`, número de orden de los asientos) también sola; numera los asientos que ya hay en el orden en que se venían mostrando.
 3. **Antes:** `sudo tavernus-backup`, como en cada versión.
 4. **Al arrancar:** la web dice `[web] mundos de las partidas: en la base (WORLD_STORE=pg); N de antes, en
    JSON, se conservan como obsoletas (no se abren)`, y cada partida, al abrirse, «en la base («slug»)». Las

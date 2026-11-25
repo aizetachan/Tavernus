@@ -107,6 +107,19 @@ describe('cuentas: contraseñas, usuarios y sesiones', () => {
     await expect(ensureAdmin(accounts, 'nadie', null)).rejects.toThrow(/contraseña/);
   });
 
+  it('asientos: el orden es el de creación aunque dos tengan el mismo created_at', async () => {
+    await db.query("insert into games (slug, name, campaign_id, mode, data_dir, cache_dir, created_at) values ('mesa', 'Mesa', 'brezal', 'offline', 'x', 'x', now())");
+    const at = new Date().toISOString();
+    // Mismo instante a propósito, con ids que ordenados alfabéticamente irían al revés.
+    for (const [id, label] of [['zzz', 'Anfitrión'], ['mmm', 'Plaza 2'], ['aaa', 'Plaza 3']] as const) {
+      await db.query('insert into seats (id, game_slug, token, label, is_host, created_at) values ($1, $2, $3, $4, $5, $6)', [id, 'mesa', `t-${id}`, label, id === 'zzz', at]);
+    }
+    expect((await accounts.seats('mesa')).map((s) => s.label)).toEqual(['Anfitrión', 'Plaza 2', 'Plaza 3']);
+    const added = await accounts.addSeat('mesa', { label: 'Plaza 4' });
+    expect((await accounts.seats('mesa')).map((s) => s.id).at(-1)).toBe(added.id);
+    await db.query('delete from games');
+  });
+
   it('biblioteca: crear, editar y borrar, validado como en la creación', async () => {
     const u = await accounts.register('ana', PASS);
     const other = await accounts.register('bea', PASS);

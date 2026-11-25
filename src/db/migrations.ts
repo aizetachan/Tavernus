@@ -139,4 +139,15 @@ export const MIGRATIONS: Migration[] = [
       'alter table users add column recovery_hash text',
     ],
   },
+  {
+    // Los asientos se listaban por created_at y, en empate (dos inserts en el mismo instante), por su id aleatorio: el
+    // orden bailaba. Un número de orden por fila lo fija; los que ya existen se numeran como se venían mostrando.
+    version: 4,
+    name: 'número de orden de los asientos',
+    sql: [
+      'alter table seats add column n bigserial',
+      `update seats set n = o.rn from (select id, row_number() over (order by created_at, id) as rn from seats) o where seats.id = o.id`,
+      `select setval('seats_n_seq', (select coalesce(max(n), 0) + 1 from seats), false)`,
+    ],
+  },
 ];

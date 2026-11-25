@@ -444,7 +444,7 @@ export class Accounts {
       if (!r[0]) throw new AccountError('No existe esa partida.', 404);
       if (!userId) return;
       const [mine] = await q.query('select id from seats where game_slug = $1 and user_id = $2', [slug, userId]);
-      if (!mine) await q.query('update seats set user_id = $2 where user_id is null and id = (select id from seats where game_slug = $1 and is_host order by created_at limit 1)', [slug, userId]);
+      if (!mine) await q.query('update seats set user_id = $2 where user_id is null and id = (select id from seats where game_slug = $1 and is_host order by n limit 1)', [slug, userId]);
     });
   }
 
@@ -459,7 +459,7 @@ export class Accounts {
   // -------------------------------------------------------------------------
 
   async seats(slug: string): Promise<Seat[]> {
-    return (await this.db.query<SeatRow>(`select ${SEAT_COLS} from seats where game_slug = $1 order by created_at, id`, [slug])).map(seatOf);
+    return (await this.db.query<SeatRow>(`select ${SEAT_COLS} from seats where game_slug = $1 order by n`, [slug])).map(seatOf);
   }
 
   async seat(slug: string, id: string): Promise<Seat | null> {
