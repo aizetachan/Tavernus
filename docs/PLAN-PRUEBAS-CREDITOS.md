@@ -101,9 +101,9 @@ modelo por escena (`PROLOGUE_MODEL`, `FINAL_MODEL`, ya programado). Los comandos
 | 25-11 a 1-12 | Pasada corta (foto de partida) y partida a mano | 3 $ |
 | 2-12 a 8-12 | Comparación de modelos y esfuerzo medio; arreglos y segunda pasada | 19 $ |
 | 9-12 a 18-12 | Arreglos y pasadas tras cada uno | 28 $ |
-| 19-12 a 24-12 | Beta cerrada: con `DAILY_MASTER_ACTIONS=200`, 0,54 $ por jugador y día a tope de cupo; diez jugadores cinco días, 30 $ | 60 $ |
+| 19-12 a 24-12 | Beta cerrada: con `DAILY_MASTER_ACTIONS=200`, 0,54 $ por jugador y día a tope de cupo; cinco jugadores cinco días, 15 $ | 45 $ |
 
-Quedan **unos 140 $** para la historia nueva y la beta. Lo que no se vaya a usar antes del 24-12 se gasta en más sesiones
+Quedan **unos 155 $** para la historia nueva y la beta. Lo que no se vaya a usar antes del 24-12 se gasta en más sesiones
 de personas: el crédito no se guarda.
 
 ## Qué se mira en cada pasada
