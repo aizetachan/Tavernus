@@ -88,12 +88,42 @@ export interface PlayerProfile {
   wants: { id: string; prompt: string; dry: string }[];
   /** Tras tantas negativas seguidas, deja a quien tiene delante y va a otra cosa de su Diario. */
   leaves_after_refusals?: number;
+  /** Recorre sus `wants` en orden, uno por acción propia, en vez de al azar (perfiles mecánicos: cobertura, no carácter). */
+  cycle?: boolean;
 }
 
 const want = (id: string, prompt: string, dry = 'Miro alrededor con calma.') => ({ id, prompt, dry });
 
 const DIRECTED_PROMPT = 'Eres un jugador atento que quiere terminar la historia: haces lo que dice tu Diario, en orden, vas donde te manda y no te quedas discutiendo. Si alguien se niega a contarte algo dos veces, lo dejas y sigues por otro lado.';
 const DIRECTED_WANTS = [want('objetivo', 'dar el siguiente paso de tu misión activa, tal como lo dice el Diario', 'Hago lo siguiente que dice mi Diario.'), want('encargo', 'preguntar a quien tengas delante si necesita algo o qué puede contarte de tu misión', '¿Necesitas ayuda con algo?'), want('entregar', 'volver a quien te encargó algo para entregarlo y cobrar', 'Vengo a contarte que está hecho.')];
+
+/** Lo que puede pasar en una sesión normal y ningún perfil de carácter pide a propósito. Cada entrada es una tool o regla del motor. */
+const MECHANICS_COMMON = [
+  want('objeto', 'beber una poción, comer algo o usar un objeto concreto que lleves, diciendo cuál', 'Bebo una poción de curación.'),
+  want('disparar', 'atacar a distancia a alguien o algo con un arma o un conjuro de los que tienes', 'Disparo a la diana con mi arco.'),
+  want('esconderse', 'esconderte o moverte con sigilo para que no te vean', 'Me escondo tras el carro y avanzo con sigilo.'),
+  want('forzar', 'forzar o abrir una puerta, un cofre o una cerradura que esté cerrada', 'Fuerzo la cerradura del cofre.'),
+  want('saquear', 'registrar un cadáver, un cofre o un rincón y llevarte lo que haya', 'Registro el cofre y me llevo lo que hay.'),
+  want('trepar', 'trepar, saltar o nadar por algún sitio difícil de la escena', 'Trepo por el muro hasta el tejado.'),
+  want('descansar', 'descansar un rato o dormir para recuperarte', 'Me siento a descansar un rato.'),
+  want('curar', 'curar o estabilizar a alguien herido, o a ti mismo', 'Vendo la herida de mi compañero.'),
+  want('examinar', 'examinar de cerca un objeto raro o una marca para saber qué es', 'Examino el amuleto con detenimiento.'),
+  want('cuerpo', 'atacar cuerpo a cuerpo a alguien hostil o a un blanco de práctica', 'Golpeo con mi arma.'),
+];
+const MECHANICS_CASTER = [
+  want('conjuro', 'lanzar un conjuro de los que tienes en tu lista (di cuál) contra alguien o algo de la escena', 'Lanzo Proyectil mágico contra el espantapájaros.'),
+  want('truco', 'lanzar un truco (cantrip) de tu lista, diciendo cuál', 'Lanzo Luz sobre mi bastón.'),
+  want('recurso', 'usar un rasgo de tu clase que gaste usos (puntos de hechicería, furia, ki, inspiración…), diciendo cuál', 'Uso un punto de hechicería.'),
+  ...MECHANICS_COMMON,
+];
+const MECHANICS_RANGER = [
+  want('rastrear', 'buscar huellas o rastrear a alguien o a un animal', 'Busco huellas en el barro.'),
+  want('recolectar', 'recolectar plantas, cazar algo o sacar agua o leña de la zona', 'Recojo hierbas junto al arroyo.'),
+  want('montar', 'montar un caballo, una mula o un carro si hay alguno cerca, o preguntar por uno', 'Monto en la mula del establo.'),
+  want('trampas', 'buscar trampas o algo escondido antes de pasar', 'Busco trampas en el umbral.'),
+  want('recurso', 'usar un rasgo de tu clase que gaste usos, diciendo cuál', 'Uso mi Enemigo predilecto.'),
+  ...MECHANICS_COMMON,
+];
 
 export const PROFILES: PlayerProfile[] = [
   { id: 'metodico', label: 'Metódico', class_id: 'cleric', race_id: 'human', suggested_p: 0.3, game_min: 15,
@@ -128,6 +158,14 @@ export const PROFILES: PlayerProfile[] = [
     wants: [want('registrar', 'registrar o examinar de cerca algo concreto de este sitio', 'Registro el rincón con cuidado.'), want('ir', 'ir a un sitio donde aún no hayas estado', 'Voy al sitio más apartado que conozco.'), want('huellas', 'buscar huellas, rastros o algo escondido por aquí', 'Busco huellas por el suelo.')] },
   { id: 'dirigido', label: 'Dirigido', class_id: 'paladin', race_id: 'human', suggested_p: 0.4, game_min: 10, leaves_after_refusals: 2,
     prompt: DIRECTED_PROMPT, wants: DIRECTED_WANTS },
+  // Mecánicos: no juegan un carácter, recorren adrede lo que puede pasar en una sesión normal (conjuros, recursos de
+  // clase, objetos, disparar, sigilo, forzar, saquear, trepar, descansar…) para que el máster ejercite todas sus tools.
+  { id: 'lanzador', label: 'Mecánico, lanzador', class_id: 'sorcerer', race_id: 'half-elf', suggested_p: 0.1, game_min: 10, cycle: true,
+    prompt: 'Eres un jugador que quiere probar todo lo que sabe hacer su personaje: cada vez intentas una cosa distinta de tu ficha (un conjuro, un rasgo de clase, un objeto, un ataque) sobre lo que haya en la escena, diciendo exactamente qué usas.',
+    wants: MECHANICS_CASTER },
+  { id: 'tirador', label: 'Mecánico, tirador', class_id: 'ranger', race_id: 'elf', suggested_p: 0.1, game_min: 10, cycle: true,
+    prompt: 'Eres un jugador que quiere probar todo lo que sabe hacer su personaje: cada vez intentas una cosa distinta (disparar, rastrear, esconderte, forzar, registrar, trepar, montar, descansar) sobre lo que haya en la escena, diciendo exactamente qué haces.',
+    wants: MECHANICS_RANGER },
 ];
 
 /** El dirigido, a por un final concreto: para las partidas que empiezan en el acto III. */
@@ -261,6 +299,8 @@ interface Seat {
   together: number;
   chats: number;
   reactions: number;
+  /** Perfiles `cycle`: por dónde va la lista de `wants`. */
+  cycleAt: number;
   pending?: { r: ActionResult; p: Planned; fresh: GameEvent[]; rolls: number; wall: number };
 }
 
@@ -343,7 +383,7 @@ export function dryPlayerClient(): TextClient {
   return {
     async create(params) {
       const prompt = params.messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n');
-      const impulse = [...IMPULSES, ...pairWantsFor(null), ...Object.values(PAIR_WANTS_BY_PROFILE).flat()].find((x) => prompt.includes(x.prompt));
+      const impulse = [...IMPULSES, ...pairWantsFor(null), ...Object.values(PAIR_WANTS_BY_PROFILE).flat(), ...MECHANICS_CASTER, ...MECHANICS_RANGER].find((x) => prompt.includes(x.prompt));
       const text = /Responde SOLO con el número/.test(prompt) ? '1' : /«me dejo» o «me resisto»/.test(prompt) ? 'Me resisto.' : impulse?.dry ?? 'Miro alrededor con calma.';
       return fakeMessage(params.model, text, { input: 450, output: 20, cache_read: 0, cache_write: 0 });
     },
@@ -705,7 +745,7 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         const intro = prepared ? null : await engine.introduce(c.id);
         seats.push({
           k, c, profile: p, startDone, last: prepared ?? intro?.text ?? c.situation?.opening ?? '', suggested: intro?.suggested_actions ?? [],
-          refusals: 0, leaveNow: false, actions: [], player: { ...ZERO(), calls: 0 }, history: [], ended: null, downs: 0, progressKey: '', progressAt: 0, finalAt: null, together: 0, chats: 0, reactions: 0,
+          refusals: 0, leaveNow: false, actions: [], player: { ...ZERO(), calls: 0 }, history: [], ended: null, downs: 0, progressKey: '', progressAt: 0, finalAt: null, together: 0, chats: 0, reactions: 0, cycleAt: 0,
         });
       }
       const partnerOf = (s: Seat): Seat | null => seats.find((x) => x !== s) ?? null;
@@ -744,7 +784,8 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         const other = partnerOf(s);
         const mode: PlayerTurn['mode'] = !s.leaveNow && s.suggested.length && rng() < (s.profile?.suggested_p ?? SUGGESTED_P) ? 'suggested' : 'own';
         const pairWant = other && mode === 'own' && !s.leaveNow && rng() < PAIR_WANT_P ? pick(rng, pairWantsFor(s.profile)) : null;
-        const impulse = s.leaveNow ? LEAVE_NPC : pairWant ?? (mode === 'own' ? pick(rng, s.profile?.wants ?? IMPULSES) : null);
+        const ownWant = () => (s.profile?.cycle ? s.profile.wants[s.cycleAt++ % s.profile.wants.length]! : pick(rng, s.profile?.wants ?? IMPULSES));
+        const impulse = s.leaveNow ? LEAVE_NPC : pairWant ?? (mode === 'own' ? ownWant() : null);
         s.leaveNow = false;
         const text = await ask(s, { mode, impulse });
         const how: PlayerTurn['how'] | undefined = pairWant?.id === 'chat' ? 'chat' : pairWant?.id === 'hablar' ? 'say' : undefined;

@@ -225,7 +225,9 @@ describe('autoplay en dry-run', () => {
       expect(m.actions).toBe(3);
       const judge = await judgeFun(g, m, dryFunClient(), models.judge);
       const md = buildPlaytest(run, [m], [judge], [], 0);
-      for (const title of ['## Fluidez', '## Conversaciones', '## Misiones', '## Combate y muerte', '## Final', '## Diversión y fluidez']) expect(md).toContain(title);
+      for (const title of ['## Fluidez', '## Conversaciones', '## Misiones', '## Combate y muerte', '## Final', '## Cobertura de tools', '## Diversión y fluidez']) expect(md).toContain(title);
+      expect(m.tools['log_event']).toBeGreaterThan(0);
+      expect(md).toMatch(/\| log_event \| \d+ \| 1 \|/);
     } finally {
       delete process.env['MASTER_MODEL'];
       await rm(dir, { recursive: true, force: true });
@@ -395,4 +397,33 @@ describe('partidas a dos', () => {
       await rm(dir, { recursive: true, force: true });
     }
   }, 120_000);
+});
+
+describe('perfiles mecánicos', () => {
+  it('recorren sus wants en orden y cubren conjuros, recursos, objetos, disparo, sigilo, forzar, saquear y descansar', () => {
+    for (const id of ['lanzador', 'tirador']) {
+      const p = PROFILES.find((x) => x.id === id)!;
+      expect(p.cycle).toBe(true);
+      for (const w of ['objeto', 'disparar', 'esconderse', 'forzar', 'saquear', 'trepar', 'descansar', 'curar', 'recurso']) expect(p.wants.map((x) => x.id)).toContain(w);
+    }
+    expect(PROFILES.find((x) => x.id === 'lanzador')!.wants.map((x) => x.id)).toContain('conjuro');
+    expect(PROFILES.find((x) => x.id === 'tirador')!.wants.map((x) => x.id)).toContain('rastrear');
+  });
+
+  it('en dry-run, el lanzador pide cada cosa una vez antes de repetir', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tavernus-mecanico-'));
+    try {
+      const models = { master: 'claude-haiku-5-5', player: 'claude-haiku-5-5', worldgen: 'claude-haiku-5-5', judge: 'claude-haiku-5-5' };
+      const profiles = PROFILES.filter((p) => p.id === 'lanzador');
+      const run = await runAutoplay({ games: 1, actions: 5, seed: 21, models, dryRun: true, gamesDir: join(dir, 'games'), outDir: join(dir, 'run'), stamp: 'test', profiles, campaign: 'brezal' });
+      expect(run.errors).toEqual([]);
+      const own = run.games[0]!.actions.filter((a) => a.mode === 'own').map((a) => a.impulse);
+      expect(own.length).toBeGreaterThan(2);
+      expect(new Set(own).size).toBe(own.length);
+      expect(own.slice(0, 3)).toEqual(profiles[0]!.wants.slice(0, 3).map((w) => w.id));
+    } finally {
+      delete process.env['MASTER_MODEL'];
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

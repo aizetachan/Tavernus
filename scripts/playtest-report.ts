@@ -16,6 +16,7 @@ import { parseArgs } from 'node:util';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { GameEvent, WorldSnapshot } from '../src/engine/model.js';
 import { liveClient, type MasterClient } from '../src/ai/master.js';
+import { MASTER_TOOLS } from '../src/ai/tools.js';
 import { REFUSAL, type AutoplayRun, type GameSummary, type PlayerTurn } from './autoplay.js';
 import { costUsd, usd, type TokenUsage } from './bench-prices.js';
 import { loadGame, norm, TYPE_LABEL, type Finding, type ErrorType } from './judge.js';
@@ -68,7 +69,22 @@ export interface GameMetrics {
   end: { final_quest: string | null; escalated: string[]; averted: string[]; epilogue: string };
   /** Partida a dos: lo que hicieron juntos y cómo cerró el máster los turnos compartidos (plan del 11-11, «cada uno lee lo suyo»). */
   pair?: { partner: string; partner_profile: string; together: number; chats: number; reactions: number; shared_turns: number; shared_without_part: number; shared_without_common: number; crimes_as_other: number };
+  /** Veces que el máster llamó a cada tool en los turnos de este jugador (los suyos y los compartidos): la cobertura de la pasada. */
+  tools: Record<string, number>;
   cost_usd: number | null;
+}
+
+/** Cuántas veces se llamó a cada tool en los cierres de este jugador. */
+export function toolCounts(pc: string, events: readonly GameEvent[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const e of events) {
+    const m = e.payload['master'] as { calls?: { name: string }[] } | undefined;
+    if (!m?.calls) continue;
+    const group = e.payload['group'];
+    if (e.actor_id !== pc && !(Array.isArray(group) && group.includes(pc))) continue;
+    for (const c of m.calls) out[c.name] = (out[c.name] ?? 0) + 1;
+  }
+  return out;
 }
 
 const NPC_ID = /\bnpc_[a-z_]+\b/;
@@ -207,6 +223,7 @@ export function analyzeGame(g: GameSummary, events: readonly GameEvent[], state:
       hp_min_ratio: hpRatios.length ? Math.min(...hpRatios) : 1, law,
     },
     end: { final_quest: g.final_quest ?? null, escalated: (g.escalated ?? []).filter((x) => !x.startsWith('!')), averted: (g.escalated ?? []).filter((x) => x.startsWith('!')).map((x) => x.slice(1)), epilogue: g.epilogue ?? '' },
+    tools: toolCounts(pc, events),
     cost_usd: g.cost_usd,
   };
 }
@@ -434,6 +451,13 @@ export function buildPlaytest(run: AutoplayRun, ms: readonly GameMetrics[], judg
 
   out.push('', '## Final', '', '| Perfil | Final | Amenazas que pasaron | Amenazas evitadas |', '|---|---|---|---|');
   for (const m of ms) out.push(`| ${m.profile} | ${m.end.final_quest ?? '—'} | ${m.end.escalated.join(', ') || '—'} | ${m.end.averted.join(', ') || '—'} |`);
+
+  // Cobertura: qué tools del máster se ejercitaron en la pasada y cuáles no (docs/PLAN-PRUEBAS-CREDITOS.md).
+  const totals = new Map<string, { n: number; games: number }>();
+  for (const m of ms) for (const [name, n] of Object.entries(m.tools)) { const r = totals.get(name) ?? { n: 0, games: 0 }; r.n += n; r.games++; totals.set(name, r); }
+  const unused = MASTER_TOOLS.map((t) => t.name).filter((name) => !totals.has(name));
+  out.push('', '## Cobertura de tools', '', `${totals.size} de ${MASTER_TOOLS.length} tools del máster usadas en la pasada. Sin usar: ${unused.join(', ') || 'ninguna'}.`, '', '| Tool | Llamadas | Partidas |', '|---|---:|---:|');
+  for (const [name, r] of [...totals.entries()].sort((a, b) => b[1].n - a[1].n)) out.push(`| ${name} | ${r.n} | ${r.games} |`);
 
   if (ms.some((m) => m.pair)) {
     out.push('', '## A dos', '', 'Turnos compartidos: los que el máster cerró para los dos a la vez (ventana de turno o ronda). «Sin su parte» y «sin lo común»: cierres donde a este jugador le faltó `narration_by_pc` o `narration_common`, y leyó la narración mezclada. «Crimen ajeno»: incidentes apuntados a este PJ cuando el golpe lo declaró el otro.', '', '| Perfil | Con quién | A la vez | Chats | Reacciones | Turnos compartidos | Sin su parte | Sin lo común | Crimen ajeno |', '|---|---|---:|---:|---:|---:|---:|---:|---:|');
