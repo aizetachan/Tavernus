@@ -460,18 +460,28 @@ export class Engine {
     if (this.world.campaign.board.active_job_ids.length === 0) this.onDay(nowG);
   }
 
-  /** Un día de juego: rota el tablón y lo anuncia en público. */
+  /**
+   * Un día de juego: rota el tablón y lo avisa en público con una línea corta, sin hora ni lista: a mitad de una escena
+   * se lee como aviso, no como narración (pausado T12, impredecible T6 y T23). La lista sale al leerlo (/tablon, el
+   * Tablón de la web, decir que se lee ante él). Los encargos del día no cambian entre dos lecturas (progress.ts).
+   */
   private onDay(tickGameS: number): void {
     // Las tiendas que reponen cada día (shop.ts); las de un valle sellado, no.
     restockShops(this.world, tickGameS);
     const jobs = rotateBoard(this.world, tickGameS, this.world.campaign.board.active_job_ids.length === 0);
     if (!jobs) return;
-    const anchor = this.world.spot(this.world.campaign.starting_points[0]!.spot_id);
+    const board = this.boardSpot();
+    const anchor = board ?? this.world.spot(this.world.campaign.starting_points[0]!.spot_id);
     this.events.emit({
       actor_id: null, at: { spot_id: anchor.id, next_spot_id: null, progress: 0, x: anchor.x, y: anchor.y, location_id: anchor.location_id },
-      action_type: 'board', narration_private: '', visibility: 'public', tags: ['board'], payload: { job_ids: jobs.map((j) => j.id) },
-      observable: `📜 Tablón de Brezal, ${this.clock.format(tickGameS)}:\n` + jobs.map((j) => `• **${j.title}** — ${j.text} (${money(this.world, j.reward_coins)}; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n'),
+      action_type: 'board', narration_private: '', visibility: 'public', tags: ['board'], payload: { job_ids: jobs.map((j) => j.id), notice: 'all' },
+      observable: board ? `Hay avisos nuevos en ${board.name} de ${this.world.location(board.location_id).name}.` : 'Hay avisos nuevos en el tablón.',
     }, this.clock.realAt(tickGameS));
+  }
+
+  /** El punto del tablón de anuncios, si los datos tienen uno (por su nombre: «el tablón»). */
+  private boardSpot(): Spot | null {
+    return [...this.world.spots.values()].find((s) => /(?<![\p{L}])tabl[oó]n(?![\p{L}])/iu.test(s.name)) ?? null;
   }
 
   /** Un minuto de juego. Aquí engancharán consumo, regeneración y líneas secundarias. */
@@ -1932,10 +1942,10 @@ export class Engine {
     this.noteBoard(c, this.nowFor(c));
   }
 
-  /** Estado del tablón para /tablon. */
+  /** Estado del tablón para /tablon: un encargo por línea, sin viñetas ni rayas («**Carbón para la fragua**: … Paga 4 de plata; lo pide Hugo.»). */
   boardText(): string {
     const jobs = activeJobs(this.world);
-    return jobs.length ? jobs.map((j) => `• **${j.title}** — ${j.text} (${money(this.world, j.reward_coins)}; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n') : 'El tablón está vacío.';
+    return jobs.length ? jobs.map((j) => `**${j.title}**: ${j.text.replace(/[.\s]+$/, '')}. Paga ${money(this.world, j.reward_coins)}; lo pide ${this.world.npc(j.giver_npc_id).name}.`).join('\n') : 'El tablón está vacío.';
   }
 
   private async resolveWithMaster(c: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string; prologue?: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<ActionResult> {
