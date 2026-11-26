@@ -26,7 +26,7 @@ import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction,
 
 import { TURN_WINDOW_MS, windowClashes, type Clash } from './turnwindow.js';
 
-import { encounterAt } from './encounter.js';
+import { encounterAt, hostilesAt, recentCombatTag } from './encounter.js';
 
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { settleAudience } from './audience.js';
@@ -58,7 +58,7 @@ import { classifyMoments, momentLookupOf, seenFromEvents, type DialogueLine, typ
 import { characterCheck, type CheckKind } from './rules.js';
 import { activeJobs, addPractice, buyFromNpc, rotateBoard, type ProgressEvent } from './progress.js';
 
-import { decisiveConsequence, engineNpcTurn, forcedTurnText, resolveAttack, type ForcedTurn } from './combat.js';
+import { decisiveConsequence, dueNpcTurns, engineNpcTurn, forcedTurnText, resolveAttack, type ForcedTurn } from './combat.js';
 import { npcCanAct } from './death.js';
 
 import { attackRoll, checkRoll, hiddenCheckRoll, isHiddenRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
@@ -1400,6 +1400,30 @@ export class Engine {
   }
 
   /** El jugador pulsa 🎲: el servidor tira y el master narra la consecuencia. */
+  /**
+   * Los NPC que le pegan ahora, tras su tirada (arreglo 12): los que se acaban de lanzar contra él (`provoked`, la
+   * víctima de su agresión que pelea) y, si ya hay pelea en la sala (combate en curso, o golpes recientes con hostiles
+   * delante), los hostiles que le ven, como en el turno de los NPC (combat.ts, dueNpcTurns). Cada uno, su turno entero
+   * con su tirada y su daño (engineNpcTurn). Lista vacía si nadie.
+   */
+  private retaliation(c: Character, provoked: ReadonlySet<Id>): ForcedTurn[] {
+    if (c.status !== 'active') return [];
+    const loc = this.world.characterSpot(c)?.location_id;
+    if (!loc) return [];
+    const nowG = this.nowFor(c);
+    const fight = encounterAt(this.world, this.events.recentInLocation(loc, 400), loc, nowG) !== null
+      || (recentCombatTag(this.events.recentInLocation(loc, 12), nowG) && hostilesAt(this.world, loc, [c]).length > 0);
+    if (!fight && !provoked.size) return [];
+    const out: ForcedTurn[] = [];
+    for (const d of dueNpcTurns(this.world, [c.id], new Set(), nowG)) {
+      if (!fight && !provoked.has(d.npc.id)) continue;
+      if (c.status !== 'active') break;
+      const f = engineNpcTurn(this.world, d.npc.id, c.id, this.rng, nowG);
+      if (f) out.push(f);
+    }
+    return out;
+  }
+
   async rollPending(characterId: Id): Promise<ActionResult> {
     await this.tick();
     const c = this.world.character(characterId);
@@ -1427,6 +1451,8 @@ export class Engine {
       let roll: ShownRoll;
       let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean; damage: number; ko?: boolean } | undefined;
       let conflictNote: string | null = null;
+      /** NPC que se lanzan contra él por lo que acaba de pasar (conflict.ts: la víctima que pelea, el allegado que se mete). */
+      const provoked = new Set<Id>();
       if (pending.roll.kind === 'attack' && pending.roll.target) {
         // Lo que escribió el jugador decide si el golpe a 0 PG mata o deja inconsciente (combat.ts, lethalBlow).
         const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c), { intent: pending.text, hand: pending.roll.key === 'off_hand' ? 'off' : 'main' });
@@ -1453,6 +1479,7 @@ export class Engine {
         if (npc) {
           const res = resolveConflict(this.world, c, npc, v, { total: result.total, natural: result.natural ?? null, npc_total: npcTotal }, this.nowFor(c));
           conflictNote = `${res.facts}${res.reaction ? ` Reacción de ${npc.name} (hecho): ${res.reaction}` : ''}${npcTotal !== null ? ` (${npc.name} sacó ${npcTotal} en su tirada.)` : ''}`;
+          for (const k of res.incident?.knowers ?? []) if (k.how === 'saw' && k.response === 'fight') provoked.add(k.npc_id);
         }
       } else if (pending.roll.confront) {
         // Convencerle o engañarle en un careo: con éxito, un aviso; si falla, delito (conflict.ts).
@@ -1501,7 +1528,30 @@ export class Engine {
         const told = t && trustNotice(nameFor(this.world, c, t.npc_id), t);
         if (told) this.emitProgress(c, [{ kind: 'trust', text: told }]);
       }
-      let r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result, ...(conflictNote ? { conflict: conflictNote } : {}), ...(hiddenRoll ? { hidden: true } : {}) });
+      // Represalia (arreglo 12 del 26-11-2026): el NPC que pelea con él no le pega «de palabra» en la narración. Tras una
+      // tirada que no es un ataque suyo, los hostiles que le tienen delante hacen su turno YA, con su tirada y su daño, y
+      // el máster lo cuenta como hecho (engineDone: no vuelven a atacar en este turno; si no lo nombra, el cierre lo añade).
+      const struck = pending.roll.kind === 'attack' ? [] : this.retaliation(c, provoked);
+      const struckText = struck.map((f) => forcedTurnText(this.world, f, c.id, (id) => this.labelFor(c, id)));
+      if (struck.length) {
+        this.engineDoneFor.set(c.id, struck.map((f, k) => ({ npc_id: f.npc_id, text: struckText[k]!, forced: f })));
+        const fact = `Represalia, ya resuelta por el servidor con su tirada (hecho: cuéntala tal cual después de lo del jugador, con ese resultado; no llames a attack ni a apply_damage por ella): ${struckText.join(' ')}`;
+        if (conflictNote !== null) conflictNote = `${conflictNote} ${fact}`;
+      }
+      let r: ActionResult;
+      try {
+        r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result, ...(conflictNote ? { conflict: conflictNote } : {}), ...(hiddenRoll ? { hidden: true } : {}) });
+      } finally {
+        if (struck.length) this.engineDoneFor.delete(c.id);
+      }
+      // Sin narración, el golpe ya está dado: se cuenta en la voz del motor.
+      if (struck.length && !r.ok) {
+        this.events.emit({
+          actor_id: c.id, action_type: 'npc_retaliation', narration_private: struckText.join(' '),
+          observable: struck.map((f) => forcedTurnText(this.world, f, null, (id) => this.world.npc(id).name)).join(' '), loudness: 3,
+          tags: ['combat', 'deterministic'], payload: { master: null, npc_id: struck[0]!.npc_id },
+        }, this.stampFor(c));
+      }
       if (!r.ok && r.text === '') r = { ok: false, text: `${shown}\nEl narrador no responde; inténtalo de nuevo.` };
       // Si el máster le llevó a otro punto al contarlo («te metes en el callejón»), se esconde allí.
       if (stealth && result.success && c.sneak && c.sneak.spot_id !== this.world.characterSpot(c)?.id) noteSneak(this.world, c, result.total, this.nowFor(c));

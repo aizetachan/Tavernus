@@ -12,6 +12,10 @@ import { conflictVerdict, resolveConflict, stolenOf } from '../src/engine/confli
 import { allIncidents, inFightWith, reportIncident } from '../src/engine/crime.js';
 import { hasTag } from '../src/engine/standing.js';
 import { setNpcOrder } from '../src/engine/npcorders.js';
+import { Master } from '../src/ai/master.js';
+import { offlineClient } from '../src/ai/offline.js';
+import { seededRng } from '../src/engine/dice.js';
+import type { GameEvent } from '../src/engine/model.js';
 import type { Character, ItemDef, ItemInstance, Npc } from '../src/engine/model.js';
 import { fakeTime } from './helpers.js';
 
@@ -43,8 +47,8 @@ function martillo(engine: Engine, hugo: Npc): ItemInstance {
 }
 
 /** La herrería: Bruno y Hugo en el banco de trabajo, sin más gente (la autoridad, lejos). */
-async function herreria() {
-  const b = await boot();
+async function herreria(rng?: () => number) {
+  const b = await boot(rng);
   const hugo = b.engine.world.npc('npc_hugo');
   hold(b.engine, hugo, 'sp_he_banco');
   b.c.location = { type: 'spot', id: 'sp_he_banco' };
@@ -102,6 +106,52 @@ describe('(15) desarmar o quitar algo en una pelea abierta no es robo', () => {
     const r = resolveConflict(w, c, hugo, v, { total: 30, natural: 15, npc_total: 4 }, now);
     expect(r.response).toBe('crime');
     expect(r.incident?.kind).toBe('theft');
+  });
+});
+
+/** Lo que vio el máster en una llamada (el contexto) y las tools que llamó, del evento de su cierre. */
+function masterOf(e: GameEvent): { context: string; calls: { name: string; input: Record<string, unknown> }[] } {
+  const m = e.payload['master'] as { context?: string; calls?: { name: string; input: Record<string, unknown> }[] } | null;
+  return { context: m?.context ?? '', calls: m?.calls ?? [] };
+}
+
+describe('(12) la represalia del NPC tras un éxito del jugador pasa por su tirada', () => {
+  it('Opus, violento 1652, turno 3: agarra a Hugo (Atletismo, éxito) y Hugo le pega con el martillo: un turno de Hugo con tirada y daño reales, como hecho en el contexto del cierre', async () => {
+    const { engine, c, hugo } = await herreria(seededRng(4));
+    engine.attachMaster(new Master(engine, { client: offlineClient(), rng: seededRng(3) }));
+    c.hp_max = 40; c.hp_current = 40; // que aguante el golpe, sea cual sea el dado
+    const hp = c.hp_current;
+    const hugoHp = hugo.hp_current;
+    const a = await engine.act(c.id, 'Agarro a Hugo por la pechera y lo acerco al mostrador. Como vuelvas a esconderme algo, le rompo las piernas a Garrán.');
+    expect(a.requires_roll).toMatchObject({ kind: 'skill', key: 'athletics' });
+    expect(a.requires_roll?.conflict?.npc_id).toBe(hugo.id);
+    const from = engine.events.all().at(-1)!.seq;
+    const r = await engine.rollPending(c.id);
+    expect(r.ok).toBe(true);
+    // Hugo se lanza contra él (la agresión) y pega YA, con su tirada: el daño es el de su ataque, no uno de palabra.
+    const outcome = engine.events.all().filter((e) => e.seq > from && e.action_type === 'master_roll_outcome').at(-1)!;
+    const m = masterOf(outcome);
+    expect(m.context).toMatch(/Represalia, ya resuelta por el servidor con su tirada/);
+    const told = /(?:Hugo|El herrero) te ataca con ([^.]+?) y (te da \((\d+)\)|falla)/.exec(m.context);
+    expect(told).not.toBeNull();
+    const dmg = told![3] ? Number(told![3]) : 0;
+    expect(c.hp_current).toBe(hp - dmg);
+    expect(m.context).toMatch(/no llames a attack ni a apply_damage/);
+    expect(hugo.hp_current).toBe(hugoHp);
+    // Un solo turno de Hugo: el cierre no le hace atacar otra vez (ni el máster ni el servidor).
+    const attacks = m.calls.filter((x) => x.name === 'attack' && x.input['attacker_id'] === hugo.id);
+    expect(attacks).toHaveLength(0);
+  });
+
+  it('sin pelea ni nadie que se lance contra él, una tirada no trae golpes del motor', async () => {
+    const { engine, c, hugo } = await herreria();
+    engine.attachMaster(new Master(engine, { client: offlineClient(), rng: seededRng(3) }));
+    const hp = c.hp_current;
+    // Un amigo que le empuja en broma: la relación decide que no es delito y nadie pelea.
+    hugo.attitude.by_character[c.id] = 'friendly';
+    const a = await engine.act(c.id, 'Trepo por la viga de la fragua para mirar qué hay encima');
+    if (a.requires_roll) await engine.rollPending(c.id);
+    expect(c.hp_current).toBe(hp);
   });
 });
 
