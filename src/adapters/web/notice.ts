@@ -60,8 +60,10 @@ type NoticeEvent = Pick<GameEvent, 'action_type' | 'narration_private' | 'observ
  * lector (por defecto, lo del actor o, si no hay, lo observable).
  */
 export function noticeOf(e: NoticeEvent, readerId: Id | null = e.actor_id ?? null, text?: string): WebNotice | null {
-  // El tablón cambia, pero sus encargos no entran en el Diario hasta que el PJ lo lee.
-  if (e.action_type === 'board') return webNotice('Hay avisos nuevos en el tablón de la plaza: pásate a leerlos', { link: 'ver el Tablón', tab: 'tablon' });
+  // El tablón cambia, pero sus encargos no entran en el Diario hasta que el PJ lo lee. Su `observable` (la lista
+  // entera, con hora y viñetas) no se pinta: es un aviso que lleva al Tablón (arreglo 42). Lo del mundo, sin actor:
+  // quien lee el tablón sí recibe su lista.
+  if (e.action_type === 'board' || (e.tags?.includes('board') && !e.actor_id)) return webNotice('Hay avisos nuevos en el tablón de la plaza: pásate a leerlos', { link: 'ver el Tablón', tab: 'tablon' });
   const q = e.payload?.['quest'] as QuestChange | undefined;
   if (/^progress_/.test(e.action_type) && q && QUEST_HEAD[q.event]) {
     // Un rumor es lo que se oye en el sitio: una línea de ambiente, sin enlace ni entrada en el Diario.
