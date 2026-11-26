@@ -1998,12 +1998,12 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         }
       }
       // Desenlace de una reacción que resolvió el servidor (el otro resistió y ganó o perdió): la narración no cuenta lo contrario (arreglo 2).
-      if ((ctx.reaction_rejections ?? 0) < 1 && engine.inReactionOutcome(actor.id)) {
-        const won = [...world.characters.keys()].some((id) => engine.reactionWon(actor.id, id));
-        const bad = reactionOutcomeMismatch(won, s('narration_private'));
+      const outcome = (ctx.reaction_rejections ?? 0) < 1 ? engine.reactionOutcomeOf(actor.id) : null;
+      if (outcome) {
+        const bad = reactionOutcomeMismatch(outcome.success, s('narration_private'));
         if (bad) {
           ctx.reaction_rejections = (ctx.reaction_rejections ?? 0) + 1;
-          return { error: reactionOutcomeRejection(won, bad) };
+          return { error: reactionOutcomeRejection(outcome.success, bad, outcome.rolls) };
         }
       }
       // Un tool de escritura que falló en un mensaje anterior de este turno, narrado como hecho (arreglo 5). El del mismo

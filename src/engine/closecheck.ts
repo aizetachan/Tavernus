@@ -1160,10 +1160,11 @@ export function reactionOutcomeMismatch(won: boolean, narration: string): string
   return null;
 }
 
-export function reactionOutcomeRejection(won: boolean, phrase: string): string {
+export function reactionOutcomeRejection(won: boolean, phrase: string, rolls?: string): string {
+  const dice = rolls ? ` (${rolls})` : '';
   return won
-    ? `El servidor ya ha resuelto la reacción: el otro jugador se resistió y ha PERDIDO la tirada enfrentada, así que el actor lo CONSIGUE. La narración dice «${phrase}», que es lo contrario. Cuenta que lo consigue (si le quita algo, transfer_item o take_coins ahora); lo que hizo el otro al resistirse se puede contar. Reescribe log_event.`
-    : `El servidor ya ha resuelto la reacción: el otro jugador ha GANADO la tirada enfrentada, así que el actor NO lo consigue. La narración dice «${phrase}», que es lo contrario. Cuenta que no lo consigue. Reescribe log_event.`;
+    ? `El servidor ya ha resuelto la reacción: el otro jugador se resistió y ha PERDIDO la tirada enfrentada${dice}, así que el actor lo CONSIGUE. La narración dice «${phrase}», que es lo contrario. Cuenta que lo consigue (si le quita algo, transfer_item o take_coins ahora); lo que hizo el otro al resistirse se puede contar. Reescribe log_event.`
+    : `El servidor ya ha resuelto la reacción: el otro jugador ha GANADO la tirada enfrentada${dice}, así que el actor NO lo consigue. La narración dice «${phrase}», que es lo contrario. Cuenta que no lo consigue. Reescribe log_event.`;
 }
 
 // ---------------------------------------------------------------------------
