@@ -55,7 +55,7 @@ describe('seguir: el NPC que acepta acompañar va con el PJ', () => {
     expect(brenna.location.id).toBe(engine.world.characterSpot(kael)!.id);
     const moves = since(engine, from).filter((e) => e.action_type === 'npc_move');
     expect(moves.map((e) => [e.location_id, e.observable])).toEqual([
-      ['loc_taberna', 'Brenna se va de la barra con Kael.'],
+      ['loc_taberna', 'Brenna deja la barra y sale con Kael hacia Plaza del Pozo.'],
       ['loc_plaza', 'Brenna llega con Kael a la puerta de la taberna.'],
     ]);
     // La llegada va después de la de Kael, y él la lee en segunda persona; Mira, desde el pozo, la ve llegar.
@@ -102,7 +102,7 @@ describe('dejar de seguir', () => {
     await engine.tick();
     expect(orderOf(brenna)).toBeNull();
     expect(brenna.location.id).toBe('sp_tab_barra');
-    expect(readsOf(got, mira.id, 'npc_move').some((t) => /se va/.test(t))).toBe(true);
+    expect(readsOf(got, mira.id, 'npc_move').some((t) => /sale hacia/.test(t))).toBe(true);
   });
 
   it('se acaba sola si él se va (ausente) o se le acaba el tiempo, y se lo cuenta', async () => {
@@ -141,8 +141,8 @@ describe('moverse por decisión propia', () => {
     await engine.tick();
     expect(brenna.location.id).toBe('sp_pl_taberna');
     expect(orderOf(brenna)).toMatchObject({ kind: 'stay', spot_id: 'sp_pl_taberna' });
-    expect(since(engine, from).filter((e) => e.action_type === 'npc_move').map((e) => e.observable)).toEqual(['Brenna se va de la barra.', 'Brenna llega a la puerta de la taberna.']);
-    expect(readsOf(got, kael.id, 'npc_move')).toContain('Brenna se va de la barra.');
+    expect(since(engine, from).filter((e) => e.action_type === 'npc_move').map((e) => e.observable)).toEqual(['Brenna deja la barra y sale hacia Plaza del Pozo.', 'Brenna llega a la puerta de la taberna.']);
+    expect(readsOf(got, kael.id, 'npc_move')).toContain('Brenna deja la barra y sale hacia Plaza del Pozo.');
     expect(readsOf(got, mira.id, 'npc_move')).toContain('Brenna llega a la puerta de la taberna.');
     time.advanceGame(31 * GAME_MINUTE);
     await engine.tick();

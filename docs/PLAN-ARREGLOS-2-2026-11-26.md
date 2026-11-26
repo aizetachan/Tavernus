@@ -277,3 +277,96 @@ llegó por su lado al mismo veredicto de H13 (su test `test/pareja-lectura-2026-
 - **Sesión coordinadora:** las tandas 4 y 5 se leyeron con la herramienta vieja. Para la pasada corta, la comparación
   con `--baseline` de lo que lee cada jugador (párrafos dobles, segunda persona del compañero) no es justa con las
   tandas viejas: ahí era la herramienta.
+## Estado del paquete E
+
+Rama `claude/arreglos-e-mundo-42f681` (suite entera, 1786 tests, y `typecheck` en verde bajo el tope de 3 GB), un commit por arreglo, todos con su test (`test/*-2026-11-26.test.ts`, con los
+turnos reales de los transcripts como fixture).
+
+### Hecho
+
+1. **(32) Frases de ambiente con hablante** (bce2092). `ChatterDef` y `ChatterSet` tienen `not_npc_ids`; `chatter.ts`
+   elige, frase a frase, a alguien que pueda decirla y que no salga nombrado en ella (por su nombre, o con `{npc}` o
+   `{npc_role}` si la tanda es de él); si no queda nadie, calla o la dice la gente sin cara. «Si Garrán viene a cobrar»
+   va en su tanda (`plaza_cobro`) sin Osric ni Doro. `speakerLabel` usa `roleLabel`, que respeta `role_short` («El
+   guardia» para Doro) y pone el artículo por la primera palabra del oficio (con los de él en «-a»: guardia, centinela,
+   vigía…). Que quien habla esté en el sitio ya lo exigía el motor; queda en el test.
+2. **(30, motor) La salida y la entrada se ven y quedan en el evento** (35066b5). Ver abajo lo que deja para F. La línea
+   de salida dice adónde va («Ilse deja el caldero y sale hacia Plaza del Pozo, camino de la misa del pozo.»). El relleno,
+   que iba y venía siempre en silencio, avisa cuando entra o sale de una localización con jugadores (en su paseo dentro
+   del mismo sitio sigue callado); lo que la agenda pone al día con retraso (`quiet`) también avisa si hay jugadores. Los
+   movimientos de la historia escrita (efecto `npc_move` de `story.ts`) dejan su evento desde `engine.ts`.
+3. **(41) Línea de aproximación solo si llega** (7e0d96a). `approachLine` en `narrate.ts`: «Te acercas a X.» o null si
+   la narración ya cuenta el movimiento, si la acción o la narración hablan de llamar a una puerta o de una puerta
+   cerrada, o si la acción nombra otro punto u otra localización. `errandLine` la usa.
+4. **(42) El tablón como aviso** (2174ac2, y el remate del Diario en 5459e21). El evento `board` de `onDay` es «Hay avisos
+   nuevos en el tablón de Plaza del Pozo.», sin hora, lista ni viñetas, anclado en el punto del tablón y con
+   `payload.job_ids` y `notice: 'all'`. `/tablon` da un encargo por línea, sin «•» ni «—». La crónica del Diario lee los
+   títulos de `job_ids`. Los encargos ya eran estables dentro del día (`boardOfDay` depende solo del día): queda en el
+   test, también forzando la rotación; lo que se leyó como «cambian entre dos lecturas» era el cambio de día a las 00:00.
+5. **(43) Epílogo** (e297329). «Amanece el sexto día» sale una vez (en el aviso público; la escena del Lindero ya no lo
+   repite) y `emitStory` saca lo del mundo antes que lo de cada PJ: el alba llega antes que el resumen de lo jugado.
+6. **(44) Erratas** (5459e21). «el sereno el sereno», «el herrero el herrero», «el buhonero el buhonero» y «el guardia el
+   guardia» salían de `maskNpcNames` cuando el máster escribe «el sereno Anselmo» para quien no sabe el nombre: ahora
+   «el sereno Anselmo», «al herrero Hugo» y «Hugo el herrero» quedan en «el sereno», «al herrero», «el herrero». El test
+   arma para cada NPC de Brezal lo que escribe el máster con oficio y nombre y las plantillas del motor (al pasar, Diario,
+   entra y sale) y comprueba que no repiten palabra. Fuera los «·» de mis ficheros: salvaciones («éxitos 1/3, fallos
+   0/3»), `/recap`, la recompensa y el resumen del día del Diario. El título de las misiones de la historia («I · El agua
+   turbia», `journal.ts:545`) se queda: `prologue.ts:374` lo limpia con `/^[IV]+ · /` y ese fichero no es de ningún
+   paquete; hay que cambiar los dos a la vez («Acto I: …»).
+7. **(38, motor) La reaparición se lee** (4b3c61a). El aviso de la muerte y la respuesta a un muerto que intenta actuar
+   dicen dónde vuelve (punto y lugar), a qué hora de juego y que hasta entonces no puede actuar. La vuelta llega como
+   narración con dónde, a qué hora, cuánto ha pasado y con qué PG («↺ … Abres los ojos en la puerta (Taberna del Jabalí)
+   hacia las 20:15, 6 h después de caer, con 6/12 PG.»); el evento `respawn` lleva `game_s` y `away_game_s`. Que un
+   muerto no actúe ni hable ya lo hacía `act` y `say`: queda en el test.
+
+### Lo que deja el punto 2 en los eventos (para la guarda del paquete F)
+
+Todo `npc_move` (agenda y horario en `schedule.ts`, órdenes en `npcorders.ts`, historia escrita en `engine.ts`) lleva
+`payload.npc_id` y `payload.move`:
+
+```ts
+move: {
+  npc_id, from_spot_id, to_spot_id, from_location_id, to_location_id,
+  dir: 'leave' | 'arrive' | 'within',   // cambio de localización: dos eventos, salida (en el punto de origen) y llegada
+  cause: 'schedule' | 'order' | 'follow' | 'story',
+  game_s,                               // instante de juego del movimiento
+}
+```
+
+(tipo `NpcMove` en `npcorders.ts`). «Quién se ha ido de aquí desde el turno anterior»: eventos `npc_move` con
+`move.dir === 'leave'` y `move.from_location_id` igual a la localización del actor, con `seq` mayor que el último cierre
+de ese actor. «Quién ha entrado»: `dir === 'arrive'` y `to_location_id`. Los de la historia escrita llevan `observable:
+null` cuando la historia ya lo cuenta (un aviso o una escena que le nombra), pero llevan `move` igual. No dejan evento
+(ni antes ni ahora): los pasos dentro de la sala en combate (`combat.ts`), `placeExtraAt` (`extras.ts`, el relleno de un
+encuentro de camino) y los cambios de estado (muerto, inconsciente).
+
+### Lo que no cerré y lo que pido en ficheros de otros paquetes
+
+- **F, `tools.ts:2466`.** Las cinco líneas «Te acercas al caldero» del arreglo 41 (charlatán T6, metódico T6 y T28,
+  impredecible T2, violento T19) no salen de `errandLine` sino del acercamiento de `reachNpc` (`ctx.approach`). Pido
+  cambiar `const approached = ctx.approach && !/\bacerc/i.test(s('narration_private')) ? \`Te acercas …\` : ''` por
+  `const near = ctx.approach ? approachLine(world, ctx.approach.to_spot_id, ctx.action_text ?? '', s('narration_private')) : null;`
+  y `const approached = near ? \`${near} \` : ''` (`approachLine` de `narrate.ts`). El test
+  `test/aproximacion-2026-11-26.test.ts` ya cubre esos cinco casos sobre la función.
+- **F, `prompt.ts:605`.** `hints.errand.line` puede venir vacía ahora (sin acercamiento que contar): que no ponga «».
+- **I, epílogo y reaparición en el transcript.** La partida no se «cierra el día 2»: `autoplay.ts` adelanta el reloj
+  hasta el epílogo (`passGame` hasta `EPILOGUE_H`), así que la Brasa pasa de verdad, y el resumen junta todos los avisos
+  y eventos de historia aunque el jugador no los vea. Pido que el transcript diga «(reloj adelantado del día 2, 23:40,
+  al alba del sexto día)» y que filtre el epílogo por `delivered_to`. Igual con la espera de quien está caído: lo que le
+  llega (muerte, salvaciones, vuelta) va a `s.last` pero el transcript no lo imprime, y por eso el violento «aparece» en el
+  molino y el recolector vuelve «al turno siguiente» (que en el reloj del juego son más de 2 h reales). El motor no
+  tiene un «cierre de partida»; si se quiere uno, es trabajo aparte.
+- **G.** El recolector «lanza Curar heridas inconsciente» (T11) viene, con toda probabilidad, de un 20 natural en la
+  salvación que el transcript no enseña; lo del 1 PG y las salvaciones es suyo.
+- **Sin dueño (`model.ts`, `extras.ts`).** El género del NPC se infiere del oficio (`roleLabel`). Lo limpio es un campo
+  `gender` en `Npc` que `extraNpc` copie de `ExtraDef` (hoy lo usa para el oficio y lo pierde) y que `roleLabel` lea.
+- **Del modelo, no de plantillas.** «Mastinas», «Mirás» y «le te pide» están en la narración del máster (Haiku): no hay
+  plantilla que arreglar.
+- **«·» fuera de mis ficheros.** Siguen en las tiradas («🎲 Kael · Fuerza», web y `rolls`), el título de la hoja
+  (`players`), `paint`, `info` y la web (`novel.ts`, `notice.ts`, `page.ts`). Lo de la web es del paquete H.
+- **Pedido de G en `engine.ts` (arreglo 37), sin aplicar.** En `Engine.tryLaw`, tras `if (insulted) reportIncident(…'insult'…)`:
+  `const threat = parseArmedThreat(this.world, c, text, target); if (threat) reportThreat(this.world, c, threat.npc, threat.weapon, nowG);`
+  importando las dos de `./crime.js`. Depende de la rama de G (abf0219) y no compila en la mía: lo hace la coordinadora
+  al fusionar G.
+- **H, web.** El evento `board` ya no trae la lista ni la hora; `notice.ts` lo pinta bien como aviso. Si en algún sitio
+  la web leía la lista del `observable`, que lea `payload.job_ids`.

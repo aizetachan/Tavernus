@@ -12,7 +12,7 @@ import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, takeAmount, transferItem, type InventoryView, type TransferError } from './inventory.js';
-import type { CarrySlot, Character, DecisiveConsequence, EquipSlot, GameEvent, GameSettings, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
+import type { CarrySlot, Character, DecisiveConsequence, EquipSlot, GameEvent, GameSettings, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, Spot, WorldSnapshot } from './model.js';
 
 import { EQUIP_SLOTS } from './model.js';
 
@@ -31,7 +31,7 @@ import { encounterAt, hostilesAt, recentCombatTag } from './encounter.js';
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { settleAudience } from './audience.js';
 import { bounceOff, parseCrossing } from './barrier.js';
-import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, listEs, maskUnknownNames, whereAmI, whoIsHere } from './narrate.js';
+import { aEs, approachLine, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, listEs, maskUnknownNames, nameRe, npcNameForms, whereAmI, whoIsHere } from './narrate.js';
 import { encounterChance, parseInfo, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
 import { answerInfo, infoText, type InfoAnswer } from './info.js';
 import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type RouteCut } from './goto.js';
@@ -43,7 +43,7 @@ import { allIncidents, arrestAttempt, arrestCharge, arrestHostile, incidentText,
 
 import { coinsOf, currencyOf, DEFAULT_STARTING_COINS, migrateLegacyCoins, money, newPurse, pay } from './money.js';
 
-import { tickOrders } from './npcorders.js';
+import { npcMoveLines, npcMoveOf, tickOrders, type NpcMove } from './npcorders.js';
 import { nameFor, storyQuestAction, tickStory, type StoryOutput } from './story.js';
 import { syncStoryPack, type Story } from './story.js';
 import { trustFromRoll, trustNotice } from './trust.js';
@@ -460,18 +460,28 @@ export class Engine {
     if (this.world.campaign.board.active_job_ids.length === 0) this.onDay(nowG);
   }
 
-  /** Un día de juego: rota el tablón y lo anuncia en público. */
+  /**
+   * Un día de juego: rota el tablón y lo avisa en público con una línea corta, sin hora ni lista: a mitad de una escena
+   * se lee como aviso, no como narración (pausado T12, impredecible T6 y T23). La lista sale al leerlo (/tablon, el
+   * Tablón de la web, decir que se lee ante él). Los encargos del día no cambian entre dos lecturas (progress.ts).
+   */
   private onDay(tickGameS: number): void {
     // Las tiendas que reponen cada día (shop.ts); las de un valle sellado, no.
     restockShops(this.world, tickGameS);
     const jobs = rotateBoard(this.world, tickGameS, this.world.campaign.board.active_job_ids.length === 0);
     if (!jobs) return;
-    const anchor = this.world.spot(this.world.campaign.starting_points[0]!.spot_id);
+    const board = this.boardSpot();
+    const anchor = board ?? this.world.spot(this.world.campaign.starting_points[0]!.spot_id);
     this.events.emit({
       actor_id: null, at: { spot_id: anchor.id, next_spot_id: null, progress: 0, x: anchor.x, y: anchor.y, location_id: anchor.location_id },
-      action_type: 'board', narration_private: '', visibility: 'public', tags: ['board'], payload: { job_ids: jobs.map((j) => j.id) },
-      observable: `📜 Tablón de Brezal, ${this.clock.format(tickGameS)}:\n` + jobs.map((j) => `• **${j.title}** — ${j.text} (${money(this.world, j.reward_coins)}; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n'),
+      action_type: 'board', narration_private: '', visibility: 'public', tags: ['board'], payload: { job_ids: jobs.map((j) => j.id), notice: 'all' },
+      observable: board ? `Hay avisos nuevos en ${board.name} de ${this.world.location(board.location_id).name}.` : 'Hay avisos nuevos en el tablón.',
     }, this.clock.realAt(tickGameS));
+  }
+
+  /** El punto del tablón de anuncios, si los datos tienen uno (por su nombre: «el tablón»). */
+  private boardSpot(): Spot | null {
+    return [...this.world.spots.values()].find((s) => /(?<![\p{L}])tabl[oó]n(?![\p{L}])/iu.test(s.name)) ?? null;
   }
 
   /** Un minuto de juego. Aquí engancharán consumo, regeneración y líneas secundarias. */
@@ -1253,13 +1263,13 @@ export class Engine {
 
   /** Lo que hace al llegar: con plantilla si es trivial y el sitio no es nuevo; si no, el master con el viaje ya hecho. */
   private async errandAction(c: Character, text: string, e: Errand, a: Arrival | null, obstacle: string | null = null): Promise<ActionResult> {
-    const line = this.errandLine(c, a);
+    const line = this.errandLine(c, a, e.action);
     const spot = this.world.characterSpot(c)!;
     if (e.absent_npc_id) {
       const n = this.world.npc(e.absent_npc_id);
       const who = c.knows.includes(n.id) ? n.name : descriptorOf(this.world, n.id);
       // Con master, que lo cuente él («llegas a la casa de las hierbas, pero Ilse no está…»); sin él, la plantilla.
-      if (!this.master) return this.emitPending(c, text, e, `${line} ${who.charAt(0).toUpperCase()}${who.slice(1)} no está aquí. ${pendingLine(e.action)}`, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`);
+      if (!this.master) return this.emitPending(c, text, e, `${line ? `${line} ` : ''}${who.charAt(0).toUpperCase()}${who.slice(1)} no está aquí. ${pendingLine(e.action)}`, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`);
       obstacle = `${who} no está aquí ahora`;
     }
     const hooks = [...(a?.hooks ?? [])];
@@ -1270,22 +1280,28 @@ export class Engine {
       if (r) return r;
     }
     if (!this.master) {
-      this.emitTrivial(c, text, 'move', 'movement', line, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`, spot.name);
+      if (line) this.emitTrivial(c, text, 'move', 'movement', line, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`, spot.name);
       const r = this.resolveAction(c, e.action);
-      return { ...r, text: `${line}\n${r.text}` };
+      return { ...r, text: line ? `${line}\n${r.text}` : r.text };
     }
     const r = await this.resolveWithHints(c, text, { hooks, encounter: null, errand: { line, action: e.action, first_visit: a?.first_visit ?? false, ...(obstacle ? { obstacle } : {}) } });
     if (r.ok || r.text !== '') return r;
-    return this.emitPending(c, text, e, `${line} El narrador no responde ahora mismo. ${pendingLine(e.action)}`, null, null);
+    return this.emitPending(c, text, e, `${line ? `${line} ` : ''}El narrador no responde ahora mismo. ${pendingLine(e.action)}`, null, null);
   }
 
-  /** «Cruzas la puerta baja y entras en Casa de las hierbas. Te acercas al caldero.» */
-  private errandLine(c: Character, a: Arrival | null): string {
+  /**
+   * «Cruzas la puerta baja y entras en Casa de las hierbas. Te acercas al caldero.» El acercamiento, solo si cabe
+   * (narrate.ts, approachLine): no si la acción habla de una puerta cerrada o va a otro sitio del que dice la frase.
+   */
+  private errandLine(c: Character, a: Arrival | null, action: string): string {
     const spot = this.world.characterSpot(c)!;
     const parts: string[] = [];
     if (a?.note) parts.push(a.note);
     if (a?.crossed) parts.push(crossingLine(this.world, a.exit_id, a.landing_spot_id ?? spot.id) || `Llegas a ${this.world.location(spot.location_id).name}.`);
-    if (!a?.crossed || (a.landing_spot_id && a.landing_spot_id !== spot.id)) parts.push(`Te acercas ${aEs(spot.name)}.`);
+    if (!a?.crossed || (a.landing_spot_id && a.landing_spot_id !== spot.id)) {
+      const near = approachLine(this.world, spot.id, action);
+      if (near) parts.push(near);
+    }
     return parts.join(' ');
   }
 
@@ -1823,12 +1839,40 @@ export class Engine {
    * delante: lo lee quien dice leerlo (act) o usa /tablon.
    */
   private advanceStory(nowG: number): void {
+    const before = new Map([...this.world.npcs.values()].map((n) => [n.id, n.location.id]));
     const out = tickStory(this.world, nowG, this.threatNow(nowG));
     this.emitStory(out);
     // Hechos y reglas del mundo (worldrules.ts): lo que acaba de cambiar dispara las reacciones de los datos.
-    this.emitStory(tickWorld(this.world, nowG).story);
+    const rules = tickWorld(this.world, nowG).story;
+    this.emitStory(rules);
+    this.emitStoryMoves(before, [out, rules], nowG);
     // Lo que acaba de pasar en la escena (beats) lo cuenta el máster ya, tras la acción, sin esperar al tick.
     if (out.beats.length) this.fireTimeHooks(nowG);
+  }
+
+  /**
+   * Los NPC que la historia escrita ha cambiado de sitio (efecto `npc_move`, story.ts) dejan su `npc_move` como los
+   * de la agenda y las órdenes: con `move` en el payload, para que se sepa quién se fue y cuándo. La línea, solo si
+   * la historia no lo cuenta ya (un aviso o una escena que le nombra): sin ella, el evento queda sin texto.
+   */
+  private emitStoryMoves(before: Map<Id, Id>, outs: StoryOutput[], nowG: number): void {
+    const told = outs.flatMap((o) => [...o.announcements.map((a) => a.text), ...o.beats.map((b) => b.text), ...o.personal.flatMap((p) => p.events.map((e) => e.text))]).join(' / ');
+    for (const n of this.world.npcs.values()) {
+      const was = before.get(n.id);
+      if (!was || was === n.location.id || n.status === 'dead' || !this.world.spots.has(was)) continue;
+      const from = this.world.spot(was);
+      const to = this.world.spot(n.location.id);
+      const said = npcNameForms(n.name).some((f) => nameRe(f, 'u').test(told));
+      const lines = npcMoveLines(n, from, to, this.world.location(to.location_id).name);
+      const at = (s: Spot) => ({ spot_id: s.id, next_spot_id: null, progress: 0, x: s.x, y: s.y, location_id: s.location_id });
+      const emit = (spot: Spot, dir: NpcMove['dir'], text: string, vague: string) => this.events.emit({
+        actor_id: null, at: at(spot), action_type: 'npc_move', narration_private: '', observable: said ? null : text, tags: ['npc', 'story', 'deterministic'],
+        payload: { master: null, npc_id: n.id, observable_vague: vague, move: npcMoveOf(n, from, to, dir, 'story', nowG) },
+      }, this.now());
+      if (from.location_id === to.location_id) { emit(to, 'within', lines.within, `Alguien cruza hacia ${to.name}.`); continue; }
+      emit(from, 'leave', lines.leave, 'Una figura se marcha.');
+      emit(to, 'arrive', lines.arrive, `Una figura llega ${aEs(to.name)}.`);
+    }
   }
 
   /** El PJ lee el tablón (dice leerlo ante él, o /tablon): cada encargo que no había visto entra en su Diario como disponible, con aviso. */
@@ -1843,9 +1887,11 @@ export class Engine {
   /**
    * Avisos de la historia: los del PJ como progreso privado; los del mundo, a quien esté en el lugar (o a todos).
    * Lo que pasa en la escena (`beats`) lo cuenta el máster, con un gancho para ese PJ que salta en este mismo
-   * tick: una sola voz. Sin máster, sale como aviso.
+   * tick: una sola voz. Sin máster, sale como aviso. Primero lo del mundo y luego lo de cada uno: el alba del
+   * epílogo antes que el resumen de lo jugado.
    */
   emitStory(out: StoryOutput): void {
+    this.emitAnnouncements(out);
     for (const p of out.personal) {
       const c = this.world.characters.get(p.character_id);
       if (c) this.emitProgress(c, p.events);
@@ -1859,6 +1905,10 @@ export class Engine {
       if (this.master) plantBeat(this.world, loc, c.id, `Historia escrita: acaba de pasar esto; cuéntalo tú, con tus palabras y sin contradecirlo: ${texts.join(' / ')}`, this.gameNow());
       else this.emitProgress(c, texts.map((text) => ({ kind: 'story', text })));
     }
+  }
+
+  /** Los avisos del mundo de la historia, a quien esté en el lugar (o a todos, los públicos). */
+  private emitAnnouncements(out: StoryOutput): void {
     for (const a of out.announcements) {
       const spot = this.world.spots.get(a.spot_id ?? this.world.location(a.location_id).default_spot_id)!;
       this.events.emit({
@@ -1898,10 +1948,10 @@ export class Engine {
     this.noteBoard(c, this.nowFor(c));
   }
 
-  /** Estado del tablón para /tablon. */
+  /** Estado del tablón para /tablon: un encargo por línea, sin viñetas ni rayas («**Carbón para la fragua**: … Paga 4 de plata; lo pide Hugo.»). */
   boardText(): string {
     const jobs = activeJobs(this.world);
-    return jobs.length ? jobs.map((j) => `• **${j.title}** — ${j.text} (${money(this.world, j.reward_coins)}; lo pide ${this.world.npc(j.giver_npc_id).name})`).join('\n') : 'El tablón está vacío.';
+    return jobs.length ? jobs.map((j) => `**${j.title}**: ${j.text.replace(/[.\s]+$/, '')}. Paga ${money(this.world, j.reward_coins)}; lo pide ${this.world.npc(j.giver_npc_id).name}.`).join('\n') : 'El tablón está vacío.';
   }
 
   private async resolveWithMaster(c: Character, text: string, roll?: { original_text: string; result: CheckResult & { label: string } }, intro?: { origin: string; welcome: string; prologue?: string }, scene?: MasterScene, decisive?: { seconds: number; speed: 'fast' | 'normal'; threat: string }): Promise<ActionResult> {
@@ -2070,7 +2120,7 @@ export class Engine {
         const missed = this.recapFor(c.id);
         const gap = justBack(c, nowG);
         const head = gap ? `Para ti no pasó el tiempo; el mundo siguió ${fmtDuration(gap.to_game_s - gap.from_game_s)} sin ti.\n` : '';
-        return head + (missed.length ? missed.map((d) => `· ${d.text}`).join('\n') : 'No te has perdido nada.');
+        return head + (missed.length ? missed.map((d) => d.text).join('\n') : 'No te has perdido nada.');
       }
       case 'time': return `${this.clock.format(nowG)} (ratio ${this.clock.timeRatio}×).${nowG - this.gameNow() > SAME_TIME_TOLERANCE_S ? ` Vas ${fmtDuration(nowG - this.gameNow())} por delante del reloj del mundo (has viajado).` : ''}`;
       case 'tablon': this.noteBoard(c, nowG); return this.boardText();
@@ -3485,9 +3535,8 @@ export class Engine {
   downText(c: Character): string {
     if (c.status === 'dead' && c.death) {
       const left = Math.max(0, c.death.respawn_real_ms - this.now());
-      const back = this.world.spot(respawnSpotId(this.world, c)).name;
       return c.death.respawn_real_ms
-        ? `☠ Has muerto. Volverás en ${back} dentro de ${fmtDuration(left / 1000)} reales (${fmtDuration(this.clock.realToGame(left / 1000))} de juego). Mientras, solo puedes mirar.`
+        ? `☠ Has muerto. Volverás en ${this.respawnWhere(c)} dentro de ${fmtDuration(left / 1000)} reales (${fmtDuration(this.clock.realToGame(left / 1000))} de juego, hacia las ${hhmm(this.clock.gameNow(c.death.respawn_real_ms))}). Hasta entonces no puedes actuar: solo mirar.`
         : '☠ Has muerto.';
     }
     if (isStable(c)) {
@@ -3495,7 +3544,7 @@ export class Engine {
       return `Estás inconsciente pero estable.${until ? ` Recobrarás el sentido con 1 PG hacia las ${hhmm(until)}.` : ''} Si alguien te cura, despiertas antes.`;
     }
     const d = c.dying;
-    return `Estás inconsciente, a 0 PG. El servidor tira tus salvaciones contra muerte${d ? ` (éxitos ${d.success}/3 · fallos ${d.fail}/3)` : ''}: tres éxitos te estabilizan, tres fallos te matan. Otro jugador puede estabilizarte (Medicina CD 10) o curarte.`;
+    return `Estás inconsciente, a 0 PG. El servidor tira tus salvaciones contra muerte${d ? ` (éxitos ${d.success}/3, fallos ${d.fail}/3)` : ''}: tres éxitos te estabilizan, tres fallos te matan. Otro jugador puede estabilizarte (Medicina CD 10) o curarte.`;
   }
 
   /** ¿Hay amenaza en el sitio del PJ (un NPC hostil vivo o combate reciente)? */
@@ -3682,16 +3731,30 @@ export class Engine {
     this.announceRoll({
       roller_id: c.id, label: 'Salvación contra muerte', dice: `d20 [${r.natural}]`, total: r.natural,
       outcome: r.outcome === 'revive' ? '20 natural: vuelve en sí' : r.natural === 1 ? 'fallo (1 natural: dos fallos)' : r.outcome === 'success' ? 'éxito' : 'fallo',
-      ...(r.outcome === 'revive' || r.died ? {} : { note: `éxitos ${r.success}/3 · fallos ${r.fail}/3` }),
+      ...(r.outcome === 'revive' || r.died ? {} : { note: `éxitos ${r.success}/3, fallos ${r.fail}/3` }),
     }, { death_save: r }, 'death_save', ['roll', 'death']);
     return r;
   }
 
-  /** Vuelve de la muerte: en el punto de reaparición, con aviso a los presentes y al grupo. */
+  /** Dónde vuelve quien ha muerto: el punto y su lugar («el camastro, en Casa de las hierbas»). */
+  private respawnWhere(c: Character): string {
+    const spot = this.world.spot(respawnSpotId(this.world, c));
+    return `${spot.name}, en ${this.world.location(spot.location_id).name}`;
+  }
+
+  /**
+   * Vuelve de la muerte: en el punto de reaparición, con aviso a los presentes y al grupo. El jugador lo lee como
+   * narración con dónde, a qué hora, cuánto ha pasado y con qué PG (violento T4 y T5: moría en la herrería y salía en
+   * el molino sin transición), y el evento lo lleva en `respawn` (`game_s`, `away_game_s`) para quien lo cuente después.
+   */
   private comeBack(c: Character): void {
+    const diedMs = c.death?.died_real_ms ?? null;
     const r = respawn(this.world, c);
     if (!r) return;
+    const nowG = this.nowFor(c);
+    const away = diedMs !== null ? Math.max(0, this.clock.realToGame((this.now() - diedMs) / 1000)) : null;
     const spot = this.world.spot(r.spot_id);
+    const loc = this.world.location(spot.location_id);
     const bodyLoc = this.world.locationOfSpot(r.body_spot_id);
     const story = r.story || `Alguien te encontró y te trajo ${aEs(spot.name)}.`;
     const things = r.left.length || r.coins_left ? (r.mode === 'casual'
@@ -3700,12 +3763,12 @@ export class Engine {
     const scar = r.penalty ? ` La muerte se cobra algo: −${r.penalty.amount} a ${r.penalty.label} (se recupera al subir de nivel).` : '';
     const ev = this.events.emit({
       actor_id: c.id, action_type: 'respawn',
-      narration_private: `${story} Abres los ojos en ${spot.name} con ${c.hp_current}/${c.hp_max} PG.${things}${scar}`,
+      narration_private: `↺ ${story} Abres los ojos en ${spot.name} (${loc.name}) hacia las ${hhmm(nowG)}${away ? `, ${fmtDuration(away)} después de caer` : ''}, con ${c.hp_current}/${c.hp_max} PG.${things}${scar}`,
       observable: `${c.name} está aquí, pálido, como recién vuelto de muy lejos.`, tags: ['death', 'deterministic'],
-      payload: { master: null, respawn: { ...r, location_id: spot.location_id }, suggested_actions: suggestActions(this.world, this.clock, c, this.nowFor(c)) },
+      payload: { master: null, respawn: { ...r, location_id: spot.location_id, game_s: nowG, ...(away !== null ? { away_game_s: away } : {}) }, suggested_actions: suggestActions(this.world, this.clock, c, nowG) },
     }, this.now());
     this.noticeOthers(c, ev, `↺ ${c.name} ha vuelto: está en ${this.world.locationOfSpot(r.spot_id).name}.`);
-    this.background(this.masterLine(c, 'respawn', `${c.name} vuelve de la muerte ${aEs(spot.name)}. ${story}`));
+    this.background(this.masterLine(c, 'respawn', `${c.name} vuelve de la muerte ${aEs(spot.name)} (${loc.name}), con ${c.hp_current}/${c.hp_max} PG. ${story}`));
   }
 
   /** Aviso fuera de la ficción a los demás jugadores que no lo han visto. */
@@ -4099,15 +4162,15 @@ export class Engine {
     this.world.touch('characters', c.id);
     const spot = this.world.spot(d.spot_id);
     const loc = this.world.location(spot.location_id);
-    const back = this.world.spot(respawnSpotId(this.world, c)).name;
-    const when = `${fmtDuration(wait)} reales (${fmtDuration(this.clock.realToGame(wait))} de juego)`;
+    const back = this.respawnWhere(c);
+    const when = `${fmtDuration(wait)} reales (${fmtDuration(this.clock.realToGame(wait))} de juego, hacia las ${hhmm(this.clock.gameNow(d.respawn_real_ms))})`;
     const things = d.left.length || d.coins_left
       ? d.mode === 'casual' ? ' Lo que llevabas se queda en tu cuerpo, esperándote: solo tú puedes recogerlo.' : ' Lo que llevabas se queda en tu cuerpo, y cualquiera puede llevárselo.'
       : '';
     const scar = d.mode === 'hardcore' && deathRules(this.world).hardcore_ability_penalty > 0 ? ' Volverás con las manos vacías y una cicatriz que no se va.' : '';
     const ev = this.events.emit({
       actor_id: c.id, action_type: 'death',
-      narration_private: `☠ Todo se apaga. Has muerto en ${spot.name}. No es el final: volverás en ${back} dentro de ${when}.${things}${scar}`,
+      narration_private: `☠ Todo se apaga. Has muerto en ${spot.name}. No es el final: volverás en ${back} dentro de ${when}. Hasta entonces no puedes actuar.${things}${scar}`,
       observable: `${c.name} se desploma y deja de respirar.`, tags: ['death', 'combat'],
       payload: { master: null, death: { mode: d.mode, spot_id: d.spot_id, location_id: loc.id, cause: d.cause, left: d.left, coins_left: d.coins_left, respawn_real_ms: d.respawn_real_ms, body_instance_id: d.body_instance_id } },
     }, this.stampFor(c));

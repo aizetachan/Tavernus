@@ -130,12 +130,18 @@ export const REACTIONS: WorldRule[] = [
   },
 ];
 
-/** Vida diaria: lo que se oye en un día corriente, sin que pase nada. */
+/**
+ * Vida diaria: lo que se oye en un día corriente, sin que pase nada. Cada tanda dice quién puede decirla (`npc_ids`) o
+ * quién no (`not_npc_ids`); el NPC al que nombra una frase no la dice nunca (chatter.ts), sin ponerlo aquí.
+ */
 export const CHATTER: ChatterDef[] = [
   { id: 'plaza', location_ids: ['loc_plaza'], hours: [8, 21], texts: [
     'La niebla no levanta. Tres semanas ya.',
-    'Si Garrán viene a cobrar otra vez, yo no tengo ni para pan.',
     'Dicen que en los Corrales han oído lobos esta noche.',
+  ] },
+  // La queja de lo que cobra Garrán: ni el regidor, que es quien manda cobrar, ni Doro, que cobra el sueldo del concejo.
+  { id: 'plaza_cobro', location_ids: ['loc_plaza'], hours: [8, 21], per_day: 1, not_npc_ids: ['npc_osric', 'npc_doro'], texts: [
+    'Si Garrán viene a cobrar otra vez, yo no tengo ni para pan.',
   ] },
   { id: 'jabali', location_ids: ['loc_taberna'], hours: [17, 2], texts: [
     'Otra jarra, Brenna, que mañana será peor.',

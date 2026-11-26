@@ -24,6 +24,7 @@
 
 import { GAME_DAY, GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
 import type { Character, Id, Npc } from './model.js';
+import { nameRe, npcNameForms, roleLabel } from './narrate.js';
 import { crowdHere } from './schedule.js';
 import { factById, knowsFact } from './worldfacts.js';
 import type { World } from './world.js';
@@ -38,6 +39,8 @@ export interface ChatterSet {
   location_ids: Id[];
   /** Quién puede decirlos; null, cualquiera del sitio (que lo sepa, si va de un hecho). */
   npc_ids: Id[] | null;
+  /** Quién no los dice nunca (el regidor no se queja de lo que cobra Garrán). El NPC al que nombra la frase, tampoco, sin ponerlo. */
+  not_npc_ids?: Id[];
   /** Hecho del que se habla: solo lo comenta quien lo sabe. */
   fact_id: Id | null;
   /** PJ de quien se habla. */
@@ -57,7 +60,7 @@ export interface ChatterSet {
 }
 
 /** Vida diaria escrita en los datos de la campaña (`campaign.chatter`). Sin plazo. */
-export interface ChatterDef { id: Id; location_ids: Id[]; npc_ids?: Id[]; texts: string[]; hours?: [number, number]; per_day?: number }
+export interface ChatterDef { id: Id; location_ids: Id[]; npc_ids?: Id[]; not_npc_ids?: Id[]; texts: string[]; hours?: [number, number]; per_day?: number }
 
 /** Lo que se dice: quién, dónde, qué y a quién le llega. */
 export interface ChatterLine { set_id: Id; kind: ChatterKind; location_id: Id; spot_id: Id; npc_id: Id | null; text: string; listeners: Id[] }
@@ -102,6 +105,7 @@ function dailySets(world: World): ChatterSet[] {
   return ((world.campaign as typeof world.campaign & ChatterCampaign).chatter ?? []).map((d) => ({
     id: `daily:${d.id}`, kind: 'daily' as const, texts: d.texts, location_ids: d.location_ids, npc_ids: d.npc_ids ?? null, fact_id: null, about: null, subject: null,
     vars: {}, from_game_s: 0, until_game_s: null, per_day: d.per_day ?? 2, ...(d.hours ? { hours: d.hours } : {}),
+    ...(d.not_npc_ids?.length ? { not_npc_ids: d.not_npc_ids } : {}),
   }));
 }
 
@@ -112,9 +116,6 @@ function inHours(h: [number, number] | undefined, nowS: number): boolean {
   const x = hourOf(nowS);
   return h[0] <= h[1] ? x >= h[0] && x < h[1] : x >= h[0] || x < h[1];
 }
-
-/** «el herrero», «la tabernera». */
-function roleOf(n: Npc): string { return /^(el|la|los|las) /.test(n.role) ? n.role : /a$/.test(n.role) ? `la ${n.role}` : `el ${n.role}`; }
 
 /** Cómo llama el que habla al PJ: por su nombre si ha tenido trato con él (lo recuerda, o tiene opinión de él); si no, «el forastero». */
 function pcAs(world: World, speaker: Npc | null, pcId: Id | null): string | null {
@@ -138,6 +139,7 @@ function speakers(world: World, set: ChatterSet, locationId: Id): Npc[] {
     if (n.status !== 'alive' || n.mute || n.talking_to) return false;
     if (world.spots.get(n.location.id)?.location_id !== locationId) return false;
     if (set.npc_ids && !set.npc_ids.includes(n.id)) return false;
+    if (set.not_npc_ids?.includes(n.id)) return false;
     if (fact && set.kind !== 'daily' && !knowsFact(fact, n.id)) return false;
     return true;
   }).sort((a, b) => a.id.localeCompare(b.id));
@@ -178,9 +180,19 @@ export function tickChatter(world: World, nowS: number): ChatterLine[] {
       const fact = set.fact_id ? factById(world, set.fact_id) : null;
       const crowd = !set.npc_ids && set.kind !== 'reaction' && crowdHere(world, loc, nowS) && (!fact || nowS - fact.game_s >= GAME_HOUR);
       if (!who.length && !crowd) continue;
-      const idx = set.texts.findIndex((_, i) => ears.some((c) => !(st.heard[c.id] ?? []).includes(`${set.id}#${i}`)));
+      // La primera frase que alguien no haya oído y que alguien pueda decir: nadie se nombra a sí mismo («Otra jarra, Brenna»).
+      let idx = -1;
+      let speaker: Npc | null = null;
+      for (let i = 0; i < set.texts.length; i++) {
+        if (!ears.some((c) => !(st.heard[c.id] ?? []).includes(`${set.id}#${i}`))) continue;
+        const named = namedIn(world, set.texts[i]!, set);
+        const can = who.filter((n) => !named.has(n.id));
+        if (!can.length && !crowd) continue;
+        idx = i;
+        speaker = can.length ? can[(said?.count ?? 0) % can.length]! : null;
+        break;
+      }
       if (idx < 0) continue;
-      const speaker = who.length ? who[(said?.count ?? 0) % who.length]! : null;
       const spot = speaker ? speaker.location.id : world.location(loc).default_spot_id;
       const text = render(world, set.texts[idx]!, set, speaker);
       out.push({ set_id: set.id, kind: set.kind, location_id: loc, spot_id: spot, npc_id: speaker?.id ?? null, text, listeners: ears.map((c) => c.id) });
@@ -194,6 +206,17 @@ export function tickChatter(world: World, nowS: number): ChatterLine[] {
       break;
     }
   }
+  return out;
+}
+
+/**
+ * NPC a los que nombra la plantilla: por su nombre (también el que pone un hueco) o, con `{npc}` o `{npc_role}`, el de
+ * quien va la tanda. Esos no la dicen: Brenna no pide «Otra jarra, Brenna», ni Hugo habla «del herrero».
+ */
+function namedIn(world: World, template: string, set: ChatterSet): Set<Id> {
+  const out = new Set<Id>(set.subject && /\{npc(_role)?\}/.test(template) ? [set.subject] : []);
+  const text = render(world, template, set, null);
+  for (const n of world.npcs.values()) if (npcNameForms(n.name).some((f) => nameRe(f, 'u').test(text))) out.add(n.id);
   return out;
 }
 
@@ -211,11 +234,11 @@ export function fillSet(world: World, id: Id, texts: string[]): void {
   world.touch('campaign', world.campaign.id);
 }
 
-/** Quién lo dice, como lo conoce el lector: su nombre si lo sabe; si no, su oficio («La tabernera»). */
+/** Quién lo dice, como lo conoce el lector: su nombre si lo sabe; si no, su oficio con el artículo que le toca («La tabernera», «El guardia»). */
 export function speakerLabel(world: World, npcId: Id | null, readerId: Id | null): string {
   const n = npcId ? world.npcs.get(npcId) : undefined;
   if (!n) return 'Alguien';
   const reader = readerId ? world.characters.get(readerId) : undefined;
-  const name = reader && reader.knows.includes(n.id) ? n.name : roleOf(n);
+  const name = reader && reader.knows.includes(n.id) ? n.name : roleLabel(n);
   return name.charAt(0).toUpperCase() + name.slice(1);
 }

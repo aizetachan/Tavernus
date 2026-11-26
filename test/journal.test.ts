@@ -34,7 +34,7 @@ describe('diario: misiones', () => {
     expect(jobs.every((q) => q.origin?.kind === 'board' && q.history[0]!.kind === 'added')).toBe(true);
     expect(jobs.map((q) => q.id).sort()).toEqual([...first].sort());
     expect(jobs.every((q) => q.status === 'available' && q.seen !== null && q.giver === 'Brenna')).toBe(true);
-    expect(jobs.find((q) => q.id === 'job_lena')).toMatchObject({ reward: '6 de plata · +1 de reputación', steps: [{ text: 'Conseguir 10 × leña', done: false }, { text: 'Entregarlo a Brenna', done: false }] });
+    expect(jobs.find((q) => q.id === 'job_lena')).toMatchObject({ reward: '6 de plata y +1 de reputación', steps: [{ text: 'Conseguir 10 × leña', done: false }, { text: 'Entregarlo a Brenna', done: false }] });
     // El logro no sale hasta la primera pista: antes no dice nada.
     expect(j.quests.active.some((q) => q.kind === 'achievement')).toBe(false);
 
@@ -272,7 +272,7 @@ describe('diario: crónica y lugares', () => {
       'person: Conoces a Brenna (tabernera) en Taberna del Jabalí.',
       'roll: Persuasión: d20 [4] + 0 = 4 → fallo',
     ]);
-    expect(yesterday!.summary).toBe('1 conversación · 1 tirada');
+    expect(yesterday!.summary).toBe('1 conversación, 1 tirada');
     expect(texts(today)).toEqual(expect.arrayContaining([
       'board: El tablón cambia: ' + activeJobs(engine.world).map((x) => x.title).join(', ') + '.',
       'place: Llegas a Claro del Roble, el sendero.',

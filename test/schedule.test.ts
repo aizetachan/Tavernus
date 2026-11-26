@@ -130,13 +130,13 @@ describe('agenda: el motor la cumple', () => {
     expect(got.filter((d) => d.character_id === 'ch_kael' && d.event.tags.includes('schedule'))).toHaveLength(0);
   });
 
-  it('quien ve salir o llegar al NPC lo percibe («Brenna se va de la barra»)', async () => {
+  it('quien ve salir o llegar al NPC lo percibe («Brenna deja la barra y sale hacia…»)', async () => {
     const time = fakeTime();
     const { engine } = await bootEngine(time);
     const got = listen(engine);
     await at(engine, time, 20.05);
     const kael = got.filter((d) => d.character_id === 'ch_kael' && d.event.action_type === 'npc_move').map((d) => d.text);
-    expect(kael.join(' ')).toMatch(/Brenna se va de la barra, camino de la misa de la tarde/);
+    expect(kael.join(' ')).toMatch(/Brenna deja la barra y sale hacia Plaza del Pozo, camino de la misa de la tarde/);
     const mira = got.filter((d) => d.character_id === 'ch_mira' && d.event.action_type === 'npc_move').map((d) => d.text);
     expect(mira.join(' ')).toMatch(/llega al pozo para la misa de la tarde/);
   });

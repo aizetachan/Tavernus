@@ -22,7 +22,7 @@ import { GAME_DAY, GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
 import type { EmitInput } from './events.js';
 import type { Id, LightLevel, Location, Npc, Spot } from './model.js';
 import type { Position } from './movement.js';
-import { orderOf } from './npcorders.js';
+import { npcMoveLines, npcMoveOf, orderOf, playersInLocation, type NpcMove } from './npcorders.js';
 import type { World } from './world.js';
 
 export type Recurrence = 'daily' | 'weekly' | 'once';
@@ -411,17 +411,22 @@ function moveNpc(world: World, n: Npc, toId: Id, atS: number, emit: ScheduleEmit
   const to = world.spot(toId);
   n.location = { type: 'spot', id: to.id };
   world.touch('npcs', n.id);
-  // El relleno va y viene sin aviso: se ve en el tablero (el servidor lo vuelve a pedir), no en el chat.
-  if (quiet || n.tier === 'extra') return;
+  // Ante jugadores nadie desaparece ni aparece en silencio: ni el relleno (que si no va y viene sin aviso: se ve en el
+  // tablero, no en el chat) ni lo que la agenda pone al día con retraso (`quiet`). Dentro del mismo sitio, el relleno
+  // pasea callado.
+  const cross = from.location_id !== to.location_id;
+  const seen = cross && (playersInLocation(world, from.location_id).length > 0 || playersInLocation(world, to.location_id).length > 0);
+  if (quiet && !seen) return;
+  if (n.tier === 'extra' && !seen) return;
   const base = { actor_id: null, action_type: 'npc_move', narration_private: '', tags: ['npc', 'schedule', 'deterministic'] };
-  const payload = (vague: string) => ({ master: null, npc_id: n.id, ...(e ? { schedule_event_id: e.id } : {}), observable_vague: vague });
-  if (from.location_id === to.location_id) {
-    emit({ ...base, at: posOf(to), observable: `${n.name} deja ${from.name} y va ${aEs(to.name)}.`, payload: payload(`Alguien cruza hacia ${to.name}.`) }, atS);
+  const payload = (vague: string, dir: NpcMove['dir']) => ({ master: null, npc_id: n.id, ...(e ? { schedule_event_id: e.id } : {}), observable_vague: vague, move: npcMoveOf(n, from, to, dir, 'schedule', atS) });
+  const lines = npcMoveLines(n, from, to, world.location(to.location_id).name, { goal: e ? `camino ${deEs(e.title)}` : null, arriveFor: e ? `para ${e.title}` : null });
+  if (!cross) {
+    emit({ ...base, at: posOf(to), observable: lines.within, payload: payload(`Alguien cruza hacia ${to.name}.`, 'within') }, atS);
     return;
   }
-  const goal = e ? `, camino ${deEs(e.title)}` : '';
-  emit({ ...base, at: posOf(from), observable: `${n.name} se va ${deEs(from.name)}${goal}.`, payload: payload('Una figura se marcha.') }, atS);
-  emit({ ...base, at: posOf(to), observable: `${n.name} llega ${aEs(to.name)}${e ? ` para ${e.title}` : ''}.`, payload: payload(`Una figura llega ${aEs(to.name)}.`) }, atS);
+  emit({ ...base, at: posOf(from), observable: lines.leave, payload: payload('Una figura se marcha.', 'leave') }, atS);
+  emit({ ...base, at: posOf(to), observable: lines.arrive, payload: payload(`Una figura llega ${aEs(to.name)}.`, 'arrive') }, atS);
 }
 
 /**
