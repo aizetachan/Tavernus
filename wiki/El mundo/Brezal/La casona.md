@@ -32,7 +32,8 @@ Es la sede de la casona del regidor. Ver [[Facciones]].
 - **El arcón de los registros**: herrajes nuevos y una cerradura. Está **cerrado**: solo lo abre la llave del arcón, que lleva [[Garrán]].
 - **La alcoba de arriba**: cama con dosel y una ventana al norte, a la niebla. Desde aquí no se ve el resto de la casa.
 - **La torre del reloj**: lo alto de la torre, junto al reloj parado. Se ve Brezal entero, el humo del Granero Quemado y la niebla alrededor, quieta como una pared. Caben dos. Hay una cuerda.
-- **El calabozo**: un cuarto de piedra detrás de la despensa, sin ventana, con una reja, un jergón de paja y una argolla en la pared. Aquí encierra [[Garrán]] a quien no paga o a quien el regidor quiere quieto. Es el calabozo del pueblo: 24 horas por una muerte, 8 por una agresión con arma o por profanar un cuerpo. Ver [[Mecánicas#Crimen, testigos y ley]].
+- **El pasillo de la despensa**: estrecho y sin ventanas, detrás del despacho, con la puerta de la despensa a un lado y la reja del calabozo al fondo. Desde la celda es lo único que se ve.
+- **El calabozo**: un cuarto de piedra al fondo del pasillo de la despensa, sin ventana, con una reja, un jergón de paja y una argolla en la pared. Aquí encierra [[Garrán]] a quien no paga o a quien el regidor quiere quieto. Es el calabozo del pueblo: 24 horas por una muerte, 8 por una agresión con arma o por profanar un cuerpo. Ver [[Mecánicas#Crimen, testigos y ley]].
 
 > [!warning]- Spoiler: lo que esconde el regidor
 > - En el **arcón** hay una **copa de plata con el sello de Vharn**: lo último que Osric no se atrevió a fundir. Ver [[Objetos#Copa de plata con el sello de Vharn|Copa de plata con el sello de Vharn]].

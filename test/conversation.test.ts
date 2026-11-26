@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { actionContext } from '../src/ai/prompt.js';
 import { executeTool, type ToolContext } from '../src/ai/tools.js';
 import { blocksSpeech, novelBlocks } from '../src/adapters/web/novel.js';
-import { conversationCheck, conversationOf, narrationWithLines, type Conversation } from '../src/engine/conversation.js';
+import { conversationBlock, conversationCheck, conversationOf, CONVERSATION_MAX_WORDS, narrationWithLines, npcStreak, STREAK_LIMIT, STREAK_NOTICE, streakBlock, type Conversation } from '../src/engine/conversation.js';
 import { seededRng } from '../src/engine/dice.js';
 import type { Engine } from '../src/engine/engine.js';
 import type { GameEvent } from '../src/engine/model.js';
@@ -175,5 +175,61 @@ describe('en el cierre del máster y en su contexto', () => {
     const engine = await talkingToBrenna();
     const r = run(ctxFor(engine), logEvent('', { npc_id: 'npc_brenna' }));
     expect(r.error).toContain('pon al menos su respuesta en lines');
+  });
+});
+
+describe('racha con el mismo NPC (arreglo 13)', () => {
+  const at = (e: GameEvent, game_s: number): GameEvent => ({ ...e, timestamp_game_s: game_s });
+
+  it('cuenta los cierres seguidos con el NPC; tiradas, un paseo por la sala o un turno suelto sin NPC no la cortan', () => {
+    // Como la del rompejuegos con Garrán (Haiku, 20261125-1051): pregunta tras pregunta, alguna tirada y algún paso.
+    const evs: GameEvent[] = [];
+    for (let i = 0; i < 9; i++) evs.push(talk('npc_garran'));
+    evs.push(ev('master', { npc_id: 'npc_garran', lines: [me('Dímelo o te parto la cara.')], payload: { requires_roll: { kind: 'skill', key: 'intimidation' } } }), ev('roll'), talk('npc_garran'));
+    evs.push(ev('master', { narration: 'Miras la reja.' }), talk('npc_garran'));
+    evs.push(ev('arrived', { spot_id: 'sp_inn_mesa' }), ev('master', { spot_id: 'sp_inn_mesa', npc_id: 'npc_garran', lines: [me('¿Y ahora?'), npc('npc_garran', 'Otra vez tú.')] }));
+    expect(npcStreak(evs, 'ch_ddd', 'loc_inn')).toEqual({ npc_id: 'npc_garran', turns: 12 });
+    // conversationOf se corta con el paseo; la racha, no.
+    expect(conversationOf(evs, 'ch_ddd', { location_id: 'loc_inn', spot_id: 'sp_inn_mesa' })!.turns).toBe(1);
+  });
+
+  it('la cortan otro NPC, otra localización, dos turnos seguidos sin NPC o una hora de juego sin hablarle', () => {
+    const base = () => [talk('npc_garran'), talk('npc_garran'), talk('npc_garran')];
+    expect(npcStreak([...base(), talk('npc_ilse')], 'ch_ddd', 'loc_inn')).toEqual({ npc_id: 'npc_ilse', turns: 1 });
+    expect(npcStreak([...base(), ev('master', { location_id: 'loc_plaza', narration: 'Cruzas la plaza.' })], 'ch_ddd', 'loc_plaza')).toBeNull();
+    expect(npcStreak([...base(), ev('master', { narration: 'Miras.' }), ev('master', { narration: 'Esperas.' }), talk('npc_garran')], 'ch_ddd', 'loc_inn')!.turns).toBe(1);
+    const later = [...base().map((e) => at(e, 0)), at(talk('npc_garran'), 2 * 3600)];
+    expect(npcStreak(later, 'ch_ddd', 'loc_inn')!.turns).toBe(1);
+    // Lo de otros jugadores no cuenta ni corta.
+    expect(npcStreak([...base(), ev('master', { actor_id: 'ch_otro', npc_id: 'npc_ilse' })], 'ch_ddd', 'loc_inn')!.turns).toBe(3);
+  });
+
+  it('el aviso sale desde el turno de aviso y, en el tope, manda cerrar con un gesto del NPC', () => {
+    expect(streakBlock({ npc_id: 'npc_garran', turns: STREAK_NOTICE - 2 }, 'Garrán')).toBeNull();
+    expect(streakBlock({ npc_id: 'npc_garran', turns: STREAK_NOTICE - 1 }, 'Garrán')).toMatch(/^## Charla que se alarga con Garrán \(turno 6 seguido\)/);
+    const close = streakBlock({ npc_id: 'npc_garran', turns: STREAK_LIMIT - 1 }, 'Garrán')!;
+    expect(close).toMatch(/^## Charla larga con Garrán \(turno 8 seguido\): ciérrala/);
+    expect(close).toMatch(/se va a lo suyo .*set_npc_order go.*cambia a un tema suyo.*pide algo a cambio.*la corta/);
+    expect(close).toContain('no más preguntas a Garrán');
+  });
+
+  it('llega al contexto del máster cuando el NPC sigue delante', async () => {
+    const { engine } = await bootEngine();
+    const kael = engine.world.character('ch_kael');
+    const say = () => engine.events.emit({ actor_id: 'ch_kael', action_type: 'master', narration_private: '', payload: { npc_id: 'npc_brenna', lines: [{ speaker: 'actor', text: '¿Y el sótano?' }, { speaker: 'npc', npc_id: 'npc_brenna', text: 'Ya te lo he dicho.' }] } });
+    for (let i = 0; i < STREAK_NOTICE - 2; i++) say();
+    expect(actionContext(engine, kael, '¿Y el sótano?')).not.toContain('## Charla');
+    say();
+    expect(actionContext(engine, kael, '¿Y el sótano?')).toContain('## Charla que se alarga con');
+    say(); say();
+    expect(actionContext(engine, kael, '¿Y el sótano?')).toMatch(/## Charla larga con (Brenna|la tabernera)[^\n]*\(turno 8 seguido\): ciérrala/);
+  });
+});
+
+describe('tope de palabras en conversación (arreglo 4)', () => {
+  it('el bloque de conversación dice el tope antes de escribir, junto a los gestos ya narrados', () => {
+    const block = conversationBlock({ npc_id: 'npc_brenna', turns: 3, npc_spoke: true, gestures: ['jarra', 'mirada'] }, 'Brenna');
+    expect(block).toContain(`Tope de la narración: ${CONVERSATION_MAX_WORDS} palabras sin contar lo dicho`);
+    expect(block).toContain('Gestos ya narrados (no los repitas): jarra, mirada.');
   });
 });

@@ -145,6 +145,8 @@ export function conversationBlock(c: Conversation, name: string): string {
   return [
     `## En conversación con ${name} (turno ${c.turns + 1})`,
     `Si la acción sigue la charla con ${name}, aplica CONVERSACIÓN: narration_private vacía, o solo una acción concreta, algo relevante para el jugador${c.npc_spoke ? '' : ' o una frase que presente a quien va a hablar, terminada en dos puntos'}. ${c.npc_spoke ? 'Ya ha hablado en esta conversación: no la presentes otra vez.' : ''}`.trim(),
+    // Arreglo 4: 40 rechazos en la pasada 1 por pasarse; el tope tiene que verse antes de escribir, no solo en la guarda.
+    `Tope de la narración: ${CONVERSATION_MAX_WORDS} palabras sin contar lo dicho (${CONVERSATION_MAX_WORDS_ROLL} si cuenta el desenlace de una tirada); lo que pase de ahí se rechaza.`,
     c.gestures.length ? `Gestos ya narrados (no los repitas): ${c.gestures.join(', ')}.` : '',
   ].filter(Boolean).join('\n');
 }
@@ -205,6 +207,59 @@ export function conversationRejection(p: ConversationProblem, name: string): str
   if (p.kind === 'empty') return `Estás en conversación con ${name} y el cierre no trae nada: pon al menos su respuesta en lines (narration_private puede ir vacía).`;
   if (p.kind === 'long') return `Estás en conversación con ${name}: la narración tiene ${p.words} palabras sin contar lo dicho (tope ${p.max}). ${fix}`;
   return `Estás en conversación con ${name}: la narración repite gestos ya narrados (${p.gestures.join(', ')}), que son relleno. ${fix}`;
+}
+
+/**
+ * Racha con un NPC (arreglo 13 del plan del 26-11): cierres seguidos del PJ con el mismo NPC en esta localización.
+ * Se mide como la «Mayor racha con un NPC» del informe de pruebas (scripts/playtest-report.ts), más ancha que
+ * `conversationOf`: una tirada, un movimiento dentro de la sala o un turno suelto sin NPC no la cortan. La cortan
+ * otro interlocutor, otra localización, una pausa de más de una hora de juego o STREAK_BREAK_TURNS turnos seguidos
+ * sin NPC (el jugador ya está en otra cosa). Haiku dejó rachas de 24 y 27 turnos (violento y rompejuegos,
+ * 20261125-1051); Sonnet y Opus, solos, de 5 a 10.
+ */
+export const STREAK_NOTICE = 6;
+/** A partir de este turno seguido con el mismo NPC, el NPC cierra la charla. */
+export const STREAK_LIMIT = 8;
+const STREAK_BREAK_TURNS = 2;
+const STREAK_GAP_S = 3600;
+
+export interface NpcStreak { npc_id: Id; turns: number }
+
+export function npcStreak(events: readonly GameEvent[], actorId: Id, locationId: Id): NpcStreak | null {
+  let npc: Id | null = null;
+  let turns = 0;
+  let idle = 0;
+  let last: number | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.actor_id !== actorId || SKIP.test(e.action_type)) continue;
+    if (e.location_id !== locationId) break;
+    const who = interlocutorOf(typeof e.payload['npc_id'] === 'string' ? (e.payload['npc_id'] as Id) : null, linesOf(e));
+    if (!who) { if (++idle >= STREAK_BREAK_TURNS) break; continue; }
+    if ((npc && who !== npc) || (last !== null && last - e.timestamp_game_s > STREAK_GAP_S)) break;
+    npc = who;
+    idle = 0;
+    last = e.timestamp_game_s;
+    // La petición de tirada y su desenlace son el mismo turno.
+    if (!e.payload['requires_roll']) turns++;
+  }
+  return npc && turns > 0 ? { npc_id: npc, turns } : null;
+}
+
+/** Aviso del contexto del máster cuando la racha se alarga (prompt.ts); null si aún no toca. */
+export function streakBlock(s: NpcStreak, name: string): string | null {
+  const n = s.turns + 1;
+  if (n < STREAK_NOTICE) return null;
+  if (n < STREAK_LIMIT) {
+    return [
+      `## Charla que se alarga con ${name} (turno ${n} seguido)`,
+      `Si la acción sigue con ${name}, que no se estanque: si el jugador da vueltas a lo mismo, ${name} trae algo nuevo (un tema suyo, una petición, alguien que llega) o empieza a despedirse. Al turno ${STREAK_LIMIT} la cierra.`,
+    ].join('\n');
+  }
+  return [
+    `## Charla larga con ${name} (turno ${n} seguido): ciérrala`,
+    `Si la acción vuelve a ser con ${name}, en este turno ${name} cierra la charla, con su carácter y en sus lines: se va a lo suyo (si se marcha a otro sitio, set_npc_order go), cambia a un tema suyo que mueva la escena, pide algo a cambio (un favor, dinero, que haga algo) o la corta («ya te he dicho lo que sé»). No repite lo que ya ha dicho ni suelta nada que no soltaría. En suggested_actions, cosas que hacer aquí o en otro sitio, no más preguntas a ${name}.`,
+  ].join('\n');
 }
 
 /** Réplicas literales de la transcripción que ven el máster y el actor (ai/actor.ts). */
