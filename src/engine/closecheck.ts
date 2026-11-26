@@ -138,26 +138,54 @@ export function stolenRejection(phrase: string): string {
 }
 
 /** El NPC entrega algo a quien se lo pide («te la pone delante», «te sirve», «te tiende la jarra»). */
-const SERVES = /\b(?:te (?:lo |la |los |las )?(?:pone|planta|deja|sirve|tiende|alarga|acerca|pasa|da|entrega|empuja)\b|te (?:pone|sirve|deja|planta) (?:delante|en la barra|en la mesa))/;
+const SERVES = new RegExp([
+  String.raw`\b(?:te (?:lo |la |los |las )?(?:pone|planta|deja|sirve|tiende|alarga|acerca|pasa|da|entrega|empuja)\b|te (?:pone|sirve|deja|planta) (?:delante|en la barra|en la mesa))`,
+  // «la llena de una cuba y la desliza hacia ti», «Sirve una jarra de cerveza turbia y la empuja hacia ti» (bench de Haiku, 25-11).
+  String.raw`\b(?:la|lo|las|los) (?:desliza|empuja|pone|deja|planta|acerca|arrastra|sirve|alarga|tiende)\b[^.;:]{0,25}\b(?:hacia ti|delante de ti|ante ti|frente a ti|a tu lado|junto a tu mano|en tu mano)\b`,
+  String.raw`\b(?:sirve|escancia) (?:una|la|otra|dos|tu) (?:jarra|cerveza|copa|vaso|taza|racion|cuenco|plato)\b`,
+].join('|'));
+/** Lo que paga o apunta lo servido: mover el objeto con transfer_item no lo cobra. */
+const SERVED_PAID = new Set(['buy_item', 'set_debt', 'pawn_item', 'give_coins', 'take_coins', 'settle_debt']);
+/** Giros con «sin» que no niegan que lo sirva: «la llena sin prisa». */
+const HARMLESS_SIN = /\bsin (?:prisa|prisas|ceremonia|cuidado|decir nada|una palabra|mirar\w*|levantar la vista|derramar\w*(?: una gota)?)\b/g;
+
+/** Lo que vende quien está delante, como lo cita el cierre: nombre del objeto, ID y precio. */
+export interface MenuItem { npc_id: string; npc: string; item_id: string; name: string; price: string }
 
 /**
  * En un trato (comercio), el NPC sirve o entrega lo que vende y nadie lo cobra ni lo apunta: la cerveza de Brenna
  * («Cuatro de cobre», y te la pone delante) sin buy_item ni set_debt, y el jugador se va sin pagar sin que pase
  * nada. Lo que se sirve se cobra al servirlo (buy_item) o se fía (set_debt). Devuelve la frase, o null.
  */
-export function servedWithoutPay(input: { narration: string; lines?: readonly DialogueLine[]; okTools: readonly string[]; trade: boolean; pendingRoll?: boolean }): string | null {
-  if (!input.trade || input.pendingRoll || input.okTools.some((t) => DEAL_TOOLS.has(t))) return null;
+export function servedWithoutPay(input: { narration: string; lines?: readonly DialogueLine[]; okTools: readonly string[]; trade: boolean; pendingRoll?: boolean; goods?: readonly string[] }): string | null {
+  if (!input.trade || input.pendingRoll || input.okTools.some((t) => SERVED_PAID.has(t))) return null;
   const said = (input.lines ?? []).filter((l) => l.speaker === 'npc').map((l) => l.text);
+  // Con `goods` (el comercio solo se deduce de nombrar algo de la carta), «te deja pasar» no es servir: la frase
+  // lleva lo que se entrega («te la pone», «la desliza hacia ti», «sirve una jarra») o nombra el género.
+  const goods = input.goods?.length ? new RegExp(`\\b(?:${[...input.goods, ...GENERIC_GOODS].map(esc).join('|')})s?\\b`) : null;
   for (const c of clauses(norm([input.narration.replace(/«[^»]*»/g, ' . '), ...said].join(' . ')))) {
-    if (/\b(no|ni|nunca|sin|si|cuando|antes|primero|cuanto)\b/.test(c)) continue;
+    if (/\b(no|ni|nunca|sin|si|cuando|antes|primero|cuanto)\b/.test(c.replace(HARMLESS_SIN, ' '))) continue;
     const m = SERVES.exec(c);
-    if (m) return m[0];
+    if (m && (!goods || /^(?:te (?:lo|la|los|las) |la |lo |las |los |sirve|escancia)/.test(m[0]) || goods.test(c))) return m[0];
   }
   return null;
 }
 
-export function servedRejection(phrase: string): string {
-  return `El NPC entrega lo que vende («${phrase}») y nadie lo cobra: lo que se sirve se paga al servirlo con buy_item (de su lista «Vende») o se fía con set_debt si no puede o no quiere pagar ahora. Si todavía no se lo da (solo dice el precio), cuéntalo así. Reescribe log_event.`;
+/** Palabras que nombran algo de la carta («jarra de cerveza» → cerveza): sin las del recipiente. */
+const GENERIC_GOODS = new Set(['jarra', 'vaso', 'copa', 'plato', 'cuenco', 'racion', 'noche', 'trozo', 'botella', 'pieza', 'bolsa', 'taza']);
+export function menuWords(name: string): string[] {
+  return norm(name).replace(/[^a-z0-9 ]+/g, ' ').split(' ').filter((w) => w.length >= 5 && !GENERIC_GOODS.has(w));
+}
+
+/** Lo de la carta que nombran estos textos («una cerveza»): el primer trago también se paga (arreglo 14). */
+export function menuNamed(menu: readonly MenuItem[], texts: readonly string[]): MenuItem | null {
+  const t = norm(texts.join(' . '));
+  return menu.find((m) => menuWords(m.name).some((w) => new RegExp(`\\b${esc(w)}s?\\b`).test(t))) ?? null;
+}
+
+export function servedRejection(phrase: string, item?: MenuItem | null): string {
+  const what = item ? ` ${item.npc} vende ${item.name} a ${item.price}: buy_item (npc_id ${item.npc_id}, item_id ${item.item_id}) al servirlo, o set_debt si se lo fía.` : '';
+  return `El NPC entrega lo que vende («${phrase}») y nadie lo cobra: lo que se sirve se paga al servirlo con buy_item (de su lista «Vende») o se fía con set_debt si no puede o no quiere pagar ahora; también el primer trago.${what} Si todavía no se lo da (solo dice el precio), cuéntalo así. Reescribe log_event.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -917,4 +945,353 @@ export function conflictCloseProblems(i: ConflictCloseInput): string | null {
     if (OFF_TOPIC.test(said.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''))) return `${i.reacts.name} acaba de pillar al actor: su primera frase es la reacción a eso, no deudas, encargos ni precios. Reescribe sus líneas.`;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Estado narrado sin la tool que lo hace real (PLAN-ARREGLOS-2026-11-26, arreglo 1)
+// ---------------------------------------------------------------------------
+
+/** Lo que el máster narra como hecho y solo existe si pasa por su tool. */
+export type StateKind = 'rest' | 'heal' | 'pick' | 'spell' | 'fact' | 'memory' | 'debt';
+
+/** Tools que lo hacen real, por clase. `memory` no tiene tool: va en npc_memory_note del propio cierre. */
+export const STATE_TOOLS: Record<StateKind, readonly string[]> = {
+  rest: ['take_rest'],
+  heal: ['heal', 'stabilize', 'use_item', 'cast_spell', 'spend_resource', 'take_rest'],
+  pick: ['transfer_item', 'harvest', 'spawn_item', 'take_coins', 'buy_item', 'sell_item', 'pawn_item', 'use_item'],
+  spell: ['cast_spell', 'spend_resource', 'use_scroll', 'use_item'],
+  fact: ['record_character_fact', 'plant_rumor'],
+  memory: [],
+  debt: ['set_debt', 'pawn_item', 'settle_debt'],
+};
+
+export interface StateMiss { kind: StateKind; phrase: string }
+
+/** El jugador quiere descansar («dejo que la mano descanse», «me tumbo un momento», «para recuperar el aliento»). */
+const WANTS_REST = /\b(descans\w*|repos\w*|dormir|duermo|me duermo|cabezada|siesta|recuperar (?:el aliento|fuerzas|las fuerzas)|recupero (?:el aliento|fuerzas)|paso la noche|pasar la noche|hago noche|acamp\w*|me tumbo un (?:momento|rato)|cierro los ojos un (?:momento|rato))\b/;
+/** Descanso contado como hecho: con estas basta. */
+const TELLS_REST = /\b(descansas|duermes|te duermes|te quedas dormid[oa]|echas una cabezada|das una cabezada|dormitas|pasas la noche|reposas|recuperas (?:el aliento|fuerzas|las fuerzas))\b/;
+/** Y estas, si el jugador pedía descansar. */
+const TELLS_REST_SOFT = /\b(te tumbas|te echas|te recuestas|cierras los ojos)\b/;
+/** El jugador quiere curar o vendar (a sí mismo o a otro). */
+const WANTS_HEAL = /\b(curo|me curo|le curo|curar\w*|curame|curale|vendo|me vendo|le vendo|vendar\w*|vendaje|estabiliz\w*|primeros auxilios|tapon\w* la herida|cos\w* la herida|hemorragia|(?:me|le) presiono (?:la herida|el hombro|el costado|la costilla|el brazo|la pierna))\b/;
+/** Cura contada como hecha. */
+const TELLS_HEAL = /\b(te vendas|le vendas|te venda|le venda|te curas|le curas|te cura|le cura|estabilizas|le estabilizas|cierras la herida|la herida se cierra|deja de sangrar|la sangre deja de (?:correr|salir|manar)|recuperas \d+ (?:pg|puntos de golpe))\b/;
+/** Y estas, si el jugador pedía curar: «te ciñes el costado», «el aire vuelve a entrar sin el pinchazo». */
+const TELLS_HEAL_SOFT = /\b(?:te cines|cines|te ajustas|le ajustas|te atas|le atas)\b[^.;:]{0,40}\b(?:costado|herida|hombro|brazo|pierna|tira|tiras|venda|vendaje|pano|tela)\b|\bel aire vuelve a entrar\b|\bel dolor (?:cede|afloja|remite)\b/;
+/** Coger algo del sitio: «tomas uno de los eslabones», «recoges unas hierbas», «coges la llave de la mesa». */
+const TELLS_PICK = new RegExp([
+  String.raw`\b(?:tomas|coges|recoges|agarras|arrancas|cosechas|desentierras|levantas|sacas) (?:con cuidado |despacio )?(?:uno|una|unos|unas|un par|dos|tres) de (?:los|las|esos|esas|estos|estas)\b`,
+  String.raw`\b(?:tomas|coges|recoges|arrancas|cortas|cosechas|juntas|reunes|desentierras)\b[^.;:]{0,30}\b(?:hierbas?|setas?|bayas?|lena|lenos|raices|flores|frutos?|ramas?|musgo|juncos|hongos|plantas?)\b`,
+  String.raw`\b(?:recoges|coges|tomas)\b[^.;:]{0,30}\b(?:del suelo|de la losa|del estante|de la mesa|de la repisa|del cofre|del agua|del barro|de entre)\b`,
+].join('|'));
+/** Lanzar un conjuro contado como hecho. */
+const TELLS_SPELL = /\b(?:lanzas|conjuras|invocas|pronuncias|recitas|canalizas)\b[^.;:]{0,40}\b(?:conjuro|hechizo|rayo|dardo|dardos|proyectil|truco|encantamiento|maleficio|bendicion|plegaria)\b|\b(?:sale|salen|brota|brotan|surge|surgen|nace|salta|escapa)\w* de (?:tus|la punta de tus) (?:dedos|manos|palmas?)\b/;
+/** El jugador cuenta algo de su personaje: su pasado, su gente («Mi padre era herrero», «Busco a mi hermana Lía»). */
+const TELLS_OWN_PAST = /\bmi (?:padre|madre|abuel[oa]|herman[oa]|tio|tia|maestr[oa]|mentor[a]?|mujer|marido|esposa|esposo|hij[oa]|familia|gente|pueblo|aldea|clan|orden)\b[^.;:!?]{0,25}\b(?:era|fue|es|tenia|tuvo|murio|vivia|se fue|me (?:enseno|dijo|decia|crio|dejo|llevo))\b|\bbusco a mi (?:herman[oa]|padre|madre|hij[oa]|tio|tia|amig[oa]|mujer|marido|esposa|esposo)\b|\b(?:naci|creci|me crie|servi|aprendi|estudie) (?:en|con|de|a|bajo)\b|\bfui (?:aprendiz|soldado|marinero|guardia|sacerdote|novici[oa]|ladron[a]?|herrer[oa]|cazador[a]?|mercenari[oa]|escudero|acolito|monje|pastor[a]?|grumete)\b/;
+/** Un NPC que se quedará con algo del actor: eso va en npc_memory_note. */
+const TELLS_MEMORY = /\b(lo recordara|la recordara|te recordara|no lo olvidara|no la olvidara|no te olvidara|se acordara de (?:ti|esto|eso|tu cara|tu nombre)|toma nota (?:de|mentalmente)|se le queda grabad[oa]|se lo apunta|lo anota)\b/;
+/** Deuda o fiado cerrado. */
+const TELLS_DEBT = /\b(me (?:lo |la )?debes|quedas a deber|te (?:lo |la )?fio|fiad[oa]s?|a tu cuenta|en tu cuenta|lo apunto|te (?:lo |la )?apunto|queda apuntad[oa])\b/;
+/** Lo que niega, pregunta, ofrece o deja en intento, delante de la frase. */
+const STATE_NOT_DONE = /\b(no|ni|nunca|sin|apenas|intentas|intenta|quieres|quiere|si|antes de|vas a|podrias|podria|tampoco)\b/;
+/** Una negación justo delante («no te cura»), sin mirar más atrás en la frase. */
+const NEGATED_JUST_BEFORE = /\b(?:no|ni|nunca)\b[^,]{0,20}$/;
+
+const outsideQuotes = (t: string) => norm(t).replace(/«[^»]*»|“[^”]*”|"[^"]*"/g, ' . ');
+
+/** La primera frase que lo da por hecho sin negación delante, o null. `strict`: cualquier negación o intento antes, en la frase. */
+function firstDone(text: string, re: RegExp, strict = false): string | null {
+  for (const c of clauses(text)) {
+    const m = re.exec(c);
+    if (!m) continue;
+    const before = c.slice(0, m.index);
+    if (strict ? STATE_NOT_DONE.test(before) : NEGATED_JUST_BEFORE.test(before)) continue;
+    return m[0];
+  }
+  return null;
+}
+
+/**
+ * Lo que el máster da por hecho y no ha pasado por su tool: descansar sin take_rest, curar o vendar sin heal, coger
+ * algo del sitio sin transfer_item, lanzar un conjuro sin cast_spell, aceptar el pasado que cuenta el jugador sin
+ * record_character_fact, que un NPC lo recordará sin npc_memory_note, o un fiado sin set_debt. Pasada 1 de las pruebas
+ * del 25-11: 25 de 56 tools a cero, casi todas por esto. Lo que dice el actor entre «» no cuenta; lo de los NPC, sí.
+ * `skip`: clases que ya mira otra guarda en este cierre.
+ */
+export function stateWithoutTool(input: {
+  action: string | null; narration: string; lines?: readonly DialogueLine[]; okTools: readonly string[]; pendingRoll?: boolean;
+  /** Nombres de los conjuros y recursos de clase del actor, para reconocerlos en la narración. */
+  spells?: readonly string[]; resources?: readonly string[];
+  /** El cierre trae npc_memory_note. */
+  memoryNote?: boolean; hasOpenDebt?: boolean; skip?: readonly StateKind[];
+}): StateMiss | null {
+  if (input.pendingRoll) return null;
+  const ok = (k: StateKind) => input.skip?.includes(k) || STATE_TOOLS[k].some((t) => input.okTools.includes(t));
+  const narr = outsideQuotes(input.narration);
+  const npcSaid = (input.lines ?? []).filter((l) => l.speaker === 'npc').map((l) => norm(l.text)).join(' . ');
+  const action = norm(input.action ?? '');
+  if (!ok('rest')) {
+    const p = firstDone(narr, TELLS_REST, true) ?? (WANTS_REST.test(action) ? firstDone(narr, TELLS_REST_SOFT, true) : null);
+    if (p) return { kind: 'rest', phrase: p };
+  }
+  if (!ok('heal')) {
+    const p = firstDone(narr, TELLS_HEAL) ?? (WANTS_HEAL.test(action) ? firstDone(narr, TELLS_HEAL_SOFT) : null);
+    if (p) return { kind: 'heal', phrase: p };
+  }
+  if (!ok('pick')) {
+    const p = firstDone(narr, TELLS_PICK, true);
+    if (p) return { kind: 'pick', phrase: p };
+  }
+  if (!ok('spell')) {
+    const named = [...(input.spells ?? []), ...(input.resources ?? [])].map((n) => norm(n).trim()).filter((n) => n.length >= 4).map(esc);
+    const byName = named.length ? new RegExp(String.raw`\b(?:lanzas|conjuras|invocas|usas|activas|canalizas|gastas|recurres a|entras en)\b[^.;:]{0,20}\b(?:${named.join('|')})\b`) : null;
+    const p = firstDone(narr, TELLS_SPELL, true) ?? (byName ? firstDone(narr, byName, true) : null);
+    if (p) return { kind: 'spell', phrase: p };
+  }
+  if (!ok('fact')) {
+    const m = TELLS_OWN_PAST.exec(action);
+    if (m) return { kind: 'fact', phrase: m[0] };
+  }
+  if (!ok('memory') && !input.memoryNote) {
+    const p = firstDone(`${narr} . ${npcSaid}`, TELLS_MEMORY);
+    if (p) return { kind: 'memory', phrase: p };
+  }
+  // El fiado sin ningún tool de trato ya lo rechaza dealWithoutState: aquí, el que se cuela con otro tool (transfer_item).
+  if (!ok('debt') && input.okTools.some((t) => DEAL_TOOLS.has(t))) {
+    for (const c of [...clauses(narr), ...clauses(npcSaid)]) {
+      const m = TELLS_DEBT.exec(c);
+      if (!m || NOT_CLOSED.test(c)) continue;
+      if (input.hasOpenDebt && /^(me (?:lo |la )?debes|quedas a deber|queda apuntad[oa])$/.test(m[1]!)) continue;
+      return { kind: 'debt', phrase: m[1]! };
+    }
+  }
+  return null;
+}
+
+const STATE_HINT: Record<StateKind, string> = {
+  rest: 'Descansar lo hace take_rest (short: una hora, gasta dados de golpe; long: la noche entera): el servidor aplica el tiempo, lo que recupera y si alguien le interrumpe. Si solo es un respiro de un momento, cuéntalo así: no recupera nada.',
+  heal: 'Curar o vendar lo hace heal (con item_instance_id si gasta una venda, un kit o una poción: el servidor la gasta y tira) o stabilize a quien está a 0 PG. Si es un apaño que no devuelve PG, dilo así en la narración.',
+  pick: 'Coger algo del sitio lo hace transfer_item (con su ID: ver lo que hay en el punto) o harvest si es un recurso (hierbas, leña, setas). Si no está en los datos, no lo hay: cuéntalo así.',
+  spell: 'Un conjuro lo lanza cast_spell (comprueba que lo tiene, gasta el espacio y tira) y un recurso de clase se gasta con spend_resource. Si no lo tiene o no le quedan usos, cuéntalo así.',
+  fact: 'El jugador cuenta algo de su personaje: guárdalo con record_character_fact (es verdad para él, no da nada gratis); si es algo del mundo compartido, plant_rumor. Si no lo das por bueno, dilo en la narración.',
+  memory: 'Lo que un NPC recordará del actor va en npc_memory_note de este mismo cierre (una frase en tercera persona); sin eso, lo olvida.',
+  debt: 'Una deuda o un fiado lo apunta set_debt (o pawn_item si deja prenda, settle_debt si paga); mover un objeto no lo registra.',
+};
+
+export function stateRejection(miss: StateMiss): string {
+  return `La narración da por hecho «${miss.phrase}» y en este turno no ha pasado por su tool: lo que no pasa por un tool no ha ocurrido. ${STATE_HINT[miss.kind]} Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Tool fallido narrado como hecho (arreglo 5)
+// ---------------------------------------------------------------------------
+
+/** Verbos que cuentan el efecto de cada tool de escritura como hecho (como scripts/judge.ts, sin tildes). */
+const FAILED_EFFECT: Record<string, RegExp> = {
+  transfer_item: /\b(te (?:da|entrega|tiende|pasa|vende)|recibes|coges|tomas|recoges|guardas|metes|le das|le entregas|entregas)\b/,
+  buy_item: /\b(te (?:da|entrega|tiende|pasa|vende|cobra|sirve|pone)|recibes|compras|pagas)\b/,
+  sell_item: /\b(vendes|te (?:paga|da)|cobras|le (?:das|entregas))\b/,
+  pawn_item: /\b(empenas|en prenda|le (?:das|dejas|entregas)|te (?:da|entrega|fia))\b/,
+  give_coins: /\b(pagas|le das|le dejas|le pasas|entregas)\b[^.;:]{0,30}\b(monedas?|cobres?|platas?|oros?)\b/,
+  take_coins: /\b(te (?:haces|quedas) con|coges|tomas|vacias)\b[^.;:]{0,30}\b(monedas?|cobres?|platas?|oros?|bolsa)\b/,
+  spawn_item: /\b(encuentras|recibes|aparece|te (?:da|entrega))\b/,
+  move_to: /\b(llegas|entras|cruzas|alcanzas|te plantas|subes|bajas)\b/,
+  attack: /\b(golpeas|impactas|hieres|derribas|le (?:das|clavas|abres))\b/,
+  heal: /\b(curas|sanas|recuperas|cierras la herida|te vendas|le vendas)\b/,
+  set_debt: /\b(fiad[oa]|te lo fio|queda apuntad[oa]|te lo apunto)\b/,
+  settle_debt: /\b(saldad[ao]|pagas|liquidas|cancelas la deuda|en paz)\b/,
+  harvest: /\b(recoges|arrancas|cortas|cosechas|pescas|talas)\b/,
+  cast_spell: /\b(lanzas|conjuras|invocas)\b/,
+  take_rest: /\b(descansas|duermes|te duermes|pasas la noche)\b/,
+  use_item: /\b(bebes|te bebes|enciendes)\b/,
+  discover_spot: /\b(descubres|encuentras|hallas)\b/,
+};
+/** Lo que niega o deja en intento (scripts/judge.ts). */
+const FAILED_NEGATION = /\b(no|nunca|sin|ni|tampoco|nadie|nada|niega|rechaza|imposible|apenas|intentas|intenta|quieres|podrias)\b/;
+
+export interface FailedTool { name: string; error: string }
+
+/** Frases sueltas (por punto) sin lo citado. */
+const sentencesOf = (t: string) => norm(t).replace(/«[^»]*»/g, ' . ').split(/(?<=[.!?…])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+
+/**
+ * Tools de escritura que han fallado en este cierre (y no se repitieron bien después) cuyo efecto la narración da
+ * por hecho: transfer_item devuelve no_space y «tomas uno de los eslabones» (explorador, acción 16 de la tanda
+ * 20261125-1051), o «tienes las manos ocupadas, así que los guardas en la mochila» (dirigido, turno 18).
+ */
+export function failedToolNarrated(input: { narration: string; failed: readonly FailedTool[]; okTools: readonly string[] }): { name: string; error: string; phrase: string } | null {
+  const last = new Map<string, string>();
+  for (const f of input.failed) last.set(f.name, f.error);
+  for (const [name, error] of last) {
+    const re = FAILED_EFFECT[name];
+    if (!re) continue;
+    const s = sentencesOf(input.narration).find((x) => { const m = re.exec(x); return m !== null && !FAILED_NEGATION.test(x.slice(0, m.index)); });
+    if (s) return { name, error, phrase: s.replace(/[.!?…]+$/, '') };
+  }
+  return null;
+}
+
+export function failedToolRejection(hit: { name: string; error: string; phrase: string }): string {
+  return `${hit.name} ha fallado en este turno (${hit.error}) y la narración lo da por hecho: «${hit.phrase}». Lo que falla no ha ocurrido. Narra que no puede y por qué (con lo que dijo el error y sus opciones), o arregla lo que falta y vuelve a llamar a ${hit.name} antes de cerrar. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Desenlace contra la tirada enfrentada de una reacción (arreglo 2)
+// ---------------------------------------------------------------------------
+
+/** Lo que cuenta que no lo consigue: la mano que se queda a un dedo, el otro que se libra. */
+const NARRATES_FAIL = /\b(tu mano se (?:detiene|queda|para)|se te escapa|no (?:llegas|consigues|logras|alcanzas)|a un dedo de|a un palmo de|se (?:te )?cierra en el aire|te quedas con las manos vacias|retiras la mano vacia|sin tocar(?:le|la|lo)?|se libra|se zafa|te aparta la mano)\b/;
+/** Lo que cuenta que lo consigue cuando ha perdido. */
+const NARRATES_WIN = /\b(lo consigues|te haces con|ya es tuy[oa]|cae en tu (?:mano|palma)|te lo llevas|se lo quitas|le quitas|le arrebatas|no se entera|no nota nada|no se da cuenta|lo derribas|le derribas|lo tumbas|le tumbas)\b/;
+
+/**
+ * El servidor resolvió la reacción de otro jugador (resiste y gana, o pierde) y la narración cuenta lo contrario:
+ * «Juego de manos 13 contra Percepción 5: ganas tú. Lo consigues.» y «Tu mano se detiene a un dedo de su cinto»
+ * (pareja pícaro con novato, acción 36 de 20261125-1115). Lo que hace el otro al resistirse («aparta la bolsa con el
+ * codo») sí se cuenta. Devuelve la frase contraria, o null.
+ */
+export function reactionOutcomeMismatch(won: boolean, narration: string): string | null {
+  // «No lo consigues» o «no llegas» son el fallo mismo: la negación va dentro de la frase buscada.
+  for (const c of clauses(outsideQuotes(narration))) {
+    const m = (won ? NARRATES_FAIL : NARRATES_WIN).exec(c);
+    if (m && !(won ? /\b(?:casi|como si)\b[^,]{0,15}$/ : NEGATED_JUST_BEFORE).test(c.slice(0, m.index))) return m[0];
+  }
+  return null;
+}
+
+export function reactionOutcomeRejection(won: boolean, phrase: string): string {
+  return won
+    ? `El servidor ya ha resuelto la reacción: el otro jugador se resistió y ha PERDIDO la tirada enfrentada, así que el actor lo CONSIGUE. La narración dice «${phrase}», que es lo contrario. Cuenta que lo consigue (si le quita algo, transfer_item o take_coins ahora); lo que hizo el otro al resistirse se puede contar. Reescribe log_event.`
+    : `El servidor ya ha resuelto la reacción: el otro jugador ha GANADO la tirada enfrentada, así que el actor NO lo consigue. La narración dice «${phrase}», que es lo contrario. Cuenta que no lo consigue. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Golpe de un NPC sin attack (arreglo 12)
+// ---------------------------------------------------------------------------
+
+const NPC_WEAPON = '(?:martillo|maza|mazo|garrote|porra|cachiporra|tranca|culata|baston|hacha|espada|daga|cuchillo|navaja|lanza|jarra|puno|punos|codo|rodilla|bota|cabeza|hoja|filo|acero|piedra|zarpa|colmillos|dientes)';
+const NPC_BODY = '(?:cara|nariz|boca|brazo|costilla|costillas|costado|craneo|cabeza|sien|frente|ceja|pomulo|labio|mandibula|cuello|hombro|pecho|estomago|vientre|espalda|rinones|pierna|rodilla|muneca)';
+/** Un NPC que pega al actor: «te mete el martillo en las costillas», «la maza te entra en la sien», «te golpea». */
+const NPC_HITS_YOU = new RegExp([
+  String.raw`\bte (?:mete|clava|hunde|estrella|descarga|planta|suelta|asesta|arrea|atiza|propina|casca|sacude|lanza|da|pega)\b[^.;:]{0,30}\b(?:${NPC_WEAPON}|${BLOW}|golpe)\b`,
+  String.raw`\bte (?:golpea|hiere|muerde|apunala|acuchilla|raja|derriba|tumba)\b`,
+  String.raw`\bte (?:alcanza|acierta|parte|rompe|revienta) (?:de lleno )?(?:en )?(?:la|el|las|los) ${NPC_BODY}\b|\bte da (?:de lleno )?en (?:la|el|las|los) ${NPC_BODY}\b`,
+  String.raw`\b(?:${NPC_WEAPON}|golpe|${BLOW})\b[^.;:]{0,20}\bte (?:entra|da|alcanza|golpea|acierta|abre|parte|revienta|impacta)\b`,
+  String.raw`\b(?:recibes|encajas|te llevas) (?:un|una|el|la) (?:${BLOW}|golpe|${NPC_WEAPON})\b`,
+].join('|'));
+/** Lo que no llega a ser golpe: amenaza, amago, casi, si, o lo esquiva. */
+const HIT_NOT_DONE = /\b(no|ni|casi|amag\w*|amenaz\w*|intenta\w*|pretende|a punto de|si|como si|esquivas|fallas|falla|se queda corto|no llega)\b/;
+
+/** Un NPC presente como lo puede nombrar la narración. */
+export interface NpcRef { id: string; refs: readonly string[] }
+
+/**
+ * La narración pone a un NPC a pegarle al actor y ese NPC no ha hecho su turno con attack (ni hay conflict_act):
+ * el daño se aplica de palabra. Violento, turno 3 de 20261125-1652: Atletismo 11, éxito, y «Hugo no forcejea: se
+ * suelta de un tirón y te mete el martillo de fragua en las costillas» (14 → 11 PG sin tirada). Quien pega es el NPC
+ * nombrado en la frase antes del golpe o, si no se nombra a nadie, el último nombrado antes. Devuelve el NPC y la
+ * frase, o null.
+ */
+export function npcHitWithoutAttack(input: { narration: string; npcs: readonly NpcRef[]; struck: ReadonlySet<string> }): { npc_id: string; phrase: string } | null {
+  if (!input.npcs.length) return null;
+  const people = input.npcs.map((n) => {
+    const list = n.refs.map((r) => norm(r).replace(/^(?:el|la|los|las|un|una) /, '').trim()).filter((r) => r.length >= 3).map(esc).sort((a, b) => b.length - a.length);
+    return { id: n.id, re: list.length ? new RegExp(`\\b(?:${list.join('|')})\\b`, 'g') : null };
+  });
+  const named = (c: string, upTo: number) => {
+    let who: string | null = null; let at = -1;
+    for (const p of people) for (const x of p.re ? c.matchAll(p.re) : []) if (x.index! > at && x.index! < upTo) { who = p.id; at = x.index!; }
+    return who;
+  };
+  let last: string | null = null;
+  for (const c of clauses(outsideQuotes(input.narration))) {
+    const m = NPC_HITS_YOU.exec(c);
+    if (m && !HIT_NOT_DONE.test(c.slice(0, m.index))) {
+      const npc = named(c, m.index) ?? last;
+      if (npc && !input.struck.has(npc)) return { npc_id: npc, phrase: m[0] };
+    }
+    // El último nombrado en la frase es el sujeto que hereda la siguiente si no nombra a nadie.
+    last = named(c, Infinity) ?? last;
+  }
+  return null;
+}
+
+export function npcHitRejection(name: string, npcId: string, phrase: string, actorId: string): string {
+  return `La narración dice que ${name} le pega al actor («${phrase}») y ${name} no ha hecho su turno: el golpe de ${name} pasa por attack (attacker_id ${npcId}, target_id ${actorId}). El servidor tira el ataque contra su CA y aplica el daño si impacta; narra lo que devuelva. Si no llega a pegarle (amaga, se contiene, le aparta), cuéntalo así. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// settle_debt y set_debt que no cuadran con lo narrado (arreglo 17)
+// ---------------------------------------------------------------------------
+
+const NUM_WORDS: Record<string, number> = {
+  un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12,
+  trece: 13, catorce: 14, quince: 15, veinte: 20, treinta: 30, cuarenta: 40, cincuenta: 50, cien: 100, ciento: 100, doscientas: 200, trescientas: 300, quinientas: 500,
+};
+
+/** Cantidades de dinero en un texto ya normalizado («uno de oro y cinco de plata», «30 de cobre», «diez monedas»), con su sitio. */
+export function moneyAmounts(text: string, cur: readonly { name: string; value: number }[]): { at: number; end: number; value: number }[] {
+  const names = cur.map((d) => esc(norm(d.name)));
+  const num = String.raw`(\d+|${Object.keys(NUM_WORDS).join('|')})`;
+  const re = new RegExp(String.raw`\b${num} (?:monedas? |piezas? )?de (${names.join('|')})\b|\b${num} monedas?\b`, 'g');
+  const n = (s: string) => (/^\d+$/.test(s) ? Number(s) : NUM_WORDS[s] ?? 0);
+  const parts: { at: number; end: number; value: number; coin: boolean }[] = [];
+  for (const m of text.matchAll(re)) {
+    const coin = Boolean(m[1]);
+    const value = coin ? n(m[1]!) * (cur.find((d) => norm(d.name) === m[2])?.value ?? 1) : n(m[3]!);
+    const prev = parts.at(-1);
+    // «uno de oro y cinco de plata»: una sola cantidad (solo entre monedas con su metal).
+    if (prev && prev.coin && coin && /^\s*(?:,|y)\s*$/.test(text.slice(prev.end, m.index))) { prev.value += value; prev.end = m.index! + m[0].length; }
+    else parts.push({ at: m.index!, end: m.index! + m[0].length, value, coin });
+  }
+  return parts.map(({ at, end, value }) => ({ at, end, value }));
+}
+
+/** Lo que el actor entrega («pagas», «vacías», «le das», o quien cobra «los barre», «se queda con»). */
+const HANDS_OVER = /\b(pagas|das|le das|entregas|dejas|vacias|vuelcas|pones|cuentas|sueltas|le pasas|barre|recoge|se queda con|cobra|se guarda|se embolsa)\b/;
+/** Todo lo que lleva: «vacías el oro y la plata», «vuelcas la bolsa», «hasta la última moneda». */
+const ALL_COINS = /\b(?:vacias|vuelcas) (?:la|tu) bolsa\b|\btodo (?:tu|el|lo que llevas)(?: dinero| oro)?\b|\bel oro y la plata\b|\btodas tus monedas\b|\bhasta la ultima moneda\b|\btu bolsa (?:queda )?vacia\b/;
+/** Lo que queda de deuda («debes ahora uno de oro y cinco de plata», «te faltan diez de plata»). */
+const STILL_OWES = /\b(?:debes|me debes|le debes|quedas a deber|te queda(?:n)? por pagar|te falta(?:n)?|queda(?:n)? de (?:la )?deuda)\b/;
+/** Deuda cerrada. */
+const SETTLED = /\b(saldad[oa]|estais en paz|estas en paz|no (?:le |me )?debes nada|cuentas claras|deuda (?:queda )?cerrada)\b/;
+
+/**
+ * settle_debt y set_debt cuadrados con lo narrado en el mismo cierre: lo que se paga, lo que queda de deuda y si se
+ * da todo lo que lleva. Pareja de Opus (20261125-1703, turno 5): «Vacías el oro y la plata sobre la tablilla; él los
+ * barre con la palma» y settle_debt cobra 150. Devuelve el motivo, o null.
+ */
+export function debtMismatch(input: {
+  narration: string; cur: readonly { name: string; value: number }[]; fmt: (n: number) => string;
+  settle?: { paid: number; remaining: number; coins_left: number } | null; set?: { amount: number; owes: number } | null;
+}): string | null {
+  if (!input.settle && !input.set) return null;
+  for (const c of clauses(outsideQuotes(input.narration))) {
+    const amounts = moneyAmounts(c, input.cur);
+    const owes = STILL_OWES.exec(c);
+    if (owes && !/\b(no|ni)\b[^,]{0,10}$/.test(c.slice(0, owes.index))) {
+      const a = amounts.find((x) => x.at > owes.index);
+      if (a) {
+        const said = c.slice(owes.index, a.end);
+        if (input.settle && a.value !== input.settle.remaining) return `la narración dice que queda de deuda ${input.fmt(a.value)} («${said}») y tras settle_debt quedan ${input.fmt(input.settle.remaining)}`;
+        if (!input.settle && input.set && a.value !== input.set.owes && a.value !== input.set.amount) return `la narración apunta ${input.fmt(a.value)} («${said}») y set_debt deja la deuda en ${input.fmt(input.set.owes)}`;
+        continue;
+      }
+    }
+    const settled = SETTLED.exec(c);
+    if (input.settle && settled && input.settle.remaining > 0 && !/\b(no|ni|todavia|aun)\b/.test(c.slice(0, settled.index))) return `la narración da la deuda por saldada («${settled[0]}») y tras settle_debt quedan ${input.fmt(input.settle.remaining)}`;
+    const gives = HANDS_OVER.exec(c);
+    if (input.settle && gives && !/\b(no|ni|si|quieres|ofreces|propones)\b/.test(c.slice(0, gives.index))) {
+      const all = ALL_COINS.exec(c);
+      if (all && input.settle.coins_left > 0) return `la narración dice «${all[0]}» (todo lo que lleva) y settle_debt ha cobrado ${input.fmt(input.settle.paid)}: le quedan ${input.fmt(input.settle.coins_left)} en la bolsa`;
+      const a = amounts[0];
+      if (a && a.value !== input.settle.paid) return `la narración paga ${input.fmt(a.value)} («${c.slice(a.at, a.end)}») y settle_debt ha cobrado ${input.fmt(input.settle.paid)}`;
+    }
+  }
+  return null;
+}
+
+export function debtRejection(why: string, tool: 'settle_debt' | 'set_debt'): string {
+  return `${tool} y la narración no cuadran: ${why}. El estado manda: narra lo que ha movido el servidor (lo pagado, lo que queda de deuda, lo que le queda en la bolsa) o vuelve a llamar a ${tool} con la cantidad que narras. Reescribe log_event.`;
 }
