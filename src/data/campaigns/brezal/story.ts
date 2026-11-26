@@ -681,7 +681,8 @@ const ESCALATION: StoryEscalation[] = [
     // Solo se evitaría si el Cerco se abriera (la expansión).
     unless: { kind: 'spot_state', spot_id: 'sp_li_niebla', key: 'abierta' },
     location_id: 'loc_lindero', spot_id: 'sp_li_niebla',
-    text: 'Amanece el sexto día. La niebla del Lindero está donde estaba, quieta, sin olor.',
+    // «Amanece el sexto día» una sola vez: en el aviso público, que llega a todos; aquí, solo lo que se ve en el Lindero.
+    text: 'La niebla del Lindero está donde estaba, quieta, sin olor.',
     effects: [
       { kind: 'location_state', location_id: 'loc_plaza', patch: { tense: false } },
       { kind: 'announce', location_id: 'loc_plaza', spot_id: 'sp_pl_pozo', text: 'Amanece el sexto día. Ilse sube al tejado del molino, mira la niebla un rato largo y dice: «Cambia. Pero sigue cerrada». Brezal sigue sellada. La Guarda de Vharn tiene más nudos.', public: true },

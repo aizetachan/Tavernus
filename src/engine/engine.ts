@@ -1887,9 +1887,11 @@ export class Engine {
   /**
    * Avisos de la historia: los del PJ como progreso privado; los del mundo, a quien esté en el lugar (o a todos).
    * Lo que pasa en la escena (`beats`) lo cuenta el máster, con un gancho para ese PJ que salta en este mismo
-   * tick: una sola voz. Sin máster, sale como aviso.
+   * tick: una sola voz. Sin máster, sale como aviso. Primero lo del mundo y luego lo de cada uno: el alba del
+   * epílogo antes que el resumen de lo jugado.
    */
   emitStory(out: StoryOutput): void {
+    this.emitAnnouncements(out);
     for (const p of out.personal) {
       const c = this.world.characters.get(p.character_id);
       if (c) this.emitProgress(c, p.events);
@@ -1903,6 +1905,10 @@ export class Engine {
       if (this.master) plantBeat(this.world, loc, c.id, `Historia escrita: acaba de pasar esto; cuéntalo tú, con tus palabras y sin contradecirlo: ${texts.join(' / ')}`, this.gameNow());
       else this.emitProgress(c, texts.map((text) => ({ kind: 'story', text })));
     }
+  }
+
+  /** Los avisos del mundo de la historia, a quien esté en el lugar (o a todos, los públicos). */
+  private emitAnnouncements(out: StoryOutput): void {
     for (const a of out.announcements) {
       const spot = this.world.spots.get(a.spot_id ?? this.world.location(a.location_id).default_spot_id)!;
       this.events.emit({
