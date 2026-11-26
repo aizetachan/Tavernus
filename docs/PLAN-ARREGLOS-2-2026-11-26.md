@@ -231,3 +231,49 @@ rechazo, y en los cuatro casos compara con lo que `engine.onDelivery` entrega a 
 salir en verde con el motor de `main`. Las tandas 4 y 5 se leyeron con la herramienta vieja: en las parejas, lo del otro
 en segunda persona y los párrafos dobles no cuentan como fallo del máster, y el orden invertido de E2 y E6 sale de lo
 mismo (el `ActionResult` delante de los eventos). Lo que el juez marcó como incoherencia por esas lecturas tampoco.
+
+## Estado del paquete I
+
+Rama `claude/arreglos-i-herramientas-26ca5f`, cuatro commits (uno por punto), solo `scripts/autoplay.ts`,
+`scripts/playtest-report.ts`, `scripts/judge.ts`, `docs/PLAN-PRUEBAS-CREDITOS.md`, este plan y tests nuevos. Nada en `src/`.
+
+**Hecho.** Suite entera (132 ficheros, 1773 tests) y `npm run typecheck` en verde bajo el tope de 3 GB. El paquete H
+llegó por su lado al mismo veredicto de H13 (su test `test/pareja-lectura-2026-11-26.test.ts`, commit `a91fa8c`).
+
+- **H13** (`2d9c926`). Veredicto arriba: es la herramienta. `shownSince` construye lo que lee cada jugador como la web
+  (entregas con `readerText`, una vez y en orden, y las respuestas sin evento). Test: `test/autoplay-lectura.test.ts`
+  (turno compartido como la pareja pícaro C2, lo del compañero por su cuenta, tirada oculta, rechazo; los cuatro
+  comparados con lo que `onDelivery` entrega a la web).
+- **H14** (`3872350`). `open` cuadraba: en las 23 partidas de las tandas 4 y 5, cada «📖 Nueva misión» coincide con una
+  misión abierta en su acción. El fallo era la etiqueta: el transcript ponía «misiones N» con las cumplidas. Ahora dice
+  «misiones abiertas N, cumplidas M» (con las de `give_quest`, `given` y `given_done`, nuevas en `TurnState`), las tablas
+  dicen «Misiones cumplidas» y `questNotices` avisa en `playtest.md` si un 📖 no cuadra. Test: `test/playtest-misiones.test.ts`.
+- **H15** (`aa877e0`). El cronista lleva una sola historia en el perfil (`CRONISTA_BIO`: Vadoscuro, copista, el maestro
+  Anselmo, la hermana Maren). Al herido se le reabre la herida a un tercio de PG si empieza una acción a PG máximos
+  (`start.reopen`, `reopenWound`). Al volver de una caída, `wakeNote` le dice si ha muerto y reaparecido, dónde y con
+  cuántos PG; y a 0 PG no juega aunque el estado diga activo. Lo que dice la herramienta va en el transcript como «Antes
+  de actuar», aparte del texto del juego. Test: `test/autoplay-perfiles-h15.test.ts`.
+- **H16** (`22190f7`). `npc_ausente`, `ambiente_mal_hablante` y `enlatada_sin_sentido` en `MODEL_TYPES` con su
+  definición. Para las dos últimas, el juez ve ahora en cada turno las frases de ambiente que le llegaron al jugador (con
+  quién las dice) y las respuestas del motor sin máster. `playtest.md` trae «Patrones del 26-11 según el juez»: una fila
+  por jugador con las tres y la incoherencia. Nota en `docs/PLAN-PRUEBAS-CREDITOS.md`. Test: `test/juez-h16.test.ts`.
+
+**Lo que no cerré.**
+
+- Las dos narraciones de un turno con tirada (intención y resultado) siguen en el transcript porque la web también las
+  enseña: es del paquete F (punto 7). El «🎲 Sigilo» sin número, del paquete H (punto 3).
+- `npc_ausente` se separa de `incoherencia_contexto`: la incoherencia de la próxima pasada no es comparable a secas con
+  el 9,4 por 100 de la pasada 4; hay que sumar las dos columnas (dicho en el informe y en el plan de pruebas).
+- El juez lee más texto por lote (ambiente y respuestas del motor, hasta 8 líneas de ambiente por turno): el coste del
+  juez sube algo; no medido, porque no hay llamadas al modelo en este paquete.
+- La herida que se reabre y el aviso de reaparición los escribe la herramienta en el estado y en lo que lee el jugador,
+  no el motor: el máster ve los PG bajar sin evento. Si el juez lo marca como incoherencia en el herido, es esto.
+- Por qué el recolector pudo actuar en T11 tras caer a 0 PG en T10 (estado «unconscious» al final de T10, «dead» al
+  final de T11) no lo he reproducido; la herramienta ya no le deja jugar a 0 PG, y lo del motor es del paquete G (punto 3).
+
+**Lo que pido a otros paquetes.**
+
+- **F (punto 7) y H (punto 2):** nada en el motor por la duplicación en pareja; ver «Veredicto de H13».
+- **Sesión coordinadora:** las tandas 4 y 5 se leyeron con la herramienta vieja. Para la pasada corta, la comparación
+  con `--baseline` de lo que lee cada jugador (párrafos dobles, segunda persona del compañero) no es justa con las
+  tandas viejas: ahí era la herramienta.
