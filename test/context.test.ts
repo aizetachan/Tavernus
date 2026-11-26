@@ -201,6 +201,15 @@ describe('prompt de sistema: lo que piden las tandas del 25-11 (paquete C)', () 
     for (const t of ['stabilize', 'transfer_item', 'harvest', 'cast_spell', 'spend_resource', 'settle_debt', 'pawn_item']) expect(guide).toContain(t);
   });
 
+  it('(tanda 5: 24, 26, 27, 28 y 29) el fiado del deudor, la cita, el encargo, la regla y las monedas propias, con su tool', async () => {
+    const guide = (await prompt()).split('\n').find((l) => l.startsWith('LO QUE SOLO PASA CON SU TOOL'))!;
+    expect(guide).toMatch(/«Brenna, apúntamela, te la pago mañana: una cerveza» → si fía, set_debt de Brenna[^;]*due_in_hours 24[^;]*; si no fía, «aquí no se apunta nada», sin tool/);
+    expect(guide).toMatch(/«mañana al alba junto al pozo» → «allí estaré»\): schedule_event/);
+    expect(guide).toMatch(/«ya lo tienes», «aquí está lo que pediste»\): complete_job/);
+    expect(guide).toMatch(/«según las reglas, ¿cuántos días aguanta un hombre sin comer\?»[^:]*: lookup_rule primero/);
+    expect(guide).toMatch(/«escondo mis monedas en la mochila»\): take_coins de SU bolsa con to_instance_id; nunca de la bolsa de otro/);
+  });
+
   it('(14) el primer trago se cobra con buy_item', async () => {
     expect(await prompt()).toMatch(/se sirve con buy_item y se cobra a su precio, también el primer trago \(«ponme una cerveza» → buy_item de la cerveza\): nada que tenga precio se sirve gratis/);
   });
