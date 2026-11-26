@@ -1,0 +1,1027 @@
+{
+ "version": 1,
+ "dry_run": false,
+ "stamp": "20261125-1703",
+ "started_at": "2026-11-25T16:03:05.825Z",
+ "models": {
+  "master": "claude-opus-5-5",
+  "player": "claude-haiku-5-5",
+  "worldgen": "claude-haiku-5-5",
+  "judge": "claude-haiku-5-5"
+ },
+ "seed": 1,
+ "games_planned": 1,
+ "actions_per_game": 40,
+ "games": [
+  {
+   "n": 1,
+   "slug": "auto-20261125-1703-picaro-novato",
+   "dir": "(recortado)",
+   "campaign_id": "brezal",
+   "world": {
+    "seed": 0,
+    "tone": "",
+    "model": "brezal",
+    "cost_usd": 0
+   },
+   "character": {
+    "id": "ch_bruno_mwwbbqka",
+    "name": "Bruno",
+    "race": "Semielfo",
+    "class": "pícaro",
+    "hook": "",
+    "situation": null
+   },
+   "actions": [
+    {
+     "i": 1,
+     "mode": "own",
+     "impulse": "empenar",
+     "text": "Miro la tablilla y sonrío. Garrán, ¿y si te dejo la daga de plata como prenda por seis días más? Brenna me la dio, vale una fortuna.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000000r"
+     ]
+    },
+    {
+     "i": 2,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Preguntarle qué hay en el Granero Quemado",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000000t"
+     ]
+    },
+    {
+     "i": 3,
+     "mode": "own",
+     "impulse": "amenazar",
+     "text": "Me inclino sobre la tablilla y susurro: Garrán, si le cuento al regidor que cobras comisión por cada deudor, ¿qué crees que pasará contigo?",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000000w"
+     ]
+    },
+    {
+     "i": 4,
+     "mode": "own",
+     "impulse": "regatear",
+     "text": "Garrán, deja de contar. Te propongo un trato: tú me das seis días y yo te traigo la mitad del oro ahora mismo, sin que el regidor sepa nada.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000000y"
+     ]
+    },
+    {
+     "i": 5,
+     "mode": "own",
+     "impulse": "fiado",
+     "text": "Garrán, cuenta con los dedos, que yo te doy la palabra de Bruno: mañana te traigo lo que falta. Brenna, ponme otra cerveza y apúntala a mi cuenta, que luego pago todo junto.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000017"
+     ]
+    },
+    {
+     "i": 6,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Ofrecerse a traer leña para la posada",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000019"
+     ]
+    },
+    {
+     "i": 7,
+     "mode": "own",
+     "impulse": "regatear",
+     "text": "Brenna, la leña la corto yo, pero dime cuánto pagas por el haz y te lo rebajo a cambio de que me des la cerveza gratis.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000001c"
+     ]
+    },
+    {
+     "i": 8,
+     "mode": "own",
+     "impulse": "mentir",
+     "text": "Brenna, te doy mi palabra de que el haz lo corto yo, pero antes dime dónde está el monte: cuentan que soy primo del leñador de Soto, así que me debes un favor.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000001d"
+     ]
+    },
+    {
+     "i": 9,
+     "mode": "own",
+     "impulse": "robar_pj",
+     "text": "Brenna se marcha con la misa, así que me deslizo tras la barra y, sin que nadie mire, le birlo a Ciro la bolsa de monedas que lleva al cinto.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 10,
+     "mode": "own",
+     "impulse": "hablar",
+     "text": "Ciro, ese de la espada, ¿me guardas la bolsa un rato? Que el alguacil tiene ojos de buitre y yo no me fío de ninguno.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000021"
+     ]
+    },
+    {
+     "i": 11,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Preguntar al jornalero adónde fue el alguacil",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 12,
+     "mode": "own",
+     "impulse": "hablar",
+     "text": "Ciro, cuidado con Garrán: si ve que llevas mi bolsa, te cuelga a ti la deuda. ¿Me la guardas hasta mañana, eh?",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000024"
+     ]
+    },
+    {
+     "i": 13,
+     "mode": "own",
+     "impulse": "hablar",
+     "text": "Ciro, oye, la bolsa es mía, no tuya; y si Garrán pregunta, tú nunca la viste, ¿eh?",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000002e"
+     ]
+    },
+    {
+     "i": 14,
+     "mode": "own",
+     "impulse": "robar",
+     "text": "Me inclino hacia el guardia con una sonrisa y, bajo la barra, le deslizo su cuchillo de la faja mientras le guiño: «Pues ya ves, Garrán huele las monedas. Qué pena que tú no».",
+     "ok": true,
+     "rolls": 1,
+     "event_ids": [
+      "ev_0000002g",
+      "ev_0000002i"
+     ]
+    },
+    {
+     "i": 15,
+     "mode": "own",
+     "impulse": "colarse",
+     "text": "Suelto la muñeca con una risa falsa, levanto las manos despacio y susurro: «Vale, vale, era una broma. Déjame invitarte a una ronda y lo hablamos.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000002l"
+     ]
+    },
+    {
+     "i": 16,
+     "mode": "own",
+     "impulse": "regatear",
+     "text": "Bruno sonríe de lado, deja la mano quieta sobre la barra y susurra: «Vale, vale, rebajo la ronda: tres monedas de cobre por el cuchillo y olvidamos la broma».",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000002n"
+     ]
+    },
+    {
+     "i": 17,
+     "mode": "own",
+     "impulse": "seguir",
+     "text": "Bruno levanta las manos con una sonrisa torcida y se acerca a Ciro, susurrando: «Ciro, si me llevan, ven conmigo al cuartel. Y tráeme la bolsa.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 18,
+     "mode": "own",
+     "impulse": "chat",
+     "text": "Ciro, estoy en el calabozo con las manos atadas. Si ves a Garrán, que parezca que no me conoces y tráeme la ganzúa.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 19,
+     "mode": "own",
+     "impulse": "dar",
+     "text": "Ciro, pásame la ración por la rendija del calabozo, disimulando. Y dile a Garrán que me doy por enterado de su mano.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000031"
+     ]
+    },
+    {
+     "i": 20,
+     "mode": "own",
+     "impulse": "hablar",
+     "text": "Bruno susurra con una sonrisa: «Bota, Ciro. Y tú distrae al de la lanza; el banco ya lo miro yo.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000032"
+     ]
+    },
+    {
+     "i": 21,
+     "mode": "own",
+     "impulse": "chat",
+     "text": "Ciro, mira el banco sin girar la cabeza: los dos bultos no se mueven, así que yo me encargo del nudo y tú pasa la ganzúa.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 22,
+     "mode": "own",
+     "impulse": "empenar",
+     "text": "Ciro, te dejo la daga corta en prenda por la ganzúa; cuando salgamos me la devuelves con intereses.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003a"
+     ]
+    },
+    {
+     "i": 23,
+     "mode": "own",
+     "impulse": "dar",
+     "text": "Ciro, te doy una ración por la rendija, y si el de la lanza despierta, cuenta que la compartimos.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003c"
+     ]
+    },
+    {
+     "i": 24,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Preguntar a Ciro quién tiene la ganzúa",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003d"
+     ]
+    },
+    {
+     "i": 25,
+     "mode": "own",
+     "impulse": "empenar",
+     "text": "Le paso a Ciro la ración por la rendija, la mochila contra el hierro, y susurro: «Te la doy a cambio de la ganzúa. Y la daga corta queda empeñada hasta que salgamos».",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003j"
+     ]
+    },
+    {
+     "i": 26,
+     "mode": "own",
+     "impulse": "seguir",
+     "text": "Me retuerzo contra la argolla, rozando el nudo mientras le susurro a Ciro: «Pásame la ganzúa por la rendija, que yo me ocupo del resto.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003k"
+     ]
+    },
+    {
+     "i": 27,
+     "mode": "own",
+     "impulse": "colarse",
+     "text": "Ciro, mira, tú finge que duermes y yo me ocupo de la ganzúa. Y si el de la lanza sube, dile que el calabozo está embrujado y que tú no has visto nada.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003m"
+     ]
+    },
+    {
+     "i": 28,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Frotar otra vez la cuerda contra la argolla",
+     "ok": true,
+     "rolls": 1,
+     "event_ids": [
+      "ev_0000003o",
+      "ev_0000003q"
+     ]
+    },
+    {
+     "i": 29,
+     "mode": "own",
+     "impulse": "colarse",
+     "text": "Ciro, tranquilo, tú finge que duermes; yo me cuelo por la trastienda y te traigo la ganzúa.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003s"
+     ]
+    },
+    {
+     "i": 30,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Forzar la cerradura de la reja con las herramientas",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003u"
+     ]
+    },
+    {
+     "i": 31,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Guardar las ganzúas antes de que baje alguien",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003w"
+     ]
+    },
+    {
+     "i": 32,
+     "mode": "own",
+     "impulse": "colarse",
+     "text": "Me pego a la rendija del banco, deslizo la ganzúa por debajo de la puerta y susurro: «Ciro, si baja alguien, tú roncas fuerte; yo me cuelo arriba».",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003y"
+     ]
+    },
+    {
+     "i": 33,
+     "mode": "own",
+     "impulse": "seguir",
+     "text": "Me acerco a la reja, bajo la voz y le susurro a Ciro: «Garrán es el de las llaves, colega. Y si me ayudas, saco la ganzúa y nos largamos antes de que suba.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000040"
+     ]
+    },
+    {
+     "i": 34,
+     "mode": "own",
+     "impulse": "robar_pj",
+     "text": "Me doy la vuelta con sigilo y, mientras hablo con Ciro, deslizo la mano hacia su cinturón para birlarle la bolsa de monedas sin que lo note.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000042"
+     ]
+    },
+    {
+     "i": 35,
+     "mode": "own",
+     "impulse": "seguir",
+     "text": "Ciro, pásame la mano por entre los barrotes, que tengo un plan y tu cinturón me interesa más que el candado.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000043"
+     ]
+    },
+    {
+     "i": 36,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Volver a probar la ganzúa en el candado",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000045"
+     ]
+    },
+    {
+     "i": 37,
+     "mode": "own",
+     "impulse": "colarse",
+     "text": "Me cuelo por el hueco entre la reja y el muro, reptando hacia la despensa, y susurro: «Ciro, dile al alguacil que te aburres y que has visto un gato. Yo subo.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000047"
+     ]
+    },
+    {
+     "i": 38,
+     "mode": "own",
+     "impulse": "robar",
+     "text": "Me pego a la reja y deslizo la mano hacia el bolsillo de Ciro, sin hacer ruido: «Dame la bolsa de monedas, colega, que yo te devuelvo el favor.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000049",
+      "ev_0000004c"
+     ]
+    },
+    {
+     "i": 39,
+     "mode": "own",
+     "impulse": "robar",
+     "text": "Garrán viene con la mano en la porra; me hago el inocente, sonrío y le enseño las palmas: «Venga, alguacil, que solo le pedía a Ciro un favor. Mire, ya tengo la mano fuera; ¿y si la usa usted para abrirme el candado?».",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000004d"
+     ]
+    },
+    {
+     "i": 40,
+     "mode": "own",
+     "impulse": "mentir",
+     "text": "Garrán, escúcheme: le juro por mi madre que el favor era ver si Ciro tenía un tarro de aceite; soy sobrino del maestro cerrajero de Valdeyermo, ¿sabe? Me manda a revisar los candados.",
+     "ok": true,
+     "rolls": 1,
+     "event_ids": [
+      "ev_0000004g",
+      "ev_0000004i"
+     ]
+    }
+   ],
+   "master": {
+    "input": 510745,
+    "output": 60682,
+    "cache_read": 2046646,
+    "cache_write": 0,
+    "calls": 42,
+    "cost_usd": null,
+    "models": [
+     "claude-opus-5-5"
+    ]
+   },
+   "player": {
+    "input": 97300,
+    "output": 2123,
+    "cache_read": 0,
+    "cache_write": 0,
+    "calls": 40,
+    "cost_usd": 0.0107915
+   },
+   "cost_usd": 2.5751502999999984,
+   "failures": 0,
+   "wall_ms": 970929,
+   "profile": "picaro",
+   "ended": "presupuesto",
+   "metered_usd": 2.5643587999999986,
+   "quests": [
+    {
+     "id": "q_main_salir",
+     "title": "Salir de la aldea",
+     "status": "active"
+    }
+   ],
+   "escalated": [
+    "esc_tos",
+    "esc_lobos",
+    "esc_tobias",
+    "esc_herreria",
+    "esc_brasa",
+    "!esc_epilogo_templar",
+    "!esc_epilogo_verdad",
+    "!esc_epilogo_arder",
+    "esc_epilogo"
+   ],
+   "final_quest": null,
+   "epilogue": "Los lobos han saltado la cerca de los Corrales: el gallinero reventado, plumas por todas partes, dos ovejas muertas en el redil y huellas enormes, de ceniza, en la cancela. Úrsula está en medio con un",
+   "downs": 0,
+   "pair": {
+    "n": 1,
+    "partner": "Ciro",
+    "partner_profile": "novato",
+    "together": 12,
+    "chats": 2,
+    "reactions": 0
+   }
+  },
+  {
+   "n": 1,
+   "slug": "auto-20261125-1703-picaro-novato",
+   "dir": "(recortado)",
+   "campaign_id": "brezal",
+   "world": {
+    "seed": 0,
+    "tone": "",
+    "model": "brezal",
+    "cost_usd": 0
+   },
+   "character": {
+    "id": "ch_ciro_mwwbbqku",
+    "name": "Ciro",
+    "race": "Humano",
+    "class": "guerrero",
+    "hook": "",
+    "situation": null
+   },
+   "actions": [
+    {
+     "i": 1,
+     "mode": "own",
+     "impulse": "reglas",
+     "text": "Oye, ¿las monedas cuentan como las que lleva Bruno o van aparte? Yo tengo \"undefined\", ¿eso es que no tengo nada? Mejor miro la tablilla, a ver qué dice.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000000s"
+     ]
+    },
+    {
+     "i": 2,
+     "mode": "own",
+     "impulse": "confundir",
+     "text": "Espera, ¿Garrán es el del Soto o el cazador? Me he liado con los nombres. Miro la barra por si veo al cazador, sea quien sea.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000000t"
+     ]
+    },
+    {
+     "i": 3,
+     "mode": "own",
+     "impulse": "reglas",
+     "text": "Espera, ¿y cómo sé yo cuántas monedas tengo ahora? Lo de \"undefined\" me tiene preocupado. Miro la bolsa de cuero a ver si lo aclaro.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000000x"
+     ]
+    },
+    {
+     "i": 4,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Fijarse en la alfombra bajo la mesa",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000000y"
+     ]
+    },
+    {
+     "i": 5,
+     "mode": "own",
+     "impulse": "reglas",
+     "text": "Espera, ¿la tirada de Bruno con el 18 significa que ya ha convencido a Garrán? ¿Y mis monedas siguen siendo una de oro y cinco de plata, o Garrán me las quitó de verdad?",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 6,
+     "mode": "own",
+     "impulse": "dudar",
+     "text": "Oye, ¿y qué puedo hacer ahora mismo? ¿Me acerco a Garrán con Bruno o me quedo aquí esperando a que me llamen?",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000001a"
+     ]
+    },
+    {
+     "i": 7,
+     "mode": "own",
+     "impulse": "reglas",
+     "text": "Espera, ¿cómo se tira el dado para convencer a Garrán? Y, ¿eso del Diario lo apunto yo o lo lleva el narrador? Cojo los dados de la mochila por si hace falta.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000001c"
+     ]
+    },
+    {
+     "i": 8,
+     "mode": "own",
+     "impulse": "reglas",
+     "text": "Oye, Brenna, ¿y si te traigo el haz yo mismo? ¿Cómo sé cuántas monedas me quedan y dónde apunto lo que me encargues?",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 9,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Esperar turno con Brenna",
+     "ok": false,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 10,
+     "mode": "own",
+     "impulse": "dudar",
+     "text": "¿Con quién? Espera, ¿Brenna es la tabernera o la que se va a la misa? Y Garrán, ¿dónde está ahora? Mejor le pregunto a Bruno qué hago yo.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000021"
+     ]
+    },
+    {
+     "i": 11,
+     "mode": "own",
+     "impulse": "oferta",
+     "text": "Acepto.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 12,
+     "mode": "own",
+     "impulse": "confundir",
+     "text": "Espera, ¿la bolsa de Bruno es la mía ahora? Le miro a los ojos y le pregunto si Brenna es la tabernera o la de la misa del pozo.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000024"
+     ]
+    },
+    {
+     "i": 13,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Preguntar al jornalero por Garrán",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000002f"
+     ]
+    },
+    {
+     "i": 14,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Preguntar al guardia qué hace Garrán en la casona",
+     "ok": false,
+     "rolls": 1,
+     "event_ids": [
+      "ev_0000002g"
+     ]
+    },
+    {
+     "i": 15,
+     "mode": "own",
+     "impulse": "confundir",
+     "text": "Espera, ¿el guardia es Garrán o el de la lanza? Me pongo delante de Bruno con las manos abiertas: «Soy Ciro, el de la espada, y yo no le he robado nada.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000002l"
+     ]
+    },
+    {
+     "i": 16,
+     "mode": "own",
+     "impulse": "dudar",
+     "text": "Ciro: ¿Qué se supone que hago ahora? ¿Sigo al guardia o me quedo aquí con las manos quietas, a ver si se me pasa el susto?",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 17,
+     "mode": "own",
+     "impulse": "confundir",
+     "text": "Espera, ¿el guardia de la lanza es Garrán o el flaco de los dados? Me acerco a Bruno y le susurro: ¿Brenna también es del gremio?",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000002t"
+     ]
+    },
+    {
+     "i": 18,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Salir hacia la casona tras Bruno",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000002z"
+     ]
+    },
+    {
+     "i": 19,
+     "mode": "own",
+     "impulse": "chat",
+     "text": "Bruno, ¿la ganzúa va dentro de la bolsa de cuero o la escondiste en la bota? Yo me pego a la pared y miro quién espera en el banco.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 20,
+     "mode": "own",
+     "impulse": "dudar",
+     "text": "¿Qué hago ahora? ¿Miro al guardia de la lanza o sigo a Bruno hacia la puerta? Me quedo pegado a la pared, sin saber bien por dónde empezar.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000033"
+     ]
+    },
+    {
+     "i": 21,
+     "mode": "own",
+     "impulse": "confundir",
+     "text": "Espera, ¿el de la lanza es Garrán o el flaco de los dados? Bruno dijo algo de Brenna, así que me arrimo a la reja y susurro: ¡Bota, sí, pero que no se me escape Brenna!",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000039"
+     ]
+    },
+    {
+     "i": 22,
+     "mode": "own",
+     "impulse": "dar",
+     "text": "Le paso la ganzúa a Bruno por debajo de la reja, con la mano temblorosa. Ojalá que el nudo no sea de los que se aprietan más.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003b"
+     ]
+    },
+    {
+     "i": 23,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Susurrar a Bruno que la ganzúa no la tienes tú",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003c"
+     ]
+    },
+    {
+     "i": 24,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Intentar aflojar el nudo frotándolo contra la argolla",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003e"
+     ]
+    },
+    {
+     "i": 25,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Susurrarle a Bruno que frote el nudo contra la argolla",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003j"
+     ]
+    },
+    {
+     "i": 26,
+     "mode": "own",
+     "impulse": "reglas",
+     "text": "Espera, ¿cómo se tira un dado aquí? Bruno dice que hay que tirar para la ganzúa, pero yo no sé si mis dados sirven para algo.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003k"
+     ]
+    },
+    {
+     "i": 27,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Seguir frotando el nudo con paciencia",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003n"
+     ]
+    },
+    {
+     "i": 28,
+     "mode": "own",
+     "impulse": "reglas",
+     "text": "Perdona, Bruno, ¿y los dados sirven para algo o solo para jugar a las cartas? Y las monedas, ¿dónde las veo? Yo no tengo ni idea de cuántas llevo.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003r"
+     ]
+    },
+    {
+     "i": 29,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Guardar la bolsa bajo la ropa",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003t"
+     ]
+    },
+    {
+     "i": 30,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Preguntar a la criada qué hora es el cobro",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 31,
+     "mode": "own",
+     "impulse": "confundir",
+     "text": "Perdona, ¿la criada es la que lleva las llaves o la de la barra? Creí que Garrán era el del cobro, no el de la cerveza.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003x"
+     ]
+    },
+    {
+     "i": 32,
+     "mode": "own",
+     "impulse": "confundir",
+     "text": "Perdona, ¿Garrán es el de la vara o el de las llaves? Creí que el regidor era el de la barra, y Bruno dijo algo de un tal Garrote.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_0000003z"
+     ]
+    },
+    {
+     "i": 33,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Quedarse quieto en el banco",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000041"
+     ]
+    },
+    {
+     "i": 34,
+     "mode": "own",
+     "impulse": "confundir",
+     "text": "Garrán, ¿y el de la vara no era Garrote? Bruno dijo que cobras con llave, pero yo creí que era el de las monedas.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000042"
+     ]
+    },
+    {
+     "i": 35,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Contestar a Ciro en voz baja",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000044"
+     ]
+    },
+    {
+     "i": 36,
+     "mode": "suggested",
+     "impulse": null,
+     "text": "Acercarse a la reja del calabozo",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000046"
+     ]
+    },
+    {
+     "i": 37,
+     "mode": "own",
+     "impulse": "hablar",
+     "text": "Bruno, pásame algo por la reja, que no veo ni el candado. Y no hagas ruido, que el de la maza está contando otra vez.",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": [
+      "ev_00000047"
+     ]
+    },
+    {
+     "i": 38,
+     "mode": "own",
+     "impulse": "reaccion",
+     "text": "Me resisto, aparto la mano de Bruno y pego la bolsa contra el pecho. ¡Que no me toque las monedas, que son mías!",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 39,
+     "mode": "own",
+     "impulse": "seguir",
+     "text": "Bruno, saca el brazo ya y agarra la bolsa, que Garrán viene. ¡Yo me pongo delante de la reja para taparte!",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    },
+    {
+     "i": 40,
+     "mode": "own",
+     "impulse": "dudar",
+     "text": "¿Puedo hacer algo mientras Garrán habla con Bruno? ¿Me acerco a la reja o me quedo aquí esperando, como me ha dicho?",
+     "ok": true,
+     "rolls": 0,
+     "event_ids": []
+    }
+   ],
+   "master": {
+    "input": 192846,
+    "output": 25183,
+    "cache_read": 917462,
+    "cache_write": 0,
+    "calls": 20,
+    "cost_usd": null,
+    "models": [
+     "claude-opus-5-5"
+    ]
+   },
+   "player": {
+    "input": 80587,
+    "output": 1765,
+    "cache_read": 0,
+    "cache_write": 0,
+    "calls": 39,
+    "cost_usd": 0.008941200000000002
+   },
+   "cost_usd": 2.573299999999999,
+   "failures": 2,
+   "wall_ms": 970930,
+   "profile": "novato",
+   "ended": "presupuesto",
+   "metered_usd": 2.5643587999999986,
+   "quests": [],
+   "escalated": [
+    "esc_tos",
+    "esc_lobos",
+    "esc_tobias",
+    "esc_herreria",
+    "esc_brasa",
+    "!esc_epilogo_templar",
+    "!esc_epilogo_verdad",
+    "!esc_epilogo_arder",
+    "esc_epilogo"
+   ],
+   "final_quest": null,
+   "epilogue": "Los lobos han saltado la cerca de los Corrales: el gallinero reventado, plumas por todas partes, dos ovejas muertas en el redil y huellas enormes, de ceniza, en la cancela. Úrsula está en medio con un",
+   "downs": 0,
+   "pair": {
+    "n": 1,
+    "partner": "Bruno",
+    "partner_profile": "picaro",
+    "together": 12,
+    "chats": 1,
+    "reactions": 1
+   }
+  }
+ ],
+ "errors": [],
+ "totals": {
+  "master_usd": 5.128717599999997,
+  "player_usd": 0.019732700000000002,
+  "worldgen_usd": 0,
+  "cost_usd": 5.148450299999997,
+  "actions": 80,
+  "master_calls": 62,
+  "failures": 2
+ }
+}

@@ -1,0 +1,29 @@
+{
+ "version": 1,
+ "dry_run": false,
+ "stamp": "20261125-1557",
+ "started_at": "2026-11-25T14:57:55.081Z",
+ "models": {
+  "master": "claude-opus-5-5",
+  "player": "claude-haiku-5-5",
+  "worldgen": "claude-haiku-5-5",
+  "judge": "claude-haiku-5-5"
+ },
+ "seed": 1,
+ "games_planned": 2,
+ "actions_per_game": 40,
+ "games": [],
+ "errors": [
+  "partida 1: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.\"},\"request_id\":\"req_011ChPrHVNrupFTjVibyBzpj\"}",
+  "partida 2: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.\"},\"request_id\":\"req_011ChPrHkZfUkwG9rKMdDfgo\"}"
+ ],
+ "totals": {
+  "master_usd": 0,
+  "player_usd": 0,
+  "worldgen_usd": 0,
+  "cost_usd": 0,
+  "actions": 0,
+  "master_calls": 0,
+  "failures": 0
+ }
+}

@@ -42,6 +42,19 @@ export function similar(a: string, b: string): number {
 // Métricas de cada partida, sin modelo
 // ---------------------------------------------------------------------------
 
+/**
+ * Fin que dice la verdad: una partida que jugó todas sus acciones acabó por «tope» aunque el resumen diga «presupuesto»
+ * (antes de H8, el tope de gasto se miraba tras la última vuelta y la pareja de 20261125-1703 lo marcó con las 40 jugadas).
+ */
+export function trueEnd(g: Pick<GameSummary, 'ended' | 'actions'>, planned: number): string {
+  return g.ended === 'presupuesto' && g.actions.length >= planned ? 'tope' : g.ended ?? '';
+}
+
+/** Las partidas de la tanda con el fin corregido (trueEnd). */
+export function withTrueEnds(run: AutoplayRun): AutoplayRun {
+  return { ...run, games: run.games.map((g) => { const ended = trueEnd(g, run.actions_per_game); return ended === (g.ended ?? '') ? g : { ...g, ended: ended as NonNullable<GameSummary['ended']> }; }) };
+}
+
 export interface Exchange { action: number | null; said: string; lines: string[]; narration: string }
 
 export interface GameMetrics {
@@ -326,8 +339,8 @@ export function digestOf(g: GameSummary, max = 320): string {
 const HOW_LABEL: Record<NonNullable<PlayerTurn['how']>, string> = { chat: 'chat', say: 'en voz alta', reaction: 'reacción', offer: 'oferta' };
 
 export function transcriptOf(g: GameSummary): string {
-  const head = [`# ${g.profile} · ${g.character.name}, ${g.character.race} ${g.character.class}${g.pair ? ` · con ${g.pair.partner} (${g.pair.partner_profile})` : ''}`, '', `Fin: ${g.ended}. Situación: ${g.character.situation ?? '—'}`, ''];
-  const body = g.actions.map((a) => `## ${a.i}. ${a.mode === 'own' ? `propia, ${a.impulse ?? ''}` : 'sugerida'}${a.how ? `, ${HOW_LABEL[a.how]}` : ''}${a.together ? ', a la vez' : ''}${a.ok ? '' : ' · RECHAZADA'} · ${((a.wall_ms ?? 0) / 1000).toFixed(1)} s\n\n> ${a.text}\n\n${a.reply ?? a.engine_text ?? ''}\n${a.state ? `\n_PG ${a.state.hp}/${a.state.hp_max}, nivel ${a.state.level}, ${a.state.location}, misiones ${a.state.done}, pasos ${a.state.steps}, pistas ${a.state.clues}_\n` : ''}`);
+  const head = [`# ${g.profile}: ${g.character.name}, ${g.character.race} ${g.character.class}${g.pair ? ` (con ${g.pair.partner}, ${g.pair.partner_profile})` : ''}`, '', `Fin: ${g.ended}${g.error ? ` (${g.error})` : ''}. Situación: ${g.character.situation ?? '—'}`, ''];
+  const body = g.actions.map((a) => `## ${a.i}. ${a.mode === 'own' ? `propia, ${a.impulse ?? ''}` : 'sugerida'}${a.how ? `, ${HOW_LABEL[a.how]}` : ''}${a.together ? ', a la vez' : ''}${a.ok ? '' : ', RECHAZADA'}, ${((a.wall_ms ?? 0) / 1000).toFixed(1)} s\n\n> ${a.text}\n\n${a.reply ?? a.engine_text ?? ''}\n${a.state ? `\n_PG ${a.state.hp}/${a.state.hp_max}, nivel ${a.state.level}, ${a.state.location}, misiones ${a.state.done}, pasos ${a.state.steps}, pistas ${a.state.clues}_\n` : ''}`);
   return [...head, ...body, '## Epílogo', '', g.epilogue ?? ''].join('\n');
 }
 
@@ -433,12 +446,17 @@ export function dryFunClient(): MasterClient {
 // ---------------------------------------------------------------------------
 
 export function buildPlaytest(run: AutoplayRun, ms: readonly GameMetrics[], judges: readonly GameJudge[], findings: readonly Finding[], judgeCost: number | null): string {
-  const out: string[] = [`# Partidas por perfil · ${run.stamp}`, ''];
+  const out: string[] = [`# Partidas por perfil: ${run.stamp}`, ''];
   const totalActions = ms.reduce((a, m) => a + m.actions, 0);
   const funCost = judges.reduce<number | null>((a, j) => (a === null || j.cost_usd === null ? null : a + j.cost_usd), 0);
   const play = run.totals.cost_usd;
   const total = play === null || funCost === null ? null : play + funCost + (judgeCost ?? 0);
   out.push(`${ms.length} partidas, ${totalActions} acciones. Modelos: máster ${run.models.master}, jugador ${run.models.player}, juez ${run.models.judge}.`, '', `Coste: partidas ${usd(play, 3)}, juez por turnos ${usd(judgeCost, 3)}, juez de diversión y charlas ${usd(funCost, 3)}. **Total ${usd(total, 3)}** (${usd(total === null || !totalActions ? null : total / totalActions, 5)} por acción).`, '');
+
+  const cut = run.games.filter((g) => g.ended === 'error');
+  const lost = run.errors.length - new Set(cut.map((g) => g.n)).size;
+  if (cut.length) out.push(`${cut.length} ${cut.length === 1 ? 'partida cortada' : 'partidas cortadas'} por un error: van con las acciones y el coste que llevaban (fin «error»).`, '');
+  if (lost > 0) out.push(`${lost} ${lost === 1 ? 'partida no dejó' : 'partidas no dejaron'} resumen (tanda anterior a H7): lo que gastaron no está en el total.`, '');
 
   out.push('## Resumen', '', '| Perfil | Fin | Acciones | Nivel | Misiones | Pasos | Pistas | Final | Caídas | Horas de juego | Coste |', '|---|---|---:|---:|---:|---:|---:|---|---:|---:|---:|');
   for (const m of ms) out.push(`| ${m.profile} | ${m.ended} | ${m.actions} | ${m.level} | ${m.quests.done} | ${m.quests.steps} | ${m.quests.clues} | ${m.end.final_quest ?? '—'} | ${m.combat.pj_down} | ${m.game_hours.toFixed(0)} | ${usd(m.cost_usd, 3)} |`);
@@ -527,7 +545,7 @@ async function main() {
   const { values } = parseArgs({ options: { run: { type: 'string' }, live: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, reuse: { type: 'boolean', default: false }, window: { type: 'string' }, baseline: { type: 'string' } } });
   if (!values.run) throw new Error('Indica --run <carpeta de la tanda>.');
   const dir = resolve(values.run);
-  const run = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8')) as AutoplayRun;
+  const run = withTrueEnds(JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8')) as AutoplayRun);
   const model = process.env['JUDGE_MODEL']?.trim() || 'claude-haiku-5-5';
   const judgeFile = join(dir, 'playtest-judge.json');
   const client = values['dry-run'] ? dryFunClient() : values.live ? liveClient(120_000) : null;

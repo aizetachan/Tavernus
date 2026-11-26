@@ -1,9 +1,13 @@
 import { readFileSync } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { MasterClient } from '../src/ai/master.js';
 import type { GameEvent } from '../src/engine/model.js';
-import type { GameSummary } from '../scripts/autoplay.js';
-import { buildWindowSection, declaresStrike, windowMetrics } from '../scripts/playtest-report.js';
+import { dryMasterClient, dryPlayerClient, PROFILES, runAutoplay, type AutoplayRun, type GameSummary, type PlayerProfile, type TextClient } from '../scripts/autoplay.js';
+import { loadGame } from '../scripts/judge.js';
+import { analyzeGame, buildPlaytest, buildWindowSection, declaresStrike, transcriptOf, trueEnd, windowMetrics, withTrueEnds } from '../scripts/playtest-report.js';
 
 const fixture = <T>(name: string): T => JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'playtest', name), 'utf8')) as T;
 
@@ -55,4 +59,99 @@ describe('golpes declarados (H2 y H6)', () => {
     const g = { n: 1, profile: 'violento', character: { id: 'pc' }, actions: [{ i: 1, text: 'Le estampo el puño en la cara.', event_ids: ['e1'] }] } as unknown as GameSummary;
     expect(windowMetrics(g, events, 10)).toMatchObject({ attack_verbs: 1, attack_verbs_rolled: 1, npc_attacks: 0 });
   });
+});
+
+const MODELS = { master: 'claude-haiku-5-5', player: 'claude-haiku-5-5', worldgen: 'claude-haiku-5-5', judge: 'claude-haiku-5-5' };
+const pairOf = (a: string, b: string) => [PROFILES.find((p) => p.id === a)!, PROFILES.find((p) => p.id === b)!] as [PlayerProfile, PlayerProfile];
+const autoplayFixture = <T>(name: string): T => JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'autoplay', name), 'utf8')) as T;
+
+describe('partidas cortadas por un error (H7)', () => {
+  // La tanda 20261125-1557 (Opus) se cortó por el límite de gasto de la API y su summary.json se quedó sin partidas.
+  const cut = autoplayFixture<AutoplayRun>('summary-20261125-1557.json');
+  const apiError = cut.errors[0]!.replace(/^partida \d+: /, '');
+
+  it('guardan las acciones jugadas y su coste, con fin «error», y el informe las cuenta', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tavernus-cortada-'));
+    try {
+      const inner = dryPlayerClient();
+      let calls = 0;
+      const playerClient: TextClient = { async create(p) { if (++calls > 3) throw new Error(apiError); return inner.create(p); } };
+      const profiles = PROFILES.filter((p) => p.id === 'violento');
+      const run = await runAutoplay({ games: 1, actions: 10, seed: 4, models: MODELS, dryRun: false, masterClient: dryMasterClient(), playerClient, gamesDir: join(dir, 'games'), outDir: join(dir, 'run'), stamp: 'test', profiles, campaign: 'brezal' });
+      expect(run.errors).toEqual([`partida 1: ${apiError}`]);
+      const g = run.games[0]!;
+      expect(g).toMatchObject({ ended: 'error', error: apiError, profile: 'violento' });
+      expect(g.actions).toHaveLength(3);
+      expect(g.cost_usd).toBeGreaterThan(0);
+      expect(run.totals.actions).toBe(3);
+      expect(run.totals.cost_usd).toBeGreaterThan(0);
+      // Lo mismo en el summary.json que queda en disco.
+      const saved = JSON.parse(await readFile(join(dir, 'run', 'summary.json'), 'utf8')) as AutoplayRun;
+      expect(saved.games[0]!.ended).toBe('error');
+      expect(saved.totals.cost_usd).toBe(run.totals.cost_usd);
+      const loaded = loadGame(g.dir, g.character.id);
+      const md = buildPlaytest(run, [analyzeGame(g, loaded.events, loaded.state)], [], [], 0);
+      expect(md).toContain('1 partida cortada por un error: van con las acciones y el coste que llevaban');
+      expect(md).toMatch(/\| violento \| error \| 3 \|/);
+      expect(md).toContain('## Partidas que no terminaron');
+      expect(transcriptOf(g)).toContain(`Fin: error (${apiError})`);
+    } finally {
+      delete process.env['MASTER_MODEL'];
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('una tanda de antes, sin resumen de las cortadas, avisa de que su gasto no está en el total', () => {
+    const md = buildPlaytest(cut, [], [], [], 0);
+    expect(md).toContain('2 partidas no dejaron resumen (tanda anterior a H7): lo que gastaron no está en el total.');
+    expect(md).toContain('You have reached your specified API usage limits');
+  });
+});
+
+describe('tope de gasto en pareja (H8)', () => {
+  it('la pareja de 20261125-1703 jugó sus 40 acciones: su fin es «tope», no «presupuesto»', () => {
+    const run = autoplayFixture<AutoplayRun>('summary-20261125-1703.json');
+    expect(run.games.map((g) => g.ended)).toEqual(['presupuesto', 'presupuesto']);
+    expect(withTrueEnds(run).games.map((g) => g.ended)).toEqual(['tope', 'tope']);
+    expect(trueEnd({ ended: 'presupuesto', actions: run.games[0]!.actions.slice(0, 12) }, 40)).toBe('presupuesto');
+  });
+
+  it('si el tope se pasa en la última vuelta, el fin es «tope»', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tavernus-tope-'));
+    try {
+      const inner = dryMasterClient();
+      let expensive = false;
+      const masterClient: MasterClient = { async create(p) { const r = await inner.create(p); return expensive ? { ...r, usage: { ...r.usage, input_tokens: 50_000_000 } } as typeof r : r; } };
+      const player = dryPlayerClient();
+      let calls = 0;
+      // 2 acciones de cada uno: 4 llamadas del jugador; desde la tercera (la última vuelta), el máster cuesta un dineral.
+      const playerClient: TextClient = { async create(p) { if (++calls >= 3) expensive = true; return player.create(p); } };
+      const run = await runAutoplay({ games: 1, actions: 2, seed: 11, models: MODELS, dryRun: false, masterClient, playerClient, gamesDir: join(dir, 'games'), outDir: join(dir, 'run'), stamp: 'test', pairs: [pairOf('violento', 'pausado')], campaign: 'brezal', maxUsdPerGame: 1 });
+      expect(run.errors).toEqual([]);
+      expect(run.games.map((g) => g.actions.length)).toEqual([2, 2]);
+      expect(run.games.reduce((a, g) => a + (g.metered_usd ?? 0), 0)).toBeGreaterThan(2);
+      expect(run.games.map((g) => g.ended)).toEqual(['tope', 'tope']);
+    } finally {
+      delete process.env['MASTER_MODEL'];
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('el tope es por jugador: a dos, la partida puede gastar el doble antes de cortar', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tavernus-tope2-'));
+    try {
+      const pair = pairOf('violento', 'pausado');
+      // Lo que gasta la partida hasta acabar la primera vuelta (prólogos, presentaciones y una acción de cada uno).
+      const probe = await runAutoplay({ games: 1, actions: 1, seed: 11, models: MODELS, dryRun: false, masterClient: dryMasterClient(), playerClient: dryPlayerClient(), gamesDir: join(dir, 'g0'), outDir: join(dir, 'r0'), stamp: 'probe', pairs: [pair], campaign: 'brezal' });
+      const afterOne = probe.games.reduce((a, g) => a + (g.metered_usd ?? 0), 0);
+      // Un tope algo por encima de la mitad: como tope de la partida cortaría tras la primera vuelta; por jugador, sigue.
+      const run = await runAutoplay({ games: 1, actions: 6, seed: 11, models: MODELS, dryRun: false, masterClient: dryMasterClient(), playerClient: dryPlayerClient(), gamesDir: join(dir, 'g1'), outDir: join(dir, 'r1'), stamp: 'test', pairs: [pair], campaign: 'brezal', maxUsdPerGame: afterOne * 0.55 });
+      expect(run.errors).toEqual([]);
+      expect(run.games.every((g) => g.actions.length >= 2 && g.actions.length < 6)).toBe(true);
+      expect(run.games.map((g) => g.ended)).toEqual(['presupuesto', 'presupuesto']);
+    } finally {
+      delete process.env['MASTER_MODEL'];
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
 });

@@ -246,7 +246,8 @@ export interface PlayerTurn {
 /** Foto del PJ tras cada acción: para ver el progreso sin reconstruirlo del log. */
 export interface TurnState { game_s: number; status: string; hp: number; hp_max: number; level: number; xp: number; coins: number; location: string; open: number; steps: number; done: number; clues: number }
 
-export type GameEnd = 'final' | 'atasco' | 'tope' | 'presupuesto' | 'caido';
+/** Por qué acabó: final, atasco, tope de acciones, tope de gasto, caído sin levantarse, o un error que la cortó (H7). */
+export type GameEnd = 'final' | 'atasco' | 'tope' | 'presupuesto' | 'caido' | 'error';
 
 export interface GameSummary {
   n: number;
@@ -264,6 +265,8 @@ export interface GameSummary {
   /** Partidas con perfil. */
   profile?: string;
   ended?: GameEnd;
+  /** Partida cortada por un error: el mensaje. Lo jugado y lo gastado hasta ahí sí están (H7). */
+  error?: string;
   /** Coste real de todas las llamadas del máster, también las que no dejan evento (prólogo, fallos). */
   metered_usd?: number | null;
   quests?: { id: string; title: string; status: string }[];
@@ -458,7 +461,7 @@ export interface AutoplayOptions {
   campaign?: string;
   /** Partidas a la vez. */
   parallel?: number;
-  /** Corta la partida si el máster pasa de este gasto. */
+  /** Corta la partida si el máster pasa de este gasto por jugador (a dos, la partida puede gastar el doble). */
   maxUsdPerGame?: number;
   /** Empieza en este acto de Brezal, con lo anterior hecho por tools y sin máster (prepareBrezalAct). */
   startAct?: 2 | 3;
@@ -682,6 +685,7 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
     };
     // A dos: ventana de turno corta (tiempo real) para que lo mandado a la vez vaya en la misma llamada, y rondas de pelea que no esperan medio minuto a nadie.
     const manager = newManager(() => clock, meter, pair ? { turnWindowMs: PAIR_WINDOW_MS, roundMs: PAIR_ROUND_MS } : {});
+    let summarize: ((epilogueFrom: number | null, error?: string) => void) | null = null;
     try {
       if (opts.startAct && opts.campaign !== 'brezal') throw new Error('--start-act solo vale para Brezal.');
       if (opts.startAct && pair) throw new Error('--start-act no vale para las partidas a dos.');
@@ -762,6 +766,44 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
       const playing = () => seats.filter((s) => s.ended === null);
       const inFight = (s: Seat) => { const loc = engine.world.characterSpot(s.c)?.location_id; return Boolean(loc && engine.roundIn(loc)); };
 
+      /**
+       * Un resumen por jugador con lo jugado hasta ahora. Al acabar, con el epílogo; si la partida revienta (la API sin
+       * crédito, un fallo del motor), con las acciones y el coste que ya llevaba y `ended: 'error'`: antes se perdía todo y
+       * la tanda cortada del 25-11 (20261125-1557) marcó 0 $ con unas 40 acciones de Opus jugadas (H7).
+       */
+      summarize = (epilogueFrom: number | null, error?: string) => {
+        const story = engine.world.campaign as { story_state?: { started_game_s: number; escalated: string[] } };
+        const worldCost = gen?.cost_usd ?? 0;
+        // A dos, lo que no es de un PJ en concreto (lo medido y el mundo) se reparte a partes iguales.
+        const share = seats.length;
+        for (const s of seats) {
+          const c = s.c;
+          const quests = s.profile ? questsOf(engine.world, c).map((v) => ({ id: v.quest.id, title: v.quest.title, status: v.status })) : undefined;
+          const epilogue = epilogueFrom === null ? undefined : engine.events.all().filter((e) => e.seq > epilogueFrom && (e.action_type === 'announcement' || e.action_type === 'story' || e.payload['master'] || (e.action_type === 'progress_story' && e.actor_id === c.id))).map((e) => e.narration_private || e.observable || '').filter(Boolean).join('\n\n');
+          // Coste del máster: todos sus eventos de la partida (intro, acciones, tiradas, llegadas).
+          const master = masterTally(masterEvents(c));
+          const playerCost = costUsd(s.player, models.player);
+          const meteredShare = metered === null ? null : metered / share;
+          const other = partnerOf(s);
+          const summary: GameSummary = {
+            n, slug: game.slug, dir: manager.paths(game).dir, campaign_id: game.campaign_id,
+            world: { seed: game.world?.seed ?? 0, tone, model: gen?.model ?? (opts.campaign ?? 'offline'), cost_usd: worldCost / share },
+            character: { id: c.id, name: c.name, race: RACES.find((r) => r.id === c.race_id)?.name ?? c.race_id, class: c.class_name, hook: opts.campaign ? '' : s.k === 0 ? hook : '', situation: c.situation ? situationText(engine.world, c.situation) : null },
+            actions: s.actions, master, player: { ...s.player, cost_usd: playerCost },
+            cost_usd: sumCost([s.profile || error ? meteredShare : master.cost_usd, playerCost, worldCost / share]),
+            failures: s.actions.filter((a) => !a.ok).length,
+            wall_ms: Date.now() - t0,
+            ...(s.profile ? { profile: s.profile.id, ended: s.ended!, metered_usd: meteredShare, quests: quests!, escalated: story.story_state?.escalated ?? [], final_quest: finalDone(c), epilogue: epilogue ?? '', downs: s.downs } : {}),
+            ...(error ? { ended: 'error' as const, error, metered_usd: meteredShare } : {}),
+            ...(opts.startAct ? { start_act: opts.startAct, start_done: s.startDone } : {}),
+            ...(other ? { pair: { n, partner: other.c.name, partner_profile: other.profile?.id ?? '', together: s.together, chats: s.chats, reactions: s.reactions } } : {}),
+          };
+          run.games.push(summary);
+          log(`${tag}→ ${summary.slug}${other ? ` (${c.name})` : ''}: máster ${usd(s.profile ? meteredShare : master.cost_usd)} (${master.calls} llamadas), jugador ${usd(playerCost)}, mundo ${usd(worldCost / share)}; ${summary.failures} fallos${error ? '; fin: error' : s.profile ? `; fin: ${s.ended}` : ''}${other ? `; a la vez ${s.together}, chats ${s.chats}, reacciones ${s.reactions}` : ''}`);
+        }
+      };
+
+
       /** Pide al jugador automático su texto: una acción, una respuesta a una reacción o una frase para el chat. */
       const ask = async (s: Seat, o: { mode: PlayerTurn['mode']; impulse: { prompt: string } | null; question?: string }): Promise<string> => {
         const other = partnerOf(s);
@@ -823,7 +865,11 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         return { r, texts, rolls };
       };
 
+      // Tope de gasto por jugador: a dos, la partida puede gastar el doble. Se mira antes de cada vuelta, así «presupuesto»
+      // solo sale si quedaban acciones por jugar (la pareja del 25-11, 20261125-1703, lo marcó con las 40 jugadas: H8).
+      const cap = opts.maxUsdPerGame ? opts.maxUsdPerGame * seats.length : null;
       for (let i = 1; i <= opts.actions && playing().length; i++) {
+        if (cap !== null && metered !== null && metered >= cap) { for (const s of playing()) s.ended = 'presupuesto'; break; }
         // Caído o muerto no se juega: se espera a que se levante o reaparezca, como quien vuelve al cabo de un rato.
         for (const s of playing()) {
           if (!s.profile || s.c.status === 'active') continue;
@@ -897,7 +943,6 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
           if (s.finalAt !== null && i >= s.finalAt + 5) s.ended = 'final';
           else if (i - s.progressAt >= STUCK_ACTIONS) s.ended = 'atasco';
         }
-        if (opts.maxUsdPerGame && metered !== null && metered >= opts.maxUsdPerGame) { for (const s of playing()) s.ended = 'presupuesto'; }
       }
       for (const s of seats) s.ended ??= 'tope';
 
@@ -911,36 +956,17 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
       }
       await engine.flush();
 
-      const worldCost = gen?.cost_usd ?? 0;
-      // A dos, lo que no es de un PJ en concreto (lo medido y el mundo) se reparte a partes iguales.
-      const share = seats.length;
-      for (const s of seats) {
-        const c = s.c;
-        const quests = s.profile ? questsOf(engine.world, c).map((v) => ({ id: v.quest.id, title: v.quest.title, status: v.status })) : undefined;
-        const epilogue = epilogueFrom === null ? undefined : engine.events.all().filter((e) => e.seq > epilogueFrom && (e.action_type === 'announcement' || e.action_type === 'story' || e.payload['master'] || (e.action_type === 'progress_story' && e.actor_id === c.id))).map((e) => e.narration_private || e.observable || '').filter(Boolean).join('\n\n');
-        // Coste del máster: todos sus eventos de la partida (intro, acciones, tiradas, llegadas).
-        const master = masterTally(masterEvents(c));
-        const playerCost = costUsd(s.player, models.player);
-        const meteredShare = metered === null ? null : metered / share;
-        const other = partnerOf(s);
-        const summary: GameSummary = {
-          n, slug: game.slug, dir: manager.paths(game).dir, campaign_id: game.campaign_id,
-          world: { seed: game.world?.seed ?? 0, tone, model: gen?.model ?? (opts.campaign ?? 'offline'), cost_usd: worldCost / share },
-          character: { id: c.id, name: c.name, race: RACES.find((r) => r.id === c.race_id)?.name ?? c.race_id, class: c.class_name, hook: opts.campaign ? '' : s.k === 0 ? hook : '', situation: c.situation ? situationText(engine.world, c.situation) : null },
-          actions: s.actions, master, player: { ...s.player, cost_usd: playerCost },
-          cost_usd: sumCost([s.profile ? meteredShare : master.cost_usd, playerCost, worldCost / share]),
-          failures: s.actions.filter((a) => !a.ok).length,
-          wall_ms: Date.now() - t0,
-          ...(s.profile ? { profile: s.profile.id, ended: s.ended!, metered_usd: meteredShare, quests: quests!, escalated: story.story_state?.escalated ?? [], final_quest: finalDone(c), epilogue: epilogue ?? '', downs: s.downs } : {}),
-          ...(opts.startAct ? { start_act: opts.startAct, start_done: s.startDone } : {}),
-          ...(other ? { pair: { n, partner: other.c.name, partner_profile: other.profile?.id ?? '', together: s.together, chats: s.chats, reactions: s.reactions } } : {}),
-        };
-        run.games.push(summary);
-        log(`${tag}→ ${summary.slug}${other ? ` (${c.name})` : ''}: máster ${usd(s.profile ? meteredShare : master.cost_usd)} (${master.calls} llamadas), jugador ${usd(playerCost)}, mundo ${usd(worldCost / share)}; ${summary.failures} fallos${s.profile ? `; fin: ${s.ended}` : ''}${other ? `; a la vez ${s.together}, chats ${s.chats}, reacciones ${s.reactions}` : ''}`);
-      }
+      summarize(epilogueFrom);
+      summarize = null;
       await manager.close(game.slug);
       save();
     } catch (e) {
+      // Lo jugado y lo gastado hasta el fallo se guarda igual (H7).
+      if (summarize) {
+        try { summarize(null, (e as Error).message.slice(0, 300)); save(); } catch (e2) { log(`  ✗ partida ${n}: sin resumen parcial (${(e2 as Error).message})`); }
+      } else if (metered) {
+        (e as Error).message = `${(e as Error).message} (máster gastado antes de empezar: ${usd(metered, 4)})`;
+      }
       await manager.closeAll().catch(() => undefined);
       throw e;
     }
