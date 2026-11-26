@@ -19,6 +19,7 @@ Lo que sí se prueba ahora son las **mecánicas básicas**, en pasadas cortas y 
 |---|---|
 | Combate: el jugador llega a atacar, los NPC responden, caídas, reaparición, un solo alto por encuentro | perfiles violento y rompejuegos; tabla «Combate y muerte» del `playtest-report` |
 | Todo lo demás que puede pasar en una sesión: conjuros y trucos, recursos de clase, objetos y pociones, disparar, sigilo, forzar, saquear, trepar, descansar, curar, rastrear, recolectar, montar, trampas | perfiles mecánicos `lanzador` (hechicero) y `tirador` (explorador), que recorren esa lista en orden; tabla «Cobertura de tools» del informe: qué tools del máster se usaron y cuáles no |
+| Las tools que llevaban cuatro pasadas a cero (H10): curarse, descansar y preguntar reglas; fiado, prendas, vender, pagar y propinas; pasado del personaje, tablón, encargos y lo que se anuncia con hora; recolectar, sintonizar y pergaminos | perfiles mecánicos `herido` (guerrero, empieza a un tercio de PG con dos pociones y un kit de sanador), `deudor` (bardo), `cronista` (bruja) y `recolector` (druida, con un pergamino y una capa de protección); y la pareja `herido:violento`, para estabilizar al que cae |
 | Lo que piden los demás perfiles: preguntas de reglas (novato), percepción y mapa (explorador), descanso y tiempo (pausado), frases de tres palabras (rápido), cambiar de sitio (impredecible), seguir el Diario (metódico, dirigido) | los 11 perfiles de carácter a 40 acciones |
 | Lo imposible, lo que no existe, la cuarta pared | `bench:creativity` (25 prompts) |
 | Voz de los NPC: director y actor | `talk-bench` (variantes A, B y C2 con Haiku) |
@@ -34,25 +35,27 @@ Lo que sí se prueba ahora son las **mecánicas básicas**, en pasadas cortas y 
 De la tanda del 31-10 (2.840 acciones con Haiku 5.5 a esfuerzo bajo), por acción del máster: 12.650 tokens de
 entrada sin caché, 1.900 de salida y 48.900 de lectura de caché. Con los precios de la API:
 
-| Modelo | Por acción | 40 acciones | Pasada corta (19 jugadores × 40) |
+| Modelo | Por acción | 40 acciones | Pasada corta (25 jugadores × 40) |
 |---|---:|---:|---:|
-| Haiku 5.5 (producción) | 0,0027 $ | 0,11 $ | 2,1 $ |
-| Sonnet 5.5 | 0,054 $ | 2,2 $ | 41 $ |
-| Opus 5.5 | 0,098 $ | 3,9 $ | 75 $ |
+| Haiku 5.5 (producción) | 0,0027 $ | 0,11 $ | 2,8 $ |
+| Sonnet 5.5 | 0,054 $ | 2,2 $ | 55 $ |
+| Opus 5.5 | 0,098 $ | 3,9 $ | 98 $ |
 
 Lo demás es pequeño: jugador automático con Haiku, 0,01 $ por 40 acciones; juez de errores, unos 0,05 $ por partida de
 40; actor Sonnet en las charlas, unos 0,004 $ por turno de charla. Fable 5.2 (0,187 $ por acción) queda fuera.
 
 ## La pasada corta
 
-Trece partidas de un jugador (los 11 perfiles de carácter y los 2 mecánicos) y tres parejas, todas de 40 acciones, con
-Haiku, el actor Sonnet como en producción y el juez de errores; más el banco de creatividad y el de conversación. Se
-lanza entera cada vez que se arregla algo, y se compara con la anterior. **Unos 3 $ y una hora.**
+Diecisiete partidas de un jugador (los 11 perfiles de carácter y los 6 mecánicos) y cuatro parejas, todas de 40 acciones,
+con Haiku, el actor Sonnet como en producción y el juez de errores; más el banco de creatividad y el de conversación. Se
+lanza entera cada vez que se arregla algo, y se compara con la anterior. **Unos 3,5 $ y una hora.** Cada perfil de 40
+acciones con Haiku a esfuerzo bajo cuesta unos 0,12 $; los cuatro de H10 (herido, deudor, cronista, recolector) suman
+0,5 $ a la pasada y la pareja herido:violento, 0,25 $.
 
 | Partidas | Qué mira | Comando |
 |---|---|---|
-| los 13 perfiles (`all`): violento y rompejuegos para combate y ley; charlatán y pícaro para charla, comercio, prendas y robo; lanzador y tirador para el resto de la mecánica; los demás para lo suyo | combate, charla, cobertura de tools, fluidez, incoherencias | `npm run autoplay -- --profiles all --actions 40 --parallel 5 --live` (1,6 $) |
-| 3 parejas: picaro:novato, violento:pausado, metodico:charlatan | concurrencia, chat, reacciones, robo entre jugadores | `npm run autoplay -- --pairs picaro:novato,violento:pausado,metodico:charlatan --actions 40 --parallel 3 --live` (0,8 $) |
+| los 17 perfiles (`all`): violento y rompejuegos para combate y ley; charlatán y pícaro para charla, comercio, prendas y robo; lanzador y tirador para conjuros, disparo, sigilo y el resto de la mecánica; herido, deudor, cronista y recolector para las tools que llevaban cuatro pasadas a cero (H10); los demás para lo suyo | combate, charla, cobertura de tools, fluidez, incoherencias | `npm run autoplay -- --profiles all --actions 40 --parallel 5 --live` (2,1 $) |
+| 4 parejas: picaro:novato, violento:pausado, metodico:charlatan, herido:violento | concurrencia, chat, reacciones, robo entre jugadores; atender al que cae (`stabilize`) | `npm run autoplay -- --pairs picaro:novato,violento:pausado,metodico:charlatan,herido:violento --actions 40 --parallel 4 --live` (1 $) |
 | creatividad | lo imposible, lo que no existe, cuarta pared | `npm run bench:creativity -- --model claude-haiku-5-5 --effort low --live` (0,05 $) |
 | conversación | voz de los NPC con y sin actor, juez con rúbrica | `node --env-file=.env --import tsx scripts/talk-bench.ts --live --cap 0.15` (0,15 $) |
 
@@ -66,7 +69,7 @@ El juez de errores corre solo al acabar `autoplay` (sin `--no-judge`); el juez d
 sin `--live`). Entorno: `ACTOR_MODEL=claude-sonnet-5-5`, `MASTER_MODEL=claude-haiku-5-5`, `MASTER_EFFORT=low`.
 
 Repeticiones previstas: una ahora (la foto de partida), una tras cada tanda de arreglos y una antes de la beta. Cinco
-pasadas en el mes, **unos 15 $**. Una vez, además, los cuatro perfiles de combate y charla con `MASTER_EFFORT=medium`
+pasadas en el mes, **unos 17 $**. Una vez, además, los cuatro perfiles de combate y charla con `MASTER_EFFORT=medium`
 (0,6 $) para ver si el esfuerzo medio baja las incoherencias.
 
 **Partida a mano.** Una partida a dos de Miguel y Santi en tavernus.com, 30 a 40 turnos, con el guion de la taberna
@@ -121,8 +124,14 @@ En las 40 acciones de cada partida, frente a la pasada anterior:
 - Concurrencia (parejas): turnos compartidos sin su parte o sin lo común, a cero; crímenes apuntados al que no pegó, a
   cero; reacciones contestadas; chats que llegan al otro.
 - Cobertura (tabla «Cobertura de tools»): las tools que quedan a cero en la pasada son lo que no se ha probado. Con los
-  mecánicos se espera ver `cast_spell`, `spend_resource`, `use_item`, `take_rest`, `heal`, `harvest`, `roll_check` de
-  sigilo y atletismo, `attack` a distancia y `transfer_item` por saqueo; una tool que el jugador pide y no aparece es un
-  fallo del máster o del prompt, no del jugador.
+  mecánicos se espera ver `cast_spell`, `use_item`, `roll_check` de sigilo y atletismo, `attack` a distancia y
+  `transfer_item` por saqueo (lanzador y tirador); `heal` con poción, `spend_resource` (Tomar aliento), `take_rest` y
+  `lookup_rule` (herido); `set_debt`, `pawn_item`, `sell_item`, `buy_item`, `settle_debt`, `give_coins` y `take_coins`
+  (deudor); `record_character_fact`, `complete_job`, `give_quest`, `finish_quest`, `schedule_event` y `get_schedule`
+  (cronista); `harvest`, `get_item`, `attune_item`, `use_scroll` y `update_spot_state` (recolector); `stabilize` en la
+  pareja herido:violento si el violento cae. Una tool que el jugador pide y no aparece es un fallo del máster o del
+  prompt, no del jugador. Lo que ningún perfil provoca a propósito: `spawn_item` (Brezal no deja crear objetos),
+  `update_location_state`, `restrain_npc`, `remove_condition` y `report_incident` (`add_condition` puede salir con
+  el Enmarañar del recolector).
 
 Nada de esto dice si el juego es divertido. Para eso está la partida a mano.

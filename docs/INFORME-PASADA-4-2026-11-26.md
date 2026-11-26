@@ -155,6 +155,8 @@ De las herramientas:
   (`scripts/autoplay.ts`, ficha y resumen de escena por turno).
 - **H10. Perfiles que provoquen las tools a cero.** Un perfil «herido» que pide curarse y descansar, un «deudor» que fía y
   deja prendas, un «cronista» que cuenta su pasado: sin ellos la cobertura no se mueve.
+  Hecho el 26-11 en `scripts/autoplay.ts`: herido, deudor, cronista y recolector, en `all`, y la pareja herido:violento
+  para `stabilize`; qué tool pide cada uno, en `docs/PLAN-PRUEBAS-CREDITOS.md` («Qué se mira en cada pasada»).
 
 ## Qué sigue
 
