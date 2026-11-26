@@ -575,7 +575,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     // Una tirada social con éxito da el camino, no el secreto (talk.ts).
     const skill = Object.entries(SKILLS).find(([, v]) => roll.result.label.startsWith(v.es))?.[0];
     const social = skill ? socialOutcomeLine(world, engine.events.all(), actor, skill, roll.result.success, engine.nowFor(actor)) : null;
-    L.push(`## Resultado de la tirada\nAcción original: «${roll.original_text}»\n${roll.result.label}: ${roll.result.breakdown} → ${roll.result.success === null ? 'sin CD' : roll.result.success ? 'ÉXITO' : 'FALLO'}${roll.result.natural ? ` (${roll.result.natural} natural)` : ''}.${rollLine(roll.result)}${social ? `\n${social}` : ''}${roll.conflict ? `\nLo ha resuelto el motor (acción conflictiva) y ya está aplicado: no muevas tú ningún objeto (transfer_item, spawn_item) ni lo contradigas. Si el NPC reacciona, su primera frase es la reacción, sin deudas, encargos ni comercio.\nCuéntalo así (hechos): ${roll.conflict}` : ''}${roll.hidden ? '\nTIRADA OCULTA: el jugador no ha visto el dado ni sabe si ha salido bien. Con éxito, narra lo que nota, encuentra o consigue, sin nombrar la tirada. Con fallo, no nota nada: la escena sigue como si no hubiera nada que ver (a lo sumo una ligera sensación, sin confirmar nada); NUNCA digas que ha fallado, que «no ve nada raro» de forma que delate que había algo, ni lo que se le ha escapado.' : ''}\nNarra la consecuencia y aplica los cambios con tools. No pidas otra tirada para esta misma acción.`);
+    L.push(`## Resultado de la tirada\nAcción original: «${roll.original_text}»\n${roll.result.label}: ${roll.result.breakdown} → ${roll.result.success === null ? 'sin CD' : roll.result.success ? 'ÉXITO' : 'FALLO'}${roll.result.natural ? ` (${roll.result.natural} natural)` : ''}.${rollLine(roll.result)}${social ? `\n${social}` : ''}${roll.conflict ? `\nLo ha resuelto el motor (acción conflictiva) y ya está aplicado: no muevas tú ningún objeto (transfer_item, spawn_item) ni lo contradigas. Si el NPC reacciona, su primera frase es la reacción, sin deudas, encargos ni comercio.\nCuéntalo así (hechos): ${roll.conflict}` : ''}${roll.hidden ? '\nTIRADA OCULTA: el jugador no ha visto el dado ni sabe si ha salido bien. Con éxito, narra lo que nota, encuentra o consigue, sin nombrar la tirada. Con fallo, no nota nada: la escena sigue como si no hubiera nada que ver (a lo sumo una ligera sensación, sin confirmar nada); NUNCA digas que ha fallado, que «no ve nada raro» de forma que delate que había algo, ni lo que se le ha escapado.' : ''}\nNarra la consecuencia y aplica los cambios con tools. No pidas otra tirada para esta misma acción.${intentLine(engine, actor, roll.original_text)}`);
   } else if (engine.sceneHints(actor.id)?.round || engine.sceneHints(actor.id)?.group || engine.sceneHints(actor.id)?.window) {
     // Turno compartido: lo de cada uno va en su bloque (Ronda, Conversación de grupo o A la vez), no como acción del actor.
     L.push([
@@ -704,6 +704,17 @@ const EXTRA_SERVICE: Record<ExtraNpc['script']['service'], string> = {
 };
 
 /** Un vecino de relleno en una línea: quién es, qué vende, qué lleva y su guion corto (extras.ts). */
+/**
+ * Lo que el jugador ya leyó antes de tirar (el cierre de la intención), para que el resultado siga desde ahí en vez de
+ * volver a contarlo (arreglo 36): un cierre por turno, en orden.
+ */
+function intentLine(engine: Engine, actor: Character, originalText: string): string {
+  const e = [...engine.events.all()].reverse().find((x) => x.actor_id === actor.id && x.input_text != null);
+  if (!e || e.input_text !== originalText || !e.narration_private.trim()) return '';
+  const t = e.narration_private.length > 500 ? `${e.narration_private.slice(0, 500)}…` : e.narration_private;
+  return `\nAntes de tirar, el jugador ya ha leído esto (la intención): «${t}». Tu narración va DESPUÉS y lo continúa: empieza por lo que pasa al tirar, sin volver a contar lo que hace ni repetir esas frases (lo repetido se quita).`;
+}
+
 /** Jugadores de la partida, sin los muertos ni los retirados. */
 function livePcs(world: World): { id: Id; name: string }[] {
   return [...world.characters.values()].filter((c) => c.status !== 'dead' && c.status !== 'retired').map((c) => ({ id: c.id, name: c.name }));

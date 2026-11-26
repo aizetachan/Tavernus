@@ -11,7 +11,7 @@ import type { Character } from '../engine/model.js';
 import { actionContext, conflictPlanFor, systemPrompt, talkPlanFor, type DecisiveResponse, type RollContext, type Scene } from './prompt.js';
 import { cleanText, executeTool, MASTER_TOOLS, WRITE_TOOLS, type LogEventInput, type ToolContext } from './tools.js';
 import type { Approach } from '../engine/movement.js';
-import { isPlaceholder, rollCategory, withoutSelfCorrection } from '../engine/closecheck.js';
+import { isPlaceholder, rollCategory, withoutIntentRepeat, withoutSelfCorrection } from '../engine/closecheck.js';
 import type { ProgressEvent } from '../engine/progress.js';
 import { characterStory, storyOf } from '../engine/story.js';
 import type { ShownRoll } from '../engine/rolls.js';
@@ -98,6 +98,20 @@ export function liveClient(timeoutMs = 90_000): MasterClient {
   return { create: (p) => sdk.beta.messages.create(p) };
 }
 
+/**
+ * Lo que leyó el jugador antes de tirar: la narración del cierre de la intención (su último evento con ese texto). null
+ * si no lo hay o estaba vacía.
+ */
+export function intentNarration(engine: Engine, actor: Character, originalText: string): string | null {
+  const events = engine.events.all();
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.actor_id !== actor.id || e.input_text == null) continue;
+    return e.input_text === originalText && e.narration_private.trim() ? e.narration_private : null;
+  }
+  return null;
+}
+
 export class Master {
   private readonly client: MasterClient;
   private readonly rng: Rng;
@@ -175,8 +189,20 @@ export class Master {
     const calls: ToolCallRecord[] = [];
     const failures: ToolFailure[] = [];
     /** Cierre aceptado: con tool_failed y los errores si algo de escritura falló por el camino. */
-    const done = (closed: LogEventInput, m: string): MasterOutcome => ({
-      ok: true, closed: failures.length ? { ...closed, tags: [...closed.tags, 'tool_failed'] } : closed, usage, calls, rolls: ctx.rolls, context, model: m, progress: ctx.progress, shown_rolls: ctx.shown_rolls ?? [],
+    // Tras una tirada, la narración del resultado continúa a la de la intención, que el jugador ya ha leído antes de
+    // tirar: lo que la vuelve a contar se quita (arreglo 36). Sin tirada, igual.
+    const intent = roll ? intentNarration(engine, actor, roll.original_text) : null;
+    const continued = (c: LogEventInput): LogEventInput => {
+      if (!intent) return c;
+      const cut = (t: string) => withoutIntentRepeat(intent, t).narration;
+      return {
+        ...c, narration_private: cut(c.narration_private),
+        ...(c.narration_common != null ? { narration_common: cut(c.narration_common) } : {}),
+        ...(c.narration_by_pc ? { narration_by_pc: Object.fromEntries(Object.entries(c.narration_by_pc).map(([id, t]) => [id, cut(t)])) } : {}),
+      };
+    };
+    const done = (raw: LogEventInput, m: string): MasterOutcome => ({
+      ok: true, closed: ((closed) => (failures.length ? { ...closed, tags: [...closed.tags, 'tool_failed'] } : closed))(continued(raw)), usage, calls, rolls: ctx.rolls, context, model: m, progress: ctx.progress, shown_rolls: ctx.shown_rolls ?? [],
       ...(failures.length ? { tool_errors: failures } : {}), ...(ctx.approach ? { approach: ctx.approach } : {}),
     });
     const usage: MasterUsage = { input: 0, output: 0, cache_read: 0, cache_write: 0, iterations: 0, ms: 0 };

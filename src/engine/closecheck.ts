@@ -1816,3 +1816,34 @@ export function downedRejection(hit: { id: string; name: string; phrase: string;
     ? `${hit.name} [${hit.id}] está a 0 PG (${state}): inconsciente, no lanza, no ataca, no coge nada ni se mueve («${hit.phrase}»). Narra lo que le llega desde el suelo, a medias, o lo que hacen los demás. Reescribe log_event.`
     : `La narración levanta a ${hit.name} [${hit.id}] («${hit.phrase}») y está a 0 PG (${state}): una salvación con éxito no le despierta. Vuelve en sí solo si alguien le cura (heal) o, estable, cuando lo diga el servidor; para estabilizarle, stabilize. Si no, sigue en el suelo. Reescribe log_event.`;
 }
+
+// ---------------------------------------------------------------------------
+// Un cierre por turno con tirada (arreglo 36, parte del máster)
+// ---------------------------------------------------------------------------
+
+/** Palabras que no dicen nada de la escena, para comparar dos narraciones por lo que cuentan. */
+const FILLER = new Set(['para', 'pero', 'como', 'sobre', 'entre', 'hasta', 'desde', 'hacia', 'donde', 'cuando', 'mientras', 'todo', 'toda', 'todos', 'todas', 'este', 'esta', 'esto', 'tiene', 'tienes', 'otra', 'otro', 'sigue', 'sigues', 'algo', 'nada', 'poco', 'mucho', 'tras', 'ante', 'cada', 'solo', 'tambien', 'despacio', 'luego', 'antes', 'despues']);
+const contentWords = (t: string) => norm(t).replace(/[^a-z0-9ñ ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !FILLER.has(w));
+
+/**
+ * La narración del resultado de una tirada sin las frases que vuelven a contar la intención que el jugador ya leyó antes
+ * de tirar (patrón 6 del análisis del 26-11-2026: tirador T5, «Levantas la losa un palmo…» tras «Deslizas la punta de
+ * la espada bajo el borde de la losa…»). Una frase se va si cuatro o más de sus palabras con contenido y al menos seis
+ * de cada diez ya estaban en la intención; lo dicho entre «» se queda. Si se iría todo, se deja como estaba.
+ */
+export function withoutIntentRepeat(intent: string, narration: string): { narration: string; removed: string[] } {
+  const seen = new Set(contentWords(intent.replace(/«[^»]*»/g, ' ')));
+  if (!seen.size || !narration.trim()) return { narration, removed: [] };
+  const removed: string[] = [];
+  // Párrafo a párrafo (lo suyo y lo común van separados por una línea en blanco).
+  const paragraphs = narration.split(/\n{2,}/).map((para) => para.split(/(?<=[.!?…»])[ \t]+(?=[\p{Lu}«¿¡])/u).filter((p) => {
+    if (/«/.test(p)) return true;
+    const w = contentWords(p);
+    const old = w.filter((x) => seen.has(x)).length;
+    const repeat = w.length >= 4 && old >= 4 && old / w.length >= 0.6;
+    if (repeat) removed.push(p);
+    return !repeat;
+  }).join(' ')).filter((p) => p.trim());
+  if (!removed.length || !paragraphs.length) return { narration, removed: [] };
+  return { narration: paragraphs.join('\n\n'), removed };
+}
