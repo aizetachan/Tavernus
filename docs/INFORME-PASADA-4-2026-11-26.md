@@ -163,3 +163,59 @@ De las herramientas:
 Nada que lanzar hasta arreglar el 19 (doble golpe), que es corto. Después, la partida a mano de Miguel y Santi en
 tavernus.com, que es la única prueba de si es jugable; y, con el arreglo 19 y los perfiles de H10, otra pasada corta con
 `--baseline data/local/autoplay/20261126-0418` y `20261126-0442`.
+
+## Tanda 5 (26-11-2026): los cuatro perfiles de H10
+
+Sobre `main` 92f32cb, los perfiles nuevos del jugador automático (herido, deudor, cronista, recolector), 40 acciones cada
+uno, Haiku bajo. `data/local/autoplay/20261126-0602`, 0,54 $ (0,0034 $ por acción). Las cuatro partidas llegaron a las 40
+acciones, sin 429. Acumulado: unos 32 $ de los 200.
+
+**Cobertura: de 27 a 36 tools de 56** sumando esta tanda a la pasada 4. De las 25 que llevaban cuatro pasadas a cero,
+nueve se disparan por primera vez: `heal` (5), `record_character_fact` (5), `take_rest` (4), `take_coins` (4), `harvest`
+(4), `spend_resource` (3), `settle_debt` (2), `pawn_item` (1), `use_scroll` (1). Los perfiles hacen lo que debían: cuando el
+jugador lo pide con las palabras justas, Haiku llama a la tool.
+
+**Siguen a cero aunque el jugador lo pida**, y eso ya es un dato del máster, no del jugador:
+
+| Tool | Quién lo pidió y cuántas veces | Qué hizo el máster |
+|---|---|---|
+| `set_debt` | deudor, «apúntamela, te la pago mañana», 6 veces | el NPC acepta o rechaza de palabra; ninguna deuda en el estado. Es la mitad de los 11 «trato sin estado» del juez (6,9 por 100) |
+| `sell_item` | deudor 6 veces (cuerda, antorchas), recolector 3 (bayas, truchas) | «no hay nadie que te la compre», o lo convierte en trueque narrado. Ningún NPC de Brezal compra |
+| `lookup_rule` | herido, 7 preguntas de reglas («¿cuántos días aguanta un hombre sin comer?», «¿cuántas millas al día?») | Hugo contesta de memoria, en ficción. Correcto como voz, pero la regla no se consulta nunca |
+| `complete_job`, `give_quest`, `finish_quest` | cronista: lee el tablón 4 veces, hace el agua para Ilse y la leña, pide trabajo 4 veces | `story_quest` 3 veces, pero el encargo no se registra ni se cobra: «El frasco en el brocal no sabe nada de lo que has visto. Ponlo en mi mano». El trato de vigilar el pozo a cambio de información queda de palabra |
+| `schedule_event` | cronista, «mañana al alba junto al pozo» 4 veces | la cita se acepta de palabra; `get_schedule` 1 vez |
+| `attune_item` | recolector, 4 veces | la capa de protección con la que empieza no aparece en su ficha a partir del turno 17 («finjo sintonizarme con una capa que no tengo»): o la soltó al «soltar» algo, o la ficha de H1 no la lista como equipada. Revisar |
+| `stabilize`, `restrain_npc`, `add_condition` | nadie en solitario | la pareja herido:violento no se lanzó en esta tanda |
+
+**Lo demás que sale:**
+
+- **Errores por 100 acciones: 39** (más que los 30 de la pasada 4), y el reparto lo explica: «trato sin estado» sube de 1,3 a
+  6,9 porque estos perfiles piden tratos todo el rato y el máster los acepta de palabra. Es la medida de lo que falta.
+- **El recolector muere dos veces en el Soto** (lobos, 19 horas de juego): va al bosque de noche a recolectar. El perfil debe
+  recolectar de día o cerca del pueblo. Su «Curar heridas» se tira (`cast_spell`, 1d8+2 = 10) y el juez protesta porque la
+  narración dice «recuperas 10 PG, hasta 9»: la aritmética la hizo el motor, la frase el máster.
+- **El deudor «esconde sus monedas» y el máster narra que roba la bolsa de la tabernera** (turno 36, tirada de éxito aplicada a
+  otra cosa). Un «esconder» no puede acabar en `take_coins` de un NPC: guarda en `conflict_act` o `take_coins` (quién es el
+  dueño de la bolsa).
+- **El herido descansa bien:** el descanso corto cura por el motor (`take_rest`, 12 → 13 PG, «Son las 19:12») y el motor
+  rechaza descansar con una amenaza delante. La poción y Tomar aliento pasan por sus tools.
+
+**Arreglos que añade:**
+
+24. **Fiar es `set_debt` o no es.** Guarda: un NPC que acepta «apúntamela», «te la pago mañana», «a cuenta» sin `set_debt` se
+    rechaza una vez (hoy la guarda de trato sin estado solo salta una vez por partida: debería saltar por trato). Y la guía
+    del prompt con el ejemplo literal del deudor.
+25. **Comprar al jugador.** Brezal necesita al menos un NPC que compre (el buhonero Lucio, Brenna para comida y leña): lista de
+    compra en los datos y `sell_item` con precio. Sin eso `sell_item` no se puede medir.
+26. **Encargos del tablón que se cobran.** Cuando el jugador trae lo pedido y lo dice, el máster debe cerrar el encargo
+    (`complete_job`) y pagar; hoy lo narra como charla. Guarda: «ya lo tienes», «aquí está lo que pediste» con un encargo
+    activo y sin `complete_job`.
+27. **Citas con hora.** «Mañana al alba junto al pozo» aceptado por un NPC sin `schedule_event` se rechaza una vez (es la misma
+    familia que el 24).
+28. **`lookup_rule` cuando el jugador pregunta por una regla** («según las reglas», «¿cuántos días…?»): guarda o guía; la voz
+    del NPC puede contestar después, pero con la regla consultada.
+29. **«Esconder» no es robar.** Guarda en `take_coins`: la bolsa de la que saca monedas tiene que ser del actor salvo robo
+    declarado.
+
+De las herramientas: **H11**, el recolector de día y cerca del pueblo; **H12**, comprobar por qué la capa del recolector
+desaparece de la ficha (H1) a mitad de partida.
