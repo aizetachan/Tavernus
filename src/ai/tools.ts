@@ -1907,13 +1907,15 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const junk = placeholderFields({ narration_private: s('narration_private'), observable: opt('observable'), observable_vague: opt('observable_vague'), observable_target: opt('observable_target') });
       if (junk.length) return { error: placeholderRejection(junk) };
       const empty = !req && emptyClose({ narration: cleanText(s('narration_private')), lines: parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id), (id) => world.characters.has(id)).filter((l) => !isPlaceholder(l.text)) });
-      // Turno compartido: cada uno de los que actuaron recibe su respuesta, por su nombre. Se reescribe una vez.
-      if ((ctx.shared_rejections ?? 0) < 1) {
+      // Turno compartido: cada uno de los que actuaron recibe su parte en narration_by_pc. Sin ella, se reescribe hasta
+      // dos veces (el tope de muertes e incidentes; arreglo 8: 4 de 23 cierres de grupo la dejaban sin poner); la
+      // narración común en «tú», una.
+      if ((ctx.shared_rejections ?? 0) < 2) {
         const acted = sharedActed(engine, actor.id);
         const lines = parseLines(input['lines'], null, (id) => world.npcs.has(id), (id) => acted.some((m) => m.id === id));
         const byPc = parseByPc(input['narration_by_pc'], (id) => acted.some((m) => m.id === id));
         const missing = unansweredInShared({ narration: s('narration_private'), lines, acted, byPc });
-        const vague = acted.length >= 2 ? secondPersonSingular(s('narration_private')) : null;
+        const vague = acted.length >= 2 && (ctx.shared_rejections ?? 0) < 1 ? secondPersonSingular(s('narration_private')) : null;
         if (missing.length || vague) {
           ctx.shared_rejections = (ctx.shared_rejections ?? 0) + 1;
           return { error: unansweredRejection(missing.map((m) => ({ id: m.id, name: m.name, text: acted.find((a) => a.id === m.id)!.text })), vague) };
