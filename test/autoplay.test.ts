@@ -7,7 +7,7 @@ import {
   buildReport, detectFailedToolNarrated, detectInventedPlace, detectLongNarration, detectNoResponse, detectNpcOutOfReach,
   detectPromiseWithoutState, detectRepeatedSuggestion, detectTrivialRoll, judgeRun, parseJudge, runDetectors, turnsFromEvents, type GameJudgement, type Turn,
 } from '../scripts/judge.js';
-import { cleanOwnAction, dryMasterClient, dryPlayerClient, estimate, FINAL_PROFILES, masterTally, parseSuggestedChoice, playerPrompt, prepareBrezalAct, PROFILES, runAutoplay, type GameSummary } from '../scripts/autoplay.js';
+import { cleanOwnAction, dryMasterClient, playerSheet, dryPlayerClient, estimate, FINAL_PROFILES, masterTally, parseSuggestedChoice, playerPrompt, prepareBrezalAct, PROFILES, runAutoplay, type GameSummary } from '../scripts/autoplay.js';
 import { analyzeGame, buildPlaytest, buildWindowSection, dryFunClient, judgeFun, keyOf, similar, windowMetrics } from '../scripts/playtest-report.js';
 import { authoredSeed } from '../src/data/campaigns/index.js';
 import { Engine } from '../src/engine/engine.js';
@@ -16,6 +16,7 @@ import { claimSituation } from '../src/worldgen/index.js';
 import { MemoryRepository } from '../src/persistence/memory.js';
 import { fakeTime } from './helpers.js';
 import { loadGame } from '../scripts/judge.js';
+import { coinsOf, money } from '../src/engine/money.js';
 
 const PC = 'ch_test';
 let seq = 0;
@@ -172,6 +173,39 @@ describe('jugador automático', () => {
     expect(parseSuggestedChoice('2', ['a', 'b'])).toBe('b');
     expect(parseSuggestedChoice('La 7, claro', ['a', 'b'])).toBe('a');
     expect(cleanOwnAction('«Le digo que me lo fíe.»\nY sonrío.')).toBe('Le digo que me lo fíe.');
+  });
+});
+
+describe('ficha del jugador automático (H1)', () => {
+  const boot = async (class_id: string) => {
+    const time = fakeTime(Date.UTC(2026, 9, 22, 12, 0, 0));
+    const engine = await Engine.boot({ repo: new MemoryRepository(), campaignId: 'brezal', seed: authoredSeed('brezal', { now: new Date(time.now()) }), now: time.now, deterministic: false });
+    const r = await engine.createCharacter(`u_${class_id}`, 'Fen', { class_id });
+    if (!r.ok) throw new Error(r.reason);
+    return { engine, c: r.character };
+  };
+
+  it('el dinero sale de las bolsas, no de un campo que ya no existe', async () => {
+    const { engine, c } = await boot('fighter');
+    const sheet = playerSheet(engine, c);
+    expect(sheet).not.toContain('undefined');
+    expect(sheet).not.toContain('Monedas:');
+    expect(coinsOf(engine.world, c.id)).toBeGreaterThan(0);
+    expect(sheet).toContain(`Dinero: ${money(engine.world, coinsOf(engine.world, c.id))}.`);
+  });
+
+  it('un lanzador ve sus conjuros y sus usos de clase', async () => {
+    const { engine, c } = await boot('sorcerer');
+    const sheet = playerSheet(engine, c);
+    expect(sheet).toMatch(/Conjuros: Trucos: [^;.]+/);
+    expect(sheet).toMatch(/Nivel 1: /);
+    expect(sheet).toMatch(/Usos de clase: [^.]*\d+\/\d+ \((corto|largo)\)/);
+    expect(sheet).not.toContain('undefined');
+  });
+
+  it('un guerrero sin conjuros no saca la línea vacía', async () => {
+    const { engine, c } = await boot('fighter');
+    expect(playerSheet(engine, c)).not.toContain('Conjuros:');
   });
 });
 

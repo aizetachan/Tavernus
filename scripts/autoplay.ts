@@ -30,7 +30,9 @@ import type { ActionResult, Engine } from '../src/engine/engine.js';
 import type { Character, GameEvent, Offer, Reaction } from '../src/engine/model.js';
 import { readerText } from '../src/engine/events.js';
 import { journalOf } from '../src/engine/journal.js';
-import { choiceOptions, pendingChoices } from '../src/engine/levels.js';
+import { choiceOptions, pendingChoices, spellGroups } from '../src/engine/levels.js';
+import { coinsOf, money } from '../src/engine/money.js';
+import { resourceLines } from '../src/engine/rest.js';
 import { characterStory, questsOf, questStatus, storyOf } from '../src/engine/story.js';
 import { seededRng, type Rng } from '../src/engine/dice.js';
 import { GameManager } from '../src/games/manager.js';
@@ -398,7 +400,14 @@ export function dryPlayerClient(): TextClient {
 export function playerSheet(engine: Engine, c: Character): string {
   const items = engine.world.itemsCarriedBy(c.id).map((i) => { const d = engine.world.itemDef(i.item_id); return i.quantity > 1 ? `${d.name} ×${i.quantity}` : d.name; });
   const race = RACES.find((r) => r.id === c.race_id)?.name ?? c.race_id;
-  return `${c.name}, ${race.toLowerCase()} ${c.class_name.toLowerCase()} de nivel ${c.level}. PG ${c.hp_current}/${c.hp_max}. Monedas: ${c.coins}. Lleva: ${items.join(', ') || 'nada'}.`;
+  // El dinero no es un campo del PJ: es lo que hay en sus bolsas (money.ts). Antes salía «Monedas: undefined» y llegaba a la narración.
+  const parts = [`${c.name}, ${race.toLowerCase()} ${c.class_name.toLowerCase()} de nivel ${c.level}. PG ${c.hp_current}/${c.hp_max}.`, `Dinero: ${money(engine.world, coinsOf(engine.world, c.id))}.`];
+  const spells = spellGroups(c).map((g) => `${g.label}: ${[...g.spells, ...g.always].map((s) => s.name).join(', ')}`);
+  if (spells.length) parts.push(`Conjuros: ${spells.join('; ')}.`);
+  const res = resourceLines(c);
+  if (res.length) parts.push(`Usos de clase: ${res.join(', ')}.`);
+  parts.push(`Lleva: ${items.join(', ') || 'nada'}.`);
+  return parts.join(' ');
 }
 
 export const PLAYER_SYSTEM = 'Juegas a un juego de rol por chat en castellano: eres el jugador, no el narrador. Contestas solo con lo que hace o dice tu personaje, en primera persona, en una o dos frases (25 palabras como mucho), sin comillas de apertura ni explicaciones. Juegas con ganas: quieres avanzar en tu situación y a veces pones a prueba al narrador.';
@@ -719,7 +728,7 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
       const finalDone = (c: Character) => characterStory(c).done.find((id) => id.startsWith('q_final_')) ?? null;
       const stateNow = (c: Character): TurnState => {
         const st = characterStory(c);
-        return { game_s: engine.nowFor(c), status: c.status, hp: c.hp_current, hp_max: c.hp_max, level: c.level, xp: c.xp, coins: c.coins, location: engine.world.characterSpot(c)?.location_id ?? '', open: st.open.length, steps: st.steps.length, done: st.done.length, clues: c.clues.length };
+        return { game_s: engine.nowFor(c), status: c.status, hp: c.hp_current, hp_max: c.hp_max, level: c.level, xp: c.xp, coins: coinsOf(engine.world, c.id), location: engine.world.characterSpot(c)?.location_id ?? '', open: st.open.length, steps: st.steps.length, done: st.done.length, clues: c.clues.length };
       };
       const diaryNow = (c: Character): string => {
         const j = journalOf(engine, c.id);
