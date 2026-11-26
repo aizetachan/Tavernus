@@ -18,6 +18,7 @@ import { allHooks } from '../src/engine/hooks.js';
 import { allScheduled, routineOf } from '../src/engine/schedule.js';
 import { parseTrivial } from '../src/engine/fastpath.js';
 import { parseCrossing } from '../src/engine/barrier.js';
+import { inventedPlaces } from '../src/engine/places.js';
 import { generateMap, mapInputOf } from '../src/adapters/web/mapgen.js';
 import { GameManager } from '../src/games/manager.js';
 import type { Character, WorldSnapshot } from '../src/engine/model.js';
@@ -631,5 +632,33 @@ describe('menú: «Brezal (demo)» carga la campaña escrita', () => {
     const again = await games.open(game.slug);
     expect(again.world.character(character_id!).situation?.why_here).toBe(c.situation!.why_here);
     await games.closeAll();
+  });
+});
+
+describe('la casona: el pasillo de la despensa (arreglo 16)', () => {
+  // Narraciones reales desde la celda, rechazadas por citar «el pasillo» (Opus, violento, tanda 20261125-1652).
+  const FROM_CELL = [
+    'Te pegas a la reja con el hacha alzada y la otra mano abierta entre los barrotes. No viene nadie. Al otro lado solo está el pasillo de la despensa, a oscuras, y el olor a cera que baja de arriba.',
+    'Te apoyas en los barrotes y escupes hacia el pasillo, pero ahí no hay nadie: Garrán no está. Solo oscuridad y olor a despensa.',
+  ];
+
+  it('existe en la casona, a la vista, y el máster puede citarlo desde la celda', async () => {
+    const { engine } = await boot();
+    const w = engine.world;
+    const pasillo = w.spot('sp_ca_pasillo');
+    expect(pasillo.location_id).toBe('loc_casona');
+    expect(pasillo.hidden).toBeFalsy();
+    expect(pasillo.aliases).toContain('pasillo');
+    for (const t of FROM_CELL) expect(inventedPlaces(w, 'loc_casona', t)).toEqual([]);
+    // El calabozo dice dónde está: al fondo del pasillo.
+    expect(w.spot('sp_ca_calabozo').description).toMatch(/pasillo de la despensa/);
+  });
+
+  it('un preso en el calabozo no sale al pasillo', async () => {
+    const { engine } = await boot();
+    const c = await newPc(engine, 'Bruno', 'fighter');
+    c.location = { type: 'spot', id: 'sp_ca_calabozo' };
+    c.jailed = { until_game_s: engine.gameNow() + 8 * H, spot_id: 'sp_ca_calabozo', reason: 'agresión' };
+    expect(tool(engine, c, 'move_to', { character_id: c.id, target_spot_id: 'sp_ca_pasillo', pace: 'walk' }).error).toBeDefined();
   });
 });

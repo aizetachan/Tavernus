@@ -143,8 +143,12 @@ export const LOCATIONS: AuthoredLocation[] = [
       S('sp_ca_torre', 'la torre del reloj', ['torre', 'torre del reloj', 'reloj', 'mirador', 'campanario'], ['stairs'], 1, 12,
         'Lo alto de la torre, junto a la maquinaria del reloj parado. Desde aquí se ve Brezal entero, el humo del Granero Quemado y, alrededor de todo, la niebla, quieta como una pared.',
         { entry_cost_s: 40, capacity: 2, ...apart('sp_ca_puerta', 'sp_ca_banco', 'sp_ca_despacho', 'sp_ca_arcon', 'sp_ca_alcoba') }),
+      // Lo que se ve desde la reja del calabozo: el máster lo citaba sin que existiera (siete cierres rechazados con Sonnet y Opus, tandas del 25-11).
+      S('sp_ca_pasillo', 'el pasillo de la despensa', ['pasillo', 'pasillo de la despensa', 'despensa', 'corredor'], ['door'], 10, 5,
+        'Un pasillo estrecho y sin ventanas detrás del despacho, con la puerta de la despensa a un lado (sacos de harina, ristras de ajos, olor a humedad) y, al fondo, la reja del calabozo.',
+        apart('sp_ca_puerta', 'sp_ca_banco')),
       S('sp_ca_calabozo', 'el calabozo', ['calabozo', 'celda', 'reja', 'cárcel', 'carcel'], ['door'], 12, 5,
-        'Un cuarto de piedra detrás de la despensa, sin ventana, con una reja, un jergón de paja y una argolla en la pared. Aquí encierra Garrán a quien no paga o a quien el regidor quiere quieto.',
+        'Un cuarto de piedra al fondo del pasillo de la despensa, sin ventana, con una reja, un jergón de paja y una argolla en la pared. Aquí encierra Garrán a quien no paga o a quien el regidor quiere quieto.',
         { capacity: 2, ...apart('sp_ca_puerta', 'sp_ca_banco', 'sp_ca_despacho', 'sp_ca_arcon') }),
       S('sp_ca_bodega', 'la bodega tapiada', ['bodega', 'tabique', 'despensa'], ['barrel'], 10, 2, 'Tras un tabique de la despensa que suena a hueco, una bodega estrecha con dos toneles, una manta y una vela.',
         { hidden: true, dc_to_find: 15, capacity: 2 }),
