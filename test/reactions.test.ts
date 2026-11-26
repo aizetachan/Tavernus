@@ -113,12 +113,14 @@ describe('petición, respuesta y resolución', () => {
     }
   });
 
-  it('responder con sus palabras: un «vale» es dejarse; lo demás, resistirse con lo dicho', async () => {
+  it('responder con sus palabras: un «vale» es dejarse; lo demás, resistirse (lo que escribe es un gesto, no una frase dicha)', async () => {
     const { engine, kael, mira, seen } = await together();
     await engine.act(kael.id, 'empujo a Mira');
     const r = await engine.answerReaction(mira.id, mira.reactions![0]!.id, null, 'Ni se te ocurra, me agarro al brocal');
     expect(r.event!.action_type).toBe('reaction_resisted');
-    expect(seen(kael.id).at(-1)!.text).toContain('Mira se resiste. «Ni se te ocurra, me agarro al brocal».');
+    // Arreglo 9 del 26-11-2026: no vuelve como frase dicha ni se le enseña tal cual a quien actúa (lo cuenta el máster).
+    expect(seen(kael.id).at(-1)!.text).toMatch(/^Mira se resiste\. Tirada enfrentada/);
+    expect(seen(kael.id).at(-1)!.text).not.toContain('brocal');
     await engine.act(kael.id, 'empujo a Mira');
     const r2 = await engine.answerReaction(mira.id, mira.reactions![0]!.id, null, 'vale, vale');
     expect(r2.event!.action_type).toBe('reaction_accepted');

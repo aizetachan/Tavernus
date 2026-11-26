@@ -22,7 +22,7 @@ import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswe
 
 import { npcSees, witnesses } from './perception.js';
 
-import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, reactionExplain, readsAsAccept, readsAsResist } from './reactions.js';
+import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, reactionExplain, reactionReply, readsAsAccept, readsAsResist } from './reactions.js';
 
 import { TURN_WINDOW_MS, windowClashes, type Clash } from './turnwindow.js';
 
@@ -173,6 +173,19 @@ export type MasterResolution =
  * ventana decisiva que caducó): con quién (NPC), en una frase para el actor, y el turno del NPC si lo hubo.
  */
 export interface EngineDone { npc_id: Id | null; text: string; forced?: ForcedTurn }
+
+/** El desenlace de una reacción entre PJ mientras el máster lo narra (Engine.reactionOutcomeOf). */
+export interface ReactionOutcome {
+  target_id: Id;
+  /** Gana quien actúa (el otro se dejó o perdió la tirada). */
+  success: boolean;
+  kind: ReactionKind;
+  /** Lo que intentaba, para el afectado («birlarte una moneda»). */
+  attempt: string;
+  how: 'accept' | 'resist' | 'timeout' | 'away' | 'helpless';
+  /** Lo que hace el afectado, como lo escribió (un gesto). */
+  gesture?: string;
+}
 
 /**
  * Una llamada al máster, para el registro del servicio: quién, de qué tipo, modelo, cuánto tardó, tokens y error.
@@ -2604,7 +2617,7 @@ export class Engine {
   private unannounced = new Map<Id, Reaction[]>();
   /** Actores cuya narración del máster es el desenlace de una reacción (no se pide otra encima). */
   /** Quien está narrando el desenlace de su reacción: contra quién y si le ha salido (take_coins y robar a otro PJ, tools.ts). */
-  private reactionOutcome = new Map<Id, { target_id: Id; success: boolean }>();
+  private reactionOutcome = new Map<Id, ReactionOutcome>();
 
   /** ¿Está el máster narrando el desenlace de una reacción de este actor? (tools.ts no deja pedir otra.) */
   inReactionOutcome(characterId: Id): boolean { return this.reactionOutcome.has(characterId); }
@@ -2613,6 +2626,12 @@ export class Engine {
     const r = this.reactionOutcome.get(fromId);
     return Boolean(r && r.target_id === targetId && r.success);
   }
+  /**
+   * El desenlace de la reacción que el máster está narrando para este actor (arreglo 2 del 26-11-2026): contra quién,
+   * qué intentaba, cómo decidió el otro y quién ha ganado. null si no está narrando ninguno. Lo lee la guarda del cierre
+   * (tools.ts) para rechazar la narración que cuente lo contrario.
+   */
+  reactionOutcomeOf(fromId: Id): Readonly<ReactionOutcome> | null { return this.reactionOutcome.get(fromId) ?? null; }
 
   /** Lo que el actor intenta sobre otro PJ (reactions.ts), reconocido por el motor; null si no es eso. */
   private tryReaction(c: Character, text: string): ActionResult | null {
@@ -2808,11 +2827,14 @@ export class Engine {
     if (mine.id !== theirs.id) approachSpot(this.world, from, mine.id);
     const toName = pcName(this.world, from.id, to);
     const ToName = toName.charAt(0).toUpperCase() + toName.slice(1);
-    // Cómo decidió, para el afectado [0] y para quien actúa [1].
-    const said = reply ? ` «${reply.replace(/[«»]/g, '').replace(/[.]+$/, '')}».` : '';
+    // Cómo decidió, para el afectado [0] y para quien actúa [1]. Lo que escribió es lo que hace, un gesto (arreglo 9 del
+    // 26-11-2026): no se le devuelve como frase dicha ni se le enseña al otro tal cual (lo cuenta el máster); solo lo que
+    // puso entre comillas, que sí lo dice en voz alta.
+    const answer = reactionReply(reply);
+    const said = answer.speech.length ? `: ${answer.speech.map((x) => `«${x.replace(/[.]+$/, '')}»`).join(' ')}.` : '.';
     const decided = {
-      accept: [`Te dejas.${said}`, `${ToName} se deja.${said}`],
-      resist: [`Te resistes.${said}`, `${ToName} se resiste.${said}`],
+      accept: [`Te dejas${said}`, `${ToName} se deja${said}`],
+      resist: [`Te resistes${said}`, `${ToName} se resiste${said}`],
       timeout: ['No respondes a tiempo: te resistes por instinto.', `${ToName} no responde a tiempo: se resiste por instinto.`],
       away: ['No estás: te resistes por instinto.', `${ToName} no está (su jugador se ha ido): se resiste por instinto.`],
       helpless: [`No puedes resistirte (${to.status === 'asleep' ? 'duermes' : 'estás inconsciente'}).`, `${ToName} no puede resistirse (${to.status === 'asleep' ? 'duerme' : 'está inconsciente'}).`],
@@ -2839,6 +2861,14 @@ export class Engine {
     } else if (unopposed) {
       success = true;
       check = { label: `Reacción de ${to.name}`, expr: '', total: 0, rolls: [], d20s: [], modifier: 0, dc: null, advantage: 'none', success: true, breakdown: `${decided[1]} Sin tirada.` };
+    } else if (r.noticed) {
+      // A escondidas y le ha pillado (covertAttempt: la enfrentada oculta ya la perdió quien actúa). Si se resiste, no se
+      // tira otra vez lo mismo: no lo consigue (pareja 1115, acción 36: «Lo notas», se resiste, segunda tirada que gana el
+      // pícaro y una narración que lo contradice).
+      success = false;
+      rollTheirs = 'Ya le habías pillado: no hace falta otra tirada.';
+      rollMine = `${ToName} ya te había pillado: no hay otra tirada.`;
+      check = { label: `Reacción de ${to.name}`, expr: '', total: 0, rolls: [], d20s: [], modifier: 0, dc: null, advantage: 'none', success: false, breakdown: `${decided[1]} ${rollMine}` };
     } else {
       const k = contest(from, to, r, this.rng, this.takeHelp(from) ? 'advantage' : 'none');
       success = k.success;
@@ -2881,8 +2911,14 @@ export class Engine {
       join(decided[0], rollTheirs, outcome[0]), outcome[2], join(decided[1], rollMine, outcome[1]), { success, ...(dest ? { dest } : {}) });
     // Con máster: narra el desenlace para quien actuaba, como tras una tirada.
     if (this.master) {
-      check.breakdown = `${check.breakdown}${effects.length ? ` Ya aplicado por el servidor (no lo repitas): ${effects.join('; ')}.` : ''} ${to.name} es otro jugador y ya ha decidido: narra el desenlace sin ponerle palabras, gestos ni intenciones que no estén aquí, y no pidas otra reacción para esto.`;
-      this.reactionOutcome.set(from.id, { target_id: to.id, success });
+      const verdict = unopposed
+        ? `RESULTADO (hecho del servidor): ${from.name} lo consigue, sin tirada (${to.name} ${how === 'accept' ? 'se deja' : 'no puede resistirse'}).`
+        : success
+          ? `RESULTADO (hecho del servidor, no lo contradigas): gana ${from.name}. Lo consigue: lo que intentaba (${r.attempt}, dicho a ${to.name}) pasa${r.kind === 'attack' ? ' y el golpe entra' : ''}. Lo que haga ${to.name} para impedirlo NO le sale.`
+          : `RESULTADO (hecho del servidor, no lo contradigas): gana ${to.name}. ${from.name} NO lo consigue: lo que intentaba (${r.attempt}, dicho a ${to.name}) no pasa${r.kind === 'attack' ? ' y el golpe no entra' : ''}; no narres que lo logra ni a medias.`;
+      const gesture = answer.gesture ? ` Cómo ${how === 'accept' ? 'se deja' : 'se resiste'} ${to.name}, según su jugador (en primera persona; es lo que HACE, un gesto, no algo que diga en voz alta; cuéntalo en tercera persona y ajustado al resultado): ${answer.gesture.replace(/[.]+$/, '')}.` : '';
+      check.breakdown = `${check.breakdown} ${verdict}${gesture}${effects.length ? ` Ya aplicado por el servidor (no lo repitas): ${effects.join('; ')}.` : ''} ${to.name} es otro jugador y ya ha decidido: narra el desenlace sin ponerle palabras, gestos ni intenciones que no estén aquí, y no pidas otra reacción para esto.`;
+      this.reactionOutcome.set(from.id, { target_id: to.id, success, kind: r.kind, attempt: r.attempt, how, ...(answer.gesture ? { gesture: answer.gesture } : {}) });
       try { await this.resolveWithMaster(from, r.input ?? `(intenta ${r.attempt})`, { original_text: r.input ?? r.attempt, result: check }); } finally { this.reactionOutcome.delete(from.id); }
     }
     return done({ ok: true, text: e.narration_private, event: e });

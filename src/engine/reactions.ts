@@ -191,6 +191,38 @@ export function readsAsResist(text: string): boolean {
     || /\b(?:me resisto|resistirme|me resistire|me suelto|soltarme|me zafo|zafarme|me libero|liberarme|me aparto|apartarme|me niego|no me dejo|forcejeo|forcejear|me revuelvo|me escabullo)\b/i.test(t);
 }
 
+/** Lo que escribe el afectado al decidir, partido en lo que hace y lo que dice. */
+export interface ReactionReply {
+  /** Lo que hace, como lo escribe su jugador (primera persona): un gesto, no una frase dicha. null si no hay. */
+  gesture: string | null;
+  /** Lo que dice en voz alta: solo lo que va entre comillas. */
+  speech: string[];
+}
+
+/** Lo que ya dice el botón o la tirada: «me resisto», «me dejo», «no», «vale»… al principio. */
+const DECISION_LEAD = /^(?:(?:no\s+)?me\s+(?:resisto|dejo|niego|zafo|suelto|aparto)|me\s+resistire|resistirme|vale|venga|de\s+acuerdo|ok|okey|bueno|va|s[ií]|no|ni\s+hablar|nunca|jam[aá]s)(?![a-zñáéíóúü])[\s,.;:!¡]*/i;
+
+/**
+ * La respuesta del afectado (arreglo 9 del 26-11-2026): lo que escribe es lo que HACE, un gesto, no algo que diga. Las
+ * dos reacciones de la pasada 1 volvían como frase dicha («Me resisto, clavo los pies…») y el máster las narró como
+ * diálogo. Sin el «me resisto» o «me dejo» del principio (ya lo dice la decisión), y con lo que va entre comillas
+ * aparte: eso sí lo dice.
+ */
+export function reactionReply(text: string | null | undefined): ReactionReply {
+  const raw = (text ?? '').trim();
+  if (!raw) return { gesture: null, speech: [] };
+  const speech: string[] = [];
+  const rest = raw.replace(/«([^»]*)»|“([^”]*)”|"([^"\n]*)"/g, (_m, a: string | undefined, b: string | undefined, c: string | undefined) => {
+    const said = (a ?? b ?? c ?? '').trim();
+    if (said) speech.push(said);
+    return ' ';
+  });
+  let g = rest.replace(/\s+/g, ' ').trim();
+  for (let i = 0; i < 3; i++) { const next = g.replace(DECISION_LEAD, '').trim(); if (next === g) break; g = next; }
+  g = g.replace(/^[\s,.;:!¡?¿]+|[\s,;:]+$/g, '').trim();
+  return { gesture: g ? g.charAt(0).toUpperCase() + g.slice(1) : null, speech };
+}
+
 /** «1:30» para los avisos. */
 export function fmtLeft(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
