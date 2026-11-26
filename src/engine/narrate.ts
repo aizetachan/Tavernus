@@ -199,14 +199,22 @@ export function descriptorOf(world: World, id: Id): string {
   return 'alguien';
 }
 
+/** Oficios en «-a» que son de él («el guardia», «el centinela») y en otra letra que son de ella («la mujer del ascua»). */
+const MASC_A = new Set(['guardia', 'centinela', 'vigía', 'guía', 'poeta', 'profeta', 'patriarca', 'monarca', 'jerarca', 'papa', 'cura']);
+const FEM_OTHER = new Set(['mujer', 'madre', 'señora', 'reina', 'emperatriz', 'actriz', 'institutriz', 'abadesa', 'sacerdotisa']);
+
 /**
  * El oficio con artículo, para el texto corrido: la forma corta si los datos
  * la dan («el alguacil» por «alguacil y recaudador», «el guardia»); si no, el
- * oficio entero, con «la» si acaba en «a» («la curandera»).
+ * oficio entero, con el artículo de su primera palabra: «la» si acaba en «a»
+ * («la curandera», «la mujer del ascua»), salvo los de él («el guardia»).
  */
 export function roleLabel(n: Pick<Npc, 'role' | 'role_short'>, long = false): string {
   const r = (long ? null : n.role_short) ?? n.role;
-  return /^(el|la|los|las|un|una) /i.test(r) ? r : /a$/.test(r) ? `la ${r}` : `el ${r}`;
+  if (/^(el|la|los|las|un|una) /i.test(r)) return r;
+  const head = r.split(/\s+/)[0]!.toLowerCase();
+  const fem = FEM_OTHER.has(head) || (/a$/.test(head) && !MASC_A.has(head));
+  return `${fem ? 'la' : 'el'} ${r}`;
 }
 
 /**
