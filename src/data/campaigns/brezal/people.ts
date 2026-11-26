@@ -50,7 +50,9 @@ export const NPCS: AuthoredNpc[] = [
       { tag: 'salvo_ceniza', note: 'le sirve sin cobrar y le guarda el sitio junto al fuego; habla con él más de lo que habla con nadie' },
       { tag: 'asesino', note: 'le tiene miedo: no le sirve y no le quita ojo' },
     ],
-    buys: [{ item_id: 'it_madera', price: 3 }, { item_id: 'it_bayas', price: 1 }, { item_id: 'it_pescado', price: 5 }, { item_id: 'it_harina', price: 15 }, { item_id: 'it_huevo', price: 1 }],
+    // Compra para la cocina y el fuego (arreglo 25): lo que pide el tablón, y la col y el pan del pueblo. Cuerda, antorchas
+    // y cacharros no: eso, al buhonero.
+    buys: [{ item_id: 'it_madera', price: 3 }, { item_id: 'it_bayas', price: 1 }, { item_id: 'it_pescado', price: 5 }, { item_id: 'it_harina', price: 15 }, { item_id: 'it_huevo', price: 1 }, { item_id: 'it_col', price: 1 }],
     sells: [{ item_id: 'it_cerveza', price: 4 }, { item_id: 'it_racion', price: 10 }, { item_id: 'it_antorcha', price: 2 }, { item_id: 'it_pocion', price: 2500 }, { item_id: ROOM_NIGHT_ITEM_ID, price: ROOM_NIGHT_PRICE }],
     stats: srd('commoner', 9, { attack_name: 'jarra' }),
     routine: { day: 'sp_tab_barra', night: 'sp_tab_mesa' },
@@ -294,7 +296,13 @@ export const NPCS: AuthoredNpc[] = [
       { tag: 'clase:bard', opinion: 5, note: 'le cuenta historias del camino y le canta la tonada de los carboneros', option: { text: 'Cambiarle canciones del camino', skill: 'performance', dc: 12 } },
       { tag: 'asesino', note: 'le vende lo que pida, deprisa y sin mirarle, para que se vaya cuanto antes' },
     ],
-    buys: [{ item_id: 'it_piel', price: 120 }, { item_id: 'it_cuerda', price: 60 }, { item_id: 'it_antorcha', price: 1 }],
+    // Compra lo que vende un buhonero (arreglo 25), siempre por debajo de lo que lo vende él: cuerda, luz, herramientas
+    // y baratijas; lo demás (las hachas, que son de Hugo), a la mitad de lo que vale (`buys_any`).
+    buys: [
+      { item_id: 'it_piel', price: 120 }, { item_id: 'it_cuerda', price: 60 }, { item_id: 'it_antorcha', price: 1 }, { item_id: 'it_aceite', price: 6 },
+      { item_id: 'it_farol', price: 300 }, { item_id: 'it_garfio', price: 120 }, { item_id: 'it_saco', price: 1 }, { item_id: 'it_odre', price: 12 },
+      { item_id: 'it_kit_needle', price: 2 }, { item_id: 'it_kit_hook', price: 2 }, { item_id: 'it_daga', price: 120 }, { item_id: 'it_kit_ring', price: 200 }, { item_id: 'it_mochila', price: 80 }, { item_id: 'it_racion', price: 5 },
+    ],
     sells: [
       { item_id: 'it_tiza', price: 1 }, { item_id: 'it_antorcha', price: 2 }, { item_id: 'it_saco', price: 2 }, { item_id: 'it_aceite', price: 12 },
       { item_id: 'it_racion', price: 12 }, { item_id: 'it_odre', price: 25 }, { item_id: 'it_kit_needle', price: 5 }, { item_id: 'it_kit_hook', price: 5 },

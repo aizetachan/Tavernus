@@ -84,7 +84,39 @@ export function buyPrice(world: World, npc: Npc, itemId: Id): number | null {
   const def = world.itemDef(itemId);
   const share = npc.shop?.buys_any;
   if (!share || def.value <= 0 || def.unique || def.type === 'quest' || def.container?.fixed || def.service) return null;
-  return Math.max(1, Math.floor(def.value * share));
+  // Lo que él mismo vende no lo paga por encima de su precio de venta (la ración vale 50 en el catálogo y se vende a 12).
+  const sells = npc.sells.find((s) => s.item_id === itemId)?.price;
+  return Math.max(1, Math.floor(Math.min(def.value, sells ?? def.value) * share));
+}
+
+/** Lo que paga por algo cualquier NPC: con tienda, su lista o `buys_any`; sin tienda, solo su lista. */
+export function npcBuyPrice(world: World, npc: Npc, itemId: Id): number | null {
+  return npc.shop ? buyPrice(world, npc, itemId) : npc.buys.find((b) => b.item_id === itemId)?.price ?? null;
+}
+
+/**
+ * Quién compra un objeto (arreglo 25): los NPC vivos que lo tienen en su lista o con tienda que lo coge, del que más
+ * paga al que menos, con dónde están. Para el hint de sell_item cuando el que tiene delante no lo compra.
+ */
+export function buyersOf(world: World, itemId: Id, except?: Id): { npc: Npc; price: number; where: string }[] {
+  const out: { npc: Npc; price: number; where: string }[] = [];
+  for (const n of world.npcs.values()) {
+    if (n.id === except || n.status !== 'alive' || n.tier === 'extra') continue;
+    const price = npcBuyPrice(world, n, itemId);
+    if (price === null) continue;
+    const locId = n.shop?.location_id ?? (n.location.type === 'spot' ? world.spots.get(n.location.id)?.location_id : undefined);
+    out.push({ npc: n, price, where: locId ? world.locations.get(locId)?.name ?? '' : '' });
+  }
+  // Lo que pone en su lista va antes que lo que una tienda coge de todo a la mitad.
+  const listed = (n: Npc) => Number(n.buys.some((b) => b.item_id === itemId));
+  return out.sort((a, b) => listed(b.npc) - listed(a.npc) || b.price - a.price);
+}
+
+/** «Lucio Cendal (el buhonero, en la Tienda del buhonero)»: quién compra, para un hint. */
+export function buyersLine(world: World, itemId: Id, except?: Id): string | null {
+  const who = buyersOf(world, itemId, except).slice(0, 3);
+  if (!who.length) return null;
+  return who.map(({ npc, where }) => `${npc.name} [${npc.id}] (${npc.role_short ?? npc.role}${where ? `, en ${where}` : ''})`).join(', ');
 }
 
 /** Hora del día (0-24) de un instante de juego. */

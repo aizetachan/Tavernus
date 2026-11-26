@@ -56,7 +56,7 @@ Atiende de 9:00 a 19:00. Fuera de esa hora, aunque esté en el mostrador, no ven
 
 Se le compra hablándole, como a cualquiera. Tiene tienda de verdad: vende de **existencias contadas** y no repone, porque el valle está sellado. Lo que hay, y a qué precio, está en [[La tienda del buhonero#Qué vende]].
 
-- **Compra** pieles de lobo, cuerda, antorchas y casi cualquier cosa a la mitad de lo que vale, con el dinero de su bolsa. Si no le llega, no compra.
+- **Compra** lo que vende un buhonero, siempre por menos de lo que él lo vende: pieles de lobo, cuerda, antorchas, aceite y faroles, garfios, sacos y odres, hilo y aguja, sedal y anzuelos, dagas, mochilas, raciones y baratijas como un anillo de sello. Lo demás, a la mitad de lo que vale (y nunca por encima de la mitad de lo que él lo cobra). Paga con el dinero de su bolsa: si no le llega, no compra. Es a quien manda la gente del pueblo cuando alguien les ofrece cuerda o antorchas (desde el 2026-11-26).
 - Coger algo de sus estantes o de su carro sin pagar es un robo.
 - No vende nada mágico.
 
