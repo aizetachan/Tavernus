@@ -84,8 +84,49 @@ function posOf(s: Spot): Position {
 
 /** «al pozo», «a la barra». */
 function aEs(name: string): string { return /^el /i.test(name) ? `al ${name.slice(3)}` : `a ${name}`; }
-/** «del pozo», «de la barra». */
-function deEs(name: string): string { return /^el /i.test(name) ? `del ${name.slice(3)}` : `de ${name}`; }
+
+/** «hacia el molino», «hacia la herrería», «hacia Plaza del Pozo»: el artículo de un nombre de sitio, en minúscula. */
+export function haciaEs(name: string): string { return `hacia ${name.replace(/^(El|La|Los|Las) /, (m) => m.toLowerCase())}`; }
+
+/**
+ * Lo que el motor deja en el evento `npc_move` (payload `move`) para quien tenga que saber quién se fue y cuándo
+ * (la guarda de presencia del cierre, closecheck.ts): de dónde a dónde, si este evento es la salida o la llegada
+ * (`dir`: `leave` y `arrive` cuando cambia de localización, `within` dentro de la misma) y por qué se movió.
+ */
+export interface NpcMove {
+  npc_id: Id;
+  from_spot_id: Id;
+  to_spot_id: Id;
+  from_location_id: Id;
+  to_location_id: Id;
+  dir: 'leave' | 'arrive' | 'within';
+  /** `schedule`: la agenda o su horario (schedule.ts); `order`: una orden (go, encargo); `follow`: acompaña a un PJ; `story`: la historia escrita. */
+  cause: 'schedule' | 'order' | 'follow' | 'story';
+  game_s: number;
+}
+
+export function npcMoveOf(n: Npc, from: Spot, to: Spot, dir: NpcMove['dir'], cause: NpcMove['cause'], gameS: number): NpcMove {
+  return { npc_id: n.id, from_spot_id: from.id, to_spot_id: to.id, from_location_id: from.location_id, to_location_id: to.location_id, dir, cause, game_s: gameS };
+}
+
+/** Jugadores en una localización (despiertos o dormidos, sin ir de camino): ante ellos un NPC que entra o sale no lo hace en silencio. */
+export function playersInLocation(world: World, locationId: Id): Character[] {
+  return [...world.characters.values()].filter((c) => (c.status === 'active' || c.status === 'asleep') && !c.transit && world.characterSpot(c)?.location_id === locationId);
+}
+
+/**
+ * Las líneas de un NPC que cambia de sitio: «Ilse deja el caldero y sale hacia Plaza del Pozo, camino de la misa
+ * del pozo.» al salir, «Ilse llega al pozo para la misa del pozo.» al llegar y «Ilse deja el caldero y va a la
+ * puerta.» dentro del mismo sitio. `goal`, a qué va; `arriveFor`, lo mismo dicho al llegar; `withWho`, con quién.
+ */
+export function npcMoveLines(n: Npc, from: Spot, to: Spot, toLocationName: string, opts: { goal?: string | null; arriveFor?: string | null; withWho?: string | null } = {}): { leave: string; arrive: string; within: string } {
+  const w = opts.withWho ? ` con ${opts.withWho}` : '';
+  return {
+    within: `${n.name} deja ${from.name} y va${w} ${aEs(to.name)}.`,
+    leave: `${n.name} deja ${from.name} y sale${w} ${haciaEs(toLocationName)}${opts.goal ? `, ${opts.goal}` : ''}.`,
+    arrive: `${n.name} llega${w} ${aEs(to.name)}${opts.arriveFor ? ` ${opts.arriveFor}` : ''}.`,
+  };
+}
 
 function nameOf(world: World, id: Id | null): string {
   if (!id) return 'alguien';
@@ -308,14 +349,16 @@ function moveNpc(world: World, n: Npc, toId: Id, atS: number, emit: OrderEmit, l
   n.talking_to = null;
   world.touch('npcs', n.id);
   const base = { actor_id: null, action_type: 'npc_move', narration_private: '', tags: ['npc', 'deterministic'] };
-  const payload = (vague: string) => ({ master: null, notice: 'all', npc_id: n.id, observable_vague: vague });
-  const withLeader = leader ? ` con ${leader.name}` : '';
+  const cause = leader ? 'follow' as const : 'order' as const;
+  const payload = (vague: string, dir: NpcMove['dir']) => ({ master: null, notice: 'all', npc_id: n.id, observable_vague: vague, move: npcMoveOf(n, from, to, dir, cause, atS) });
+  const lines = npcMoveLines(n, from, to, world.location(to.location_id).name, { withWho: leader?.name ?? null });
   if (from.location_id === to.location_id) {
-    emit({ ...base, at: posOf(to), observable: `${n.name} va${withLeader} ${aEs(to.name)}.`, payload: payload(`Alguien cruza hacia ${to.name}.`) }, atS, leader);
+    const w = leader ? ` con ${leader.name}` : '';
+    emit({ ...base, at: posOf(to), observable: `${n.name} va${w} ${aEs(to.name)}.`, payload: payload(`Alguien cruza hacia ${to.name}.`, 'within') }, atS, leader);
     return;
   }
-  emit({ ...base, at: posOf(from), observable: `${n.name} se va ${deEs(from.name)}${withLeader}.`, payload: payload('Una figura se marcha.') }, atS, leader);
-  emit({ ...base, at: posOf(to), observable: `${n.name} llega${withLeader} ${aEs(to.name)}.`, payload: payload(`Una figura llega ${aEs(to.name)}.`) }, atS, leader);
+  emit({ ...base, at: posOf(from), observable: lines.leave, payload: payload('Una figura se marcha.', 'leave') }, atS, leader);
+  emit({ ...base, at: posOf(to), observable: lines.arrive, payload: payload(`Una figura llega ${aEs(to.name)}.`, 'arrive') }, atS, leader);
 }
 
 // ---------------------------------------------------------------------------

@@ -12,7 +12,7 @@ import type { Change, Repository } from '../persistence/repository.js';
 import { resolveItem, resolveResourceNode, resolveSpot, type Resolution } from './aliases.js';
 import { EventLog, type Delivery, type DeliveryListener } from './events.js';
 import { inventoryView, spotOfPlacement, takeAmount, transferItem, type InventoryView, type TransferError } from './inventory.js';
-import type { CarrySlot, Character, DecisiveConsequence, EquipSlot, GameEvent, GameSettings, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, WorldSnapshot } from './model.js';
+import type { CarrySlot, Character, DecisiveConsequence, EquipSlot, GameEvent, GameSettings, Id, Npc, Offer, Pace, Placement, Reaction, ReactionKind, Spot, WorldSnapshot } from './model.js';
 
 import { EQUIP_SLOTS } from './model.js';
 
@@ -31,7 +31,7 @@ import { encounterAt, hostilesAt, recentCombatTag } from './encounter.js';
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { settleAudience } from './audience.js';
 import { bounceOff, parseCrossing } from './barrier.js';
-import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, listEs, maskUnknownNames, whereAmI, whoIsHere } from './narrate.js';
+import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, listEs, maskUnknownNames, nameRe, npcNameForms, whereAmI, whoIsHere } from './narrate.js';
 import { encounterChance, parseInfo, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
 import { answerInfo, infoText, type InfoAnswer } from './info.js';
 import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type RouteCut } from './goto.js';
@@ -43,7 +43,7 @@ import { allIncidents, arrestAttempt, arrestCharge, arrestHostile, incidentText,
 
 import { coinsOf, currencyOf, DEFAULT_STARTING_COINS, migrateLegacyCoins, money, newPurse, pay } from './money.js';
 
-import { tickOrders } from './npcorders.js';
+import { npcMoveLines, npcMoveOf, tickOrders, type NpcMove } from './npcorders.js';
 import { nameFor, storyQuestAction, tickStory, type StoryOutput } from './story.js';
 import { syncStoryPack, type Story } from './story.js';
 import { trustFromRoll, trustNotice } from './trust.js';
@@ -1823,12 +1823,40 @@ export class Engine {
    * delante: lo lee quien dice leerlo (act) o usa /tablon.
    */
   private advanceStory(nowG: number): void {
+    const before = new Map([...this.world.npcs.values()].map((n) => [n.id, n.location.id]));
     const out = tickStory(this.world, nowG, this.threatNow(nowG));
     this.emitStory(out);
     // Hechos y reglas del mundo (worldrules.ts): lo que acaba de cambiar dispara las reacciones de los datos.
-    this.emitStory(tickWorld(this.world, nowG).story);
+    const rules = tickWorld(this.world, nowG).story;
+    this.emitStory(rules);
+    this.emitStoryMoves(before, [out, rules], nowG);
     // Lo que acaba de pasar en la escena (beats) lo cuenta el máster ya, tras la acción, sin esperar al tick.
     if (out.beats.length) this.fireTimeHooks(nowG);
+  }
+
+  /**
+   * Los NPC que la historia escrita ha cambiado de sitio (efecto `npc_move`, story.ts) dejan su `npc_move` como los
+   * de la agenda y las órdenes: con `move` en el payload, para que se sepa quién se fue y cuándo. La línea, solo si
+   * la historia no lo cuenta ya (un aviso o una escena que le nombra): sin ella, el evento queda sin texto.
+   */
+  private emitStoryMoves(before: Map<Id, Id>, outs: StoryOutput[], nowG: number): void {
+    const told = outs.flatMap((o) => [...o.announcements.map((a) => a.text), ...o.beats.map((b) => b.text), ...o.personal.flatMap((p) => p.events.map((e) => e.text))]).join(' / ');
+    for (const n of this.world.npcs.values()) {
+      const was = before.get(n.id);
+      if (!was || was === n.location.id || n.status === 'dead' || !this.world.spots.has(was)) continue;
+      const from = this.world.spot(was);
+      const to = this.world.spot(n.location.id);
+      const said = npcNameForms(n.name).some((f) => nameRe(f, 'u').test(told));
+      const lines = npcMoveLines(n, from, to, this.world.location(to.location_id).name);
+      const at = (s: Spot) => ({ spot_id: s.id, next_spot_id: null, progress: 0, x: s.x, y: s.y, location_id: s.location_id });
+      const emit = (spot: Spot, dir: NpcMove['dir'], text: string, vague: string) => this.events.emit({
+        actor_id: null, at: at(spot), action_type: 'npc_move', narration_private: '', observable: said ? null : text, tags: ['npc', 'story', 'deterministic'],
+        payload: { master: null, npc_id: n.id, observable_vague: vague, move: npcMoveOf(n, from, to, dir, 'story', nowG) },
+      }, this.now());
+      if (from.location_id === to.location_id) { emit(to, 'within', lines.within, `Alguien cruza hacia ${to.name}.`); continue; }
+      emit(from, 'leave', lines.leave, 'Una figura se marcha.');
+      emit(to, 'arrive', lines.arrive, `Una figura llega ${aEs(to.name)}.`);
+    }
   }
 
   /** El PJ lee el tablón (dice leerlo ante él, o /tablon): cada encargo que no había visto entra en su Diario como disponible, con aviso. */
