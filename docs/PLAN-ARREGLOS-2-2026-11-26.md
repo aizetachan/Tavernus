@@ -202,3 +202,32 @@ sus tests. Nada en `src/`.
    `--baseline data/local/autoplay/20261126-0418`, `-0442` y `-0602`. Unos 3,5 $. Lo que se mira: las tres categorías nuevas
    del juez (esperadas cerca de cero), incoherencia con el contexto (9,4 por 100 en la pasada 4), `conflict_act` por acción
    inocente (0), turnos duplicados en pareja (0), enlatadas repetidas (0).
+
+## Veredicto de H13 (paquete I, 26-11-2026)
+
+**La duplicación y la segunda persona de lo del compañero son de la herramienta, no del motor.** El motor entrega bien:
+en un turno compartido cada jugador recibe su `narration_by_pc` y lo común (`readerText`, `events.ts:187`), una vez, y la
+web pinta solo esas entregas (`reply` en `server.ts` no devuelve texto cuando la acción deja evento). Pero el motor
+devuelve a todos los del turno el mismo `ActionResult`, cuyo `text` es la `narration_private` del ACTOR del cierre (lo
+suyo en segunda persona más lo común), y `seenSince` (`autoplay.ts`) lo ponía delante de los eventos vistos y solo
+quitaba los que ya estaban contenidos en él. Así Ciro leía «Le preguntas a Garrán…» (lo de Bruno, evento 29 de la pareja
+pícaro), después su parte y lo común otra vez. Con lo que hace el compañero por su cuenta pasa lo mismo cuando el texto
+llega por el `ActionResult` de un turno compartido; por evento propio del otro, el motor ya da el `observable` en tercera.
+
+**Patrón 6, en parte también.** En una tirada oculta (Percepción, Sigilo, Investigación, Perspicacia) el servidor tira al
+cerrar y el `ActionResult` es solo el resultado; la herramienta lo ponía primero y añadía después la intención: de ahí
+«el resultado antes que la intención» (explorador T1, tirador T1 y T20). Las **dos narraciones** (intención y resultado)
+sí son del motor: la web también enseña dos burbujas, una por cierre. Eso es del paquete F (punto 7, `master.ts`), que
+ahora puede mirar solo la composición y no el orden. El «🎲 Sigilo» sin número es la tirada oculta tal como la pinta el
+motor: es del paquete H (punto 3).
+
+**Arreglo (rama `claude/arreglos-i-herramientas-26ca5f`).** `shownSince` (`scripts/autoplay.ts`) construye el texto de cada
+jugador como la web: las entregas desde la secuencia, una vez, en orden y con su banda (`readerText`), sin las `on_join`,
+y antes las respuestas sin evento (rechazos, avisos del motor). `test/autoplay-lectura.test.ts` lo comprueba con dos PJ y
+un cierre compartido como el de la pareja pícaro C2, con lo del compañero por su cuenta, con una tirada oculta y con un
+rechazo, y en los cuatro casos compara con lo que `engine.onDelivery` entrega a la web.
+
+**Para F y H.** Nada que arreglar en `events.ts` ni en `audience.ts` por esto: el test del paquete H (su punto 2) debería
+salir en verde con el motor de `main`. Las tandas 4 y 5 se leyeron con la herramienta vieja: en las parejas, lo del otro
+en segunda persona y los párrafos dobles no cuentan como fallo del máster, y el orden invertido de E2 y E6 sale de lo
+mismo (el `ActionResult` delante de los eventos). Lo que el juez marcó como incoherencia por esas lecturas tampoco.

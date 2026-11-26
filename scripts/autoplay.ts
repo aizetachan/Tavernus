@@ -456,6 +456,25 @@ const addUsage = (a: TokenUsage, b: Partial<TokenUsage>) => { a.input += b.input
 const pick = <T>(rng: Rng, xs: readonly T[]): T => xs[Math.floor(rng() * xs.length) % xs.length]!;
 const sumCost = (xs: (number | null)[]) => (xs.some((x) => x === null) ? null : xs.reduce<number>((a, x) => a + (x ?? 0), 0));
 
+/**
+ * Lo que la web le enseña a un jugador desde `seq` (H13, 26-11-2026): cada evento que le llega, una vez, en su orden y
+ * con el texto de su entrega (`readerText` con su banda, lo mismo que `engine.onDelivery` lleva a `toMessage` en la
+ * web), sin los que la web deja fuera del hilo (`on_join`, `silentInThread` en server.ts), y antes las respuestas que no
+ * dejan evento (rechazos, avisos del motor), que la web pinta tal cual (`reply` en server.ts: con evento, ningún texto).
+ * Antes el transcript juntaba el `text` de cada ActionResult con los eventos vistos: en un turno compartido ese texto es
+ * la narración del ACTOR del cierre (lo suyo en segunda persona y lo común), y el compañero leía lo del otro como suyo
+ * y lo común dos veces (pareja pícaro C2 y C12); en una tirada oculta, el resultado iba antes que la intención.
+ */
+export function shownSince(world: Engine['world'], events: readonly GameEvent[], characterId: string, seq: number, results: readonly ActionResult[] = []): string[] {
+  const loose = results.filter((r) => !r.ok || !r.event).map((r) => r.text).filter((t) => t?.trim());
+  const delivered = events.filter((e) => e.seq > seq && !e.tags.includes('on_join')).flatMap((e) => {
+    const d = e.delivered_to.find((x) => x.character_id === characterId);
+    const t = d ? readerText(world, e, characterId, d.level) : null;
+    return t?.trim() ? [t] : [];
+  });
+  return [...loose, ...delivered];
+}
+
 /** Gasto del máster según sus eventos. La línea de la muerte (`master_line`) guarda solo el modelo: no suma aquí, ya la cuenta el medidor. */
 export function masterTally(events: readonly GameEvent[]): TokenUsage & { calls: number; cost_usd: number | null; models: string[] } {
   const master = { ...ZERO(), calls: 0, cost_usd: 0 as number | null, models: [] as string[] };
@@ -917,11 +936,8 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
       /** Los cierres del máster que son de este jugador: los suyos y los compartidos en los que entró (`group`). */
       const turnEvents = (c: Character): GameEvent[] => engine.events.all().filter((e) => e.payload['master'] && (e.actor_id === c.id || (Array.isArray(e.payload['group']) && (e.payload['group'] as string[]).includes(c.id))));
       const settle = async () => { if (profile) await engine.settle(60_000); else for (let k = 0; k < 5; k++) await new Promise((r) => setImmediate(r)); };
-      /** Lo que le ha llegado a un jugador desde `seq`, sin lo que ya está en `seen`: lo suyo entero y, de los demás, lo que lee él (readerText). */
-      const seenSince = (c: Character, seq: number, seen: readonly string[]): string[] => engine.events.all()
-        .filter((e) => e.seq > seq && (e.actor_id === c.id || e.delivered_to.some((d) => d.character_id === c.id && d.level === 'full')))
-        .map((e) => (e.actor_id === c.id ? e.narration_private : readerText(engine.world, e, c.id, 'full') ?? e.observable ?? ''))
-        .filter((t) => t && !seen.some((x) => x.includes(t)));
+      /** Lo que le ha llegado a un jugador desde `seq`, como lo leería en la web (shownSince). */
+      const seenSince = (c: Character, seq: number, results: readonly ActionResult[] = []): string[] => shownSince(engine.world, engine.events.all(), c.id, seq, results);
       const lastSeq = () => engine.events.all().at(-1)?.seq ?? 0;
       /** Pasa tiempo de juego a saltos de 5 minutos, como «/time» en offline (engine.command). */
       const passGame = async (minutes: number) => {
@@ -1056,7 +1072,7 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
       };
 
       /** Manda lo decidido al motor: acción (con sus tiradas), frase en la escena, chat con el compañero o respuesta a una reacción. */
-      const send = async (s: Seat, p: Planned): Promise<{ r: ActionResult; texts: string[]; rolls: number }> => {
+      const send = async (s: Seat, p: Planned): Promise<{ r: ActionResult; results: ActionResult[]; rolls: number }> => {
         const other = partnerOf(s);
         let r: ActionResult;
         if (p.how === 'reaction') {
@@ -1071,10 +1087,10 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         } else {
           r = await engine.act(s.c.id, p.text, p.how === 'say' ? { mode: 'say' } : {});
         }
-        const texts = [r.text];
+        const results = [r];
         let rolls = 0;
-        for (; r.requires_roll && rolls < MAX_ROLLS_PER_ACTION; rolls++) { r = await engine.rollPending(s.c.id); texts.push(r.text); }
-        return { r, texts, rolls };
+        for (; r.requires_roll && rolls < MAX_ROLLS_PER_ACTION; rolls++) { r = await engine.rollPending(s.c.id); results.push(r); }
+        return { r, results, rolls };
       };
 
       // Tope de gasto por jugador: a dos, la partida puede gastar el doble. Se mira antes de cada vuelta, así «presupuesto»
@@ -1097,7 +1113,7 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
           for (let k = 0; k < 200 && !isUp(); k++) { clock += 60_000; await engine.tick(); }
           await settle();
           if (!isUp()) { s.ended = 'caido'; continue; }
-          s.last = `${s.last}\n\n${seenSince(s.c, seqDown, [s.last]).join('\n')}`.trim();
+          s.last = [s.last, ...seenSince(s.c, seqDown)].join('\n\n').trim();
           s.suggested = [];
         }
         // Quien está caído esperando a que le atiendan no juega esta vuelta.
@@ -1109,7 +1125,7 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         const seq = lastSeq();
         const t1 = Date.now();
         const plans = new Map<Seat, Planned>();
-        const results = new Map<Seat, { r: ActionResult; texts: string[]; rolls: number }>();
+        const results = new Map<Seat, { r: ActionResult; results: ActionResult[]; rolls: number }>();
         if (together) {
           for (const s of active) plans.set(s, await decide(s));
           const rs = await Promise.all(active.map((s) => send(s, plans.get(s)!)));
@@ -1128,12 +1144,11 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         const wall = Date.now() - t1;
         let combat = false;
         for (const s of active) {
-          const { r, texts, rolls } = results.get(s)!;
+          const { r, results: rs, rolls } = results.get(s)!;
           const p = plans.get(s)!;
           const fresh = turnEvents(s.c).filter((e) => !before.get(s)!.has(e.id));
-          const moreEvents = s.profile ? seenSince(s.c, seq, texts) : [];
           combat ||= fresh.some((e) => e.tags.includes('combat') || ((e.payload['master'] as { calls?: { name: string }[] }).calls ?? []).some((x) => x.name === 'attack'));
-          s.last = [...texts, ...moreEvents].join('\n\n');
+          s.last = seenSince(s.c, seq, rs).join('\n\n');
           s.suggested = r.suggested_actions ?? [];
           if (together) s.together++;
           s.pending = { r, p, fresh, rolls, wall };
@@ -1143,7 +1158,7 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         const calm = active.every((s) => s.profile && s.c.status === 'active' && !s.c.decisive && !s.pending!.r.requires_roll) && !combat;
         if (calm) {
           await passGame(Math.max(...active.map((s) => s.profile!.game_min)));
-          for (const s of active) { const later = seenSince(s.c, seqAfter, [s.last]); if (later.length) s.last = `${s.last}\n\n${later.join('\n')}`; }
+          for (const s of active) { const later = seenSince(s.c, seqAfter); if (later.length) s.last = [s.last, ...later].join('\n\n'); }
         }
         for (const s of active) {
           const { r, p, fresh, rolls, wall: w } = s.pending!;
