@@ -810,14 +810,15 @@ function settle(world: World, c: Character): void {
 }
 
 /** Le encierran: al calabozo, con el «preso» hasta que cumpla. `nowC`: la hora del PJ. */
-function jail(world: World, c: Character, hours: number, reason: string, nowC: number): { until: number; spot: Spot } | null {
+function jail(world: World, c: Character, hours: number, reason: string, nowC: number, byId: Id | null = null): { until: number; spot: Spot } | null {
   const spot = jailSpot(world);
   if (!spot) return null;
   const until = nowC + hours * GAME_HOUR;
+  const from = world.characterSpot(c)?.id ?? null;
   c.location = { type: 'spot', id: spot.id };
   c.transit = null;
   c.following = null;
-  c.jailed = { until_game_s: until, spot_id: spot.id, reason };
+  c.jailed = { until_game_s: until, spot_id: spot.id, reason, since_game_s: nowC, from_spot_id: from, by_npc_id: byId, unconscious: c.status === 'unconscious' };
   setCondition(c, JAILED_CONDITION, reason, until);
   world.touch('characters', c.id);
   return { until, spot };
@@ -844,7 +845,7 @@ function sentence(world: World, c: Character, nowG: number, nowC: number): Sente
   const reason = w.reason;
   const s = sentenceFor(world, c);
   if (s.kind === 'jail') {
-    const j = jail(world, c, s.hours, reason, nowC);
+    const j = jail(world, c, s.hours, reason, nowC, by?.id ?? null);
     if (by && j) setNpcOrder(world, { npc_id: by.id, order: 'go', spot_id: j.spot.id, minutes: 15 }, nowG);
     settle(world, c);
     return { kind: 'jail', paid: 0, until_game_s: j?.until ?? null, spot_id: j?.spot.id ?? null, by, reason };
@@ -967,7 +968,7 @@ export function lawTick(world: World, nowG: number, nowFor: (c: Character) => nu
         stabilize(world, c, nowG, by.name, `detenido por ${by.name}`);
         const s = sentenceFor(world, c);
         const reason = w.reason;
-        const j = jail(world, c, Math.max(s.hours, 8), reason, nowFor(c));
+        const j = jail(world, c, Math.max(s.hours, 8), reason, nowFor(c), by.id);
         if (j) {
           setNpcOrder(world, { npc_id: by.id, order: 'go', spot_id: j.spot.id, minutes: 15 }, nowG);
           settle(world, c);
@@ -1215,7 +1216,19 @@ export function crimeContext(world: World, c: Character, nowG: number): string |
   const recent = recentIncidents(world, world.characterSpot(c)?.location_id ?? '', nowG).filter((i) => !pending.includes(i));
   if (recent.length) L.push(`## Incidentes recientes aquí (ya contados)\n${recent.map((i) => `- ${ago(nowG, i.updated_game_s)}: ${i.perpetrator_name} ${deedFor(world, i, c)} en ${world.spots.get(i.spot_id)?.name ?? 'el sitio'}. Quien lo sabe sigue reaccionando igual (mira «LO PRIMERO» en cada NPC).`).join('\n')}`);
   const lines: string[] = [];
-  if (c.jailed) lines.push(`El actor está PRESO en ${world.spots.get(c.jailed.spot_id)?.name ?? 'el calabozo'} hasta las ${hhmmOf(c.jailed.until_game_s)} (${c.jailed.reason}): no sale de ahí; el servidor le suelta a su hora.`);
+  if (c.jailed) {
+    const j = c.jailed;
+    const cell = world.spots.get(j.spot_id)?.name ?? 'el calabozo';
+    lines.push(`El actor está PRESO en ${cell} hasta las ${hhmmOf(j.until_game_s)} (${j.reason}): no sale de ahí; el servidor le suelta a su hora.`);
+    // Arreglo 10 del 26-11-2026: el preso aparecía en la celda sin transición, y la autoridad le obedecía o le pegaba sin tirada.
+    if (!j.told) {
+      const from = j.from_spot_id ? world.spots.get(j.from_spot_id) : null;
+      const fromLoc = from ? world.locations.get(from.location_id)?.name : null;
+      const by = j.by_npc_id ? label(world, j.by_npc_id, c) : 'la autoridad';
+      lines.push(`ES SU PRIMER TURNO EN LA CELDA: empieza la narración por el traslado, en una o dos frases: ${j.unconscious ? `despierta en ${cell}, dolorido; ${by} le trajo a rastras, inconsciente` : `${by} le ha traído atado`}${from && from.id !== j.spot_id ? ` desde ${from.name}${fromLoc && fromLoc !== from.name ? ` (${fromLoc})` : ''}` : ''}. Luego, lo que hace.`);
+    }
+    lines.push('La autoridad no obedece al preso: lo que le ordene (abrir la reja, traer a alguien, soltarle) no lo hace; contesta desde fuera, se ríe o no contesta. Nadie le pega en la celda si él no ataca primero, y si alguien le pega, es con attack (su tirada), no de palabra.');
+  }
   if (c.wanted) {
     lines.push(`El actor está BUSCADO: ${c.wanted.reason}. Quien lo sabe no le vende ni le aloja; no descansa tranquilo donde la autoridad sepa que está.`);
     const a = c.wanted.arrest;

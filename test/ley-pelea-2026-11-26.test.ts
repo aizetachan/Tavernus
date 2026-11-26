@@ -227,3 +227,69 @@ describe('(6) un solo «¡Alto!» por detención', () => {
     expect(arrest.narration_private).toMatch(/«¡Alto! Quedas detenido\.»/);
   });
 });
+
+describe('(10) el preso, la huida y el traslado', () => {
+  it('Opus, violento 1652: cae ante la autoridad y le encierran; su primer turno en la celda cuenta el traslado, y la autoridad no le obedece', async () => {
+    const { engine, c } = await boot();
+    const w = engine.world;
+    const { crimeContext } = await import('../src/engine/crime.js');
+    const [garran, doro] = ['npc_garran', 'npc_doro'].map((id) => w.npc(id)) as [Npc, Npc];
+    hold(engine, garran, 'sp_pl_tablon'); hold(engine, doro, 'sp_pl_tablon');
+    c.location = { type: 'spot', id: 'sp_pl_tablon' };
+    reportIncident(w, { kind: 'armed_assault', perpetrator_id: c.id, victim_id: garran.id, weapon: 'gran hacha' }, engine.gameNow());
+    expect(c.wanted?.arrest).toBeTruthy();
+    // La maza de Garrán le tumba: a 0 PG delante de quien le detenía.
+    c.hp_current = 0; c.status = 'unconscious';
+    await engine.tick();
+    expect(c.jailed).toMatchObject({ spot_id: 'sp_ca_calabozo', from_spot_id: 'sp_pl_tablon', unconscious: true });
+    expect(c.jailed?.told).toBeFalsy();
+    const ctx = crimeContext(w, c, engine.nowFor(c))!;
+    expect(ctx).toMatch(/ES SU PRIMER TURNO EN LA CELDA: empieza la narración por el traslado.*despierta en .*inconsciente desde el tablón/);
+    expect(ctx).toMatch(/La autoridad no obedece al preso/);
+    // Vuelve en sí y actúa: el máster (offline) narra su turno y desde entonces el traslado ya está contado.
+    c.status = 'active'; c.hp_current = 1;
+    engine.attachMaster(new Master(engine, { client: offlineClient(), rng: seededRng(2) }));
+    const r = await engine.act(c.id, 'Me levanto del jergón y miro la reja');
+    expect(r.ok).toBe(true);
+    expect(c.jailed?.told).toBe(true);
+    expect(crimeContext(w, c, engine.nowFor(c))).not.toMatch(/PRIMER TURNO EN LA CELDA/);
+  });
+
+  /** En plena pelea en la plaza con Garrán, hostil (se resistió), y un alto en pie. */
+  async function pelea() {
+    const { engine, c } = await boot();
+    const w = engine.world;
+    const garran = w.npc('npc_garran');
+    hold(engine, garran, 'sp_pl_tablon');
+    c.location = { type: 'spot', id: 'sp_pl_tablon' };
+    c.hp_max = 60; c.hp_current = 60;
+    reportIncident(w, { kind: 'assault', perpetrator_id: c.id, victim_id: garran.id }, engine.gameNow());
+    garran.attitude.by_character[c.id] = 'hostile';
+    engine.events.emit({ actor_id: c.id, action_type: 'master', input_text: 'le pego a Garrán', narration_private: 'Le das un empujón a Garrán.', observable: null, tags: ['master', 'combat'], payload: { master: null } });
+    engine.attachMaster({ resolve: async () => ({ ok: false, reason: 'test', message: '' }) });
+    const roll = (text: string, key: string) => (engine as unknown as { resolveRoll(c: Character, p: unknown): Promise<unknown> }).resolveRoll(c, { text, roll: { kind: 'skill', key, dc: 13, advantage: 'none' }, event_id: 'ev_x', seq: 0 });
+    return { engine, c, garran, roll };
+  }
+
+  it('rompejuegos 1051: Acrobacias 16 para zafarse y salir corriendo: los hostiles no le alcanzan en ese turno y el alto queda en el aire', async () => {
+    const { engine, c, roll } = await pelea();
+    const by = c.wanted!.arrest!.npc_id;
+    const hp = c.hp_current;
+    await roll('Le suelto el brazo y salgo corriendo hacia el alguacil, gritando que tengo el frasco como prueba', 'acrobatics');
+    expect(c.hp_current).toBe(hp);
+    // Se le ha escapado a quien le detenía: ya no hay alto que negociar (si le vuelve a ver, va a por él, como a quien huye).
+    expect(c.wanted?.resisted_by).toContain(by);
+    expect(c.wanted?.arrest?.npc_id === by && !c.wanted.arrest.resisted).toBe(false);
+    expect(engine.events.all().some((e) => e.action_type === 'npc_retaliation')).toBe(false);
+  });
+
+  it('una tirada que no le saca de ahí (Intimidar con éxito) no frena el turno de los hostiles: le pegan con su tirada', async () => {
+    const { engine, c, roll } = await pelea();
+    const hp = c.hp_current;
+    await roll('¡Un paso más y te parto el yelmo, perro del regidor!', 'intimidation');
+    const hit = engine.events.all().filter((e) => e.action_type === 'npc_retaliation').at(-1);
+    expect(hit?.narration_private).toMatch(/(Garrán|El alguacil) te ataca con/);
+    const dmg = /te da \((\d+)\)/.exec(hit!.narration_private)?.[1];
+    expect(c.hp_current).toBe(hp - Number(dmg ?? 0));
+  });
+});

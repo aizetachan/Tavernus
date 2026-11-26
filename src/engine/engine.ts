@@ -1417,6 +1417,11 @@ export class Engine {
   }
 
   /** El jugador pulsa 🎲: el servidor tira y el master narra la consecuencia. */
+  /** Tiradas de zafarse o escapar (arreglo 10). */
+  private static readonly EVASION_SKILLS = new Set(['acrobatics', 'athletics', 'stealth']);
+  /** Lo que dice quien huye o se zafa: «salgo corriendo», «me escapo», «me zafo», «esquivo». */
+  private static readonly FLEES = /\b(?:hu(?:yo|ir|ye)|escap\w*|me\s+zafo|zafarme|me\s+libero|liberarme|esquiv\w*|salgo\s+corriendo|echo\s+a\s+correr|corro\s+hacia|me\s+largo|me\s+escabullo|me\s+suelto|soltarme|me\s+escurro)\b/i;
+
   /**
    * Los NPC que le pegan ahora, tras su tirada (arreglo 12): los que se acaban de lanzar contra él (`provoked`, la
    * víctima de su agresión que pelea) y, si ya hay pelea en la sala (combate en curso, o golpes recientes con hostiles
@@ -1548,7 +1553,16 @@ export class Engine {
       // Represalia (arreglo 12 del 26-11-2026): el NPC que pelea con él no le pega «de palabra» en la narración. Tras una
       // tirada que no es un ataque suyo, los hostiles que le tienen delante hacen su turno YA, con su tirada y su daño, y
       // el máster lo cuenta como hecho (engineDone: no vuelven a atacar en este turno; si no lo nombra, el cierre lo añade).
-      const struck = pending.roll.kind === 'attack' ? [] : this.retaliation(c, provoked);
+      // Zafarse o huir con éxito (Acrobacias, Atletismo, Sigilo) compra algo (arreglo 10: rompejuegos 1051, Acrobacias 16
+      // y tres golpes): los hostiles no le alcanzan en este turno y, si le estaban deteniendo, se le escapa.
+      const evaded = Boolean(result.success) && pending.roll.kind === 'skill' && Engine.EVASION_SKILLS.has(pending.roll.key) && !pending.roll.conflict && (Engine.FLEES.test(pending.text) || this.isLeaving(c, pending.text));
+      const struck = pending.roll.kind === 'attack' || evaded ? [] : this.retaliation(c, provoked);
+      if (evaded) {
+        const loc = this.world.characterSpot(c)?.location_id;
+        const missed = loc ? dueNpcTurns(this.world, [c.id], new Set(), this.nowFor(c)) : [];
+        if (missed.length) this.engineDoneFor.set(c.id, missed.map((d) => ({ npc_id: d.npc.id, text: `${this.labelFor(c, d.npc.id).replace(/^./, (x) => x.toUpperCase())} no llega a alcanzarte: te zafas.` })));
+        if (c.wanted?.arrest) { resist(this.world, c, this.nowFor(c)); c.wanted.arrest = null; this.world.touch('characters', c.id); }
+      }
       const struckText = struck.map((f) => forcedTurnText(this.world, f, c.id, (id) => this.labelFor(c, id)));
       if (struck.length) {
         this.engineDoneFor.set(c.id, struck.map((f, k) => ({ npc_id: f.npc_id, text: struckText[k]!, forced: f })));
@@ -1559,7 +1573,7 @@ export class Engine {
       try {
         r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result, ...(conflictNote ? { conflict: conflictNote } : {}), ...(hiddenRoll ? { hidden: true } : {}) });
       } finally {
-        if (struck.length) this.engineDoneFor.delete(c.id);
+        if (struck.length || evaded) this.engineDoneFor.delete(c.id);
       }
       // Sin narración, el golpe ya está dado: se cuenta en la voz del motor.
       if (struck.length && !r.ok) {
@@ -1923,6 +1937,8 @@ export class Engine {
     }, this.stampFor(c));
     // Lo que el máster pidió a otro jugador (request_reaction): la petición sale después de su narración.
     this.announcePending(c.id);
+    // Preso: su primer turno narrado en la celda ya cuenta el traslado (crime.ts, crimeContext; arreglo 10).
+    if (c.jailed && !c.jailed.told && !intro && c.status === 'active') { c.jailed.told = true; this.world.touch('characters', c.id); }
     // Tirada oculta (Percepción, Sigilo…): no hay botón; el servidor la tira ahora y el máster sigue con el resultado.
     if (k.requires_roll && isHiddenRoll(k.requires_roll) && !k.requires_roll.conflict && !k.requires_roll.confront && !roll) {
       for (const sr of out.shown_rolls ?? []) this.announceRoll(sr);
