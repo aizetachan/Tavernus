@@ -205,7 +205,7 @@ describe('muerte y vuelta', () => {
     time.advanceGame(60 + 600);
     await engine.tick();
     expect(kael.status).toBe('dead');
-    expect(seen(kael.id).some((t) => /^☠ Todo se apaga. Has muerto en la barra.* dentro de 2 h reales \(6 h de juego\)/.test(t))).toBe(true);
+    expect(seen(kael.id).some((t) => /^☠ Todo se apaga. Has muerto en la barra.* dentro de 2 h reales \(6 h de juego, hacia las \d+:\d\d\)\. Hasta entonces no puedes actuar\./.test(t))).toBe(true);
     expect(seen(far.id)).toContain('Kael se desploma y deja de respirar.');
     const body = bodiesAt(engine.world, 'sp_tab_barra')[0]!;
     expect(engine.world.itemDef(body.item_id).name).toBe('cuerpo de Kael');
@@ -226,7 +226,7 @@ describe('muerte y vuelta', () => {
     expect(kael.status).toBe('active');
     expect(engine.world.characterSpot(kael)!.id).toBe('sp_tab_puerta');
     expect(kael.hp_current).toBe(6);
-    expect(seen(kael.id).some((t) => /Abres los ojos en la puerta con 6\/12 PG\. Tus cosas siguen donde caíste/.test(t))).toBe(true);
+    expect(seen(kael.id).some((t) => /Abres los ojos en la puerta \(Taberna del Jabalí\) hacia las \d+:\d\d, 6 h después de caer, con 6\/12 PG\. Tus cosas siguen donde caíste/.test(t))).toBe(true);
     expect(engine.world.itemDef(body.item_id).name).toBe('las cosas de Kael');
     kael.location = { type: 'spot', id: 'sp_tab_barra' };
     const r = await engine.act(kael.id, 'recoger mis cosas');

@@ -3535,9 +3535,8 @@ export class Engine {
   downText(c: Character): string {
     if (c.status === 'dead' && c.death) {
       const left = Math.max(0, c.death.respawn_real_ms - this.now());
-      const back = this.world.spot(respawnSpotId(this.world, c)).name;
       return c.death.respawn_real_ms
-        ? `☠ Has muerto. Volverás en ${back} dentro de ${fmtDuration(left / 1000)} reales (${fmtDuration(this.clock.realToGame(left / 1000))} de juego). Mientras, solo puedes mirar.`
+        ? `☠ Has muerto. Volverás en ${this.respawnWhere(c)} dentro de ${fmtDuration(left / 1000)} reales (${fmtDuration(this.clock.realToGame(left / 1000))} de juego, hacia las ${hhmm(this.clock.gameNow(c.death.respawn_real_ms))}). Hasta entonces no puedes actuar: solo mirar.`
         : '☠ Has muerto.';
     }
     if (isStable(c)) {
@@ -3737,11 +3736,25 @@ export class Engine {
     return r;
   }
 
-  /** Vuelve de la muerte: en el punto de reaparición, con aviso a los presentes y al grupo. */
+  /** Dónde vuelve quien ha muerto: el punto y su lugar («el camastro, en Casa de las hierbas»). */
+  private respawnWhere(c: Character): string {
+    const spot = this.world.spot(respawnSpotId(this.world, c));
+    return `${spot.name}, en ${this.world.location(spot.location_id).name}`;
+  }
+
+  /**
+   * Vuelve de la muerte: en el punto de reaparición, con aviso a los presentes y al grupo. El jugador lo lee como
+   * narración con dónde, a qué hora, cuánto ha pasado y con qué PG (violento T4 y T5: moría en la herrería y salía en
+   * el molino sin transición), y el evento lo lleva en `respawn` (`game_s`, `away_game_s`) para quien lo cuente después.
+   */
   private comeBack(c: Character): void {
+    const diedMs = c.death?.died_real_ms ?? null;
     const r = respawn(this.world, c);
     if (!r) return;
+    const nowG = this.nowFor(c);
+    const away = diedMs !== null ? Math.max(0, this.clock.realToGame((this.now() - diedMs) / 1000)) : null;
     const spot = this.world.spot(r.spot_id);
+    const loc = this.world.location(spot.location_id);
     const bodyLoc = this.world.locationOfSpot(r.body_spot_id);
     const story = r.story || `Alguien te encontró y te trajo ${aEs(spot.name)}.`;
     const things = r.left.length || r.coins_left ? (r.mode === 'casual'
@@ -3750,12 +3763,12 @@ export class Engine {
     const scar = r.penalty ? ` La muerte se cobra algo: −${r.penalty.amount} a ${r.penalty.label} (se recupera al subir de nivel).` : '';
     const ev = this.events.emit({
       actor_id: c.id, action_type: 'respawn',
-      narration_private: `${story} Abres los ojos en ${spot.name} con ${c.hp_current}/${c.hp_max} PG.${things}${scar}`,
+      narration_private: `↺ ${story} Abres los ojos en ${spot.name} (${loc.name}) hacia las ${hhmm(nowG)}${away ? `, ${fmtDuration(away)} después de caer` : ''}, con ${c.hp_current}/${c.hp_max} PG.${things}${scar}`,
       observable: `${c.name} está aquí, pálido, como recién vuelto de muy lejos.`, tags: ['death', 'deterministic'],
-      payload: { master: null, respawn: { ...r, location_id: spot.location_id }, suggested_actions: suggestActions(this.world, this.clock, c, this.nowFor(c)) },
+      payload: { master: null, respawn: { ...r, location_id: spot.location_id, game_s: nowG, ...(away !== null ? { away_game_s: away } : {}) }, suggested_actions: suggestActions(this.world, this.clock, c, nowG) },
     }, this.now());
     this.noticeOthers(c, ev, `↺ ${c.name} ha vuelto: está en ${this.world.locationOfSpot(r.spot_id).name}.`);
-    this.background(this.masterLine(c, 'respawn', `${c.name} vuelve de la muerte ${aEs(spot.name)}. ${story}`));
+    this.background(this.masterLine(c, 'respawn', `${c.name} vuelve de la muerte ${aEs(spot.name)} (${loc.name}), con ${c.hp_current}/${c.hp_max} PG. ${story}`));
   }
 
   /** Aviso fuera de la ficción a los demás jugadores que no lo han visto. */
@@ -4149,15 +4162,15 @@ export class Engine {
     this.world.touch('characters', c.id);
     const spot = this.world.spot(d.spot_id);
     const loc = this.world.location(spot.location_id);
-    const back = this.world.spot(respawnSpotId(this.world, c)).name;
-    const when = `${fmtDuration(wait)} reales (${fmtDuration(this.clock.realToGame(wait))} de juego)`;
+    const back = this.respawnWhere(c);
+    const when = `${fmtDuration(wait)} reales (${fmtDuration(this.clock.realToGame(wait))} de juego, hacia las ${hhmm(this.clock.gameNow(d.respawn_real_ms))})`;
     const things = d.left.length || d.coins_left
       ? d.mode === 'casual' ? ' Lo que llevabas se queda en tu cuerpo, esperándote: solo tú puedes recogerlo.' : ' Lo que llevabas se queda en tu cuerpo, y cualquiera puede llevárselo.'
       : '';
     const scar = d.mode === 'hardcore' && deathRules(this.world).hardcore_ability_penalty > 0 ? ' Volverás con las manos vacías y una cicatriz que no se va.' : '';
     const ev = this.events.emit({
       actor_id: c.id, action_type: 'death',
-      narration_private: `☠ Todo se apaga. Has muerto en ${spot.name}. No es el final: volverás en ${back} dentro de ${when}.${things}${scar}`,
+      narration_private: `☠ Todo se apaga. Has muerto en ${spot.name}. No es el final: volverás en ${back} dentro de ${when}. Hasta entonces no puedes actuar.${things}${scar}`,
       observable: `${c.name} se desploma y deja de respirar.`, tags: ['death', 'combat'],
       payload: { master: null, death: { mode: d.mode, spot_id: d.spot_id, location_id: loc.id, cause: d.cause, left: d.left, coins_left: d.coins_left, respawn_real_ms: d.respawn_real_ms, body_instance_id: d.body_instance_id } },
     }, this.stampFor(c));
