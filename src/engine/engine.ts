@@ -39,7 +39,7 @@ import { parseErrand, pendingLine, trivialAction, type Errand } from './errand.j
 import { atBoard, dropQuest, readBoard, readsBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, plantBeat, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { activeIn, crowdHere, tickSchedule } from './schedule.js';
-import { allIncidents, arrestAttempt, arrestCharge, arrestHostile, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, subdue, surrender, type LawNotice } from './crime.js';
+import { allIncidents, arrestAttempt, arrestCharge, arrestHostile, incidentText, lawTick, parseArmedThreat, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, reportThreat, resist, sentencePreview, subdue, surrender, type LawNotice } from './crime.js';
 
 import { coinsOf, currencyOf, DEFAULT_STARTING_COINS, migrateLegacyCoins, money, newPurse, pay } from './money.js';
 
@@ -4086,6 +4086,9 @@ export class Engine {
     const target = locId ? npcTarget(this.world, this.events.recentInLocation(locId, 60), c, text, nowG) : null;
     const insulted = parseInsult(text, target);
     if (insulted) reportIncident(this.world, { kind: 'insult', perpetrator_id: c.id, victim_id: insulted.id, spot_id: insulted.location.id }, nowG);
+    // Amenazar con un arma a un NPC es un incidente aunque no haya golpe (arreglo 37, crime.ts).
+    const threat = parseArmedThreat(this.world, c, text, target);
+    if (threat) reportThreat(this.world, c, threat.npc, threat.weapon, nowG);
     return null;
   }
 
