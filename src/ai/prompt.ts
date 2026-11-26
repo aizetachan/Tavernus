@@ -34,7 +34,7 @@ import { debtLine, openDebts } from '../engine/debts.js';
 import { spotLockedFor } from '../engine/movement.js';
 import { reboundOf } from '../engine/barrier.js';
 import { ROLL_CATEGORY, rollCategory } from '../engine/closecheck.js';
-import { conversationBlock, conversationOf, transcriptOf, transcriptText, TRANSCRIPT_LINES } from '../engine/conversation.js';
+import { conversationBlock, conversationOf, npcStreak, streakBlock, transcriptOf, transcriptText, TRANSCRIPT_LINES } from '../engine/conversation.js';
 import { offersOf, pcName } from '../engine/party.js';
 import { pendingFrom } from '../engine/reactions.js';
 import { RULES_CHEATSHEET } from './rules-cheatsheet.js';
@@ -510,6 +510,12 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   // Conversación en curso: el narrador solo entra cuando aporta.
   const convNpc = conv ? world.npcs.get(conv.npc_id) : undefined;
   if (conv && convNpc) L.push(conversationBlock(conv, actor.knows.includes(convNpc.id) ? convNpc.name : descriptorOf(world, convNpc.id)));
+  // Racha con el mismo NPC (conversation.ts, arreglo 13): a partir de un punto, el NPC mueve la escena o cierra.
+  const streak = intro || scene ? null : npcStreak(engine.events.all(), actor.id, loc.id);
+  const streakNpc = streak ? world.npcs.get(streak.npc_id) : undefined;
+  const longTalk = streak && streakNpc?.status === 'alive' && world.spot(streakNpc.location.id).location_id === loc.id
+    ? streakBlock(streak, actor.knows.includes(streakNpc.id) ? streakNpc.name : descriptorOf(world, streakNpc.id)) : null;
+  if (longTalk) L.push(longTalk);
 
   if (intro) {
     L.push([
