@@ -961,6 +961,8 @@ export class Engine {
     }
     // A 0 PG o muerto no se actúa: se le dice cómo está y qué le espera.
     if (c.status === 'unconscious' || c.status === 'dead') return { ok: false, text: this.downText(c) };
+    // Actúa otra vez: la represalia que recibió ya no es el turno de nadie en esta acción (arreglo 19).
+    this.retaliatedOn.delete(c.id);
     const locId = positionOf(this.world, c, this.gameNow()).location_id;
     // Quien espera a que otro jugador decida (reactions.ts) no hace otra cosa hasta saberlo (hablar, sí).
     const waiting = this.reactionWait(c);
@@ -1559,13 +1561,18 @@ export class Engine {
       // y tres golpes): los hostiles no le alcanzan en este turno y, si le estaban deteniendo, se le escapa.
       const evaded = Boolean(result.success) && pending.roll.kind === 'skill' && Engine.EVASION_SKILLS.has(pending.roll.key) && !pending.roll.conflict && (Engine.FLEES.test(pending.text) || this.isLeaving(c, pending.text));
       const struck = pending.roll.kind === 'attack' || evaded ? [] : this.retaliation(c, provoked);
+      let missed: ReturnType<typeof dueNpcTurns> = [];
       if (evaded) {
         const loc = this.world.characterSpot(c)?.location_id;
-        const missed = loc ? dueNpcTurns(this.world, [c.id], new Set(), this.nowFor(c)) : [];
+        missed = loc ? dueNpcTurns(this.world, [c.id], new Set(), this.nowFor(c)) : [];
         if (missed.length) this.engineDoneFor.set(c.id, missed.map((d) => ({ npc_id: d.npc.id, text: `${this.labelFor(c, d.npc.id).replace(/^./, (x) => x.toUpperCase())} no llega a alcanzarte: te zafas.` })));
         if (c.wanted?.arrest) { resist(this.world, c, this.nowFor(c)); c.wanted.arrest = null; this.world.touch('characters', c.id); }
       }
       const struckText = struck.map((f) => forcedTurnText(this.world, f, c.id, (id) => this.labelFor(c, id)));
+      // Ese golpe (o el que esquiva) es su turno de esta ronda: la ronda que se cierre sin que él actúe no le repite (arreglo 19).
+      const spent = [...struck.map((f) => f.npc_id), ...missed.map((d) => d.npc.id)];
+      const spentLoc = this.world.characterSpot(c)?.location_id;
+      if (spent.length && spentLoc) this.retaliatedOn.set(c.id, { location_id: spentLoc, npc_ids: spent });
       if (struck.length) {
         this.engineDoneFor.set(c.id, struck.map((f, k) => ({ npc_id: f.npc_id, text: struckText[k]!, forced: f })));
         const fact = `Represalia, ya resuelta por el servidor con su tirada (hecho: cuéntala tal cual después de lo del jugador, con ese resultado; no llames a attack ni a apply_damage por ella): ${struckText.join(' ')}`;
@@ -1701,6 +1708,25 @@ export class Engine {
   /** Lo que el motor acaba de hacer y el máster tiene que contar en este turno (ai/prompt.ts, ai/tools.ts). */
   engineDone(characterId: Id): readonly EngineDone[] {
     return this.engineDoneFor.get(characterId) ?? [];
+  }
+
+  /**
+   * NPC que ya han hecho su turno en esta ronda por una represalia a otro PJ de la sala (arreglo 19), sin consumirlo:
+   * el contexto del máster los saca del turno de los hostiles. Las represalias al propio actor no cuentan: son de su
+   * turno (engineDone) y su acción siguiente ya es otra.
+   */
+  spentTurns(characterId: Id): { npc_id: Id; target_id: Id }[] {
+    const c = this.world.characters.get(characterId);
+    const loc = c ? positionOf(this.world, c, this.gameNow()).location_id : null;
+    if (!loc) return [];
+    return [...this.retaliatedOn].filter(([pc, r]) => pc !== characterId && r.location_id === loc).flatMap(([pc, r]) => r.npc_ids.map((npc_id) => ({ npc_id, target_id: pc })));
+  }
+
+  /** Como spentTurns, y los consume: el cierre que los respeta es la ronda de ese golpe; en la siguiente vuelven a atacar. */
+  takeSpentTurns(characterId: Id): Id[] {
+    const out = this.spentTurns(characterId);
+    for (const s of out) this.retaliatedOn.delete(s.target_id);
+    return [...new Set(out.map((s) => s.npc_id))];
   }
 
   /** Cómo llama el PJ a un NPC: su nombre si lo sabe; si no, lo que se ve («el guardia»). */
@@ -2278,6 +2304,14 @@ export class Engine {
   private decisiveTimers = new Map<Id, NodeJS.Timeout>();
   /** Lo que el motor acaba de hacer y el máster tiene que contar (engineDone), por PJ y solo durante su turno. */
   private engineDoneFor = new Map<Id, EngineDone[]>();
+  /**
+   * Represalias tras una tirada (arreglo 19 del 26-11-2026), por el PJ que las recibió: dónde y qué NPC le pegaron (o
+   * intentaron pegarle y se zafó). Ese golpe es el turno de esos NPC: el primer cierre de otro actor en la misma sala
+   * (la ronda que se resuelve con él dudando, el turno de otro jugador) no les hace atacar otra vez y lo consume
+   * (takeSpentTurns). Se borra también cuando el PJ vuelve a actuar: su acción siguiente es otro turno, y en ella sí
+   * vuelven a atacar.
+   */
+  private retaliatedOn = new Map<Id, { location_id: Id; npc_ids: Id[] }>();
   /** Tiradas sociales: con éxito bajo el alto compran un intento más (crime.ts). */
   static readonly SOCIAL_SKILLS = new Set(['persuasion', 'deception', 'intimidation', 'performance']);
   /** Lo que le descubre (sin acentos): hablar en voz alta, gritar, llamar, golpear, salir. */

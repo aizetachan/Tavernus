@@ -169,6 +169,9 @@ export class Master {
       ctx.npc_turns = new Set(engineDone.flatMap((d) => (d.npc_id ? [d.npc_id] : [])));
       ctx.forced_turns = engineDone.flatMap((d) => (d.forced ? [d.forced] : []));
     }
+    // Los que ya le pegaron a otro PJ de la sala con su represalia (arreglo 19): ese era su turno de esta ronda.
+    const spent = engine.takeSpentTurns(actor.id);
+    if (spent.length) ctx.spent_turns = new Set(spent);
     const calls: ToolCallRecord[] = [];
     const failures: ToolFailure[] = [];
     /** Cierre aceptado: con tool_failed y los errores si algo de escritura falló por el camino. */

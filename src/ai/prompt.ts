@@ -451,8 +451,14 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   const h = engine.sceneHints(actor.id);
   const pcs = [actor.id, ...[...(h?.round?.members ?? []), ...(h?.group?.members ?? []), ...(h?.window?.members ?? [])].map((m) => m.id).filter((id) => id !== actor.id)];
   const pcsHere = pcs.map((id) => world.characters.get(id)).filter((c): c is Character => Boolean(c));
+  // Quien ya pegó en esta ronda con su represalia a otro PJ de la sala (arreglo 19; engine.ts, spentTurns) no vuelve a atacar.
+  const spent = engine.spentTurns(actor.id);
+  if (spent.length) {
+    const label = (id: string) => (actor.knows.includes(id) ? world.npc(id).name : descriptorOf(world, id));
+    L.push(`## Ya han hecho su turno en esta ronda\n${spent.map((s) => `- ${label(s.npc_id)} [${s.npc_id}]: su represalia contra ${world.characters.get(s.target_id)?.name ?? 'otro jugador'}, ya resuelta y contada. No vuelve a atacar hasta la ronda siguiente: no llames a attack por él ni lo narres golpeando otra vez.`).join('\n')}`);
+  }
   if (encounterAt(world, engine.events.recentInLocation(loc.id, 400), loc.id, nowG) || (recentCombatTag(engine.events.recentInLocation(loc.id, 12), nowG) && hostilesAt(world, loc.id, pcsHere).length)) {
-    const due = dueNpcTurns(world, pcs, new Set(), nowG);
+    const due = dueNpcTurns(world, pcs, new Set(spent.map((s) => s.npc_id)), nowG);
     if (due.length) {
       L.push(`## Turno de los NPC hostiles\n${due.map((d) => `- ${actor.knows.includes(d.npc.id) ? d.npc.name : descriptorOf(world, d.npc.id)} [${d.npc.id}] ataca a ${d.target.id === actor.id ? 'el actor' : d.target.name} [${d.target.id}]${(d.npc.stats!.multiattack ?? 1) > 1 ? ` (multiataque ×${d.npc.stats!.multiattack}, en una sola llamada)` : ''}.`).join('\n')}\nEn este turno, después de resolver lo del jugador: un attack por cada uno (attacker_id = el NPC) y nárralo. Si cae o se rinde antes, no ataca. Si no lo haces, el servidor lo resuelve al cerrar y tendrás que reescribir.`);
     }

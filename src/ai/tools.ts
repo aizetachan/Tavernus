@@ -468,6 +468,11 @@ export interface ToolContext {
   asked?: Set<Id>;
   /** NPC que ya han hecho su turno en esta acción (attack o el motor): uno por NPC (combat.ts). */
   npc_turns?: Set<Id>;
+  /**
+   * NPC que ya hicieron su turno de esta ronda antes de este cierre: la represalia a otro PJ de la sala tras su tirada
+   * (engine.ts, takeSpentTurns; arreglo 19). Ni atacan ni los fuerza el motor; no cuentan como golpe de este cierre.
+   */
+  spent_turns?: Set<Id>;
   /** Turnos que ha tenido que hacer el motor porque el máster no los hizo (combat.ts, forceNpcTurns). */
   forced_turns?: ForcedTurn[];
   /** Cierres rechazados para que cuente esos turnos (uno como mucho; luego los añade el motor). */
@@ -1649,6 +1654,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const npcAtk = world.npcs.get(s('attacker_id'));
       const acted = (ctx.npc_turns ??= new Set());
       if (npcAtk && acted.has(npcAtk.id)) return { error: `${npcAtk.name} ya ha hecho su turno en esta acción${npcAtk.stats?.multiattack ? ' (su multiataque iba entero en ese attack)' : ''}: no vuelve a atacar hasta el siguiente. Narra lo que ya ha pasado.` };
+      if (npcAtk && ctx.spent_turns?.has(npcAtk.id)) return { error: `${npcAtk.name} ya ha hecho su turno en esta ronda (su represalia, resuelta por el servidor): no vuelve a atacar hasta la siguiente. No lo narres atacando otra vez.` };
       const adv = (ADV.includes(s('advantage')) ? s('advantage') : 'none') as Advantage;
       const r = npcAtk ? npcTurn(world, npcAtk.id, s('target_id'), adv, ctx.rng, nowGameS) : resolveAttack(world, s('attacker_id'), s('target_id'), adv, ctx.rng, nowGameS, { intent: ctx.action_text ?? null });
       if ('error' in r) return { error: r.error };
@@ -2310,7 +2316,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!req && !ctx.intro && decisiveNpc !== '*' && fightingHere(ctx, s('tags').split(',').map((t) => t.trim()))) {
         const acted = (ctx.npc_turns ??= new Set());
         if (decisiveNpc) acted.add(decisiveNpc);
-        const forced = forceNpcTurns(world, [actor.id, ...sharedWith(engine, actor.id)], acted, ctx.rng, nowGameS);
+        // Los que ya pegaron en esta ronda por una represalia (arreglo 19) no repiten, pero no cuentan como golpe de este cierre.
+        const skip = new Set([...acted, ...(ctx.spent_turns ?? [])]);
+        const forced = forceNpcTurns(world, [actor.id, ...sharedWith(engine, actor.id)], skip, ctx.rng, nowGameS);
+        for (const id of skip) if (!ctx.spent_turns?.has(id)) acted.add(id);
         if (forced.length) {
           (ctx.forced_turns ??= []).push(...forced);
           for (const f of forced) (ctx.engine_calls ??= []).push({ name: 'attack', input: { attacker_id: f.npc_id, target_id: f.target_id, advantage: 'none', by_engine: true }, result: JSON.stringify(f.outcome) });
