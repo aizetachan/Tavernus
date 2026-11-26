@@ -447,7 +447,7 @@ function applyKnower(world: World, i: Incident, n: Npc, k: Knower, nowG: number)
   }
   if (k.how === 'saw' && k.response === 'alert') {
     const to = k.to ? world.npcs.get(k.to) : null;
-    const r = to ? setNpcOrder(world, { npc_id: n.id, order: 'go', task: { kind: 'act', text: `le cuenta a ${to.name} lo que ha hecho ${i.perpetrator_name}`, target_id: to.id }, minutes: 30 }, nowG) : null;
+    const r = to ? setNpcOrder(world, { npc_id: n.id, order: 'go', task: { kind: 'act', text: `le cuenta a ${to.name} lo que pasó con ${i.perpetrator_name}`, target_id: to.id }, minutes: 30 }, nowG) : null;
     if (!r?.ok) k.response = 'shout';
   } else if (k.how === 'saw' && k.response === 'flee') {
     const away = fleeSpot(world, n, i.location_id);
@@ -906,7 +906,7 @@ export function resist(world: World, c: Character, nowG: number): Npc[] {
   for (const id of enforcerIds(world)) {
     const n = world.npcs.get(id);
     if (!n || !spot || n.status !== 'alive' || n.bound || out.includes(n) || !n.stats) continue;
-    if (setNpcOrder(world, { npc_id: n.id, order: 'go', spot_id: spot.id, task: { kind: 'act', text: `viene a ayudar a detener a ${c.name}`, target_id: c.id }, minutes: 30 }, nowG).ok) {
+    if (setNpcOrder(world, { npc_id: n.id, order: 'go', spot_id: spot.id, task: { kind: 'act', text: `viene a por ${c.name}, a ayudar en la detención`, target_id: c.id }, minutes: 30 }, nowG).ok) {
       n.attitude.by_character[c.id] = 'hostile';
       world.touch('npcs', n.id);
     }
