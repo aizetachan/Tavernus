@@ -132,7 +132,8 @@ describe('(12) la represalia del NPC tras un éxito del jugador pasa por su tira
     const outcome = engine.events.all().filter((e) => e.seq > from && e.action_type === 'master_roll_outcome').at(-1)!;
     const m = masterOf(outcome);
     expect(m.context).toMatch(/Represalia, ya resuelta por el servidor con su tirada/);
-    const told = /(?:Hugo|El herrero) te ataca con ([^.]+?) y (te da \((\d+)\)|falla)/.exec(m.context);
+    // Con su tirada a la vista (arreglo 38): «te ataca con martillo (d20 [..] + 4 = .. contra tu CA ..) y te da 6 de daño (…)».
+    const told = /(?:Hugo|El herrero) te ataca con ([^(]+?) \(d20[^)]*contra tu CA \d+\) (te da (\d+) de daño|falla)/.exec(m.context);
     expect(told).not.toBeNull();
     const dmg = told![3] ? Number(told![3]) : 0;
     expect(c.hp_current).toBe(hp - dmg);
@@ -289,7 +290,7 @@ describe('(10) el preso, la huida y el traslado', () => {
     await roll('¡Un paso más y te parto el yelmo, perro del regidor!', 'intimidation');
     const hit = engine.events.all().filter((e) => e.action_type === 'npc_retaliation').at(-1);
     expect(hit?.narration_private).toMatch(/(Garrán|El alguacil) te ataca con/);
-    const dmg = /te da \((\d+)\)/.exec(hit!.narration_private)?.[1];
+    const dmg = /te da (\d+) de daño/.exec(hit!.narration_private)?.[1];
     expect(c.hp_current).toBe(hp - Number(dmg ?? 0));
   });
 });

@@ -53,6 +53,7 @@ import { stabilize } from './death.js';
 import { opinionRefusal } from './standing.js';
 import { adjustTrust } from './trust.js';
 import { isDwelling, npcSees } from './perception.js';
+import { conflictKindOf, namesItem, readsAsBlow } from './conflict.js';
 import type { World } from './world.js';
 
 export type { IncidentKind } from './model.js';
@@ -65,6 +66,22 @@ export const KIND_ES: Record<IncidentKind, string> = { insult: 'insulto', theft_
 /** Multas por defecto (monedas) y horas de calabozo por defecto, si la campaña no dice otra cosa. */
 export const DEFAULT_FINES: Record<IncidentKind, number> = { insult: 0, theft_attempt: 30, theft: 50, assault: 30, armed_assault: 100, desecration: 100, murder: 0 };
 export const DEFAULT_JAIL_HOURS: Record<IncidentKind, number> = { insult: 0, theft_attempt: 0, theft: 0, assault: 0, armed_assault: 8, desecration: 8, murder: 24 };
+
+/** Lo que fue una agresión sin golpe: agarrar, empujar, tocar sin permiso o amenazar con un arma. */
+export type AssaultDeed = 'grab' | 'shove' | 'touch' | 'threat';
+/** Pretérito, segunda persona e imperfecto de cada una: «agarró», «has agarrado», «agarraba». */
+const DEED_ES: Record<AssaultDeed, [string, string, string]> = {
+  grab: ['agarró', 'has agarrado', 'agarraba'],
+  shove: ['empujó', 'has empujado', 'empujaba'],
+  touch: ['le puso la mano encima', 'le has puesto la mano encima', 'le ponía la mano encima'],
+  threat: ['amenazó', 'has amenazado', 'amenazaba'],
+};
+/** «agarró al molinero», «amenazó al molinero con un arma (gran hacha)», «le puso la mano encima a Ilse». */
+function assaultDeed(i: Pick<Incident, 'deed' | 'weapon'>, v: string, form: 0 | 1 | 2): string | null {
+  if (!i.deed) return null;
+  const verb = DEED_ES[i.deed][form];
+  return `${verb} ${al(v)}${i.deed === 'threat' ? (i.weapon ? ` con un arma (${i.weapon})` : ' con un arma') : ''}`;
+}
 
 /** Lo violento, que sube de gravedad dentro del mismo incidente. */
 const VIOLENT: readonly IncidentKind[] = ['assault', 'armed_assault', 'murder'];
@@ -118,6 +135,11 @@ export interface Incident {
   victim_name: string | null;
   /** Con qué (agresión con arma): «bastón», «Proyectil mágico». */
   weapon: string | null;
+  /**
+   * Qué hizo, si la agresión no fue un golpe (arreglo 37 del 26-11-2026): agarrarle, empujarle, tocarle o amenazarle con
+   * un arma. El cargo y el aviso lo citan («agarró al molinero», no «golpeó al molinero»: violento T5).
+   */
+  deed?: AssaultDeed | null;
   /** La gente de la agenda que lo vio («unos diez vecinos»). */
   crowd: string | null;
   knowers: Knower[];
@@ -140,6 +162,8 @@ export interface IncidentInput {
   /** Dónde; sin él, donde está el autor. */
   spot_id?: Id | null;
   weapon?: string | null;
+  /** Qué hizo, si la agresión no fue un golpe (agarrar, empujar, tocar, amenazar con un arma). */
+  deed?: AssaultDeed | null;
   /** La víctima lo ve aunque no esté en el punto (le quitan algo de encima). false: solo si está allí (su tienda, shop.ts). */
   victim_present?: boolean;
 }
@@ -218,8 +242,9 @@ export function knownBy(world: World, npcId: Id, characterId: Id): { incident: I
 // ---------------------------------------------------------------------------
 
 /** Lo que hizo, en pretérito: «mató a Hugo», «atacó a Hugo con un bastón». */
-export function deedText(i: Pick<Incident, 'kind' | 'victim_name' | 'weapon'>): string {
+export function deedText(i: Pick<Incident, 'kind' | 'victim_name' | 'weapon'> & { deed?: AssaultDeed | null }): string {
   const v = i.victim_name ?? 'alguien';
+  if (i.kind === 'assault') { const d = assaultDeed(i, v, 0); if (d) return d; }
   switch (i.kind) {
     case 'murder': return `mató ${al(v)}`;
     case 'armed_assault': return `atacó ${al(v)}${i.weapon ? ` (${i.weapon})` : ' con un arma'}`;
@@ -239,6 +264,7 @@ function deedFor(world: World, i: Incident, reader?: Character | null): string {
 /** En segunda persona: «has matado a Hugo». */
 function deedYou(i: Incident): string {
   const v = i.victim_name ?? 'alguien';
+  if (i.kind === 'assault') { const d = assaultDeed(i, v, 1); if (d) return d; }
   switch (i.kind) {
     case 'murder': return `has matado ${al(v)}`;
     case 'armed_assault': return `has atacado ${al(v)}`;
@@ -253,6 +279,7 @@ function deedYou(i: Incident): string {
 /** En imperfecto, para la memoria: «Vio cómo Leodhin mataba a Hugo». */
 function deedWas(i: Incident): string {
   const v = i.victim_name ?? 'alguien';
+  if (i.kind === 'assault') { const d = assaultDeed(i, v, 2); if (d) return d; }
   switch (i.kind) {
     case 'murder': return `mataba ${al(v)}`;
     case 'armed_assault': return `atacaba ${al(v)}${i.weapon ? ` (${i.weapon})` : ' con un arma'}`;
@@ -420,7 +447,7 @@ function applyKnower(world: World, i: Incident, n: Npc, k: Knower, nowG: number)
   }
   if (k.how === 'saw' && k.response === 'alert') {
     const to = k.to ? world.npcs.get(k.to) : null;
-    const r = to ? setNpcOrder(world, { npc_id: n.id, order: 'go', task: { kind: 'act', text: `le cuenta a ${to.name} lo que ha hecho ${i.perpetrator_name}`, target_id: to.id }, minutes: 30 }, nowG) : null;
+    const r = to ? setNpcOrder(world, { npc_id: n.id, order: 'go', task: { kind: 'act', text: `le cuenta a ${to.name} lo que pasó con ${i.perpetrator_name}`, target_id: to.id }, minutes: 30 }, nowG) : null;
     if (!r?.ok) k.response = 'shout';
   } else if (k.how === 'saw' && k.response === 'flee') {
     const away = fleeSpot(world, n, i.location_id);
@@ -584,16 +611,19 @@ export function reportIncident(world: World, input: IncidentInput, nowG: number)
   // La violencia sube por escalones (agresión → con arma → muerte) dentro del mismo incidente; robar o profanar es otro.
   const ladder = (k: IncidentKind) => (VIOLENT.includes(k) ? 'violence' : k);
   let i = all.find((x) => x.status === 'open' && x.perpetrator_id === c.id && victim !== null && x.victim_id === victim.id && ladder(x.kind) === ladder(input.kind) && nowG - x.updated_game_s < ESCALATE_S);
-  if (i && sev <= i.severity) return null;
+  // Un golpe tras agarrarle (o amenazarle) es la misma gravedad, pero el cargo pasa a ser el golpe.
+  const sharper = Boolean(i && sev === i.severity && i.deed && !input.deed);
+  if (i && sev <= i.severity && !sharper) return null;
   if (i) {
     i.kind = input.kind; i.severity = sev; i.updated_game_s = nowG; i.spot_id = spot.id; i.location_id = spot.location_id;
     if (input.weapon) i.weapon = input.weapon;
+    i.deed = input.deed ?? null;
     i.narrated_to = [];
   } else {
     i = {
       id: `inc_${Math.round(nowG).toString(36)}_${all.length.toString(36)}`, kind: input.kind, severity: sev, game_s: nowG, updated_game_s: nowG,
       location_id: spot.location_id, spot_id: spot.id, perpetrator_id: c.id, perpetrator_name: c.name,
-      victim_id: victim?.id ?? null, victim_name: victim?.name ?? null, weapon: input.weapon ?? null, crowd: null,
+      victim_id: victim?.id ?? null, victim_name: victim?.name ?? null, weapon: input.weapon ?? null, deed: input.deed ?? null, crowd: null,
       knowers: [], announced: 0, narrated_to: [], crowd_alert_game_s: null, rep_applied: 0, infamy_applied: 0, status: 'open',
     };
     all.push(i);
@@ -876,7 +906,7 @@ export function resist(world: World, c: Character, nowG: number): Npc[] {
   for (const id of enforcerIds(world)) {
     const n = world.npcs.get(id);
     if (!n || !spot || n.status !== 'alive' || n.bound || out.includes(n) || !n.stats) continue;
-    if (setNpcOrder(world, { npc_id: n.id, order: 'go', spot_id: spot.id, task: { kind: 'act', text: `viene a ayudar a detener a ${c.name}`, target_id: c.id }, minutes: 30 }, nowG).ok) {
+    if (setNpcOrder(world, { npc_id: n.id, order: 'go', spot_id: spot.id, task: { kind: 'act', text: `viene a por ${c.name}, a ayudar en la detención`, target_id: c.id }, minutes: 30 }, nowG).ok) {
       n.attitude.by_character[c.id] = 'hostile';
       world.touch('npcs', n.id);
     }
@@ -900,6 +930,8 @@ export const ALTO_REPEAT_S = 6 * GAME_HOUR;
 export function arrestAttempt(c: Character, kind: ArrestAttempt['kind'], text: string, nowG: number): boolean {
   const a = c.wanted?.arrest;
   if (!a) return false;
+  // Rendirse no es ganar tiempo ni resistirse: no gasta el intento ni suma aviso (arreglo 37).
+  if (kind === 'stall' && parseSurrender(text)) return false;
   a.last_attempt = { kind, text: text.trim().slice(0, 160), game_s: nowG };
   if (kind === 'roll_ok') {
     if ((a.bought ?? 0) < 1) a.bought = (a.bought ?? 0) + 1;
@@ -1259,9 +1291,19 @@ export function crimeContext(world: World, c: Character, nowG: number): string |
 
 const plain = (t: string) => nrm(t).replace(/[«»"“”¡!¿?.,;:]/g, ' ').replace(/\s+/g, ' ').trim();
 
-/** «me entrego», «me rindo», «no me resisto», «suelto el arma». */
+/**
+ * Lo que es rendirse, en cualquier parte de la frase (arreglo 37 del 26-11-2026): «me entrego», «me rindo», «no me
+ * resisto», «levanto las manos», «vale, voy con vosotros», y los botones de la sugerencia («Entregarte sin resistir»,
+ * «Entregarte a Doro», «Soltar la vela y levantar las manos»). Antes solo valía al principio y en primera persona, y
+ * el botón iba al máster como un intento de ganar tiempo: al siguiente, «ya te ha avisado una vez» y le ataban.
+ */
+const SURRENDER = /\b(?:me entrego|entregarme|entregarte|entregarse|me rindo|rendirme|rendirte|rendirse|no me resisto|sin resistir(?:me|te)?|sin oponer resistencia|me dejo (?:detener|atar|llevar|prender|esposar)|dejo que me (?:detenga\w*|ate\w*|llev\w*)|levant(?:o|ar|ando) las manos|manos en alto|alzo las manos|suelt(?:o|ar) (?:el|mi|la) (?:arma|baston|espada|cuchillo|daga|hacha|maza|garrote|lanza|arco)\w* y (?:me entrego|levant\w* las manos|me rindo)|voy con (?:vosotros|usted|ustedes|el alguacil|el guardia)|me voy con (?:el|ella|vosotros|usted)|vale,? voy|os acompano|le acompano|te acompano sin|os sigo sin|le sigo sin)\b/;
+/** Negarse a rendirse o ponerlo como condición: «no me entrego», «antes muerto que rendirme», «si me entrego…». */
+const SURRENDER_NOT = /\b(?:no (?:me )?(?:entrego|rindo|pienso (?:entregarme|rendirme))|nunca (?:me )?(?:entrego|rindo)|jamas (?:me )?(?:entrego|rindo)|ni (?:me )?(?:entrego|rindo)|antes muerto|antes muerta|si me (?:entrego|rindo)|que me rinda|que me entregue|ni hablar)\b/;
+
 export function parseSurrender(text: string): boolean {
-  return /^(?:vale[, ]+)?(?:me entrego|entregarme|me rindo|rendirme|no me resisto|me dejo detener|dejo que me detenga\w*|suelto (?:el|mi) (?:arma|baston|espada|cuchillo)|levanto las manos|me voy con (?:el|ella)|vale,? voy)\b/.test(plain(text));
+  const t = ` ${plain(text)} `;
+  return SURRENDER.test(t) && !SURRENDER_NOT.test(t);
 }
 
 /** «me resisto», «resistirme», «no me entrego». */
@@ -1294,24 +1336,51 @@ export function parseInsult(text: string, target: Npc | null): Npc | null {
   return INSULT.test(plain(text)) ? target : null;
 }
 
-const STEAL = /\b(?:rob\w*|hurt\w*|birl\w*|mang\w*|sise\w*|afan\w*|arrebat\w*|quitarle|quitarsel\w*|le quito|me lo quedo|me la quedo|le cojo|cojo su|meto la mano en su)\b/;
-
-/** ¿La acción es quitarle algo a alguien («le robo la bolsa»)? */
-/** Temer que le roben, negarlo o contar que le han robado no es robar («escondo mis monedas por si alguien me roba»). */
-const STEAL_NOT = /\b(?:por si (?:alguien |me |nos )?(?:me |nos )?rob\w+|que (?:no )?(?:me |nos )rob\w+|si (?:me |nos )rob\w+|miedo a que (?:me |nos )rob\w+|me han robado|nos han robado|no (?:le |la |lo )?robo)\b/;
-
-/** ¿La acción es quitarle algo a alguien («le robo la bolsa»)? */
+/**
+ * ¿La acción es quitarle algo a alguien («le robo la bolsa», «meto la mano en su bolsa»)? La lee el mismo lector que
+ * las acciones conflictivas (conflict.ts, conflictKindOf): verbo de robar con su blanco, y nada de lo que no lo es
+ * (temer que le roben, negarlo, lanzar un conjuro, dar algo en la mano, «el roble del Soto»: arreglos 29 y 31).
+ */
 export function readsAsTheft(text: string | null | undefined): boolean {
   if (!text) return false;
-  const t = plain(text);
-  return STEAL.test(t) && !STEAL_NOT.test(t);
+  const k = conflictKindOf(text);
+  return k === 'steal' || k === 'snatch';
 }
 
 const VIOLENCE = /\b(?:atac\w*|ataqu\w*|golpe\w*|peg(?:o|ar|arle|arla|arlo)|mat(?:o|ar|arle|arla|arlo)|apunal\w*|acuchill\w*|dispar\w*|hier(?:o|e)|herir\w*|lanz\w*|proyectil|descarga|conjuro|hechizo|empuj\w*|derrib\w*|me lanzo|cargo contra|huy\w*|escap\w*|corro|salgo corriendo)\b/;
 
-/** ¿Lo que escribe es pelear o escapar? Ante un alto, eso es resistirse. */
+/** ¿Lo que escribe es pelear o escapar? Ante un alto, eso es resistirse. Rendirse no lo es («suelto el hacha y me entrego»). */
 export function readsAsResisting(text: string): boolean {
+  if (parseSurrender(text)) return false;
   return VIOLENCE.test(plain(text));
+}
+
+/** Amenazar: «o te parto…», «habla o…», el arma «en alto», «contra el pecho», «al cuello», «le apunto». */
+const THREAT = /\b(?:o te (?:\w+ ){0,3}(?:parto|mato|rajo|abro|corto|hago|clavo|reviento|quemo|rompo|arranco|saco|tiro)|o el proximo|o eres (?:el|la) siguiente|te (?:parto|mato|rajo|abro en canal|clavo|reviento) |amenaz\w*|en alto|contra (?:el|su|tu) (?:pecho|cuello|garganta|cara|cabeza)|al cuello|en el cuello|a la garganta|en la garganta|le apunto|apuntandole|blandiendo|blando|habla (?:ya )?o |o hablas|dime .{0,60} o te)\b/;
+
+/**
+ * ¿Amenaza al NPC con un arma que lleva? (arreglo 37 del 26-11-2026: el violento amenazó al molinero con el hacha diez
+ * turnos, T20 a T37, sin ninguna consecuencia). Tiene que nombrar el arma (una que lleve encima) y amenazar; si además
+ * golpea, es un ataque y lo lleva attack. Devuelve a quién y con qué, o null. `target`: a quien se dirige (npcTarget).
+ */
+export function parseArmedThreat(world: World, c: Character, text: string, target: Npc | null): { npc: Npc; weapon: string } | null {
+  if (!target || target.status !== 'alive') return null;
+  const here = world.characterSpot(c);
+  if (!here || world.spot(target.location.id).location_id !== here.location_id) return null;
+  const t = plain(text);
+  if (!THREAT.test(t) || readsAsBlow(text) || /\b(?:atac\w*|golpe\w*|le pego)\b/.test(` ${t} `.replace(/ de golpe /g, ' '))) return null;
+  const weapon = world.itemsCarriedBy(c.id).map((i) => world.itemDef(i.item_id)).find((d) => d.weapon && namesItem(text, d));
+  return weapon ? { npc: target, weapon: weapon.name } : null;
+}
+
+/**
+ * La consecuencia de amenazarle con un arma: una agresión («amenazó al molinero con la gran hacha») con sus testigos,
+ * su aviso a la autoridad y su rumor. La misma víctima en la hora no suma otra (el incidente ya está); si luego le golpea,
+ * el cargo pasa a ser el golpe. En plena pelea o si el NPC ya va a por él, no: eso es el combate. null si no hay incidente.
+ */
+export function reportThreat(world: World, c: Character, n: Npc, weapon: string, nowG: number): Incident | null {
+  if (!isUnprovoked(n, c.id) || inFightWith(world, c, n, nowG)) return null;
+  return reportIncident(world, { kind: 'assault', perpetrator_id: c.id, victim_id: n.id, spot_id: n.location.id, weapon, deed: 'threat' }, nowG);
 }
 
 /** La pena que le espera si se entrega, en palabras: «calabozo hasta mañana a estas horas», «una multa de 300 monedas». */

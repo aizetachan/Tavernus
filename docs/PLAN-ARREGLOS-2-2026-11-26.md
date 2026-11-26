@@ -370,3 +370,78 @@ encuentro de camino) y los cambios de estado (muerto, inconsciente).
   al fusionar G.
 - **H, web.** El evento `board` ya no trae la lista ni la hora; `notice.ts` lo pinta bien como aviso. Si en algún sitio
   la web leía la lista del `observable`, que lea `payload.job_ids`.
+## Estado del paquete G
+
+Rama `claude/arreglos-g-conflicto-2d81db`, un commit por arreglo, subida a `origin`, sin PR. Tests nuevos:
+`test/conflicto-estrecho-2026-11-26.test.ts` (31), `test/rendirse-2026-11-26.test.ts` (37),
+`test/muerte-0pg-2026-11-26.test.ts` (38), `test/plantillas-ley-2026-11-26.test.ts` (44). Ajustado
+`test/ley-pelea-2026-11-26.test.ts` al texto nuevo del turno forzado (lleva la tirada).
+
+**Hecho**
+
+- **31.** `conflictKindOf` lee robo solo con el verbo y el blanco («le quito», «le arrebato», «le robo», «meto la mano en
+  su bolsa», «le birlo», «le saco la bolsa sin que…») y con las formas del verbo, no la raíz: «el roble del Soto» ya no
+  es robar (lo era: `rob\w*`), ni «la manga» mangar. «De un tirón» solo arrebata con blanco. Lista de lo que no es
+  (`NOT_CONFLICT`), por trozos de la frase: lanzar un conjuro, lanzarse o tirarse a un sitio, saltar, trepar, pescar, dar
+  algo en la mano, recoger lo caído y el codazo o la palmada para llamar la atención; así «le robo la bolsa y lanzo un
+  conjuro» sigue siendo robo. `conflictPlan` no toma por robo coger lo propio («mi bolsa», o lo que nombra y lleva él
+  sin decir de quién es lo otro). `readsAsTheft` usa el mismo lector. Exporta `conflictText`, `readsAsBlow` y
+  `attentionNudge` («de golpe» es de repente, no un golpe). Casos: rompejuegos T31 y T33, impredecible T9 dejan de ser
+  robo; pareja pícaro B37 y B9, el arreglo 29 y los de `context`/`partida-2026-11-06` siguen igual.
+  Nota: rompejuegos T15 **sí** es arrebatar («le arranco la vela de la mano y me lanzo al pozo»): el jugador escribe el
+  tirón a Ilse; lo que no lo es, «me lanzo al pozo» a secas, ya no cuenta.
+- **37.** `parseSurrender` lee la rendición en cualquier parte de la frase y los botones en segunda persona
+  («Entregarte sin resistir», «Entregarte a Doro», «Soltar la vela y levantar las manos», «vale, voy con vosotros»),
+  con sus negaciones («no me entrego», «si me entregas…»). Era la causa del «ya te ha avisado una vez»: el botón de
+  entregarse iba al máster como intento de ganar tiempo (impredecible T10 y T11, pícaro T3 y T4, rompejuegos T17, pareja
+  pícaro B38 y B39). `arrestAttempt` no cuenta la rendición y `readsAsResisting` no la lee como resistencia. La agresión
+  guarda qué fue (`Incident.deed`: agarrar, empujar, tocar, amenazar) y el aviso, la memoria, el buscado y el cargo lo
+  citan («has agarrado al molinero», violento T5); un golpe después pasa a ser el cargo. `parseArmedThreat` y
+  `reportThreat`: amenazar con un arma que lleva encima es una agresión con el arma en el cargo, una por víctima y hora
+  (violento T20, T22, T37). Arrebatar algo suyo con un golpe («agarro el garrote del molinero y lo tiro de una
+  patada», T25) es arrebatar, con su delito; un golpe sin quitar nada sigue siendo ataque (arreglo 3).
+- **38.** El motor está bien: una salvación con éxito solo suma un éxito; tres estabilizan a 0 PG y se despierta con
+  1 PG tras 1d4 h; solo un 20 natural o una curación levantan en el acto (SRD); y `act()` rechaza a 0 PG antes del
+  máster (engine.ts:963). Lo de pareja violento F2, pareja metódico E17 y recolector T11 lo hace el **jugador
+  automático**: `scripts/autoplay.ts`, «Caído o muerto no se juega», espera al caído minuto a minuto (`for k < 200 …
+  tick`) hasta que se levanta y lo que pasa mientras (las salvaciones, el 20 natural, la estabilización y sus horas, o la
+  muerte y la vuelta: violento T4 a T5) va a `s.last` pero no al transcript. Tests que lo fijan. `downStateLine(c)` en
+  `death.ts`: el estado inequívoco del caído en una línea para el contexto. El turno de un NPC que hace el motor lleva la
+  tirada de ataque y el dado de daño a la vista (`forcedTurnText`: «te ataca con lanza (d20 [14] + 4 = 18 contra tu CA
+  12) y te da 7 de daño (…)») y `forcedTurnRolls` las da como tiradas (rompejuegos T34: la lanza tenía tirada, pero no
+  se veía). Daño del mundo con regla en `combat.ts`: `hazardDamageExpr` (DMG, daño improvisado por nivel y gravedad),
+  `fallDamageExpr` (SRD, 1d6 por cada 3 m) y `worldDamage`.
+- **44 (crime.ts).** La orden de la autoridad que acude: «viene a por Lope, a ayudar en la detención» (en segunda
+  persona, «viene a por ti…»; antes «viene a ayudar a detener a ti», rompejuegos T33), y la de quien corre a avisar:
+  «le cuenta a Doro lo que pasó con Bruno» («…contigo»). Test que construye las plantillas de `crime.ts` para cada NPC
+  vivo de Brezal y dos PJ con cada tipo de incidente y de agresión, y las de `laws.ts` y `reactions.ts` para cada sitio.
+
+**No cerrado**
+
+- **35.** El rumor de relleno («La escapada al granero: cada día a las 23:00, en el arroyo») no sale de
+  `src/engine/reactions.ts` sino de `src/engine/extratalk.ts` (paquete H): `extraReply`, rama `intent === 'public'` con
+  `service === 'hours'`, donde `whenIs` casa cualquier palabra del título de un evento («granero» en «llévame al granero
+  ya»). Se lo pasé al paquete H y lo ha arreglado en su rama (`claude/arreglos-h-pareja-e19f16`, commit 8a00864): la
+  agenda solo contesta si la acción pregunta cuándo (`ASKS_WHEN`), rompejuegos T9 va al máster y «¿A qué hora es la
+  escapada al granero?» sigue contestando. En este paquete no hay código del 35.
+
+**Cambios que pide en ficheros de otros paquetes**
+
+- **Paquete E o coordinadora, `src/engine/engine.ts`** (`tryLaw`, tras la línea del insulto): enganchar la amenaza
+  armada, que sin esto no salta en partida:
+  `const threat = parseArmedThreat(this.world, c, text, target); if (threat) reportThreat(this.world, c, threat.npc, threat.weapon, nowG);`
+  (importar `parseArmedThreat` y `reportThreat` de `./crime.js`). Mensaje enviado a la sesión E.
+- **Paquete F, `src/ai/tools.ts`:**
+  - `request_reaction` con `kind: attack`: rebajar a `touch` u `other` cuando `attentionNudge(ctx.action_text)` es
+    cierto, o cuando no hay arma ni golpe (`!readsAsBlow(ctx.action_text)`), las dos de `conflict.ts` (pareja metódico M15).
+  - Turnos forzados (`forceNpcTurns`, hacia tools.ts:2398): meter `forcedTurnRolls(f, label)` en `ctx.rolls` para que
+    las tiradas de los NPC se vean como 🎲 en el hilo, no solo en la prosa del máster.
+  - `apply_damage` sin arma ni conjuro (el mundo: trepar, caer, una trampa, una carta que muerde): rechazar la cifra
+    fija sin dado una vez y pedir `expr` o `severity` (`setback`, `dangerous`, `deadly`) o la altura de la caída, y
+    tirarlo con `worldDamage` de `combat.ts` (lanzador T9: 5 PG fijos por un 1 natural; T15: 4 a 2 PG).
+  - Guarda de 0 PG (su punto 6): `downStateLine(actor)` de `death.ts` en el contexto y en el hint del rechazo.
+- **Paquete I, `scripts/autoplay.ts`:** lo que pasa mientras el jugador automático espera al caído (el bucle
+  `for k < 200` de «Caído o muerto no se juega») debe salir en el transcript como un turno propio («mientras estabas
+  en el suelo: …» con las salvaciones, la estabilización, las horas o la muerte y la vuelta), no solo en `s.last`. Es
+  lo que el análisis leyó como «una salvación con éxito y a 1 PG» (F2, E17, recolector T11) y «muere en la herrería y
+  aparece en el molino» (violento T4 y T5).

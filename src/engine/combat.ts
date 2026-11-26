@@ -339,10 +339,16 @@ export function forceNpcTurns(world: World, pcIds: readonly Id[], acted: Set<Id>
   return out;
 }
 
+/** La tirada de un golpe, como se enseña: «d20 [14] + 4 = 18 contra CA 12» (sin la CD que el dado añade al final). */
+export function attackRollText(x: AttackOutcome, you = false): string {
+  return `${x.attack_breakdown.replace(/ vs CD \d+$/, '')} contra ${you ? 'tu ' : ''}CA ${x.target_ac}`;
+}
+
 /**
- * El turno de un NPC en una frase, con el nombre que sabe quien lo lee
- * (`label`) y en segunda persona si el golpe es para él: «El herrero te ataca
- * 2 veces con martillo: el primero te da (6), el segundo falla. Te quedan 2/8 PG.»
+ * El turno de un NPC en una frase, con el nombre que sabe quien lo lee (`label`) y en segunda persona si el golpe es
+ * para él, con la tirada y el daño a la vista (arreglo 38 del 26-11-2026: la lanza del guardia dejaba al rompejuegos de
+ * 7 a 0 PG y nadie veía ni el dado ni el daño, T34): «El herrero te ataca con martillo (d20 [15] + 4 = 19 contra tu CA
+ * 12) y te da 6 de daño (1d8 [4] + 2 = 6). Te quedan 2/8 PG.»
  */
 export function forcedTurnText(world: World, t: ForcedTurn, readerId: Id | null, label: (npcId: Id) => string): string {
   const you = t.target_id === readerId;
@@ -350,15 +356,28 @@ export function forcedTurnText(world: World, t: ForcedTurn, readerId: Id | null,
   const who = label(t.npc_id);
   const Who = who.charAt(0).toUpperCase() + who.slice(1);
   const hits = t.outcome.attacks ?? [t.outcome];
-  const one = (x: AttackOutcome) => (x.hit ? `${you ? 'te da' : 'le da'} (${x.damage})` : 'falla');
+  const one = (x: AttackOutcome) => `(${attackRollText(x, you)}) ${x.hit ? `${you ? 'te da' : 'le da'} ${x.damage} de daño (${x.damage_breakdown})` : 'falla'}`;
   const lead = t.moved_to ? `${Who} se lanza contra ${you ? 'ti' : tgt} y ` : `${Who} `;
   const verb = hits.length > 1
     ? `${you ? 'te ' : ''}ataca ${hits.length} veces con ${t.outcome.weapon}${you ? '' : ` a ${tgt}`}: ${hits.map((x, k) => `${k ? 'el segundo' : 'el primero'} ${one(x)}`).join(', ')}`
-    : `${you ? 'te ' : ''}ataca con ${t.outcome.weapon}${you ? '' : ` a ${tgt}`} y ${one(hits[0]!)}`;
+    : `${you ? 'te ' : ''}ataca con ${t.outcome.weapon}${you ? '' : ` a ${tgt}`} ${one(hits[0]!)}`;
   const end = t.outcome.target_dead ? (you ? ' Mueres.' : ` ${tgt} muere.`)
     : t.outcome.target_down ? (you ? ' Caes al suelo, inconsciente.' : ` ${tgt} cae al suelo.`)
     : t.outcome.hit ? (you ? ` Te quedan ${t.outcome.target_hp} PG.` : ` ${tgt} queda a ${t.outcome.target_hp} PG.`) : '';
   return `${lead}${verb}.${end}`;
+}
+
+/**
+ * Las tiradas de un turno de NPC hecho por el motor, para enseñarlas como las demás (🎲): el ataque y, si da, el daño.
+ * Las tools las meten con las del turno (ctx.rolls) para que se vean en el hilo y no solo en la prosa del máster.
+ */
+export function forcedTurnRolls(t: ForcedTurn, label: (npcId: Id) => string): { expr: string; total: number; breakdown: string; rolls: number[] }[] {
+  const who = label(t.npc_id);
+  const Who = who.charAt(0).toUpperCase() + who.slice(1);
+  return (t.outcome.attacks ?? [t.outcome]).flatMap((x) => [
+    { expr: `${Who}: ataque con ${x.weapon}`, total: x.attack_total, breakdown: `${attackRollText(x)}: ${x.hit ? 'acierta' : 'falla'}`, rolls: [] },
+    ...(x.hit ? [{ expr: `${Who}: daño`, total: x.damage, breakdown: `${x.damage_breakdown} (${x.damage_type})`, rolls: [] }] : []),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -416,3 +435,43 @@ export function nonLethalSource(world: World, target: Character, source: string)
 }
 
 export { stabilizeIfAway } from './death.js';
+
+// ---------------------------------------------------------------------------
+// Daño del mundo: con dado o regla, nunca una cifra a ojo (arreglo 38 del 26-11-2026)
+// ---------------------------------------------------------------------------
+
+/** Lo grave que es lo que hace daño sin un arma: un percance, algo peligroso o algo mortal (DMG, daño improvisado). */
+export type HazardSeverity = 'setback' | 'dangerous' | 'deadly';
+export const HAZARD_ES: Record<HazardSeverity, string> = { setback: 'un percance', dangerous: 'algo peligroso', deadly: 'algo mortal' };
+
+/**
+ * El dado del daño improvisado por nivel y gravedad (DMG, «Improvising Damage»): a nivel 1-4, un percance es 1d10,
+ * algo peligroso 2d10 y algo mortal 4d10; sube con el nivel. Una caída es aparte (fallDamageExpr).
+ */
+export function hazardDamageExpr(level: number, severity: HazardSeverity): string {
+  const tier = level >= 17 ? 3 : level >= 11 ? 2 : level >= 5 ? 1 : 0;
+  const table: Record<HazardSeverity, [string, string, string, string]> = {
+    setback: ['1d10', '2d10', '4d10', '10d10'],
+    dangerous: ['2d10', '4d10', '10d10', '18d10'],
+    deadly: ['4d10', '10d10', '18d10', '24d10'],
+  };
+  return table[severity][tier];
+}
+
+/** Caer (SRD): 1d6 por cada 3 m (10 pies) de caída, hasta 20d6. null si no hay altura que haga daño. */
+export function fallDamageExpr(meters: number): string | null {
+  const dice = Math.min(20, Math.floor(meters / 3));
+  return dice > 0 ? `${dice}d6` : null;
+}
+
+/**
+ * Tira el daño del mundo con su dado y lo dice: «4 de daño (1d10 [4] = 4, un percance)». Para el máster (apply_damage
+ * sin arma) y para el motor: las tools rechazan una cifra fija sin dado ni regla (el paquete F lo engancha) y la tiran
+ * aquí. `expr`: el dado del conjuro, la trampa o el objeto, si lo tiene; si no, el de la gravedad para su nivel.
+ */
+export function worldDamage(level: number, how: { expr?: string | null; severity?: HazardSeverity; fall_m?: number }, rng?: Rng): { total: number; expr: string; breakdown: string } | null {
+  const expr = how.expr ?? (how.fall_m !== undefined ? fallDamageExpr(how.fall_m) : how.severity ? hazardDamageExpr(level, how.severity) : null);
+  if (!expr) return null;
+  const r = rollExpr(expr, rng);
+  return { total: r.total, expr, breakdown: `${r.breakdown}${how.severity && !how.expr ? `, ${HAZARD_ES[how.severity]}` : how.fall_m !== undefined && !how.expr ? `, caída de ${how.fall_m} m` : ''}` };
+}

@@ -670,7 +670,9 @@ export function resolveConflict(world: World, pc: Character, npc: Npc, v: Confli
   changeOpinion(world, npc, pc, -10, CONFLICT_ES[v.kind], nowG);
   adjustTrust(world, npc, pc, trust, nowG);
   const kind = v.kind === 'shove' || v.kind === 'grab' || v.kind === 'touch' ? 'assault' as const : movedId() ? 'theft' as const : 'theft_attempt' as const;
-  const incident = reportIncident(world, { kind, perpetrator_id: pc.id, victim_id: npc.id, spot_id: npc.location.id }, nowG);
+  // El cargo cita lo que hizo: agarrarle no es golpearle (arreglo 37, violento T5).
+  const how = v.kind === 'shove' || v.kind === 'grab' || v.kind === 'touch' ? v.kind : null;
+  const incident = reportIncident(world, { kind, perpetrator_id: pc.id, victim_id: npc.id, spot_id: npc.location.id, deed: how }, nowG);
   const seized = incident?.knowers.some((k) => k.npc_id === npc.id && k.response === 'seize') ?? false;
   if (seized) { openConfront(world, npc, pc, v.kind, movedId(), CONFRONT_DC.none, nowG); npc.confront![pc.id]!.crime = true; }
   return result('crime', `${deed} Para ${who} es un delito.`, seized ? `${who} te agarra de la muñeca y te exige que ${demandOf(v.kind, movedId() !== null)}; si te resistes, pelea.` : null, incident);
@@ -701,14 +703,35 @@ export function closeConfront(world: World, npc: Npc, pc: Character): void {
 // ---------------------------------------------------------------------------
 
 // Empujar, agarrar o tocar van con la persona («le empujo», «empujarle», «empujo a Hugo»): «empujo la puerta» o
-// «agarro mi espada» no son contra nadie.
-const RE_SNATCH = /\b((le|se lo|se la) (arranc|arrebat)\w*|(arrancarl|arrebatarl|arrancarsel|arrebatarsel)\w*|de un tiron|de un manotazo|se lo quito de las manos|quitarselo de las manos)\b/;
-const RE_STEAL = /\b(rob\w*|hurt\w*|birl\w*|mang\w*|sise\w*|afan\w*|sustra\w*|desvalij\w*|quitarle|quitarsel\w*|le quito|se lo quito|se la quito|me lo quedo|me la quedo|le cojo|cojo su|cogerle|meto la mano en su|meterle la mano|cortarle la bolsa|corto su bolsa|le corto la bolsa)\b/;
+// «agarro mi espada» no son contra nadie. Robar, igual: con el verbo y el blanco («le quito», «le arrebato», «meto la
+// mano en su bolsa», «le robo»); coger, tomar o sacar algo sin decir a quién no es robar (arreglo 31 del 26-11-2026).
+// «De un tirón» solo arrebata si va con el blanco («le quito la bolsa de un tirón»): «me zafo del alguacil de un
+// tirón» o «saco de un tirón la bolsa de componentes» no le quitan nada a nadie (rompejuegos T31 y T33).
+const RE_SNATCH = /\b((le|se lo|se la|se los|se las) (arranc|arrebat)\w*|(arrancarl|arrebatarl|arrancarsel|arrebatarsel)\w*|arrebat(o|a|ar) (el|la|los|las|su|sus) |se lo quito de las manos|quitarselo de las manos)/;
+/** Con un verbo de robar y el blanco, «de un tirón» o «de un manotazo» es arrebatar, no hurtar. */
+const RE_YANK = /\bde un (tiron|manotazo)\b/;
+// Las formas del verbo, no la raíz: «rob\w*» casaba «roble» (impredecible T9: «busco el roble del Soto»), «mang\w*»
+// «manga» y «mango», «afan\w*» «afán».
+const BODY = '(?!mano\\b|manos\\b|brazo\\b|hombro\\b|muneca\\b|cara\\b|pelo\\b|cuello\\b)';
+const RE_STEAL = new RegExp([
+  '\\brob(o|as|a|amos|an|ar|arle|arla|arlo|arles|arselo|arsela|arselos|arselas|e|es|en|aba|aban|ado|ada|ando|andole|andosela|andoselo)\\b',
+  '\\bhurt(o|a|as|ar|arle|arla|arlo|arsel\\w*|e|es|ado|ando)\\b',
+  '\\bbirl\\w*',
+  '\\ble (mango|siso|afano|sustraigo|desvalijo)\\b',
+  '\\bsustra(er|erle|erla|igo)\\b',
+  '\\bdesvalij\\w*',
+  '\\bquitarle\\b', '\\bquitarsel\\w*', '\\ble quito\\b', '\\bse (lo|la|los|las) quito\\b',
+  `\\ble cojo (el|la|los|las|su|sus|un|una) ${BODY}`,
+  `\\bcojo su ${BODY}`,
+  `\\bcogerle (el|la|los|las|su|sus) ${BODY}`,
+  '\\ble saco (el|la|los|las|su|sus) \\w+( \\w+){0,4} (sin que|a escondidas|del bolsillo|de su|de la bolsa)',
+  '\\bmeto la mano en su\\b', '\\bmeterle la mano\\b', '\\bcortarle la bolsa\\b', '\\bcorto su bolsa\\b', '\\ble corto la bolsa\\b',
+].join('|'));
 const RE_SHOVE = /\b((le|la|lo) (empuj|derrib)\w*|(empujarl|derribarl)\w*|empujo a|derribo a|le doy un empujon|darle un empujon|le aparto de un|le tiro al suelo|tirarl[aeo] al suelo|le pongo la zancadilla|ponerle la zancadilla|placo a)\b/;
-const RE_GRAB = /\b((le|la|lo) (agarr|sujet|inmoviliz)\w*|(agarrarl|sujetarl|inmovilizarl)\w*|agarro a|sujeto a|le cojo del|le cojo de la|cogerl[ae] del?|le retengo|retenerl[ae])\b/;
+const RE_GRAB = /\b((le|la|lo) (agarr|sujet|inmoviliz)\w*|(agarrarl|sujetarl|inmovilizarl)\w*|agarro a|sujeto a|le cojo del|le cojo por|cogerl[ae] del?|le retengo|retenerl[ae])\b/;
 /** Coger algo que lleva otro («agarro la bolsa de Garrán»): solo cuenta si lo que nombra lo lleva él. */
 const RE_TAKE = /\b(agarr|coj|cog|tom|pill)\w*\b/;
-const RE_TOUCH = /\b(le toco|tocarle|la toco|lo toco|le acaricio|acariciarle|le pellizc\w*|pellizcarle|le doy una palmada|darle una palmada|le beso|besarle|le tiro del pelo|tirarle del pelo|le hago cosquillas|hacerle cosquillas|le pincho|pincharle|le despeino|despeinarle)\b/;
+const RE_TOUCH = /\b(le toco|tocarle|la toco|lo toco|le acaricio|acariciarle|le pellizc\w*|pellizcarle|le doy una palmada|darle una palmada|le beso|besarle|le tiro del pelo|tirarle del pelo|le hago cosquillas|hacerle cosquillas|le pincho|pincharle|le despeino|despeinarle|le cojo la mano|le tomo la mano|le cojo de la mano)\b/;
 /**
  * Un golpe en la frase («le hundo el puño en las costillas», «le doy un cabezazo»): eso es un ataque y va primero
  * (attack), no una acción conflictiva. Violento 1051, acción 32: el puñetazo y «le arranco la camisa» acabaron en robo.
@@ -719,16 +742,66 @@ const RE_CLOTHES = /\b(camisa|camison|ropa|blusa|blusas|bluson|jubon|chaqueta|ca
 /** Quien solo habla de ello, pregunta o lo niega no lo está haciendo. */
 const RE_NOT = /\b(no (le |la |lo |se lo |se la )?(robo|quito|empujo|toco|agarro|cojo)|sin (robar|tocar)|si (le|la|lo) (robo|quito|empujo|toco)|quien (me |le |te |nos )?(ha )?robado|me han robado|nos han robado|te han robado|le han robado|por si (alguien |me |nos )?(me |nos )?rob\w+|que (no )?(me |nos )rob\w+|si (me |nos )rob\w+|miedo a que (me |nos )rob\w+)\b/;
 
+/**
+ * Lo que NO es una acción conflictiva aunque lleve un verbo de coger, lanzar o tirar (arreglo 31 del 26-11-2026): cada
+ * trozo de la frase que lo diga se aparta antes de leer el resto. Lanzar un conjuro («lanzo Vuelo», «le suelto un
+ * Proyectil mágico al aire»), lanzarse o tirarse a un sitio («me lanzo al pozo»), saltar, trepar, pescar, dar algo en la
+ * mano («se la planto en la mano», impredecible T9), recoger lo que está caído y un codazo
+ * o una palmada para llamar la atención.
+ */
+const NOT_CONFLICT: readonly RegExp[] = [
+  // Conjuros: lanzar, conjurar, invocar, soltar un conjuro.
+  /\b(lanz\w*|conjur\w*|invoc\w*|suelt\w*|tir\w*|disparo|preparo|recito) (un |una |el |la |mi )?(conjuro|hechizo|truco|encantamiento|proyectil|rayo|descarga|vuelo|luz|mano de mago|escudo|bola|dardo|toque|llama|rociada|sueno|curar|palabra)\b/,
+  /\b(proyectil magico|al aire|mano de mago|el conjuro|un conjuro|un hechizo|un truco)\b/,
+  // Lanzarse, tirarse o saltar a un sitio; trepar; pescar.
+  /\b(me (lanzo|tiro|arrojo|echo|dejo caer) (al|a la|a los|a las|a|hacia|por|dentro|sobre el|sobre la|de cabeza|en)|salt\w*|trep\w*|pesc\w*|cana de pescar|sedal|anzuelo)\b/,
+  // Dar algo: en la mano, se lo doy, se lo entrego, se lo devuelvo, se lo tiendo, le paso.
+  /\b(se (lo|la|los|las) (planto|pongo|dejo|meto|doy|entrego|devuelvo|tiendo|paso|ofrezco|regalo)|le (planto|doy|entrego|devuelvo|tiendo|paso|ofrezco|regalo) (el|la|los|las|mi|mis)|en (la|su) mano|en sus manos|darsel\w*|entregarsel\w*|devolversel\w*|devuelv\w*)\b/,
+  // Recoger lo caído: del suelo, del agua, lo que se le ha caído.
+  /\b(caid[oa]s?|del suelo|del agua|se le (ha )?ca(e|ido)|recoj\w*|recog\w*)\b/,
+  // Un codazo o una palmada para llamar la atención, un toque en el hombro.
+  /\b(codazo|palmada|palmadita|toque|toquecito|golpecito|le toco|toco a)\b.*\b(para (llamar|que me (mire|atienda|haga caso|escuche))|llamarle la atencion|llamar su atencion|en el hombro|en la espalda|en el brazo|carino\w*|amistos\w*|complic\w*)\b/,
+];
+
 const plainText = (t: string) => ` ${norm(t).replace(/[«»"“”¡!¿.,;:()]/g, ' ').replace(/\s+/g, ' ').trim()} `;
+
+/**
+ * Lo que queda de la acción para leerla como conflicto: la frase en texto plano, sin los trozos que no lo son
+ * (NOT_CONFLICT). Vacío si pregunta, lo niega o teme que le roben (eso no es hacerlo). Los trozos se cortan por la
+ * puntuación y por «y», «luego», «mientras», «pero»: así «le robo la bolsa y lanzo un conjuro» sigue siendo robo.
+ */
+export function conflictText(text: string): string {
+  if (/[?¿]/.test(text)) return '';
+  if (RE_NOT.test(plainText(text))) return '';
+  const parts = norm(text).split(/[«»"“”¡!.,;:()]+|\s(?:y|e|luego|despues|mientras|entonces|pero)\s/);
+  const kept = parts.map((p) => plainText(p)).filter((p) => p.trim() && !NOT_CONFLICT.some((re) => re.test(p)));
+  return kept.length ? ` ${kept.map((p) => p.trim()).join(' , ')} ` : '';
+}
+
+/** ¿Es un codazo, una palmada o un toque para llamar la atención («le doy un codazo a Elmo: ¿y tú qué opinas?»)? Eso es tocar, no atacar. */
+export function attentionNudge(text: string): boolean {
+  const t = plainText(text);
+  return /\b(codazo|codacito|palmada|palmadita|toque|toquecito|golpecito|le toco el (hombro|brazo)|le doy en el hombro)\b/.test(t)
+    && (/[?¿]/.test(text) || /\b(para (llamar|que me (mire|atienda|haga caso|escuche))|llamarle la atencion|llamar su atencion|en el hombro|en la espalda|en el brazo|y le (digo|pregunto|susurro)|y (digo|pregunto|susurro))\b/.test(t));
+}
+
+/**
+ * ¿Hay un golpe de verdad en la frase (puñetazo, patada, con el arma)? Un codazo o una palmada para llamar la atención
+ * no lo es (pareja metódico M15: «le doy un codazo a Elmo: ¿y tú qué opinas de Ilse?» acabó en estocada y Elmo a 0 PG).
+ */
+export function readsAsBlow(text: string): boolean {
+  if (attentionNudge(text)) return false;
+  // «De golpe» es de repente, no un golpe («me incorporo de golpe», violento T5; «lo suelto de golpe», T22).
+  return RE_BLOW.test(plainText(text).replace(/ de golpe /g, ' '));
+}
 
 /** ¿Qué acción conflictiva describe el texto? La primera que encaja: arrebatar, hurtar, agarrar, empujar, tocar. */
 export function conflictKindOf(text: string): ConflictKind | null {
-  // Preguntarlo, negarlo o contar que le han robado a él no es hacerlo.
-  if (/[?¿]/.test(text)) return null;
-  const t = plainText(text);
-  if (RE_NOT.test(t)) return null;
+  // Preguntarlo, negarlo o contar que le han robado a él no es hacerlo; lanzar un conjuro, saltar o dar algo, tampoco.
+  const t = conflictText(text);
+  if (!t) return null;
   if (RE_SNATCH.test(t)) return 'snatch';
-  if (RE_STEAL.test(t)) return 'steal';
+  if (RE_STEAL.test(t)) return RE_YANK.test(t) ? 'snatch' : 'steal';
   if (RE_GRAB.test(t)) return 'grab';
   if (RE_SHOVE.test(t)) return 'shove';
   if (RE_TOUCH.test(t)) return 'touch';
@@ -765,6 +838,14 @@ function itemWords(text: string): string | null {
   return m?.[1]?.replace(/\s+(?:a|al)\s+.*$/, '').trim().slice(0, 50) || null;
 }
 
+/** ¿Nombra el texto a ese NPC (por su nombre, por cómo se le ve o por su oficio)? */
+function mentionsNpc(world: World, text: string, npc: Npc): boolean {
+  const t = plainText(text);
+  const refs = [npc.name, descriptorOf(world, npc.id), npc.role_short ?? '', ...npc.role.split(/\s+y\s+|,\s*/)]
+    .map((r) => plainText(r).trim().replace(/^(el|la|los|las) /, '')).filter((r) => r.length > 2);
+  return refs.some((r) => t.includes(` ${r} `));
+}
+
 /**
  * Lee si lo que escribe el jugador es una acción conflictiva contra un NPC de
  * su sitio, y le pone el veredicto. El NPC: el que nombra, con quien habla, el
@@ -772,27 +853,41 @@ function itemWords(text: string): string | null {
  */
 export function conflictPlan(world: World, events: readonly GameEvent[], pc: Character, text: string, nowG: number): ConflictPlan | null {
   const found = conflictKindOf(text);
+  // Lo que queda de la frase sin lo que no es conflicto (conjuros, saltos, dar algo, recoger lo caído: arreglo 31).
+  const kept = conflictText(text);
   // «Agarro la bolsa de Garrán»: coger algo que lleva otro, si lo que nombra lo lleva él (se mira abajo).
-  const taking = !found && !/[?¿]/.test(text) && RE_TAKE.test(plainText(text));
+  const taking = !found && RE_TAKE.test(kept);
   if (!found && !taking) return null;
-  // Con un golpe en la frase, primero el ataque (attack): no es esto (arreglo 3 del 26-11-2026).
-  if (RE_BLOW.test(plainText(text))) return null;
+  // Con un golpe en la frase, primero el ataque (attack): no es esto (arreglo 3 del 26-11-2026). Salvo que el golpe vaya
+  // con quitarle algo suyo que no es ropa: eso es arrebatárselo con violencia, y tiene su consecuencia (arreglo 37,
+  // violento T25: «agarro el garrote del molinero y lo tiro al suelo de una patada» no dejaba ni robo ni aviso).
+  const blow = readsAsBlow(text);
+  if (blow && !found && !taking) return null;
   let kind: ConflictKind = found ?? 'steal';
   const spot = world.characterSpot(pc);
   if (!spot) return null;
+  // Coger lo suyo («cojo mi bolsa») no es quitárselo a nadie.
+  if (taking && /\b(mi|mis)\b/.test(kept)) return null;
   const here = [...world.npcs.values()].filter((n) => (n.status === 'alive' || n.status === 'unconscious') && !n.mute && world.spots.get(n.location.id)?.location_id === spot.location_id);
   if (!here.length) return null;
-  const owns = (n: Npc) => npcBelongings(world, n).find((i) => namesItem(text, world.itemDef(i.item_id)));
+  const owns = (n: Npc) => npcBelongings(world, n).find((i) => namesItem(kept, world.itemDef(i.item_id)));
   let npc = npcTarget(world, events, pc, text, nowG);
   if (npc && !here.includes(npc)) npc = null;
   if (!npc) npc = here.find((n) => owns(n)) ?? null;
   if (!npc) { const at = here.filter((n) => n.location.id === spot.id); if (at.length === 1) npc = at[0]!; }
   if (!npc) return null;
+  // Lo que nombra también lo lleva él y no dice de quién es lo otro: es lo suyo (rompejuegos T31: «saco de un tirón la
+  // bolsa de componentes» no es la bolsa de cuero del sereno).
+  if (taking && !mentionsNpc(world, kept, npc) && world.itemsCarriedBy(pc.id).some((i) => namesItem(kept, world.itemDef(i.item_id)))) return null;
   // Del suelo o de un mueble no es robarle a nadie: si nombra algo que no lleva ese NPC pero está a la vista, no es esto.
   let inst = owns(npc) ?? null;
   if (taking && !inst) return null;
   // «Le arranco la camisa»: la ropa que lleva puesta no se le roba; es agarrarle (arreglo 3).
   const clothes = (d: ItemDef) => RE_CLOTHES.test(plainText([d.name, ...d.aliases].join(' ')));
+  if (blow) {
+    if (!inst || clothes(world.itemDef(inst.item_id)) || !(taking || kind === 'steal' || kind === 'snatch')) return null;
+    kind = 'snatch';
+  }
   if ((kind === 'steal' || kind === 'snatch') && RE_CLOTHES.test(plainText(itemWords(text) ?? '')) && (!inst || clothes(world.itemDef(inst.item_id)))) { kind = 'grab'; inst = null; }
   const steals = kind === 'steal' || kind === 'snatch';
   if (steals && !inst && world.itemsIn({ type: 'spot', id: spot.id }).some((i) => namesItem(text, world.itemDef(i.item_id)))) return null;
@@ -876,7 +971,8 @@ export interface ConfrontSettlement {
 function escalate(world: World, pc: Character, npc: Npc, c: NpcConfront, nowG: number): Incident | null {
   const has = c.instance_id !== null && world.itemsCarriedBy(pc.id).some((i) => i.id === c.instance_id);
   const kind = c.kind === 'steal' || c.kind === 'snatch' ? (has ? 'theft' as const : 'theft_attempt' as const) : 'assault' as const;
-  return c.crime ? null : reportIncident(world, { kind, perpetrator_id: pc.id, victim_id: npc.id, spot_id: npc.location.id }, nowG);
+  const deed = c.kind === 'shove' || c.kind === 'grab' || c.kind === 'touch' ? c.kind : null;
+  return c.crime ? null : reportIncident(world, { kind, perpetrator_id: pc.id, victim_id: npc.id, spot_id: npc.location.id, deed }, nowG);
 }
 
 /**
