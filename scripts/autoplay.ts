@@ -37,13 +37,14 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { ActionResult, Engine } from '../src/engine/engine.js';
-import type { Character, GameEvent, Offer, Reaction } from '../src/engine/model.js';
+import type { Character, GameEvent, ItemInstance, Offer, Reaction } from '../src/engine/model.js';
 import { readerText } from '../src/engine/events.js';
 import { journalOf } from '../src/engine/journal.js';
 import { choiceOptions, pendingChoices, spellGroups } from '../src/engine/levels.js';
 import { coinsOf, money } from '../src/engine/money.js';
 import { spawnItem } from '../src/engine/inventory.js';
-import { isMagic } from '../src/engine/items.js';
+import { isIdentifiedBy, isMagic, itemName, needsAttunement } from '../src/engine/items.js';
+import { bodyStateOf } from '../src/engine/death.js';
 import { srdItem } from '../src/data/srd/items.js';
 import { resourceLines } from '../src/engine/rest.js';
 import { characterStory, questsOf, questStatus, storyOf } from '../src/engine/story.js';
@@ -508,7 +509,6 @@ export function dryPlayerClient(): TextClient {
 
 /** Ficha corta: lo que el jugador sabe de su personaje. */
 export function playerSheet(engine: Engine, c: Character): string {
-  const items = engine.world.itemsCarriedBy(c.id).map((i) => { const d = engine.world.itemDef(i.item_id); return i.quantity > 1 ? `${d.name} ×${i.quantity}` : d.name; });
   const race = RACES.find((r) => r.id === c.race_id)?.name ?? c.race_id;
   // El dinero no es un campo del PJ: es lo que hay en sus bolsas (money.ts). Antes salía «Monedas: undefined» y llegaba a la narración.
   const parts = [`${c.name}, ${race.toLowerCase()} ${c.class_name.toLowerCase()} de nivel ${c.level}. PG ${c.hp_current}/${c.hp_max}.`, `Dinero: ${money(engine.world, coinsOf(engine.world, c.id))}.`];
@@ -516,8 +516,68 @@ export function playerSheet(engine: Engine, c: Character): string {
   if (spells.length) parts.push(`Conjuros: ${spells.join('; ')}.`);
   const res = resourceLines(c);
   if (res.length) parts.push(`Usos de clase: ${res.join(', ')}.`);
-  parts.push(`Lleva: ${items.join(', ') || 'nada'}.`);
+  parts.push(...carriedLines(engine.world, c));
   return parts.join(' ');
+}
+
+type World = Engine['world'];
+
+/** Nombre de un ejemplar para su dueño: cantidad y, si pide sintonía, si está sintonizado (H12). */
+function sheetItemName(w: World, i: ItemInstance, c: Character): string {
+  const d = w.itemDef(i.item_id);
+  const name = i.quantity > 1 ? `${itemName(d, i, c.id)} ×${i.quantity}` : itemName(d, i, c.id);
+  if (!needsAttunement(d) || !isIdentifiedBy(d, i, c.id)) return name;
+  return `${name} (${i.state.attuned_to === c.id ? 'sintonía: contigo' : i.state.attuned_to ? 'sintonía: con otro' : 'sintonía: sin hacer'})`;
+}
+
+/**
+ * Lo que lleva, por sitios (H12): en las manos, puesto (lo equipado), en cada bolsa o mochila; lo sintonizado que no
+ * lleva encima; y, si murió, dónde está su cuerpo con sus cosas, que solo él puede recoger. Antes era una lista plana y,
+ * tras morir en el Soto, el recolector solo veía «Lleva: nada» y no sabía que su capa seguía en el arroyo.
+ */
+export function carriedLines(w: World, c: Character): string[] {
+  const carried = w.itemsCarriedBy(c.id);
+  const hands: string[] = [], worn: string[] = [], pockets: string[] = [];
+  const inside = new Map<string, string[]>();
+  for (const i of carried) {
+    const name = sheetItemName(w, i, c);
+    if (i.location.type === 'container') {
+      const box = w.itemInstances.get(i.location.id);
+      const label = box ? itemName(w.itemDef(box.item_id), box, c.id) : 'un fardo';
+      inside.set(label, [...(inside.get(label) ?? []), name]);
+    } else if (i.location.type === 'character' && i.location.slot.kind === 'hand') hands.push(name);
+    else if (i.location.type === 'character' && i.location.slot.kind === 'equipped') worn.push(name);
+    else pockets.push(name);
+  }
+  const lines: string[] = [];
+  if (!carried.length) lines.push('Lleva: nada.');
+  if (hands.length) lines.push(`En las manos: ${hands.join(', ')}.`);
+  if (worn.length) lines.push(`Lleva puesto: ${worn.join(', ')}.`);
+  if (pockets.length) lines.push(`En los bolsillos: ${pockets.join(', ')}.`);
+  for (const [box, names] of inside) lines.push(`En su ${box}: ${names.join(', ')}.`);
+  const carriedIds = new Set(carried.map((i) => i.id));
+  const away = [...w.itemInstances.values()].filter((i) => i.state.attuned_to === c.id && !carriedIds.has(i.id));
+  if (away.length) lines.push(`Sintonizado con: ${away.map((i) => itemName(w.itemDef(i.item_id), i, c.id)).join(', ')} (no lo lleva encima).`);
+  for (const body of [...w.itemInstances.values()].filter((i) => bodyStateOf(i)?.owner_id === c.id)) {
+    const spot = w.spotOfItem(body);
+    const where = spot ? `en ${spot.name} (${w.location(spot.location_id).name})` : 'donde cayó';
+    const names = itemsInside(w, body.id).map((i) => sheetItemName(w, i, c));
+    lines.push(`Al morir, sus cosas se quedaron en su cuerpo, ${where}, y solo él puede recogerlas: ${clip(names.join(', ') || 'nada', 300)}.`);
+  }
+  return lines;
+}
+
+/** Lo que hay dentro de un contenedor, con lo de sus bolsas anidadas. */
+function itemsInside(w: World, id: string): ItemInstance[] {
+  const out: ItemInstance[] = [];
+  const queue = [id];
+  for (let g = 0; queue.length && g < 64; g++) {
+    for (const i of w.itemsIn({ type: 'container', id: queue.pop()! })) {
+      out.push(i);
+      if (w.itemDef(i.item_id).container) queue.push(i.id);
+    }
+  }
+  return out;
 }
 
 /**
