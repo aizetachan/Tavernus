@@ -26,7 +26,7 @@ export interface RouteAction { id: string; kind: string; text: string; expect_ro
 export interface Route { name: string; description: string; character_id: string; start_spot: string; seed: number; step_real_s: number; max_rolls_per_action: number; actions: RouteAction[] }
 
 export interface CallRecord {
-  kind: 'action' | 'roll' | 'arrival' | 'decisive_timeout' | 'intro';
+  kind: 'action' | 'roll' | 'arrival' | 'decisive_timeout' | 'intro' | 'hook';
   ok: boolean;
   reason: string | null;
   message: string | null;
@@ -127,7 +127,7 @@ function callRecord(kind: CallRecord['kind'], out: MasterOutcome, fallbackModel:
 function stepRecord(a: RouteAction, calls: CallRecord[], rolls: StepRecord['rolls'], engineText: string): StepRecord {
   const sum = (f: (c: CallRecord) => number) => calls.reduce((acc, c) => acc + f(c), 0);
   const costs = calls.map((c) => c.cost_usd);
-  const label: Record<CallRecord['kind'], string> = { action: '', roll: '[tras la tirada] ', arrival: '[llegada] ', decisive_timeout: '[ventana expirada] ', intro: '[intro] ' };
+  const label: Record<CallRecord['kind'], string> = { action: '', roll: '[tras la tirada] ', arrival: '[llegada] ', decisive_timeout: '[ventana expirada] ', intro: '[intro] ', hook: '[gancho] ' };
   const lastOk = [...calls].reverse().find((c) => c.ok);
   return {
     id: a.id, kind: a.kind, text: a.text, expect_roll: Boolean(a.expect_roll),
