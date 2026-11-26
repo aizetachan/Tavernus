@@ -318,9 +318,15 @@ export function maskNpcNames(world: World, text: string, named: readonly Id[], a
       if (common && start) return m;
       return start ? desc.charAt(0).toUpperCase() + desc.slice(1) : desc;
     };
+    const forms = [long, desc];
+    // «al herrero Hugo», «del sereno Anselmo»: el oficio tras la contracción, sin su «el».
+    const contracted = forms.filter((r) => /^el /i.test(r)).map((r) => `(?<=(?<![\\p{L}\\p{N}])(?:al|del)\\s)${escapeRe(r.slice(3))}`);
+    const role = `(?:${[...forms.map(escapeRe), ...contracted].join('|')})`;
     for (const f of npcNameForms(n.name)) {
-      // «Ilse, la curandera» → «la curandera» (no «la curandera, la curandera»).
-      out = out.replace(new RegExp(`${nameRe(f).source},\\s*(?:${escapeRe(long)}|${escapeRe(desc)})(?![\\p{L}\\p{N}])`, 'gu'), put);
+      // «Ilse, la curandera» y «Hugo el herrero» → «la curandera», «el herrero» (no «la curandera, la curandera»).
+      out = out.replace(new RegExp(`${nameRe(f).source},?\\s+${role}(?![\\p{L}\\p{N}])`, 'gu'), put);
+      // «el sereno Anselmo» → «el sereno», tal como venía escrito (no «el sereno el sereno»: impredecible T6, deudor T19).
+      out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])(${role})\\s+${escapeRe(f)}(?![\\p{L}\\p{N}])`, 'giu'), '$1');
       out = out.replace(nameRe(f), put);
     }
   }

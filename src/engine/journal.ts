@@ -385,7 +385,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
       id: j.id, kind: 'job', title: j.title, text: masked(j.text), status, droppable: status === 'active',
       origin: fromBoard ? { kind: 'board', text: 'Aviso del tablón', where: null } : { kind: 'giver', text: `Te lo pide ${who}`, where: null }, history,
       giver: giver ? npcTag(c, giver) : null, giver_npc_id: giver?.id ?? null,
-      reward: `${money(w, j.reward_coins)}${j.reward_reputation ? ` · +${j.reward_reputation} de reputación` : ''}`,
+      reward: `${money(w, j.reward_coins)}${j.reward_reputation ? ` y +${j.reward_reputation} de reputación` : ''}`,
       seen_game_s: seen, seen: seen === null ? null : fmt(seen),
       completed_game_s: completed, completed: completed === null ? null : fmt(completed),
       updated_game_s: updated, updated: fmt(updated),
@@ -542,12 +542,12 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
       ? [{ text: `Volver con ${nameFor(w, c, v.turn_in_npc_id)} para entregarla`, done: v.status === 'completed' }] : [];
     const started = v.steps.some((x) => x.done);
     quests.push({
-      id: q.id, kind: 'story', title: `${['', 'I', 'II', 'III'][q.act]} · ${q.title}`, text: masked(q.text), status: v.status,
+      id: q.id, kind: 'story', title: `Acto ${['', 'I', 'II', 'III'][q.act]}: ${q.title}`, text: masked(q.text), status: v.status,
       level: q.level, difficulty: difficultyOf(q.level, c.level), ...(v.status === 'active' && o?.kind === 'giver' && !started ? { declinable: true } : {}),
       // De oídas (partidas de antes): nadie se la ha pedido; no se pone «lo pide X».
       giver: giver && o?.kind !== 'heard' ? npcTag(c, giver) : null, giver_npc_id: giver?.id ?? null,
       origin: o ? { kind: o.kind, text: masked(o.text), where: locName(o.location_id) } : null, history,
-      reward: [r.coins ? money(w, r.coins) : '', r.reputation ? `+${r.reputation} de reputación` : '', r.xp ? `${r.xp} PX` : ''].filter(Boolean).join(' · ') || null,
+      reward: [r.coins ? money(w, r.coins) : '', r.reputation ? `+${r.reputation} de reputación` : '', r.xp ? `${r.xp} PX` : ''].filter(Boolean).join(', ') || null,
       seen_game_s: seen, seen: fmt(seen), completed_game_s: completed, completed: completed === null ? null : fmt(completed),
       updated_game_s: updated, updated: fmt(updated),
       steps: [...v.steps.map((s) => ({ text: masked(s.step.text), done: s.done, ...phaseOf(q, s.step) })), ...back],
@@ -740,7 +740,10 @@ function chronicleOf(engine: Engine, c: Character, mine: readonly GameEvent[], f
         add(t, 'note', e.observable ?? e.narration_private);
         break;
       case e.action_type === 'board': {
-        const titles = [...(e.observable ?? '').matchAll(/\*\*(.+?)\*\*/g)].map((m) => m[1]!);
+        // Los encargos del día por su id (el aviso ya no trae la lista); los eventos de antes, por el texto en negrita.
+        const ids = Array.isArray(e.payload['job_ids']) ? (e.payload['job_ids'] as Id[]) : [];
+        const byId = ids.map((id) => w.campaign.jobs.find((j) => j.id === id)?.title).filter((x): x is string => Boolean(x));
+        const titles = byId.length ? byId : [...(e.observable ?? '').matchAll(/\*\*(.+?)\*\*/g)].map((m) => m[1]!);
         add(t, 'board', titles.length ? `El tablón cambia: ${titles.join(', ')}.` : 'El tablón cambia.');
         break;
       }
@@ -791,7 +794,7 @@ function chronicleOf(engine: Engine, c: Character, mine: readonly GameEvent[], f
       n('combat') ? 'combate' : '',
       n('progress') ? 'progreso' : '',
     ].filter(Boolean);
-    d.summary = bits.join(' · ');
+    d.summary = bits.join(', ');
   }
   return out;
 }

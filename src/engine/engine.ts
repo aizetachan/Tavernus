@@ -2120,7 +2120,7 @@ export class Engine {
         const missed = this.recapFor(c.id);
         const gap = justBack(c, nowG);
         const head = gap ? `Para ti no pasó el tiempo; el mundo siguió ${fmtDuration(gap.to_game_s - gap.from_game_s)} sin ti.\n` : '';
-        return head + (missed.length ? missed.map((d) => `· ${d.text}`).join('\n') : 'No te has perdido nada.');
+        return head + (missed.length ? missed.map((d) => d.text).join('\n') : 'No te has perdido nada.');
       }
       case 'time': return `${this.clock.format(nowG)} (ratio ${this.clock.timeRatio}×).${nowG - this.gameNow() > SAME_TIME_TOLERANCE_S ? ` Vas ${fmtDuration(nowG - this.gameNow())} por delante del reloj del mundo (has viajado).` : ''}`;
       case 'tablon': this.noteBoard(c, nowG); return this.boardText();
@@ -3545,7 +3545,7 @@ export class Engine {
       return `Estás inconsciente pero estable.${until ? ` Recobrarás el sentido con 1 PG hacia las ${hhmm(until)}.` : ''} Si alguien te cura, despiertas antes.`;
     }
     const d = c.dying;
-    return `Estás inconsciente, a 0 PG. El servidor tira tus salvaciones contra muerte${d ? ` (éxitos ${d.success}/3 · fallos ${d.fail}/3)` : ''}: tres éxitos te estabilizan, tres fallos te matan. Otro jugador puede estabilizarte (Medicina CD 10) o curarte.`;
+    return `Estás inconsciente, a 0 PG. El servidor tira tus salvaciones contra muerte${d ? ` (éxitos ${d.success}/3, fallos ${d.fail}/3)` : ''}: tres éxitos te estabilizan, tres fallos te matan. Otro jugador puede estabilizarte (Medicina CD 10) o curarte.`;
   }
 
   /** ¿Hay amenaza en el sitio del PJ (un NPC hostil vivo o combate reciente)? */
@@ -3732,7 +3732,7 @@ export class Engine {
     this.announceRoll({
       roller_id: c.id, label: 'Salvación contra muerte', dice: `d20 [${r.natural}]`, total: r.natural,
       outcome: r.outcome === 'revive' ? '20 natural: vuelve en sí' : r.natural === 1 ? 'fallo (1 natural: dos fallos)' : r.outcome === 'success' ? 'éxito' : 'fallo',
-      ...(r.outcome === 'revive' || r.died ? {} : { note: `éxitos ${r.success}/3 · fallos ${r.fail}/3` }),
+      ...(r.outcome === 'revive' || r.died ? {} : { note: `éxitos ${r.success}/3, fallos ${r.fail}/3` }),
     }, { death_save: r }, 'death_save', ['roll', 'death']);
     return r;
   }
