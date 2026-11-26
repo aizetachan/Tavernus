@@ -7,7 +7,7 @@ import {
   buildReport, detectDealWithoutState, detectFailedToolNarrated, JUDGE_SYSTEM, judgeDropReason, noteClosesDeal, detectInventedPlace, detectLongNarration, detectNoResponse, detectNpcOutOfReach,
   detectPromiseWithoutState, detectRepeatedSuggestion, detectTrivialRoll, judgeRun, parseJudge, runDetectors, turnsFromEvents, type GameJudgement, type Turn,
 } from '../scripts/judge.js';
-import { cleanOwnAction, dryMasterClient, playerSheet, dryPlayerClient, estimate, FINAL_PROFILES, masterTally, parseSuggestedChoice, playerPrompt, prepareBrezalAct, PROFILES, runAutoplay, type GameSummary } from '../scripts/autoplay.js';
+import { applyStart, ATTEND_WANT, cleanOwnAction, dryMasterClient, playerSheet, dryPlayerClient, estimate, FINAL_PROFILES, masterTally, PAIRS, parseSuggestedChoice, playerPrompt, prepareBrezalAct, PROFILES, runAutoplay, type GameSummary, type PlayerProfile } from '../scripts/autoplay.js';
 import { analyzeGame, buildPlaytest, buildWindowSection, dryFunClient, judgeFun, keyOf, similar, windowMetrics } from '../scripts/playtest-report.js';
 import { authoredSeed } from '../src/data/campaigns/index.js';
 import { Engine } from '../src/engine/engine.js';
@@ -17,6 +17,9 @@ import { MemoryRepository } from '../src/persistence/memory.js';
 import { fakeTime } from './helpers.js';
 import { loadGame } from '../scripts/judge.js';
 import { coinsOf, money } from '../src/engine/money.js';
+import { spellGroups } from '../src/engine/levels.js';
+import { normalize } from '../src/engine/aliases.js';
+import { SPELLS } from '../src/data/srd/spells.js';
 
 const PC = 'ch_test';
 let seq = 0;
@@ -483,13 +486,15 @@ describe('partidas a dos', () => {
 });
 
 describe('perfiles mecánicos', () => {
-  it('recorren sus wants en orden y cubren conjuros, recursos, objetos, disparo, sigilo, forzar, saquear y descansar', () => {
+  it('recorren sus wants en orden y cubren conjuros, objetos, disparo, sigilo, forzar, saquear y descansar', () => {
     for (const id of ['lanzador', 'tirador']) {
       const p = PROFILES.find((x) => x.id === id)!;
       expect(p.cycle).toBe(true);
-      for (const w of ['objeto', 'disparar', 'esconderse', 'forzar', 'saquear', 'trepar', 'descansar', 'curar', 'recurso']) expect(p.wants.map((x) => x.id)).toContain(w);
+      for (const w of ['objeto', 'disparar', 'esconderse', 'forzar', 'saquear', 'trepar', 'descansar']) expect(p.wants.map((x) => x.id)).toContain(w);
+      // A nivel 1 ni la hechicera ni el explorador tienen usos de clase ni con qué curar (H10): eso lo pide el herido.
+      for (const w of ['recurso', 'curar']) expect(p.wants.map((x) => x.id)).not.toContain(w);
     }
-    expect(PROFILES.find((x) => x.id === 'lanzador')!.wants.map((x) => x.id)).toContain('conjuro');
+    expect(PROFILES.find((x) => x.id === 'lanzador')!.wants.map((x) => x.id)).toEqual(expect.arrayContaining(['conjuro', 'truco', 'truco_ataque']));
     expect(PROFILES.find((x) => x.id === 'tirador')!.wants.map((x) => x.id)).toContain('rastrear');
   });
 
@@ -509,4 +514,108 @@ describe('perfiles mecánicos', () => {
       await rm(dir, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+describe('perfiles mecánicos de H10 (herido, deudor, cronista, recolector)', () => {
+  const H10 = ['herido', 'deudor', 'cronista', 'recolector'];
+  const MECH = PROFILES.filter((p) => p.cycle);
+  const models = { master: 'claude-haiku-5-5', player: 'claude-haiku-5-5', worldgen: 'claude-haiku-5-5', judge: 'claude-haiku-5-5' };
+  const norm = (t: string) => normalize(t).replace(/[^a-z0-9ñ ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const mentions = (text: string, name: string) => name.length >= 4 && ` ${norm(text)} `.includes(` ${norm(name)} `);
+  const bootAs = async (p: PlayerProfile) => {
+    const time = fakeTime(Date.UTC(2026, 9, 22, 12, 0, 0));
+    const engine = await Engine.boot({ repo: new MemoryRepository(), campaignId: 'brezal', seed: authoredSeed('brezal', { now: new Date(time.now()) }), now: time.now, deterministic: false });
+    const r = await engine.createCharacter(`u_${p.id}`, 'Fen', { class_id: p.class_id, race_id: p.race_id });
+    if (!r.ok) throw new Error(r.reason);
+    if (p.start) applyStart(engine, r.character, p.start);
+    return { engine, c: r.character };
+  };
+
+  it('entran en all (PROFILES), recorren su lista en orden y con wants distintos', () => {
+    for (const id of H10) {
+      const p = PROFILES.find((x) => x.id === id)!;
+      expect(p, id).toBeDefined();
+      expect(p.cycle).toBe(true);
+      expect(new Set(p.wants.map((w) => w.id)).size).toBe(p.wants.length);
+      expect(p.wants.length).toBeGreaterThanOrEqual(7);
+    }
+    // El jugador falso reconoce cada want por su frase: ninguna puede estar dentro de otra.
+    const prompts = [...new Set([...MECH.flatMap((p) => p.wants), ATTEND_WANT].map((w) => w.prompt))];
+    for (const a of prompts) for (const b of prompts) if (a !== b) expect(a.includes(b), `«${b}» está dentro de «${a}»`).toBe(false);
+    // El herido junto al violento, que es quien cae: lo único que provoca `stabilize` (solo se le hace a otro PJ).
+    expect(PAIRS).toContainEqual(['herido', 'violento']);
+  });
+
+  it('el arranque deja al herido a un tercio de PG con sus pociones y al recolector con pergamino y capa identificados', async () => {
+    const herido = await bootAs(PROFILES.find((x) => x.id === 'herido')!);
+    expect(herido.c.hp_current).toBe(Math.round(herido.c.hp_max / 3));
+    const hSheet = playerSheet(herido.engine, herido.c);
+    expect(hSheet).toContain('poción de curación ×2');
+    expect(hSheet).toContain('kit de sanador');
+    expect(hSheet).toMatch(/Usos de clase: [^.]*Tomar aliento 1\/1/);
+    const rec = await bootAs(PROFILES.find((x) => x.id === 'recolector')!);
+    const items = rec.engine.world.itemsCarriedBy(rec.c.id);
+    const scroll = items.find((i) => i.item_id === 'it_pergamino_1')!;
+    expect(scroll.state.spell_id).toBe('speak_with_animals');
+    expect(scroll.location.type).toBe('container');
+    const capa = items.find((i) => i.item_id === 'it_capa_proteccion')!;
+    expect(capa.state.identified_by).toEqual([rec.c.id]);
+    expect(rec.engine.world.itemDef('it_capa_proteccion').attunement).toBe(true);
+  });
+
+  it('las frases de los mecánicos solo nombran objetos que el PJ lleva y conjuros que tiene', async () => {
+    // Lo que no es suyo y sí puede nombrar: lo de la escena que la want busca (el cofre que forzar, el carro tras el que
+    // esconderse), lo que va a conseguir (la cerveza fiada, la cama de una noche, lo que recolecta) y las monedas de plata.
+    const SCENE = new Set(['cofre', 'carro', 'cerradura', 'cerveza', 'noche', 'cama', 'truchas', 'huevos', 'bayas', 'plata']);
+    const bad: string[] = [];
+    for (const p of MECH) {
+      const { engine, c } = await bootAs(p);
+      const w = engine.world;
+      const carried = new Set(w.itemsCarriedBy(c.id).map((i) => i.item_id));
+      const carriedNames = [...carried].flatMap((id) => [w.itemDef(id).name, ...(w.itemDef(id).aliases ?? [])].map(norm));
+      const known = new Set(spellGroups(c).flatMap((g) => [...g.spells, ...g.always]).map((x) => x.id));
+      for (const k of p.start?.kit ?? []) if (k.spell_id) known.add(k.spell_id);
+      for (const wt of p.wants) {
+        for (const d of w.itemDefs.values()) {
+          if (carried.has(d.id)) continue;
+          const hit = [d.name, ...(d.aliases ?? [])].find((n) => mentions(wt.dry, n) && !carriedNames.includes(norm(n)) && !SCENE.has(norm(n)));
+          if (hit) bad.push(`${p.id}/${wt.id}: «${wt.dry}» nombra «${hit}» (${d.name}), que no lleva`);
+        }
+        // Los conjuros van con mayúscula («Dormir»), así no salta con «dormir ocho horas».
+        const names = (t: string, n: string) => new RegExp(`(^|[^\p{L}])${n}([^\p{L}]|$)`, 'u').test(t);
+        for (const sp of SPELLS) if ((names(wt.dry, sp.name) || names(wt.prompt, sp.name)) && !known.has(sp.id)) bad.push(`${p.id}/${wt.id} nombra el conjuro ${sp.name}, que no tiene`);
+      }
+    }
+    expect(bad).toEqual([]);
+  }, 60_000);
+
+  it('en dry-run, cada uno pide su lista en orden sin repetir y lo clave llega al máster', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tavernus-h10-'));
+    try {
+      const profiles = H10.map((id) => PROFILES.find((x) => x.id === id)!);
+      const run = await runAutoplay({ games: profiles.length, actions: 12, seed: 23, models, dryRun: true, gamesDir: join(dir, 'games'), outDir: join(dir, 'run'), stamp: 'test', profiles, campaign: 'brezal', parallel: 2 });
+      expect(run.errors).toEqual([]);
+      for (const g of run.games) {
+        const p = profiles.find((x) => x.id === g.profile)!;
+        const own = g.actions.filter((a) => a.mode === 'own' && !a.how);
+        expect(own.length, p.id).toBeGreaterThanOrEqual(8);
+        expect(own.map((a) => a.impulse)).toEqual(own.map((_, i) => p.wants[i % p.wants.length]!.id));
+        expect(new Set(own.slice(0, p.wants.length).map((a) => a.impulse)).size).toBe(Math.min(own.length, p.wants.length));
+        // Lo que dice el jugador falso es la frase de su want.
+        for (const a of own) expect(a.text).toBe(p.wants.find((w) => w.id === a.impulse)!.dry);
+      }
+      // Las acciones clave no las resuelve el motor solo: dejan un cierre del máster (offline en seco).
+      const KEY: [string, string][] = [['herido', 'pocion'], ['herido', 'regla'], ['deudor', 'fiado'], ['deudor', 'prenda'], ['cronista', 'pasado'], ['recolector', 'recolectar'], ['recolector', 'pergamino']];
+      for (const [pid, wid] of KEY) {
+        const a = run.games.find((g) => g.profile === pid)!.actions.find((x) => x.impulse === wid);
+        expect(a, `${pid}/${wid} no se jugó`).toBeDefined();
+        expect(a!.event_ids.length, `${pid}/${wid} lo resolvió el motor sin máster`).toBeGreaterThan(0);
+      }
+      const herido = run.games.find((g) => g.profile === 'herido')!;
+      expect(herido.actions[0]!.state!.hp).toBeLessThan(herido.actions[0]!.state!.hp_max);
+    } finally {
+      delete process.env['MASTER_MODEL'];
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 180_000);
 });
