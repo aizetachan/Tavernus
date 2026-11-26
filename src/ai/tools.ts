@@ -68,6 +68,7 @@ import { askBlocked, endsTalk, introducesAs, npcPresumes, offersNow, talkPlanWit
 import { ALARM_KINDS, clearAlarm, setAlarm } from '../engine/alarm.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { CONFLICT_KINDS, conflictKindOf, refusedBefore, confrontButtons, confrontOf, conflictVerdict, createItem, resolveConflict, type ConflictKind, type ConflictPlan, type ConflictResult, type ConflictVerdict } from '../engine/conflict.js';
+import { creditRejection, creditWithoutDebt, declaresTheft, jobClaimRejection, jobClaimWithoutComplete, meetingRejection, meetingWithoutSchedule, movesOwnCoins, ruleQuestionRejection, ruleQuestionWithoutLookup, type JobAtHand } from '../engine/closecheck.js';
 import { conflictCloseProblems, debtMismatch, debtRejection, failedToolNarrated, failedToolRejection, menuNamed, menuWords, npcHitRejection, npcHitWithoutAttack, reactionOutcomeMismatch, reactionOutcomeRejection, stateRejection, stateWithoutTool, type MenuItem, type StateKind } from '../engine/closecheck.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
@@ -509,6 +510,17 @@ export interface ToolContext {
   npc_damage_rejections?: number;
   /** Cierres rechazados porque settle_debt o set_debt no cuadran con lo narrado (closecheck.ts; uno como mucho). */
   debt_rejections?: number;
+  /** Todos los tools que han salido bien en esta acción, también los de lectura (lookup_rule) y schedule_event. */
+  called_tools?: string[];
+  /**
+   * Cierres rechazados por la tanda 5 (closecheck.ts; uno de cada como mucho por acción): un fiado aceptado sin
+   * set_debt (arreglo 24), una cita con hora sin schedule_event (27), una pregunta de reglas sin lookup_rule (28) y un
+   * encargo del tablón dado por hecho sin complete_job (26).
+   */
+  credit_rejections?: number;
+  meeting_rejections?: number;
+  rule_rejections?: number;
+  job_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -715,6 +727,7 @@ export function executeTool(ctx: ToolContext, name: string, raw: Record<string, 
     const out = run(ctx, name, input);
     let res = typeof out === 'string' ? out : JSON.stringify(out);
     if (WRITE_TOOLS.has(name)) (ctx.write_calls ??= []).push({ name, input, out: typeof out === 'string' ? { raw: out } : out as Record<string, unknown> });
+    if (!res.startsWith('{"error"')) (ctx.called_tools ??= []).push(name);
     if (WRITE_TOOLS.has(name) && !res.startsWith('{"error"')) {
       (ctx.ok_tools ??= []).push(name);
       // La historia avanza ya (dar el agua a Ilse da el paso en esta misma respuesta): lo que pasa, a contarlo ahora.
@@ -961,6 +974,25 @@ function npcInSource(ctx: ToolContext, source: string): Npc | null {
 }
 
 /** Tools de escritura que han fallado en esta acción y no salieron bien después (el error, para el aviso del cierre). */
+/**
+ * Encargos del tablón que el actor aún no ha cobrado y cuyo NPC está en su sala, vivo (arreglo 26): con ellos delante,
+ * darlo por hecho pasa por complete_job.
+ */
+function jobsAtHand(ctx: ToolContext): JobAtHand[] {
+  const world = ctx.engine.world;
+  const here = ctx.actor.transit ? null : world.characterSpot(ctx.actor)?.location_id ?? null;
+  if (!here) return [];
+  return activeJobs(world).filter((j) => !ctx.actor.completed_jobs.includes(j.id)).flatMap((j) => {
+    const giver = world.npcs.get(j.giver_npc_id);
+    if (!giver || giver.status !== 'alive' || world.spots.get(giver.location.id)?.location_id !== here) return [];
+    const wants = j.kind === 'deliver' && j.deliver ? `${j.deliver.quantity} de ${world.itemDef(j.deliver.item_id).name}` : null;
+    const item = j.kind === 'deliver' && j.deliver ? world.itemDef(j.deliver.item_id) : null;
+    const words = [j.title, item?.name ?? '', ...(item?.aliases ?? [])].join(' ').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .split(/[^a-z]+/).filter((w) => w.length >= 4 && !['para', 'antes', 'hasta', 'desde', 'sobre', 'entre', 'cena'].includes(w));
+    return [{ id: j.id, title: j.title, giver: `${npcLabel(world, ctx.actor, giver.id)} (${giver.id})`, wants, words }];
+  });
+}
+
 function failedTools(ctx: ToolContext): { name: string; error: string }[] {
   const out = new Map<string, string>();
   for (const c of ctx.write_calls ?? []) {
@@ -1333,6 +1365,10 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (ctx.conflict) return { error: 'ya has hecho una acción conflictiva en este turno: una por turno. Narra lo que dijo el servidor.' };
       const miss = reachNpc(ctx, npc);
       if (miss) return miss;
+      // «Escondo mis monedas por si alguien me roba» no es un robo (arreglo 29): con lo suyo no se le quita nada a nadie.
+      if ((kind === 'steal' || kind === 'snatch') && movesOwnCoins(ctx.action_text)) {
+        return { error: 'not_theft', hint: `El jugador mueve su propio dinero, no le roba a ${npc.name}: no hay acción conflictiva. Para pasar monedas de una bolsa suya a otra, take_coins (instance_id de su bolsa, to_instance_id la de destino); si no, narra que las guarda.` };
+      }
       let inst = input['instance_id'] ? world.itemInstances.get(s('instance_id')) ?? null : null;
       let created = false;
       if ((kind === 'steal' || kind === 'snatch') && !inst) {
@@ -1572,6 +1608,15 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (holder?.type === 'character' && holder.id === actor.id && !into) return { error: 'own_purse', hint: 'Ya es suya: para pasar monedas a otra bolsa suya (esconderlas), di to_instance_id; para pagar, give_coins o buy_item.' };
       // Otro jugador: lootGuard ya exige su reacción (aceptada o perdida). A un NPC, como quitarle la bolsa.
       const victim = holder?.type === 'npc' ? world.npcs.get(holder.id) : undefined;
+      // «Escondo mis monedas en la mochila» no es robar (arreglo 29, deudor del 26-11, turno 32): si la bolsa es de otro,
+      // solo con un robo declarado, o ya por conflict_act, la tirada o la reacción del otro jugador.
+      if (holder && !(holder.type === 'character' && holder.id === actor.id)) {
+        const owner = holder.type === 'npc' ? world.npcs.get(holder.id)?.name : world.characters.get(holder.id)?.name;
+        if (movesOwnCoins(ctx.action_text)) return { error: 'not_yours', hint: `${name} es de ${owner ?? 'otro'}, no del actor: el jugador mueve su propio dinero. Usa la bolsa que lleva él (instance_id de su bolsa, to_instance_id la de destino) o, si no tiene otra, narra que las guarda sin más. No le saques nada a nadie.` };
+        if (victim && victim.status === 'alive' && ctx.action_text?.trim() && !declaresTheft(ctx.action_text) && !ctx.conflict && !ctx.conflict_resolved && !ctx.roll_category) {
+          return { error: 'not_theft', hint: `${name} es de ${victim.name} y la acción no dice que le robe: no se le saca dinero a nadie sin que el jugador lo declare. Si paga o cobra, give_coins, buy_item o settle_debt; si no, narra lo que hace con lo suyo.` };
+        }
+      }
       if (victim) { const miss = reachNpc(ctx, victim); if (miss) return miss; }
       // Sacarle monedas a un NPC despierto en un turno de robo es quitarle algo: lo decide conflict_act, como transfer_item.
       {
@@ -1988,6 +2033,16 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: unansweredRejection(missing.map((m) => ({ id: m.id, name: m.name, text: acted.find((a) => a.id === m.id)!.text })), vague) };
         }
       }
+      // Fiado pedido por el jugador y aceptado de palabra, sin set_debt (arreglo 24): una vez por acción, antes que el
+      // trato genérico, que con eso queda gastado para no rechazar dos veces el mismo fiado.
+      if ((ctx.credit_rejections ?? 0) < 1) {
+        const credit = creditWithoutDebt({ action: ctx.action_text ?? null, narration: s('narration_private'), lines: parseLines(input['lines'], null, (id) => world.npcs.has(id)), okTools: ctx.ok_tools ?? [], pendingRoll: req !== null });
+        if (credit) {
+          ctx.credit_rejections = (ctx.credit_rejections ?? 0) + 1;
+          ctx.deal_rejections = Math.max(1, ctx.deal_rejections ?? 0);
+          return { error: creditRejection(credit) };
+        }
+      }
       // Trato cerrado en la narración sin tool que lo registre, y desenlace que no respeta la tirada: se reescribe una vez cada uno.
       if ((ctx.deal_rejections ?? 0) < 1) {
         const deal = dealWithoutState({ narration: s('narration_private'), lines: parseLines(input['lines'], null, (id) => world.npcs.has(id)), okTools: ctx.ok_tools ?? [], pendingRoll: req !== null, hasOpenDebt: openDebts(actor).length > 0 });
@@ -2242,6 +2297,25 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (why) {
           ctx.debt_rejections = (ctx.debt_rejections ?? 0) + 1;
           return { error: debtRejection(why, settle ? 'settle_debt' : 'set_debt') };
+        }
+      }
+      // Tanda 5: una cita con hora aceptada sin schedule_event (arreglo 27), una pregunta de reglas sin lookup_rule (28) y
+      // un encargo del tablón dado por hecho sin complete_job con quien lo pidió delante (26). Una vez cada una.
+      if (!ctx.roll_category) {
+        const lines = parseLines(input['lines'], null, (id) => world.npcs.has(id));
+        const called = ctx.called_tools ?? [];
+        if ((ctx.meeting_rejections ?? 0) < 1) {
+          const meet = meetingWithoutSchedule({ action: ctx.action_text ?? null, narration: s('narration_private'), lines, calledTools: called, pendingRoll: req !== null });
+          if (meet) { ctx.meeting_rejections = (ctx.meeting_rejections ?? 0) + 1; return { error: meetingRejection(meet) }; }
+        }
+        if ((ctx.rule_rejections ?? 0) < 1) {
+          const rule = ruleQuestionWithoutLookup({ action: ctx.action_text ?? null, calledTools: called });
+          if (rule) { ctx.rule_rejections = (ctx.rule_rejections ?? 0) + 1; return { error: ruleQuestionRejection(rule) }; }
+        }
+        if ((ctx.job_rejections ?? 0) < 1) {
+          const jobs = jobsAtHand(ctx);
+          const claim = jobs.length ? jobClaimWithoutComplete({ action: ctx.action_text ?? null, narration: s('narration_private'), lines, okTools: ctx.ok_tools ?? [], failedTools: failedTools(ctx).map((f) => f.name), jobs, pendingRoll: req !== null }) : null;
+          if (claim) { ctx.job_rejections = (ctx.job_rejections ?? 0) + 1; return { error: jobClaimRejection(claim, jobs) }; }
         }
       }
       // El jugador declara un golpe y nadie lo resuelve: se reescribe una vez, y si hay razón para no tirar, que la cuente.

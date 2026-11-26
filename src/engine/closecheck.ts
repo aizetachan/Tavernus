@@ -1296,3 +1296,200 @@ export function debtMismatch(input: {
 export function debtRejection(why: string, tool: 'settle_debt' | 'set_debt'): string {
   return `${tool} y la narración no cuadran: ${why}. El estado manda: narra lo que ha movido el servidor (lo pagado, lo que queda de deuda, lo que le queda en la bolsa) o vuelve a llamar a ${tool} con la cantidad que narras. Reescribe log_event.`;
 }
+
+// ---------------------------------------------------------------------------
+// Tanda 5 (arreglos 24, 26, 27, 28 y 29): lo que el jugador pide con las palabras justas y el máster acepta de palabra
+// ---------------------------------------------------------------------------
+
+const bareText = (t: string) => norm(t).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * Lo que dicen los demás en el cierre, frase a frase y sin preguntas: la narración fuera de lo que cita del actor
+ * (sus palabras entre «», que suelen repetir la acción, a veces recortadas con «…») y lo que dicen los NPC.
+ */
+function othersSay(input: { action: string | null; narration: string; lines?: readonly DialogueLine[] }): string[] {
+  const actorTexts = [input.action ?? '', ...(input.lines ?? []).filter((l) => l.speaker === 'actor').map((l) => l.text)].map(bareText).filter(Boolean);
+  const isActor = (q: string) => {
+    const b = bareText(q);
+    if (!b) return true;
+    if (actorTexts.some((a) => a.includes(b) || b.includes(a))) return true;
+    // Recortada o retocada: casi todas sus palabras están en lo que escribió el jugador.
+    const words = b.split(' ').filter((w) => w.length > 2);
+    return words.length >= 3 && actorTexts.some((a) => { const have = new Set(a.split(' ')); return words.filter((w) => have.has(w)).length / words.length >= 0.8; });
+  };
+  const noQ = (s: string) => s.replace(/¿[^?]*\?/g, ' . ');
+  const narr = noQ(norm(input.narration).replace(/«([^»]*)»|“([^”]*)”/g, (_m, a: string | undefined, b: string | undefined) => (isActor(a ?? b ?? '') ? ' . ' : `. ${a ?? b ?? ''} .`)));
+  const npc = (input.lines ?? []).filter((l) => l.speaker === 'npc').map((l) => noQ(norm(l.text)));
+  return [...clauses(narr), ...npc.flatMap(clauses)];
+}
+
+/** Negación o duda en la frase: no acepta nada. */
+const ACCEPT_NOT = /\b(no|ni|nunca|jamas|tampoco|nadie|nada|si|quiza\w*|tal vez|podria\w*|ojala)\b/;
+/** Una frase corta que solo dice que sí («De acuerdo», «Vale, muchacha»). */
+const BARE_YES = /^(?:de acuerdo|esta bien|vale|hecho|sea|venga|bueno|trato hecho)(?:,? \w+){0,2}$/;
+
+// --- Arreglo 24: fiar es set_debt o no es --------------------------------------------------------------------------
+
+/** El jugador pide fiado: «apúntamela», «te la pago mañana», «a cuenta», «fíame». */
+const WANTS_CREDIT = /\b(?:apunt(?:a|as|ame|amela|amelo|amelas|amelos|alo|ala)|anot(?:a|ame|amela|amelo|alo|ala)|fia(?:me|mela|melo|r|rme|rmela|rmelo)|fiad[oa]s?|me (?:lo |la )?fias|a cuenta|en (?:la|mi) cuenta|a deber|(?:te|se) (?:lo |la |los |las )?(?:pago|pagare|devuelvo) (?:manana|luego|otro dia|el \w+|cuando|a la vuelta|pasado|en cuanto)|(?:lo|la|los|las) pago (?:manana|luego|cuando|en cuanto))\b/;
+/** El NPC lo acepta: «te lo apunto», «mañana, entonces», «me la pagas mañana», «a tu cuenta». */
+const ACCEPTS_CREDIT = /\b(?:te (?:lo |la |los |las )?apunt[oa]|(?:lo|la|se lo|se la) apunt[ao]|apuntad[oa]s?|anotad[oa]s?|lo anot[oa]|te (?:lo |la |los |las )?fi[oa]|fiad[oa]s?|a tu cuenta|en tu cuenta|(?:hasta )?manana,? entonces|hasta manana|(?:me )?(?:lo |la |los |las )?pagas (?:manana|luego|cuando|otro dia)|manana me (?:lo |la |los |las )?pagas|pagame (?:manana|cuando|luego)|ya me (?:lo |la )?pagaras|me (?:lo |la |los |las )?pagaras|cuando puedas|confio en ti)\b/;
+/** No fía, en cualquier frase del cierre: entonces no hay trato, diga lo que diga después («Aquí se paga en mano. Hasta mañana»). */
+const REFUSES_CREDIT = /\bno\b[^.;:]{0,30}\b(?:fi[aeo]\w*|apunt\w*|anot\w*|cuenta|deb\w*|cobr\w*)\b|\b(?:se paga (?:antes|en mano|al contado|por adelantado|aqui)|en mano|al contado|por adelantado|aqui se paga|sin fiar)\b/;
+/** Tools que dejan el fiado (o el pago) en el estado. */
+const CREDIT_TOOLS = ['set_debt', 'pawn_item', 'settle_debt', 'buy_item', 'give_coins'];
+
+/**
+ * El jugador pide fiado y el NPC lo acepta sin set_debt: «¿Me apuntas una cerveza, que te la pago mañana?» → «Mañana,
+ * entonces» (deudor, tanda 20261126-0602, turno 1). Rechazar el fiado («aquí no se apunta nada») pasa sin tool.
+ * Devuelve la frase que lo acepta, o null.
+ */
+export function creditWithoutDebt(input: { action: string | null; narration: string; lines?: readonly DialogueLine[]; okTools: readonly string[]; pendingRoll?: boolean }): string | null {
+  if (input.pendingRoll || !input.action || input.okTools.some((t) => CREDIT_TOOLS.includes(t))) return null;
+  if (!WANTS_CREDIT.test(norm(input.action))) return null;
+  const said = othersSay(input);
+  if (said.some((c) => REFUSES_CREDIT.test(c))) return null;
+  for (const c of said) {
+    if (ACCEPT_NOT.test(c)) continue;
+    const m = ACCEPTS_CREDIT.exec(c) ?? BARE_YES.exec(c);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+export function creditRejection(phrase: string): string {
+  return `El jugador pide fiado y la narración lo acepta («${phrase}») sin set_debt: lo que no pasa por un tool no ha ocurrido. Si el NPC fía, llama a set_debt (npc_id de quien fía, amount en cobre con el precio de lo que se lleva, due_in_hours si dice cuándo: «mañana» son 24) y, si le sirve algo, transfer_item; si deja algo en prenda, pawn_item. Si no fía, que lo diga en la narración, sin tool. Reescribe log_event.`;
+}
+
+// --- Arreglo 27: citas con hora --------------------------------------------------------------------------------------
+
+/** El jugador propone verse a una hora: «quedamos mañana al alba junto al pozo», «nos vemos a las ocho». */
+const WANTS_MEET = /\b(?:quedamos|quedar|nos vemos|vernos|nos encontramos|te espero|esperame|me esperas|espereme|cita|vente|ven(?:id)? (?:manana|al alba|a las|esta noche)|(?:manana|al alba|al amanecer|esta noche|a las \w+)\b[^.;:]{0,25}\b(?:aqui|alli|junto al?|en el|en la))\b/;
+const MEET_TIME = /\b(?:manana|pasado manana|al alba|al amanecer|al anochecer|al atardecer|a medianoche|a mediodia|esta noche|esta tarde|a las (?:una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|\d{1,2})|al toque|(?:en|tras|despues de|antes de) (?:la|el) (?:misa|mercado|rezo|cena|toque))\b/;
+/** El NPC se compromete: «ya estaré junto al pozo», «allí estaré», «te espero», «al alba, entonces». */
+const ACCEPTS_MEET = /\b(?:(?:alli|ahi|aqui|ya) estare|estare (?:alli|ahi|aqui|junto|en|a)|te esperare|te espero|nos vemos|alli nos vemos|no faltare|cuenta conmigo|alli ire|ire (?:sin falta|alli|al)|hasta (?:manana|el alba|entonces|la misa)|(?:al alba|manana|a las \w+|tras la misa),? entonces)\b/;
+/** Lo rechaza: entonces no hay cita (lo que diga después no la cierra). */
+const REFUSES_MEET = /\bno (?:puedo|podre|ire|voy|vendre|estare|quedo|me veras|me esperes|cuentes conmigo)\b|\bolvidalo\b/;
+
+/**
+ * Un NPC acepta una cita con hora sin schedule_event: «Mañana, al alba, aquí junto al pozo» → «a la misa de las ocho
+ * ya estaré junto al pozo» (cronista, tanda 20261126-0602, turno 6). Si la rechaza, pasa. Devuelve la frase, o null.
+ */
+export function meetingWithoutSchedule(input: { action: string | null; narration: string; lines?: readonly DialogueLine[]; calledTools: readonly string[]; pendingRoll?: boolean }): string | null {
+  if (input.pendingRoll || !input.action || input.calledTools.includes('schedule_event') || input.calledTools.includes('set_npc_order')) return null;
+  const a = norm(input.action);
+  if (!WANTS_MEET.test(a) || !MEET_TIME.test(a)) return null;
+  const said = othersSay(input);
+  if (said.some((c) => REFUSES_MEET.test(c))) return null;
+  for (const c of said) {
+    // «No faltaré» niega y acepta a la vez: cuenta como sí.
+    if (ACCEPT_NOT.test(c.replace(/\bno faltare\b/g, ' '))) continue;
+    const m = ACCEPTS_MEET.exec(c) ?? BARE_YES.exec(c);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+export function meetingRejection(phrase: string): string {
+  return `El NPC acepta una cita con hora («${phrase}») y no se ha programado: sin schedule_event, a esa hora no va nadie. Llama a schedule_event (title corto, de cosa y sin el nombre de quien acude: «la charla junto al pozo»; recurrence once; days_from_now 1 si es mañana; start_hour: el alba son las 6, «las ocho» las 8; duration_min 30; npc_ids con quien queda; told_actor true; si ya hay uno con ese título en ese sitio, lo devuelve y apunta que el actor lo sabe). Si no queda, que el NPC lo diga. Reescribe log_event.`;
+}
+
+// --- Arreglo 28: lookup_rule cuando el jugador pregunta por una regla ---------------------------------------------
+
+const RULE_EXPLICIT = /\b(?:segun (?:las |los )?(?:reglas|manuales?|reglamento|normas)|que dicen las reglas|cual es la regla|hay (?:alguna )?regla|por (?:las )?reglas)\b/;
+const RULE_HOW = /\bcuant[oa]s? (?:dias|horas|millas|leguas|kilometros|kilos|libras|pies|asaltos|turnos|minutos|conjuros|hechizos|espacios|veces|pg|puntos)\b|\bcuanto (?:aguanta\w*|tarda\w*|pesa\w*|cura\w*|dura\w*|se anda|se tarda|puedo (?:llevar|cargar|andar|aguantar))\b|\bcada cuanto\b|\bcomo funciona\w*\b/;
+/** Temas con regla en el manual y la consulta en inglés que la encuentra. */
+const RULE_TOPICS: { re: RegExp; query: string }[] = [
+  { re: /\b(?:comer|comida|beber|bebida|hambre|sed|raciones?|sin agua)\b/, query: 'food and water' },
+  { re: /\b(?:viaj\w*|millas?|leguas?|andar|se andan|se recorren|camin\w*|marcha|paso (?:normal|rapido|lento))\b/, query: 'travel pace' },
+  { re: /\b(?:descans\w*|dormir|duerm\w*|sueno)\b/, query: 'short rest long rest' },
+  { re: /\b(?:carg\w*|peso|pesa\w*|llevar encima)\b/, query: 'carrying capacity' },
+  { re: /\b(?:conjur\w*|hechiz\w*|espacios? de conjuro)\b/, query: 'casting a spell spell slots' },
+  { re: /\b(?:agotamiento|agotad\w*)\b/, query: 'exhaustion' },
+  { re: /\b(?:nadar|trepar|escalar|saltar)\b/, query: 'climbing swimming jumping' },
+  { re: /\b(?:caida|caer)\b/, query: 'falling' },
+];
+
+/**
+ * El jugador pregunta por una regla («Hugo, ¿cuántos días aguanta un hombre sin comer ni beber según las reglas?»,
+ * «¿cuántas millas se andan en un día de viaje a paso normal?»: herido, tanda 20261126-0602, nueve veces) y el
+ * cierre no la ha consultado. Devuelve la consulta en inglés que la encuentra, o null.
+ */
+export function ruleQuestionWithoutLookup(input: { action: string | null; calledTools: readonly string[] }): { query: string } | null {
+  if (!input.action || input.calledTools.includes('lookup_rule')) return null;
+  const a = norm(input.action);
+  if (!/[?¿]/.test(input.action) && !/\b(?:pregunto|pregunta)\b/.test(a)) return null;
+  const topic = RULE_TOPICS.find((t) => t.re.test(a));
+  if (!RULE_EXPLICIT.test(a) && !(RULE_HOW.test(a) && topic)) return null;
+  return { query: topic?.query ?? 'el tema, en inglés' };
+}
+
+export function ruleQuestionRejection(q: { query: string }): string {
+  return `El jugador pregunta por una regla y no la has consultado. Llama a lookup_rule (query en inglés, por ejemplo "${q.query}"; devuelve hasta 3 fragmentos del Player's Handbook o la Dungeon Master's Guide, o te dice que no hay manuales y resuelves con tu criterio) y contesta con lo que diga, con la voz del NPC o del narrador y en la ficción, sin citar el manual. Reescribe log_event.`;
+}
+
+// --- Arreglo 29: «esconder» no es robar ------------------------------------------------------------------------------
+
+/** Robar, en la acción («le robo», «le corto la bolsa», «meto la mano en su bolsa»). */
+const THEFT_WORDS = /\b(?:rob\w*|hurt\w*|birl\w*|mang\w*|sise\w*|afan\w*|sustra\w*|desvalij\w*|arrebat\w*|quitarle|quitarsel\w*|le quito|se lo quito|se la quito|me lo quedo|me la quedo|le cojo|cojo su|cogerle|meto la mano en su|meterle la mano|cortarle la bolsa|corto su bolsa|le corto la bolsa|le saco|sacarle|registr\w*)\b/;
+/** Lo que teme que le roben, o lo que le han robado a él: no es robar («por si alguien me roba»). */
+const FEARS_THEFT = /\b(?:por si|para que no|que no|no vaya a ser que|no sea que)\b[^.;:]{0,40}?\b(?:rob\w*|quit\w*|birl\w*)|\b(?:alguien|nadie|cualquiera|ladron\w*|rateros?) (?:me |nos |te )?(?:rob\w*|quit\w*|birl\w*)|\bme (?:han |habian )?rob\w*/g;
+/** Sus propias monedas: «mis monedas», «mi bolsa», «las escondo al fondo de la mochila». */
+const OWN_COINS = /\b(?:mis (?:monedas|cobres|platas|oros|ahorros|dineros?|cuartos)|mi (?:bolsa|dinero|plata|monedero|faltriquera|bolsita)|(?:escond\w*|guard\w*|pas\w*|met\w*)\b[^.;:]{0,50}\b(?:mochila|zurron|bota|forro|faltriquera|bolsillo))\b/;
+
+/** ¿La acción declara un robo? Lo que teme que le roben a él no cuenta. */
+export function declaresTheft(action: string | null | undefined): boolean {
+  return Boolean(action) && THEFT_WORDS.test(norm(action!).replace(FEARS_THEFT, ' '));
+}
+
+/**
+ * El jugador mueve su propio dinero («Saco mis monedas de la bolsa y las escondo al fondo de la mochila, por si alguien
+ * me roba»: deudor, tanda 20261126-0602, turno 32, que el máster convirtió en robarle la bolsa a la tabernera).
+ */
+export function movesOwnCoins(action: string | null | undefined): boolean {
+  if (!action) return false;
+  const a = norm(action);
+  return OWN_COINS.test(a) && /\b(?:monedas?|cobres?|platas?|oros?|dineros?|ahorros|bolsa|monedero)\b/.test(a) && !declaresTheft(action);
+}
+
+// --- Arreglo 26: encargos del tablón que se cobran ------------------------------------------------------------------
+
+/** El jugador da el encargo por hecho o lo cobra: «ya lo tienes», «aquí está lo que pediste», «la leña está en la puerta». */
+const CLAIMS_JOB = /\b(?:ya (?:lo |la |los |las )?(?:tienes|tiene|tengo|traigo)|aqui (?:esta|estan|tienes|tiene)\b|lo que (?:me )?(?:pediste|pedias|pedia|pidio|encargaste|encargo)|(?:esta|estan|queda|quedan) (?:hech[oa]s?|en (?:la|tu|su) puerta|apilad[oa]s?|entregad[oa]s?|list[oa]s?)\b|(?:lena|encargo|trabajo|recado) (?:hech[oa]|cumplid[oa]|terminad[oa])|te (?:traigo|entrego) (?:lo|la|los|las|el|tu|tus)\b|vengo a cobrar|cobro (?:el|mi) (?:encargo|paga|trabajo)|cobrar el encargo|(?:me )?(?:pagas|debes|debe) el (?:encargo|pago|trabajo)|quiero (?:mi|la) paga|mi paga|el pago del encargo)\b/;
+/** El NPC lo da por cumplido o paga: «aquí tienes tu paga», «buen trabajo», «te lo has ganado». */
+const TELLS_JOB_PAID = /\b(?:te (?:paga|pago|has ganado|lo has ganado)|aqui tienes tu (?:paga|parte|recompensa|dinero)|toma tu (?:paga|recompensa|parte)|buen trabajo|bien hecho|encargo cumplido|cumplid[oa] el encargo)\b/;
+
+export interface JobAtHand {
+  id: string; title: string; giver: string; wants: string | null;
+  /** Palabras que lo nombran (del título y de lo que pide), sin tildes: «lena», «posada», «madera». */
+  words?: readonly string[];
+}
+/** Palabras del tablón: sin ellas ni las del encargo, «ya lo tengo» o «aquí tienes» hablan de otra cosa. */
+const JOB_WORDS = /\b(?:encargos?|tablon|recompensa)\b/;
+
+/**
+ * Con un encargo del tablón sin cobrar y quien lo pidió delante, el jugador lo da por hecho («Ya tengo la leña del Soto»,
+ * cronista, tanda 20261126-0602, turnos 4, 14, 24 y 34) o el NPC lo paga de palabra, y el cierre no lleva complete_job.
+ * Lo decide el servidor (comprueba que trae lo pedido): se rechaza una vez para que lo intente. Devuelve la frase, o null.
+ */
+export function jobClaimWithoutComplete(input: { action: string | null; narration: string; lines?: readonly DialogueLine[]; okTools: readonly string[]; failedTools?: readonly string[]; jobs: readonly JobAtHand[]; pendingRoll?: boolean }): string | null {
+  if (input.pendingRoll || !input.jobs.length || input.okTools.includes('complete_job') || input.failedTools?.includes('complete_job')) return null;
+  const words = input.jobs.flatMap((j) => j.words ?? []).filter((w) => w.length >= 4).map(esc);
+  const named = (t: string) => JOB_WORDS.test(t) || (words.length > 0 && new RegExp(String.raw`\b(?:${words.join('|')})\b`).test(t));
+  const said = othersSay(input);
+  const action = norm(input.action ?? '');
+  // El encargo lo nombra el jugador al darlo por hecho, o el NPC al pagarlo: la sala (la fragua de Hugo) no cuenta.
+  const claim = named(action) ? CLAIMS_JOB.exec(action.replace(/¿[^?]*\?/g, ' . ')) : null;
+  if (claim) return claim[0];
+  for (const c of said) {
+    if (ACCEPT_NOT.test(c) || !(named(c) || named(action))) continue;
+    const m = TELLS_JOB_PAID.exec(c);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+export function jobClaimRejection(phrase: string, jobs: readonly JobAtHand[]): string {
+  const list = jobs.map((j) => `«${j.title}» (job_id ${j.id}, lo pidió ${j.giver}${j.wants ? `, pide ${j.wants}` : ''})`).join('; ');
+  return `El jugador da por hecho un encargo («${phrase}») y no se ha cobrado: un encargo del tablón lo cierra complete_job (character_id del actor, job_id, npc_id de quien lo pidió), que comprueba que trae lo pedido, se lo quita y le paga. Encargos sin cobrar de quien está aquí: ${list}. Si el servidor dice que falta algo, o no es el encargo de nadie de aquí, que el NPC lo diga. Reescribe log_event.`;
+}
