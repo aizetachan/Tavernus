@@ -921,10 +921,13 @@ function npcPresence(ctx: ToolContext, locationId: Id): NpcPresence[] {
   }));
 }
 
-/** Cuándo se fue un NPC de esta localización según el motor («a las 21:40: Garrán se va de la barra»), o null. */
+/**
+ * Cuándo se fue un NPC de esta localización según el motor («a las 21:40: Garrán se va de la barra»), o null. El motor
+ * emite la salida en el sitio de donde se va y la llegada en el de destino: el último npc_move suyo aquí, si ya no está.
+ */
 function leftAt(engine: Engine, npcId: Id, locationId: Id): string | null {
-  const e = engine.events.all().filter((x) => x.action_type === 'npc_move' && x.payload['npc_id'] === npcId && x.location_id === locationId && /\bse va\b|\bdeja\b/.test(x.observable ?? '')).at(-1);
-  return e ? `a las ${hhmm(e.timestamp_game_s)}: «${e.observable}»` : null;
+  const e = engine.events.all().filter((x) => x.action_type === 'npc_move' && x.payload['npc_id'] === npcId && x.location_id === locationId).at(-1);
+  return e ? `a las ${hhmm(e.timestamp_game_s)}${e.observable ? `: «${e.observable}»` : ''}` : null;
 }
 
 /** ¿Nombra la narración a ese NPC (por su nombre, su oficio o cómo se le ve)? */

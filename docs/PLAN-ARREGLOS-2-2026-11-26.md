@@ -202,3 +202,75 @@ sus tests. Nada en `src/`.
    `--baseline data/local/autoplay/20261126-0418`, `-0442` y `-0602`. Unos 3,5 $. Lo que se mira: las tres categorías nuevas
    del juez (esperadas cerca de cero), incoherencia con el contexto (9,4 por 100 en la pasada 4), `conflict_act` por acción
    inocente (0), turnos duplicados en pareja (0), enlatadas repetidas (0).
+
+## Estado del paquete F
+
+Rama `claude/arreglos-f-guardas-3515b5`, subida a `origin`, sin PR. Solo `src/ai/tools.ts`, `src/engine/closecheck.ts`,
+`src/ai/prompt.ts`, `src/ai/master.ts` y tests (`paint.ts` no ha hecho falta). Suite entera (133 ficheros, 1795 tests) y
+`npm run typecheck` en verde bajo el tope de 3 GB, con `--maxWorkers=2`.
+
+Todas las guardas nuevas siguen el patrón de siempre: rechazan el cierre una vez con un hint que dice qué tool o qué
+falta, y a la segunda pasa. Contadores nuevos en `ToolContext`: `presence_rejections`, `homonym_rejections`,
+`hands_rejections`, `trait_rejections`, `claim_rejections` y `downed_rejections` (`test/guardas-helpers.ts` los gasta para
+que cada test vea solo la suya).
+
+**Hecho.**
+
+- **30, presencia de NPC** (`4bd4756`). `closecheck.ts`: `npcPresenceProblem` (habla en `lines` o actúa en la narración un
+  NPC que no está; se va uno que sigue aquí; entra uno que no está) y `npcMovesSince` (los `npc_move` desde el último turno
+  del actor, su último evento con texto). Libres: los que el motor ha movido en ese intervalo y los que el cierre mueve
+  con `set_npc_order`. Sin `lines`, lo citado en la narración que no dijo el jugador cuenta como del NPC del cierre. El
+  hint dice cuándo se fue según el motor. Los nombres solo con mayúscula («Ceniza», no «la ceniza»); el oficio, si nadie
+  más lo comparte. `prompt.ts`: en «Presentes que el actor percibe», la línea «Se han ido desde el turno anterior».
+  Test `test/guardas-presencia.test.ts` (pícaro T11 y T13, pareja violento T2).
+- **34, el compañero no es un NPC** (`6d7ea6e`). El contexto pone «JUGADOR Nombre [id]» en cada PJ y, si un NPC se llama
+  igual, lo dice en los dos (al NPC por su oficio). Guarda `homonymRoleCall`: llamar al jugador por el oficio del NPC
+  ausente («el jornalero» por Ciro). El enmascarado de nombres del cierre ya no cambia «Ciro» por el oficio del NPC.
+  Guarda `handsOnPlayer`: robar o agarrar a otro JUGADOR nombrándolo sin `request_reaction` se rechaza, y si contesta un
+  NPC en su lugar, el hint lo dice. Test `test/guardas-homonimo.test.ts` (pareja pícaro B1 y B9).
+- **31 y 39** (`3074d9d`). `attackIntent`: un codazo, una palmada o un toque solo es ataque con fuerza, a la cara o con
+  arma; `request_reaction` con `kind: attack` sin eso se rebaja a `other` con hint, y `attack` contra otro jugador sin eso
+  no ataca (M15). `cast_spell` rechaza el conjuro distinto del que nombra la acción (`spellsNamedIn`, los de su lista;
+  los de una palabra, solo con mayúscula), sin `target_id` un conjuro de ataque no tira ni enseña daño, y el daño sale en
+  español («daño fuerza»). `spend_resource` niega lo que no está en la ficha con la lista de lo suyo y acepta el nombre en
+  español. Guarda `unknownTrait`: el cierre que da por bueno un rasgo con nombre que no tiene («"Acecho" gastando un
+  uso», «uso mi Sentido salvaje»). Disparar a alguien entra en `declaredStrike` (T22); a una cosa («al suelo») o «sin
+  soltar la cuerda», no (T7, T40). Por qué no saltó la guarda de conjuro sin `cast_spell` en el lanzador: los trucos sí
+  pasaban por `cast_spell` (por eso salía «🎲 Descarga de fuego (daño fire)») y en los de nivel el cierre decía que no se
+  lanzaba («no lanzas nada ni gastas espacio»), que es lo correcto; el test lo deja escrito. Test
+  `test/guardas-conjuros.test.ts`; ajustados `test/levels.test.ts` (etiqueta en español) y `test/reactions.test.ts`
+  (el `attack` entre jugadores con una acción que sí es un ataque).
+- **40 y 38, la ficha** (`7d2e145`). `ownClaimAccepted`: el jugador afirma una herida a vida llena, una deuda que no tiene
+  o un familiar que no consta, y el cierre (o un NPC) lo da por cierto sin `record_character_fact`; si lo niega o lo deja
+  en el aire, pasa (herido T21, dirigido T7). `downedActs`: un PJ a 0 PG que el cierre levanta sin `heal` ni `stabilize`,
+  o que lanza, ataca o coge (E17, recolector T11); `cast_spell`, `attack` y `spend_resource` lo niegan antes. Test
+  `test/guardas-ficha.test.ts`.
+- **36, un cierre por turno con tirada** (`733a117`). Según el veredicto de H13 del paquete I, las dos burbujas
+  (intención y resultado) son del motor y el orden invertido era de la herramienta, así que aquí solo la composición: el
+  contexto de la tirada lleva lo que el jugador ya leyó antes de tirar, y `master.ts` quita del cierre del resultado las
+  frases que vuelven a contar la intención (`withoutIntentRepeat`; lo citado se queda). Test `test/master-tirada.test.ts`
+  (tirador T5).
+
+**Lo que no cerré.**
+
+- Los commits de 31 y 39, y de 40 y 38, van de dos en dos: tocan las mismas funciones de `closecheck.ts` y `tools.ts`.
+- «🎲 Percepción» sin dado ni resultado: es la tirada oculta tal como la pinta el motor (`rolls.ts`, `engine.ts`) y la web;
+  es del paquete H (punto 3). En lo que devuelven las tools del máster todas las tiradas llevan dado y total.
+- Las guardas de presencia y de lo que el jugador cuenta de sí leen texto con reglas fijas: frases como «Garrán vuelve a
+  la casona» (un NPC ausente que hace algo en otro sitio) pueden saltar. Lo que mide la pasada corta lo dirá.
+- La charla de relleno no pasa por estas guardas: B9 (el robo a Ciro) lo contestó en 3,6 s el motor sin máster.
+
+**Lo que pido a otros paquetes.**
+
+- **E (`narrate.ts`, `maskNpcNames`).** Que no cambie por el oficio el nombre de un NPC que se llama como un PJ de la
+  partida: «El jornalero habla con Garrán» en lo que lee Bruno es Ciro el jugador, enmascarado en la entrega
+  (`events.ts`, `readerText`). En el cierre del máster ya lo evito (`tools.ts`, `keep`), pero los avisos del motor pasan
+  por ahí. Lo mismo para el punto 2 de E: la guarda de presencia lee `payload.npc_id` y el `location_id` del `npc_move`
+  (salida en el sitio de origen, llegada en el de destino); si E mantiene eso, no hay que tocar nada aquí, aunque cambie
+  el texto.
+- **H (`fastpath.ts`, `extratalk.ts`).** Una acción que nombra a un JUGADOR que se llama como un NPC de relleno (Ciro)
+  no la contesta ese NPC: al máster, que ya pide `request_reaction` (B9).
+- **G (`death.ts`, `combat.ts`).** Que un PJ a 0 PG no llegue al máster con una acción que no sea de moribundo; aquí ya se
+  niegan `cast_spell`, `attack` y `spend_resource` y se rechaza el cierre que lo levanta.
+- **Sesión coordinadora.** F va la última: tras fusionar E, comprobar `test/guardas-presencia.test.ts` con los eventos
+  nuevos de entrada y salida.
