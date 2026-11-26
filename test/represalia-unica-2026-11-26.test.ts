@@ -69,7 +69,7 @@ describe('(19) una sola represalia por turno', () => {
     const ctxText = String((retaliation.payload['master'] as { context?: string }).context ?? '');
     expect(ctxText).toMatch(/Represalia, ya resuelta por el servidor con su tirada/);
     const hpAfter = fiona.hp_current;
-    const dmg = /te da \((\d+)\)/.exec(ctxText)?.[1];
+    const dmg = /te da (\d+) de daño/.exec(ctxText)?.[1];
     expect(hpAfter).toBe(hp0 - Number(dmg ?? 0));
     expect(hugo.attitude.by_character[fiona.id]).toBe('hostile');
     // Elmo actúa: pelea con dos jugadores, ronda; Fiona duda y la ronda se cierra sin ella.
