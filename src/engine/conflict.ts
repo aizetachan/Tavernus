@@ -670,7 +670,9 @@ export function resolveConflict(world: World, pc: Character, npc: Npc, v: Confli
   changeOpinion(world, npc, pc, -10, CONFLICT_ES[v.kind], nowG);
   adjustTrust(world, npc, pc, trust, nowG);
   const kind = v.kind === 'shove' || v.kind === 'grab' || v.kind === 'touch' ? 'assault' as const : movedId() ? 'theft' as const : 'theft_attempt' as const;
-  const incident = reportIncident(world, { kind, perpetrator_id: pc.id, victim_id: npc.id, spot_id: npc.location.id }, nowG);
+  // El cargo cita lo que hizo: agarrarle no es golpearle (arreglo 37, violento T5).
+  const how = v.kind === 'shove' || v.kind === 'grab' || v.kind === 'touch' ? v.kind : null;
+  const incident = reportIncident(world, { kind, perpetrator_id: pc.id, victim_id: npc.id, spot_id: npc.location.id, deed: how }, nowG);
   const seized = incident?.knowers.some((k) => k.npc_id === npc.id && k.response === 'seize') ?? false;
   if (seized) { openConfront(world, npc, pc, v.kind, movedId(), CONFRONT_DC.none, nowG); npc.confront![pc.id]!.crime = true; }
   return result('crime', `${deed} Para ${who} es un delito.`, seized ? `${who} te agarra de la muñeca y te exige que ${demandOf(v.kind, movedId() !== null)}; si te resistes, pelea.` : null, incident);
@@ -789,7 +791,8 @@ export function attentionNudge(text: string): boolean {
  */
 export function readsAsBlow(text: string): boolean {
   if (attentionNudge(text)) return false;
-  return RE_BLOW.test(plainText(text));
+  // «De golpe» es de repente, no un golpe («me incorporo de golpe», violento T5; «lo suelto de golpe», T22).
+  return RE_BLOW.test(plainText(text).replace(/ de golpe /g, ' '));
 }
 
 /** ¿Qué acción conflictiva describe el texto? La primera que encaja: arrebatar, hurtar, agarrar, empujar, tocar. */
@@ -855,8 +858,11 @@ export function conflictPlan(world: World, events: readonly GameEvent[], pc: Cha
   // «Agarro la bolsa de Garrán»: coger algo que lleva otro, si lo que nombra lo lleva él (se mira abajo).
   const taking = !found && RE_TAKE.test(kept);
   if (!found && !taking) return null;
-  // Con un golpe en la frase, primero el ataque (attack): no es esto (arreglo 3 del 26-11-2026).
-  if (readsAsBlow(text)) return null;
+  // Con un golpe en la frase, primero el ataque (attack): no es esto (arreglo 3 del 26-11-2026). Salvo que el golpe vaya
+  // con quitarle algo suyo que no es ropa: eso es arrebatárselo con violencia, y tiene su consecuencia (arreglo 37,
+  // violento T25: «agarro el garrote del molinero y lo tiro al suelo de una patada» no dejaba ni robo ni aviso).
+  const blow = readsAsBlow(text);
+  if (blow && !found && !taking) return null;
   let kind: ConflictKind = found ?? 'steal';
   const spot = world.characterSpot(pc);
   if (!spot) return null;
@@ -878,6 +884,10 @@ export function conflictPlan(world: World, events: readonly GameEvent[], pc: Cha
   if (taking && !inst) return null;
   // «Le arranco la camisa»: la ropa que lleva puesta no se le roba; es agarrarle (arreglo 3).
   const clothes = (d: ItemDef) => RE_CLOTHES.test(plainText([d.name, ...d.aliases].join(' ')));
+  if (blow) {
+    if (!inst || clothes(world.itemDef(inst.item_id)) || !(taking || kind === 'steal' || kind === 'snatch')) return null;
+    kind = 'snatch';
+  }
   if ((kind === 'steal' || kind === 'snatch') && RE_CLOTHES.test(plainText(itemWords(text) ?? '')) && (!inst || clothes(world.itemDef(inst.item_id)))) { kind = 'grab'; inst = null; }
   const steals = kind === 'steal' || kind === 'snatch';
   if (steals && !inst && world.itemsIn({ type: 'spot', id: spot.id }).some((i) => namesItem(text, world.itemDef(i.item_id)))) return null;
@@ -961,7 +971,8 @@ export interface ConfrontSettlement {
 function escalate(world: World, pc: Character, npc: Npc, c: NpcConfront, nowG: number): Incident | null {
   const has = c.instance_id !== null && world.itemsCarriedBy(pc.id).some((i) => i.id === c.instance_id);
   const kind = c.kind === 'steal' || c.kind === 'snatch' ? (has ? 'theft' as const : 'theft_attempt' as const) : 'assault' as const;
-  return c.crime ? null : reportIncident(world, { kind, perpetrator_id: pc.id, victim_id: npc.id, spot_id: npc.location.id }, nowG);
+  const deed = c.kind === 'shove' || c.kind === 'grab' || c.kind === 'touch' ? c.kind : null;
+  return c.crime ? null : reportIncident(world, { kind, perpetrator_id: pc.id, victim_id: npc.id, spot_id: npc.location.id, deed }, nowG);
 }
 
 /**

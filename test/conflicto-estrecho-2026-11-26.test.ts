@@ -140,3 +140,11 @@ describe('(31) conflictPlan con los casos reales, en la plaza del pozo', () => {
     expect(p?.npc_id).toBe(ilse.id);
   });
 });
+
+describe('(31) «de golpe» es de repente', () => {
+  it('violento T5 y T22: «me incorporo de golpe», «lo suelto de golpe» no son un golpe', () => {
+    expect(readsAsBlow('Me incorporo de golpe entre los sacos, agarro a Mateo por el brazo y gruño.')).toBe(false);
+    expect(readsAsBlow('Lo suelto de golpe y le aprieto el hacha contra el pecho.')).toBe(false);
+    expect(readsAsBlow('Le doy un golpe en la cabeza.')).toBe(true);
+  });
+});
