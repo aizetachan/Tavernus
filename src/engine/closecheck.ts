@@ -1721,3 +1721,98 @@ export function unknownTrait(input: { action: string | null; narration: string; 
 export function unknownTraitRejection(name: string, pcName: string, has: readonly string[]): string {
   return `El jugador usa «${name}» y eso no está en la ficha de ${pcName}: no lo tiene, y el cierre no puede darle su efecto. Lo suyo: ${has.length ? has.join(', ') : 'ningún recurso ni rasgo con usos'}. Dilo en ficción (no le sale, no sabe hacerlo así) o resuélvelo con lo que sí tiene (una tirada, spend_resource o cast_spell de lo suyo). Reescribe log_event.`;
 }
+
+// ---------------------------------------------------------------------------
+// Lo que el jugador cuenta de sí mismo pasa por record_character_fact (arreglo 40)
+// ---------------------------------------------------------------------------
+
+const KIN = '(?:padre|madre|abuel[oa]|herman[oa]|tio|tia|primo|prima|hij[oa]|mujer|marido|esposa|esposo|maestr[oa]|mentor[a]?|prometid[oa])';
+/** Lo que el jugador afirma de su personaje, sin tildes: una herida, una deuda, alguien de su familia. */
+const CLAIMS = {
+  wound: /\b(?:mi (?:herida|cicatriz|cojera|pierna herida|brazo herido|costilla rota|tobillo)|(?:la|mi) venda (?:sucia )?de (?:la|mi|el) (?:pierna|brazo|costado|cabeza|mano)|me duele (?:la|el|mi) (?:pierna|brazo|costado|cabeza|hombro|espalda|herida|tobillo|rodilla)|(?:tengo|llevo) (?:una|la) herida|estoy herid[oa])\b/,
+  debt: /\b(?:(?:lo que )?(?:te|le) (?:debo|debia)|mi deuda con|(?:te|le) traigo lo que (?:te|le) debo)\b/,
+  kin: new RegExp(String.raw`\bmi ${KIN}\b`),
+} as const;
+/** Lo que lo da por cierto en la narración o en boca de un NPC. */
+const ACCEPTS = {
+  wound: /\b(?:tu (?:herida|cicatriz|cojera|pierna herida)|la (?:pierna|herida|venda|brazo|costado) (?:te )?(?:late|duele|sangra|escuece|palpita|arde|tira|supura)|(?:te )?(?:late|duele|palpita|escuece) (?:la|tu) (?:pierna|herida|brazo|costado)|la herida de (?:tu|la) (?:pierna|brazo|costado))\b/,
+  debt: /\b(?:lo que (?:le |me )?(?:debias|debes)|tu deuda con|lo que le debes|lo que me debes|tu deuda)\b/,
+  kin: new RegExp(String.raw`\btu ${KIN}\b`),
+} as const;
+/** Lo que lo niega o lo deja en el aire: con esto, pasa. */
+const CLAIM_DENIED = /\b(?:no tienes|no hay (?:ninguna|tal)|no consta|no le debes|no debes nada|ilesa?o?|sin (?:herida|un rasguno)|no sabes|dices que|si es verdad|quien sabe|eso dices|segun tu)\b/;
+
+export interface OwnClaim { kind: 'wound' | 'debt' | 'kin'; claim: string; accepted: string }
+
+/**
+ * El jugador afirma algo de su propio personaje que no está en su ficha (una herida, una deuda con alguien, un padre o un
+ * hermano) y el cierre lo da por cierto sin record_character_fact. Herido T21 (20261126-0602): «quita la venda sucia de
+ * la pierna» a 13/13 PG y «La pierna te late bajo la venda sucia»; dirigido T7 (20261126-0418): «Te he traído lo que te
+ * debía» sin deuda y «Lo que le debías a Hugo sigue en tu bolsa». `known`: lo que ya consta de él (sus hechos, su
+ * pasado); `wounded`: le faltan PG; `hasDebt`: tiene una deuda abierta. Si lo niega o lo deja en el aire, pasa.
+ */
+export function ownClaimAccepted(input: { action: string | null; narration: string; lines?: readonly DialogueLine[]; okTools: readonly string[]; known?: string; wounded?: boolean; hasDebt?: boolean; pendingRoll?: boolean }): OwnClaim | null {
+  if (!input.action || input.pendingRoll || input.okTools.some((t) => t === 'record_character_fact' || t === 'plant_rumor')) return null;
+  // También en una pregunta: «¿qué dejó mi padre?» da por hecho que lo tiene.
+  const action = norm(input.action);
+  const said = (input.lines ?? []).filter((l) => l.speaker === 'npc').map((l) => norm(l.text)).join(' . ');
+  const told = `${outsideQuotes(input.narration)} . ${said}`;
+  if (CLAIM_DENIED.test(told)) return null;
+  const known = norm(input.known ?? '');
+  for (const kind of ['wound', 'debt', 'kin'] as const) {
+    if ((kind === 'wound' && input.wounded) || (kind === 'debt' && input.hasDebt)) continue;
+    const m = CLAIMS[kind].exec(action);
+    if (!m) continue;
+    // Lo que ya consta de él (un hermano en su pasado) no es nuevo; lo que ya mira la guarda de estado («mi padre era…»), tampoco.
+    if (kind === 'kin' && (known.includes(m[0].replace(/^mi /, '')) || TELLS_OWN_PAST.test(action))) continue;
+    for (const c of clauses(told)) {
+      const a = ACCEPTS[kind].exec(c);
+      if (a) return { kind, claim: m[0], accepted: a[0] };
+    }
+  }
+  return null;
+}
+
+export function ownClaimRejection(hit: OwnClaim): string {
+  const what = hit.kind === 'wound' ? 'una herida que no consta (sus PG están completos)' : hit.kind === 'debt' ? 'una deuda que no consta' : 'alguien de su vida que no consta en su ficha';
+  return `El jugador dice «${hit.claim}» de su personaje, ${what}, y el cierre lo da por cierto («${hit.accepted}») sin guardarlo. Si lo aceptas, record_character_fact (kind ${hit.kind === 'kin' ? 'relationship' : 'background'}, text: lo que ha contado, en tercera persona) en este mismo turno: es verdad para él, no da nada gratis${hit.kind === 'wound' ? ' ni le quita PG' : hit.kind === 'debt' ? ' ni crea la deuda (eso, set_debt, solo si el otro la reconoce)' : ''}. Si no lo das por bueno, que la narración lo niegue o lo deje en el aire. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// 0 PG es 0 PG (arreglo 38, parte de la guarda)
+// ---------------------------------------------------------------------------
+
+/** Volver en sí o ponerse en pie, en segunda persona (el actor) y en tercera (otro). Sin tildes. */
+const RISES_YOU = /\b(?:abres los ojos|vuelves en ti|recuperas el (?:sentido|conocimiento)|te incorporas|te levantas|te pones en pie|despiertas|te despiertas|recobras el (?:sentido|conocimiento)|consigues ponerte en pie)\b/;
+const RISES_THEM = String.raw`(?:abre los ojos|vuelve en si|recupera el (?:sentido|conocimiento)|se incorpora|se levanta|se pone en pie|despierta|se despierta|recobra el (?:sentido|conocimiento))`;
+/** Lo que hace el actor como si estuviera en pie: lanzar, atacar, coger, andar. */
+const ACTS_YOU = /\b(?:susurras (?:el|un) conjuro|recitas|lanzas|conjuras|invocas|canalizas|pronuncias|atacas|golpeas|disparas|coges|agarras|caminas|corres|cruzas|sacas|empunas|curas|vendas)\b/;
+/** Lo que no es que vuelva: lo intenta, no puede, casi, sueña, el mundo se apaga. */
+const NOT_RISEN = /\b(?:no|ni|casi|intentas|intenta|quieres|quiere|sin poder|suenas|suena|apenas puedes|como si|antes de)\b/;
+
+/**
+ * Un PJ a 0 PG que el cierre levanta («abres los ojos», «se incorpora», «vuelve en sí») sin heal ni stabilize, o que
+ * actúa (lanza, ataca, coge) estando inconsciente. Pareja violento F2 y pareja metódico E17: de 0 a en pie con una sola
+ * salvación; recolector T11: «Curar heridas» inconsciente. `down`: los PJ de la escena a 0 PG, con el actor marcado.
+ */
+export function downedActs(input: { narration: string; down: readonly { id: string; name: string; actor: boolean }[]; okTools: readonly string[] }): { id: string; name: string; phrase: string; acts: boolean } | null {
+  if (!input.down.length || input.okTools.some((t) => t === 'heal' || t === 'stabilize')) return null;
+  const text = clauses(outsideQuotes(input.narration));
+  for (const d of input.down) {
+    const forms = npcNameForms(d.name).map(norm).filter((f) => f.length >= 3).map(esc);
+    const them = forms.length ? new RegExp(String.raw`\b(?:${forms.join('|')})\b(?:\s*,[^,.;:]{0,40},)?\s+(?:(?:por fin|al fin|despacio|de golpe)\s+)?${RISES_THEM}\b`) : null;
+    for (const c of text) {
+      const m = (d.actor ? RISES_YOU.exec(c) : null) ?? them?.exec(c) ?? null;
+      if (m && !NOT_RISEN.test(c.slice(0, m.index))) return { id: d.id, name: d.name, phrase: m[0], acts: false };
+      const a = d.actor ? ACTS_YOU.exec(c) : null;
+      if (a && !NOT_RISEN.test(c.slice(0, a.index))) return { id: d.id, name: d.name, phrase: a[0], acts: true };
+    }
+  }
+  return null;
+}
+
+export function downedRejection(hit: { id: string; name: string; phrase: string; acts: boolean }, state: string): string {
+  return hit.acts
+    ? `${hit.name} [${hit.id}] está a 0 PG (${state}): inconsciente, no lanza, no ataca, no coge nada ni se mueve («${hit.phrase}»). Narra lo que le llega desde el suelo, a medias, o lo que hacen los demás. Reescribe log_event.`
+    : `La narración levanta a ${hit.name} [${hit.id}] («${hit.phrase}») y está a 0 PG (${state}): una salvación con éxito no le despierta. Vuelve en sí solo si alguien le cura (heal) o, estable, cuando lo diga el servidor; para estabilizarle, stabilize. Si no, sigue en el suelo. Reescribe log_event.`;
+}

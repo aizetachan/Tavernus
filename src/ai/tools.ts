@@ -78,7 +78,7 @@ import { ALARM_KINDS, clearAlarm, setAlarm } from '../engine/alarm.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { CONFLICT_KINDS, conflictKindOf, refusedBefore, confrontButtons, confrontOf, conflictVerdict, createItem, resolveConflict, type ConflictKind, type ConflictPlan, type ConflictResult, type ConflictVerdict } from '../engine/conflict.js';
 import { creditRejection, creditWithoutDebt, declaresTheft, jobClaimRejection, jobClaimWithoutComplete, meetingRejection, meetingWithoutSchedule, movesOwnCoins, ruleQuestionRejection, ruleQuestionWithoutLookup, type JobAtHand } from '../engine/closecheck.js';
-import { attackIntent, spellsNamedIn, unknownTrait, unknownTraitRejection, handsOnPlayer, handsOnPlayerRejection, homonymPairs, homonymRejection, homonymRoleCall, npcMovesSince, npcPresenceProblem, presenceRejection, type NpcPresence } from '../engine/closecheck.js';
+import { downedActs, downedRejection, ownClaimAccepted, ownClaimRejection, attackIntent, spellsNamedIn, unknownTrait, unknownTraitRejection, handsOnPlayer, handsOnPlayerRejection, homonymPairs, homonymRejection, homonymRoleCall, npcMovesSince, npcPresenceProblem, presenceRejection, type NpcPresence } from '../engine/closecheck.js';
 import { conflictCloseProblems, debtMismatch, debtRejection, failedToolNarrated, failedToolRejection, menuNamed, menuWords, npcHitRejection, npcHitWithoutAttack, reactionOutcomeMismatch, reactionOutcomeRejection, stateRejection, stateWithoutTool, type MenuItem, type StateKind } from '../engine/closecheck.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
@@ -539,6 +539,10 @@ export interface ToolContext {
   hands_rejections?: number;
   /** Cierres rechazados por dar por bueno un rasgo que no está en la ficha (arreglo 39; uno como mucho). */
   trait_rejections?: number;
+  /** Cierres rechazados por dar por cierto lo que el jugador cuenta de sí sin record_character_fact (arreglo 40; uno como mucho). */
+  claim_rejections?: number;
+  /** Cierres rechazados por levantar o hacer actuar a un PJ a 0 PG (arreglo 38; uno como mucho). */
+  downed_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -1730,6 +1734,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       }
       // Un PJ ausente no ataca ni gasta recursos: solo se defiende.
       if (atk && atk.away) return { error: `${atk.name} está ausente: no ataca ni gasta recursos; si le atacan, se defiende solo` };
+      // A 0 PG no se ataca (arreglo 38).
+      if (atk && (atk.hp_current <= 0 || atk.status === 'unconscious')) return { error: 'down', hint: `${atk.name} está a 0 PG, inconsciente: no ataca. Narra lo que le llega desde el suelo.` };
       if (atk?.id === actor.id) ctx.pc_attacked = true;
       if (atk) {
         // Cuerpo a cuerpo hay que estar en el mismo punto; a distancia basta la misma localización.
@@ -1981,6 +1987,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return 'error' in r ? { error: r.error } : r;
     }
     case 'cast_spell': {
+      // A 0 PG no se lanza nada (arreglo 38, recolector T11: «Curar heridas» inconsciente).
+      if (actor.hp_current <= 0 || actor.status === 'unconscious') return { error: 'down', hint: `${actor.name} está a 0 PG, inconsciente: no lanza nada. Narra lo que le llega desde el suelo.` };
       const blocked = armorBlocksSpells(world, actor);
       if (blocked) return { error: blocked };
       // Sobre un objeto (Identificar): es de toque, el objeto tiene que estar a su alcance.
@@ -2033,6 +2041,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return out;
     }
     case 'spend_resource': {
+      if (actor.hp_current <= 0 || actor.status === 'unconscious') return { error: 'down', hint: `${actor.name} está a 0 PG, inconsciente: no gasta nada.` };
       // Un rasgo que no está en su ficha se niega con la lista de lo suyo (arreglo 39, tirador T20: «Acecho»).
       const mine = classResources(actor);
       const key = s('key').trim();
@@ -2147,6 +2156,27 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           ctx.trait_rejections = (ctx.trait_rejections ?? 0) + 1;
           return { error: unknownTraitRejection(trait, actor.name, [...classResources(actor).map((r) => r.label), ...classFeatures(actor).map((f) => f.name)]) };
         }
+      }
+      // 0 PG es 0 PG (arreglo 38): nadie a 0 PG se levanta sin heal ni stabilize, ni lanza, ataca o coge. Una vez.
+      if ((ctx.downed_rejections ?? 0) < 1) {
+        const down = [actor, ...world.charactersInLocation(here()).filter((c) => c.id !== actor.id)]
+          .filter((c) => c.status === 'unconscious' && c.hp_current <= 0).map((c) => ({ id: c.id, name: c.name, actor: c.id === actor.id }));
+        const hit = downedActs({ narration: s('narration_private'), down, okTools: ctx.ok_tools ?? [] });
+        if (hit) {
+          const c = world.character(hit.id);
+          ctx.downed_rejections = (ctx.downed_rejections ?? 0) + 1;
+          return { error: downedRejection(hit, isDying(c) ? `cayendo, salvaciones ${c.dying!.success} éxitos y ${c.dying!.fail} fallos` : 'estable, inconsciente') };
+        }
+      }
+      // Lo que el jugador cuenta de sí (una herida, una deuda, un padre) y el cierre da por cierto pasa por
+      // record_character_fact (arreglo 40). Una vez; si lo niega o lo deja en el aire, pasa.
+      if ((ctx.claim_rejections ?? 0) < 1 && !ctx.roll_category) {
+        const claim = ownClaimAccepted({
+          action: ctx.action_text ?? null, narration: s('narration_private'), lines: parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id)),
+          okTools: ctx.ok_tools ?? [], pendingRoll: req !== null, wounded: actor.hp_current < actor.hp_max, hasDebt: openDebts(actor).length > 0,
+          known: [actor.backstory ?? '', ...characterFacts(actor).map((f) => f.text)].join(' . '),
+        });
+        if (claim) { ctx.claim_rejections = (ctx.claim_rejections ?? 0) + 1; return { error: ownClaimRejection(claim) }; }
       }
       // Fiado pedido por el jugador y aceptado de palabra, sin set_debt (arreglo 24): una vez por acción, antes que el
       // trato genérico, que con eso queda gastado para no rechazar dos veces el mismo fiado.
