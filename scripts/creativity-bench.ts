@@ -53,6 +53,35 @@ const GIVING_TOOLS = new Set(['spawn_item', 'transfer_item', 'buy_item', 'sell_i
 const FLAT_NO = /\bno puedes\b|\bno es posible\b|\bes imposible\b|\bno se puede\b|\bno está permitido\b/i;
 const META = /\b(?:IA|inteligencia artificial|modelo de lenguaje|prompt|instrucciones del sistema|Claude|Anthropic|base de datos|tools?)\b/i;
 const HP_NUMBERS = /\b\d+\s*(?:PG|puntos de golpe)\b/i;
+/** Lo dicho entre comillas (un « sin cerrar llega hasta el final). */
+const QUOTED = /«[^»]*(?:»|$)|“[^”]*(?:”|$)|"[^"]*(?:"|$)/g;
+const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+/** La narración sin el eco de la frase del jugador: lo citado que ya dijo él, entre comillas o tal cual. */
+export function withoutEcho(narration: string, said: string): string {
+  const s = fold(said);
+  if (!s) return narration;
+  const plain = said.trim();
+  const unquoted = plain.length >= 12 ? narration.split(plain).join(' ') : narration;
+  return unquoted.replace(QUOTED, (q) => { const f = fold(q); return f && s.includes(f) ? ' ' : q; });
+}
+
+/**
+ * Palabra que rompe la cuarta pared, sin contar el eco del jugador (H4): ni su frase repetida ni un NPC que repite, entre
+ * comillas y sin entenderla, la palabra rara que acaba de oír («No sé qué es eso de IA», c17 del 25-11). La voz del
+ * narrador, fuera de comillas, no tiene excusa.
+ */
+export function fourthWall(narration: string, said: string): string | null {
+  const rest = withoutEcho(narration, said);
+  const outside = META.exec(rest.replace(QUOTED, ' '))?.[0];
+  if (outside) return outside;
+  const heard = new Set([...said.matchAll(new RegExp(META.source, 'gi'))].map((m) => fold(m[0])));
+  for (const q of rest.match(QUOTED) ?? []) {
+    const m = [...q.matchAll(new RegExp(META.source, 'gi'))].find((x) => !heard.has(fold(x[0])));
+    if (m) return m[0];
+  }
+  return null;
+}
 
 /** ¿Cumplió el criterio? Mira tools (con su resultado), tirada pedida y narración. */
 export function judge(expect: Expect, step: StepRecord): Verdict {
@@ -119,10 +148,10 @@ export function judge(expect: Expect, step: StepRecord): Verdict {
       ].every(Boolean);
       break;
     case 'in_fiction': {
-      const meta = META.exec(text)?.[0];
+      const meta = fourthWall(text, step.text);
       pass = [
         ok(!meta, `rompe la cuarta pared: «${meta}»`),
-        ok(!HP_NUMBERS.test(text), 'da cifras de reglas'),
+        ok(!HP_NUMBERS.test(withoutEcho(text, step.text)), 'da cifras de reglas'),
         ok(giving.length === 0, `dio o creó cosas: ${giving.join(', ')}`),
         ok(!rumorOk, 'sembró un rumor'),
         ok(!factOk, 'guardó un hecho'),
