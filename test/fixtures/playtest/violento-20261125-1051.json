@@ -1,0 +1,2729 @@
+{
+"_origen": "data/local/autoplay/20261125-1051, violento (Haiku): acciones y eventos del PJ recortados",
+"game": {
+"n": 4,
+"profile": "violento",
+"character": {
+"id": "ch_ciro_mwvy1gjq",
+"name": "Ciro"
+},
+"final_quest": null,
+"actions": [
+{
+"i": 1,
+"mode": "own",
+"impulse": "amenazar",
+"text": "Hugo, cierra esa tranca y dime ya qué dejó mi padre, o te arranco la lengua y se la doy de comer al alguacil.",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000000h",
+"ev_0000000j"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 2,
+"mode": "own",
+"impulse": "atacar",
+"text": "Agarro el hacha y la apoyo en el banco viejo. Antes de que Hugo lo toque, le pego un empujón contra la pared y le meto el mango en el pecho. ¡Cuánto debes, cabrón?",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000000k",
+"ev_0000000m"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 3,
+"mode": "own",
+"impulse": "amenazar",
+"text": "Hugo, suelta ese martillo o te parto el otro hombro y busco yo lo que guardas en esa fragua.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000000o"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 4,
+"mode": "own",
+"impulse": "buscar",
+"text": "Agarro a Hugo por la pechera y lo arrastro hacia la puerta. Quiero ver quién hay ahí fuera con esas botas, y si es el alguacil, le parto la cara.",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000000p",
+"ev_0000000r"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 5,
+"mode": "own",
+"impulse": "buscar",
+"text": "Suelto a Hugo de un empujón y me planto en el umbral con el hacha al hombro: que salga el que tiene esas botas, que aquí no se pasea nadie sin que Ciro lo sepa.",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000000s",
+"ev_0000000u"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 6,
+"mode": "suggested",
+"impulse": null,
+"text": "Atacar a Hugo con el hacha",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000000v",
+"ev_0000000x"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 7,
+"mode": "own",
+"impulse": "buscar",
+"text": "Con el costado ardiendo, me revuelvo y le clavo el hombro en el pecho para tirarle contra el crisol. ¡Dame lo que guardas, Hugo, o acabo contigo y con tu fragua!",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000000z",
+"ev_00000011"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 8,
+"mode": "suggested",
+"impulse": null,
+"text": "Exigirle a Hugo lo que guarda",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000012"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 9,
+"mode": "own",
+"impulse": "atacar",
+"text": "Me incorporo de golpe entre los sacos, buscando el hacha con la mano. ¿Dónde está Hugo? Si ese cabrón me ha vendido, le parto la cabeza.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000002n"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 10,
+"mode": "own",
+"impulse": "amenazar",
+"text": "Ciro se levanta tambaleándose, agarra al molinero por la pechera y le susurra: si no me dices dónde está mi hacha, te arranco el garrote de los dientes.",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000002o",
+"ev_0000002q"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 11,
+"mode": "own",
+"impulse": "amenazar",
+"text": "Suelto al molinero de un empujón y me planto ante su hijo, con la mano en el hacha que no tengo. Muchacho, dime qué has visto o te parto la cara contra esa muela.",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000002s",
+"ev_0000002u"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 12,
+"mode": "own",
+"impulse": "amenazar",
+"text": "Me planto ante el hijo del molinero, le pongo la mano en el pecho y le susurro: habla ya, o la próxima vez que pise tu molino lo haré con el hacha.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000002v"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 13,
+"mode": "suggested",
+"impulse": null,
+"text": "Encarar al molinero",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000002w"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 14,
+"mode": "own",
+"impulse": "amenazar",
+"text": "Ciro avanza hacia el molinero con los puños cerrados y gruñe: Un grito más y te quedas sin dientes, viejo. Ahora dime dónde está el alguacil.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000002x"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 15,
+"mode": "own",
+"impulse": "buscar",
+"text": "Doy un paso atrás, miro al alguacil de reojo y gruño: Hugo, ¿quién está ahí fuera? Si es Osric, le parto el casco antes de que cruce la puerta.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000002y"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 16,
+"mode": "own",
+"impulse": "amenazar",
+"text": "Hugo, dime quién está ahí fuera ya, o le rompo el casco a quien pise tu puerta.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000002z"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 17,
+"mode": "own",
+"impulse": "atacar",
+"text": "Abro la puerta de un golpe con el hombro y le planto el hacha en el pecho al primero que pise el umbral: ¡Osric, sal de ahí o te parto el casco!",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000030"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 18,
+"mode": "suggested",
+"impulse": null,
+"text": "Registrar la senda con la mirada",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000031"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 19,
+"mode": "own",
+"impulse": "atacar",
+"text": "Salgo al umbral con el hacha en alto y rujo hacia la niebla: ¡Osric, enséñame la cara o te la parto contra la rueda!",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000032"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 20,
+"mode": "own",
+"impulse": "atacar",
+"text": "Hugo, si Osric no sale ya, arranco la puerta del quicio y lo saco a rastras por la niebla.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000033"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 21,
+"mode": "own",
+"impulse": "atacar",
+"text": "¡Me meto en la niebla con el hacha en alto y busco a Osric a golpes, aunque tenga que pisar a quien sea!",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000034"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 22,
+"mode": "own",
+"impulse": "buscar",
+"text": "Hugo, dime dónde está Osric o te parto la mandíbula contra ese yunque. ¡Ya!",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000035"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 23,
+"mode": "own",
+"impulse": "buscar",
+"text": "Aprieto el hacha contra el pecho, me vuelvo hacia el molinero y gruño: ¡Tú, sal de tu agujero ahora, que tú sabes quién pisó este barro esta noche!",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000036"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 24,
+"mode": "own",
+"impulse": "atacar",
+"text": "Ciro no tiene hacha: las manos vacías y llenas de harina. Me lanzo sobre el molinero y le agarro del cuello de la camisa: ¡Habla o te arranco los sacos a dentelladas!",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_00000037",
+"ev_00000039"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 25,
+"mode": "own",
+"impulse": "buscar",
+"text": "Aprieto el puño sobre su camisa y le gruño al oído: ¡Quién pisó el barro esta noche, molinero! Y si veo al alguacil asomarse, le rompo la nariz.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000003b"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 26,
+"mode": "own",
+"impulse": "buscar",
+"text": "Suelto la camisa, pero le agarro del brazo y le clavo el hacha imaginaria en la mirada: ¡Y el que sí lo sabe es el regidor, así que dime dónde se esconde!",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000003c",
+"ev_0000003e"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 27,
+"mode": "own",
+"impulse": "buscar",
+"text": "Ciro aprieta más el brazo del molinero, le clava la mirada y le escupe: ¡Tú y yo ya hablamos de sobra! Dime dónde se ha metido Osric o te llevo a la piedra de moler a cabezazos.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000003f"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 28,
+"mode": "own",
+"impulse": "buscar",
+"text": "Me vuelvo hacia la puerta del molino, sin soltarle el brazo, y gruño: ¡Ese alguacil que anda rondando, ¿es el que te paga la harina? Lo quiero ver ya!",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000003g"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 29,
+"mode": "own",
+"impulse": "atacar",
+"text": "Ciro sacude al molinero contra los sacos y le planta la frente en la cara: ¡Mentira! El alguacil no viene a por harina, viene a por mi padre, y tú me vas a decir dónde mira.",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000003h",
+"ev_0000003j"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 30,
+"mode": "own",
+"impulse": "buscar",
+"text": "Me giro hacia la puerta, aún con el puño en la camisa del molinero: ¡Que salga el alguacil a dar la cara, que tengo hambre de pelea!",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000003k"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 31,
+"mode": "suggested",
+"impulse": null,
+"text": "Apretarle más hasta que hable",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_0000003l",
+"ev_0000003n"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 32,
+"mode": "own",
+"impulse": "atacar",
+"text": "Le hundo el puño en las costillas al molinero y, cuando se doble, le arranco la camisa para que sepa quién manda aquí.",
+"ok": false,
+"rolls": 1,
+"event_ids": [
+"ev_0000003o"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 33,
+"mode": "own",
+"impulse": "atacar",
+"text": "Ciro gruñe, desenvaina el hacha y se planta entre Garrán y la puerta: ¡Un paso más y te parto el yelmo, perro del regidor!",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_0000003w"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 34,
+"mode": "own",
+"impulse": "amenazar",
+"text": "Hugo, ¿quién te paga la deuda? Dime ya qué dejó mi padre o le partiré el yelmo a Osric Malvez y a su perro.",
+"ok": true,
+"rolls": 0,
+"event_ids": [],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 35,
+"mode": "own",
+"impulse": "atacar",
+"text": "Garrán, suelta esas cuerdas o te rompo las manos con los dientes. ¡Hugo, dime ya quién te debe nada!",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000040"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 36,
+"mode": "own",
+"impulse": "amenazar",
+"text": "Garrán, eres un perro del regidor y lo sabes: si me vuelves a atar, te arranco la lengua y la clavo en la puerta de Osric.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000042"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 37,
+"mode": "own",
+"impulse": "atacar",
+"text": "Me revuelvo contra las cuerdas y escupo al suelo: ¡Garrán, desátame ya o te arranco esa barba a mordiscos antes de que cuentes hasta tres!",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000043"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 38,
+"mode": "suggested",
+"impulse": null,
+"text": "Bajar la voz y pedirle que desate solo las muñecas",
+"ok": true,
+"rolls": 1,
+"event_ids": [
+"ev_00000044",
+"ev_00000046"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 39,
+"mode": "own",
+"impulse": "amenazar",
+"text": "Garrán, si el jueves no hay plata, la próxima vez que te vea te parto las rodillas contra el banco.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000047"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+},
+{
+"i": 40,
+"mode": "own",
+"impulse": "buscar",
+"text": "Me giro hacia la puerta de la fragua, miro a Hugo de reojo y gruño: ¿Quién son esas botas que no se van? Los saco a patadas.",
+"ok": true,
+"rolls": 0,
+"event_ids": [
+"ev_00000048"
+],
+"state": {
+"done": 0,
+"steps": 0,
+"clues": 0
+}
+}
+]
+},
+"events": [
+{
+"id": "ev_00000002",
+"seq": 2,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "character_joined",
+"input_text": null,
+"narration_private": "",
+"tags": [
+"milestone:join"
+],
+"payload": {}
+},
+{
+"id": "ev_0000000f",
+"seq": 15,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "prologue",
+"input_text": null,
+"narration_private": "Estás en la herrería de Vharn, junto al banco de trabajo, con la fragua todavía caliente y el olor a hierro impregnando la ropa. Herraduras a medio hacer cuelga",
+"tags": [
+"prologue"
+],
+"payload": {
+"master": {
+"calls": []
+}
+}
+},
+{
+"id": "ev_0000000g",
+"seq": 16,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_intro",
+"input_text": null,
+"narration_private": "El calor de la fragua te da en la cara y el olor a carbón se te mete en la garganta. Junto al banco, el herrero, un hombre calvo con los brazos llenos de quemad",
+"tags": [
+"master",
+"social",
+"intro"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_hugo"
+}
+},
+{
+"id": "ev_0000000h",
+"seq": 17,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Hugo, cierra esa tranca y dime ya qué dejó mi padre, o te arranco la lengua y se la doy de comer al alguacil.",
+"narration_private": "«Hugo, cierra esa tranca y dime ya qué dejó mi padre, o te arranco la lengua y se la doy de comer al alguacil.» «Con esa boca no abro nada. Y el alguacil tampoc",
+"tags": [
+"master",
+"social",
+"threat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_hugo"
+}
+},
+{
+"id": "ev_0000000i",
+"seq": 18,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Intimidación: d20 [20] + 2 = 22 → éxito (20 natural)",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Intimidación",
+"success": true,
+"total": 22
+}
+}
+},
+{
+"id": "ev_0000000j",
+"seq": 19,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Hugo, cierra esa tranca y dime ya qué dejó mi padre, o te arranco la lengua y se la doy de comer al alguacil.",
+"narration_private": "«Hugo, cierra esa tranca y dime ya qué dejó mi padre, o te arranco la lengua y se la doy de comer al alguacil.» Hugo deja de limpiarse las manos y mira el banco",
+"tags": [
+"master",
+"social",
+"intimidation",
+"lead"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_hugo"
+}
+},
+{
+"id": "ev_0000000k",
+"seq": 20,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Agarro el hacha y la apoyo en el banco viejo. Antes de que Hugo lo toque, le pego un empujón contra la pared y le meto el mango en el pecho. ¡Cuánto debes, cabrón?",
+"narration_private": "«Hugo, ¿cuánto debes, cabrón?» Te lanzas sobre Hugo con el mango cruzado contra su pecho y lo clavas contra la pared de ladrillo, junto al calor de la fragua. «",
+"tags": [
+"master",
+"social",
+"combat",
+"crime"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "conflict_act",
+"input": {
+"kind": "shove"
+},
+"result": "{\"ok\":true,\"possible\":true,\"reason\":\"Atletismo contra el Atl"
+},
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"Estás en conversación con Hugo: la narración tiene"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_hugo"
+}
+},
+{
+"id": "ev_0000000l",
+"seq": 21,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Atletismo: d20 [6] + 5 = 11 → éxito",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Atletismo",
+"success": true,
+"total": 11
+}
+}
+},
+{
+"id": "ev_0000000m",
+"seq": 22,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Agarro el hacha y la apoyo en el banco viejo. Antes de que Hugo lo toque, le pego un empujón contra la pared y le meto el mango en el pecho. ¡Cuánto debes, cabrón?",
+"narration_private": "Con el hacha aún en la mano, le sacas a Hugo del banco y lo clavas contra la pared de ladrillo, junto al calor de la fragua. Él trastabilla, se revuelve y se la",
+"tags": [
+"master",
+"combate",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "attack",
+"input": {
+"attacker_id": "npc_hugo",
+"target_id": "ch_ciro_mwvy1gjq"
+},
+"result": "{\"attacker\":\"Hugo\",\"target\":\"Ciro\",\"weapon\":\"martillo de fra"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"Hugo ya ha dicho «Quita el mango de mi pecho, Ciro"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"La narración dice «metes» y en este turno no se ha"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_hugo"
+}
+},
+{
+"id": "ev_0000000o",
+"seq": 24,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Hugo, suelta ese martillo o te parto el otro hombro y busco yo lo que guardas en esa fragua.",
+"narration_private": "«Hugo, suelta ese martillo o te parto el otro hombro y busco yo lo que guardas en esa fragua.» Hugo no suelta el martillo. Te mira un instante con la mandíbula ",
+"tags": [
+"master",
+"combat",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "attack",
+"input": {
+"attacker_id": "npc_hugo",
+"target_id": "ch_ciro_mwvy1gjq"
+},
+"result": "{\"attacker\":\"Hugo\",\"target\":\"Ciro\",\"weapon\":\"martillo de fra"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_hugo"
+}
+},
+{
+"id": "ev_0000000p",
+"seq": 25,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Agarro a Hugo por la pechera y lo arrastro hacia la puerta. Quiero ver quién hay ahí fuera con esas botas, y si es el alguacil, le parto la cara.",
+"narration_private": "Agarras a Hugo por la pechera y tiras de él hacia la puerta, con el hacha todavía en la otra mano. Él clava los talones en el suelo de piedra y se resiste con t",
+"tags": [
+"master",
+"combat",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "conflict_act",
+"input": {
+"kind": "grab"
+},
+"result": "{\"ok\":true,\"possible\":true,\"reason\":\"Atletismo contra el Atl"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_hugo"
+}
+},
+{
+"id": "ev_0000000q",
+"seq": 26,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Atletismo: d20 [13] + 5 = 18 → éxito",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Atletismo",
+"success": true,
+"total": 18
+}
+}
+},
+{
+"id": "ev_0000000r",
+"seq": 27,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Agarro a Hugo por la pechera y lo arrastro hacia la puerta. Quiero ver quién hay ahí fuera con esas botas, y si es el alguacil, le parto la cara.",
+"narration_private": "Lo agarras del brazo y tiras de él hacia la puerta. Hugo clava los talones en la piedra, pero el hacha en tu mano y tu peso lo arrastran a trompicones. Por el p",
+"tags": [
+"master",
+"combat",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "attack",
+"input": {
+"attacker_id": "npc_hugo",
+"target_id": "ch_ciro_mwvy1gjq"
+},
+"result": "{\"attacker\":\"Hugo\",\"target\":\"Ciro\",\"weapon\":\"martillo de fra"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_0000000s",
+"seq": 28,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Suelto a Hugo de un empujón y me planto en el umbral con el hacha al hombro: que salga el que tiene esas botas, que aquí no se pasea nadie sin que Ciro lo sepa.",
+"narration_private": "«Que salga el que tiene esas botas. Aquí no se pasea nadie sin que Ciro lo sepa.» Te acercas a Hugo y le empujas con el hombro y la mano libre, apartándole del ",
+"tags": [
+"master",
+"combat",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "conflict_act",
+"input": {
+"kind": "shove"
+},
+"result": "{\"ok\":true,\"possible\":true,\"reason\":\"Atletismo contra el Atl"
+},
+{
+"name": "attack",
+"input": {
+"attacker_id": "npc_hugo",
+"target_id": "ch_ciro_mwvy1gjq"
+},
+"result": "{\"attacker\":\"Hugo\",\"target\":\"Ciro\",\"weapon\":\"martillo de fra"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_hugo"
+}
+},
+{
+"id": "ev_0000000t",
+"seq": 29,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Atletismo: d20 [1] + 5 = 6 → fallo (1 natural)",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Atletismo",
+"success": false,
+"total": 6
+}
+}
+},
+{
+"id": "ev_0000000u",
+"seq": 30,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Suelto a Hugo de un empujón y me planto en el umbral con el hacha al hombro: que salga el que tiene esas botas, que aquí no se pasea nadie sin que Ciro lo sepa.",
+"narration_private": "Lanzas el hombro contra Hugo y no le mueves: se clava en el suelo de piedra como un poste. Te quedas con el hacha al hombro y el peso desequilibrado, medio dent",
+"tags": [
+"master",
+"combat",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "attack",
+"input": {
+"attacker_id": "npc_hugo",
+"target_id": "ch_ciro_mwvy1gjq"
+},
+"result": "{\"attacker\":\"Hugo\",\"target\":\"Ciro\",\"weapon\":\"martillo de fra"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_0000000v",
+"seq": 31,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Atacar a Hugo con el hacha",
+"narration_private": "Levantas la gran hacha con las dos manos y la descargas contra Hugo, que sostiene el martillo de fragua a la altura del pecho. El filo baja hacia su hombro, sin",
+"tags": [
+"master",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_0000000w",
+"seq": 32,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Ataque con gran hacha a Hugo: d20 [16] + 5 = 21 → impacta: 9 de daño",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "ataque con gran hacha a Hugo",
+"success": true,
+"total": 21
+}
+}
+},
+{
+"id": "ev_0000000x",
+"seq": 33,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Atacar a Hugo con el hacha",
+"narration_private": "El hacha entra en el hombro de Hugo y lo hace tambalearse hacia atrás con un grito seco. Él no cae: el dolor le endurece la cara, y antes de que recuperes el pe",
+"tags": [
+"master",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "attack",
+"input": {
+"attacker_id": "npc_hugo",
+"target_id": "ch_ciro_mwvy1gjq"
+},
+"result": "{\"attacker\":\"Hugo\",\"target\":\"Ciro\",\"weapon\":\"martillo de fra"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_0000000z",
+"seq": 35,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Con el costado ardiendo, me revuelvo y le clavo el hombro en el pecho para tirarle contra el crisol. ¡Dame lo que guardas, Hugo, o acabo contigo y con tu fragua!",
+"narration_private": "Te revuelves con el costado ardiendo y te echas contra Hugo con todo el peso del cuerpo, apoyando el hombro en su pecho para llevarle hacia el crisol. Las brasa",
+"tags": [
+"master",
+"combat",
+"shove"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "conflict_act",
+"input": {
+"kind": "shove"
+},
+"result": "{\"ok\":true,\"possible\":true,\"reason\":\"Atletismo contra el Atl"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"El jugador declara un golpe («le clavo el hombro»)"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_00000010",
+"seq": 36,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Atletismo: d20 [13] + 5 = 18 → éxito",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Atletismo",
+"success": true,
+"total": 18
+}
+}
+},
+{
+"id": "ev_00000011",
+"seq": 37,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Con el costado ardiendo, me revuelvo y le clavo el hombro en el pecho para tirarle contra el crisol. ¡Dame lo que guardas, Hugo, o acabo contigo y con tu fragua!",
+"narration_private": "Te echas sobre Hugo con el hombro y lo llevas hacia atrás, hasta que sus talones topan con el borde del crisol. Trastabilla, se agarra al banco y se libra de ca",
+"tags": [
+"master",
+"combat",
+"shove"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "attack",
+"input": {
+"attacker_id": "npc_hugo",
+"target_id": "ch_ciro_mwvy1gjq"
+},
+"result": "{\"attacker\":\"Hugo\",\"target\":\"Ciro\",\"weapon\":\"martillo de fra"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_00000012",
+"seq": 38,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Exigirle a Hugo lo que guarda",
+"narration_private": "Le exiges a Hugo lo que guarda, con la hoja todavía en la mano. Él no contesta con palabras: se queda con los dientes apretados, el martillo en alto, y se lanza",
+"tags": [
+"master",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "attack",
+"input": {
+"attacker_id": "npc_hugo",
+"target_id": "ch_ciro_mwvy1gjq"
+},
+"result": "{\"attacker\":\"Hugo\",\"target\":\"Ciro\",\"weapon\":\"martillo de fra"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_hugo"
+}
+},
+{
+"id": "ev_00000013",
+"seq": 39,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "down",
+"input_text": null,
+"narration_private": "Caes al suelo, inconsciente, a 0 PG. El servidor tirará tus salvaciones contra muerte: tres éxitos te estabilizan, tres fallos te matan. Otros pueden estabiliza",
+"tags": [
+"combat",
+"death"
+],
+"payload": {}
+},
+{
+"id": "ev_00000014",
+"seq": 40,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "death_save",
+"input_text": null,
+"narration_private": "🎲 Salvación contra muerte: d20 [8] → fallo · éxitos 0/3 · fallos 1/3",
+"tags": [
+"roll",
+"death"
+],
+"payload": {}
+},
+{
+"id": "ev_00000015",
+"seq": 41,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "death_save",
+"input_text": null,
+"narration_private": "🎲 Salvación contra muerte: d20 [17] → éxito · éxitos 1/3 · fallos 1/3",
+"tags": [
+"roll",
+"death"
+],
+"payload": {}
+},
+{
+"id": "ev_00000016",
+"seq": 42,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "death_save",
+"input_text": null,
+"narration_private": "🎲 Salvación contra muerte: d20 [6] → fallo · éxitos 1/3 · fallos 2/3",
+"tags": [
+"roll",
+"death"
+],
+"payload": {}
+},
+{
+"id": "ev_00000017",
+"seq": 43,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "death_save",
+"input_text": null,
+"narration_private": "🎲 Salvación contra muerte: d20 [18] → éxito · éxitos 2/3 · fallos 2/3",
+"tags": [
+"roll",
+"death"
+],
+"payload": {}
+},
+{
+"id": "ev_00000018",
+"seq": 44,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "death_save",
+"input_text": null,
+"narration_private": "🎲 Salvación contra muerte: d20 [1] → fallo (1 natural: dos fallos)",
+"tags": [
+"roll",
+"death"
+],
+"payload": {}
+},
+{
+"id": "ev_00000019",
+"seq": 45,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "death",
+"input_text": null,
+"narration_private": "☠ Todo se apaga. Has muerto en el banco de trabajo. No es el final: volverás en el camastro dentro de 2 h reales (6 h de juego). Lo que llevabas se queda en tu ",
+"tags": [
+"death",
+"combat"
+],
+"payload": {}
+},
+{
+"id": "ev_0000002b",
+"seq": 83,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_line",
+"input_text": null,
+"narration_private": "Sientes el golpe seco del martillo de fragua contra tu cráneo, el calor de la forja pegado a tu rostro, y luego el olor a hierro y a carbón apagándose mientras ",
+"tags": [
+"death"
+],
+"payload": {
+"master": "claude-haiku-5-5"
+}
+},
+{
+"id": "ev_0000002l",
+"seq": 93,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "respawn",
+"input_text": null,
+"narration_private": "Mateo te encontró tirado en el camino y te trajo al molino a cuestas. Te ha dejado sobre los sacos de harina y no pregunta quién te ha hecho eso. Abres los ojos",
+"tags": [
+"death",
+"deterministic"
+],
+"payload": {}
+},
+{
+"id": "ev_0000002m",
+"seq": 94,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_line",
+"input_text": null,
+"narration_private": "Lo primero que sientes es el polvo de harina pegado a la garganta y el peso de unas manos que te sostuvieron sin preguntar nada.",
+"tags": [
+"death"
+],
+"payload": {
+"master": "claude-haiku-5-5"
+}
+},
+{
+"id": "ev_0000002n",
+"seq": 95,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Me incorporo de golpe entre los sacos, buscando el hacha con la mano. ¿Dónde está Hugo? Si ese cabrón me ha vendido, le parto la cabeza.",
+"narration_private": "Te incorporas de golpe y la cabeza te da vueltas. Tus dedos recorren los sacos buscando el mango del hacha y solo encuentran harina y costuras. No la tienes: tu",
+"tags": [
+"master",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"El NPC entrega lo que vende («te da») y nadie lo c"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000002o",
+"seq": 96,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Ciro se levanta tambaleándose, agarra al molinero por la pechera y le susurra: si no me dices dónde está mi hacha, te arranco el garrote de los dientes.",
+"narration_private": "«Tu hacha no está en mi molino, muchacho. Está en la herrería, donde la dejaste. Suéltame la ropa, que la harina se me cae y me cuesta más de lo que te cuesta a",
+"tags": [
+"master",
+"social",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "conflict_act",
+"input": {
+"kind": "grab"
+},
+"result": "{\"ok\":true,\"possible\":true,\"reason\":\"Atletismo contra el Atl"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000002p",
+"seq": 97,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Atletismo: d20 [14] + 5 = 19 → éxito",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Atletismo",
+"success": true,
+"total": 19
+}
+}
+},
+{
+"id": "ev_0000002q",
+"seq": 98,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Ciro se levanta tambaleándose, agarra al molinero por la pechera y le susurra: si no me dices dónde está mi hacha, te arranco el garrote de los dientes.",
+"narration_private": "Agarras al molinero por el brazo y tiras de él hacia ti. Él se revuelve con la harina cayéndole de la manga, grita pidiendo ayuda y se aparta de un tirón. El hi",
+"tags": [
+"master",
+"social",
+"combat",
+"crime"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000002s",
+"seq": 100,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Suelto al molinero de un empujón y me planto ante su hijo, con la mano en el hacha que no tengo. Muchacho, dime qué has visto o te parto la cara contra esa muela.",
+"narration_private": "«¡Quieto ahí, bestia! Como toques a mi hijo, te juro que no sales de este molino.»",
+"tags": [
+"master",
+"social",
+"combat",
+"threat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "conflict_act",
+"input": {
+"kind": "shove"
+},
+"result": "{\"ok\":true,\"possible\":true,\"reason\":\"Atletismo contra el Atl"
+},
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"La narración muestra «el desván», que está oculto "
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000002t",
+"seq": 101,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Atletismo: d20 [4] + 5 = 9 → éxito",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Atletismo",
+"success": true,
+"total": 9
+}
+}
+},
+{
+"id": "ev_0000002u",
+"seq": 102,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Suelto al molinero de un empujón y me planto ante su hijo, con la mano en el hacha que no tengo. Muchacho, dime qué has visto o te parto la cara contra esa muela.",
+"narration_private": "Lo apartas de un empujón. El molinero trastabilla hacia atrás, se le enreda un pie en un saco y cae de culo sobre la harina, que se levanta en una nube gris. Se",
+"tags": [
+"master",
+"combat",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000002v",
+"seq": 103,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Me planto ante el hijo del molinero, le pongo la mano en el pecho y le susurro: habla ya, o la próxima vez que pise tu molino lo haré con el hacha.",
+"narration_private": "«Aparta tu mano de mi chico. Un paso más hacia la escalera y llamo a la guardia, te lo juro por la harina.»",
+"tags": [
+"master",
+"social",
+"danger"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"La narración muestra «el desván», que está oculto "
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"No sigue el guion de «Cómo responde…»: Nombras «El"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000002w",
+"seq": 104,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Encarar al molinero",
+"narration_private": "«¡Atrás, bestia! Un paso más y grito hasta que salga la guardia.»",
+"tags": [
+"master",
+"social",
+"danger"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000002x",
+"seq": 105,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Ciro avanza hacia el molinero con los puños cerrados y gruñe: Un grito más y te quedas sin dientes, viejo. Ahora dime dónde está el alguacil.",
+"narration_private": "«Un grito más y te quedas sin dientes, viejo. Ahora dime dónde está el alguacil.» «¡El alguacil! ¡Que alguien llame a la guardia, que este me mata! Yo no sé dón",
+"tags": [
+"master",
+"social",
+"danger"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000002y",
+"seq": 106,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Doy un paso atrás, miro al alguacil de reojo y gruño: Hugo, ¿quién está ahí fuera? Si es Osric, le parto el casco antes de que cruce la puerta.",
+"narration_private": "«Hugo, ¿quién está ahí fuera? Si es Osric, le parto el casco antes de que cruce la puerta.» «¿Hugo? Aquí no hay más Hugo que el de tu cabeza, bestia. Nadie vien",
+"tags": [
+"master",
+"social",
+"danger"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000002z",
+"seq": 107,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Hugo, dime quién está ahí fuera ya, o le rompo el casco a quien pise tu puerta.",
+"narration_private": "«Hugo, dime quién está ahí fuera ya, o le rompo el casco a quien pise tu puerta.» El molinero se queda entre los sacos, con la harina pegada a la ropa. Tose has",
+"tags": [
+"master",
+"social",
+"danger"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_00000030",
+"seq": 108,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Abro la puerta de un golpe con el hombro y le planto el hacha en el pecho al primero que pise el umbral: ¡Osric, sal de ahí o te parto el casco!",
+"narration_private": "Cruzas los nueve metros de harina hasta la puerta y tiras de ella con el hombro. La hoja gira de golpe y el polvo gris entra en una nube por el umbral.\n\nAfuera ",
+"tags": [
+"master",
+"combat",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_00000031",
+"seq": 109,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Registrar la senda con la mirada",
+"narration_private": "Desde el umbral solo ves la senda embarrada que sale hacia la plaza, con charcos grises que reflejan un cielo sin luna. Hay huellas de botas hundidas en el barr",
+"tags": [
+"master",
+"exploration"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_00000032",
+"seq": 110,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Salgo al umbral con el hacha en alto y rujo hacia la niebla: ¡Osric, enséñame la cara o te la parto contra la rueda!",
+"narration_private": "Tu grito sale por el umbral y se pierde en la niebla. La rueda sigue chirriando, el agua gris pasa por el canal y nada le responde. Por un momento solo se oye l",
+"tags": [
+"master",
+"combat",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_00000033",
+"seq": 111,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Hugo, si Osric no sale ya, arranco la puerta del quicio y lo saco a rastras por la niebla.",
+"narration_private": "«Hugo, si Osric no sale ya, arranco la puerta del quicio y lo saco a rastras por la niebla.» Tu voz sale por el umbral, cargada de harina, y la niebla se la tra",
+"tags": [
+"master",
+"social",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"La narración muestra «el desván», que está oculto "
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_00000034",
+"seq": 112,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "¡Me meto en la niebla con el hacha en alto y busco a Osric a golpes, aunque tenga que pisar a quien sea!",
+"narration_private": "Buscas el hacha en el cinto y en las manos, y no hay nada: vienes con las manos vacías y cubiertas de harina. La senda embarrada se pierde en ella, y entre los ",
+"tags": [
+"master",
+"exploration",
+"aviso"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"La narración muestra «el desván», que está oculto "
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_00000035",
+"seq": 113,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Hugo, dime dónde está Osric o te parto la mandíbula contra ese yunque. ¡Ya!",
+"narration_private": "Tu grito da contra las vigas y vuelve sin respuesta. Las muelas siguen rechinando a trompicones y la harina cae en una lluvia fina sobre el suelo. Entre los sac",
+"tags": [
+"master",
+"social",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"La narración muestra «el desván», que está oculto "
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_00000036",
+"seq": 114,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Aprieto el hacha contra el pecho, me vuelvo hacia el molinero y gruño: ¡Tú, sal de tu agujero ahora, que tú sabes quién pisó este barro esta noche!",
+"narration_private": "«Yo no sé quién pisa el barro de noche, y aunque lo supiera, no lo diría delante de ti. Lárgate de mi molino.»",
+"tags": [
+"master",
+"social",
+"danger"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"el molinero ya ha dicho «Que alguien llame a la gu"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_00000037",
+"seq": 115,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Ciro no tiene hacha: las manos vacías y llenas de harina. Me lanzo sobre el molinero y le agarro del cuello de la camisa: ¡Habla o te arranco los sacos a dentelladas!",
+"narration_private": "«Habla o te arranco los sacos a dentelladas.» Cruzas la sala entre los sacos y le agarras del cuello de la camisa, con las manos enharinadas. El molinero se enc",
+"tags": [
+"master",
+"social",
+"conflict"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "conflict_act",
+"input": {
+"kind": "grab"
+},
+"result": "{\"ok\":true,\"possible\":true,\"reason\":\"Atletismo contra el Atl"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"El jugador declara un golpe («me lanzo sobre») y e"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_00000038",
+"seq": 116,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Atletismo: d20 [9] + 5 = 14 → éxito",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Atletismo",
+"success": true,
+"total": 14
+}
+}
+},
+{
+"id": "ev_00000039",
+"seq": 117,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Ciro no tiene hacha: las manos vacías y llenas de harina. Me lanzo sobre el molinero y le agarro del cuello de la camisa: ¡Habla o te arranco los sacos a dentelladas!",
+"narration_private": "Tus dedos se cierran sobre la camisa enharinada y tiras de él hacia ti. El molinero cae de rodillas entre los sacos, con la cara a un palmo de la tuya, y no opo",
+"tags": [
+"master",
+"social",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"el molinero ya ha dicho «Que alguien llame a la gu"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003b",
+"seq": 119,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Aprieto el puño sobre su camisa y le gruño al oído: ¡Quién pisó el barro esta noche, molinero! Y si veo al alguacil asomarse, le rompo la nariz.",
+"narration_private": "«¡Quién pisó el barro esta noche, molinero! Y si veo al alguacil asomarse, le rompo la nariz.» Mantienes el puño cerrado sobre la camisa enharinada. El molinero",
+"tags": [
+"master",
+"social",
+"danger",
+"threat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003c",
+"seq": 120,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Suelto la camisa, pero le agarro del brazo y le clavo el hacha imaginaria en la mirada: ¡Y el que sí lo sabe es el regidor, así que dime dónde se esconde!",
+"narration_private": "Le agarras del brazo, apretando, con la mirada clavada en él. El molinero no retira el brazo todavía. «Al regidor no lo encuentra nadie en mi molino, ni yo que ",
+"tags": [
+"master",
+"social",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "conflict_act",
+"input": {
+"kind": "grab"
+},
+"result": "{\"ok\":true,\"possible\":true,\"reason\":\"Atletismo contra el Atl"
+},
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"El jugador declara un golpe («le clavo el hacha») "
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"Estás en conversación con el molinero: la narració"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003d",
+"seq": 121,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Atletismo: d20 [8] + 5 = 13 → éxito",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Atletismo",
+"success": true,
+"total": 13
+}
+}
+},
+{
+"id": "ev_0000003e",
+"seq": 122,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Suelto la camisa, pero le agarro del brazo y le clavo el hacha imaginaria en la mirada: ¡Y el que sí lo sabe es el regidor, así que dime dónde se esconde!",
+"narration_private": "Tus dedos aprietan el brazo del molinero y él deja de forcejear. Le queda la cara gris de harina y de miedo, y la tos le sale entre los dientes. Sus ojos se van",
+"tags": [
+"master",
+"social",
+"conflict"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003f",
+"seq": 123,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Ciro aprieta más el brazo del molinero, le clava la mirada y le escupe: ¡Tú y yo ya hablamos de sobra! Dime dónde se ha metido Osric o te llevo a la piedra de moler a cabezazos.",
+"narration_private": "«Dime dónde se ha metido Osric o te llevo a la piedra de moler a cabezazos.» «Yo no sé dónde se esconde ningún regidor, y aunque lo supiera, no lo diría con el ",
+"tags": [
+"master",
+"social",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003g",
+"seq": 124,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Me vuelvo hacia la puerta del molino, sin soltarle el brazo, y gruño: ¡Ese alguacil que anda rondando, ¿es el que te paga la harina? Lo quiero ver ya!",
+"narration_private": "«¿Alguacil? Aquí no paga nadie la harina que yo muelo, y menos un alguacil. Suéltame el brazo, bestia, o grito hasta que baje el pozo entero.»",
+"tags": [
+"master",
+"social",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003h",
+"seq": 125,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Ciro sacude al molinero contra los sacos y le planta la frente en la cara: ¡Mentira! El alguacil no viene a por harina, viene a por mi padre, y tú me vas a decir dónde mira.",
+"narration_private": "«¡Mentira! El alguacil no viene a por harina, viene a por mi padre, y tú me vas a decir dónde mira.» Lo agarras por la camisa enharinada y lo empujas contra los",
+"tags": [
+"master",
+"combat",
+"social",
+"assault"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003i",
+"seq": 126,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Ataque con puños al molinero: d20 [7] + 5 = 12 → impacta: 4 de daño",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "ataque con puños a Mateo",
+"success": true,
+"total": 12
+}
+}
+},
+{
+"id": "ev_0000003j",
+"seq": 127,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Ciro sacude al molinero contra los sacos y le planta la frente en la cara: ¡Mentira! El alguacil no viene a por harina, viene a por mi padre, y tú me vas a decir dónde mira.",
+"narration_private": "Le cierras el puño sobre la camisa y el golpe le sale seco, contra las costillas. El molinero se dobla sobre los sacos y se le escapa un ruido que no es tos. La",
+"tags": [
+"master",
+"combat",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003k",
+"seq": 128,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Me giro hacia la puerta, aún con el puño en la camisa del molinero: ¡Que salga el alguacil a dar la cara, que tengo hambre de pelea!",
+"narration_private": "«¡Que salga el alguacil a dar la cara, que tengo hambre de pelea!» «¡Gente del pozo! ¡Aquí, al molino, que me mata! ¡Socorro!»",
+"tags": [
+"master",
+"social",
+"combat",
+"danger"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003l",
+"seq": 129,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Apretarle más hasta que hable",
+"narration_private": "«Me ahogas, bestia. Mira el arcón, si quieres algo de valor. Yo no tengo más que harina.»",
+"tags": [
+"master",
+"combat",
+"social"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "conflict_act",
+"input": {
+"kind": "grab"
+},
+"result": "{\"ok\":true,\"possible\":true,\"reason\":\"Atletismo contra el Atl"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003m",
+"seq": 130,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Atletismo: d20 [11] + 5 = 16 → éxito",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Atletismo",
+"success": true,
+"total": 16
+}
+}
+},
+{
+"id": "ev_0000003n",
+"seq": 131,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Apretarle más hasta que hable",
+"narration_private": "Cierras la mano sobre el brazo del molinero y lo sujetas contra los sacos. Él se retuerce, pero no logra zafarse; la tos le sale entrecortada y la harina le cae",
+"tags": [
+"master",
+"social",
+"combat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_mateo"
+}
+},
+{
+"id": "ev_0000003o",
+"seq": 132,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Le hundo el puño en las costillas al molinero y, cuando se doble, le arranco la camisa para que sepa quién manda aquí.",
+"narration_private": "Cierras el puño y te preparas para hundirlo en las costillas del molinero, que aún te sostiene la mirada entre los sacos.",
+"tags": [
+"master",
+"combat",
+"crime"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "conflict_act",
+"input": {
+"kind": "steal"
+},
+"result": "{\"ok\":true,\"resolved\":true,\"item\":\"ropa de diario\",\"instance"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"El jugador declara un golpe («le hundo el puno») y"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_0000003v",
+"seq": 139,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "arrest",
+"input_text": null,
+"narration_private": "Garrán se te planta delante: «¡Alto! Quedas detenido.» Te acusa de esto: el jornalero atacó a Hugo (gran hacha) en el banco de trabajo (La herrería). Si te entr",
+"tags": [
+"crime",
+"law",
+"deterministic"
+],
+"payload": {
+"npc_id": "npc_garran"
+}
+},
+{
+"id": "ev_0000003w",
+"seq": 140,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Ciro gruñe, desenvaina el hacha y se planta entre Garrán y la puerta: ¡Un paso más y te parto el yelmo, perro del regidor!",
+"narration_private": "Garrán no retrocede. Mira el hacha, luego a ti, y levanta la maza hasta el hombro. El molinero sale corriendo a avisar a Garrán. El hijo del molinero se queda j",
+"tags": [
+"master",
+"social",
+"combat",
+"law"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"No sigue el guion de «Cómo responde…»: Nombras «El"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"Acaba de pasar algo que el motor ya ha decidido: e"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"error\":\"Acaba de pasar algo que el motor ya ha decidido: e"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_garran"
+}
+},
+{
+"id": "ev_0000003x",
+"seq": 141,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "seized",
+"input_text": "Hugo, ¿quién te paga la deuda? Dime ya qué dejó mi padre o le partiré el yelmo a Osric Malvez y a su perro.",
+"narration_private": "Garrán ya te ha avisado una vez y no te deja seguir. Garrán te agarra del brazo, te lo retuerce a la espalda y te ata las manos. Te lleva a empujones al calaboz",
+"tags": [
+"crime",
+"law",
+"deterministic"
+],
+"payload": {
+"npc_id": "npc_garran"
+}
+},
+{
+"id": "ev_00000040",
+"seq": 144,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Garrán, suelta esas cuerdas o te rompo las manos con los dientes. ¡Hugo, dime ya quién te debe nada!",
+"narration_private": "Garrán no se inmuta. Tira del nudo de la cuerda hasta que te corta las muñecas, y te deja la cara contra la pared húmeda. Huele a cebolla y a cuero mojado. Desd",
+"tags": [
+"master",
+"social",
+"danger"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_garran"
+}
+},
+{
+"id": "ev_00000042",
+"seq": 146,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Garrán, eres un perro del regidor y lo sabes: si me vuelves a atar, te arranco la lengua y la clavo en la puerta de Osric.",
+"narration_private": "Te acercas al banco de espera. «Garrán, eres un perro del regidor y lo sabes: si me vuelves a atar, te arranco la lengua y la clavo en la puerta de Osric.» Lo d",
+"tags": [
+"master",
+"social",
+"threat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "get_npc",
+"input": {},
+"result": "{\"id\":\"npc_garran\",\"name\":\"Garrán\",\"role\":\"alguacil y recaud"
+},
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_garran"
+}
+},
+{
+"id": "ev_00000043",
+"seq": 147,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Me revuelvo contra las cuerdas y escupo al suelo: ¡Garrán, desátame ya o te arranco esa barba a mordiscos antes de que cuentes hasta tres!",
+"narration_private": "«¿Morderme a mí? Ya te llevaste a Hugo por delante con el hacha, y ahora me vienes con dientes. Otra palabra y la maza te los cuenta uno a uno.»",
+"tags": [
+"master",
+"social",
+"threat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_garran"
+}
+},
+{
+"id": "ev_00000044",
+"seq": 148,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Bajar la voz y pedirle que desate solo las muñecas",
+"narration_private": "«Solo las muñecas, Garrán. Desátame solo las muñecas y no te pido nada más.» Te inclinas hacia la reja, con la voz baja, y las muñecas tirando de la cuerda. Gar",
+"tags": [
+"master",
+"social",
+"persuasion"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_garran"
+}
+},
+{
+"id": "ev_00000045",
+"seq": 149,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "roll",
+"input_text": null,
+"narration_private": "🎲 Persuasión: d20 [18] + 0 = 18 → éxito",
+"tags": [
+"roll"
+],
+"payload": {
+"roll": {
+"label": "Persuasión",
+"success": true,
+"total": 18
+}
+}
+},
+{
+"id": "ev_00000046",
+"seq": 150,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master_roll_outcome",
+"input_text": "Bajar la voz y pedirle que desate solo las muñecas",
+"narration_private": "Garrán se levanta sin prisa, se acerca a la reja y afloja el nudo hasta que las muñecas quedan libres, aunque la cuerda ha dejado marcas. Vuelve al banco sin mi",
+"tags": [
+"master",
+"social",
+"milestone"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_garran"
+}
+},
+{
+"id": "ev_00000047",
+"seq": 151,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Garrán, si el jueves no hay plata, la próxima vez que te vea te parto las rodillas contra el banco.",
+"narration_private": "«Otra amenaza más, Ciro, y van dos en esta noche. Apunto la tuya junto a la deuda de tu padre. El jueves pagará Hugo, y si no paga, la cuenta la pagas tú en ese",
+"tags": [
+"master",
+"social",
+"threat"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "npc_trust",
+"input": {},
+"result": "{\"ok\":true,\"trust\":\"extraño\"}"
+},
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+},
+"npc_id": "npc_garran"
+}
+},
+{
+"id": "ev_00000048",
+"seq": 152,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "master",
+"input_text": "Me giro hacia la puerta de la fragua, miro a Hugo de reojo y gruño: ¿Quién son esas botas que no se van? Los saco a patadas.",
+"narration_private": "Desde el calabozo, tras la reja, no ves la puerta de la fragua ni a Hugo: el banco de espera de la casona da al zaguán, y la herrería queda al otro lado del pue",
+"tags": [
+"master",
+"social",
+"clarification"
+],
+"payload": {
+"master": {
+"calls": [
+{
+"name": "log_event",
+"input": {},
+"result": "{\"ok\":true,\"closed\":true}"
+}
+]
+}
+}
+},
+{
+"id": "ev_0000004w",
+"seq": 176,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "released",
+"input_text": null,
+"narration_private": "Se abre la puerta del calabozo: has cumplido y eres libre. Lo que hiciste no se olvida.",
+"tags": [
+"crime",
+"law",
+"deterministic"
+],
+"payload": {}
+},
+{
+"id": "ev_000000da",
+"seq": 478,
+"actor_id": "ch_ciro_mwvy1gjq",
+"action_type": "progress_story",
+"input_text": null,
+"narration_private": "En estos días no has cerrado ningún asunto en Brezal. Nadie ha decidido todavía qué hacer con el ascua de Ysolde, y aún se puede. Sigue pendiente: «Lo que dejó ",
+"tags": [
+"progress",
+"story"
+],
+"payload": {}
+}
+]
+}

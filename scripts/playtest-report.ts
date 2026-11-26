@@ -104,7 +104,7 @@ export function pairMetrics(g: GameSummary, events: readonly GameEvent[]): GameM
     const calls = ((e.payload['master'] as { calls?: { name: string; input?: { character_id?: string } }[] }).calls ?? []);
     const mine = calls.some((c) => c.name === 'report_incident' && c.input?.character_id === pc);
     const inputs = e.payload['group_inputs'] as Record<string, string> | undefined;
-    return mine && inputs && !ATTACK_VERB.test(inputs[pc] ?? '') && Object.entries(inputs).some(([id, t]) => id !== pc && ATTACK_VERB.test(t));
+    return mine && inputs && !declaresStrike(inputs[pc] ?? '') && Object.entries(inputs).some(([id, t]) => id !== pc && declaresStrike(t));
   }).length;
   return { partner: g.pair.partner, partner_profile: g.pair.partner_profile, together: g.pair.together, chats: g.pair.chats, reactions: g.pair.reactions, shared_turns: shared.length, shared_without_part: without_part, shared_without_common: without_common, crimes_as_other };
 }
@@ -232,13 +232,34 @@ export function analyzeGame(g: GameSummary, events: readonly GameEvent[], state:
 // Métricas del plan (docs/PLAN-ARREGLOS-PLAYTEST.md) sobre las primeras acciones
 // ---------------------------------------------------------------------------
 
-/** Declarar un golpe: las palabras con las que el jugador pega, no con las que amenaza. */
-export const ATTACK_VERB = /\b(ataco|golpeo|le pego|pego a|apu[nñ]alo|clavo|hundo|estampo|le parto|te parto|rajo|disparo|lanzo el golpe|le doy un pu[nñ]etazo|descargo|arremeto|me abalanzo|embisto)\b/i;
+/**
+ * Declarar un golpe: las palabras con las que el jugador pega ahora, no con las que amenaza. Antes contaba «te parto el
+ * yelmo» y no veía «le planta la frente» (informe del 25-11, H2 y H6). Se mira frase a frase (`declaresStrike`).
+ */
+const HIT = String.raw`(pu[nñ]os?|hacha|mango|espada|daga|cuchillo|martillo|maza|garrote|bast[oó]n|lanza|frente|cabeza|rodilla|codo|hombro|pie|bota|tajo|golpe|pu[nñ]etazo|cabezazo|rodillazo|codazo|hachazo|patada|bofet[oó]n|guantazo|mamporro|empuj[oó]n|estocada|flecha|virote|saeta)`;
+// Límites de palabra con letras acentuadas: \b de JS no ve «ñ» ni «ó» como letra.
+export const ATTACK_VERB = new RegExp(String.raw`(?<!\p{L})(${[
+  String.raw`ataco|atacar|ataca|golpeo|golpear|golpea|apu[nñ]alo|apu[nñ]ala|apu[nñ]alar|acuchillo|embisto|embiste|arremeto|arremete|disparo|dispara|disparar`,
+  String.raw`(le|la|lo) (pego|pega|parto|parte|rompo|rompe|rajo|raja|tumbo|tumba)`,
+  String.raw`pego a`,
+  String.raw`me (abalanzo|lanzo|tiro) (sobre|contra)`,
+  String.raw`(clavo|clava|hundo|hunde|meto|mete|planto|planta|estampo|estampa|estrello|estrella|doy|da|suelto|suelta|arreo|arrea|atizo|atiza|asesto|asesta|lanzo|lanza|descargo|descarga) (el|la|los|las|un|una|mi|mis|su|sus) (\p{L}+ )?${HIT}`,
+].join('|')})(?!\p{L})`, 'iu');
+/** Lo que convierte la frase en amenaza o hipótesis: condicionales («si»), alternativas («o»), comparaciones («como») y lo figurado. */
+const NOT_A_STRIKE = /(?<!\p{L})(si|o|u|como|imaginari\p{L}*|mirada|amenaz\p{L}*|finjo|amago)(?!\p{L})/iu;
+/** A quien se habla con «te» no se le pega: se le amenaza («te parto la cara»). */
+const SPOKEN = /(?<!\p{L})te (parto|rompo|arranco|clavo|meto|reviento|mato|abro|doy|pego|hundo|planto)(?!\p{L})/iu;
+
+/** ¿La acción declara un golpe? Frase a frase (lo dicho entre comillas o tras dos puntos va aparte), sin condicionales ni amenazas. */
+export function declaresStrike(text: string): boolean {
+  return text.split(/[.;:!?¡¿«»"“”\n]+|\s[-–—]\s/).some((f) => ATTACK_VERB.test(f) && !NOT_A_STRIKE.test(f) && !SPOKEN.test(f));
+}
 const SOCIAL_ROLL = /Persuasi|Enga|Intimid|Interpret|Perspic/i;
 
 export interface WindowMetrics {
   profile: string; actions: number; steps: number; done: number; clues: number; npc_run: number; refusals: number; rolls: number; social_rolls: number;
-  attack_verbs: number; attack_verbs_rolled: number; npc_attacks: number; downs: number; master_turns: number; rejected_turns: number; final: string | null;
+  /** Golpes declarados por el PJ (sin amenazas ni condicionales), los que pasaron por tirada de ataque y los resueltos como maniobra (`conflict_act`). */
+  attack_verbs: number; attack_verbs_rolled: number; attack_verbs_maneuver: number; npc_attacks: number; downs: number; master_turns: number; rejected_turns: number; final: string | null;
 }
 
 /** Lo que mide el plan, en las primeras `n` acciones de una partida (las misiones, sin contar las que ya traía si empezó preparada). */
@@ -256,18 +277,24 @@ export function windowMetrics(g: GameSummary, events: readonly GameEvent[], n: n
     if (!npc || !e.input_text) continue;
     run = npc === cur ? run + 1 : 1; cur = npc; best = Math.max(best, run);
   }
-  const verbs = actions.filter((a) => ATTACK_VERB.test(a.text));
+  const calls = (e: GameEvent) => (e.payload['master'] as { calls?: { name: string; result: unknown; input?: Record<string, unknown> }[] } | null | undefined)?.calls ?? [];
+  const ok = (c: { result: unknown }) => !String(c.result).startsWith('{"error"');
+  const byId = new Map(events.map((e) => [e.id, e]));
+  // Un golpe pasa por tirada si en su turno hay una tirada de ataque del PJ o un `attack` con él de atacante.
+  const verbs = actions.filter((a) => declaresStrike(a.text));
+  const turnCalls = (a: PlayerTurn) => a.event_ids.flatMap((id) => { const e = byId.get(id); return e ? calls(e) : []; });
   const rolled = verbs.filter((a) => {
     const seqs = a.event_ids.map((id) => seqOf.get(id) ?? 0);
-    return seqs.length > 0 && rolls.some((r) => /^ataque/i.test(roll(r)) && r.seq >= Math.min(...seqs) && r.seq <= Math.max(...seqs));
+    const rolledAttack = seqs.length > 0 && rolls.some((r) => /^ataque/i.test(roll(r)) && r.seq >= Math.min(...seqs) && r.seq <= Math.max(...seqs));
+    return rolledAttack || turnCalls(a).some((c) => c.name === 'attack' && ok(c) && c.input?.['attacker_id'] === pc);
   });
-  const calls = (e: GameEvent) => (e.payload['master'] as { calls?: { name: string; result: unknown }[] } | null | undefined)?.calls ?? [];
+  const maneuver = verbs.filter((a) => !rolled.includes(a) && turnCalls(a).some((c) => c.name === 'conflict_act' && ok(c) && /^(shove|grab|trip|disarm)$/.test(String(c.input?.['kind'] ?? ''))));
   const masters = own.filter((e) => calls(e).length > 0);
   const end = actions.at(-1)?.state;
   return {
     profile: g.profile ?? String(g.n), actions: actions.length, steps: end?.steps ?? 0, done: (end?.done ?? 0) - (g.start_done ?? 0), clues: end?.clues ?? 0,
     npc_run: best, refusals: own.filter((e) => REFUSAL.test(e.narration_private ?? '')).length, rolls: rolls.length, social_rolls: rolls.filter((r) => SOCIAL_ROLL.test(roll(r))).length,
-    attack_verbs: verbs.length, attack_verbs_rolled: rolled.length, npc_attacks: own.flatMap(calls).filter((c) => c.name === 'attack').length, downs: own.filter((e) => e.action_type === 'down').length,
+    attack_verbs: verbs.length, attack_verbs_rolled: rolled.length, attack_verbs_maneuver: maneuver.length, npc_attacks: own.flatMap(calls).filter((c) => c.name === 'attack' && c.input?.['attacker_id'] !== pc).length, downs: own.filter((e) => e.action_type === 'down').length,
     master_turns: masters.length, rejected_turns: masters.filter((e) => calls(e).some((c) => String(c.result).startsWith('{"error"'))).length, final: g.final_quest ?? null,
   };
 }
@@ -277,9 +304,10 @@ export function buildWindowSection(n: number, rows: readonly WindowMetrics[], ba
   const cell = (r: WindowMetrics, f: (x: WindowMetrics) => string) => { const b = base.find((x) => x.profile === r.profile); return b ? `${f(b)} → ${f(r)}` : f(r); };
   const share = (x: WindowMetrics) => `${x.master_turns ? Math.round((x.rejected_turns / x.master_turns) * 100) : 0} %`;
   const out = [`## Métricas del plan en las primeras ${n} acciones`, '', base.length ? 'Cada casilla: tanda de referencia → esta tanda.' : '', '',
-    '| Perfil | Mayor racha con un NPC | Negativas | Tiradas sociales | Misiones | Pasos | Pistas | Verbos de ataque con tirada | Ataques de NPC | A 0 PG | Turnos con rechazo | Final |', '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|'];
-  for (const r of rows) out.push(`| ${r.profile} | ${cell(r, (x) => String(x.npc_run))} | ${cell(r, (x) => String(x.refusals))} | ${cell(r, (x) => String(x.social_rolls))} | ${cell(r, (x) => String(x.done))} | ${cell(r, (x) => String(x.steps))} | ${cell(r, (x) => String(x.clues))} | ${cell(r, (x) => `${x.attack_verbs_rolled} de ${x.attack_verbs}`)} | ${cell(r, (x) => String(x.npc_attacks))} | ${cell(r, (x) => String(x.downs))} | ${cell(r, share)} | ${r.final ?? '—'} |`);
+    '| Perfil | Mayor racha con un NPC | Negativas | Tiradas sociales | Misiones | Pasos | Pistas | Golpes con tirada de ataque | Ataques de NPC | A 0 PG | Turnos con rechazo | Final |', '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|'];
+  for (const r of rows) out.push(`| ${r.profile} | ${cell(r, (x) => String(x.npc_run))} | ${cell(r, (x) => String(x.refusals))} | ${cell(r, (x) => String(x.social_rolls))} | ${cell(r, (x) => String(x.done))} | ${cell(r, (x) => String(x.steps))} | ${cell(r, (x) => String(x.clues))} | ${cell(r, (x) => `${x.attack_verbs_rolled} de ${x.attack_verbs}${x.attack_verbs_maneuver ? ` (+${x.attack_verbs_maneuver} maniobra)` : ''}`)} | ${cell(r, (x) => String(x.npc_attacks))} | ${cell(r, (x) => String(x.downs))} | ${cell(r, share)} | ${r.final ?? '—'} |`);
   const pct = (xs: readonly WindowMetrics[]) => { const t = xs.reduce((a, x) => a + x.master_turns, 0); return t ? Math.round((xs.reduce((a, x) => a + x.rejected_turns, 0) / t) * 100) : 0; };
+  out.push('', '«Golpes con tirada de ataque»: acciones del PJ que declaran un golpe (sin amenazas, «si», «o» ni «como») y cuántas pasaron por una tirada de ataque o un `attack` suyo; «maniobra», las resueltas con `conflict_act` (empujar, agarrar, derribar, desarmar).');
   out.push('', `Turnos con rechazo del máster, en conjunto: ${base.length ? `${pct(base)} % → ` : ''}${pct(rows)} %.`, '');
   return out.join('\n');
 }
