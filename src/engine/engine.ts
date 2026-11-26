@@ -22,7 +22,7 @@ import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswe
 
 import { npcSees, witnesses } from './perception.js';
 
-import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, reactionExplain, reactionReply, readsAsAccept, readsAsResist } from './reactions.js';
+import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, pcActionTarget, reactionExplain, reactionReply, readsAsAccept, readsAsResist } from './reactions.js';
 
 import { TURN_WINDOW_MS, windowClashes, type Clash } from './turnwindow.js';
 
@@ -974,7 +974,8 @@ export class Engine {
     const t0 = text.trim();
     const give = parseGive(t0);
     const party = parseParty(t0);
-    const betweenPcs = (c.status === 'active' && parseReaction(this.world, c, t0)) || (give && findPresentPc(this.world, c, give.to)) || (party && (party.kind === 'unfollow' || findPresentPc(this.world, c, party.who)));
+    // Robarle, agarrarle o empujarle a otro PJ que nombra (reactions.ts, pcActionTarget): ni charla de grupo ni vecino.
+    const betweenPcs = (c.status === 'active' && pcActionTarget(this.world, c, t0)) || (give && findPresentPc(this.world, c, give.to)) || (party && (party.kind === 'unfollow' || findPresentPc(this.world, c, party.who)));
     const scene = betweenPcs || parseRest(t0) || this.isDeathAction(c, t0) ? null : this.sceneRoute(c, t0);
     if (scene) return scene;
     // Varios a la vez (turnwindow.ts): lo que manden otros PJ del sitio en unos segundos va al máster en la misma llamada.
@@ -1005,7 +1006,10 @@ export class Engine {
       if (c.following && (travel || this.isMove(c, clean))) { c.following = null; this.world.touch('characters', c.id); }
       // La ley delante (crime.ts): entregarse o resistirse a un alto; y lo que el motor ve como crimen antes de que narre el máster.
       const law = this.tryConfront(c, clean) ?? this.tryLaw(c, clean);
-      const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryExtraTalk(c, clean) ?? await this.tryTrivial(c, clean));
+      // Lo que le hace a otro PJ con las manos y no reconoce tryReaction (robarle a escondidas, «le birlo la bolsa a
+      // Ciro») va al máster, que pide la reacción: ni encargos, ni charla con un vecino, ni atajos sin máster (arreglo 7).
+      const atPc = c.status === 'active' && pcActionTarget(this.world, c, clean) !== null;
+      const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? (atPc ? null : await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryExtraTalk(c, clean) ?? await this.tryTrivial(c, clean)));
       if (fast) {
         r = fast;
       } else if (this.master && c.status === 'active' && !this.isMechanical(c, clean)) {

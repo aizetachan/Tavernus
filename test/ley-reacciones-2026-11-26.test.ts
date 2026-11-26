@@ -10,7 +10,12 @@ import { executeTool, type ToolContext } from '../src/ai/tools.js';
 import { seededRng } from '../src/engine/dice.js';
 import type { Engine, MasterLike, ReactionOutcome } from '../src/engine/engine.js';
 import type { Delivery } from '../src/engine/events.js';
-import { reactionReply } from '../src/engine/reactions.js';
+import { pcActionTarget, reactionReply } from '../src/engine/reactions.js';
+import { authoredSeed } from '../src/data/campaigns/index.js';
+import { Engine as EngineClass } from '../src/engine/engine.js';
+import { MemoryRepository } from '../src/persistence/memory.js';
+import { setNpcOrder } from '../src/engine/npcorders.js';
+import { conversationCheck } from '../src/engine/conversation.js';
 import { bootEngine, fakeTime } from './helpers.js';
 
 function collect(engine: Engine) {
@@ -134,5 +139,49 @@ describe('(18) robo a otro jugador: la enfrentada oculta decide', () => {
     const r = await engine.answerReaction(mira.id, mira.reactions![0]!.id, 'accept');
     expect(r.event!.payload['reaction']).toMatchObject({ success: true });
     expect(spy.at(-1)!.breakdown).toMatch(/RESULTADO \(hecho del servidor\): Kael lo consigue, sin tirada/);
+  });
+});
+
+describe('(7) robarle a otro jugador va al máster, no a la charla sin máster', () => {
+  /** Brezal en la mesa del fondo del Jabalí: Bruno (pícaro), Ciro (el otro jugador) y Ciro el jornalero, el vecino del mismo nombre. */
+  async function jabali() {
+    const EPOCH = Date.UTC(2026, 9, 22, 12, 0, 0);
+    const time = fakeTime(EPOCH);
+    const engine = await EngineClass.boot({ repo: new MemoryRepository(), campaignId: 'brezal', seed: authoredSeed('brezal', { now: new Date(EPOCH) }), now: time.now, deterministic: true, fastTravel: false, rng: () => 0.5 });
+    const mk = async (user: string, name: string, klass: string) => { const r = await engine.createCharacter(user, name, { class_id: klass }); if (!r.ok) throw new Error(r.reason); return r.character; };
+    const bruno = await mk('u_bruno', 'Bruno', 'rogue');
+    const ciro = await mk('u_ciro', 'Ciro', 'fighter');
+    for (const c of [bruno, ciro]) { c.location = { type: 'spot', id: 'sp_tab_mesa' }; engine.setConnected(c.id, true); }
+    const vecino = engine.world.npc('npc_x_ciro');
+    vecino.location = { type: 'spot', id: 'sp_tab_mesa' };
+    setNpcOrder(engine.world, { npc_id: vecino.id, order: 'go', spot_id: 'sp_tab_mesa', minutes: 600 }, engine.gameNow());
+    return { engine, bruno, ciro, vecino };
+  }
+
+  it('pareja 1115, acción 9: «me deslizo tras Ciro y le birlo la bolsa» lo recibe el máster (con el otro jugador como objetivo), no el vecino', async () => {
+    const { engine, bruno, ciro } = await jabali();
+    const text = 'Me deslizo tras Ciro y le birlo la bolsa de cuero mientras aparenta mirar a Brenna. Si se da cuenta, finjo que quería ayudarle a contar.';
+    expect(pcActionTarget(engine.world, bruno, text)?.id).toBe(ciro.id);
+    const spy = spyMaster(engine);
+    const from = engine.events.all().at(-1)?.seq ?? 0;
+    await engine.act(bruno.id, text);
+    expect(spy.map((x) => x.text)).toContain(text);
+    // Ningún vecino contesta sin máster.
+    expect(engine.events.all().filter((e) => e.seq > from && e.tags.includes('extra'))).toHaveLength(0);
+  });
+
+  it('lo que no es contra él, sigue su camino: hablar con Ciro o con el vecino no es una acción contra un jugador', async () => {
+    const { engine, bruno } = await jabali();
+    expect(pcActionTarget(engine.world, bruno, 'Le pregunto a Ciro qué tal la cena')).toBeNull();
+    expect(pcActionTarget(engine.world, bruno, 'le robo la bolsa a Brenna')).toBeNull();
+    expect(pcActionTarget(engine.world, bruno, 'empujo a Ciro contra la mesa')?.name).toBe('Ciro');
+  });
+
+  it('el cierre que pide la reacción no es un turno de charla: el tope de palabras de la conversación no lo rechaza', () => {
+    const conv = { npc_id: 'npc_x_ciro', turns: 3, npc_spoke: true, gestures: [] };
+    const long = 'Te inclinas hacia Ciro como si fueras a confiarle algo, con la sonrisa de quien cuenta un chisme, y deslizas la mano hacia la bolsa de cuero que le cuelga del cinto, despacio, entre el ruido de las jarras y las risas de la mesa de al lado, sin que nadie parezca mirar.';
+    const lines = [{ speaker: 'npc' as const, npc_id: 'npc_x_ciro', text: 'Déjalo.' }];
+    expect(conversationCheck({ conversation: conv, narration: long, lines, npcId: 'npc_x_ciro', okTools: [] })?.kind).toBe('long');
+    expect(conversationCheck({ conversation: conv, narration: long, lines, npcId: 'npc_x_ciro', okTools: ['request_reaction'] })).toBeNull();
   });
 });

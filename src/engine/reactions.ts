@@ -13,6 +13,7 @@
  */
 
 import { normalize } from './aliases.js';
+import { conflictKindOf } from './conflict.js';
 import type { Advantage, CheckResult, Rng } from './dice.js';
 import { parseTrivial } from './fastpath.js';
 import type { Character, Id, Reaction, ReactionKind } from './model.js';
@@ -87,6 +88,21 @@ export function parseReaction(world: World, actor: Character, text: string): Rea
     return { kind, target: o, attempt: attemptText(world, kind, dest, prone), dest_spot_id: dest, prone };
   }
   return null;
+}
+
+/**
+ * ¿Le hace el actor algo con las manos a otro PJ presente al que nombra? Robarle, arrebatarle, agarrarle, empujarle o
+ * tocarle sin permiso (conflict.ts lee el verbo) o lo que reconoce parseReaction. Devuelve ese PJ, o null. Eso no lo
+ * contesta el motor sin máster (charla con un vecino, atajos): va al máster, que pide la reacción (request_reaction).
+ * Pareja 1115, acción 9: «Me deslizo tras Ciro y le birlo la bolsa…» lo contestó Ciro el jornalero, un vecino con el
+ * mismo nombre que el otro jugador, sin máster y sin robo.
+ */
+export function pcActionTarget(world: World, actor: Character, text: string): Character | null {
+  const direct = parseReaction(world, actor, text);
+  if (direct) return direct.target;
+  if (!conflictKindOf(text)) return null;
+  const t = ` ${plain(text).replace(/[^a-zñ0-9]+/g, ' ')} `;
+  return presentOthers(world, actor).find((o) => { const n = plain(o.name).replace(/[^a-zñ0-9]+/g, ' ').trim(); return n.length > 1 && t.includes(` ${n} `); }) ?? null;
 }
 
 /** El sitio al que se lo lleva, si lo dice y existe para el actor (como «ir a …»). */
