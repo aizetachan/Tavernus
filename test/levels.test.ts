@@ -228,7 +228,7 @@ describe('en el motor', () => {
     const ctx: ToolContext = { engine, actor: c, nowGameS: engine.gameNow(), rng: seededRng(5), closed: null, rolls: [], progress: [] };
     const ok = JSON.parse(executeTool(ctx, 'cast_spell', { spell: 'Proyectil mágico', slot_level: null, ritual: null, target_id: null }));
     expect(ok).toMatchObject({ ok: true, spell: 'Proyectil mágico', level: 1, slot: 'espacios de conjuro de nivel 1: le quedan 1', apply: 'aplícalo con apply_damage' });
-    expect(ctx.shown_rolls?.[0]?.label).toBe('Proyectil mágico (daño force)');
+    expect(ctx.shown_rolls?.[0]?.label).toBe('Proyectil mágico (daño fuerza)');
     const atk = JSON.parse(executeTool(ctx, 'cast_spell', { spell: 'fire_bolt', slot_level: null, ritual: null, target_id: 'npc_doro' }));
     expect(atk.attack).toMatch(/contra CA \d+/);
     const no = JSON.parse(executeTool(ctx, 'cast_spell', { spell: 'Curar heridas', slot_level: null, ritual: null, target_id: null }));

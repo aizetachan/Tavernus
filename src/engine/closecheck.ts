@@ -252,13 +252,16 @@ const STRIKE = new RegExp([
   String.raw`\blanzo\s+(?:(?:el|la|mi|un|una)\s+)?${WEAPON}\s+(?:de mano\s+)?contra\b`,
   String.raw`\ble\s+aplasto\s+(?:la|el)\s+${BODY}\b`,
   String.raw`\bdescargo\s+(?:(?:el|la|mi|un)\s+)?(?:golpe|${WEAPON})\b`,
+  // Disparar (arreglo 39, tirador T22): «disparo una flecha a la sombra», «suelto una flecha contra», «apunto y tiro».
+  String.raw`\b(?:disparo|suelto|lanzo|tiro)\s+(?:una|la|otra|mi)\s+(?:flecha|saeta|virote|piedra|jabalina)\s+(?:a|al|contra|hacia|sobre)\b`,
+  String.raw`\bapunto\b[^.;:]{0,60}?\by\s+(?:disparo|suelto|tiro)\b`,
 ].join('|'));
 /** Una amenaza, una condición o un plan no es el golpe, si va delante: «si no hablas, le parto el brazo», «o le parto el brazo», «voy a…». */
 const NOT_A_STRIKE = /\b(si|como|cuando|proxima|voy a|vas a|quiero|quieres|puedo|podria|deberia|tendria|amenaz\w*|finjo|fingir|amago|amagar|ademan|no|ni|sin|juro|manana|pienso|pretendo|de lo contrario|porque|para que|casi|o (?:te|le|lo|la|les)|que (?:te|le|lo|la|les))\b/;
 /** Lo mismo detrás, hasta la coma: «te rompo la cara si no hablas», «le parto el brazo como vuelvas». */
 const THEN_THREAT = /\b(si|como|cuando|hasta que|de lo contrario)\b/;
 /** Un mueble no es un objetivo: «le clavo el hacha en el tablón», «le doy un golpe a la puerta». */
-const AT_A_THING = /\b(?:en|a|contra|sobre)\s+(?:el|la|los|las)\s+(?:tablon|marco|mesa|banco|puerta|pared|suelo|madera|yunque|aldaba|barra|reja|vela|carta|cofre|bolsa|llave)\b/;
+const AT_A_THING = /\b(?:(?:en|a|contra|sobre|hacia)\s+(?:el|la|los|las)|al|del)\s+(?:suelo|aire|cielo|agua|pozo|cubo|blanco|diana|arbol|tronco|saco|tablon|marco|mesa|banco|puerta|pared|suelo|madera|yunque|aldaba|barra|reja|vela|carta|cofre|bolsa|llave)\b/;
 
 /** El golpe que declara el jugador, o null. Lo que dice (entre comillas, entre ¡!, tras «:») no es lo que hace. */
 export function declaredStrike(action: string): string | null {
@@ -1492,4 +1495,355 @@ export function jobClaimWithoutComplete(input: { action: string | null; narratio
 export function jobClaimRejection(phrase: string, jobs: readonly JobAtHand[]): string {
   const list = jobs.map((j) => `«${j.title}» (job_id ${j.id}, lo pidió ${j.giver}${j.wants ? `, pide ${j.wants}` : ''})`).join('; ');
   return `El jugador da por hecho un encargo («${phrase}») y no se ha cobrado: un encargo del tablón lo cierra complete_job (character_id del actor, job_id, npc_id de quien lo pidió), que comprueba que trae lo pedido, se lo quita y le paga. Encargos sin cobrar de quien está aquí: ${list}. Si el servidor dice que falta algo, o no es el encargo de nadie de aquí, que el NPC lo diga. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Presencia de NPC en el cierre (arreglo 30)
+// ---------------------------------------------------------------------------
+
+/**
+ * Los `npc_move` que el motor ha emitido desde el último turno del actor (su último evento con texto del jugador):
+ * quién ha salido o entrado mientras tanto. Sin turno anterior, todos.
+ */
+export function npcMovesSince(events: readonly GameEvent[], actorId: string): GameEvent[] {
+  let from = 0;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.actor_id === actorId && e.input_text != null) { from = i + 1; break; }
+  }
+  return events.slice(from).filter((e) => e.action_type === 'npc_move' && typeof e.payload['npc_id'] === 'string');
+}
+
+/** Un NPC tal como lo ve la guarda: si está en la sala del actor, si el motor lo ha movido en este turno y si el cierre le ha dado una orden. */
+export interface NpcPresence {
+  id: string;
+  refs: readonly string[];
+  present: boolean;
+  /** El motor lo ha movido desde el turno anterior del actor (se puede contar que se va o que llega). */
+  moved_now?: boolean;
+  /** El cierre le ha dado una orden con set_npc_order (entra, se va o acompaña). */
+  ordered?: boolean;
+}
+
+export interface PresenceHit { kind: 'absent_speaks' | 'absent_acts' | 'false_exit' | 'false_entry'; npc_id: string; phrase: string }
+
+/** Lo que hace alguien en escena, en presente: habla, gesticula, coge, mira. Sin tildes. */
+const NPC_ACTS = String.raw`(?:dice|contesta|responde|replica|anade|asiente|sonrie|rie|grune|murmura|susurra|grita|suspira|resopla|carraspea|mira|observa|levanta|alza|senala|deja|coge|toma|pone|golpea|acerca|levanta|inclina|cuenta|limpia|sacude|saca|guarda|gira|cruza|remueve|sigue \w+(?:ando|iendo)|bebe|sirve|tiende|ofrece|pide|apoya|frunce|clava|encoge|agarra|sujeta|empuja|seca|escupe|interviene|corta|insiste|pregunta|ensena|da|niega con|entra|llega|aparece|se asoma|asoma)`;
+/** Lo que es entrar: con esto, el hint pide set_npc_order para traerlo. */
+const NPC_ENTERS = /^(?:entra|llega|aparece|se asoma|asoma)$/;
+/** Irse: «se va», «se marcha», «sale por la puerta», «se ha ido», «ya no está». «Se va a enfadar» es futuro, no salida. */
+const NPC_LEAVES = String.raw`(?:se va(?! a \w+(?:ar|er|ir)\b)|se va a (?:cenar|comer|dormir|misa|casa|la|el|su|sus)\b|se marcha|se ha ido|se ha marchado|se fue|se marcho|sale (?:de|por|hacia|a la calle|a la plaza|afuera)|ha salido|desaparece (?:por|tras|calle)|ya no esta|ya se ha ido|ya se fue)`;
+/** Hablar de otro, de lo que hará o de lo que suele hacer: no es que actúe ahora. */
+const REPORTED = /\b(que|si|cuando|segun|como|hasta que|antes de que|dicen|cuentan|manana|esta noche|luego|mas tarde|a las \d+|cada|siempre|suele|ayer|antes|nadie|ni rastro|pregunta(?:s)? por|buscas?)\b/;
+/** Entre el nombre y el verbo: un inciso entre comas, un adverbio y los clíticos. */
+const SUBJECT_GAP = String.raw`(?:\s*,[^,.;:]{0,60},)?\s+(?:(?:ya|todavia|aun|tambien|solo|apenas|entonces|luego|despues|por fin)\s+)?(?:(?:te|se|le|les|lo|la|los|las|me|nos)\s+){0,2}`;
+
+/**
+ * El cierre contra la sala (arreglo 30, patrón 1 del análisis del 26-11-2026): habla o actúa un NPC que no está (no
+ * está en «Presentes», el motor no lo ha movido en este turno y el cierre no lo hace entrar con set_npc_order), o se
+ * narra que un NPC que sigue aquí se va, sin que el motor lo haya movido. Pícaro T11: «Garrán se va de la barra» (motor,
+ * T10) y Garrán contesta cuatro turnos más; pareja violento T2: «Hugo, que se ha ido a cenar, ya no está» con Hugo en
+ * la herrería. Las palabras dentro de comillas son de alguien («Garrán está en la casona»): no cuentan. Devuelve el
+ * primer fallo, o null.
+ */
+export function npcPresenceProblem(input: { narration: string; lines?: readonly DialogueLine[]; npcs: readonly NpcPresence[] }): PresenceHit | null {
+  const free = (n: NpcPresence) => n.moved_now || n.ordered;
+  for (const l of input.lines ?? []) {
+    if (l.speaker !== 'npc' || !l.npc_id) continue;
+    const n = input.npcs.find((x) => x.id === l.npc_id);
+    if (n && !n.present && !free(n)) return { kind: 'absent_speaks', npc_id: n.id, phrase: l.text.slice(0, 80) };
+  }
+  // Sin tildes pero con mayúsculas: un nombre propio solo cuenta en mayúscula («Ceniza» el perro, no «la ceniza»).
+  const text = clauses(input.narration.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/«[^»]*»|“[^”]*”|"[^"]*"/g, ' . '));
+  const pattern = (refs: readonly string[], flags: string, present: boolean) => {
+    const list = refs.map((r) => r.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^(?:el|la|los|las|un|una) /i, '').trim()).filter((r) => r.length >= 3).map(esc).sort((a, b) => b.length - a.length);
+    if (!list.length) return null;
+    const who = String.raw`\b(?:${list.join('|')})\b`;
+    return new RegExp(present ? String.raw`${who}(?:${SUBJECT_GAP}${NPC_LEAVES}|\s*,\s*que\s+${NPC_LEAVES})` : String.raw`${who}${SUBJECT_GAP}(${NPC_ACTS})\b`, flags);
+  };
+  for (const n of input.npcs) {
+    if (free(n)) continue;
+    // Los nombres (con mayúscula) se buscan tal cual; los oficios («el herrero»), sin mirar mayúsculas.
+    const res = [pattern(n.refs.filter((r) => /^\p{Lu}/u.test(r)), '', n.present), pattern(n.refs.filter((r) => !/^\p{Lu}/u.test(r)), 'i', n.present)].filter((r): r is RegExp => r !== null);
+    for (const c of text) {
+      for (const re of res) {
+        const m = re.exec(c);
+        if (!m) continue;
+        const low = c.toLowerCase();
+        if (REPORTED.test(low.slice(0, m.index)) || (!n.present && REPORTED.test(low.slice(m.index + m[0].length)))) continue;
+        const verb = (m[1] ?? '').toLowerCase();
+        return { kind: n.present ? 'false_exit' : NPC_ENTERS.test(verb) ? 'false_entry' : 'absent_acts', npc_id: n.id, phrase: m[0] };
+      }
+    }
+  }
+  return null;
+}
+
+/** `left`: cuándo y cómo se fue, si el motor lo movió («a las 21:40: Garrán se va de la barra»). */
+export function presenceRejection(hit: PresenceHit, name: string, left: string | null): string {
+  switch (hit.kind) {
+    case 'absent_speaks':
+    case 'absent_acts':
+      return `${name} [${hit.npc_id}] no está aquí${left ? ` (se fue ${left})` : ''}: no habla ni actúa en este cierre («${hit.phrase}»). Mira «Presentes que el actor percibe»: solo ellos contestan. Si el jugador le busca o le habla, narra que no está y, si acaso, quién de los presentes le contesta o dónde dicen que anda. Si tiene que llegar ahora, set_npc_order (order go, target_location_id de aquí) antes de cerrar. Reescribe log_event.`;
+    case 'false_entry':
+      return `La narración hace entrar a ${name} [${hit.npc_id}] («${hit.phrase}») y no está aquí ni el servidor lo ha traído${left ? ` (se fue ${left})` : ''}. Si llega de verdad, set_npc_order (order go, target_location_id de aquí) antes de cerrar; si no, que no aparezca. Reescribe log_event.`;
+    case 'false_exit':
+      return `La narración dice que ${name} [${hit.npc_id}] se va («${hit.phrase}») y el servidor no lo ha movido: sigue aquí, en «Presentes». Si se marcha de verdad, set_npc_order (order go, adónde va) antes de cerrar; si no, que siga en escena. Reescribe log_event.`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// El compañero no es un NPC (arreglo 34)
+// ---------------------------------------------------------------------------
+
+/** Un JUGADOR de la sala que se llama como un NPC (Ciro el jugador y Ciro el jornalero). */
+export interface Homonym { pc_id: string; pc_name: string; npc_id: string; npc_role: string; npc_present: boolean }
+
+/**
+ * La narración llama al JUGADOR por el oficio del NPC que se llama como él: «el jornalero» por Ciro (pareja pícaro con
+ * novato, 20261126-0442, Bruno lo ve así de B1 a B31) cuando el jornalero no está en la sala. Si el NPC está, el oficio
+ * puede ser suyo: no se mira. Devuelve el par y la frase, o null.
+ */
+export function homonymRoleCall(input: { narration: string; homonyms: readonly Homonym[] }): (Homonym & { phrase: string }) | null {
+  const text = outsideQuotes(input.narration);
+  for (const h of input.homonyms) {
+    if (h.npc_present) continue;
+    const role = norm(h.npc_role).replace(/^(?:el|la|los|las|un|una) /, '').trim();
+    if (role.length < 3) continue;
+    const m = new RegExp(String.raw`\b(?:(?:el|la|al|del)\s+)?${esc(role)}\b`).exec(text);
+    if (m) return { ...h, phrase: m[0] };
+  }
+  return null;
+}
+
+export function homonymRejection(hit: Homonym & { phrase: string }): string {
+  return `La narración dice «${hit.phrase}» y ese es ${hit.pc_name} el NPC [${hit.npc_id}], que no está aquí. Quien está es el JUGADOR ${hit.pc_name} [${hit.pc_id}]: se llaman igual, pero no es ${hit.npc_role}. Llámale ${hit.pc_name} y no le pongas palabras ni actos que no consten. Reescribe log_event.`;
+}
+
+/** Agarrar, sujetar, empujar, quitarle algo: lo que se le hace a otro con las manos. Sin tildes. */
+const GRABS = /\b(?:agarr\w*|sujet\w*|empuj\w*|zarande\w*|inmoviliz\w*|retengo|retenerle|le (?:cojo|tomo|tiro) (?:del|de la|por)|tir\w* de (?:su|la|el)|le (?:tapo|cierro) la boca|me lo llevo|me la llevo|lo arrastro|la arrastro)\b/;
+
+/**
+ * La acción le hace algo con las manos a otro JUGADOR (robarle, agarrarle, empujarle) nombrándolo: eso pasa por
+ * request_reaction, que es el otro quien decide. Pareja pícaro B9: «deslizo la mano hacia el bolsillo de Ciro y le saco
+ * la bolsa» y contesta Ciro el jornalero, «De eso no sé nada». Devuelve el jugador y lo que intenta, o null.
+ */
+export function handsOnPlayer(action: string | null | undefined, pcs: readonly { id: string; name: string }[]): { pc_id: string; pc_name: string; what: 'theft' | 'grab' } | null {
+  if (!action) return null;
+  const a = norm(action).replace(/«[^»]*»|"[^"]*"|“[^”]*”/g, ' . ');
+  const theft = declaresTheft(action);
+  const grab = GRABS.test(a);
+  if (!theft && !grab) return null;
+  for (const p of pcs) {
+    const forms = npcNameForms(p.name).map((f) => norm(f)).filter((f) => f.length >= 3);
+    if (forms.some((f) => new RegExp(String.raw`\b${esc(f)}\b`).test(a))) return { pc_id: p.id, pc_name: p.name, what: theft ? 'theft' : 'grab' };
+  }
+  return null;
+}
+
+export function handsOnPlayerRejection(hit: { pc_id: string; pc_name: string; what: 'theft' | 'grab' }, npcAnswers: string | null): string {
+  const how = hit.what === 'theft'
+    ? `request_reaction (target_character_id ${hit.pc_id}, kind other, actor_skill sleight_of_hand, target_skills perception): el servidor hace la tirada enfrentada oculta y te dice si le pilla`
+    : `request_reaction (target_character_id ${hit.pc_id}, kind grapple, shove u other): ${hit.pc_name} decide en su pantalla si se deja o se resiste`;
+  return `El actor le ${hit.what === 'theft' ? 'quita algo' : 'pone las manos encima'} al JUGADOR ${hit.pc_name} [${hit.pc_id}] y este cierre no lo resuelve${npcAnswers ? `: contesta ${npcAnswers} en su lugar, y no es él` : ''}. Con otro jugador va siempre por ${how}. Narra solo el intento y cierra sin el resultado. Reescribe log_event.`;
+}
+
+/** Los pares JUGADOR y NPC que se llaman igual (por cualquiera de sus formas de nombre: «Ciro», «Ciro el Viejo»). */
+export function homonymPairs(pcs: readonly { id: string; name: string }[], npcs: readonly { id: string; name: string }[]): { pc_id: string; npc_id: string }[] {
+  const forms = (name: string) => new Set(npcNameForms(name).map(norm).filter((f) => f.length >= 3));
+  const out: { pc_id: string; npc_id: string }[] = [];
+  for (const p of pcs) {
+    const mine = forms(p.name);
+    for (const n of npcs) if ([...forms(n.name)].some((f) => mine.has(f))) out.push({ pc_id: p.id, npc_id: n.id });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Un codazo no es un ataque (arreglo 31) y conjuros y rasgos por su lista (arreglo 39)
+// ---------------------------------------------------------------------------
+
+/** Un roce para llamar la atención: un codazo, una palmada, un toque. Solo es ataque si va con fuerza o a hacer daño. */
+const MILD_CONTACT = /\b(?:codazo|codacito|golpecito|palmada|palmadita|toque|toquecito|empujoncito|pellizco|capon)\b/;
+const MEANS_HARM = /\b(?:fuerte|con fuerza|con todas|con rabia|para (?:hacerle dano|tumbarle|tumbarlo|derribarle|derribarlo|herirle)|en (?:la|el|las|los) (?:cara|nariz|boca|costillas|estomago|cabeza|cuello|ojo|ojos|mandibula|sien|garganta|entrepierna))\b/;
+
+/**
+ * ¿La acción declara un ataque de verdad? Un golpe con arma o con intención de hacer daño, sí; un codazo para llamar la
+ * atención, una palmada o tocar el hombro, no (pareja metódico M15: «le doy un codazo a Elmo: ¿y tú qué opinas de
+ * Ilse?» acabó en una estocada de 10 y Elmo a 0 PG). Devuelve lo que lo dice, o null.
+ */
+export function attackIntent(action: string | null | undefined): string | null {
+  if (!action) return null;
+  const strike = declaredStrike(action);
+  if (!strike) return null;
+  const acts = norm(action).replace(/«[^»]*»|"[^"]*"|“[^”]*”/g, ' . ').replace(/¿[^?]*\??/g, ' . ').replace(/:[^.\n]*/g, ' . ');
+  return MILD_CONTACT.test(strike) && !MEANS_HARM.test(acts) ? null : strike;
+}
+
+/** Los conjuros de su lista que nombra el texto. Uno de una palabra («Luz», «Escudo»), solo con mayúscula. */
+export function spellsNamedIn(text: string | null | undefined, names: readonly string[]): string[] {
+  if (!text) return [];
+  const plain = text.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return names.filter((n) => {
+    const p = n.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return /\s/.test(p) ? new RegExp(String.raw`\b${esc(p)}\b`, 'i').test(plain) : new RegExp(String.raw`(?<![\p{L}])${esc(p)}(?![\p{L}])`, 'u').test(plain);
+  });
+}
+
+/** Lo que dice que gasta o usa un rasgo con nombre: «"Acecho" gastando un uso», «uso mi Sentido salvaje», «activo Furia». */
+const USES_TRAIT = [
+  /[«"“]([^»"”]{3,40})[»"”]\s*,?\s*(?:gastando|gasto|usando|uso)\b/u,
+  /\b(?:gastando|gasto|usando|uso)\s+(?:un uso de|una carga de|mi|mis|el|la)?\s*[«"“]([^»"”]{3,40})[»"”]/u,
+  /\b(?:[Uu]so|[Aa]ctivo|[Gg]asto un uso de|[Uu]sando|[Aa]ctivando)\s+(?:mi\s+|mis\s+|el\s+|la\s+)?(?:rasgo\s+|don\s+|poder\s+)?(\p{Lu}[\p{Ll}]+(?:\s+(?:de\s+|del\s+|la\s+)?[\p{Ll}\p{Lu}][\p{Ll}]+){0,3})/u,
+];
+/** Lo que niega en la narración: «no tienes Acecho», «no es tuyo», «no sabes hacerlo». */
+const TRAIT_DENIED = /\b(?:no (?:tienes|tiene|sabes|sabe|conoces|es (?:tuyo|suyo|un rasgo|algo que)|forma parte|esta en tu)|no hay tal|ningun (?:rasgo|don|truco)|nada de eso)\b/;
+
+/**
+ * El jugador usa un rasgo con nombre que no está en su ficha (tirador T20: «"Acecho" gastando un uso», y el cierre lo
+ * acepta). `known`: sus recursos, rasgos y conjuros. Si la narración lo niega, pasa. Devuelve el nombre, o null.
+ */
+export function unknownTrait(input: { action: string | null; narration: string; known: readonly string[] }): string | null {
+  if (!input.action) return null;
+  const known = input.known.map(norm).filter(Boolean);
+  for (const re of USES_TRAIT) {
+    const m = re.exec(input.action);
+    if (!m) continue;
+    const name = m[1]!.trim();
+    const n = norm(name);
+    if (n.length < 3 || known.some((k) => k === n || k.includes(n) || n.includes(k))) continue;
+    if (TRAIT_DENIED.test(norm(input.narration).replace(/«[^»]*»/g, ' '))) return null;
+    return name;
+  }
+  return null;
+}
+
+export function unknownTraitRejection(name: string, pcName: string, has: readonly string[]): string {
+  return `El jugador usa «${name}» y eso no está en la ficha de ${pcName}: no lo tiene, y el cierre no puede darle su efecto. Lo suyo: ${has.length ? has.join(', ') : 'ningún recurso ni rasgo con usos'}. Dilo en ficción (no le sale, no sabe hacerlo así) o resuélvelo con lo que sí tiene (una tirada, spend_resource o cast_spell de lo suyo). Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Lo que el jugador cuenta de sí mismo pasa por record_character_fact (arreglo 40)
+// ---------------------------------------------------------------------------
+
+const KIN = '(?:padre|madre|abuel[oa]|herman[oa]|tio|tia|primo|prima|hij[oa]|mujer|marido|esposa|esposo|maestr[oa]|mentor[a]?|prometid[oa])';
+/** Lo que el jugador afirma de su personaje, sin tildes: una herida, una deuda, alguien de su familia. */
+const CLAIMS = {
+  wound: /\b(?:mi (?:herida|cicatriz|cojera|pierna herida|brazo herido|costilla rota|tobillo)|(?:la|mi) venda (?:sucia )?de (?:la|mi|el) (?:pierna|brazo|costado|cabeza|mano)|me duele (?:la|el|mi) (?:pierna|brazo|costado|cabeza|hombro|espalda|herida|tobillo|rodilla)|(?:tengo|llevo) (?:una|la) herida|estoy herid[oa])\b/,
+  debt: /\b(?:(?:lo que )?(?:te|le) (?:debo|debia)|mi deuda con|(?:te|le) traigo lo que (?:te|le) debo)\b/,
+  kin: new RegExp(String.raw`\bmi ${KIN}\b`),
+} as const;
+/** Lo que lo da por cierto en la narración o en boca de un NPC. */
+const ACCEPTS = {
+  wound: /\b(?:tu (?:herida|cicatriz|cojera|pierna herida)|la (?:pierna|herida|venda|brazo|costado) (?:te )?(?:late|duele|sangra|escuece|palpita|arde|tira|supura)|(?:te )?(?:late|duele|palpita|escuece) (?:la|tu) (?:pierna|herida|brazo|costado)|la herida de (?:tu|la) (?:pierna|brazo|costado))\b/,
+  debt: /\b(?:lo que (?:le |me )?(?:debias|debes)|tu deuda con|lo que le debes|lo que me debes|tu deuda)\b/,
+  kin: new RegExp(String.raw`\btu ${KIN}\b`),
+} as const;
+/** Lo que lo niega o lo deja en el aire: con esto, pasa. */
+const CLAIM_DENIED = /\b(?:no tienes|no hay (?:ninguna|tal)|no consta|no le debes|no debes nada|ilesa?o?|sin (?:herida|un rasguno)|no sabes|dices que|si es verdad|quien sabe|eso dices|segun tu)\b/;
+
+export interface OwnClaim { kind: 'wound' | 'debt' | 'kin'; claim: string; accepted: string }
+
+/**
+ * El jugador afirma algo de su propio personaje que no está en su ficha (una herida, una deuda con alguien, un padre o un
+ * hermano) y el cierre lo da por cierto sin record_character_fact. Herido T21 (20261126-0602): «quita la venda sucia de
+ * la pierna» a 13/13 PG y «La pierna te late bajo la venda sucia»; dirigido T7 (20261126-0418): «Te he traído lo que te
+ * debía» sin deuda y «Lo que le debías a Hugo sigue en tu bolsa». `known`: lo que ya consta de él (sus hechos, su
+ * pasado); `wounded`: le faltan PG; `hasDebt`: tiene una deuda abierta. Si lo niega o lo deja en el aire, pasa.
+ */
+export function ownClaimAccepted(input: { action: string | null; narration: string; lines?: readonly DialogueLine[]; okTools: readonly string[]; known?: string; wounded?: boolean; hasDebt?: boolean; pendingRoll?: boolean }): OwnClaim | null {
+  if (!input.action || input.pendingRoll || input.okTools.some((t) => t === 'record_character_fact' || t === 'plant_rumor')) return null;
+  // También en una pregunta: «¿qué dejó mi padre?» da por hecho que lo tiene.
+  const action = norm(input.action);
+  const said = (input.lines ?? []).filter((l) => l.speaker === 'npc').map((l) => norm(l.text)).join(' . ');
+  const told = `${outsideQuotes(input.narration)} . ${said}`;
+  if (CLAIM_DENIED.test(told)) return null;
+  const known = norm(input.known ?? '');
+  for (const kind of ['wound', 'debt', 'kin'] as const) {
+    if ((kind === 'wound' && input.wounded) || (kind === 'debt' && input.hasDebt)) continue;
+    const m = CLAIMS[kind].exec(action);
+    if (!m) continue;
+    // Lo que ya consta de él (un hermano en su pasado) no es nuevo; lo que ya mira la guarda de estado («mi padre era…»), tampoco.
+    if (kind === 'kin' && (known.includes(m[0].replace(/^mi /, '')) || TELLS_OWN_PAST.test(action))) continue;
+    for (const c of clauses(told)) {
+      const a = ACCEPTS[kind].exec(c);
+      if (a) return { kind, claim: m[0], accepted: a[0] };
+    }
+  }
+  return null;
+}
+
+export function ownClaimRejection(hit: OwnClaim): string {
+  const what = hit.kind === 'wound' ? 'una herida que no consta (sus PG están completos)' : hit.kind === 'debt' ? 'una deuda que no consta' : 'alguien de su vida que no consta en su ficha';
+  return `El jugador dice «${hit.claim}» de su personaje, ${what}, y el cierre lo da por cierto («${hit.accepted}») sin guardarlo. Si lo aceptas, record_character_fact (kind ${hit.kind === 'kin' ? 'relationship' : 'background'}, text: lo que ha contado, en tercera persona) en este mismo turno: es verdad para él, no da nada gratis${hit.kind === 'wound' ? ' ni le quita PG' : hit.kind === 'debt' ? ' ni crea la deuda (eso, set_debt, solo si el otro la reconoce)' : ''}. Si no lo das por bueno, que la narración lo niegue o lo deje en el aire. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// 0 PG es 0 PG (arreglo 38, parte de la guarda)
+// ---------------------------------------------------------------------------
+
+/** Volver en sí o ponerse en pie, en segunda persona (el actor) y en tercera (otro). Sin tildes. */
+const RISES_YOU = /\b(?:abres los ojos|vuelves en ti|recuperas el (?:sentido|conocimiento)|te incorporas|te levantas|te pones en pie|despiertas|te despiertas|recobras el (?:sentido|conocimiento)|consigues ponerte en pie)\b/;
+const RISES_THEM = String.raw`(?:abre los ojos|vuelve en si|recupera el (?:sentido|conocimiento)|se incorpora|se levanta|se pone en pie|despierta|se despierta|recobra el (?:sentido|conocimiento))`;
+/** Lo que hace el actor como si estuviera en pie: lanzar, atacar, coger, andar. */
+const ACTS_YOU = /\b(?:susurras (?:el|un) conjuro|recitas|lanzas|conjuras|invocas|canalizas|pronuncias|atacas|golpeas|disparas|coges|agarras|caminas|corres|cruzas|sacas|empunas|curas|vendas)\b/;
+/** Lo que no es que vuelva: lo intenta, no puede, casi, sueña, el mundo se apaga. */
+const NOT_RISEN = /\b(?:no|ni|casi|intentas|intenta|quieres|quiere|sin poder|suenas|suena|apenas puedes|como si|antes de)\b/;
+
+/**
+ * Un PJ a 0 PG que el cierre levanta («abres los ojos», «se incorpora», «vuelve en sí») sin heal ni stabilize, o que
+ * actúa (lanza, ataca, coge) estando inconsciente. Pareja violento F2 y pareja metódico E17: de 0 a en pie con una sola
+ * salvación; recolector T11: «Curar heridas» inconsciente. `down`: los PJ de la escena a 0 PG, con el actor marcado.
+ */
+export function downedActs(input: { narration: string; down: readonly { id: string; name: string; actor: boolean }[]; okTools: readonly string[] }): { id: string; name: string; phrase: string; acts: boolean } | null {
+  if (!input.down.length || input.okTools.some((t) => t === 'heal' || t === 'stabilize')) return null;
+  const text = clauses(outsideQuotes(input.narration));
+  for (const d of input.down) {
+    const forms = npcNameForms(d.name).map(norm).filter((f) => f.length >= 3).map(esc);
+    const them = forms.length ? new RegExp(String.raw`\b(?:${forms.join('|')})\b(?:\s*,[^,.;:]{0,40},)?\s+(?:(?:por fin|al fin|despacio|de golpe)\s+)?${RISES_THEM}\b`) : null;
+    for (const c of text) {
+      const m = (d.actor ? RISES_YOU.exec(c) : null) ?? them?.exec(c) ?? null;
+      if (m && !NOT_RISEN.test(c.slice(0, m.index))) return { id: d.id, name: d.name, phrase: m[0], acts: false };
+      const a = d.actor ? ACTS_YOU.exec(c) : null;
+      if (a && !NOT_RISEN.test(c.slice(0, a.index))) return { id: d.id, name: d.name, phrase: a[0], acts: true };
+    }
+  }
+  return null;
+}
+
+export function downedRejection(hit: { id: string; name: string; phrase: string; acts: boolean }, state: string): string {
+  return hit.acts
+    ? `${hit.name} [${hit.id}] está a 0 PG (${state}): inconsciente, no lanza, no ataca, no coge nada ni se mueve («${hit.phrase}»). Narra lo que le llega desde el suelo, a medias, o lo que hacen los demás. Reescribe log_event.`
+    : `La narración levanta a ${hit.name} [${hit.id}] («${hit.phrase}») y está a 0 PG (${state}): una salvación con éxito no le despierta. Vuelve en sí solo si alguien le cura (heal) o, estable, cuando lo diga el servidor; para estabilizarle, stabilize. Si no, sigue en el suelo. Reescribe log_event.`;
+}
+
+// ---------------------------------------------------------------------------
+// Un cierre por turno con tirada (arreglo 36, parte del máster)
+// ---------------------------------------------------------------------------
+
+/** Palabras que no dicen nada de la escena, para comparar dos narraciones por lo que cuentan. */
+const FILLER = new Set(['para', 'pero', 'como', 'sobre', 'entre', 'hasta', 'desde', 'hacia', 'donde', 'cuando', 'mientras', 'todo', 'toda', 'todos', 'todas', 'este', 'esta', 'esto', 'tiene', 'tienes', 'otra', 'otro', 'sigue', 'sigues', 'algo', 'nada', 'poco', 'mucho', 'tras', 'ante', 'cada', 'solo', 'tambien', 'despacio', 'luego', 'antes', 'despues']);
+const contentWords = (t: string) => norm(t).replace(/[^a-z0-9ñ ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !FILLER.has(w));
+
+/**
+ * La narración del resultado de una tirada sin las frases que vuelven a contar la intención que el jugador ya leyó antes
+ * de tirar (patrón 6 del análisis del 26-11-2026: tirador T5, «Levantas la losa un palmo…» tras «Deslizas la punta de
+ * la espada bajo el borde de la losa…»). Una frase se va si cuatro o más de sus palabras con contenido y al menos seis
+ * de cada diez ya estaban en la intención; lo dicho entre «» se queda. Si se iría todo, se deja como estaba.
+ */
+export function withoutIntentRepeat(intent: string, narration: string): { narration: string; removed: string[] } {
+  const seen = new Set(contentWords(intent.replace(/«[^»]*»/g, ' ')));
+  if (!seen.size || !narration.trim()) return { narration, removed: [] };
+  const removed: string[] = [];
+  // Párrafo a párrafo (lo suyo y lo común van separados por una línea en blanco).
+  const paragraphs = narration.split(/\n{2,}/).map((para) => para.split(/(?<=[.!?…»])[ \t]+(?=[\p{Lu}«¿¡])/u).filter((p) => {
+    if (/«/.test(p)) return true;
+    const w = contentWords(p);
+    const old = w.filter((x) => seen.has(x)).length;
+    const repeat = w.length >= 4 && old >= 4 && old / w.length >= 0.6;
+    if (repeat) removed.push(p);
+    return !repeat;
+  }).join(' ')).filter((p) => p.trim());
+  if (!removed.length || !paragraphs.length) return { narration, removed: [] };
+  return { narration: paragraphs.join('\n\n'), removed };
 }

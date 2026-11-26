@@ -42,7 +42,7 @@ import { bodiesAt, bodyStateOf, deadNpcsAt, isDying, isStable, NPC_DOWN_HINT } f
 import { crimeContext, npcCrimeLine, recentIncidents } from '../engine/crime.js';
 import { TALK_RULES } from './actor.js';
 import { concernsLine } from '../engine/concerns.js';
-import { movesOwnCoins, recentNpcLines } from '../engine/closecheck.js';
+import { homonymPairs, movesOwnCoins, npcMovesSince, recentNpcLines } from '../engine/closecheck.js';
 import { isExtra, type ExtraNpc } from '../engine/extras.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { shopClosed, shopLines } from '../engine/shop.js';
@@ -354,7 +354,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const p = perceive(world, engine.clock, actor, op, nowG);
     if (p.level === 'none') continue;
     // Los PJ de una partida se conocen siempre por su nombre: presentarse es solo cosa de NPC.
-    const name = p.sight === 'full' ? `${o.name} [${o.id}], ${o.race} ${o.class_name}${o.appearance ? `, ${o.appearance}` : ''}` : p.sight === 'vague' ? `una figura (${o.name} [${o.id}])` : 'movimiento';
+    const name = p.sight === 'full' ? `JUGADOR ${o.name} [${o.id}]${pcHomonymNote(world, o.id)}, ${o.race} ${o.class_name}${o.appearance ? `, ${o.appearance}` : ''}` : p.sight === 'vague' ? `una figura (${o.name} [${o.id}])` : 'movimiento';
     // Ausente (su jugador se ha ido) y, a los 30 min, bajo el velo (SPEC §9.1).
     const away = o.veiled ? ' BAJO EL VELO: no es objetivo válido; si alguien va a por él, narra que se aparta o se esconde.'
       : o.away ? ` AUSENTE: no ataca ni gasta recursos; si le atacan se defiende solo (CA y salvaciones normales)${o.status === 'unconscious' ? '; está a 0 PG, estabilizado' : ''}.` : '';
@@ -404,7 +404,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     // Lo que vio o sabe del actor (crime.ts) va antes que su carácter: manda sobre cómo le trata.
     const crime = npcCrimeLine(world, n, actor, nowG);
     present.push([
-      `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}.${crime ? `\n  ${crime}\n ` : ''} ${n.description}`,
+      `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}${npcHomonymNote(world, n.id)}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}.${crime ? `\n  ${crime}\n ` : ''} ${n.description}`,
       `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage})${(n.stats.multiattack ?? 1) > 1 ? `, multiataque ×${n.stats.multiattack}` : ''}.${n.bound ? ' ATADO: no se mueve ni pelea.' : ''}${n.noncombatant ? ' No es de pelear: se defiende si le atacan, pero no remata a nadie; le deja, le echa, pide ayuda o llama a la guardia.' : ''}` : ' No combate.'}`,
       // Opinión con el actor, temas que tiene en la cabeza y reacción a sus etiquetas (standing.ts, worldrules.ts).
       ...npcStandingLines(world, n, actor, nowG),
@@ -425,6 +425,15 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   }
   // Testigos: otros PJs que percibirían al actor aunque gritara. Sin ninguno, observable no le llega a nadie y es salida tirada.
   if (!witnesses(world, engine.clock, pos, nowG, WITNESS_LOUDNESS, actor.id).length) present.push(NO_WITNESSES);
+  // Quién ha salido de aquí desde el turno anterior del actor (npc_move del motor; arreglo 30): ya no habla ni actúa aquí.
+  const gone = new Map<Id, string>();
+  for (const e of npcMovesSince(engine.events.all(), actor.id)) {
+    const n = world.npcs.get(String(e.payload['npc_id']));
+    if (!n || e.location_id !== loc.id || world.spot(n.location.id).location_id === loc.id) continue;
+    const known = actor.knows.includes(n.id);
+    gone.set(n.id, `${known ? n.name : descriptorOf(world, n.id)} [${n.id}]${known && e.observable ? ` («${e.observable}»)` : ''}`);
+  }
+  if (gone.size) present.push(`- Se han ido desde el turno anterior (ya NO están aquí: no hablan, no contestan ni actúan en tu cierre; si el jugador les habla, nadie le contesta por ellos): ${[...gone.values()].join(', ')}.`);
   L.push('## Presentes que el actor percibe\n' + (present.length ? present.join('\n') : 'Nadie.'));
   if (extrasHere.length) L.push(`## Gente de relleno aquí (solo existen estos; no saben nada de la historia, no dan misiones, contestan dos frases como mucho y a la segunda pregunta que no es lo suyo se cierran)\n${extrasHere.join('\n')}`);
   // Crimen y ley (crime.ts): el incidente que hay que contar, y si el actor está buscado, detenido o preso.
@@ -566,7 +575,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     // Una tirada social con éxito da el camino, no el secreto (talk.ts).
     const skill = Object.entries(SKILLS).find(([, v]) => roll.result.label.startsWith(v.es))?.[0];
     const social = skill ? socialOutcomeLine(world, engine.events.all(), actor, skill, roll.result.success, engine.nowFor(actor)) : null;
-    L.push(`## Resultado de la tirada\nAcción original: «${roll.original_text}»\n${roll.result.label}: ${roll.result.breakdown} → ${roll.result.success === null ? 'sin CD' : roll.result.success ? 'ÉXITO' : 'FALLO'}${roll.result.natural ? ` (${roll.result.natural} natural)` : ''}.${rollLine(roll.result)}${social ? `\n${social}` : ''}${roll.conflict ? `\nLo ha resuelto el motor (acción conflictiva) y ya está aplicado: no muevas tú ningún objeto (transfer_item, spawn_item) ni lo contradigas. Si el NPC reacciona, su primera frase es la reacción, sin deudas, encargos ni comercio.\nCuéntalo así (hechos): ${roll.conflict}` : ''}${roll.hidden ? '\nTIRADA OCULTA: el jugador no ha visto el dado ni sabe si ha salido bien. Con éxito, narra lo que nota, encuentra o consigue, sin nombrar la tirada. Con fallo, no nota nada: la escena sigue como si no hubiera nada que ver (a lo sumo una ligera sensación, sin confirmar nada); NUNCA digas que ha fallado, que «no ve nada raro» de forma que delate que había algo, ni lo que se le ha escapado.' : ''}\nNarra la consecuencia y aplica los cambios con tools. No pidas otra tirada para esta misma acción.`);
+    L.push(`## Resultado de la tirada\nAcción original: «${roll.original_text}»\n${roll.result.label}: ${roll.result.breakdown} → ${roll.result.success === null ? 'sin CD' : roll.result.success ? 'ÉXITO' : 'FALLO'}${roll.result.natural ? ` (${roll.result.natural} natural)` : ''}.${rollLine(roll.result)}${social ? `\n${social}` : ''}${roll.conflict ? `\nLo ha resuelto el motor (acción conflictiva) y ya está aplicado: no muevas tú ningún objeto (transfer_item, spawn_item) ni lo contradigas. Si el NPC reacciona, su primera frase es la reacción, sin deudas, encargos ni comercio.\nCuéntalo así (hechos): ${roll.conflict}` : ''}${roll.hidden ? '\nTIRADA OCULTA: el jugador no ha visto el dado ni sabe si ha salido bien. Con éxito, narra lo que nota, encuentra o consigue, sin nombrar la tirada. Con fallo, no nota nada: la escena sigue como si no hubiera nada que ver (a lo sumo una ligera sensación, sin confirmar nada); NUNCA digas que ha fallado, que «no ve nada raro» de forma que delate que había algo, ni lo que se le ha escapado.' : ''}\nNarra la consecuencia y aplica los cambios con tools. No pidas otra tirada para esta misma acción.${intentLine(engine, actor, roll.original_text)}`);
   } else if (engine.sceneHints(actor.id)?.round || engine.sceneHints(actor.id)?.group || engine.sceneHints(actor.id)?.window) {
     // Turno compartido: lo de cada uno va en su bloque (Ronda, Conversación de grupo o A la vez), no como acción del actor.
     L.push([
@@ -695,6 +704,35 @@ const EXTRA_SERVICE: Record<ExtraNpc['script']['service'], string> = {
 };
 
 /** Un vecino de relleno en una línea: quién es, qué vende, qué lleva y su guion corto (extras.ts). */
+/**
+ * Lo que el jugador ya leyó antes de tirar (el cierre de la intención), para que el resultado siga desde ahí en vez de
+ * volver a contarlo (arreglo 36): un cierre por turno, en orden.
+ */
+function intentLine(engine: Engine, actor: Character, originalText: string): string {
+  const e = [...engine.events.all()].reverse().find((x) => x.actor_id === actor.id && x.input_text != null);
+  if (!e || e.input_text !== originalText || !e.narration_private.trim()) return '';
+  const t = e.narration_private.length > 500 ? `${e.narration_private.slice(0, 500)}…` : e.narration_private;
+  return `\nAntes de tirar, el jugador ya ha leído esto (la intención): «${t}». Tu narración va DESPUÉS y lo continúa: empieza por lo que pasa al tirar, sin volver a contar lo que hace ni repetir esas frases (lo repetido se quita).`;
+}
+
+/** Jugadores de la partida, sin los muertos ni los retirados. */
+function livePcs(world: World): { id: Id; name: string }[] {
+  return [...world.characters.values()].filter((c) => c.status !== 'dead' && c.status !== 'retired').map((c) => ({ id: c.id, name: c.name }));
+}
+
+/** El NPC que se llama como un JUGADOR (arreglo 34): son dos personas, y cada uno se nombra de una forma. */
+function npcHomonymNote(world: World, npcId: Id): string {
+  const pc = homonymPairs(livePcs(world), [{ id: npcId, name: world.npc(npcId).name }]).map((h) => world.characters.get(h.pc_id)!)[0];
+  return pc ? ` (OJO: se llama igual que el JUGADOR ${pc.name} [${pc.id}] y NO es él; a este NPC nómbralo por su oficio, «${descriptorOf(world, npcId)}»)` : '';
+}
+
+/** El JUGADOR que se llama como un NPC: no es ese NPC, ni se le llama por su oficio. */
+function pcHomonymNote(world: World, pcId: Id): string {
+  const pc = world.characters.get(pcId)!;
+  const npcs = homonymPairs([{ id: pc.id, name: pc.name }], [...world.npcs.values()].map((n) => ({ id: n.id, name: n.name }))).map((h) => h.npc_id);
+  return npcs.length ? ` (no es ${npcs.map((id) => `${descriptorOf(world, id)} [${id}]`).join(' ni ')}, el NPC que se llama igual: a él, siempre por su nombre)` : '';
+}
+
 function extraLine(engine: Engine, n: ExtraNpc, actor: Character, spotName: string, distance: number, talking: boolean, nowG: number): string {
   const world = engine.world;
   const known = actor.knows.includes(n.id);
@@ -705,7 +743,7 @@ function extraLine(engine: Engine, n: ExtraNpc, actor: Character, spotName: stri
   const crime = npcCrimeLine(world, n, actor, nowG);
   const said = talking ? transcriptText(transcriptOf(engine.events.all(), actor.id, n.id, 6), 'Actor', 'NPC') : [];
   return [
-    `- ${who}, en ${spotName}, ${distance} m. ${look}`,
+    `- ${who}${npcHomonymNote(world, n.id)}, en ${spotName}, ${distance} m. ${look}`,
     crime ? `  ${crime}` : '',
     `  Guion: ${n.script.temper}; sirve para: ${EXTRA_SERVICE[n.script.service]}${refer.length ? `; lo que no sabe, lo remite a ${refer.join(' o ')}` : ''}.${att !== 'neutral' ? ` Actitud: ${att}.` : ''}`,
     n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, priceFor(n, actor.id, b.price, 'buy'))}`).join(', ')}` : '',

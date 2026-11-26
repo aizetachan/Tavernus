@@ -219,7 +219,7 @@ describe('con máster', () => {
     // Un ataque del actor a otro jugador tampoco se resuelve: se convierte en petición.
     const { engine: e2, kael: k2, mira: m2 } = await together();
     const hp = m2.hp_current;
-    const atk = JSON.parse(executeTool({ ...ctx, engine: e2, actor: k2 }, 'attack', { attacker_id: k2.id, target_id: m2.id, advantage: 'none' }));
+    const atk = JSON.parse(executeTool({ ...ctx, engine: e2, actor: k2, action_text: 'ataco a Mira con la daga' }, 'attack', { attacker_id: k2.id, target_id: m2.id, advantage: 'none' }));
     expect(atk).toMatchObject({ pending_reaction: true });
     expect(m2.hp_current).toBe(hp);
     // Ni moverle por su cuenta.
