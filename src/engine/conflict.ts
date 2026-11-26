@@ -709,6 +709,13 @@ const RE_GRAB = /\b((le|la|lo) (agarr|sujet|inmoviliz)\w*|(agarrarl|sujetarl|inm
 /** Coger algo que lleva otro («agarro la bolsa de Garrán»): solo cuenta si lo que nombra lo lleva él. */
 const RE_TAKE = /\b(agarr|coj|cog|tom|pill)\w*\b/;
 const RE_TOUCH = /\b(le toco|tocarle|la toco|lo toco|le acaricio|acariciarle|le pellizc\w*|pellizcarle|le doy una palmada|darle una palmada|le beso|besarle|le tiro del pelo|tirarle del pelo|le hago cosquillas|hacerle cosquillas|le pincho|pincharle|le despeino|despeinarle)\b/;
+/**
+ * Un golpe en la frase («le hundo el puño en las costillas», «le doy un cabezazo»): eso es un ataque y va primero
+ * (attack), no una acción conflictiva. Violento 1051, acción 32: el puñetazo y «le arranco la camisa» acabaron en robo.
+ */
+const RE_BLOW = /\b(punetazo|patada|bofetada|tortazo|cabezazo|codazo|rodillazo|guantazo|mamporro|sopapo|navajazo|hachazo|espadazo|estocada|tajo|golpe(?:o|a|ar|arle|arla|arlo)?|pego|pegarle|le pego|atac\w*|apunal\w*|acuchill\w*|le parto la cara|el puno en|los nudillos en)\b/;
+/** Ropa que lleva puesta: arrancársela no es quitarle algo de valor (robo), es agarrarle (agresión). */
+const RE_CLOTHES = /\b(camisa|camison|ropa|blusa|blusas|bluson|jubon|chaqueta|capa|pantalon|calzas|falda|mandil|delantal|vestido|sayo|tunica|chaleco|manga|cuello)\b/;
 /** Quien solo habla de ello, pregunta o lo niega no lo está haciendo. */
 const RE_NOT = /\b(no (le |la |lo |se lo |se la )?(robo|quito|empujo|toco|agarro|cojo)|sin (robar|tocar)|si (le|la|lo) (robo|quito|empujo|toco)|quien (me |le |te |nos )?(ha )?robado|me han robado|nos han robado|te han robado|le han robado)\b/;
 
@@ -768,7 +775,9 @@ export function conflictPlan(world: World, events: readonly GameEvent[], pc: Cha
   // «Agarro la bolsa de Garrán»: coger algo que lleva otro, si lo que nombra lo lleva él (se mira abajo).
   const taking = !found && !/[?¿]/.test(text) && RE_TAKE.test(plainText(text));
   if (!found && !taking) return null;
-  const kind: ConflictKind = found ?? 'steal';
+  // Con un golpe en la frase, primero el ataque (attack): no es esto (arreglo 3 del 26-11-2026).
+  if (RE_BLOW.test(plainText(text))) return null;
+  let kind: ConflictKind = found ?? 'steal';
   const spot = world.characterSpot(pc);
   if (!spot) return null;
   const here = [...world.npcs.values()].filter((n) => (n.status === 'alive' || n.status === 'unconscious') && !n.mute && world.spots.get(n.location.id)?.location_id === spot.location_id);
@@ -780,8 +789,11 @@ export function conflictPlan(world: World, events: readonly GameEvent[], pc: Cha
   if (!npc) { const at = here.filter((n) => n.location.id === spot.id); if (at.length === 1) npc = at[0]!; }
   if (!npc) return null;
   // Del suelo o de un mueble no es robarle a nadie: si nombra algo que no lleva ese NPC pero está a la vista, no es esto.
-  const inst = owns(npc) ?? null;
+  let inst = owns(npc) ?? null;
   if (taking && !inst) return null;
+  // «Le arranco la camisa»: la ropa que lleva puesta no se le roba; es agarrarle (arreglo 3).
+  const clothes = (d: ItemDef) => RE_CLOTHES.test(plainText([d.name, ...d.aliases].join(' ')));
+  if ((kind === 'steal' || kind === 'snatch') && RE_CLOTHES.test(plainText(itemWords(text) ?? '')) && (!inst || clothes(world.itemDef(inst.item_id)))) { kind = 'grab'; inst = null; }
   const steals = kind === 'steal' || kind === 'snatch';
   if (steals && !inst && world.itemsIn({ type: 'spot', id: spot.id }).some((i) => namesItem(text, world.itemDef(i.item_id)))) return null;
   // «Agarro la bolsa»: agarrar algo suyo es arrebatárselo.

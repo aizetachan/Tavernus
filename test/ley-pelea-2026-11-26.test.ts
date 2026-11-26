@@ -156,3 +156,74 @@ describe('(12) la represalia del NPC tras un éxito del jugador pasa por su tira
 });
 
 export type { Character };
+
+describe('(3) golpe que acaba en robo y cargo equivocado', () => {
+  it('violento 1051, acción 32: «le hundo el puño en las costillas y le arranco la camisa» no es una acción conflictiva (va el ataque primero) y la camisa no se roba', async () => {
+    const { engine, c } = await boot();
+    const mateo = engine.world.npc('npc_mateo');
+    hold(engine, mateo, 'sp_mo_sacos');
+    c.location = { type: 'spot', id: 'sp_mo_sacos' };
+    const { conflictPlan } = await import('../src/engine/conflict.js');
+    const now = engine.gameNow();
+    expect(conflictPlan(engine.world, [], c, 'Le hundo el puño en las costillas al molinero y, cuando se doble, le arranco la camisa para que sepa quién manda aquí.', now)).toBeNull();
+    // Sin golpe, arrancarle la camisa es agarrarle (agresión), no robarle.
+    expect(conflictPlan(engine.world, [], c, 'Le arranco la camisa al molinero', now)?.kind).toBe('grab');
+    // Lo que sí lleva y vale, sigue siendo arrebatárselo.
+    expect(conflictPlan(engine.world, [], c, 'le arranco la bolsa al molinero', now)?.kind).toBe('snatch');
+  });
+
+  it('el alto cita lo que lo provoca (el intento de robo al molinero), no lo más grave de la lista (lo de Hugo)', async () => {
+    const { engine, c } = await boot();
+    const w = engine.world;
+    const [hugo, mateo, garran] = ['npc_hugo', 'npc_mateo', 'npc_garran'].map((id) => w.npc(id)) as [Npc, Npc, Npc];
+    // Antes: le pegó a Hugo con la gran hacha en la herrería, delante de Garrán; se fue y la detención quedó en el aire.
+    hold(engine, hugo, 'sp_he_banco'); hold(engine, garran, 'sp_he_banco');
+    c.location = { type: 'spot', id: 'sp_he_banco' };
+    reportIncident(w, { kind: 'armed_assault', perpetrator_id: c.id, victim_id: hugo.id, weapon: 'gran hacha' }, engine.gameNow());
+    expect(c.wanted?.arrest?.npc_id).toBe(garran.id);
+    c.wanted!.arrest = null;
+    // Ahora, en el molino, intenta robarle a Mateo delante de Garrán.
+    hold(engine, mateo, 'sp_mo_sacos'); hold(engine, garran, 'sp_mo_sacos');
+    c.location = { type: 'spot', id: 'sp_mo_sacos' };
+    const from = engine.events.all().at(-1)?.seq ?? 0;
+    reportIncident(w, { kind: 'theft_attempt', perpetrator_id: c.id, victim_id: mateo.id }, engine.gameNow() + 60);
+    await engine.tick();
+    const arrest = engine.events.all().filter((e) => e.seq > from && e.action_type === 'arrest').at(-1)!;
+    expect(arrest).toBeTruthy();
+    expect(arrest.narration_private).toMatch(/Te acusa de esto: Bruno intentó robarle (a Mateo|al molinero) en los sacos de harina \(El molino\); y además, atacó (a Hugo|al herrero) \(gran hacha\)/);
+  });
+});
+
+describe('(6) un solo «¡Alto!» por detención', () => {
+  /** Bruno le pega a Hugo en la herrería con Garrán delante. `narrated`: el cierre del máster ya ha dado el alto. */
+  async function detencion(narrated: boolean) {
+    const { engine, c } = await boot();
+    const w = engine.world;
+    const [hugo, garran] = ['npc_hugo', 'npc_garran'].map((id) => w.npc(id)) as [Npc, Npc];
+    hold(engine, hugo, 'sp_he_banco'); hold(engine, garran, 'sp_he_banco');
+    c.location = { type: 'spot', id: 'sp_he_banco' };
+    const from = engine.events.all().at(-1)?.seq ?? 0;
+    reportIncident(w, { kind: 'assault', perpetrator_id: c.id, victim_id: hugo.id }, engine.gameNow());
+    engine.events.emit({
+      actor_id: c.id, action_type: 'master', input_text: 'le pego a Hugo', observable: null, tags: ['master'],
+      narration_private: narrated ? 'Le cruzas la cara a Hugo. Garrán se levanta del banco con la porra en la mano: «¡Alto ahí! Quedas detenido.»' : 'Le cruzas la cara a Hugo, que retrocede contra el yunque.',
+      payload: { master: null },
+    });
+    await engine.tick();
+    const mine = engine.events.all().filter((e) => e.seq > from && (e.actor_id === c.id || e.payload['target_character_id'] === c.id));
+    const text = (e: GameEvent) => e.actor_id === c.id ? e.narration_private : String(e.payload['observable_target'] ?? '');
+    return { mine, altos: mine.map(text).join('\n').match(/¡Alto/g)?.length ?? 0, arrest: mine.find((e) => e.action_type === 'arrest')! };
+  }
+
+  it('si el máster ya lo ha narrado, ni el incidente ni el alto del motor lo repiten', async () => {
+    const { altos, arrest } = await detencion(true);
+    expect(altos).toBe(1);
+    expect(arrest.narration_private).toMatch(/^(Garrán|El alguacil) te detiene\. Te acusa de esto/);
+  });
+
+  it('si no lo ha narrado, lo da el motor, una vez', async () => {
+    const { altos, arrest } = await detencion(false);
+    expect(altos).toBe(1);
+    expect(arrest.narration_private).toMatch(/«¡Alto! Quedas detenido\.»/);
+  });
+});

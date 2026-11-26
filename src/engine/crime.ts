@@ -717,6 +717,24 @@ export function spreadNews(world: World, nowG: number): void {
 // Detención, calabozo y caza
 // ---------------------------------------------------------------------------
 
+/**
+ * De qué le acusa quien le da el alto (arreglo 3 del 26-11-2026): lo último que ha hecho y esa autoridad sabe, que es
+ * lo que provoca el alto, no lo más grave de la lista (violento 1051, acción 32: intenta robarle al molinero y Garrán
+ * le acusaba de lo de Hugo en la herrería). `before`: lo demás que se le busca, en una frase, o null.
+ */
+export function arrestCharge(world: World, c: Character, npcId: Id | null): { charge: string; before: string | null } | null {
+  const open = wantedIncidents(world, c);
+  if (!open.length) return null;
+  const known = npcId ? open.filter((i) => i.knowers.some((k) => k.npc_id === npcId)) : [];
+  const latest = [...(known.length ? known : open)].sort((a, b) => b.updated_game_s - a.updated_game_s)[0]!;
+  const rest = open.filter((i) => i.id !== latest.id).sort((a, b) => b.severity - a.severity);
+  const v = (i: Incident) => ({ ...i, victim_name: i.victim_id ? label(world, i.victim_id, c) : i.victim_name });
+  return {
+    charge: `${deedText(v(latest))} en ${where(world, latest)}`,
+    before: rest.length ? `${deedText(v(rest[0]!))} en ${where(world, rest[0]!)}${rest.length > 1 ? ` (y ${rest.length - 1} cosa${rest.length > 2 ? 's' : ''} más)` : ''}` : null,
+  };
+}
+
 /** Incidentes abiertos por los que buscan a este PJ. */
 export function wantedIncidents(world: World, c: Character): Incident[] {
   return (c.wanted?.incident_ids ?? []).map((id) => incidentById(world, id)).filter((x): x is Incident => Boolean(x) && x!.status === 'open');
@@ -1072,7 +1090,7 @@ function label(world: World, id: Id, reader?: Character | null): string {
  * él), para no soltar nombres que no sabe; sin él, nombres (el evento los
  * enmascara al entregarlo).
  */
-export function reactionSentences(world: World, i: Incident, you: boolean, reader?: Character | null): string[] {
+export function reactionSentences(world: World, i: Incident, you: boolean, reader?: Character | null, opts: { altoApart?: boolean } = {}): string[] {
   const p = you ? 'ti' : i.perpetrator_name;
   const out: string[] = [];
   const victim = i.victim_id ? label(world, i.victim_id, reader) : 'la víctima';
@@ -1081,7 +1099,8 @@ export function reactionSentences(world: World, i: Incident, you: boolean, reade
     if (!n || k.how === 'told' || n.status !== 'alive') continue;
     const name = cap(label(world, n.id, reader));
     switch (k.response) {
-      case 'arrest': out.push(`${name} se planta delante de ${p}: «¡Alto! Quedas detenido.»`); break;
+      // En el aviso de los jugadores el «¡Alto!» va en su evento (arrest), no aquí también (arreglo 6 del 26-11-2026).
+      case 'arrest': out.push(opts.altoApart ? `${name} lo ha visto y va a por ${p}.` : `${name} se planta delante de ${p}: «¡Alto! Quedas detenido.»`); break;
       case 'fight': out.push(`${name} se lanza contra ${p}.`); break;
       case 'hold': out.push(you ? `${name} aprieta los puños, pero no se mueve: deja que la autoridad se encargue de ti.` : `${name} aprieta los puños, pero no se mueve: deja que la autoridad se encargue.`); break;
       case 'seize': out.push(you ? `${name} te agarra de la muñeca: «Suelta eso. Ahora.»` : `${name} agarra de la muñeca a ${p} y le exige que lo suelte.`); break;
@@ -1128,7 +1147,7 @@ export function mainReactions(world: World, i: Incident, you: boolean, reader?: 
     const any = i.knowers.some((k) => k.how !== 'told' && world.npcs.get(k.npc_id)?.status === 'alive' && (k.response === 'shout' || k.response === 'flee'));
     return any || i.crowd ? [you ? 'La gente se aparta de ti y alguno grita pidiendo ayuda.' : `La gente se aparta de ${i.perpetrator_name} y alguno grita pidiendo ayuda.`] : [];
   }
-  return reactionSentences(world, { ...i, knowers: ranked, crowd: null }, you, reader);
+  return reactionSentences(world, { ...i, knowers: ranked, crowd: null }, you, reader, { altoApart: true });
 }
 
 /** Para el control de cierre: con qué palabras se nombra a cada testigo que reacciona (nombre, rol, cómo le ve el actor). */

@@ -39,7 +39,7 @@ import { parseErrand, pendingLine, trivialAction, type Errand } from './errand.j
 import { atBoard, dropQuest, readBoard, readsBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, plantBeat, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { activeIn, crowdHere, tickSchedule } from './schedule.js';
-import { allIncidents, arrestAttempt, arrestHostile, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, subdue, surrender, type LawNotice } from './crime.js';
+import { allIncidents, arrestAttempt, arrestCharge, arrestHostile, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, subdue, surrender, type LawNotice } from './crime.js';
 
 import { coinsOf, currencyOf, DEFAULT_STARTING_COINS, migrateLegacyCoins, money, newPurse, pay } from './money.js';
 
@@ -3830,6 +3830,20 @@ export class Engine {
     for (const n of notices) this.emitLaw(n);
   }
 
+  /**
+   * ¿Ha narrado ya el máster el alto a este PJ en este turno (su último cierre, hace nada)? «¡Alto!», «quedas
+   * detenido», «estás arrestado»… en la narración o en lo que dicen los NPC. Entonces el motor no lo repite.
+   */
+  private narratedAlto(c: Character): boolean {
+    const nowG = this.nowFor(c);
+    const recent = this.events.all().slice(-12).reverse();
+    const last = recent.find((e) => e.actor_id === c.id && e.action_type.startsWith('master'));
+    if (!last || Math.abs(nowG - last.timestamp_game_s) > 2 * 60) return false;
+    const lines = Array.isArray(last.payload['lines']) ? (last.payload['lines'] as { text?: string }[]).map((l) => l.text ?? '') : [];
+    const t = [last.narration_private, ...lines].join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return /¡\s*alto\b|(^|[^a-z])alto(?:\s+ahi)?\s*!|\b(?:quedas|estas|queda|esta)\s+(?:detenid|arrestad)|\bte\s+(?:detengo|arresto)\b|\bdate\s+preso\b/.test(t);
+  }
+
   /** Lo que la ley le hace a un PJ (crime.ts): el alto, el calabozo al caer, la salida. */
   private emitLaw(n: LawNotice): void {
     const c = n.character;
@@ -3839,10 +3853,15 @@ export class Engine {
     const mine = (t: string) => contract(maskUnknownNames(this.world, c.id, t));
     if (n.kind === 'arrest') {
       const reason = c.wanted?.reason ?? 'lo que has hecho';
+      // De qué le acusa: lo que acaba de provocar el alto, no lo más grave de la lista (arreglo 3); lo de antes, aparte.
+      const charge = arrestCharge(this.world, c, n.npc?.id ?? null);
+      const accused = charge ? `${c.name} ${charge.charge}${charge.before ? `; y además, ${charge.before}` : ''}` : `${c.name} ${reason}`;
+      // Si el máster ya ha narrado el alto en este turno, no se repite (arreglo 6: tres «¡Alto!» por detención).
+      const told = this.narratedAlto(c);
       this.events.emit({
         actor_id: c.id, action_type: 'arrest',
-        narration_private: mine(`${By} se te planta delante: «¡Alto! Quedas detenido.» Te acusa de esto: ${c.name} ${reason}. Si te entregas, te espera ${sentencePreview(this.world, c)}; si te resistes o huyes, irá a por ti.`),
-        observable: `${n.npc?.name ?? 'La autoridad'} le da el alto a ${c.name}: «¡Alto! Quedas detenido.»`, loudness: 3,
+        narration_private: mine(`${told ? `${By} te detiene.` : `${By} se te planta delante: «¡Alto! Quedas detenido.»`} Te acusa de esto: ${accused}. Si te entregas, te espera ${sentencePreview(this.world, c)}; si te resistes o huyes, irá a por ti.`),
+        observable: told ? `${n.npc?.name ?? 'La autoridad'} detiene a ${c.name}.` : `${n.npc?.name ?? 'La autoridad'} le da el alto a ${c.name}: «¡Alto! Quedas detenido.»`, loudness: 3,
         tags: ['crime', 'law', 'deterministic'],
         payload: { master: null, npc_id: n.npc?.id ?? null, observable_vague: 'Una voz grita «¡Alto!».', suggested_actions: ['Entregarme', 'Resistirme', 'Huir'], arrest: { npc_id: n.npc?.id ?? null, reason } },
       }, this.stampFor(c));
