@@ -15,7 +15,7 @@ import { GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
 import { attitudeOf } from './combat.js';
 import { talkTier, type TalkTier } from './concerns.js';
 import { transcriptOf } from './conversation.js';
-import { knownBy, npcProfile, reportIncident, type ConflictProfile, type Incident } from './crime.js';
+import { inFightWith, knownBy, npcProfile, reportIncident, type ConflictProfile, type Incident } from './crime.js';
 import type { Advantage } from './dice.js';
 import { checkFits, transferItem } from './inventory.js';
 import { DEFAULT_STARTING_COINS, money, pay } from './money.js';
@@ -521,7 +521,8 @@ export function createItem(world: World, npc: Npc, spec: NewItemSpec): { ok: tru
 // ---------------------------------------------------------------------------
 
 /** Cómo se lo toma el NPC: no se entera, casi le pilla, le advierte, broma, reproche, careo o delito. */
-export type ConflictResponse = 'unnoticed' | 'near_miss' | 'warned' | 'joke' | 'reproach' | 'confront' | 'crime';
+/** `disarm`: quitárselo en plena pelea (desarmarle); no es robo ni careo, la pelea sigue (arreglo 15 del 26-11-2026). */
+export type ConflictResponse = 'unnoticed' | 'near_miss' | 'warned' | 'joke' | 'reproach' | 'confront' | 'crime' | 'disarm';
 
 export interface ConflictResult {
   outcome: ConflictOutcome;
@@ -615,6 +616,18 @@ export function resolveConflict(world: World, pc: Character, npc: Npc, v: Confli
     case 'shove': deed = outcome === 'success' ? `Empujas a ${who}: trastabilla y retrocede.` : `${who} aguanta el empujón sin moverse.`; break;
     case 'grab': deed = outcome === 'success' ? `Agarras a ${who} del brazo.` : `${who} se suelta de un tirón.`; break;
     case 'touch': deed = `Tocas a ${who} sin su permiso.`; break;
+  }
+  // En plena pelea, quitárselo (o intentarlo) es desarmarle, no robarle: sin careo, sin incidente de robo y sin «ladrón».
+  // Lo suyo sigue siendo suyo y sabe quién lo tiene (no lo «echa en falta» luego, stolen.ts).
+  if ((v.kind === 'snatch' || v.kind === 'steal') && inFightWith(world, pc, npc, nowG)) {
+    const got = moved as ConflictResult['moved'];
+    if (got) {
+      const inst2 = world.itemInstances.get(got.instance_id);
+      const mark = inst2?.state['stolen'] as StolenMark | undefined;
+      if (inst2 && mark) { mark.noticed_game_s = nowG; mark.suspect_id = pc.id; world.touch('item_instances', inst2.id); }
+    }
+    memo(world, npc, pc, `${pc.name} ${got ? `le quitó ${got.name} en la pelea` : 'intentó desarmarle en la pelea'}.`, 2, nowG);
+    return result('disarm', `${deed} En plena pelea no es un robo: ${got ? 'le has desarmado' : 'sigue con lo suyo'} y la pelea sigue.`, null);
   }
   let rel = repeat ? lowerRelation(v.relation) : v.relation;
   const trust = TRUST_BY_KIND[v.kind];

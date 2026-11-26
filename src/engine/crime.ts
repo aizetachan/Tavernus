@@ -576,6 +576,9 @@ export function reportIncident(world: World, input: IncidentInput, nowG: number)
   const spot = input.spot_id ? world.spots.get(input.spot_id) ?? null : world.characterSpot(c);
   if (!spot) return null;
   const victim = input.victim_id ? world.npcs.get(input.victim_id) ?? null : null;
+  // Quitarle algo en plena pelea (desarmarle, arrancarle el martillo) no es un robo: lo grave ya es la pelea (arreglo
+  // 15 del 26-11-2026: Bruno le quita el martillo a Hugo con Atletismo 12 y salía «ladrón» y «te buscan»).
+  if ((input.kind === 'theft' || input.kind === 'theft_attempt') && victim && victim.status === 'alive' && inFightWith(world, c, victim, nowG)) return null;
   const sev = SEVERITY[input.kind];
   const all = store(world);
   // La violencia sube por escalones (agresión → con arma → muerte) dentro del mismo incidente; robar o profanar es otro.
@@ -624,6 +627,16 @@ export function reportAssault(world: World, c: Character, n: Npc, weapon: string
   if (!isUnprovoked(n, c.id) && !store(world).some((x) => x.status === 'open' && x.perpetrator_id === c.id && x.victim_id === n.id && VIOLENT.includes(x.kind))) return null;
   const armed = weapon !== null && weapon !== 'puños';
   return reportIncident(world, { kind: armed ? 'armed_assault' : 'assault', perpetrator_id: c.id, victim_id: n.id, spot_id: n.location.id, weapon: armed ? weapon : null }, nowG);
+}
+
+/**
+ * ¿Están el PJ y ese NPC peleando ahora? Sí si el NPC le es hostil (se lanzó contra él, le ataca) o si hay una agresión
+ * reciente entre los dos, de uno al otro. Lo que le quite en ese rato es desarmarle, no robarle.
+ */
+export function inFightWith(world: World, c: Character, n: Npc, nowG: number): boolean {
+  if ((n.attitude.by_character[c.id] ?? n.attitude.default) === 'hostile') return true;
+  return store(world).some((x) => x.status === 'open' && VIOLENT.includes(x.kind) && nowG - x.updated_game_s < ESCALATE_S
+    && x.perpetrator_id === c.id && x.victim_id === n.id);
 }
 
 /** ¿Empezó el PJ la pelea con ese NPC? Hay una agresión suya abierta contra él (y entonces vencerle no da PX). */
