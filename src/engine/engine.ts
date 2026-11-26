@@ -185,6 +185,8 @@ export interface ReactionOutcome {
   how: 'accept' | 'resist' | 'timeout' | 'away' | 'helpless';
   /** Lo que hace el afectado, como lo escribió (un gesto). */
   gesture?: string;
+  /** Las tiradas, para quien actúa: «Tirada enfrentada: tu Juego de manos d20 [18] + 2 = 20, contra su Percepción…». */
+  rolls?: string;
 }
 
 /**
@@ -2938,7 +2940,7 @@ export class Engine {
           : `RESULTADO (hecho del servidor, no lo contradigas): gana ${to.name}. ${from.name} NO lo consigue: lo que intentaba (${r.attempt}, dicho a ${to.name}) no pasa${r.kind === 'attack' ? ' y el golpe no entra' : ''}; no narres que lo logra ni a medias.`;
       const gesture = answer.gesture ? ` Cómo ${how === 'accept' ? 'se deja' : 'se resiste'} ${to.name}, según su jugador (en primera persona; es lo que HACE, un gesto, no algo que diga en voz alta; cuéntalo en tercera persona y ajustado al resultado): ${answer.gesture.replace(/[.]+$/, '')}.` : '';
       check.breakdown = `${check.breakdown} ${verdict}${gesture}${effects.length ? ` Ya aplicado por el servidor (no lo repitas): ${effects.join('; ')}.` : ''} ${to.name} es otro jugador y ya ha decidido: narra el desenlace sin ponerle palabras, gestos ni intenciones que no estén aquí, y no pidas otra reacción para esto.`;
-      this.reactionOutcome.set(from.id, { target_id: to.id, success, kind: r.kind, attempt: r.attempt, how, ...(answer.gesture ? { gesture: answer.gesture } : {}) });
+      this.reactionOutcome.set(from.id, { target_id: to.id, success, kind: r.kind, attempt: r.attempt, how, ...(answer.gesture ? { gesture: answer.gesture } : {}), ...(rollMine ? { rolls: rollMine } : {}) });
       try { await this.resolveWithMaster(from, r.input ?? `(intenta ${r.attempt})`, { original_text: r.input ?? r.attempt, result: check }); } finally { this.reactionOutcome.delete(from.id); }
     }
     return done({ ok: true, text: e.narration_private, event: e });

@@ -46,6 +46,7 @@ function spyMaster(engine: Engine) {
     },
   };
   engine.attachMaster(m);
+  engine.onMaster(() => {}); // sin el aviso de consola por cada fallo fingido
   return seen;
 }
 
@@ -90,7 +91,7 @@ describe('(2) el resultado de la enfrentada llega al cierre como hecho', () => {
       const got = spy.at(-1)!;
       expect(got.success).toBe(win);
       expect(got.breakdown).toMatch(win ? /RESULTADO \(hecho del servidor, no lo contradigas\): gana Kael\. Lo consigue/ : /RESULTADO \(hecho del servidor, no lo contradigas\): gana Mira\. Kael NO lo consigue/);
-      expect(got.outcome).toMatchObject({ target_id: mira.id, success: win, kind: 'shove', how: 'resist' });
+      expect(got.outcome).toMatchObject({ target_id: mira.id, success: win, kind: 'shove', how: 'resist', rolls: expect.stringMatching(/^Tirada enfrentada: tu Atletismo d20/) });
       // Fuera de esa narración, ya no hay desenlace en curso.
       expect(engine.reactionOutcomeOf(kael.id)).toBeNull();
     }
