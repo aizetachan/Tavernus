@@ -117,14 +117,14 @@ function eventContext(r: Report): string {
   const m = (e.payload['master'] ?? null) as MasterMeta | null;
   const u = m?.usage;
   const out: string[] = [];
-  out.push(`<div><h3>Evento</h3><p>seq ${esc(e.seq)} · <code>${esc(e.action_type)}</code> · ${e.tags.length ? esc(e.tags.join(', ')) : 'sin etiquetas'}</p></div>`);
+  out.push(`<div><h3>Evento</h3><p>seq ${esc(e.seq)}, <code>${esc(e.action_type)}</code>, ${e.tags.length ? esc(e.tags.join(', ')) : 'sin etiquetas'}</p></div>`);
   if (e.input_text) out.push(`<div><h3>Lo que hizo el jugador</h3><p>${esc(e.input_text)}</p></div>`);
   if (e.narration_private) out.push(`<div><h3>Narración</h3><p>${esc(e.narration_private)}</p></div>`);
   if (r.read && r.read.text !== e.narration_private) out.push(`<div><h3>Lo que leyó este PJ (${esc(r.read.level)})</h3><p>${esc(r.read.text)}</p></div>`);
   if (m) {
     const tokens = u ? `entrada ${count(u.input ?? 0)}, salida ${count(u.output ?? 0)}, caché leída ${count(u.cache_read ?? 0)}, caché escrita ${count(u.cache_write ?? 0)}` : 'sin datos';
-    const turns = u?.iterations ? ` · ${u.iterations} ${u.iterations === 1 ? 'vuelta' : 'vueltas'}` : '';
-    const ms = u?.ms ? ` · ${count(u.ms)} ms` : '';
+    const turns = u?.iterations ? `, ${u.iterations} ${u.iterations === 1 ? 'vuelta' : 'vueltas'}` : '';
+    const ms = u?.ms ? `, ${count(u.ms)} ms` : '';
     const actor = m.actor ? `<p>Actor: ${esc(m.actor.model)} (entrada ${count(m.actor.input ?? 0)}, salida ${count(m.actor.output ?? 0)})</p>` : '';
     out.push(`<div><h3>Máster</h3><p>${esc(m.model ?? 'modelo desconocido')}${turns}${ms}</p><p>Tokens: ${tokens}</p>${actor}</div>`);
     const calls = m.calls ?? [];
@@ -143,13 +143,13 @@ function eventContext(r: Report): string {
 
 function reportItem(item: StoredReport, date: (ms: number) => string): string {
   const r = item.report;
-  if (!r) return `<details class="report"><summary><span class="head">${esc(item.game_name)} · <code>${esc(item.file)}</code></span><span class="said">No se ha podido leer este reporte.</span></summary></details>`;
+  if (!r) return `<details class="report"><summary><span class="head">${esc(item.game_name)}, <code>${esc(item.file)}</code></span><span class="said">No se ha podido leer este reporte.</span></summary></details>`;
   const when = Date.parse(r.at);
   return `<details class="report"><summary>`
-    + `<span class="head">${esc(Number.isNaN(when) ? r.at : date(when))} · ${esc(item.game_name)} · ${esc(r.character?.name)}${r.general ? ' · algo va mal' : ` · evento ${esc(r.seq)}`}</span>`
+    + `<span class="head">${esc(Number.isNaN(when) ? r.at : date(when))}, ${esc(item.game_name)}, ${esc(r.character?.name)}${r.general ? ', algo va mal' : `, evento ${esc(r.seq)}`}</span>`
     + `<span class="said">${esc(r.text)}</span></summary>`
     + `<div class="ctx">${eventContext(r)}`
-    + `<div><h3>Datos</h3><p>Partida <code>${esc(item.slug)}</code> · PJ <code>${esc(r.character?.id)}</code> · versión ${esc(r.server_version ?? 'desconocida')}</p>`
+    + `<div><h3>Datos</h3><p>Partida <code>${esc(item.slug)}</code>, PJ <code>${esc(r.character?.id)}</code>, versión ${esc(r.server_version ?? 'desconocida')}</p>`
     + `<p>Hora en su navegador: ${esc(r.client_at ?? 'no la mandó')}</p>`
     + (r.user_agent ? `<p>Navegador: ${esc(r.user_agent)}</p>` : '')
     + `<p>Fichero: <code>${esc(item.slug)}/reports/${esc(item.file)}</code></p></div>`
@@ -159,7 +159,7 @@ function reportItem(item: StoredReport, date: (ms: number) => string): string {
 export function statusPage(d: StatusData): string {
   const date = dateFn(d.tz);
   const more = d.reports.total - d.reports.items.length;
-  return `${HEAD('Estado · Tavernus')}${STYLE}
+  return `${HEAD('Estado de Tavernus')}${STYLE}
 <main class="box wide status">
   <div class="eyebrow">Tavernus</div>
   <h1>Estado del servidor</h1>

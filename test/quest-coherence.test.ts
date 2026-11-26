@@ -231,7 +231,7 @@ describe('misiones: el tablón', () => {
     expect(jobs.every((q) => q.status === 'available' && q.origin?.kind === 'board')).toBe(true);
     const notices = questEvents(engine, c).filter((e) => (e.payload['quest'] as { event: string }).event === 'available').map((e) => noticeOf(e)!);
     expect(notices).toHaveLength(posted.length);
-    expect(notices[0]!.text).toMatch(/^Encargo en el Diario · «/);
+    expect(notices[0]!.text).toMatch(/^Encargo en el Diario: «/);
     expect(notices[0]!.quest!.why).toMatch(/^Aviso del tablón: lo pide /);
     // Quedarse delante no repite los avisos.
     await engine.tick();

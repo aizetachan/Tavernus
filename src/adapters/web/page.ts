@@ -716,7 +716,8 @@ export const PAGE = String.raw`<!doctype html>
   .msg.ambient.k-rumor { border-left-color: rgba(240,200,80,.35); }
   .msg.ambient.k-reaction { border-left-color: rgba(140,205,165,.4); }
   .msg.notice .link { display: inline; height: auto; margin: 0 0 0 .35em; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--accent); opacity: .8; font: inherit; cursor: pointer; }
-  .msg.notice .link::before { content: '· '; color: rgba(198,191,180,.4); }
+  .msg.notice .link::before { content: '('; color: rgba(198,191,180,.4); }
+  .msg.notice .link::after { content: ')'; color: rgba(198,191,180,.4); }
   .msg.notice .link:hover { opacity: 1; text-decoration: underline; }
   .msg.notice.tone-good { color: rgba(140,205,165,.75); }
   .msg.notice.tone-bad { color: rgba(240,150,140,.78); }
@@ -1723,10 +1724,10 @@ ${SHOP_JS}
   function deathBlock(s) {
     var d = s.death;
     if (!d) return '';
-    if (d.state === 'dead') return '<div class="tile wide death"><span class="l">☠ Muerto · vuelves en ' + escapeHtml(d.respawn_place || '') + '<b data-respawn="' + Number(d.respawn_real_ms || 0) + '">—</b></span><small>' + escapeHtml(DEATH_MODE[d.mode] || '') + '</small></div>';
-    if (d.state === 'dying') return '<div class="tile wide death"><span class="l">A 0 PG, cayendo<b>' + d.success + ' ✔ · ' + d.fail + ' ✖</b></span><small>El servidor tira tus salvaciones contra muerte: tres éxitos te estabilizan, tres fallos te matan.</small></div>';
+    if (d.state === 'dead') return '<div class="tile wide death"><span class="l">☠ Muerto, vuelves en ' + escapeHtml(d.respawn_place || '') + '<b data-respawn="' + Number(d.respawn_real_ms || 0) + '">—</b></span><small>' + escapeHtml(DEATH_MODE[d.mode] || '') + '</small></div>';
+    if (d.state === 'dying') return '<div class="tile wide death"><span class="l">A 0 PG, cayendo<b>' + d.success + ' ✔ y ' + d.fail + ' ✖</b></span><small>El servidor tira tus salvaciones contra muerte: tres éxitos te estabilizan, tres fallos te matan.</small></div>';
     if (d.state === 'stable') return '<div class="tile wide death"><span class="l">Inconsciente, estable<b>' + escapeHtml(d.stable_until ? 'hacia las ' + d.stable_until : '') + '</b></span><small>Recobras el sentido con 1 PG; si alguien te cura, antes.</small></div>';
-    return '<p class="sh-foot" style="margin-top:8px">Modo de muerte · ' + escapeHtml(DEATH_MODE[d.mode] || d.mode) + '</p>';
+    return '<p class="sh-foot" style="margin-top:8px">Modo de muerte: ' + escapeHtml(DEATH_MODE[d.mode] || d.mode) + '</p>';
   }
   function fmtLeft(ms) {
     var s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
@@ -1751,11 +1752,11 @@ ${SHOP_JS}
   function renderCard(s) {
     var t = s.title.split(' · '), c = combatOf(s);
     $('card').innerHTML = '<div class="top"><span class="av">' + escapeHtml(initial(t[0] || '?')) + '</span><div class="who"><div class="name">' + escapeHtml(t[0] || '') + '</div>' +
-      '<div class="sub">' + escapeHtml(t.slice(1).join(' · ')) + '</div></div>' +
+      '<div class="sub">' + escapeHtml(t.slice(1).join(', ')) + '</div></div>' +
       '<button type="button" class="ib stats-btn" title="Todas tus estadísticas" aria-label="Ver todas tus estadísticas"><svg class="i"><use href="#i-body"/></svg></button></div>' +
       (c.hp ? '<div class="hpline"><span class="bar"><i class="' + c.cls + '" style="width:' + c.pct + '%"></i></span><span class="hpv">' + c.hp[1] + ' / ' + c.hp[2] + ' PG</span></div>' : '') +
-      (s.death && s.death.state === 'dead' ? '<div class="respawn">☠ Muerto · vuelves en <b data-respawn="' + Number(s.death.respawn_real_ms || 0) + '">—</b></div>'
-        : s.death && s.death.state === 'dying' ? '<div class="respawn">A 0 PG · salvaciones ' + s.death.success + ' ✔ · ' + s.death.fail + ' ✖</div>' : '');
+      (s.death && s.death.state === 'dead' ? '<div class="respawn">☠ Muerto, vuelves en <b data-respawn="' + Number(s.death.respawn_real_ms || 0) + '">—</b></div>'
+        : s.death && s.death.state === 'dying' ? '<div class="respawn">A 0 PG, salvaciones: ' + s.death.success + ' ✔ y ' + s.death.fail + ' ✖</div>' : '');
     // «despierto · Taberna, La barra»: el lugar a la cabecera del chat; debajo, la hora, el rincón y el estado.
     var d = s.description.split('\n')[0], i = d.indexOf(' · ');
     var where = i >= 0 ? d.slice(i + 3) : d, state = i >= 0 ? d.slice(0, i) : '';
@@ -1764,14 +1765,14 @@ ${SHOP_JS}
     document.querySelector('#place .pl').textContent = placeName;
     $('view-place').textContent = placeName;
     // En el móvil solo la hora (el lugar ya va encima): el rincón y el estado se quedan para el escritorio.
-    var extra = [comma >= 0 ? where.slice(comma + 2) : '', state !== 'despierto' ? state : '', s.description.split('\n')[1] || ''].filter(Boolean).join(' · ');
+    var extra = [comma >= 0 ? where.slice(comma + 2) : '', state !== 'despierto' ? state : '', s.description.split('\n')[1] || ''].filter(Boolean).join(', ');
     // En el móvil arriba va el nombre de la partida, y el lugar baja aquí, tras la hora.
     // La fecha («Miércoles 3 de Brotes, año 1, »), solo en el escritorio: en el móvil, la hora sola.
     var hm = /^(.*?)(\d{1,2}:\d{2})$/.exec(s.footer || ''), when = hm ? '<span class="sub-d">' + escapeHtml(hm[1]) + '</span>' + hm[2] : escapeHtml(s.footer || '');
-    $('place-sub').innerHTML = when + '<span class="sub-pl">' + (s.footer ? ' · ' : '') + escapeHtml(placeName) + '</span>' +
-      (extra ? '<span class="sub-x">' + (s.footer ? ' · ' : '') + escapeHtml(extra) + '</span>' : '');
+    $('place-sub').innerHTML = when + '<span class="sub-pl">' + (s.footer ? ', ' : '') + escapeHtml(placeName) + '</span>' +
+      (extra ? '<span class="sub-x">' + (s.footer ? ', ' : '') + escapeHtml(extra) + '</span>' : '');
     var coins = field(s, 'Monedas');
-    $('pack-sub').textContent = [loadShort(s) !== '—' ? 'Carga ' + loadShort(s) + ' lb' : '', coins ? coins : ''].filter(Boolean).join(' · ') || 'Lo que llevas encima';
+    $('pack-sub').textContent = [loadShort(s) !== '—' ? 'Carga ' + loadShort(s) + ' lb' : '', coins ? coins : ''].filter(Boolean).join(', ') || 'Lo que llevas encima';
   }
 
   var ABILS = ['FUE', 'DES', 'CON', 'INT', 'SAB', 'CAR'];
@@ -1784,7 +1785,7 @@ ${SHOP_JS}
     var dl = s.description.split('\n'), d0 = dl[0], cut = d0.indexOf(' · ');
     var state = cut >= 0 ? d0.slice(0, cut) : '', where = (cut >= 0 ? d0.slice(cut + 3) : d0) + (dl[1] ? '\n' + dl[1] : '');
     var h = '<div class="sh-head"><span class="av">' + (av ? '<img alt="" src="' + escapeHtml(av.getAttribute('src')) + '">' : escapeHtml(initial(t[0] || '?'))) + '</span><div class="sh-who"><h2>' + escapeHtml(t[0] || '') + '</h2>' +
-      '<p>' + escapeHtml(t.slice(1).join(' · ')) + '</p></div>' +
+      '<p>' + escapeHtml(t.slice(1).join(', ')) + '</p></div>' +
       '<div class="sh-state">' + (state ? '<div><small>Estado</small><b>' + escapeHtml(state) + '</b></div>' : '') + '<div><small>Ubicación</small><b>' + escapeHtml(where) + '</b></div></div></div>';
     h += '<div class="tiles">';
     if (c.hp) h += '<div class="tile wide"><span class="l">Puntos de golpe<b>' + c.hp[1] + ' / ' + c.hp[2] + '</b></span><span class="bar"><i class="' + c.cls + '" style="width:' + c.pct + '%"></i></span>' + (c.cond ? '<small>Condiciones: ' + escapeHtml(c.cond) + '</small>' : '') + '</div>';
@@ -1804,7 +1805,7 @@ ${SHOP_JS}
       h += '<div class="kv-t">Características</div><div class="tiles">';
       ABILS.forEach(function (a) {
         if (!scores[a]) return;
-        h += '<div class="tile ab' + (saveSet[a] ? ' save' : '') + '"><small>' + a + (saveSet[a] ? ' · salv.' : '') + '</small><b>' + mod(scores[a]) + '</b><small>' + scores[a] + '</small></div>';
+        h += '<div class="tile ab' + (saveSet[a] ? ' save' : '') + '"><small>' + a + (saveSet[a] ? ' (salv.)' : '') + '</small><b>' + mod(scores[a]) + '</b><small>' + scores[a] + '</small></div>';
       });
       h += '</div>';
       if (saves && saves !== '—') h += '<p class="sh-foot" style="margin-top:8px">Salvaciones: ' + escapeHtml(saves) + '</p>';
@@ -1835,7 +1836,7 @@ ${SHOP_JS}
   }
   function spellRow(sp) {
     return '<details class="spell"><summary><span>' + escapeHtml(sp.name) + '</span>' + (sp.always ? '<span class="tagx">siempre</span>' : '') +
-      '<span class="meta">' + escapeHtml(sp.time + ' · ' + sp.range) + '</span></summary><p>' + escapeHtml(sp.text) + '</p><p class="tags">' + escapeHtml(sp.tags.join(' · ')) + '</p></details>';
+      '<span class="meta">' + escapeHtml(sp.time + ', ' + sp.range) + '</span></summary><p>' + escapeHtml(sp.text) + '</p><p class="tags">' + escapeHtml(sp.tags.join(', ')) + '</p></details>';
   }
   function optName(ch, id) { var o = ch.options.filter(function (x) { return x.id === id; })[0]; return o ? o.name : id; }
   function editFoot(n, count, exact, err) {
@@ -1870,14 +1871,14 @@ ${SHOP_JS}
     var picks = classEdit.picks;
     return '<div class="speditor"><h4>' + escapeHtml(e.title) + '</h4>' + e.options.map(function (sp) {
       return '<label><input type="checkbox" data-spick="' + escapeHtml(sp.id) + '"' + (picks.indexOf(sp.id) >= 0 ? ' checked' : '') + '><span><b>' + escapeHtml(sp.name) + '</b> <small>' +
-        escapeHtml(sp.tags.join(' · ') + ' · ' + sp.time + ' · ' + sp.range) + '</small><small>' + escapeHtml(sp.text) + '</small></span></label>';
+        escapeHtml([sp.tags.join(', '), sp.time, sp.range].filter(Boolean).join(', ')) + '</small><small>' + escapeHtml(sp.text) + '</small></span></label>';
     }).join('') + editFoot(picks.length, e.count, e.exact, classEdit.error) + '</div>';
   }
   function renderClass(k) {
     if (!k) return '';
     var h = '<div class="kv-t">Nivel y experiencia</div>';
     var pct = k.next_xp ? Math.max(0, Math.min(100, Math.round(100 * (k.xp - k.level_xp) / (k.next_xp - k.level_xp)))) : 100;
-    h += '<div class="tiles"><div class="tile wide"><span class="l">Nivel ' + k.level + ' · competencia +' + k.proficiency + '<b>' + k.xp + (k.next_xp ? ' / ' + k.next_xp : '') + ' PX</b></span>' +
+    h += '<div class="tiles"><div class="tile wide"><span class="l">Nivel ' + k.level + ', competencia +' + k.proficiency + '<b>' + k.xp + (k.next_xp ? ' / ' + k.next_xp : '') + ' PX</b></span>' +
       '<span class="bar"><i class="xp" style="width:' + pct + '%"></i></span><small>' + (k.next_xp ? 'Te faltan ' + (k.next_xp - k.xp) + ' PX para el nivel ' + (k.level + 1) + '. Se ganan venciendo enemigos y cumpliendo misiones; al llegar subes solo y un aviso te dice qué ganas.' : 'Nivel máximo.') + '</small></div></div>';
     var pend = k.choices.filter(function (c) { return c.pending; });
     if (pend.length) h += '<div class="kv-t">Por elegir</div>' + pend.map(choiceBox).join('');
@@ -2005,7 +2006,7 @@ ${SHOP_JS}
       var pct = function (n) { return Math.max(0, Math.min(100, n / c.max_lb * 100)); };
       var lvl = { ok: 'Ligero', encumbered: 'Cargado', heavily: 'Muy cargado', immobile: 'No puedes moverte' }[c.level] || '';
       h += '<div class="pk-w"><b>' + escapeHtml(pkLb(c.weight_lb).replace(' lb', '')) + '<small> / ' + escapeHtml(String(c.max_lb)) + ' lb</small></b>' +
-        '<span class="pk-lvl ' + c.level + '">' + escapeHtml(lvl) + (c.speed_penalty_ft && c.level !== 'immobile' ? ' · −' + c.speed_penalty_ft + ' pies de velocidad' : '') + '</span></div>';
+        '<span class="pk-lvl ' + c.level + '">' + escapeHtml(lvl) + (c.speed_penalty_ft && c.level !== 'immobile' ? ', −' + c.speed_penalty_ft + ' pies de velocidad' : '') + '</span></div>';
       pkBar = '<div class="pk-bar ' + c.level + '" role="meter" aria-label="Carga" aria-valuemin="0" aria-valuemax="' + c.max_lb + '" aria-valuenow="' + c.weight_lb + '" aria-valuetext="' + escapeHtml(p.load) + '">' +
         '<i style="width:' + pct(c.weight_lb) + '%"></i><span class="mk" style="left:' + pct(c.encumbered_lb) + '%" title="Cargado desde ' + c.encumbered_lb + ' lb"></span>' +
         '<span class="mk" style="left:' + pct(c.heavily_lb) + '%" title="Muy cargado desde ' + c.heavily_lb + ' lb"></span></div>';
@@ -2029,7 +2030,7 @@ ${SHOP_JS}
     var grid = function (title, g, dest, items, slots, maxLb) {
       var at = arrange(g, items, slots), byId = {}, w = 0;
       items.forEach(function (x) { byId[x.id] = x; w += x.weight_lb || 0; });
-      return '<div class="kv-t">' + escapeHtml(title) + ' <span>' + items.length + ' / ' + slots + (maxLb ? ' · ' + escapeHtml(pkLb(w)) + ' de ' + escapeHtml(pkLb(maxLb)) : w ? ' · ' + escapeHtml(pkLb(w)) : '') + '</span></div>' +
+      return '<div class="kv-t">' + escapeHtml(title) + ' <span>' + items.length + ' / ' + slots + (maxLb ? ', ' + escapeHtml(pkLb(w)) + ' de ' + escapeHtml(pkLb(maxLb)) : w ? ', ' + escapeHtml(pkLb(w)) : '') + '</span></div>' +
         '<div class="pk-grid" role="group" aria-label="' + escapeHtml(title) + '">' + at.map(function (id, i) {
           return slot(id ? byId[id] : null, { dest: dest, g: g, i: i, where: title + ', casilla ' + (i + 1), icon: null });
         }).join('') + '</div>';
@@ -2466,7 +2467,7 @@ ${SHOP_JS}
         if (side === 'right') { lx = ex - 4; ly = ey - 7; anchor = 'end'; }
         else if (side === 'left') { lx = ex + 4; ly = ey - 7; anchor = 'start'; }
         else { anchor = ex < SW / 2 ? 'start' : 'end'; lx = ex + (anchor === 'start' ? 8 : -8); ly = side === 'top' ? 14 : H - 6; }
-        var label = '→ ' + e.to_location_name + ' · ' + fmtM(e.distance_m) + (e.blocked ? ' · bloqueada' : '');
+        var label = '→ ' + e.to_location_name + ', ' + fmtM(e.distance_m) + (e.blocked ? ', bloqueada' : '');
         var start = Math.min(14, t / 3);
         var seg = 'x1="' + r1(px + ux * start) + '" y1="' + r1(py + uy * start) + '" x2="' + r1(ex) + '" y2="' + r1(ey) + '"';
         // Sin rótulo: el tablero solo nombra personajes. El destino sale al pasar el ratón (title) y la flecha sigue siendo clicable.
@@ -2667,7 +2668,7 @@ ${SHOP_JS}
       if (!a || !b) return;
       var seg = 'x1="' + r1(X(a.x)) + '" y1="' + r1(Y(a.y)) + '" x2="' + r1(X(b.x)) + '" y2="' + r1(Y(b.y)) + '"';
       o.push('<g class="edge" data-edge="' + escapeHtml(e.id) + '"><line class="road-hit" ' + seg + '/><line class="road' + (e.blocked ? ' blocked' : '') + '" ' + seg + '/>' +
-        '<text class="dist" x="' + r1((X(a.x) + X(b.x)) / 2) + '" y="' + r1((Y(a.y) + Y(b.y)) / 2 - 4) + '">' + escapeHtml(fmtM(e.distance_m) + (e.blocked ? ' · bloqueado' : '')) + '</text></g>');
+        '<text class="dist" x="' + r1((X(a.x) + X(b.x)) / 2) + '" y="' + r1((Y(a.y) + Y(b.y)) / 2 - 4) + '">' + escapeHtml(fmtM(e.distance_m) + (e.blocked ? ', bloqueado' : '')) + '</text></g>');
     });
     // Ruta del actor entre dos lugares.
     var tr = ends(m.actor.transit);
@@ -2703,7 +2704,7 @@ ${SHOP_JS}
 
     var title = isWorld ? m.region.name : m.zone.name;
     var sub = isWorld ? 'región' : (ZONE_KIND[m.zone.kind] || m.zone.kind);
-    var where = '<div class="where"><b>' + escapeHtml(title) + '</b><span class="sub">· ' + escapeHtml(sub) + '</span><span class="btns">' +
+    var where = '<div class="where"><b>' + escapeHtml(title) + '</b><span class="sub">' + escapeHtml(sub) + '</span><span class="btns">' +
       '<button type="button" data-view="zone"' + (isWorld ? '' : ' class="on"') + '>Zona</button><button type="button" data-view="world"' + (isWorld ? ' class="on"' : '') + '>Región</button>' +
       '<button type="button" data-map-big title="' + (big ? 'Volver al panel (Esc)' : 'Ver el mapa en grande') + '">' + (big ? 'Cerrar' : 'Ampliar') + '</button></span></div>';
     var legend = '<div class="legend"><span><i style="border-color:' + RING_MAP.self + '"></i>tú</span><span><i style="border-color:' + RING_MAP.ally + '"></i>aliado o neutral</span>' +
@@ -2945,7 +2946,7 @@ ${SHOP_JS}
   function questWhence(q) {
     var o = q.origin;
     return q.kind === 'main' ? 'misión principal' : q.kind === 'achievement' ? 'logro' : q.kind === 'debt' ? 'deuda' + (q.giver ? ' con ' + q.giver : '')
-      : o && o.kind === 'heard' ? 'de oídas' : o && o.kind === 'board' ? 'tablón' + (q.giver ? ' · lo pide ' + q.giver : '') : q.giver ? 'nos lo pidió ' + q.giver : o && o.kind === 'self' ? 'por tu cuenta' : '';
+      : o && o.kind === 'heard' ? 'de oídas' : o && o.kind === 'board' ? 'tablón' + (q.giver ? ', lo pide ' + q.giver : '') : q.giver ? 'nos lo pidió ' + q.giver : o && o.kind === 'self' ? 'por tu cuenta' : '';
   }
   function questLevel(q) {
     return q.level ? '<span class="lv d-' + q.difficulty + '" title="Nivel ' + q.level + ': ' + escapeHtml(JDIFF[q.difficulty] || '') + '">Nv ' + q.level + '</span>' : '';
@@ -3445,7 +3446,7 @@ ${SHOP_JS}
     if (!q) { $('quest').innerHTML = h + '<button type="button" class="prow" data-quest><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Nada entre manos</b><small>Mira el tablón o habla con la gente</small></span></button></div>'; return; }
     // Tarjeta de la seguida: título, de quién, plazo, qué toca ahora y el progreso. Debajo, lo que está listo para entregar y «Ver todas».
     var next = questNext(q) || (q.summary && q.summary.text) || '';
-    var sub = [QKIND[q.kind] || '', q.giver && q.kind !== 'main' ? 'de ' + q.giver : '', q.level ? 'Nv ' + q.level : ''].filter(Boolean).join(' · ');
+    var sub = [QKIND[q.kind] || '', q.giver && q.kind !== 'main' ? 'de ' + q.giver : '', q.level ? 'Nv ' + q.level : ''].filter(Boolean).join(', ');
     h += '<button type="button" class="qcard" data-quest title="Abrir en el Diario"><span class="qcard-h">' + questIcon(q, false) + '<span class="tt"><b>' + escapeHtml(q.title) + '</b>' + (sub ? '<small>' + escapeHtml(sub) + '</small>' : '') + '</span>' + clockHtml(q, 'muted') + '</span>' +
       (next ? '<span class="qcard-n"><svg class="i"><use href="#i-arrow"/></svg><span>' + escapeHtml(next) + '</span></span>' : '') + progressHtml(q) + '</button>';
     var ready = live.filter(function (x) { return x.status === 'ready' && x.id !== q.id; });

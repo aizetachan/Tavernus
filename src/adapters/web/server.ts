@@ -87,7 +87,7 @@ import { type DialogueLine, type LineTo, type Moment } from '../../engine/moment
 import { lineTargets, presentIds, viewOf } from '../../engine/audience.js';
 import { blocksSpeech, novelBlocks, withoutEcho, type NovelBlock } from './novel.js';
 import { handleJournalRequest, touchesJournal } from './journal.js';
-import { noticeOf, webNotice, type WebNotice } from './notice.js';
+import { noticeOf, rollNoticeText, webNotice, type WebNotice } from './notice.js';
 import { handlePaintRequest } from './paint.js';
 import { handleAvatarRequest } from './avatar.js';
 import { journeyOf } from '../../engine/travel.js';
@@ -1667,7 +1667,7 @@ export function createWebServer(games: GameManager, opts: WebServerOptions = {})
 
   function wikiMissing(res: ServerResponse): void {
     res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
-    res.end('<!doctype html><html lang="es"><meta charset="utf-8"><title>No está · Wiki de Tavernus</title><link rel="stylesheet" href="/wiki/wiki.css"><body><div class="page"><article><h1>No hay esa página</h1><p>Puede que la hayan movido o que la wiki no esté construida. <a href="/wiki/">Ir a la portada de la wiki</a>.</p></article></div></body></html>');
+    res.end('<!doctype html><html lang="es"><meta charset="utf-8"><title>No está: Wiki de Tavernus</title><link rel="stylesheet" href="/wiki/wiki.css"><body><div class="page"><article><h1>No hay esa página</h1><p>Puede que la hayan movido o que la wiki no esté construida. <a href="/wiki/">Ir a la portada de la wiki</a>.</p></article></div></body></html>');
   }
 
   async function serveAsset(res: ServerResponse, name: string): Promise<void> {
@@ -1926,13 +1926,16 @@ export function silentInThread(e: GameEvent): boolean {
 
 export function toMessage(d: Delivery, engine: Engine): WebMessage {
   const e: GameEvent = d.event;
-  const m: WebMessage = { seq: e.seq, kind: MASTER_TYPES.has(e.action_type) ? 'master' : 'system', text: d.text };
+  // Una tirada se lee con su dado y su resultado o diciendo que es oculta, sin «·» (también las del historial; arreglo 36).
+  const shownRoll = e.payload['shown_roll'] as { hidden?: boolean } | undefined;
+  const text = shownRoll ? rollNoticeText(d.text, shownRoll) : d.text;
+  const m: WebMessage = { seq: e.seq, kind: MASTER_TYPES.has(e.action_type) ? 'master' : 'system', text };
   // Lo que la gente comenta al pasar (chatter.ts): una línea de ambiente con quien lo dice, sin burbuja de narrador.
   const chat = e.action_type === 'chatter' ? e.payload['chatter'] as { npc_id: Id | null; text: string; kind: string } | undefined : undefined;
   if (chat) { m.ambient = { npc_id: chat.npc_id, name: speakerLabel(engine.world, chat.npc_id, d.character_id), text: chat.text, kind: chat.kind }; return m; }
   // Lo informativo no es narración (notice.ts): sale como aviso de sistema de una línea, también en el historial
   // restaurado. El tablón y el progreso llevan al Diario. Sigue con sus botones, momentos y sonido.
-  const notice = noticeOf(e, d.character_id, d.text);
+  const notice = noticeOf(e, d.character_id, text);
   // La ventana decisiva caducó sin que el jugador hiciera nada (Engine.expireDecisive): que se vea antes de lo que pasa.
   if (e.tags.includes('decisive_timeout') && e.actor_id === d.character_id) m.timeout = true;
   // Tirada a la vista (rolls.ts): la propia anima el dado del botón; la de otro jugador es solo el aviso.

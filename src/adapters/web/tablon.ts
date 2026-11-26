@@ -67,7 +67,7 @@ export function tablonView(engine: Engine, characterId: Id, justRead: readonly I
       id: j.id, title: j.title, text: maskUnknownNames(w, c.id, j.text),
       // El aviso firma: leído, se sabe quién lo pide (quests.ts, readBoard).
       giver: npc ? { id: npc.id, name: npc.name, role: npc.role } : null,
-      reward: `${money(w, j.reward_coins)}${j.reward_reputation ? ` · +${j.reward_reputation} de reputación` : ''}`,
+      reward: `${money(w, j.reward_coins)}${j.reward_reputation ? ` y +${j.reward_reputation} de reputación` : ''}`,
       deadline, steps, fresh: seen[j.id] === undefined || justRead.includes(j.id),
     };
   };
@@ -75,7 +75,7 @@ export function tablonView(engine: Engine, characterId: Id, justRead: readonly I
     const at = leavesBoardAt(w, j.id, nowG);
     if (at === null) return 'Sin plazo: sigue en el tablón';
     const when = engine.clock.format(at).replace(/, año \d+/, '');
-    return `Hasta el ${when.charAt(0).toLowerCase()}${when.slice(1)} · quedan ${leftText(at - nowG)} de juego`;
+    return `Hasta el ${when.charAt(0).toLowerCase()}${when.slice(1)} (quedan ${leftText(at - nowG)} de juego)`;
   };
   const onBoardIds = new Set(onBoard.map((j) => j.id));
   const taken = w.campaign.jobs.flatMap((j) => {
@@ -131,7 +131,7 @@ export const TABLON_JS = String.raw`
     return h + '</article>';
   }
   function renderTablon(t) {
-    var p = t.place, h = p ? '<p class="tb-where"><b>' + escapeHtml(p.spot.charAt(0).toUpperCase() + p.spot.slice(1)) + '</b>' + (p.location ? ' de ' + escapeHtml(p.location) : '') + (p.here ? ' · estás delante' : '') + '</p>' : '';
+    var p = t.place, h = p ? '<p class="tb-where"><b>' + escapeHtml(p.spot.charAt(0).toUpperCase() + p.spot.slice(1)) + '</b>' + (p.location ? ' de ' + escapeHtml(p.location) : '') + (p.here ? ', estás delante' : '') + '</p>' : '';
     h += '<h3>Disponibles <span>' + t.available.length + '</span></h3>' + (t.available.length ? t.available.map(function (j) { return tablonJobHtml(j, 'available'); }).join('') : '<p class="empty">No queda ninguno por coger: el tablón cambia cada día.</p>');
     h += '<h3>Los que has cogido <span>' + t.taken.length + '</span></h3>' + (t.taken.length ? t.taken.map(function (j) { return tablonJobHtml(j, 'taken'); }).join('') : '<p class="empty">Ninguno. Un encargo se coge hablando de él con quien lo pide.</p>');
     if (t.done.length) h += '<h3>Cumplidos <span>' + t.done.length + '</span></h3>' + t.done.map(function (j) { return tablonJobHtml(j, 'done'); }).join('');
@@ -142,7 +142,7 @@ export const TABLON_JS = String.raw`
     var fresh = t.available.filter(function (j) { return j.fresh; }).length, n = t.available.length;
     if (!n && !t.taken.length) { $('tablon-side').innerHTML = ''; }
     else $('tablon-side').innerHTML = '<button type="button" class="prow" data-tablon><span class="ico"><svg class="i"><use href="#i-board"/></svg></span><span class="tt"><b>Tablón</b><small>' +
-      escapeHtml([n + (n === 1 ? ' encargo' : ' encargos'), fresh ? fresh + ' sin leer' : '', t.taken.length ? t.taken.length + ' en curso' : ''].filter(Boolean).join(' · ')) + '</small></span></button>';
+      escapeHtml([n + (n === 1 ? ' encargo' : ' encargos'), fresh ? fresh + ' sin leer' : '', t.taken.length ? t.taken.length + ' en curso' : ''].filter(Boolean).join(', ')) + '</small></span></button>';
     var dot = document.querySelector('#cube-menu [data-open="tablon"] .dotnew');
     if (dot) { dot.hidden = !fresh; cubeNew(); }
     var tab = document.querySelector('[data-dr="tablon"]');

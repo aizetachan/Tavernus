@@ -1,7 +1,7 @@
 /**
  * Diario en la web: la vista del motor (src/engine/journal.ts) con los retratos
  * de los NPC que ya estén ilustrados. El aviso de una línea que sustituye en el
- * hilo a los mensajes de tablón y de progreso («Tablón actualizado · ver en el
+ * hilo a los mensajes de tablón y de progreso («Tablón actualizado (ver en el
  * Diario») está en notice.ts.
  *
  *   GET /api/journal?character=ID

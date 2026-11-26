@@ -99,7 +99,7 @@ describe('tarjeta «Mientras no estabas»', () => {
     expect(c.people).toEqual(['Kael se ha ido; su personaje se queda en la barra.', 'Kael ha vuelto.']);
     expect(c.said).toEqual([{ who: 'Kael', text: 'Mira, te espero fuera', to_me: true }]);
     expect(c.here).toEqual(['Kael golpea la mesa.']);
-    expect(c.changes).toEqual([{ text: 'Paso cumplido · La deuda: Hablar con el alguacil', why: 'Kael lo dio estando tú', link: 'ver en el Diario', tab: 'journal' }]);
+    expect(c.changes).toEqual([{ text: 'Paso cumplido: Hablar con el alguacil («La deuda»)', why: 'Kael lo dio estando tú', link: 'ver en el Diario', tab: 'journal' }]);
     expect(c.board).toBe(true);
     expect(awayCardEmpty(c)).toBe(false);
   });
@@ -152,7 +152,7 @@ describe('tablón', () => {
     expect(shown.reward).toContain(`+${first.reward_reputation} de reputación`);
     expect(shown.fresh).toBe(true);
     expect(t.taken).toEqual([]);
-    expect(shown.deadline).toMatch(leavesBoardAt(engine.world, first.id, engine.gameNow()) === null ? /Sin plazo/ : /Hasta .* quedan \d+ (h|días) de juego/);
+    expect(shown.deadline).toMatch(leavesBoardAt(engine.world, first.id, engine.gameNow()) === null ? /Sin plazo/ : /Hasta .* \(quedan \d+ (h|días) de juego\)$/);
   });
 
   it('el plazo es el día en que sale del tablón, coincide con la rotación y nunca es antes de mañana', async () => {

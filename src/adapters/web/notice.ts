@@ -40,6 +40,18 @@ export function toneOf(text: string): WebNotice['tone'] {
   return undefined;
 }
 
+/**
+ * La línea de una tirada como se lee en el hilo (rolls.ts): la oculta dice que lo es («🎲 Percepción (tirada
+ * oculta)») y nunca lleva «·». Lo del historial escrito antes («🎲 Bruno · Persuasión: …», «… · éxitos 1/3 · fallos
+ * 0/3», «🎲 Percepción» a secas) se lee como lo nuevo (arreglo 36).
+ */
+export function rollNoticeText(text: string, shown: { hidden?: boolean }): string {
+  let t = text.replace(/^🎲 ([^·:]+?) · (\S)/u, (_m, who: string, c: string) => `🎲 ${who} tira ${c.toLowerCase()}`);
+  t = t.replace(/\s+·\s+(?=éxitos|fallos)/, '; ').replace(/\s*·\s*/g, ', ');
+  if (shown.hidden && !/oculta/.test(t)) t = `${t.replace(/[.\s]+$/, '')} (tirada oculta)`;
+  return t;
+}
+
 type NoticeEvent = Pick<GameEvent, 'action_type' | 'narration_private' | 'observable'> & Partial<Pick<GameEvent, 'actor_id' | 'payload' | 'tags'>>;
 
 /**
@@ -54,9 +66,9 @@ export function noticeOf(e: NoticeEvent, readerId: Id | null = e.actor_id ?? nul
   if (/^progress_/.test(e.action_type) && q && QUEST_HEAD[q.event]) {
     // Un rumor es lo que se oye en el sitio: una línea de ambiente, sin enlace ni entrada en el Diario.
     if (q.event === 'rumor') return webNotice(q.why);
-    if (q.event === 'warned' || q.event === 'failed') return { text: `${QUEST_HEAD[q.event]} · «${q.title}»`, link: 'ver en el Diario', tab: 'journal', quest: { id: q.id, event: q.event, why: q.why.charAt(0).toUpperCase() + q.why.slice(1) } };
-    const what = q.event === 'step' && q.step ? `${q.title}: ${q.step}` : `«${q.title}»`;
-    return { text: `${QUEST_HEAD[q.event]} · ${what}`, link: 'ver en el Diario', tab: 'journal', quest: { id: q.id, event: q.event, why: q.why.charAt(0).toUpperCase() + q.why.slice(1), ...(q.declinable ? { declinable: true } : {}) } };
+    if (q.event === 'warned' || q.event === 'failed') return { text: `${QUEST_HEAD[q.event]}: «${q.title}»`, link: 'ver en el Diario', tab: 'journal', quest: { id: q.id, event: q.event, why: q.why.charAt(0).toUpperCase() + q.why.slice(1) } };
+    const what = q.event === 'step' && q.step ? `${q.step} («${q.title}»)` : `«${q.title}»`;
+    return { text: `${QUEST_HEAD[q.event]}: ${what}`, link: 'ver en el Diario', tab: 'journal', quest: { id: q.id, event: q.event, why: q.why.charAt(0).toUpperCase() + q.why.slice(1), ...(q.declinable ? { declinable: true } : {}) } };
   }
   const isActor = readerId !== null && readerId === e.actor_id;
   // Subida de nivel (levels.ts): quien sube ve lo que gana y va a su Hoja; los demás, una línea.

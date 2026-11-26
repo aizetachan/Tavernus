@@ -54,7 +54,7 @@ describe('la tirada del botón 🎲', () => {
     const own = rolls(to(kael.id)).at(-1)!;
     const seen = rolls(to(mira.id)).at(-1)!;
     expect(own.text).toMatch(/^🎲 Fuerza: d20 \[\d+\] \+ 2 = \d+ → (éxito|fallo)/);
-    expect(seen.text).toMatch(/^🎲 Kael · Fuerza: d20 \[\d+\] \+ 2 = \d+ → (éxito|fallo)/);
+    expect(seen.text).toMatch(/^🎲 Kael tira fuerza: d20 \[\d+\] \+ 2 = \d+ → (éxito|fallo)/);
     expect(seen.event.id).toBe(own.event.id);
     // La CD la fija el máster en secreto: no se dice.
     expect(seen.text).not.toContain('CD');
@@ -79,7 +79,7 @@ describe('la tirada del botón 🎲', () => {
     expect(other).toMatchObject({ kind: 'system', dice: 'other' });
     expect(mine.narrator).toBeUndefined();
     expect(other.narrator).toBeUndefined();
-    expect(other.notice?.text ?? other.text).toMatch(/^🎲 Kael · Ataque con daga a Brenna: d20 \[\d+\] \+ \d+ = \d+ → (impacta|falla)/);
+    expect(other.notice?.text ?? other.text).toMatch(/^🎲 Kael tira ataque con daga a Brenna: d20 \[\d+\] \+ \d+ = \d+ → (impacta|falla)/);
   });
 });
 
@@ -138,7 +138,7 @@ describe('las tiradas del máster (turno compartido, ataques, Medicina)', () => 
     await engine.act(kael.id, 'miro cómo pelea Mira');
     const own = rolls(to(mira.id)).at(-1)!;
     expect(own.text).toBe('🎲 Ataque con espada a Brenna: d20 [14] + 5 = 19 → impacta: 6 de daño');
-    expect(rolls(to(kael.id)).at(-1)!.text).toBe('🎲 Mira · Ataque con espada a Brenna: d20 [14] + 5 = 19 → impacta: 6 de daño');
+    expect(rolls(to(kael.id)).at(-1)!.text).toBe('🎲 Mira tira ataque con espada a Brenna: d20 [14] + 5 = 19 → impacta: 6 de daño');
     const narration = to(kael.id).find((d) => d.event.action_type === 'master')!;
     expect(own.event.seq).toBeGreaterThan(narration.event.seq);
   });
@@ -154,7 +154,7 @@ describe('salvación contra muerte', () => {
     const seen = rolls(to(mira.id)).at(-1)!;
     expect(own.event.action_type).toBe('death_save');
     expect(own.text).toMatch(/^🎲 Salvación contra muerte: d20 \[\d+\]/);
-    expect(seen.text).toMatch(/^🎲 Kael · Salvación contra muerte: d20 \[\d+\]/);
+    expect(seen.text).toMatch(/^🎲 Kael tira salvación contra muerte: d20 \[\d+\]/);
     expect(toMessage(seen, engine)).toMatchObject({ kind: 'system', dice: 'other' });
   });
 });

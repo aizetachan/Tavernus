@@ -856,7 +856,7 @@ export const NOVEL_JS = String.raw`
       var b = document.createElement('button');
       b.className = 'roll';
       b.innerHTML = D20_ICON;
-      b.title = 'Tirar d20' + (m.roll.dc ? ' · CD ' + m.roll.dc : ''); b.setAttribute('aria-label', 'Tirar el dado de veinte caras' + (m.roll.dc ? ', dificultad ' + m.roll.dc : ''));
+      b.title = 'Tirar d20' + (m.roll.dc ? ' (CD ' + m.roll.dc + ')' : ''); b.setAttribute('aria-label', 'Tirar el dado de veinte caras' + (m.roll.dc ? ', dificultad ' + m.roll.dc : ''));
       b.onclick = function () { b.classList.add('chosen'); b.blur(); rollBtn = b; spendButtons(); roll(); };
       row.appendChild(b);
     } else {

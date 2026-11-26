@@ -477,7 +477,7 @@ export const SFX_SCRIPT = String.raw`<script>
     credits.forEach(function (c, i) {
       var a = document.createElement('a');
       a.href = c.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = '«' + c.title + '», de ' + c.author;
-      cr.appendChild(a); cr.appendChild(document.createTextNode(' (' + c.license + ')' + (i < credits.length - 1 ? ' · ' : '. Freesound.org')));
+      cr.appendChild(a); cr.appendChild(document.createTextNode(' (' + c.license + ')' + (i < credits.length - 1 ? '; ' : '. Freesound.org')));
     });
   }
 
