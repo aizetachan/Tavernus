@@ -53,6 +53,7 @@ import { stabilize } from './death.js';
 import { opinionRefusal } from './standing.js';
 import { adjustTrust } from './trust.js';
 import { isDwelling, npcSees } from './perception.js';
+import { conflictKindOf } from './conflict.js';
 import type { World } from './world.js';
 
 export type { IncidentKind } from './model.js';
@@ -1294,17 +1295,15 @@ export function parseInsult(text: string, target: Npc | null): Npc | null {
   return INSULT.test(plain(text)) ? target : null;
 }
 
-const STEAL = /\b(?:rob\w*|hurt\w*|birl\w*|mang\w*|sise\w*|afan\w*|arrebat\w*|quitarle|quitarsel\w*|le quito|me lo quedo|me la quedo|le cojo|cojo su|meto la mano en su)\b/;
-
-/** ¿La acción es quitarle algo a alguien («le robo la bolsa»)? */
-/** Temer que le roben, negarlo o contar que le han robado no es robar («escondo mis monedas por si alguien me roba»). */
-const STEAL_NOT = /\b(?:por si (?:alguien |me |nos )?(?:me |nos )?rob\w+|que (?:no )?(?:me |nos )rob\w+|si (?:me |nos )rob\w+|miedo a que (?:me |nos )rob\w+|me han robado|nos han robado|no (?:le |la |lo )?robo)\b/;
-
-/** ¿La acción es quitarle algo a alguien («le robo la bolsa»)? */
+/**
+ * ¿La acción es quitarle algo a alguien («le robo la bolsa», «meto la mano en su bolsa»)? La lee el mismo lector que
+ * las acciones conflictivas (conflict.ts, conflictKindOf): verbo de robar con su blanco, y nada de lo que no lo es
+ * (temer que le roben, negarlo, lanzar un conjuro, dar algo en la mano, «el roble del Soto»: arreglos 29 y 31).
+ */
 export function readsAsTheft(text: string | null | undefined): boolean {
   if (!text) return false;
-  const t = plain(text);
-  return STEAL.test(t) && !STEAL_NOT.test(t);
+  const k = conflictKindOf(text);
+  return k === 'steal' || k === 'snatch';
 }
 
 const VIOLENCE = /\b(?:atac\w*|ataqu\w*|golpe\w*|peg(?:o|ar|arle|arla|arlo)|mat(?:o|ar|arle|arla|arlo)|apunal\w*|acuchill\w*|dispar\w*|hier(?:o|e)|herir\w*|lanz\w*|proyectil|descarga|conjuro|hechizo|empuj\w*|derrib\w*|me lanzo|cargo contra|huy\w*|escap\w*|corro|salgo corriendo)\b/;
