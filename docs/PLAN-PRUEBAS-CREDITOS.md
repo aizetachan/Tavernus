@@ -119,6 +119,20 @@ En las 40 acciones de cada partida, frente a la pasada anterior:
   repetidas, sugeridas repetidas.
 - Incoherencias (juez): errores de gravedad 3 (tool fallido narrado, trato sin estado, máster sin respuesta) a cero;
   lugares inventados y NPC fuera de alcance, a la baja.
+- Patrones del análisis del 26-11-2026 (juez, sección «Patrones del 26-11 según el juez» de `playtest.md`, H16): tres
+  categorías propias del juez modelo, esperadas cerca de cero tras los arreglos 30 a 44. `npc_ausente`: habla o actúa un
+  NPC que el contexto dice que no está, o se va o llega sin que el motor lo mueva (patrón 1, 23 de 23 partidas).
+  `ambiente_mal_hablante`: una frase de ambiente en boca de quien no toca o del NPC al que nombra (patrón 3, 12 de 23).
+  `enlatada_sin_sentido`: una respuesta rápida del motor que no contesta a la acción (patrón 5, 11 de 23). Para las dos
+  últimas el juez ve desde el 26-11 las frases de ambiente que le llegaron al jugador y las respuestas del motor sin
+  máster, que antes no le llegaban. `npc_ausente` sale de la incoherencia con el contexto: para comparar con la pasada
+  4 (9,4 por 100 acciones) y con las tandas `20261126-0418`, `-0442` y `-0602`, se suman las dos columnas.
+- Lectura de los transcripts (H13 a H15, 26-11-2026): desde el 26-11 cada jugador lee lo que le entrega la web (lo suyo y
+  lo común una vez, lo del compañero en tercera persona, la intención antes que el resultado); en las tandas de antes, lo
+  del otro en segunda persona y los párrafos dobles en pareja eran de la herramienta, no del máster. La línea de estado
+  dice «misiones abiertas N, cumplidas M» (antes «misiones N» eran las cumplidas). Al herido se le reabre la herida si
+  empieza una acción a PG máximos, el cronista tiene una sola historia y, al volver de una caída, el jugador lee si ha
+  reaparecido: lo que dice la herramienta va en el transcript como «Antes de actuar».
 - Charla (charlatán, pícaro): racha con el mismo NPC (objetivo 15 o menos), negativas literales (5 o menos), tiradas
   sociales (3 o más).
 - Concurrencia (parejas): turnos compartidos sin su parte o sin lo común, a cero; crímenes apuntados al que no pegó, a

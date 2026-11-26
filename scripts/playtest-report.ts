@@ -576,7 +576,26 @@ export function buildPlaytest(run: AutoplayRun, ms: readonly GameMetrics[], judg
     for (const [t, r] of [...types.entries()].sort((a, b) => b[1].n - a[1].n)) out.push(`| ${TYPE_LABEL[t as ErrorType] ?? t} | ${r.n} | ${r.games.size} | ${totalActions ? ((r.n / totalActions) * 100).toFixed(1) : '—'} |`);
     out.push('');
   }
+  if (findings.length) out.push(buildPatternSection(ms, findings), '');
   if (run.errors.length) out.push('## Partidas que no terminaron', '', ...run.errors.map((e) => `- ${esc(e)}`), '');
+  return out.join('\n');
+}
+
+/** H16: las tres categorías del juez que salen del análisis del 26-11-2026, y la incoherencia, por perfil. */
+export const PATTERN_TYPES = ['npc_ausente', 'ambiente_mal_hablante', 'enlatada_sin_sentido', 'incoherencia_contexto'] as const;
+
+/**
+ * Una columna por categoría y una fila por partida (a dos, por jugador). La incoherencia va al lado porque `npc_ausente`
+ * se le quita: para comparar con una tanda de antes del 26-11-2026, súmense las dos.
+ */
+export function buildPatternSection(ms: readonly GameMetrics[], findings: readonly Finding[]): string {
+  const rowOf = (f: Finding) => ms.find((m) => m.slug === f.game || m.slug === `${f.game}#${f.character}`);
+  const out = ['## Patrones del 26-11 según el juez', '', 'Por cada 100 acciones (entre paréntesis, cuántos). `npc_ausente` se separa de la incoherencia desde el 26-11-2026: para comparar con tandas anteriores, súmense.', '',
+    `| Perfil | ${PATTERN_TYPES.map((t) => TYPE_LABEL[t]).join(' | ')} |`, `|---|${PATTERN_TYPES.map(() => '---:').join('|')}|`];
+  const cell = (n: number, actions: number) => `${actions ? ((n / actions) * 100).toFixed(1) : '—'} (${n})`;
+  for (const m of ms) out.push(`| ${m.profile} | ${PATTERN_TYPES.map((t) => cell(findings.filter((f) => f.type === t && rowOf(f) === m).length, m.actions)).join(' | ')} |`);
+  const total = ms.reduce((a, m) => a + m.actions, 0);
+  out.push(`| **Total** | ${PATTERN_TYPES.map((t) => cell(findings.filter((f) => f.type === t).length, total)).join(' | ')} |`);
   return out.join('\n');
 }
 

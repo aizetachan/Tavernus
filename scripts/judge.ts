@@ -46,6 +46,10 @@ export const MODEL_TYPES = {
   regla_mal_aplicada: { label: 'Regla de juego mal aplicada', def: 'tirada con habilidad o CD absurdas, éxito o fallo narrado al revés de lo que dice el dado, daño o PG mal contados, o una acción arriesgada resuelta sin tirada.' },
   imposible_sin_ingenio: { label: 'Respuesta a lo imposible sin ingenio', def: 'el jugador pide algo imposible o que no existe y el máster se lo concede sin más, se lo inventa, o lo corta en seco sin ofrecer nada interesante a cambio.' },
   inventiva_mal_gestionada: { label: 'Inventiva del jugador mal gestionada', def: 'el jugador intenta algo creativo o pícaro (mentir, regatear, colarse, amenazar, pedir fiado, empeñar) y el máster lo ignora, lo resuelve sin consecuencias o le da la razón sin tirada cuando la merece.' },
+  // H16 (plan de arreglos 2, 26-11-2026): los patrones 1, 3 y 5 del análisis de las tandas 4 y 5, para medirlos aparte.
+  npc_ausente: { label: 'NPC que no está habla o actúa', def: 'en la narración del máster habla o actúa un NPC que no está en la lista de presentes de la escena (o que se fue en un turno anterior y sigue contestando), o la narración dice que un NPC se va o llega sin que ningún tool ni evento lo mueva. Que el máster diga que alguien no está, o lo haga entrar con un motivo, no es error. Un NPC que no está es este tipo, no incoherencia_contexto.' },
+  ambiente_mal_hablante: { label: 'Frase de ambiente en boca de quien no toca', def: 'una línea de «Ambiente» (frases que el motor pone en boca de los presentes, sin máster) la dice el NPC al que nombra la propia frase («Otra jarra, Brenna» dicha por Brenna; «Si Garrán viene a cobrar» dicha por Garrán), alguien que no está en la escena, o va con una etiqueta que no le corresponde (otro oficio, otro género).' },
+  enlatada_sin_sentido: { label: 'Respuesta del motor que no contesta', def: 'una «Respuesta del motor» (sin máster) no contesta a lo que hizo o dijo el jugador: una frase hecha o una negativa que no viene a cuento, la misma frase a acciones distintas, «¿Con quién?» cuando estaba claro, «Dices: …» sin réplica de nadie, o le hace esperar cuando se dirigía a otro jugador.' },
 } as const;
 
 export type DetType = keyof typeof DET_TYPES;
@@ -69,6 +73,8 @@ export interface Finding {
   /** Juez modelo: ¿la cita aparece de verdad en el turno? */
   quote_ok?: boolean;
   game?: string;
+  /** PJ de la partida (a dos, la partida es la misma para los dos). */
+  character?: string;
 }
 
 /** Un turno del máster: un evento suyo con lo que lo rodea. */
@@ -94,6 +100,12 @@ export interface Turn {
   player?: { mode: PlayerTurn['mode']; impulse: string | null; ok: boolean } | null;
   /** Instante de juego del evento (para saber qué deudas había ya abiertas). */
   game_s?: number;
+  /**
+   * H16: lo que el motor le dio al jugador sin máster desde el turno anterior, para que el juez lo vea: las frases de
+   * ambiente que le llegaron (con quién las dice) y las respuestas rápidas a sus acciones (con lo que hizo él).
+   */
+  ambient?: { npc_id: string | null; text: string }[];
+  motor?: { action: number; said: string; reply: string }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +117,10 @@ export function turnsFromEvents(events: readonly GameEvent[], characterId: strin
   for (const a of actions) for (const id of a.event_ids) byEvent.set(id, a);
   const turns: Turn[] = [];
   let lastRoll: Turn['roll'] = null;
+  let ambient: NonNullable<Turn['ambient']> = [];
   for (const e of events) {
+    const chat = e.action_type === 'chatter' ? e.payload['chatter'] as { npc_id?: string | null; text?: string } | undefined : undefined;
+    if (chat && e.delivered_to.some((d) => d.character_id === characterId)) { ambient.push({ npc_id: chat.npc_id ?? null, text: e.observable ?? chat.text ?? '' }); continue; }
     if (e.actor_id !== characterId) continue;
     if (e.action_type === 'roll') {
       const r = e.payload['roll'] as { label?: string; total?: number; dc?: number | null; success?: boolean | null; natural?: number } | undefined;
@@ -127,8 +142,19 @@ export function turnsFromEvents(events: readonly GameEvent[], characterId: strin
       roll: e.action_type === 'master_roll_outcome' ? lastRoll : null,
       player: a ? { mode: a.mode, impulse: a.impulse, ok: a.ok } : null,
       game_s: e.timestamp_game_s,
+      ...(ambient.length ? { ambient } : {}),
     });
+    ambient = [];
     if (e.action_type === 'master_roll_outcome') lastRoll = null;
+  }
+  // Lo que queda después del último turno, con el último.
+  if (ambient.length && turns.length) turns.at(-1)!.ambient = [...(turns.at(-1)!.ambient ?? []), ...ambient];
+  // Respuestas sin máster (ningún evento suyo en la acción): con el primer turno de una acción posterior, o con el último.
+  const actionOf = new Map(turns.map((t) => [t, byEvent.get(t.event_id)?.i ?? null]));
+  for (const a of actions) {
+    if (a.event_ids.length || !(a.reply ?? a.engine_text)) continue;
+    const t = turns.find((x) => (actionOf.get(x) ?? -1) > a.i) ?? turns.at(-1);
+    if (t) (t.motor ??= []).push({ action: a.i, said: a.text, reply: clip(a.reply ?? a.engine_text ?? '', 300) });
   }
   return turns;
 }
@@ -335,7 +361,7 @@ export const JUDGE_SYSTEM = [
   'Revisas partidas de un juego de rol por chat en castellano entre un jugador automático y el narrador (el máster). Señala SOLO errores claros del máster, de esta lista cerrada:',
   ...Object.entries(MODEL_TYPES).map(([k, v]) => `- ${k}: ${v.def}`),
   'Lo que el jugador se inventa o da por hecho en su acción (un objeto que no lleva, alguien que no está, un sitio, un trato o algo que no ha pasado) no es contexto: si el máster lo niega, lo corrige o no le sigue la corriente, lo hace bien y no es incoherencia_contexto. El error es concedérselo como cierto, o cortarlo en seco sin ofrecer nada (imposible_sin_ingenio).',
-  'No señales estilo, gustos ni errores del jugador. Ante la duda, no lo señales: nada de entradas «para comprobar» ni que digan que no hay error. Cada error lleva el número de turno, una cita literal copiada de la narración del máster de ese turno (como mucho 200 caracteres) y una frase de por qué.',
+  'No señales estilo, gustos ni errores del jugador. Ante la duda, no lo señales: nada de entradas «para comprobar» ni que digan que no hay error. Cada error lleva el número de turno, una cita literal copiada de la narración del máster de ese turno (como mucho 200 caracteres) y una frase de por qué. Para ambiente_mal_hablante y enlatada_sin_sentido, el turno donde aparece y la cita literal de la línea de «Ambiente» o de la «Respuesta del motor».',
   'Devuelve SOLO un objeto JSON, sin texto alrededor: {"findings":[{"turn":<número>,"type":"<tipo de la lista>","severity":<1 leve, 2 claro, 3 grave>,"quote":"<cita literal>","why":"<una frase>"}]}. Sin errores: {"findings":[]}.',
 ].join('\n');
 
@@ -351,6 +377,8 @@ export function turnBlock(t: Turn): string {
   if (t.roll) lines.push(`Tirada: ${t.roll.label} = ${t.roll.total}${t.roll.dc !== null ? ` vs CD ${t.roll.dc}` : ''} → ${t.roll.success === null ? '—' : t.roll.success ? 'éxito' : 'fallo'}${t.roll.natural ? ` (natural ${t.roll.natural})` : ''}`);
   if (t.context) lines.push(`Escena:\n${sceneExtract(t.context)}`);
   if (t.calls.length) lines.push(`Tools: ${t.calls.filter((c) => c.name !== 'log_event' || isError(c.result)).map((c) => `${c.name}(${clip(JSON.stringify(c.input), 90)}) → ${isError(c.result) ? `ERROR ${clip(c.result, 100)}` : 'ok'}`).join('; ') || 'solo log_event'}`);
+  if (t.ambient?.length) lines.push(`Ambiente (frases del motor, sin máster, antes de este turno):\n${t.ambient.slice(-8).map((x) => `- [habla: ${x.npc_id ?? 'nadie concreto'}] ${x.text}`).join('\n')}`);
+  if (t.motor?.length) lines.push(`Respuestas del motor (sin máster) a acciones anteriores:\n${t.motor.map((x) => `- Acción ${x.action}, jugador: «${clip(x.said, 160)}» → motor: «${x.reply}»`).join('\n')}`);
   lines.push(`Máster: ${t.narration}`);
   if (t.suggested.length) lines.push(`Sugeridas: ${t.suggested.join(' | ')}`);
   if (t.requires_roll) lines.push(`Pide tirada: ${t.requires_roll.kind} ${t.requires_roll.key} CD ${t.requires_roll.dc ?? '—'}`);
@@ -403,7 +431,7 @@ export function parseJudge(text: string, turns: readonly Turn[]): { findings: Fi
     const drop = judgeDropReason(type, quote, String(x['why'] ?? ''));
     if (drop) { dropped.push(`${drop} (turno ${turn})`); continue; }
     const sev = Math.min(3, Math.max(1, Math.round(Number(x['severity']) || 2)));
-    const hay = norm([t.narration, t.input_text ?? '', ...t.suggested, ...t.lines.map((l) => l.text)].join(' '));
+    const hay = norm([t.narration, t.input_text ?? '', ...t.suggested, ...t.lines.map((l) => l.text), ...(t.ambient ?? []).map((x) => x.text), ...(t.motor ?? []).map((x) => x.reply)].join(' '));
     findings.push({ type: type as ModelType, layer: 'model', turn, event_id: t.event_id, severity: sev, detail: clip(String(x['why'] ?? ''), 240), quote: clip(quote), quote_ok: hay.includes(norm(quote)) });
   }
   return { findings, dropped, error: null };
@@ -486,7 +514,7 @@ export async function judgeGame(dir: string, opts: { summary?: GameSummary; clie
     }
     judge.cost_usd = costUsd(judge.usage, opts.model);
   }
-  for (const f of findings) f.game = g.slug;
+  for (const f of findings) { f.game = g.slug; f.character = g.characterId; }
   opts.log?.(`  ${g.slug}: ${turns.length} turnos, ${findings.filter((f) => f.layer === 'det').length} det + ${findings.filter((f) => f.layer === 'model').length} juez${judge.calls ? ` (${usd(judge.cost_usd, 4)})` : ''}`);
   const turn_text: GameJudgement['turn_text'] = {};
   for (const t of turns) turn_text[t.index] = { action: t.input_text, narration: t.narration };
