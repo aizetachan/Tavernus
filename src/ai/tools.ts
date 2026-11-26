@@ -36,8 +36,17 @@ import { encounterAt, hostilesAt, recentCombatTag } from '../engine/encounter.js
 import { INCIDENT_KINDS, incidentRejection, npcCrimeLine, pendingIncidents, reactionSentences, readsAsTheft, reportAssault, reportIncident, reportKill, unnarratedReactors, type IncidentKind } from '../engine/crime.js';
 import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, helplessNpc, isDying, killNpc, knockOutNpc, medicineDc, NPC_DOWN_HINT, reviveNpc, stabilize } from '../engine/death.js';
 import { classResources, spendResource } from '../engine/rest.js';
-import { castableSpells, castSpell, spellStats } from '../engine/levels.js';
-import { spellById } from '../data/srd/spells.js';
+import { castableSpells, castSpell, classFeatures, spellStats } from '../engine/levels.js';
+import { spellById, spellNamed } from '../data/srd/spells.js';
+
+/** Tipos de daño en español, para lo que lee el jugador (arreglo 39: «daño fire»). */
+const DAMAGE_ES: Record<string, string> = {
+  acid: 'ácido', bludgeoning: 'contundente', cold: 'frío', fire: 'fuego', force: 'fuerza', lightning: 'relámpago', necrotic: 'necrótico',
+  piercing: 'perforante', poison: 'veneno', psychic: 'psíquico', radiant: 'radiante', slashing: 'cortante', thunder: 'trueno', falling: 'caída',
+};
+export function damageEs(type: string | null | undefined): string {
+  return type ? DAMAGE_ES[type] ?? type : '';
+}
 import { applyItemEffect, damageAfterResistance, gearLines, armorBlocksSpells, attackProfile, attune, canAttune, castFromCharges, copyCost, copyScroll, endAttunement, identify, reachCheck, spellItemBonus, spendCharges, useScroll, type ItemCast } from '../engine/itemrules.js';
 import { isIdentifiedBy } from '../engine/items.js';
 import { isWaypoint, setAhead } from '../engine/travel.js';
@@ -69,7 +78,7 @@ import { ALARM_KINDS, clearAlarm, setAlarm } from '../engine/alarm.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { CONFLICT_KINDS, conflictKindOf, refusedBefore, confrontButtons, confrontOf, conflictVerdict, createItem, resolveConflict, type ConflictKind, type ConflictPlan, type ConflictResult, type ConflictVerdict } from '../engine/conflict.js';
 import { creditRejection, creditWithoutDebt, declaresTheft, jobClaimRejection, jobClaimWithoutComplete, meetingRejection, meetingWithoutSchedule, movesOwnCoins, ruleQuestionRejection, ruleQuestionWithoutLookup, type JobAtHand } from '../engine/closecheck.js';
-import { handsOnPlayer, handsOnPlayerRejection, homonymPairs, homonymRejection, homonymRoleCall, npcMovesSince, npcPresenceProblem, presenceRejection, type NpcPresence } from '../engine/closecheck.js';
+import { attackIntent, spellsNamedIn, unknownTrait, unknownTraitRejection, handsOnPlayer, handsOnPlayerRejection, homonymPairs, homonymRejection, homonymRoleCall, npcMovesSince, npcPresenceProblem, presenceRejection, type NpcPresence } from '../engine/closecheck.js';
 import { conflictCloseProblems, debtMismatch, debtRejection, failedToolNarrated, failedToolRejection, menuNamed, menuWords, npcHitRejection, npcHitWithoutAttack, reactionOutcomeMismatch, reactionOutcomeRejection, stateRejection, stateWithoutTool, type MenuItem, type StateKind } from '../engine/closecheck.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
@@ -528,6 +537,8 @@ export interface ToolContext {
   homonym_rejections?: number;
   /** Cierres rechazados porque el actor le hace algo con las manos a otro JUGADOR sin request_reaction (arreglo 34; uno como mucho). */
   hands_rejections?: number;
+  /** Cierres rechazados por dar por bueno un rasgo que no está en la ficha (arreglo 39; uno como mucho). */
+  trait_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -1677,7 +1688,12 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       if (!who.ok) return { error: who.error };
       const to = world.characters.get(s('target_character_id'));
       if (!to || to.id === who.id) return { error: 'target_character_id no es otro jugador presente. A un NPC no se le pide reacción: resuélvelo tú.' };
-      const kind = ['grapple', 'shove', 'attack', 'other'].includes(s('kind')) ? s('kind') as ReactionKind : 'other';
+      let kind = ['grapple', 'shove', 'attack', 'other'].includes(s('kind')) ? s('kind') as ReactionKind : 'other';
+      // Un codazo, una palmada o tocarle el hombro no es un ataque (arreglo 31, pareja metódico M15): sin verbo de ataque
+      // en lo que escribió quien actúa, se rebaja a other y no hay tirada de ataque ni daño.
+      const typed = sharedInputs(engine, actor.id)?.get(who.id) ?? ctx.action_text;
+      const softened = kind === 'attack' && typed != null && !attackIntent(typed);
+      if (softened) kind = 'other';
       const dest = s('destination_spot_id') && s('destination_spot_id') !== 'null' ? s('destination_spot_id') : null;
       if (dest && !world.spots.has(dest)) return { error: 'unknown_spot', hint: `${dest} no es un punto. ${hereList(ctx)}` };
       const skills = (v: string) => v && v !== 'null' ? v.split(/\s*,\s*/).map(normalizeSkill).filter((k) => SKILLS[k]) : [];
@@ -1698,7 +1714,7 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       }
       const r = engine.requestReaction(who.id, to.id, { kind, attempt, input: ctx.action_text ?? null, dest_spot_id: dest, prone: kind === 'shove' && /suelo|derrib|tumb/i.test(attempt), ...(contest ? { contest } : {}) }, { announce: false });
       if (!r.ok) return { error: 'reaction_failed', hint: r.error };
-      return { ok: true, pending_reaction: true, hint: `Queda PEDIDO, no hecho: ${pcName(world, who.id, to)} es otro jugador y decide si se deja o se resiste. Narra solo el intento; no narres su reacción ni el resultado. Cierra con log_event sin requires_roll.` };
+      return { ok: true, pending_reaction: true, ...(softened ? { kind: 'other' } : {}), hint: `${softened ? `«${String(typed).slice(0, 80)}» no es un ataque (un codazo, una palmada o un toque para llamar la atención): queda como other, sin tirada de ataque ni daño; no narres un golpe. ` : ''}Queda PEDIDO, no hecho: ${pcName(world, who.id, to)} es otro jugador y decide si se deja o se resiste. Narra solo el intento; no narres su reacción ni el resultado. Cierra con log_event sin requires_roll.` };
     }
     case 'attack': {
       const atk = world.characters.get(s('attacker_id'));
@@ -1706,6 +1722,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       const victim = world.characters.get(s('target_id'));
       if (atk && victim && victim.id !== atk.id && atk.id === actor.id && !sharedWith(engine, actor.id).includes(victim.id)) {
         if (engine.inReactionOutcome(actor.id)) return { error: 'El ataque ya está resuelto por el servidor (lo tienes en el resultado): narra lo que ha pasado.' };
+        // Sin verbo de ataque en la acción (un codazo para llamar la atención), no hay ataque (arreglo 31).
+        if (ctx.action_text != null && !attackIntent(ctx.action_text)) return { error: 'not_an_attack', hint: `«${ctx.action_text.slice(0, 80)}» no es un ataque: un codazo, una palmada o un toque para llamar la atención no se tira contra su CA ni hace daño. Narra el gesto sin tirada; si de verdad le sujeta o le aparta, request_reaction (kind grapple, shove u other).` };
         const r = engine.requestReaction(actor.id, victim.id, { kind: 'attack', attempt: 'atacarte', input: ctx.action_text ?? null }, { announce: false });
         if (!r.ok) return { error: 'reaction_failed', hint: r.error };
         return { ok: true, pending_reaction: true, hint: `Contra otro jugador no se ataca sin más: queda PEDIDO y ${pcName(world, actor.id, victim)} decide si se defiende. Narra solo el intento (se lanza, levanta el arma); no narres el golpe ni su reacción.` };
@@ -1968,6 +1986,14 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       // Sobre un objeto (Identificar): es de toque, el objeto tiene que estar a su alcance.
       const onItem = input['target_id'] ? world.itemInstances.get(s('target_id')) : undefined;
       if (onItem && !usableBy(ctx, onItem.id, [actor.id])) return { error: 'not_reachable', hint: 'Es de toque: el objeto tiene que estar en sus manos o delante.' };
+      // El conjuro que se lanza es el que pide el jugador (arreglo 39, lanzador T2 y T5: pide Rayo de escarcha y sale
+      // Descarga de fuego). Si la acción nombra uno de los suyos y no este, no se lanza nada.
+      const asked = spellsNamedIn(ctx.action_text, castableSpells(actor).map((id) => spellById(id)?.name ?? id));
+      const wanted = spellNamed(s('spell'));
+      if (wanted && asked.length && !asked.some((n) => spellNamed(n)?.id === wanted.id)) {
+        const first = spellNamed(asked[0]!);
+        return { error: 'not_the_asked_spell', hint: `El jugador pide «${asked.join('», «')}», no ${wanted.name}: lanza el que pide (spell ${first?.id ?? asked[0]}) o, si no puede, dilo en ficción. No cambies un conjuro por otro.` };
+      }
       const r = castSpell(actor, s('spell'), { slot_level: input['slot_level'] == null ? null : Number(input['slot_level']), ritual: input['ritual'] === true, bonus: spellItemBonus(world, actor) }, ctx.rng);
       if (!r.ok) return { error: r.error };
       // Identificar sobre un objeto: el motor se lo descubre al actor.
@@ -1993,9 +2019,13 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         out['attack'] = `${atk.breakdown} contra CA ${ac}: ${atk.success ? (atk.natural === 20 ? 'impacta, crítico (dobla los dados de daño)' : 'impacta') : 'falla'}`;
         out['hit'] = atk.success === true;
         (ctx.shown_rolls ??= []).push({ roller_id: actor.id, target_id: tgt, label: `${sp.name} a ${npc?.name ?? pc!.name}`, dice: atk.breakdown, total: atk.total, outcome: atk.success ? `impacta${r.roll && sp.dice?.kind === 'damage' ? `: ${r.roll.total} de daño` : ''}` : 'falla', ...(atk.natural ? { natural: atk.natural } : {}) });
-      } else if (sp.attack) out['attack'] = `ataque de conjuro ${r.attack >= 0 ? '+' : ''}${r.attack}: pásale target_id para tirarlo`;
+      } else if (sp.attack) {
+        // Sin blanco no hay a quién dañar (arreglo 39, lanzador T2 y T33: «Descarga de fuego (daño fire): 1d10 [6]» contra el agua).
+        out['attack'] = `sin target_id: no ha apuntado a nadie, así que no hace daño a nadie. Narra el efecto sobre lo que apuntaba (el agua sisea, la piedra se ennegrece). Si apuntaba a alguien, ponlo en target_id la próxima vez (ataque de conjuro ${r.attack >= 0 ? '+' : ''}${r.attack}).`;
+        return out;
+      }
       if (r.roll && sp.dice) {
-        const what = sp.dice.kind === 'heal' ? 'curación' : sp.dice.kind === 'temp_hp' ? 'PG temporales' : sp.dice.kind === 'pool' ? (sp.dice.type ?? 'total') : `daño ${sp.dice.type ?? ''}`.trim();
+        const what = sp.dice.kind === 'heal' ? 'curación' : sp.dice.kind === 'temp_hp' ? 'PG temporales' : sp.dice.kind === 'pool' ? (sp.dice.type ?? 'total') : `daño ${damageEs(sp.dice.type)}`.trim();
         out['roll'] = `${what}: ${r.roll.breakdown}`;
         out['apply'] = sp.dice.kind === 'heal' ? 'aplícalo con heal' : sp.dice.kind === 'damage' ? (sp.attack ? 'si impacta, aplícalo con apply_damage' : sp.save ? 'aplícalo con apply_damage (mitad o nada si supera la salvación, según el conjuro)' : 'aplícalo con apply_damage') : 'resuélvelo al narrar';
         if (!(sp.attack && tgt)) (ctx.shown_rolls ??= []).push({ roller_id: actor.id, label: `${sp.name} (${what})`, dice: r.roll.breakdown, total: r.roll.total, outcome: null });
@@ -2003,6 +2033,14 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       return out;
     }
     case 'spend_resource': {
+      // Un rasgo que no está en su ficha se niega con la lista de lo suyo (arreglo 39, tirador T20: «Acecho»).
+      const mine = classResources(actor);
+      const key = s('key').trim();
+      const plainKey = norm(key);
+      if (!mine.some((x) => x.key === key || norm(x.label) === plainKey)) {
+        return { error: 'not_in_sheet', hint: `${actor.name} no tiene «${key}»: no está en su ficha. Lo suyo: ${mine.length ? mine.map((x) => `${x.label} [${x.key}]`).join(', ') : 'ningún recurso de clase'}. Dilo en ficción (no sabe hacerlo, no le sale) y no narres su efecto.` };
+      }
+      input['key'] = mine.find((x) => x.key === key || norm(x.label) === plainKey)!.key;
       const r = spendResource(world, actor, s('key'), input['amount'] == null ? 1 : Number(input['amount']));
       return r.ok ? { ok: true, resource: r.label, left: r.left } : { error: r.error };
     }
@@ -2099,6 +2137,15 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           const npcLine = parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id)).find((l) => l.speaker === 'npc' && l.npc_id);
           ctx.hands_rejections = (ctx.hands_rejections ?? 0) + 1;
           return { error: handsOnPlayerRejection(hit, npcLine?.npc_id ? npcLabel(world, actor, npcLine.npc_id) : null) };
+        }
+      }
+      // Un rasgo con nombre que no está en la ficha («"Acecho" gastando un uso», tirador T20) no se da por bueno (arreglo 39). Una vez.
+      if ((ctx.trait_rejections ?? 0) < 1 && !ctx.roll_category) {
+        const has = [...classResources(actor).map((r) => r.label), ...classFeatures(actor).map((f) => f.name), ...castableSpells(actor).map((id) => spellById(id)?.name ?? id)];
+        const trait = unknownTrait({ action: ctx.action_text ?? null, narration: s('narration_private'), known: has });
+        if (trait && !(ctx.ok_tools ?? []).some((t) => t === 'spend_resource' || t === 'cast_spell')) {
+          ctx.trait_rejections = (ctx.trait_rejections ?? 0) + 1;
+          return { error: unknownTraitRejection(trait, actor.name, [...classResources(actor).map((r) => r.label), ...classFeatures(actor).map((f) => f.name)]) };
         }
       }
       // Fiado pedido por el jugador y aceptado de palabra, sin set_debt (arreglo 24): una vez por acción, antes que el

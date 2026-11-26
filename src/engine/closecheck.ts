@@ -252,13 +252,16 @@ const STRIKE = new RegExp([
   String.raw`\blanzo\s+(?:(?:el|la|mi|un|una)\s+)?${WEAPON}\s+(?:de mano\s+)?contra\b`,
   String.raw`\ble\s+aplasto\s+(?:la|el)\s+${BODY}\b`,
   String.raw`\bdescargo\s+(?:(?:el|la|mi|un)\s+)?(?:golpe|${WEAPON})\b`,
+  // Disparar (arreglo 39, tirador T22): «disparo una flecha a la sombra», «suelto una flecha contra», «apunto y tiro».
+  String.raw`\b(?:disparo|suelto|lanzo|tiro)\s+(?:una|la|otra|mi)\s+(?:flecha|saeta|virote|piedra|jabalina)\s+(?:a|al|contra|hacia|sobre)\b`,
+  String.raw`\bapunto\b[^.;:]{0,60}?\by\s+(?:disparo|suelto|tiro)\b`,
 ].join('|'));
 /** Una amenaza, una condición o un plan no es el golpe, si va delante: «si no hablas, le parto el brazo», «o le parto el brazo», «voy a…». */
 const NOT_A_STRIKE = /\b(si|como|cuando|proxima|voy a|vas a|quiero|quieres|puedo|podria|deberia|tendria|amenaz\w*|finjo|fingir|amago|amagar|ademan|no|ni|sin|juro|manana|pienso|pretendo|de lo contrario|porque|para que|casi|o (?:te|le|lo|la|les)|que (?:te|le|lo|la|les))\b/;
 /** Lo mismo detrás, hasta la coma: «te rompo la cara si no hablas», «le parto el brazo como vuelvas». */
 const THEN_THREAT = /\b(si|como|cuando|hasta que|de lo contrario)\b/;
 /** Un mueble no es un objetivo: «le clavo el hacha en el tablón», «le doy un golpe a la puerta». */
-const AT_A_THING = /\b(?:en|a|contra|sobre)\s+(?:el|la|los|las)\s+(?:tablon|marco|mesa|banco|puerta|pared|suelo|madera|yunque|aldaba|barra|reja|vela|carta|cofre|bolsa|llave)\b/;
+const AT_A_THING = /\b(?:(?:en|a|contra|sobre|hacia)\s+(?:el|la|los|las)|al|del)\s+(?:suelo|aire|cielo|agua|pozo|cubo|blanco|diana|arbol|tronco|saco|tablon|marco|mesa|banco|puerta|pared|suelo|madera|yunque|aldaba|barra|reja|vela|carta|cofre|bolsa|llave)\b/;
 
 /** El golpe que declara el jugador, o null. Lo que dice (entre comillas, entre ¡!, tras «:») no es lo que hace. */
 export function declaredStrike(action: string): string | null {
@@ -1654,4 +1657,67 @@ export function homonymPairs(pcs: readonly { id: string; name: string }[], npcs:
     for (const n of npcs) if ([...forms(n.name)].some((f) => mine.has(f))) out.push({ pc_id: p.id, npc_id: n.id });
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Un codazo no es un ataque (arreglo 31) y conjuros y rasgos por su lista (arreglo 39)
+// ---------------------------------------------------------------------------
+
+/** Un roce para llamar la atención: un codazo, una palmada, un toque. Solo es ataque si va con fuerza o a hacer daño. */
+const MILD_CONTACT = /\b(?:codazo|codacito|golpecito|palmada|palmadita|toque|toquecito|empujoncito|pellizco|capon)\b/;
+const MEANS_HARM = /\b(?:fuerte|con fuerza|con todas|con rabia|para (?:hacerle dano|tumbarle|tumbarlo|derribarle|derribarlo|herirle)|en (?:la|el|las|los) (?:cara|nariz|boca|costillas|estomago|cabeza|cuello|ojo|ojos|mandibula|sien|garganta|entrepierna))\b/;
+
+/**
+ * ¿La acción declara un ataque de verdad? Un golpe con arma o con intención de hacer daño, sí; un codazo para llamar la
+ * atención, una palmada o tocar el hombro, no (pareja metódico M15: «le doy un codazo a Elmo: ¿y tú qué opinas de
+ * Ilse?» acabó en una estocada de 10 y Elmo a 0 PG). Devuelve lo que lo dice, o null.
+ */
+export function attackIntent(action: string | null | undefined): string | null {
+  if (!action) return null;
+  const strike = declaredStrike(action);
+  if (!strike) return null;
+  const acts = norm(action).replace(/«[^»]*»|"[^"]*"|“[^”]*”/g, ' . ').replace(/¿[^?]*\??/g, ' . ').replace(/:[^.\n]*/g, ' . ');
+  return MILD_CONTACT.test(strike) && !MEANS_HARM.test(acts) ? null : strike;
+}
+
+/** Los conjuros de su lista que nombra el texto. Uno de una palabra («Luz», «Escudo»), solo con mayúscula. */
+export function spellsNamedIn(text: string | null | undefined, names: readonly string[]): string[] {
+  if (!text) return [];
+  const plain = text.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return names.filter((n) => {
+    const p = n.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return /\s/.test(p) ? new RegExp(String.raw`\b${esc(p)}\b`, 'i').test(plain) : new RegExp(String.raw`(?<![\p{L}])${esc(p)}(?![\p{L}])`, 'u').test(plain);
+  });
+}
+
+/** Lo que dice que gasta o usa un rasgo con nombre: «"Acecho" gastando un uso», «uso mi Sentido salvaje», «activo Furia». */
+const USES_TRAIT = [
+  /[«"“]([^»"”]{3,40})[»"”]\s*,?\s*(?:gastando|gasto|usando|uso)\b/u,
+  /\b(?:gastando|gasto|usando|uso)\s+(?:un uso de|una carga de|mi|mis|el|la)?\s*[«"“]([^»"”]{3,40})[»"”]/u,
+  /\b(?:[Uu]so|[Aa]ctivo|[Gg]asto un uso de|[Uu]sando|[Aa]ctivando)\s+(?:mi\s+|mis\s+|el\s+|la\s+)?(?:rasgo\s+|don\s+|poder\s+)?(\p{Lu}[\p{Ll}]+(?:\s+(?:de\s+|del\s+|la\s+)?[\p{Ll}\p{Lu}][\p{Ll}]+){0,3})/u,
+];
+/** Lo que niega en la narración: «no tienes Acecho», «no es tuyo», «no sabes hacerlo». */
+const TRAIT_DENIED = /\b(?:no (?:tienes|tiene|sabes|sabe|conoces|es (?:tuyo|suyo|un rasgo|algo que)|forma parte|esta en tu)|no hay tal|ningun (?:rasgo|don|truco)|nada de eso)\b/;
+
+/**
+ * El jugador usa un rasgo con nombre que no está en su ficha (tirador T20: «"Acecho" gastando un uso», y el cierre lo
+ * acepta). `known`: sus recursos, rasgos y conjuros. Si la narración lo niega, pasa. Devuelve el nombre, o null.
+ */
+export function unknownTrait(input: { action: string | null; narration: string; known: readonly string[] }): string | null {
+  if (!input.action) return null;
+  const known = input.known.map(norm).filter(Boolean);
+  for (const re of USES_TRAIT) {
+    const m = re.exec(input.action);
+    if (!m) continue;
+    const name = m[1]!.trim();
+    const n = norm(name);
+    if (n.length < 3 || known.some((k) => k === n || k.includes(n) || n.includes(k))) continue;
+    if (TRAIT_DENIED.test(norm(input.narration).replace(/«[^»]*»/g, ' '))) return null;
+    return name;
+  }
+  return null;
+}
+
+export function unknownTraitRejection(name: string, pcName: string, has: readonly string[]): string {
+  return `El jugador usa «${name}» y eso no está en la ficha de ${pcName}: no lo tiene, y el cierre no puede darle su efecto. Lo suyo: ${has.length ? has.join(', ') : 'ningún recurso ni rasgo con usos'}. Dilo en ficción (no le sale, no sabe hacerlo así) o resuélvelo con lo que sí tiene (una tirada, spend_resource o cast_spell de lo suyo). Reescribe log_event.`;
 }
