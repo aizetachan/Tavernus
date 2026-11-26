@@ -40,6 +40,7 @@ import type { ActionResult, Engine } from '../src/engine/engine.js';
 import type { Character, GameEvent, ItemInstance, Offer, Reaction } from '../src/engine/model.js';
 import { readerText } from '../src/engine/events.js';
 import { journalOf } from '../src/engine/journal.js';
+import { givenQuests } from '../src/engine/quests.js';
 import { choiceOptions, pendingChoices, spellGroups } from '../src/engine/levels.js';
 import { coinsOf, money } from '../src/engine/money.js';
 import { spawnItem } from '../src/engine/inventory.js';
@@ -356,8 +357,13 @@ export interface PlayerTurn {
   state?: TurnState;
 }
 
-/** Foto del PJ tras cada acción: para ver el progreso sin reconstruirlo del log. */
-export interface TurnState { game_s: number; status: string; hp: number; hp_max: number; level: number; xp: number; coins: number; location: string; open: number; steps: number; done: number; clues: number }
+/**
+ * Foto del PJ tras cada acción, para ver el progreso sin reconstruirlo del log. `open` y `done` son las misiones de la historia (`characterStory`: las del 📖 y la principal,
+ * que se abre sin aviso); `given` y `given_done`, las que da un NPC con `give_quest` («Nueva misión: …» sin 📖), que no
+ * están en la historia (H14: el transcript decía «misiones» con `done` y se leía como abiertas). Las tandas de antes del
+ * 26-11-2026 no traen `given`.
+ */
+export interface TurnState { game_s: number; status: string; hp: number; hp_max: number; level: number; xp: number; coins: number; location: string; open: number; steps: number; done: number; clues: number; given?: number; given_done?: number }
 
 /** Por qué acabó: final, atasco, tope de acciones, tope de gasto, caído sin levantarse, o un error que la cortó (H7). */
 export type GameEnd = 'final' | 'atasco' | 'tope' | 'presupuesto' | 'caido' | 'error';
@@ -954,7 +960,7 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
       const finalDone = (c: Character) => characterStory(c).done.find((id) => id.startsWith('q_final_')) ?? null;
       const stateNow = (c: Character): TurnState => {
         const st = characterStory(c);
-        return { game_s: engine.nowFor(c), status: c.status, hp: c.hp_current, hp_max: c.hp_max, level: c.level, xp: c.xp, coins: coinsOf(engine.world, c.id), location: engine.world.characterSpot(c)?.location_id ?? '', open: st.open.length, steps: st.steps.length, done: st.done.length, clues: c.clues.length };
+        return { game_s: engine.nowFor(c), status: c.status, hp: c.hp_current, hp_max: c.hp_max, level: c.level, xp: c.xp, coins: coinsOf(engine.world, c.id), location: engine.world.characterSpot(c)?.location_id ?? '', open: st.open.length, steps: st.steps.length, done: st.done.length, clues: c.clues.length, given: givenQuests(c).filter((q) => q.status === 'active').length, given_done: givenQuests(c).filter((q) => q.status === 'completed').length };
       };
       const diaryNow = (c: Character): string => {
         const j = journalOf(engine, c.id);
@@ -1170,7 +1176,7 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
           s.history.push(`Tú: ${p.text}\nRespuesta: ${clip(s.last, 260)}`);
           s.refusals = REFUSAL.test(s.last) ? s.refusals + 1 : 0;
           if (s.profile.leaves_after_refusals && s.refusals >= s.profile.leaves_after_refusals) { s.leaveNow = true; s.refusals = 0; }
-          const key = `${state.steps}/${state.done}/${state.open}/${state.clues}/${state.xp}/${state.level}/${state.location}`;
+          const key = `${state.steps}/${state.done}/${state.open}/${state.given}/${state.given_done}/${state.clues}/${state.xp}/${state.level}/${state.location}`;
           if (key !== s.progressKey) { s.progressKey = key; s.progressAt = i; }
           if (s.finalAt === null && finalDone(s.c)) s.finalAt = i;
           // Tras el final, unas pocas acciones para ver si el mundo lo refleja.

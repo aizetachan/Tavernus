@@ -17,7 +17,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { GameEvent, WorldSnapshot } from '../src/engine/model.js';
 import { liveClient, type MasterClient } from '../src/ai/master.js';
 import { MASTER_TOOLS } from '../src/ai/tools.js';
-import { REFUSAL, type AutoplayRun, type GameSummary, type PlayerTurn } from './autoplay.js';
+import { REFUSAL, type AutoplayRun, type GameSummary, type PlayerTurn, type TurnState } from './autoplay.js';
 import { costUsd, usd, type TokenUsage } from './bench-prices.js';
 import { loadGame, norm, TYPE_LABEL, type Finding, type ErrorType } from './judge.js';
 
@@ -77,7 +77,7 @@ export interface GameMetrics {
     npcs: number; turns: number; top: { npc: string; turns: number }[]; line_words: number;
     repeated_lines: { npc: string; a: string; b: string }[]; turns_without_line: number; by_npc: Record<string, Exchange[]>;
   };
-  quests: { statuses: Record<string, string>; rumors: string[]; opened: number; done: number; steps: number; clues: number; first_step_action: number | null; first_done_action: number | null; expired: string[] };
+  quests: { statuses: Record<string, string>; rumors: string[]; opened: number; done: number; steps: number; clues: number; first_step_action: number | null; first_done_action: number | null; expired: string[]; /** Acciones donde los avisos «📖 Nueva misión» y las misiones abiertas no cuadran (H14). */ notice_mismatch: QuestNoticeMismatch[] };
   combat: { pj_attacks: number; npc_attacks: number; unanswered: number; npc_down: number; npc_dead: string[]; pj_down: number; pj_dead: number; death_saves: number; respawns: number; hp_min_ratio: number; law: Record<string, number> };
   end: { final_quest: string | null; escalated: string[]; averted: string[]; epilogue: string };
   /** Partida a dos: lo que hicieron juntos y cómo cerró el máster los turnos compartidos (plan del 11-11, «cada uno lee lo suyo»). */
@@ -226,7 +226,7 @@ export function analyzeGame(g: GameSummary, events: readonly GameEvent[], state:
     quests: {
       statuses, rumors: Object.keys(story?.story?.rumors ?? {}), opened: (story?.story?.open.length ?? 0) + (story?.story?.done.length ?? 0), done: story?.story?.done.length ?? 0,
       steps: story?.story?.steps.length ?? 0, clues: story?.clues?.length ?? 0,
-      first_step_action: firstOf((a) => (a.state?.steps ?? 0) > 0), first_done_action: firstOf((a) => (a.state?.done ?? 0) > 0), expired: story?.story?.expired ?? [],
+      first_step_action: firstOf((a) => (a.state?.steps ?? 0) > 0), first_done_action: firstOf((a) => (a.state?.done ?? 0) > 0), expired: story?.story?.expired ?? [], notice_mismatch: questNotices(g),
     },
     combat: {
       pj_attacks: pjAttacks, npc_attacks: master.flatMap(callsOf).filter((c) => c.name === 'attack' && !c.result.startsWith('{"error"')).length, unanswered,
@@ -322,7 +322,7 @@ export function buildWindowSection(n: number, rows: readonly WindowMetrics[], ba
   const cell = (r: WindowMetrics, f: (x: WindowMetrics) => string) => { const b = base.find((x) => x.profile === r.profile); return b ? `${f(b)} → ${f(r)}` : f(r); };
   const share = (x: WindowMetrics) => `${x.master_turns ? Math.round((x.rejected_turns / x.master_turns) * 100) : 0} %`;
   const out = [`## Métricas del plan en las primeras ${n} acciones`, '', base.length ? 'Cada casilla: tanda de referencia → esta tanda.' : '', '',
-    '| Perfil | Mayor racha con un NPC | Negativas | Tiradas sociales | Misiones | Pasos | Pistas | Golpes con tirada de ataque | Ataques de NPC | A 0 PG | Turnos con rechazo | Final |', '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|'];
+    '| Perfil | Mayor racha con un NPC | Negativas | Tiradas sociales | Misiones cumplidas | Pasos | Pistas | Golpes con tirada de ataque | Ataques de NPC | A 0 PG | Turnos con rechazo | Final |', '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|'];
   for (const r of rows) out.push(`| ${r.profile} | ${cell(r, (x) => String(x.npc_run))} | ${cell(r, (x) => String(x.refusals))} | ${cell(r, (x) => String(x.social_rolls))} | ${cell(r, (x) => String(x.done))} | ${cell(r, (x) => String(x.steps))} | ${cell(r, (x) => String(x.clues))} | ${cell(r, (x) => `${x.attack_verbs_rolled} de ${x.attack_verbs}${x.attack_verbs_maneuver ? ` (+${x.attack_verbs_maneuver} maniobra)` : ''}`)} | ${cell(r, (x) => String(x.npc_attacks))} | ${cell(r, (x) => String(x.downs))} | ${cell(r, share)} | ${r.final ?? '—'} |`);
   const pct = (xs: readonly WindowMetrics[]) => { const t = xs.reduce((a, x) => a + x.master_turns, 0); return t ? Math.round((xs.reduce((a, x) => a + x.rejected_turns, 0) / t) * 100) : 0; };
   out.push('', '«Golpes con tirada de ataque»: acciones del PJ que declaran un golpe (sin amenazas, «si», «o» ni «como») y cuántas pasaron por una tirada de ataque o un `attack` suyo; «maniobra», las resueltas con `conflict_act` (empujar, agarrar, derribar, desarmar).');
@@ -334,10 +334,40 @@ export function buildWindowSection(n: number, rows: readonly WindowMetrics[], ba
 // Transcripción legible y juez de diversión
 // ---------------------------------------------------------------------------
 
+/**
+ * Las misiones de una línea de estado (H14): abiertas y cumplidas, las de la historia más las que da un NPC. Antes salía
+ * «misiones N» con las cumplidas y el análisis del 26-11-2026 lo leyó como abiertas («misiones 0» con «📖 Nueva misión»).
+ */
+export function questLine(s: TurnState): string {
+  return `misiones abiertas ${s.open + (s.given ?? 0)}, cumplidas ${s.done + (s.given_done ?? 0)}`;
+}
+
+export interface QuestNoticeMismatch { action: number; notices: number; opened: number }
+
+/**
+ * ¿Cuadran los avisos «📖 Nueva misión» de cada respuesta con las misiones de la historia que se abren en esa acción
+ * (`open` + `done` respecto a la anterior: una puede abrirse y cumplirse a la vez)? Devuelve las acciones donde no. La
+ * principal se abre sin aviso, así que en la primera acción se mira solo que no haya más avisos que misiones nuevas. Un
+ * aviso repetido en la misma respuesta cuenta una vez (las tandas de antes de H13 duplicaban párrafos en pareja).
+ */
+export function questNotices(g: GameSummary): QuestNoticeMismatch[] {
+  const out: QuestNoticeMismatch[] = [];
+  let prev: TurnState | null = null;
+  for (const a of g.actions) {
+    const s = a.state;
+    if (!s) continue;
+    const notices = new Set((a.reply ?? '').match(/📖 Nueva misión[^«\n]*«[^»]+»/g) ?? []).size;
+    const opened = prev ? (s.open + s.done) - (prev.open + prev.done) : null;
+    if (opened === null ? false : notices !== opened) out.push({ action: a.i, notices, opened });
+    prev = s;
+  }
+  return out;
+}
+
 export function digestOf(g: GameSummary, max = 320): string {
   return g.actions.map((a) => {
     const s = a.state;
-    return `#${a.i} ${a.mode === 'own' ? `[propia${a.impulse ? `: ${a.impulse}` : ''}]` : '[sugerida]'} Jugador: ${a.text}\nJuego: ${clip((a.reply ?? a.engine_text ?? '').replace(/\s+/g, ' '), max)}${s ? `\n(${s.hp_max ? `PG ${s.hp}/${s.hp_max}, ` : ''}nivel ${s.level}, ${s.location}, misiones ${s.done}, pasos ${s.steps}, pistas ${s.clues})` : ''}`;
+    return `#${a.i} ${a.mode === 'own' ? `[propia${a.impulse ? `: ${a.impulse}` : ''}]` : '[sugerida]'} Jugador: ${a.text}\nJuego: ${clip((a.reply ?? a.engine_text ?? '').replace(/\s+/g, ' '), max)}${s ? `\n(${s.hp_max ? `PG ${s.hp}/${s.hp_max}, ` : ''}nivel ${s.level}, ${s.location}, ${questLine(s)}, pasos ${s.steps}, pistas ${s.clues})` : ''}`;
   }).join('\n\n');
 }
 
@@ -345,7 +375,7 @@ const HOW_LABEL: Record<NonNullable<PlayerTurn['how']>, string> = { chat: 'chat'
 
 export function transcriptOf(g: GameSummary): string {
   const head = [`# ${g.profile}: ${g.character.name}, ${g.character.race} ${g.character.class}${g.pair ? ` (con ${g.pair.partner}, ${g.pair.partner_profile})` : ''}`, '', `Fin: ${g.ended}${g.error ? ` (${g.error})` : ''}. Situación: ${g.character.situation ?? '—'}`, ''];
-  const body = g.actions.map((a) => `## ${a.i}. ${a.mode === 'own' ? `propia, ${a.impulse ?? ''}` : 'sugerida'}${a.how ? `, ${HOW_LABEL[a.how]}` : ''}${a.together ? ', a la vez' : ''}${a.ok ? '' : ', RECHAZADA'}, ${((a.wall_ms ?? 0) / 1000).toFixed(1)} s\n\n> ${a.text}\n\n${a.reply ?? a.engine_text ?? ''}\n${a.state ? `\n_PG ${a.state.hp}/${a.state.hp_max}, nivel ${a.state.level}, ${a.state.location}, misiones ${a.state.done}, pasos ${a.state.steps}, pistas ${a.state.clues}_\n` : ''}`);
+  const body = g.actions.map((a) => `## ${a.i}. ${a.mode === 'own' ? `propia, ${a.impulse ?? ''}` : 'sugerida'}${a.how ? `, ${HOW_LABEL[a.how]}` : ''}${a.together ? ', a la vez' : ''}${a.ok ? '' : ', RECHAZADA'}, ${((a.wall_ms ?? 0) / 1000).toFixed(1)} s\n\n> ${a.text}\n\n${a.reply ?? a.engine_text ?? ''}\n${a.state ? `\n_PG ${a.state.hp}/${a.state.hp_max}, nivel ${a.state.level}, ${a.state.location}, ${questLine(a.state)}, pasos ${a.state.steps}, pistas ${a.state.clues}_\n` : ''}`);
   return [...head, ...body, '## Epílogo', '', g.epilogue ?? ''].join('\n');
 }
 
@@ -463,7 +493,7 @@ export function buildPlaytest(run: AutoplayRun, ms: readonly GameMetrics[], judg
   if (cut.length) out.push(`${cut.length} ${cut.length === 1 ? 'partida cortada' : 'partidas cortadas'} por un error: van con las acciones y el coste que llevaban (fin «error»).`, '');
   if (lost > 0) out.push(`${lost} ${lost === 1 ? 'partida no dejó' : 'partidas no dejaron'} resumen (tanda anterior a H7): lo que gastaron no está en el total.`, '');
 
-  out.push('## Resumen', '', '| Perfil | Fin | Acciones | Nivel | Misiones | Pasos | Pistas | Final | Caídas | Horas de juego | Coste |', '|---|---|---:|---:|---:|---:|---:|---|---:|---:|---:|');
+  out.push('## Resumen', '', '| Perfil | Fin | Acciones | Nivel | Misiones cumplidas | Pasos | Pistas | Final | Caídas | Horas de juego | Coste |', '|---|---|---:|---:|---:|---:|---:|---|---:|---:|---:|');
   for (const m of ms) out.push(`| ${m.profile} | ${m.ended} | ${m.actions} | ${m.level} | ${m.quests.done} | ${m.quests.steps} | ${m.quests.clues} | ${m.end.final_quest ?? '—'} | ${m.combat.pj_down} | ${m.game_hours.toFixed(0)} | ${usd(m.cost_usd, 3)} |`);
 
   out.push('', '## Fluidez', '', '| Perfil | Espera media | P95 | Sin máster | Palabras por respuesta | Rechazadas | Sin respuesta | Narración repetida | Mayor racha sin avance | Tiradas por 100 | Éxito |', '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|');
@@ -496,6 +526,10 @@ export function buildPlaytest(run: AutoplayRun, ms: readonly GameMetrics[], judg
   for (const [id, r] of [...quests.entries()].sort()) out.push(`| ${id} | ${Object.values(r).reduce((a, x) => a + x, 0)} | ${r['active'] ?? 0} | ${r['ready'] ?? 0} | ${r['completed'] ?? 0} | ${r['expired'] ?? 0} | ${r['failed'] ?? 0} | ${r['declined'] ?? 0} |`);
   out.push('', '| Perfil | Primer paso en la acción | Primera misión cumplida en la acción | Acciones por misión |', '|---|---:|---:|---:|');
   for (const m of ms) out.push(`| ${m.profile} | ${m.quests.first_step_action ?? '—'} | ${m.quests.first_done_action ?? '—'} | ${m.quests.done ? (m.actions / m.quests.done).toFixed(0) : '—'} |`);
+  const mismatched = ms.filter((m) => m.quests.notice_mismatch?.length);
+  out.push('', mismatched.length
+    ? `Avisos «📖 Nueva misión» que no cuadran con las misiones abiertas: ${mismatched.map((m) => `${m.profile} (${m.quests.notice_mismatch.map((x) => `acción ${x.action}: ${x.notices} avisos, ${x.opened} abiertas`).join('; ')})`).join('; ')}.`
+    : 'Cada aviso «📖 Nueva misión» cuadra con una misión abierta en esa acción.');
 
   out.push('', '## Combate y muerte', '', '| Perfil | Ataques del PJ | Ataques de NPC | Ataques sin respuesta | NPC derribados | NPC muertos | PJ a 0 PG | PJ muerto | Salvaciones | Reapariciones | PG mínimos | Ley |', '|---|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|---|');
   for (const m of ms) { const c = m.combat; out.push(`| ${m.profile} | ${c.pj_attacks} | ${c.npc_attacks} | ${c.unanswered} | ${c.npc_down} | ${esc(c.npc_dead.join(', ')) || '—'} | ${c.pj_down} | ${c.pj_dead} | ${c.death_saves} | ${c.respawns} | ${Math.round(c.hp_min_ratio * 100)} % | ${esc(Object.entries(c.law).map(([k, n]) => `${k} ${n}`).join(', ')) || '—'} |`); }
