@@ -29,7 +29,7 @@ import { barrierToward, bounceOff } from '../engine/barrier.js';
 import { blockedOnRoute, entrySpot } from '../engine/goto.js';
 import { finishQuest, giveQuest, hasGivenQuest } from '../engine/quests.js';
 
-import { attitudeOf, decisiveConsequence, decisiveRefusal, forcedTurnText, forceNpcTurns, intentOf, lethalBlow, nonLethalSource, npcTurn, resolveAttack, type ForcedTurn } from '../engine/combat.js';
+import { attitudeOf, decisiveConsequence, decisiveRefusal, forcedTurnRolls, forcedTurnText, forceNpcTurns, intentOf, lethalBlow, nonLethalSource, npcTurn, resolveAttack, worldDamage, type ForcedTurn, type HazardSeverity } from '../engine/combat.js';
 
 import { encounterAt, hostilesAt, recentCombatTag } from '../engine/encounter.js';
 
@@ -53,7 +53,7 @@ import { isWaypoint, setAhead } from '../engine/travel.js';
 import { ABILITY_ES, armorClass, characterCheck, normalizeSkill, skillModifier, SKILLS, type CheckKind } from '../engine/rules.js';
 import { SOCIAL_SKILLS, socialDcShift } from '../engine/standing.js';
 import { freshTagOptions, tagOptions } from '../engine/worldrules.js';
-import { aEs, descriptorOf, fmtDuration, maskUnknownNames, nameRe, npcNameForms, unknownNpcsNamed } from '../engine/narrate.js';
+import { aEs, approachLine, descriptorOf, fmtDuration, maskUnknownNames, nameRe, npcNameForms, unknownNpcsNamed } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
 import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
 import { addScheduledEvent, hhmm, listSchedule, RECURRENCES } from '../engine/schedule.js';
@@ -246,8 +246,9 @@ export const MASTER_TOOLS: Tool[] = [
     target_skills: nstr('Solo other: skills con las que se resiste el afectado, separadas por comas (la mejor de las suyas); null = athletics,acrobatics'),
     character_id: nstr('Solo en turno compartido: ID del PJ que lo hace, si no es el actor del turno. null = el actor'),
   }),
-  tool('apply_damage', 'Quita puntos de golpe a un personaje o NPC por daño que no es un ataque (caída, fuego, trampa).', {
-    target_id: str('ID del personaje o NPC'), amount: num('Daño'), damage_type: str('Tipo: slashing, fire, falling…'), source: str('Qué lo causa'),
+  tool('apply_damage', 'Quita puntos de golpe a un personaje o NPC por daño que no es un ataque (caída, fuego, trampa). El daño del mundo a un PJ lleva dado o regla: expr, severity o fall_m; el servidor lo tira y amount se ignora. Con amount a secas solo el daño que ya tiró otra tool (cast_spell).', {
+    target_id: str('ID del personaje o NPC'), amount: num('Daño ya tirado (cast_spell) o del NPC'), damage_type: str('Tipo: slashing, fire, falling…'), source: str('Qué lo causa'),
+    expr: nstr('Dado del daño del mundo («1d4», «2d6»), o null'), severity: nstr('Sin dado propio: setback, dangerous o deadly (el servidor pone el dado del nivel del PJ), o null'), fall_m: nnum('Metros de caída (1d6 por cada 3 m), o null'),
   }),
   tool('heal', 'Devuelve puntos de golpe a un personaje o NPC. A un PJ a 0 PG le despierta (cualquier curación). Si cura un objeto (poción, venda), pásalo en item_instance_id: el servidor lo gasta y tira sus dados.', {
     target_id: str('ID del personaje o NPC'), amount: num('PG curados (con un objeto que tiene dados de curación, los tira el servidor y esto se ignora)'), healer_id: nstr('Quién cura (ID de PJ o NPC); null = el actor'),
@@ -518,6 +519,8 @@ export interface ToolContext {
   hit_rejections?: number;
   /** apply_damage al actor con el golpe de un NPC que no ha atacado (uno como mucho). */
   npc_damage_rejections?: number;
+  /** apply_damage del mundo con una cifra fija sin dado ni regla: se rechaza una vez (paquete G, worldDamage). */
+  world_damage_rejections?: number;
   /** Cierres rechazados porque settle_debt o set_debt no cuadran con lo narrado (closecheck.ts; uno como mucho). */
   debt_rejections?: number;
   /** Todos los tools que han salido bien en esta acción, también los de lectura (lookup_rule) y schedule_event. */
@@ -912,9 +915,11 @@ function npcPresence(ctx: ToolContext, locationId: Id): NpcPresence[] {
   const label = (n: Npc) => descriptorOf(world, n.id).toLowerCase();
   const moved = new Set(npcMovesSince(ctx.engine.events.all(), ctx.actor.id).map((e) => String(e.payload['npc_id'])));
   const ordered = new Set((ctx.write_calls ?? []).filter((w) => w.name === 'set_npc_order' && !('error' in w.out)).map((w) => String(w.input['npc_id'])));
+  // Un nombre que también lleva un JUGADOR presente (Ciro el jugador y Ciro el jornalero) es del jugador: no delata al NPC ausente.
+  const pcNames = new Set(world.charactersInLocation(locationId).filter((c) => c.status !== 'dead' && c.status !== 'retired').flatMap((c) => [c.name, ...npcNameForms(c.name)].map(norm)));
   return alive.map((n) => ({
     id: n.id,
-    refs: [n.name, ...npcNameForms(n.name), ...(alive.filter((o) => label(o) === label(n)).length === 1 ? [label(n)] : [])],
+    refs: [n.name, ...npcNameForms(n.name), ...(alive.filter((o) => label(o) === label(n)).length === 1 ? [label(n)] : [])].filter((r) => !pcNames.has(norm(r))),
     present: world.spot(n.location.id).location_id === locationId,
     moved_now: moved.has(n.id),
     ordered: ordered.has(n.id),
@@ -1810,8 +1815,24 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         }
       }
       if (c.status === 'dead') return { error: `${c.name} ya está muerto` };
+      // Daño del mundo (trepar, caer, una trampa, una carta que muerde): con dado o regla, nunca una cifra fija (worldDamage, combat.ts).
+      let amount = Number(input['amount']) || 0;
+      if (!damageByActor(ctx, s('source')) && !npcInSource(ctx, `${s('source')} ${s('damage_type')}`)) {
+        const sev = s('severity');
+        const how = {
+          expr: input['expr'] && s('expr') !== 'null' ? s('expr') : null,
+          ...((['setback', 'dangerous', 'deadly'] as HazardSeverity[]).includes(sev as HazardSeverity) ? { severity: sev as HazardSeverity } : {}),
+          ...(input['fall_m'] != null && Number.isFinite(Number(input['fall_m'])) ? { fall_m: Number(input['fall_m']) } : {}),
+        };
+        const rolled = how.expr || 'severity' in how || 'fall_m' in how ? worldDamage(c.level, how, ctx.rng) : null;
+        if (rolled) { amount = rolled.total; ctx.rolls.push({ expr: rolled.expr, total: rolled.total, breakdown: rolled.breakdown, rolls: [] }); }
+        else if (ctx.action_text !== undefined && amount > 0 && (ctx.world_damage_rejections ?? 0) < 1) {
+          ctx.world_damage_rejections = (ctx.world_damage_rejections ?? 0) + 1;
+          return { error: 'fixed_damage', hint: `El daño del mundo lleva dado o regla, no una cifra fija (${amount}). Vuelve a llamar a apply_damage con expr (el dado de la trampa o del objeto, «1d4»), con severity (setback, dangerous o deadly: el servidor pone el dado del nivel de ${c.name}) o con fall_m (metros de caída): el servidor lo tira y lo aplica.` };
+        }
+      }
       // Resistencia o inmunidad por lo que lleva o se ha tomado (itemrules.ts): el motor la aplica, no el máster.
-      const r = damageCharacter(world, c, damageAfterResistance(world, c, Number(input['amount']) || 0, s('damage_type')), { cause: s('source') || s('damage_type') || 'daño', nowGameS, ...(nonLethalSource(world, c, s('source')) ? { nonLethal: true, rng: ctx.rng } : {}) });
+      const r = damageCharacter(world, c, damageAfterResistance(world, c, amount, s('damage_type')), { cause: s('source') || s('damage_type') || 'daño', nowGameS, ...(nonLethalSource(world, c, s('source')) ? { nonLethal: true, rng: ctx.rng } : {}) });
       return {
         ok: true, hp: `${c.hp_current}/${c.hp_max}`, status: c.status,
         ...(r.down ? { down: true, note: c.away ? 'está ausente: cae y queda estable (no muere ausente)' : 'cae a 0 PG: inconsciente; el servidor tira sus salvaciones contra muerte' } : {}),
@@ -2544,6 +2565,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         for (const id of skip) if (!ctx.spent_turns?.has(id)) acted.add(id);
         if (forced.length) {
           (ctx.forced_turns ??= []).push(...forced);
+          // Sus tiradas se ven como 🎲 en el hilo, no solo en la prosa (paquete G).
+          for (const f of forced) ctx.rolls.push(...forcedTurnRolls(f, (id) => npcLabel(world, actor, id)));
           for (const f of forced) (ctx.engine_calls ??= []).push({ name: 'attack', input: { attacker_id: f.npc_id, target_id: f.target_id, advantage: 'none', by_engine: true }, result: JSON.stringify(f.outcome) });
           if ((ctx.npc_turn_rejections ?? 0) < 1) {
             ctx.npc_turn_rejections = (ctx.npc_turn_rejections ?? 0) + 1;
@@ -2611,7 +2634,9 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         const n = world.npcs.get(ctx.talk.npc_id);
         if (n && !(n.knows_name_of ?? []).includes(actor.id)) { n.knows_name_of = [...(n.knows_name_of ?? []), actor.id]; world.touch('npcs', n.id); }
       }
-      const approached = ctx.approach && !/\bacerc/i.test(s('narration_private')) ? `Te acercas ${aEs(world.spot(ctx.approach.to_spot_id).name)}. ` : '';
+      // «Te acercas a X.» solo si llega y es adonde va (arreglo 41, narrate.ts): no ante una puerta cerrada ni camino de otro sitio.
+      const near = ctx.approach && !/\bacerc/i.test(s('narration_private')) ? approachLine(world, ctx.approach.to_spot_id, ctx.action_text ?? '', s('narration_private')) : null;
+      const approached = near ? `${near} ` : '';
       const closingNpc = input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null;
       // «Hablar con Aren» es lo que quiere hacer, no algo que diga: fuera de lines.
       const sharedIds = sharedWith(engine, actor.id);

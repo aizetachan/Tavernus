@@ -85,16 +85,16 @@ describe('los tres modos en el motor', () => {
     expect(await engine.act(c.id, '   ', { mode: 'say' })).toEqual({ ok: false, text: '¿Qué dices?' });
   });
 
-  it('Hacer: unas comillas van al narrador (lo que dice su personaje); la raya sigue siendo el Chat entre jugadores', async () => {
+  it('Hacer: unas comillas van al narrador (lo que dice su personaje); la raya, solo en la sala con Brenna, también (arreglo 35)', async () => {
     const { engine, c } = await kael();
     const before = engine.events.all().length;
     await engine.act(c.id, '«hola, Brenna»');
     expect(engine.events.all().slice(before).some((e) => e.action_type === 'say')).toBe(false);
+    // Sin otro jugador que la oiga y con un NPC delante, la raya no es chat: se la contesta el NPC (scene.ts, dashForNpc).
     const mid = engine.events.all().length;
     await engine.act(c.id, '— hola a todos');
-    const chat = engine.events.all().slice(mid).find((e) => e.action_type === 'say');
-    expect(chat?.input_text).toBe('hola a todos');
-    expect(chat?.tags).toContain('say');
+    expect(engine.events.all().slice(mid).some((e) => e.action_type === 'say')).toBe(false);
+    expect(engine.events.all().slice(mid).some((e) => e.actor_id === c.id && e.input_text === '«hola a todos»')).toBe(true);
   });
 });
 

@@ -579,3 +579,34 @@ que cada test vea solo la suya).
   niegan `cast_spell`, `attack` y `spend_resource` y se rechaza el cierre que lo levanta.
 - **Sesión coordinadora.** F va la última: tras fusionar E, comprobar `test/guardas-presencia.test.ts` con los eventos
   nuevos de entrada y salida.
+
+## Estado de la fusión (26-11-2026, sesión coordinadora)
+
+Las cinco ramas fusionadas en `main` por orden I, E, G, H, F, sin conflictos en `src` (solo las secciones «Estado» de este
+documento y el test del tablón, que E y H crearon con el mismo nombre: el de H queda como
+`test/tablon-aviso-web-2026-11-26.test.ts`). Suite entera en verde (153 ficheros, 1.896 tests), `typecheck` y `lint`.
+
+Remates cruzados aplicados al fusionar:
+
+- **`engine.ts`.** La amenaza armada de G (`parseArmedThreat`, `reportThreat`) enganchada en `tryLaw` tras el insulto. El
+  parche de H del arreglo 35 aplicado a mano (la raya a un NPC la contesta él y no es chat; «me despierto y…» despierto
+  es acción; sin NPC con quien esperar no hay «¿Con quién?»); su test ya no lleva `skip` y el fichero del parche se quitó.
+- **`tools.ts`.** La línea de aproximación de `reachNpc` usa `approachLine` (E, arreglo 41), además del filtro de siempre
+  («acerc» ya en la narración). Las tiradas de los turnos forzados entran en `ctx.rolls` (G). `apply_damage` del mundo a
+  un PJ lleva dado o regla: `expr`, `severity` o `fall_m`, que tira `worldDamage`; una cifra fija sin arma ni conjuro se
+  rechaza una vez (`fixed_damage`); el daño de `cast_spell` pasa con su cifra (`test/dano-mundo-2026-11-26.test.ts`). La
+  guarda de presencia (F) no delata a un NPC ausente por un nombre que también lleva un JUGADOR presente (Ciro).
+- **`prompt.ts`.** La línea del recado vacía no pinta «».
+- **`journal.ts` y `prologue.ts`.** El título de las misiones de la historia es «Acto I: El agua turbia», sin «·».
+- **Tests ajustados.** `conversacion-2026-11-11` (la raya a solas con Brenna va al máster, no al chat),
+  `guardas-desenlace` (las brasas de la fragua piden dado), `pareja-lectura` (el jornalero con orden de quedarse, que la
+  agenda del relleno se lo llevaba al tick y la guarda de presencia lo veía).
+
+Queda para después de medir:
+
+- La rebaja de `request_reaction` que pedía G la hace `attackIntent` (F); `downStateLine` en el hint del 0 PG, no.
+- `autoplay.ts` (E): nota en el transcript del reloj adelantado hasta el epílogo y filtrar el epílogo por `delivered_to`.
+- `model.ts`/`extras.ts`: campo `gender` en `Npc` en vez de inferirlo del oficio (E).
+- «·» que siguen fuera de los ficheros de estos paquetes: `sheet-view.ts`, `info.ts`, `levels.ts`, `combat.ts`
+  (desgloses), `story.ts` (contexto del máster), `actor.ts`, `paint.ts`, `illustrate.ts`, `wiki/theme.ts`.
+- `npc_ausente` se separa de `incoherencia_contexto`: para comparar con el 9,4 de la pasada 4, sumar las dos columnas.

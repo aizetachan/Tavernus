@@ -371,7 +371,7 @@ export function recapTemplate(engine: Engine, c: Character, since: GameEvent, ho
     } else if ((q.kind === 'story' || q.kind === 'given') && (q.status === 'active' || q.status === 'ready')) {
       // La historia escrita y lo que le han pedido: con lo que toca ahora (el título entre comillas no se enmascara).
       const now = q.summary.next ?? q.steps.find((s) => !s.done)?.text;
-      doing.push(`«${q.title.replace(/^[IV]+ · /, '')}»${now ? `: ${lowerFirst(noDot(now))}` : ''}.`);
+      doing.push(`«${q.title.replace(/^Acto [IV]+: /, '')}»${now ? `: ${lowerFirst(noDot(now))}` : ''}.`);
     }
   }
   if (doing.length) out.push(`**Lo que tienes entre manos.** ${doing.join(' ')}`);

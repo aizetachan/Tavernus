@@ -20,6 +20,7 @@ import { Engine, type MasterLike } from '../src/engine/engine.js';
 import type { Delivery } from '../src/engine/events.js';
 import type { Character } from '../src/engine/model.js';
 import type { DialogueLine } from '../src/engine/moments.js';
+import { setNpcOrder } from '../src/engine/npcorders.js';
 import { MemoryRepository } from '../src/persistence/memory.js';
 import { fakeTime } from './helpers.js';
 
@@ -129,6 +130,8 @@ describe('arreglo 33: lo que lee cada uno en un turno compartido (pareja pícaro
     const { engine, bruno, ciro, seen } = await pareja();
     const jornalero = engine.world.npc('npc_x_ciro');
     jornalero.location = { type: 'spot', id: 'sp_tab_barra' };
+    // Que la agenda del relleno no se lo lleve al tick: la guarda de presencia (arreglo 30, paquete F) mira dónde está de verdad.
+    expect(setNpcOrder(engine.world, { npc_id: jornalero.id, order: 'go', spot_id: 'sp_tab_barra', minutes: 600 }, engine.gameNow()).ok).toBe(true);
     for (const c of [bruno, ciro]) c.location = { type: 'spot', id: 'sp_tab_barra' };
     const brunoPart = 'Te acercas al jornalero y pones la daga sobre la mesa. Le hablas bajo. Él mira la hoja, luego a ti, y no dice nada.';
     const ciroPart = 'Te quedas junto a la barra y miras la tablilla de deudas: nombres escritos con tiza y cifras al lado.';

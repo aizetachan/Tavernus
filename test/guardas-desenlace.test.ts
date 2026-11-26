@@ -120,7 +120,9 @@ describe('arreglo 12: un NPC que pega sin attack', () => {
     // Lo aplicado por apply_damage ya cuenta como su golpe: el cierre que lo narra pasa.
     expect(run(ctx, 'log_event', logEvent(VIOLENTO_3)).closed).toBe(true);
     // El daño del mundo no pasa por attack; ni el golpe no letal de quien no es de pelear (combat.ts, nonLethalSource).
-    expect(run(ctxOnly(engine, 'hit_rejections', { action_text: 'Me acerco a la fragua.' }), 'apply_damage', { target_id: 'ch_kael', amount: 1, damage_type: 'fire', source: 'las brasas de la fragua' }).ok).toBe(true);
+    // (Con una cifra fija sin dado, el daño del mundo se rechaza una vez y pide expr, severity o fall_m: test/dano-mundo-2026-11-26.test.ts.)
+    expect(run(ctxOnly(engine, 'hit_rejections', { action_text: 'Me acerco a la fragua.' }), 'apply_damage', { target_id: 'ch_kael', amount: 1, damage_type: 'fire', source: 'las brasas de la fragua' }).error).toBe('fixed_damage');
+    expect(run(ctxOnly(engine, 'hit_rejections', { action_text: 'Me acerco a la fragua.' }), 'apply_damage', { target_id: 'ch_kael', amount: 1, damage_type: 'fire', source: 'las brasas de la fragua', expr: '1d4' }).ok).toBe(true);
     engine.world.npc('npc_brenna').noncombatant = true;
     expect(run(ctxOnly(engine, 'hit_rejections', { action_text: 'Brenna, aparta.' }), 'apply_damage', { target_id: 'ch_kael', amount: 1, damage_type: 'bludgeoning', source: 'Brenna' }).ok).toBe(true);
   });
