@@ -146,11 +146,37 @@ function stepRecord(a: RouteAction, calls: CallRecord[], rolls: StepRecord['roll
   };
 }
 
-/** Ejecuta la ruta. Exportado para poder probarlo sin la CLI. */
+/** Variables que eligen el modelo del máster por encima de la campaña (src/ai/master.ts, `effectiveModel`). */
+export const MASTER_ENV = ['MASTER_MODEL', 'MASTER_EFFORT', 'PROLOGUE_MODEL', 'FINAL_MODEL'] as const;
+
+/**
+ * Deja el entorno de forma que el máster use el modelo y el esfuerzo pedidos: MASTER_MODEL y MASTER_EFFORT a lo pedido, y
+ * sin PROLOGUE_MODEL ni FINAL_MODEL. Sin esto, `--model` perdía contra un MASTER_MODEL del entorno y dos pasadas «de
+ * Sonnet» corrieron con Haiku (informe 2 del 25-11, H5). Devuelve lo que cambió (para avisar) y cómo dejarlo como estaba.
+ */
+export function pinMasterEnv(model: string, effort: string, env: NodeJS.ProcessEnv = process.env): { changed: string[]; restore: () => void } {
+  const saved = Object.fromEntries(MASTER_ENV.map((k) => [k, env[k]]));
+  const want: Record<(typeof MASTER_ENV)[number], string | undefined> = { MASTER_MODEL: model, MASTER_EFFORT: effort, PROLOGUE_MODEL: undefined, FINAL_MODEL: undefined };
+  const changed: string[] = [];
+  for (const k of MASTER_ENV) {
+    const before = env[k]?.trim() || undefined;
+    if (before && before !== want[k]) changed.push(`${k}=${before}`);
+    if (want[k] === undefined) delete env[k]; else env[k] = want[k];
+  }
+  return { changed, restore: () => { for (const k of MASTER_ENV) { if (saved[k] === undefined) delete env[k]; else env[k] = saved[k]; } } };
+}
+
+/** Ejecuta la ruta. Exportado para poder probarlo sin la CLI. El modelo y el esfuerzo pedidos mandan sobre el entorno. */
 export async function runBench(opts: { route: Route; model: string; effort: string; dryRun: boolean; client?: MasterClient; writeMult?: number; log?: (s: string) => void }): Promise<BenchRun> {
+  const log = opts.log ?? (() => undefined);
+  const pinned = pinMasterEnv(opts.model, opts.effort);
+  if (pinned.changed.length) log(`⚠ El entorno pedía otro máster (${pinned.changed.join(', ')}): manda --model ${opts.model} --effort ${opts.effort}.`);
+  try { return await runRoute(opts, log); } finally { pinned.restore(); }
+}
+
+async function runRoute(opts: { route: Route; model: string; effort: string; dryRun: boolean; client?: MasterClient; writeMult?: number }, log: (s: string) => void): Promise<BenchRun> {
   const { route, model, effort, dryRun } = opts;
   const writeMult = opts.writeMult ?? CACHE_WRITE_MULT;
-  const log = opts.log ?? (() => undefined);
   let clock = SEED_REAL_EPOCH_MS;
   const engine = await Engine.boot({ repo: new MemoryRepository(), campaignId: 'demo', seed: makeSeed(), now: () => clock });
   engine.world.campaign.master = { ...engine.world.campaign.master, model, effort: effort as 'low' };
@@ -262,6 +288,8 @@ async function main() {
   if (!dryRun && !Master.configured('live')) throw new Error('Falta ANTHROPIC_API_KEY (o ANTHROPIC_AUTH_TOKEN) para --live.');
 
   const run = await runBench({ route, model, effort, dryRun, ...(dryRun ? {} : { client: liveClient() }), writeMult, log: (s) => console.log(`  ${s}`) });
+  const answered = [...new Set(run.steps.flatMap((s) => s.models))];
+  if (answered.some((m) => !m.startsWith(model))) console.warn(`⚠ Se pidió ${model} y contestó ${answered.join(', ')}: revisa la pasada antes de compararla.`);
 
   mkdirSync(values.out, { recursive: true });
   const stamp = run.started_at.replace(/[:.]/g, '-').replace(/-\d{3}Z$/, 'Z');

@@ -18,7 +18,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { makeSeed } from '../src/data/seed/demo.js';
 import { liveClient, Master, type MasterClient } from '../src/ai/master.js';
 import { BASELINE_CALL, CACHE_WRITE_MULT, estimateRun, priceFor, usd } from './bench-prices.js';
-import { runBench, type Route, type StepRecord } from './model-bench.js';
+import { pinMasterEnv, runBench, type Route, type StepRecord } from './model-bench.js';
 
 export type Expect = 'witty_refusal' | 'rumor' | 'question' | 'in_fiction' | 'character_fact' | 'player_rumor' | 'conditional';
 export interface CreativityPrompt { id: string; kind: string; expect: Expect; text: string }
@@ -318,6 +318,9 @@ async function main() {
     return;
   }
   if (!dryRun && !Master.configured('live')) throw new Error('Falta ANTHROPIC_API_KEY (o ANTHROPIC_AUTH_TOKEN) para --live.');
+  // Cada prompt fija el entorno del máster (runBench); aquí, una vez, el aviso de que el entorno pedía otro (H5).
+  const clash = pinMasterEnv(model, effort).changed;
+  if (clash.length) console.warn(`⚠ El entorno pedía otro máster (${clash.join(', ')}): manda --model ${model} --effort ${effort}.`);
 
   const run = await runCreativity({ bench, model, effort, dryRun, ...(dryRun ? {} : { client: liveClient() }), writeMult, log: (s) => console.log(`  ${s}`) });
   mkdirSync(values.out, { recursive: true });
