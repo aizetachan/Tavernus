@@ -229,7 +229,7 @@ describe('n.º 13: los títulos de la agenda se leen dentro de frases', () => {
     time.advanceGame(5 * 3600 + 5 * 60);
     await engine.tick();
     const moves = since(engine, from).filter((e) => e.action_type === 'npc_move' && e.payload['npc_id'] === 'npc_tobias').map((e) => e.observable);
-    expect(moves.join(' ')).toMatch(/Tobías se va del desván, camino de la escapada al granero\./);
+    expect(moves.join(' ')).toMatch(/Tobías deja el desván y sale hacia el Soto, camino de la escapada al granero\./);
     expect(moves.join(' ')).not.toMatch(/Tobías va al granero/);
   });
 });

@@ -542,7 +542,7 @@ export function journalOf(engine: Engine, characterId: Id): Journal {
       ? [{ text: `Volver con ${nameFor(w, c, v.turn_in_npc_id)} para entregarla`, done: v.status === 'completed' }] : [];
     const started = v.steps.some((x) => x.done);
     quests.push({
-      id: q.id, kind: 'story', title: `Acto ${['', 'I', 'II', 'III'][q.act]}: ${q.title}`, text: masked(q.text), status: v.status,
+      id: q.id, kind: 'story', title: `${['', 'I', 'II', 'III'][q.act]} · ${q.title}`, text: masked(q.text), status: v.status,
       level: q.level, difficulty: difficultyOf(q.level, c.level), ...(v.status === 'active' && o?.kind === 'giver' && !started ? { declinable: true } : {}),
       // De oídas (partidas de antes): nadie se la ha pedido; no se pone «lo pide X».
       giver: giver && o?.kind !== 'heard' ? npcTag(c, giver) : null, giver_npc_id: giver?.id ?? null,

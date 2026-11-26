@@ -186,7 +186,7 @@ describe('Engine: fase 1 sin IA', () => {
     engine.setConnected('ch_mira', true);
     await engine.act('ch_mira', 'despierto');
     const recap = await engine.command('ch_mira', '/recap');
-    expect(recap).toBe('· Oyes a alguien hablar cerca.\n· Una figura deja algo en el suelo.');
+    expect(recap).toBe('Oyes a alguien hablar cerca.\nUna figura deja algo en el suelo.');
     // Un segundo recap ya no repite nada.
     expect(await engine.command('ch_mira', '/recap')).toBe('No te has perdido nada.');
   });
