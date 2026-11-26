@@ -31,7 +31,7 @@ import { encounterAt, hostilesAt, recentCombatTag } from './encounter.js';
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { settleAudience } from './audience.js';
 import { bounceOff, parseCrossing } from './barrier.js';
-import { aEs, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, listEs, maskUnknownNames, nameRe, npcNameForms, whereAmI, whoIsHere } from './narrate.js';
+import { aEs, approachLine, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, listEs, maskUnknownNames, nameRe, npcNameForms, whereAmI, whoIsHere } from './narrate.js';
 import { encounterChance, parseInfo, parseTrivial, suggestActions, tension, type TrivialIntent } from './fastpath.js';
 import { answerInfo, infoText, type InfoAnswer } from './info.js';
 import { blockedOnRoute, crossingLine, interruptionOnRoute, notePassedRun, type RouteCut } from './goto.js';
@@ -1253,13 +1253,13 @@ export class Engine {
 
   /** Lo que hace al llegar: con plantilla si es trivial y el sitio no es nuevo; si no, el master con el viaje ya hecho. */
   private async errandAction(c: Character, text: string, e: Errand, a: Arrival | null, obstacle: string | null = null): Promise<ActionResult> {
-    const line = this.errandLine(c, a);
+    const line = this.errandLine(c, a, e.action);
     const spot = this.world.characterSpot(c)!;
     if (e.absent_npc_id) {
       const n = this.world.npc(e.absent_npc_id);
       const who = c.knows.includes(n.id) ? n.name : descriptorOf(this.world, n.id);
       // Con master, que lo cuente él («llegas a la casa de las hierbas, pero Ilse no está…»); sin él, la plantilla.
-      if (!this.master) return this.emitPending(c, text, e, `${line} ${who.charAt(0).toUpperCase()}${who.slice(1)} no está aquí. ${pendingLine(e.action)}`, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`);
+      if (!this.master) return this.emitPending(c, text, e, `${line ? `${line} ` : ''}${who.charAt(0).toUpperCase()}${who.slice(1)} no está aquí. ${pendingLine(e.action)}`, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`);
       obstacle = `${who} no está aquí ahora`;
     }
     const hooks = [...(a?.hooks ?? [])];
@@ -1270,22 +1270,28 @@ export class Engine {
       if (r) return r;
     }
     if (!this.master) {
-      this.emitTrivial(c, text, 'move', 'movement', line, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`, spot.name);
+      if (line) this.emitTrivial(c, text, 'move', 'movement', line, `${c.name} llega ${aEs(spot.name)}.`, `Una figura llega ${aEs(spot.name)}.`, spot.name);
       const r = this.resolveAction(c, e.action);
-      return { ...r, text: `${line}\n${r.text}` };
+      return { ...r, text: line ? `${line}\n${r.text}` : r.text };
     }
     const r = await this.resolveWithHints(c, text, { hooks, encounter: null, errand: { line, action: e.action, first_visit: a?.first_visit ?? false, ...(obstacle ? { obstacle } : {}) } });
     if (r.ok || r.text !== '') return r;
-    return this.emitPending(c, text, e, `${line} El narrador no responde ahora mismo. ${pendingLine(e.action)}`, null, null);
+    return this.emitPending(c, text, e, `${line ? `${line} ` : ''}El narrador no responde ahora mismo. ${pendingLine(e.action)}`, null, null);
   }
 
-  /** «Cruzas la puerta baja y entras en Casa de las hierbas. Te acercas al caldero.» */
-  private errandLine(c: Character, a: Arrival | null): string {
+  /**
+   * «Cruzas la puerta baja y entras en Casa de las hierbas. Te acercas al caldero.» El acercamiento, solo si cabe
+   * (narrate.ts, approachLine): no si la acción habla de una puerta cerrada o va a otro sitio del que dice la frase.
+   */
+  private errandLine(c: Character, a: Arrival | null, action: string): string {
     const spot = this.world.characterSpot(c)!;
     const parts: string[] = [];
     if (a?.note) parts.push(a.note);
     if (a?.crossed) parts.push(crossingLine(this.world, a.exit_id, a.landing_spot_id ?? spot.id) || `Llegas a ${this.world.location(spot.location_id).name}.`);
-    if (!a?.crossed || (a.landing_spot_id && a.landing_spot_id !== spot.id)) parts.push(`Te acercas ${aEs(spot.name)}.`);
+    if (!a?.crossed || (a.landing_spot_id && a.landing_spot_id !== spot.id)) {
+      const near = approachLine(this.world, spot.id, action);
+      if (near) parts.push(near);
+    }
     return parts.join(' ');
   }
 

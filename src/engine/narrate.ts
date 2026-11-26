@@ -149,6 +149,35 @@ function peopleSeen(world: World, clock: GameClock, c: Character, nowGameS: numb
   return out;
 }
 
+/** Minúsculas, sin tildes ni signos: para comparar palabras. */
+function plain(text: string): string {
+  return text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zñ0-9]+/g, ' ').trim();
+}
+const PLACE_STOP = new Set(['el', 'la', 'los', 'las', 'del', 'de', 'al', 'y', 'con', 'en']);
+/** La narración ya cuenta que se mueve: no hace falta (y estorba) anteponerle el acercamiento. */
+const NARRATED_MOVE = /(te acercas|te arrimas|cruzas|recorres|llegas|vas hacia|te diriges|sales|entras|te plantas|avanzas)/;
+/** Una puerta que no se abre o a la que se llama desde fuera: no se llega a lo de dentro. */
+const SHUT = /(llam(?:o|as|a|ar) (?:a|en) la puerta|llam(?:o|as|a) con los nudillos|toc(?:o|as|ar) (?:a|en) la puerta|golpe(?:o|as|ar) la puerta|abre(?:me)?|tranca|atrancad[ao]|cerrad[ao] (?:con llave|a cal y canto)|con llave|no (?:te )?abre|por la rendija|al otro lado de la puerta)/;
+
+/**
+ * La línea de aproximación del motor («Te acercas al caldero.»), o null si no cabe: si la narración ya cuenta el
+ * movimiento, si la acción o la narración hablan de una puerta cerrada o de llamar a ella (desde fuera no se llega a
+ * lo de dentro), o si la acción va a otro sitio del que dice la frase (nombra otro punto de la localización u otra
+ * localización: «me largo hacia la taberna», «abro la puerta»). Casos: charlatán T6, metódico T6 y T28, impredecible
+ * T2, violento T19 (data/local/autoplay/20261126-0418).
+ */
+export function approachLine(world: World, toSpotId: Id, action: string, narration = ''): string | null {
+  const to = world.spots.get(toSpotId);
+  if (!to) return null;
+  const act = ` ${plain(action)} `;
+  const nar = ` ${plain(narration)} `;
+  if (NARRATED_MOVE.test(nar) || SHUT.test(act) || SHUT.test(nar)) return null;
+  const mine = new Set(plain(to.name).split(' '));
+  const names = [...world.spotsOf(to.location_id).filter((s) => s.id !== to.id).map((s) => s.name), ...[...world.locations.values()].map((l) => l.name)];
+  const other = names.some((n) => plain(n).split(' ').some((w) => w.length >= 4 && !PLACE_STOP.has(w) && !mine.has(w) && act.includes(` ${w} `)));
+  return other ? null : `Te acercas ${aEs(to.name)}.`;
+}
+
 /** «a» + nombre, con la contracción: «al pozo», «a la barra», «a Mira». */
 export function aEs(name: string): string {
   return /^el /i.test(name) ? `al ${name.slice(3)}` : `a ${name}`;
