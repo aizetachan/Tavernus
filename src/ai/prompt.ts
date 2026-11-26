@@ -42,7 +42,7 @@ import { bodiesAt, bodyStateOf, deadNpcsAt, isDying, isStable, NPC_DOWN_HINT } f
 import { crimeContext, npcCrimeLine, recentIncidents } from '../engine/crime.js';
 import { TALK_RULES } from './actor.js';
 import { concernsLine } from '../engine/concerns.js';
-import { movesOwnCoins, npcMovesSince, recentNpcLines } from '../engine/closecheck.js';
+import { homonymPairs, movesOwnCoins, npcMovesSince, recentNpcLines } from '../engine/closecheck.js';
 import { isExtra, type ExtraNpc } from '../engine/extras.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { shopClosed, shopLines } from '../engine/shop.js';
@@ -354,7 +354,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     const p = perceive(world, engine.clock, actor, op, nowG);
     if (p.level === 'none') continue;
     // Los PJ de una partida se conocen siempre por su nombre: presentarse es solo cosa de NPC.
-    const name = p.sight === 'full' ? `${o.name} [${o.id}], ${o.race} ${o.class_name}${o.appearance ? `, ${o.appearance}` : ''}` : p.sight === 'vague' ? `una figura (${o.name} [${o.id}])` : 'movimiento';
+    const name = p.sight === 'full' ? `JUGADOR ${o.name} [${o.id}]${pcHomonymNote(world, o.id)}, ${o.race} ${o.class_name}${o.appearance ? `, ${o.appearance}` : ''}` : p.sight === 'vague' ? `una figura (${o.name} [${o.id}])` : 'movimiento';
     // Ausente (su jugador se ha ido) y, a los 30 min, bajo el velo (SPEC §9.1).
     const away = o.veiled ? ' BAJO EL VELO: no es objetivo válido; si alguien va a por él, narra que se aparta o se esconde.'
       : o.away ? ` AUSENTE: no ataca ni gasta recursos; si le atacan se defiende solo (CA y salvaciones normales)${o.status === 'unconscious' ? '; está a 0 PG, estabilizado' : ''}.` : '';
@@ -404,7 +404,7 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
     // Lo que vio o sabe del actor (crime.ts) va antes que su carácter: manda sobre cómo le trata.
     const crime = npcCrimeLine(world, n, actor, nowG);
     present.push([
-      `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}.${crime ? `\n  ${crime}\n ` : ''} ${n.description}`,
+      `- NPC ${knownNpc ? `${n.name} [${n.id}], ${n.role}` : `${descriptorOf(world, n.id)} [${n.id}] (el actor NO sabe su nombre, que es ${n.name}: llámala por lo que se ve; si se presenta o alguien la nombra, ponlo en names_learned)`}${npcHomonymNote(world, n.id)}, en ${ns.name}, ${Math.round(p.distance_m ?? 0)} m${ns.id !== spot.id ? ` (fuera de alcance: move_to ${ns.id} para hablarle de cerca)` : ''}.${crime ? `\n  ${crime}\n ` : ''} ${n.description}`,
       `  Quiere: ${dot(n.motivation)}${homeLine(world, n, loc.id)} Actitud: ${attitudeOf(n, actor.id)}.${n.stats ? ` Combate: CA ${n.stats.ac}, PG ${n.stats.hp}/${n.stats.hp_max}, ${n.stats.attack_name} +${n.stats.attack_bonus} (${n.stats.damage})${(n.stats.multiattack ?? 1) > 1 ? `, multiataque ×${n.stats.multiattack}` : ''}.${n.bound ? ' ATADO: no se mueve ni pelea.' : ''}${n.noncombatant ? ' No es de pelear: se defiende si le atacan, pero no remata a nadie; le deja, le echa, pide ayuda o llama a la guardia.' : ''}` : ' No combate.'}`,
       // Opinión con el actor, temas que tiene en la cabeza y reacción a sus etiquetas (standing.ts, worldrules.ts).
       ...npcStandingLines(world, n, actor, nowG),
@@ -704,6 +704,24 @@ const EXTRA_SERVICE: Record<ExtraNpc['script']['service'], string> = {
 };
 
 /** Un vecino de relleno en una línea: quién es, qué vende, qué lleva y su guion corto (extras.ts). */
+/** Jugadores de la partida, sin los muertos ni los retirados. */
+function livePcs(world: World): { id: Id; name: string }[] {
+  return [...world.characters.values()].filter((c) => c.status !== 'dead' && c.status !== 'retired').map((c) => ({ id: c.id, name: c.name }));
+}
+
+/** El NPC que se llama como un JUGADOR (arreglo 34): son dos personas, y cada uno se nombra de una forma. */
+function npcHomonymNote(world: World, npcId: Id): string {
+  const pc = homonymPairs(livePcs(world), [{ id: npcId, name: world.npc(npcId).name }]).map((h) => world.characters.get(h.pc_id)!)[0];
+  return pc ? ` (OJO: se llama igual que el JUGADOR ${pc.name} [${pc.id}] y NO es él; a este NPC nómbralo por su oficio, «${descriptorOf(world, npcId)}»)` : '';
+}
+
+/** El JUGADOR que se llama como un NPC: no es ese NPC, ni se le llama por su oficio. */
+function pcHomonymNote(world: World, pcId: Id): string {
+  const pc = world.characters.get(pcId)!;
+  const npcs = homonymPairs([{ id: pc.id, name: pc.name }], [...world.npcs.values()].map((n) => ({ id: n.id, name: n.name }))).map((h) => h.npc_id);
+  return npcs.length ? ` (no es ${npcs.map((id) => `${descriptorOf(world, id)} [${id}]`).join(' ni ')}, el NPC que se llama igual: a él, siempre por su nombre)` : '';
+}
+
 function extraLine(engine: Engine, n: ExtraNpc, actor: Character, spotName: string, distance: number, talking: boolean, nowG: number): string {
   const world = engine.world;
   const known = actor.knows.includes(n.id);
@@ -714,7 +732,7 @@ function extraLine(engine: Engine, n: ExtraNpc, actor: Character, spotName: stri
   const crime = npcCrimeLine(world, n, actor, nowG);
   const said = talking ? transcriptText(transcriptOf(engine.events.all(), actor.id, n.id, 6), 'Actor', 'NPC') : [];
   return [
-    `- ${who}, en ${spotName}, ${distance} m. ${look}`,
+    `- ${who}${npcHomonymNote(world, n.id)}, en ${spotName}, ${distance} m. ${look}`,
     crime ? `  ${crime}` : '',
     `  Guion: ${n.script.temper}; sirve para: ${EXTRA_SERVICE[n.script.service]}${refer.length ? `; lo que no sabe, lo remite a ${refer.join(' o ')}` : ''}.${att !== 'neutral' ? ` Actitud: ${att}.` : ''}`,
     n.sells.length ? `  Vende: ${n.sells.map((b) => `${world.itemDef(b.item_id).name} [${b.item_id}] a ${money(world, priceFor(n, actor.id, b.price, 'buy'))}`).join(', ')}` : '',

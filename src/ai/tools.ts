@@ -69,7 +69,7 @@ import { ALARM_KINDS, clearAlarm, setAlarm } from '../engine/alarm.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { CONFLICT_KINDS, conflictKindOf, refusedBefore, confrontButtons, confrontOf, conflictVerdict, createItem, resolveConflict, type ConflictKind, type ConflictPlan, type ConflictResult, type ConflictVerdict } from '../engine/conflict.js';
 import { creditRejection, creditWithoutDebt, declaresTheft, jobClaimRejection, jobClaimWithoutComplete, meetingRejection, meetingWithoutSchedule, movesOwnCoins, ruleQuestionRejection, ruleQuestionWithoutLookup, type JobAtHand } from '../engine/closecheck.js';
-import { npcMovesSince, npcPresenceProblem, presenceRejection, type NpcPresence } from '../engine/closecheck.js';
+import { handsOnPlayer, handsOnPlayerRejection, homonymPairs, homonymRejection, homonymRoleCall, npcMovesSince, npcPresenceProblem, presenceRejection, type NpcPresence } from '../engine/closecheck.js';
 import { conflictCloseProblems, debtMismatch, debtRejection, failedToolNarrated, failedToolRejection, menuNamed, menuWords, npcHitRejection, npcHitWithoutAttack, reactionOutcomeMismatch, reactionOutcomeRejection, stateRejection, stateWithoutTool, type MenuItem, type StateKind } from '../engine/closecheck.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
@@ -524,6 +524,10 @@ export interface ToolContext {
   job_rejections?: number;
   /** Cierres rechazados porque habla o actúa un NPC que no está, o se va uno que el motor no ha movido (arreglo 30; uno como mucho). */
   presence_rejections?: number;
+  /** Cierres rechazados por llamar a un JUGADOR por el oficio del NPC que se llama como él (arreglo 34; uno como mucho). */
+  homonym_rejections?: number;
+  /** Cierres rechazados porque el actor le hace algo con las manos a otro JUGADOR sin request_reaction (arreglo 34; uno como mucho). */
+  hands_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -2075,6 +2079,28 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: presenceRejection(hit, npcLabel(world, actor, hit.npc_id), leftAt(engine, hit.npc_id, here())) };
         }
       }
+      // El compañero no es un NPC (arreglo 34): al JUGADOR que se llama como un NPC no se le llama por el oficio de ese
+      // NPC, y robarle o agarrarle pasa por request_reaction (no lo contesta un NPC en su lugar). Una vez cada una.
+      if ((ctx.homonym_rejections ?? 0) < 1) {
+        const pcsHere = world.charactersInLocation(here()).filter((c) => c.id !== actor.id && c.status !== 'dead' && c.status !== 'retired');
+        const homonyms = homonymPairs(pcsHere.map((c) => ({ id: c.id, name: c.name })), [...world.npcs.values()].map((n) => ({ id: n.id, name: n.name }))).map((h) => {
+          const n = world.npc(h.npc_id);
+          return { pc_id: h.pc_id, pc_name: world.character(h.pc_id).name, npc_id: n.id, npc_role: descriptorOf(world, n.id), npc_present: n.status === 'alive' && world.spot(n.location.id).location_id === here() };
+        });
+        const hit = homonyms.length ? homonymRoleCall({ narration: s('narration_private'), homonyms }) : null;
+        if (hit) { ctx.homonym_rejections = (ctx.homonym_rejections ?? 0) + 1; return { error: homonymRejection(hit) }; }
+      }
+      if ((ctx.hands_rejections ?? 0) < 1 && !ctx.roll_category && !engine.inReactionOutcome(actor.id)) {
+        const shared = sharedWith(engine, actor.id);
+        const pcsHere = world.charactersInLocation(here()).filter((c) => c.id !== actor.id && c.status !== 'dead' && c.status !== 'retired' && !shared.includes(c.id));
+        const hit = handsOnPlayer(ctx.action_text, pcsHere.map((c) => ({ id: c.id, name: c.name })));
+        const asked = [...(ctx.ok_tools ?? []), ...failedTools(ctx).map((f) => f.name)].includes('request_reaction') || ctx.stealth_won?.has(hit?.pc_id ?? '');
+        if (hit && !asked) {
+          const npcLine = parseLines(input['lines'], input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null, (id) => world.npcs.has(id)).find((l) => l.speaker === 'npc' && l.npc_id);
+          ctx.hands_rejections = (ctx.hands_rejections ?? 0) + 1;
+          return { error: handsOnPlayerRejection(hit, npcLine?.npc_id ? npcLabel(world, actor, npcLine.npc_id) : null) };
+        }
+      }
       // Fiado pedido por el jugador y aceptado de palabra, sin set_debt (arreglo 24): una vez por acción, antes que el
       // trato genérico, que con eso queda gastado para no rechazar dos veces el mismo fiado.
       if ((ctx.credit_rejections ?? 0) < 1) {
@@ -2577,7 +2603,8 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       for (const sp of spotsNamedIn(world, here(), closingLines.filter((l) => l.speaker === 'npc').map((l) => l.text).join('\n'))) discoverSpot(world, actor, sp);
       // Un nombre que el actor no sabe no sale en su narración: el oficio («el herrero»), salvo lo que dicen otros y lo que nombró el jugador.
       // Tampoco en su boca: «¿Qué le pasó a Hugo?» que el máster le pone sin saberlo él pasa a «¿Qué le pasó al herrero?» (en lines y en la cita).
-      const keep = namedByPlayer(named, ctx.action_text);
+      // Al JUGADOR que se llama como un NPC no se le cambia el nombre por el oficio de ese NPC (arreglo 34).
+      const keep = [...namedByPlayer(named, ctx.action_text), ...homonymPairs([...world.characters.values()].map((c) => ({ id: c.id, name: c.name })), [...world.npcs.values()].map((n) => ({ id: n.id, name: n.name }))).map((h) => h.npc_id)];
       const masked = (t: string) => maskUnknownNames(world, actor.id, t, keep);
       const ownLines = closingLines.filter((l) => l.speaker === 'actor').map((l) => [l.text, masked(l.text)] as const).filter(([a, b]) => a !== b);
       const unname = (t: string) => ownLines.reduce((acc, [a, b]) => acc.split(a).join(b), t);

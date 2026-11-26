@@ -15,12 +15,12 @@ const SPENT: Partial<ToolContext> = {
   spot_rejections: 1, talk_rejections: 1, hidden_rejections: 1, decisive_rejections: 1, npc_turn_rejections: 1, conflict_rejections: 1,
   state_rejections: 1, failed_rejections: 1, reaction_rejections: 1, hit_rejections: 1, debt_rejections: 1,
   credit_rejections: 1, meeting_rejections: 1, rule_rejections: 1, job_rejections: 1,
-  presence_rejections: 1,
+  presence_rejections: 1, homonym_rejections: 1, hands_rejections: 1,
 };
 
 export type Guard = 'served_rejections' | 'shared_rejections' | 'state_rejections' | 'failed_rejections' | 'reaction_rejections' | 'hit_rejections' | 'debt_rejections'
   | 'credit_rejections' | 'meeting_rejections' | 'rule_rejections' | 'job_rejections'
-  | 'presence_rejections';
+  | 'presence_rejections' | 'homonym_rejections' | 'hands_rejections';
 
 /** Contexto de Kael con todas las guardas gastadas menos `only`. */
 export function ctxOnly(engine: Engine, only: Guard, extra: Partial<ToolContext> = {}, actorId = 'ch_kael'): ToolContext {

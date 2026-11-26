@@ -1588,3 +1588,70 @@ export function presenceRejection(hit: PresenceHit, name: string, left: string |
       return `La narración dice que ${name} [${hit.npc_id}] se va («${hit.phrase}») y el servidor no lo ha movido: sigue aquí, en «Presentes». Si se marcha de verdad, set_npc_order (order go, adónde va) antes de cerrar; si no, que siga en escena. Reescribe log_event.`;
   }
 }
+
+// ---------------------------------------------------------------------------
+// El compañero no es un NPC (arreglo 34)
+// ---------------------------------------------------------------------------
+
+/** Un JUGADOR de la sala que se llama como un NPC (Ciro el jugador y Ciro el jornalero). */
+export interface Homonym { pc_id: string; pc_name: string; npc_id: string; npc_role: string; npc_present: boolean }
+
+/**
+ * La narración llama al JUGADOR por el oficio del NPC que se llama como él: «el jornalero» por Ciro (pareja pícaro con
+ * novato, 20261126-0442, Bruno lo ve así de B1 a B31) cuando el jornalero no está en la sala. Si el NPC está, el oficio
+ * puede ser suyo: no se mira. Devuelve el par y la frase, o null.
+ */
+export function homonymRoleCall(input: { narration: string; homonyms: readonly Homonym[] }): (Homonym & { phrase: string }) | null {
+  const text = outsideQuotes(input.narration);
+  for (const h of input.homonyms) {
+    if (h.npc_present) continue;
+    const role = norm(h.npc_role).replace(/^(?:el|la|los|las|un|una) /, '').trim();
+    if (role.length < 3) continue;
+    const m = new RegExp(String.raw`\b(?:(?:el|la|al|del)\s+)?${esc(role)}\b`).exec(text);
+    if (m) return { ...h, phrase: m[0] };
+  }
+  return null;
+}
+
+export function homonymRejection(hit: Homonym & { phrase: string }): string {
+  return `La narración dice «${hit.phrase}» y ese es ${hit.pc_name} el NPC [${hit.npc_id}], que no está aquí. Quien está es el JUGADOR ${hit.pc_name} [${hit.pc_id}]: se llaman igual, pero no es ${hit.npc_role}. Llámale ${hit.pc_name} y no le pongas palabras ni actos que no consten. Reescribe log_event.`;
+}
+
+/** Agarrar, sujetar, empujar, quitarle algo: lo que se le hace a otro con las manos. Sin tildes. */
+const GRABS = /\b(?:agarr\w*|sujet\w*|empuj\w*|zarande\w*|inmoviliz\w*|retengo|retenerle|le (?:cojo|tomo|tiro) (?:del|de la|por)|tir\w* de (?:su|la|el)|le (?:tapo|cierro) la boca|me lo llevo|me la llevo|lo arrastro|la arrastro)\b/;
+
+/**
+ * La acción le hace algo con las manos a otro JUGADOR (robarle, agarrarle, empujarle) nombrándolo: eso pasa por
+ * request_reaction, que es el otro quien decide. Pareja pícaro B9: «deslizo la mano hacia el bolsillo de Ciro y le saco
+ * la bolsa» y contesta Ciro el jornalero, «De eso no sé nada». Devuelve el jugador y lo que intenta, o null.
+ */
+export function handsOnPlayer(action: string | null | undefined, pcs: readonly { id: string; name: string }[]): { pc_id: string; pc_name: string; what: 'theft' | 'grab' } | null {
+  if (!action) return null;
+  const a = norm(action).replace(/«[^»]*»|"[^"]*"|“[^”]*”/g, ' . ');
+  const theft = declaresTheft(action);
+  const grab = GRABS.test(a);
+  if (!theft && !grab) return null;
+  for (const p of pcs) {
+    const forms = npcNameForms(p.name).map((f) => norm(f)).filter((f) => f.length >= 3);
+    if (forms.some((f) => new RegExp(String.raw`\b${esc(f)}\b`).test(a))) return { pc_id: p.id, pc_name: p.name, what: theft ? 'theft' : 'grab' };
+  }
+  return null;
+}
+
+export function handsOnPlayerRejection(hit: { pc_id: string; pc_name: string; what: 'theft' | 'grab' }, npcAnswers: string | null): string {
+  const how = hit.what === 'theft'
+    ? `request_reaction (target_character_id ${hit.pc_id}, kind other, actor_skill sleight_of_hand, target_skills perception): el servidor hace la tirada enfrentada oculta y te dice si le pilla`
+    : `request_reaction (target_character_id ${hit.pc_id}, kind grapple, shove u other): ${hit.pc_name} decide en su pantalla si se deja o se resiste`;
+  return `El actor le ${hit.what === 'theft' ? 'quita algo' : 'pone las manos encima'} al JUGADOR ${hit.pc_name} [${hit.pc_id}] y este cierre no lo resuelve${npcAnswers ? `: contesta ${npcAnswers} en su lugar, y no es él` : ''}. Con otro jugador va siempre por ${how}. Narra solo el intento y cierra sin el resultado. Reescribe log_event.`;
+}
+
+/** Los pares JUGADOR y NPC que se llaman igual (por cualquiera de sus formas de nombre: «Ciro», «Ciro el Viejo»). */
+export function homonymPairs(pcs: readonly { id: string; name: string }[], npcs: readonly { id: string; name: string }[]): { pc_id: string; npc_id: string }[] {
+  const forms = (name: string) => new Set(npcNameForms(name).map(norm).filter((f) => f.length >= 3));
+  const out: { pc_id: string; npc_id: string }[] = [];
+  for (const p of pcs) {
+    const mine = forms(p.name);
+    for (const n of npcs) if ([...forms(n.name)].some((f) => mine.has(f))) out.push({ pc_id: p.id, npc_id: n.id });
+  }
+  return out;
+}
