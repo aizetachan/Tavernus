@@ -219,3 +219,12 @@ jugador lo pide con las palabras justas, Haiku llama a la tool.
 
 De las herramientas: **H11**, el recolector de día y cerca del pueblo; **H12**, comprobar por qué la capa del recolector
 desaparece de la ficha (H1) a mitad de partida.
+Hechos el 26-11 en `scripts/autoplay.ts`. **H12**: la capa no la soltó nadie ni la movió el máster. El recolector murió en el
+arroyo en el turno 11 (evento 75, `death`) y, como manda el modo casual, todo lo que llevaba quedó en su cuerpo
+(`ii_body_ch_ciro_…_73920`, en `sp_cl_arroyo`); el «soltar» del turno 6 dejó una antorcha y nada más. El motor hizo lo
+correcto; lo que fallaba era la ficha del jugador, que tras la vuelta decía «Lleva: nada» sin decir dónde estaban sus
+cosas. Ahora separa manos, puesto y cada bolsa, marca la sintonía («sintonía: sin hacer» o «contigo»), nombra lo
+sintonizado que no lleva encima y, si murió, dónde está su cuerpo y qué hay dentro. **H11**: el recolector no va nunca al
+Soto (el lobo flaco y la loba están en el arroyo y el roble a cualquier hora, no solo de noche): examina y sintoniza la
+capa en la plaza, recolecta en los Corrales (ponedero y huerto) con antorcha, pesca en el canal del molino y vende a
+Brenna.
