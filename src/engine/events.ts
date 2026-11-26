@@ -194,13 +194,13 @@ export function readerText(world: World, e: GameEvent, characterId: Id, level: P
     const common = typeof e.payload['narration_common'] === 'string' ? e.payload['narration_common'] : null;
     // Con su parte, nunca la narración mezclada de todos (la segunda persona de otro no es para él).
     const text = common !== null || mine ? [mine ?? '', common ?? ''].filter((t) => t.trim()).join('\n\n') : e.narration_private;
-    return maskUnknownNames(world, characterId, text);
+    return maskForReader(world, characterId, text);
   }
   // Algo que afecta a todos los presentes (audience.ts): la misma narración para todos. Si el turno era compartido,
   // lo común (narration_private lleva además la parte en segunda persona del actor).
   if (viewOf(e, characterId) === 'shared') {
     const common = e.payload['narration_common'];
-    return maskUnknownNames(world, characterId, typeof common === 'string' && common.trim() ? common : e.narration_private);
+    return maskForReader(world, characterId, typeof common === 'string' && common.trim() ? common : e.narration_private);
   }
   const target = e.payload['target_character_id'];
   const own = e.payload['observable_target'];
@@ -208,9 +208,27 @@ export function readerText(world: World, e: GameEvent, characterId: Id, level: P
   if (!text) return null;
   const reader = world.characters.get(characterId);
   if (reader) text = secondPerson(text, reader.name);
-  return maskUnknownNames(world, characterId, text);
+  return maskForReader(world, characterId, text);
 }
 
 export function characterLabel(c: Character, level: PerceptionLevel): string {
   return level === 'full' ? c.name : 'alguien';
+}
+
+const firstName = (s: string) => s.trim().split(/\s+/)[0]!.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+/** NPC que se llaman como un jugador de la partida (Ciro el jornalero y Ciro el jugador): su nombre no se enmascara. */
+export function pcNameClashes(world: World): Id[] {
+  const pcs = new Set([...world.characters.values()].filter((c) => c.status !== 'retired').map((c) => firstName(c.name)));
+  return [...world.npcs.values()].filter((n) => pcs.has(firstName(n.name))).map((n) => n.id);
+}
+
+/**
+ * Los nombres que el lector no conoce, enmascarados (narrate.ts), salvo el de un NPC que se llama como un jugador de la
+ * partida: «Ciro» en un turno compartido es Ciro el jugador, no «el jornalero» (pareja pícaro: Ciro leía «el jornalero
+ * le mira» por sí mismo y Bruno veía a su compañero como el jornalero toda la partida; arreglo 33). Los PJ se conocen
+ * siempre por su nombre.
+ */
+function maskForReader(world: World, readerId: Id, text: string): string {
+  return maskUnknownNames(world, readerId, text, pcNameClashes(world));
 }

@@ -1906,11 +1906,15 @@ function characterOr404(engine: Engine, id: string | null, res: ServerResponse):
   return null;
 }
 
-/** Con evento, la narración ya llegó por el stream; sin él (consultas, errores) va en la respuesta. */
 /** El motor dijo que no (para el registro: resultado=rechazada). */
 const refused = (r: { ok: boolean }) => !r.ok;
 
-function reply(r: ActionResult): { ok: boolean; text: string | null; say_to?: { id: Id; name: string }; info?: InfoAnswer } {
+/**
+ * Lo que la web contesta a quien actuó. Con evento, la narración ya llegó por el stream (cada uno la suya, events.ts
+ * readerText); sin él (consultas, errores) va en la respuesta. En una ventana de turno todos reciben el mismo
+ * ActionResult (el del primero): por eso aquí no se usa su texto (arreglo 33).
+ */
+export function reply(r: ActionResult): { ok: boolean; text: string | null; say_to?: { id: Id; name: string }; info?: InfoAnswer } {
   if (!r.ok) return { ok: false, text: r.text };
   return { ok: true, text: r.event ? null : r.text, ...(r.say_to ? { say_to: r.say_to } : {}), ...(r.info ? { info: r.info } : {}) };
 }
