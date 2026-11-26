@@ -576,6 +576,9 @@ export function reportIncident(world: World, input: IncidentInput, nowG: number)
   const spot = input.spot_id ? world.spots.get(input.spot_id) ?? null : world.characterSpot(c);
   if (!spot) return null;
   const victim = input.victim_id ? world.npcs.get(input.victim_id) ?? null : null;
+  // Quitarle algo en plena pelea (desarmarle, arrancarle el martillo) no es un robo: lo grave ya es la pelea (arreglo
+  // 15 del 26-11-2026: Bruno le quita el martillo a Hugo con Atletismo 12 y salía «ladrón» y «te buscan»).
+  if ((input.kind === 'theft' || input.kind === 'theft_attempt') && victim && victim.status === 'alive' && inFightWith(world, c, victim, nowG)) return null;
   const sev = SEVERITY[input.kind];
   const all = store(world);
   // La violencia sube por escalones (agresión → con arma → muerte) dentro del mismo incidente; robar o profanar es otro.
@@ -624,6 +627,16 @@ export function reportAssault(world: World, c: Character, n: Npc, weapon: string
   if (!isUnprovoked(n, c.id) && !store(world).some((x) => x.status === 'open' && x.perpetrator_id === c.id && x.victim_id === n.id && VIOLENT.includes(x.kind))) return null;
   const armed = weapon !== null && weapon !== 'puños';
   return reportIncident(world, { kind: armed ? 'armed_assault' : 'assault', perpetrator_id: c.id, victim_id: n.id, spot_id: n.location.id, weapon: armed ? weapon : null }, nowG);
+}
+
+/**
+ * ¿Están el PJ y ese NPC peleando ahora? Sí si el NPC le es hostil (se lanzó contra él, le ataca) o si hay una agresión
+ * reciente entre los dos, de uno al otro. Lo que le quite en ese rato es desarmarle, no robarle.
+ */
+export function inFightWith(world: World, c: Character, n: Npc, nowG: number): boolean {
+  if ((n.attitude.by_character[c.id] ?? n.attitude.default) === 'hostile') return true;
+  return store(world).some((x) => x.status === 'open' && VIOLENT.includes(x.kind) && nowG - x.updated_game_s < ESCALATE_S
+    && x.perpetrator_id === c.id && x.victim_id === n.id);
 }
 
 /** ¿Empezó el PJ la pelea con ese NPC? Hay una agresión suya abierta contra él (y entonces vencerle no da PX). */
@@ -704,6 +717,24 @@ export function spreadNews(world: World, nowG: number): void {
 // Detención, calabozo y caza
 // ---------------------------------------------------------------------------
 
+/**
+ * De qué le acusa quien le da el alto (arreglo 3 del 26-11-2026): lo último que ha hecho y esa autoridad sabe, que es
+ * lo que provoca el alto, no lo más grave de la lista (violento 1051, acción 32: intenta robarle al molinero y Garrán
+ * le acusaba de lo de Hugo en la herrería). `before`: lo demás que se le busca, en una frase, o null.
+ */
+export function arrestCharge(world: World, c: Character, npcId: Id | null): { charge: string; before: string | null } | null {
+  const open = wantedIncidents(world, c);
+  if (!open.length) return null;
+  const known = npcId ? open.filter((i) => i.knowers.some((k) => k.npc_id === npcId)) : [];
+  const latest = [...(known.length ? known : open)].sort((a, b) => b.updated_game_s - a.updated_game_s)[0]!;
+  const rest = open.filter((i) => i.id !== latest.id).sort((a, b) => b.severity - a.severity);
+  const v = (i: Incident) => ({ ...i, victim_name: i.victim_id ? label(world, i.victim_id, c) : i.victim_name });
+  return {
+    charge: `${deedText(v(latest))} en ${where(world, latest)}`,
+    before: rest.length ? `${deedText(v(rest[0]!))} en ${where(world, rest[0]!)}${rest.length > 1 ? ` (y ${rest.length - 1} cosa${rest.length > 2 ? 's' : ''} más)` : ''}` : null,
+  };
+}
+
 /** Incidentes abiertos por los que buscan a este PJ. */
 export function wantedIncidents(world: World, c: Character): Incident[] {
   return (c.wanted?.incident_ids ?? []).map((id) => incidentById(world, id)).filter((x): x is Incident => Boolean(x) && x!.status === 'open');
@@ -779,14 +810,15 @@ function settle(world: World, c: Character): void {
 }
 
 /** Le encierran: al calabozo, con el «preso» hasta que cumpla. `nowC`: la hora del PJ. */
-function jail(world: World, c: Character, hours: number, reason: string, nowC: number): { until: number; spot: Spot } | null {
+function jail(world: World, c: Character, hours: number, reason: string, nowC: number, byId: Id | null = null): { until: number; spot: Spot } | null {
   const spot = jailSpot(world);
   if (!spot) return null;
   const until = nowC + hours * GAME_HOUR;
+  const from = world.characterSpot(c)?.id ?? null;
   c.location = { type: 'spot', id: spot.id };
   c.transit = null;
   c.following = null;
-  c.jailed = { until_game_s: until, spot_id: spot.id, reason };
+  c.jailed = { until_game_s: until, spot_id: spot.id, reason, since_game_s: nowC, from_spot_id: from, by_npc_id: byId, unconscious: c.status === 'unconscious' };
   setCondition(c, JAILED_CONDITION, reason, until);
   world.touch('characters', c.id);
   return { until, spot };
@@ -813,7 +845,7 @@ function sentence(world: World, c: Character, nowG: number, nowC: number): Sente
   const reason = w.reason;
   const s = sentenceFor(world, c);
   if (s.kind === 'jail') {
-    const j = jail(world, c, s.hours, reason, nowC);
+    const j = jail(world, c, s.hours, reason, nowC, by?.id ?? null);
     if (by && j) setNpcOrder(world, { npc_id: by.id, order: 'go', spot_id: j.spot.id, minutes: 15 }, nowG);
     settle(world, c);
     return { kind: 'jail', paid: 0, until_game_s: j?.until ?? null, spot_id: j?.spot.id ?? null, by, reason };
@@ -936,7 +968,7 @@ export function lawTick(world: World, nowG: number, nowFor: (c: Character) => nu
         stabilize(world, c, nowG, by.name, `detenido por ${by.name}`);
         const s = sentenceFor(world, c);
         const reason = w.reason;
-        const j = jail(world, c, Math.max(s.hours, 8), reason, nowFor(c));
+        const j = jail(world, c, Math.max(s.hours, 8), reason, nowFor(c), by.id);
         if (j) {
           setNpcOrder(world, { npc_id: by.id, order: 'go', spot_id: j.spot.id, minutes: 15 }, nowG);
           settle(world, c);
@@ -1059,7 +1091,7 @@ function label(world: World, id: Id, reader?: Character | null): string {
  * él), para no soltar nombres que no sabe; sin él, nombres (el evento los
  * enmascara al entregarlo).
  */
-export function reactionSentences(world: World, i: Incident, you: boolean, reader?: Character | null): string[] {
+export function reactionSentences(world: World, i: Incident, you: boolean, reader?: Character | null, opts: { altoApart?: boolean } = {}): string[] {
   const p = you ? 'ti' : i.perpetrator_name;
   const out: string[] = [];
   const victim = i.victim_id ? label(world, i.victim_id, reader) : 'la víctima';
@@ -1068,7 +1100,8 @@ export function reactionSentences(world: World, i: Incident, you: boolean, reade
     if (!n || k.how === 'told' || n.status !== 'alive') continue;
     const name = cap(label(world, n.id, reader));
     switch (k.response) {
-      case 'arrest': out.push(`${name} se planta delante de ${p}: «¡Alto! Quedas detenido.»`); break;
+      // En el aviso de los jugadores el «¡Alto!» va en su evento (arrest), no aquí también (arreglo 6 del 26-11-2026).
+      case 'arrest': out.push(opts.altoApart ? `${name} lo ha visto y va a por ${p}.` : `${name} se planta delante de ${p}: «¡Alto! Quedas detenido.»`); break;
       case 'fight': out.push(`${name} se lanza contra ${p}.`); break;
       case 'hold': out.push(you ? `${name} aprieta los puños, pero no se mueve: deja que la autoridad se encargue de ti.` : `${name} aprieta los puños, pero no se mueve: deja que la autoridad se encargue.`); break;
       case 'seize': out.push(you ? `${name} te agarra de la muñeca: «Suelta eso. Ahora.»` : `${name} agarra de la muñeca a ${p} y le exige que lo suelte.`); break;
@@ -1115,7 +1148,7 @@ export function mainReactions(world: World, i: Incident, you: boolean, reader?: 
     const any = i.knowers.some((k) => k.how !== 'told' && world.npcs.get(k.npc_id)?.status === 'alive' && (k.response === 'shout' || k.response === 'flee'));
     return any || i.crowd ? [you ? 'La gente se aparta de ti y alguno grita pidiendo ayuda.' : `La gente se aparta de ${i.perpetrator_name} y alguno grita pidiendo ayuda.`] : [];
   }
-  return reactionSentences(world, { ...i, knowers: ranked, crowd: null }, you, reader);
+  return reactionSentences(world, { ...i, knowers: ranked, crowd: null }, you, reader, { altoApart: true });
 }
 
 /** Para el control de cierre: con qué palabras se nombra a cada testigo que reacciona (nombre, rol, cómo le ve el actor). */
@@ -1183,7 +1216,19 @@ export function crimeContext(world: World, c: Character, nowG: number): string |
   const recent = recentIncidents(world, world.characterSpot(c)?.location_id ?? '', nowG).filter((i) => !pending.includes(i));
   if (recent.length) L.push(`## Incidentes recientes aquí (ya contados)\n${recent.map((i) => `- ${ago(nowG, i.updated_game_s)}: ${i.perpetrator_name} ${deedFor(world, i, c)} en ${world.spots.get(i.spot_id)?.name ?? 'el sitio'}. Quien lo sabe sigue reaccionando igual (mira «LO PRIMERO» en cada NPC).`).join('\n')}`);
   const lines: string[] = [];
-  if (c.jailed) lines.push(`El actor está PRESO en ${world.spots.get(c.jailed.spot_id)?.name ?? 'el calabozo'} hasta las ${hhmmOf(c.jailed.until_game_s)} (${c.jailed.reason}): no sale de ahí; el servidor le suelta a su hora.`);
+  if (c.jailed) {
+    const j = c.jailed;
+    const cell = world.spots.get(j.spot_id)?.name ?? 'el calabozo';
+    lines.push(`El actor está PRESO en ${cell} hasta las ${hhmmOf(j.until_game_s)} (${j.reason}): no sale de ahí; el servidor le suelta a su hora.`);
+    // Arreglo 10 del 26-11-2026: el preso aparecía en la celda sin transición, y la autoridad le obedecía o le pegaba sin tirada.
+    if (!j.told) {
+      const from = j.from_spot_id ? world.spots.get(j.from_spot_id) : null;
+      const fromLoc = from ? world.locations.get(from.location_id)?.name : null;
+      const by = j.by_npc_id ? label(world, j.by_npc_id, c) : 'la autoridad';
+      lines.push(`ES SU PRIMER TURNO EN LA CELDA: empieza la narración por el traslado, en una o dos frases: ${j.unconscious ? `despierta en ${cell}, dolorido; ${by} le trajo a rastras, inconsciente` : `${by} le ha traído atado`}${from && from.id !== j.spot_id ? ` desde ${from.name}${fromLoc && fromLoc !== from.name ? ` (${fromLoc})` : ''}` : ''}. Luego, lo que hace.`);
+    }
+    lines.push('La autoridad no obedece al preso: lo que le ordene (abrir la reja, traer a alguien, soltarle) no lo hace; contesta desde fuera, se ríe o no contesta. Nadie le pega en la celda si él no ataca primero, y si alguien le pega, es con attack (su tirada), no de palabra.');
+  }
   if (c.wanted) {
     lines.push(`El actor está BUSCADO: ${c.wanted.reason}. Quien lo sabe no le vende ni le aloja; no descansa tranquilo donde la autoridad sepa que está.`);
     const a = c.wanted.arrest;

@@ -22,11 +22,11 @@ import { coinsIn, dropOffer, findPresentPc, HELP_TTL_S, OFFER_TTL_MS, offerAnswe
 
 import { npcSees, witnesses } from './perception.js';
 
-import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, reactionExplain, readsAsAccept, readsAsResist } from './reactions.js';
+import { contest, dropReaction, findReaction, fmtLeft, GRAPPLE_S, parseReaction, pendingFrom, PRONE_S, REACTION_TTL_MS, pcActionTarget, reactionExplain, reactionReply, readsAsAccept, readsAsResist } from './reactions.js';
 
 import { TURN_WINDOW_MS, windowClashes, type Clash } from './turnwindow.js';
 
-import { encounterAt } from './encounter.js';
+import { encounterAt, hostilesAt, recentCombatTag } from './encounter.js';
 
 import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { settleAudience } from './audience.js';
@@ -39,7 +39,7 @@ import { parseErrand, pendingLine, trivialAction, type Errand } from './errand.j
 import { atBoard, dropQuest, readBoard, readsBoard } from './quests.js';
 import { consumeHooks, matchHooks, pendingHooksIn, plantBeat, pruneHooks, type Hook, type HookCue } from './hooks.js';
 import { activeIn, crowdHere, tickSchedule } from './schedule.js';
-import { allIncidents, arrestAttempt, arrestHostile, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, subdue, surrender, type LawNotice } from './crime.js';
+import { allIncidents, arrestAttempt, arrestCharge, arrestHostile, incidentText, lawTick, parseDesecration, parseInsult, parseResist, parseSurrender, readsAsResisting, reportIncident, resist, sentencePreview, subdue, surrender, type LawNotice } from './crime.js';
 
 import { coinsOf, currencyOf, DEFAULT_STARTING_COINS, migrateLegacyCoins, money, newPurse, pay } from './money.js';
 
@@ -58,7 +58,7 @@ import { classifyMoments, momentLookupOf, seenFromEvents, type DialogueLine, typ
 import { characterCheck, type CheckKind } from './rules.js';
 import { activeJobs, addPractice, buyFromNpc, rotateBoard, type ProgressEvent } from './progress.js';
 
-import { decisiveConsequence, engineNpcTurn, forcedTurnText, resolveAttack, type ForcedTurn } from './combat.js';
+import { decisiveConsequence, dueNpcTurns, engineNpcTurn, forcedTurnText, resolveAttack, type ForcedTurn } from './combat.js';
 import { npcCanAct } from './death.js';
 
 import { attackRoll, checkRoll, hiddenCheckRoll, isHiddenRoll, rollAudience, rollTextForOthers, rollTextForRoller, type ShownRoll } from './rolls.js';
@@ -173,6 +173,21 @@ export type MasterResolution =
  * ventana decisiva que caducó): con quién (NPC), en una frase para el actor, y el turno del NPC si lo hubo.
  */
 export interface EngineDone { npc_id: Id | null; text: string; forced?: ForcedTurn }
+
+/** El desenlace de una reacción entre PJ mientras el máster lo narra (Engine.reactionOutcomeOf). */
+export interface ReactionOutcome {
+  target_id: Id;
+  /** Gana quien actúa (el otro se dejó o perdió la tirada). */
+  success: boolean;
+  kind: ReactionKind;
+  /** Lo que intentaba, para el afectado («birlarte una moneda»). */
+  attempt: string;
+  how: 'accept' | 'resist' | 'timeout' | 'away' | 'helpless';
+  /** Lo que hace el afectado, como lo escribió (un gesto). */
+  gesture?: string;
+  /** Las tiradas, para quien actúa: «Tirada enfrentada: tu Juego de manos d20 [18] + 2 = 20, contra su Percepción…». */
+  rolls?: string;
+}
 
 /**
  * Una llamada al máster, para el registro del servicio: quién, de qué tipo, modelo, cuánto tardó, tokens y error.
@@ -961,7 +976,8 @@ export class Engine {
     const t0 = text.trim();
     const give = parseGive(t0);
     const party = parseParty(t0);
-    const betweenPcs = (c.status === 'active' && parseReaction(this.world, c, t0)) || (give && findPresentPc(this.world, c, give.to)) || (party && (party.kind === 'unfollow' || findPresentPc(this.world, c, party.who)));
+    // Robarle, agarrarle o empujarle a otro PJ que nombra (reactions.ts, pcActionTarget): ni charla de grupo ni vecino.
+    const betweenPcs = (c.status === 'active' && pcActionTarget(this.world, c, t0)) || (give && findPresentPc(this.world, c, give.to)) || (party && (party.kind === 'unfollow' || findPresentPc(this.world, c, party.who)));
     const scene = betweenPcs || parseRest(t0) || this.isDeathAction(c, t0) ? null : this.sceneRoute(c, t0);
     if (scene) return scene;
     // Varios a la vez (turnwindow.ts): lo que manden otros PJ del sitio en unos segundos va al máster en la misma llamada.
@@ -992,7 +1008,10 @@ export class Engine {
       if (c.following && (travel || this.isMove(c, clean))) { c.following = null; this.world.touch('characters', c.id); }
       // La ley delante (crime.ts): entregarse o resistirse a un alto; y lo que el motor ve como crimen antes de que narre el máster.
       const law = this.tryConfront(c, clean) ?? this.tryLaw(c, clean);
-      const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryExtraTalk(c, clean) ?? await this.tryTrivial(c, clean));
+      // Lo que le hace a otro PJ con las manos y no reconoce tryReaction (robarle a escondidas, «le birlo la bolsa a
+      // Ciro») va al máster, que pide la reacción: ni encargos, ni charla con un vecino, ni atajos sin máster (arreglo 7).
+      const atPc = c.status === 'active' && pcActionTarget(this.world, c, clean) !== null;
+      const fast = law ?? (decisive ? null : this.tryReaction(c, clean) ?? this.tryParty(c, clean) ?? (travel ? this.tryTravel(c, clean, travel) : null) ?? this.tryBarrier(c, clean) ?? this.tryDeathAction(c, clean) ?? (atPc ? null : await this.tryRest(c, clean) ?? await this.tryErrand(c, clean) ?? await this.tryExtraTalk(c, clean) ?? await this.tryTrivial(c, clean)));
       if (fast) {
         r = fast;
       } else if (this.master && c.status === 'active' && !this.isMechanical(c, clean)) {
@@ -1400,6 +1419,35 @@ export class Engine {
   }
 
   /** El jugador pulsa 🎲: el servidor tira y el master narra la consecuencia. */
+  /** Tiradas de zafarse o escapar (arreglo 10). */
+  private static readonly EVASION_SKILLS = new Set(['acrobatics', 'athletics', 'stealth']);
+  /** Lo que dice quien huye o se zafa: «salgo corriendo», «me escapo», «me zafo», «esquivo». */
+  private static readonly FLEES = /\b(?:hu(?:yo|ir|ye)|escap\w*|me\s+zafo|zafarme|me\s+libero|liberarme|esquiv\w*|salgo\s+corriendo|echo\s+a\s+correr|corro\s+hacia|me\s+largo|me\s+escabullo|me\s+suelto|soltarme|me\s+escurro)\b/i;
+
+  /**
+   * Los NPC que le pegan ahora, tras su tirada (arreglo 12): los que se acaban de lanzar contra él (`provoked`, la
+   * víctima de su agresión que pelea) y, si ya hay pelea en la sala (combate en curso, o golpes recientes con hostiles
+   * delante), los hostiles que le ven, como en el turno de los NPC (combat.ts, dueNpcTurns). Cada uno, su turno entero
+   * con su tirada y su daño (engineNpcTurn). Lista vacía si nadie.
+   */
+  private retaliation(c: Character, provoked: ReadonlySet<Id>): ForcedTurn[] {
+    if (c.status !== 'active') return [];
+    const loc = this.world.characterSpot(c)?.location_id;
+    if (!loc) return [];
+    const nowG = this.nowFor(c);
+    const fight = encounterAt(this.world, this.events.recentInLocation(loc, 400), loc, nowG) !== null
+      || (recentCombatTag(this.events.recentInLocation(loc, 12), nowG) && hostilesAt(this.world, loc, [c]).length > 0);
+    if (!fight && !provoked.size) return [];
+    const out: ForcedTurn[] = [];
+    for (const d of dueNpcTurns(this.world, [c.id], new Set(), nowG)) {
+      if (!fight && !provoked.has(d.npc.id)) continue;
+      if (c.status !== 'active') break;
+      const f = engineNpcTurn(this.world, d.npc.id, c.id, this.rng, nowG);
+      if (f) out.push(f);
+    }
+    return out;
+  }
+
   async rollPending(characterId: Id): Promise<ActionResult> {
     await this.tick();
     const c = this.world.character(characterId);
@@ -1427,6 +1475,8 @@ export class Engine {
       let roll: ShownRoll;
       let attack: { target_id: Id; hit: boolean; down: boolean; dead: boolean; damage: number; ko?: boolean } | undefined;
       let conflictNote: string | null = null;
+      /** NPC que se lanzan contra él por lo que acaba de pasar (conflict.ts: la víctima que pelea, el allegado que se mete). */
+      const provoked = new Set<Id>();
       if (pending.roll.kind === 'attack' && pending.roll.target) {
         // Lo que escribió el jugador decide si el golpe a 0 PG mata o deja inconsciente (combat.ts, lethalBlow).
         const atk = resolveAttack(this.world, c.id, pending.roll.target, pending.roll.advantage, undefined, this.nowFor(c), { intent: pending.text, hand: pending.roll.key === 'off_hand' ? 'off' : 'main' });
@@ -1453,6 +1503,7 @@ export class Engine {
         if (npc) {
           const res = resolveConflict(this.world, c, npc, v, { total: result.total, natural: result.natural ?? null, npc_total: npcTotal }, this.nowFor(c));
           conflictNote = `${res.facts}${res.reaction ? ` Reacción de ${npc.name} (hecho): ${res.reaction}` : ''}${npcTotal !== null ? ` (${npc.name} sacó ${npcTotal} en su tirada.)` : ''}`;
+          for (const k of res.incident?.knowers ?? []) if (k.how === 'saw' && k.response === 'fight') provoked.add(k.npc_id);
         }
       } else if (pending.roll.confront) {
         // Convencerle o engañarle en un careo: con éxito, un aviso; si falla, delito (conflict.ts).
@@ -1501,7 +1552,39 @@ export class Engine {
         const told = t && trustNotice(nameFor(this.world, c, t.npc_id), t);
         if (told) this.emitProgress(c, [{ kind: 'trust', text: told }]);
       }
-      let r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result, ...(conflictNote ? { conflict: conflictNote } : {}), ...(hiddenRoll ? { hidden: true } : {}) });
+      // Represalia (arreglo 12 del 26-11-2026): el NPC que pelea con él no le pega «de palabra» en la narración. Tras una
+      // tirada que no es un ataque suyo, los hostiles que le tienen delante hacen su turno YA, con su tirada y su daño, y
+      // el máster lo cuenta como hecho (engineDone: no vuelven a atacar en este turno; si no lo nombra, el cierre lo añade).
+      // Zafarse o huir con éxito (Acrobacias, Atletismo, Sigilo) compra algo (arreglo 10: rompejuegos 1051, Acrobacias 16
+      // y tres golpes): los hostiles no le alcanzan en este turno y, si le estaban deteniendo, se le escapa.
+      const evaded = Boolean(result.success) && pending.roll.kind === 'skill' && Engine.EVASION_SKILLS.has(pending.roll.key) && !pending.roll.conflict && (Engine.FLEES.test(pending.text) || this.isLeaving(c, pending.text));
+      const struck = pending.roll.kind === 'attack' || evaded ? [] : this.retaliation(c, provoked);
+      if (evaded) {
+        const loc = this.world.characterSpot(c)?.location_id;
+        const missed = loc ? dueNpcTurns(this.world, [c.id], new Set(), this.nowFor(c)) : [];
+        if (missed.length) this.engineDoneFor.set(c.id, missed.map((d) => ({ npc_id: d.npc.id, text: `${this.labelFor(c, d.npc.id).replace(/^./, (x) => x.toUpperCase())} no llega a alcanzarte: te zafas.` })));
+        if (c.wanted?.arrest) { resist(this.world, c, this.nowFor(c)); c.wanted.arrest = null; this.world.touch('characters', c.id); }
+      }
+      const struckText = struck.map((f) => forcedTurnText(this.world, f, c.id, (id) => this.labelFor(c, id)));
+      if (struck.length) {
+        this.engineDoneFor.set(c.id, struck.map((f, k) => ({ npc_id: f.npc_id, text: struckText[k]!, forced: f })));
+        const fact = `Represalia, ya resuelta por el servidor con su tirada (hecho: cuéntala tal cual después de lo del jugador, con ese resultado; no llames a attack ni a apply_damage por ella): ${struckText.join(' ')}`;
+        if (conflictNote !== null) conflictNote = `${conflictNote} ${fact}`;
+      }
+      let r: ActionResult;
+      try {
+        r = await this.resolveWithMaster(c, pending.text, { original_text: pending.text, result, ...(conflictNote ? { conflict: conflictNote } : {}), ...(hiddenRoll ? { hidden: true } : {}) });
+      } finally {
+        if (struck.length || evaded) this.engineDoneFor.delete(c.id);
+      }
+      // Sin narración, el golpe ya está dado: se cuenta en la voz del motor.
+      if (struck.length && !r.ok) {
+        this.events.emit({
+          actor_id: c.id, action_type: 'npc_retaliation', narration_private: struckText.join(' '),
+          observable: struck.map((f) => forcedTurnText(this.world, f, null, (id) => this.world.npc(id).name)).join(' '), loudness: 3,
+          tags: ['combat', 'deterministic'], payload: { master: null, npc_id: struck[0]!.npc_id },
+        }, this.stampFor(c));
+      }
       if (!r.ok && r.text === '') r = { ok: false, text: `${shown}\nEl narrador no responde; inténtalo de nuevo.` };
       // Si el máster le llevó a otro punto al contarlo («te metes en el callejón»), se esconde allí.
       if (stealth && result.success && c.sneak && c.sneak.spot_id !== this.world.characterSpot(c)?.id) noteSneak(this.world, c, result.total, this.nowFor(c));
@@ -1856,6 +1939,8 @@ export class Engine {
     }, this.stampFor(c));
     // Lo que el máster pidió a otro jugador (request_reaction): la petición sale después de su narración.
     this.announcePending(c.id);
+    // Preso: su primer turno narrado en la celda ya cuenta el traslado (crime.ts, crimeContext; arreglo 10).
+    if (c.jailed && !c.jailed.told && !intro && c.status === 'active') { c.jailed.told = true; this.world.touch('characters', c.id); }
     // Tirada oculta (Percepción, Sigilo…): no hay botón; el servidor la tira ahora y el máster sigue con el resultado.
     if (k.requires_roll && isHiddenRoll(k.requires_roll) && !k.requires_roll.conflict && !k.requires_roll.confront && !roll) {
       for (const sr of out.shown_rolls ?? []) this.announceRoll(sr);
@@ -2554,7 +2639,7 @@ export class Engine {
   private unannounced = new Map<Id, Reaction[]>();
   /** Actores cuya narración del máster es el desenlace de una reacción (no se pide otra encima). */
   /** Quien está narrando el desenlace de su reacción: contra quién y si le ha salido (take_coins y robar a otro PJ, tools.ts). */
-  private reactionOutcome = new Map<Id, { target_id: Id; success: boolean }>();
+  private reactionOutcome = new Map<Id, ReactionOutcome>();
 
   /** ¿Está el máster narrando el desenlace de una reacción de este actor? (tools.ts no deja pedir otra.) */
   inReactionOutcome(characterId: Id): boolean { return this.reactionOutcome.has(characterId); }
@@ -2563,6 +2648,12 @@ export class Engine {
     const r = this.reactionOutcome.get(fromId);
     return Boolean(r && r.target_id === targetId && r.success);
   }
+  /**
+   * El desenlace de la reacción que el máster está narrando para este actor (arreglo 2 del 26-11-2026): contra quién,
+   * qué intentaba, cómo decidió el otro y quién ha ganado. null si no está narrando ninguno. Lo lee la guarda del cierre
+   * (tools.ts) para rechazar la narración que cuente lo contrario.
+   */
+  reactionOutcomeOf(fromId: Id): Readonly<ReactionOutcome> | null { return this.reactionOutcome.get(fromId) ?? null; }
 
   /** Lo que el actor intenta sobre otro PJ (reactions.ts), reconocido por el motor; null si no es eso. */
   private tryReaction(c: Character, text: string): ActionResult | null {
@@ -2758,11 +2849,14 @@ export class Engine {
     if (mine.id !== theirs.id) approachSpot(this.world, from, mine.id);
     const toName = pcName(this.world, from.id, to);
     const ToName = toName.charAt(0).toUpperCase() + toName.slice(1);
-    // Cómo decidió, para el afectado [0] y para quien actúa [1].
-    const said = reply ? ` «${reply.replace(/[«»]/g, '').replace(/[.]+$/, '')}».` : '';
+    // Cómo decidió, para el afectado [0] y para quien actúa [1]. Lo que escribió es lo que hace, un gesto (arreglo 9 del
+    // 26-11-2026): no se le devuelve como frase dicha ni se le enseña al otro tal cual (lo cuenta el máster); solo lo que
+    // puso entre comillas, que sí lo dice en voz alta.
+    const answer = reactionReply(reply);
+    const said = answer.speech.length ? `: ${answer.speech.map((x) => `«${x.replace(/[.]+$/, '')}»`).join(' ')}.` : '.';
     const decided = {
-      accept: [`Te dejas.${said}`, `${ToName} se deja.${said}`],
-      resist: [`Te resistes.${said}`, `${ToName} se resiste.${said}`],
+      accept: [`Te dejas${said}`, `${ToName} se deja${said}`],
+      resist: [`Te resistes${said}`, `${ToName} se resiste${said}`],
       timeout: ['No respondes a tiempo: te resistes por instinto.', `${ToName} no responde a tiempo: se resiste por instinto.`],
       away: ['No estás: te resistes por instinto.', `${ToName} no está (su jugador se ha ido): se resiste por instinto.`],
       helpless: [`No puedes resistirte (${to.status === 'asleep' ? 'duermes' : 'estás inconsciente'}).`, `${ToName} no puede resistirse (${to.status === 'asleep' ? 'duerme' : 'está inconsciente'}).`],
@@ -2789,6 +2883,14 @@ export class Engine {
     } else if (unopposed) {
       success = true;
       check = { label: `Reacción de ${to.name}`, expr: '', total: 0, rolls: [], d20s: [], modifier: 0, dc: null, advantage: 'none', success: true, breakdown: `${decided[1]} Sin tirada.` };
+    } else if (r.noticed) {
+      // A escondidas y le ha pillado (covertAttempt: la enfrentada oculta ya la perdió quien actúa). Si se resiste, no se
+      // tira otra vez lo mismo: no lo consigue (pareja 1115, acción 36: «Lo notas», se resiste, segunda tirada que gana el
+      // pícaro y una narración que lo contradice).
+      success = false;
+      rollTheirs = 'Ya le habías pillado: no hace falta otra tirada.';
+      rollMine = `${ToName} ya te había pillado: no hay otra tirada.`;
+      check = { label: `Reacción de ${to.name}`, expr: '', total: 0, rolls: [], d20s: [], modifier: 0, dc: null, advantage: 'none', success: false, breakdown: `${decided[1]} ${rollMine}` };
     } else {
       const k = contest(from, to, r, this.rng, this.takeHelp(from) ? 'advantage' : 'none');
       success = k.success;
@@ -2831,8 +2933,14 @@ export class Engine {
       join(decided[0], rollTheirs, outcome[0]), outcome[2], join(decided[1], rollMine, outcome[1]), { success, ...(dest ? { dest } : {}) });
     // Con máster: narra el desenlace para quien actuaba, como tras una tirada.
     if (this.master) {
-      check.breakdown = `${check.breakdown}${effects.length ? ` Ya aplicado por el servidor (no lo repitas): ${effects.join('; ')}.` : ''} ${to.name} es otro jugador y ya ha decidido: narra el desenlace sin ponerle palabras, gestos ni intenciones que no estén aquí, y no pidas otra reacción para esto.`;
-      this.reactionOutcome.set(from.id, { target_id: to.id, success });
+      const verdict = unopposed
+        ? `RESULTADO (hecho del servidor): ${from.name} lo consigue, sin tirada (${to.name} ${how === 'accept' ? 'se deja' : 'no puede resistirse'}).`
+        : success
+          ? `RESULTADO (hecho del servidor, no lo contradigas): gana ${from.name}. Lo consigue: lo que intentaba (${r.attempt}, dicho a ${to.name}) pasa${r.kind === 'attack' ? ' y el golpe entra' : ''}. Lo que haga ${to.name} para impedirlo NO le sale.`
+          : `RESULTADO (hecho del servidor, no lo contradigas): gana ${to.name}. ${from.name} NO lo consigue: lo que intentaba (${r.attempt}, dicho a ${to.name}) no pasa${r.kind === 'attack' ? ' y el golpe no entra' : ''}; no narres que lo logra ni a medias.`;
+      const gesture = answer.gesture ? ` Cómo ${how === 'accept' ? 'se deja' : 'se resiste'} ${to.name}, según su jugador (en primera persona; es lo que HACE, un gesto, no algo que diga en voz alta; cuéntalo en tercera persona y ajustado al resultado): ${answer.gesture.replace(/[.]+$/, '')}.` : '';
+      check.breakdown = `${check.breakdown} ${verdict}${gesture}${effects.length ? ` Ya aplicado por el servidor (no lo repitas): ${effects.join('; ')}.` : ''} ${to.name} es otro jugador y ya ha decidido: narra el desenlace sin ponerle palabras, gestos ni intenciones que no estén aquí, y no pidas otra reacción para esto.`;
+      this.reactionOutcome.set(from.id, { target_id: to.id, success, kind: r.kind, attempt: r.attempt, how, ...(answer.gesture ? { gesture: answer.gesture } : {}), ...(rollMine ? { rolls: rollMine } : {}) });
       try { await this.resolveWithMaster(from, r.input ?? `(intenta ${r.attempt})`, { original_text: r.input ?? r.attempt, result: check }); } finally { this.reactionOutcome.delete(from.id); }
     }
     return done({ ok: true, text: e.narration_private, event: e });
@@ -3740,6 +3848,20 @@ export class Engine {
     for (const n of notices) this.emitLaw(n);
   }
 
+  /**
+   * ¿Ha narrado ya el máster el alto a este PJ en este turno (su último cierre, hace nada)? «¡Alto!», «quedas
+   * detenido», «estás arrestado»… en la narración o en lo que dicen los NPC. Entonces el motor no lo repite.
+   */
+  private narratedAlto(c: Character): boolean {
+    const nowG = this.nowFor(c);
+    const recent = this.events.all().slice(-12).reverse();
+    const last = recent.find((e) => e.actor_id === c.id && e.action_type.startsWith('master'));
+    if (!last || Math.abs(nowG - last.timestamp_game_s) > 2 * 60) return false;
+    const lines = Array.isArray(last.payload['lines']) ? (last.payload['lines'] as { text?: string }[]).map((l) => l.text ?? '') : [];
+    const t = [last.narration_private, ...lines].join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return /¡\s*alto\b|(^|[^a-z])alto(?:\s+ahi)?\s*!|\b(?:quedas|estas|queda|esta)\s+(?:detenid|arrestad)|\bte\s+(?:detengo|arresto)\b|\bdate\s+preso\b/.test(t);
+  }
+
   /** Lo que la ley le hace a un PJ (crime.ts): el alto, el calabozo al caer, la salida. */
   private emitLaw(n: LawNotice): void {
     const c = n.character;
@@ -3749,10 +3871,15 @@ export class Engine {
     const mine = (t: string) => contract(maskUnknownNames(this.world, c.id, t));
     if (n.kind === 'arrest') {
       const reason = c.wanted?.reason ?? 'lo que has hecho';
+      // De qué le acusa: lo que acaba de provocar el alto, no lo más grave de la lista (arreglo 3); lo de antes, aparte.
+      const charge = arrestCharge(this.world, c, n.npc?.id ?? null);
+      const accused = charge ? `${c.name} ${charge.charge}${charge.before ? `; y además, ${charge.before}` : ''}` : `${c.name} ${reason}`;
+      // Si el máster ya ha narrado el alto en este turno, no se repite (arreglo 6: tres «¡Alto!» por detención).
+      const told = this.narratedAlto(c);
       this.events.emit({
         actor_id: c.id, action_type: 'arrest',
-        narration_private: mine(`${By} se te planta delante: «¡Alto! Quedas detenido.» Te acusa de esto: ${c.name} ${reason}. Si te entregas, te espera ${sentencePreview(this.world, c)}; si te resistes o huyes, irá a por ti.`),
-        observable: `${n.npc?.name ?? 'La autoridad'} le da el alto a ${c.name}: «¡Alto! Quedas detenido.»`, loudness: 3,
+        narration_private: mine(`${told ? `${By} te detiene.` : `${By} se te planta delante: «¡Alto! Quedas detenido.»`} Te acusa de esto: ${accused}. Si te entregas, te espera ${sentencePreview(this.world, c)}; si te resistes o huyes, irá a por ti.`),
+        observable: told ? `${n.npc?.name ?? 'La autoridad'} detiene a ${c.name}.` : `${n.npc?.name ?? 'La autoridad'} le da el alto a ${c.name}: «¡Alto! Quedas detenido.»`, loudness: 3,
         tags: ['crime', 'law', 'deterministic'],
         payload: { master: null, npc_id: n.npc?.id ?? null, observable_vague: 'Una voz grita «¡Alto!».', suggested_actions: ['Entregarme', 'Resistirme', 'Huir'], arrest: { npc_id: n.npc?.id ?? null, reason } },
       }, this.stampFor(c));

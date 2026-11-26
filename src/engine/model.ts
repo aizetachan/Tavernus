@@ -541,7 +541,13 @@ export interface Character {
   /** Buscado por la autoridad (crime.ts): por qué, desde cuándo, dónde le vieron por última vez y si le están deteniendo. */
   wanted?: Wanted | null;
   /** Encerrado en el calabozo (crime.ts) hasta ese instante de juego (el suyo). */
-  jailed?: { until_game_s: number; spot_id: Id; reason: string } | null;
+  jailed?: {
+    until_game_s: number; spot_id: Id; reason: string;
+    /** Cuándo entró, desde dónde, quién le llevó y si llegó inconsciente (crime.ts): para contar el traslado (arreglo 10). */
+    since_game_s?: number; from_spot_id?: Id | null; by_npc_id?: Id | null; unconscious?: boolean;
+    /** El máster ya ha narrado un turno suyo en la celda: el traslado ya está contado. */
+    told?: boolean;
+  } | null;
   /** Ventanas decisivas abiertas contra él (las últimas): para no abrir dos seguidas ni más de una por NPC y combate (SPEC §9.3). */
   decisive_log?: DecisiveLogEntry[];
   /** Infamia: muertes de quien no era hostil y cadáveres profanados (crime.ts). En lugar de PX. */

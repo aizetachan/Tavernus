@@ -41,6 +41,8 @@ const MOVES = new Set(['arrived', 'passed', 'move', 'master_arrival', 'master_in
 /** Lo que no es un turno del jugador: no cuenta ni rompe. */
 const SKIP = /^(roll|board|announcement|progress_)/;
 const COMBAT_TOOLS = new Set(['attack', 'apply_damage']);
+/** Lo que se le hace a otro jugador (reactions.ts): es una acción, no charla, aunque haya un NPC hablando (arreglo 7 del 26-11-2026). */
+const PC_ACTION_TOOLS = new Set(['request_reaction']);
 
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -178,7 +180,7 @@ export function conversationCheck(input: {
   others?: readonly string[];
 }): ConversationProblem | null {
   const c = input.conversation;
-  if (!c || input.attack || input.okTools.some((t) => t === 'move_to' || COMBAT_TOOLS.has(t))) return null;
+  if (!c || input.attack || input.okTools.some((t) => t === 'move_to' || COMBAT_TOOLS.has(t) || PC_ACTION_TOOLS.has(t))) return null;
   const who = interlocutorOf(input.npcId, input.lines);
   if (who !== c.npc_id && !(who === null && !narratorProse(input.narration))) return null;
   const prose = narratorProse(input.narration);

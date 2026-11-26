@@ -143,14 +143,16 @@ describe('Leodhin mata a Hugo en la barra del Jabalí (partida del 27-10, seq 72
     // La muerte ya no dice que «se quedan mirando el cuerpo»: la reacción va en el incidente.
     expect(death.observable).not.toMatch(/se quedan mirando|se apartan/);
     expect(incident.observable).toMatch(/^⚖ Lo han visto: Leodhin mató a Hugo\./);
-    expect(incident.observable).toMatch(/Garrán se planta delante de Leodhin: «¡Alto! Quedas detenido\.»/);
+    // El «¡Alto!» va en su evento (arrest), no también aquí (arreglo 6 del 26-11-2026: tres «¡Alto!» por detención).
+    expect(incident.observable).toMatch(/Garrán lo ha visto y va a por Leodhin\./);
+    expect(incident.observable).not.toMatch(/Alto/);
     expect(incident.observable).toMatch(/Brenna retrocede sin quitarle ojo: no piensa atender a Leodhin\./);
     // El aviso que leen los jugadores lleva solo lo que pesa (la ley, quien se niega a servirle); la gente que grita
     // queda para el máster, en las reacciones del incidente (reunión del 11-11-2026).
     expect(incident.observable).not.toMatch(/Unos seis vecinos gritan y se apartan/);
     expect(incident.observable!.split(/(?<=\.»?)\s+/).length).toBeLessThanOrEqual(3);
     // Para él, con los nombres que sabe: no sabe cómo se llaman el herrero ni el alguacil.
-    expect(incident.payload['observable_target']).toMatch(/^⚖ Te han visto: has matado al herrero\. El alguacil se planta delante de ti.*Desde ahora te buscan\./);
+    expect(incident.payload['observable_target']).toMatch(/^⚖ Te han visto: has matado al herrero\. El alguacil lo ha visto y va a por ti.*Desde ahora te buscan\./);
     expect(arrest.narration_private).toMatch(/^El alguacil se te planta delante: .*Te acusa de esto: Leodhin mató al herrero en la barra/);
     expect(arrest.narration_private).not.toMatch(/Garrán|Hugo/);
     expect(arrest.actor_id).toBe(leo.id);

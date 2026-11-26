@@ -15,7 +15,7 @@ import { GAME_HOUR, GAME_MINUTE } from '../clock/clock.js';
 import { attitudeOf } from './combat.js';
 import { talkTier, type TalkTier } from './concerns.js';
 import { transcriptOf } from './conversation.js';
-import { knownBy, npcProfile, reportIncident, type ConflictProfile, type Incident } from './crime.js';
+import { inFightWith, knownBy, npcProfile, reportIncident, type ConflictProfile, type Incident } from './crime.js';
 import type { Advantage } from './dice.js';
 import { checkFits, transferItem } from './inventory.js';
 import { DEFAULT_STARTING_COINS, money, pay } from './money.js';
@@ -521,7 +521,8 @@ export function createItem(world: World, npc: Npc, spec: NewItemSpec): { ok: tru
 // ---------------------------------------------------------------------------
 
 /** Cómo se lo toma el NPC: no se entera, casi le pilla, le advierte, broma, reproche, careo o delito. */
-export type ConflictResponse = 'unnoticed' | 'near_miss' | 'warned' | 'joke' | 'reproach' | 'confront' | 'crime';
+/** `disarm`: quitárselo en plena pelea (desarmarle); no es robo ni careo, la pelea sigue (arreglo 15 del 26-11-2026). */
+export type ConflictResponse = 'unnoticed' | 'near_miss' | 'warned' | 'joke' | 'reproach' | 'confront' | 'crime' | 'disarm';
 
 export interface ConflictResult {
   outcome: ConflictOutcome;
@@ -616,6 +617,18 @@ export function resolveConflict(world: World, pc: Character, npc: Npc, v: Confli
     case 'grab': deed = outcome === 'success' ? `Agarras a ${who} del brazo.` : `${who} se suelta de un tirón.`; break;
     case 'touch': deed = `Tocas a ${who} sin su permiso.`; break;
   }
+  // En plena pelea, quitárselo (o intentarlo) es desarmarle, no robarle: sin careo, sin incidente de robo y sin «ladrón».
+  // Lo suyo sigue siendo suyo y sabe quién lo tiene (no lo «echa en falta» luego, stolen.ts).
+  if ((v.kind === 'snatch' || v.kind === 'steal') && inFightWith(world, pc, npc, nowG)) {
+    const got = moved as ConflictResult['moved'];
+    if (got) {
+      const inst2 = world.itemInstances.get(got.instance_id);
+      const mark = inst2?.state['stolen'] as StolenMark | undefined;
+      if (inst2 && mark) { mark.noticed_game_s = nowG; mark.suspect_id = pc.id; world.touch('item_instances', inst2.id); }
+    }
+    memo(world, npc, pc, `${pc.name} ${got ? `le quitó ${got.name} en la pelea` : 'intentó desarmarle en la pelea'}.`, 2, nowG);
+    return result('disarm', `${deed} En plena pelea no es un robo: ${got ? 'le has desarmado' : 'sigue con lo suyo'} y la pelea sigue.`, null);
+  }
   let rel = repeat ? lowerRelation(v.relation) : v.relation;
   const trust = TRUST_BY_KIND[v.kind];
 
@@ -696,6 +709,13 @@ const RE_GRAB = /\b((le|la|lo) (agarr|sujet|inmoviliz)\w*|(agarrarl|sujetarl|inm
 /** Coger algo que lleva otro («agarro la bolsa de Garrán»): solo cuenta si lo que nombra lo lleva él. */
 const RE_TAKE = /\b(agarr|coj|cog|tom|pill)\w*\b/;
 const RE_TOUCH = /\b(le toco|tocarle|la toco|lo toco|le acaricio|acariciarle|le pellizc\w*|pellizcarle|le doy una palmada|darle una palmada|le beso|besarle|le tiro del pelo|tirarle del pelo|le hago cosquillas|hacerle cosquillas|le pincho|pincharle|le despeino|despeinarle)\b/;
+/**
+ * Un golpe en la frase («le hundo el puño en las costillas», «le doy un cabezazo»): eso es un ataque y va primero
+ * (attack), no una acción conflictiva. Violento 1051, acción 32: el puñetazo y «le arranco la camisa» acabaron en robo.
+ */
+const RE_BLOW = /\b(punetazo|patada|bofetada|tortazo|cabezazo|codazo|rodillazo|guantazo|mamporro|sopapo|navajazo|hachazo|espadazo|estocada|tajo|golpe(?:o|a|ar|arle|arla|arlo)?|pego|pegarle|le pego|atac\w*|apunal\w*|acuchill\w*|le parto la cara|el puno en|los nudillos en)\b/;
+/** Ropa que lleva puesta: arrancársela no es quitarle algo de valor (robo), es agarrarle (agresión). */
+const RE_CLOTHES = /\b(camisa|camison|ropa|blusa|blusas|bluson|jubon|chaqueta|capa|pantalon|calzas|falda|mandil|delantal|vestido|sayo|tunica|chaleco|manga|cuello)\b/;
 /** Quien solo habla de ello, pregunta o lo niega no lo está haciendo. */
 const RE_NOT = /\b(no (le |la |lo |se lo |se la )?(robo|quito|empujo|toco|agarro|cojo)|sin (robar|tocar)|si (le|la|lo) (robo|quito|empujo|toco)|quien (me |le |te |nos )?(ha )?robado|me han robado|nos han robado|te han robado|le han robado)\b/;
 
@@ -755,7 +775,9 @@ export function conflictPlan(world: World, events: readonly GameEvent[], pc: Cha
   // «Agarro la bolsa de Garrán»: coger algo que lleva otro, si lo que nombra lo lleva él (se mira abajo).
   const taking = !found && !/[?¿]/.test(text) && RE_TAKE.test(plainText(text));
   if (!found && !taking) return null;
-  const kind: ConflictKind = found ?? 'steal';
+  // Con un golpe en la frase, primero el ataque (attack): no es esto (arreglo 3 del 26-11-2026).
+  if (RE_BLOW.test(plainText(text))) return null;
+  let kind: ConflictKind = found ?? 'steal';
   const spot = world.characterSpot(pc);
   if (!spot) return null;
   const here = [...world.npcs.values()].filter((n) => (n.status === 'alive' || n.status === 'unconscious') && !n.mute && world.spots.get(n.location.id)?.location_id === spot.location_id);
@@ -767,8 +789,11 @@ export function conflictPlan(world: World, events: readonly GameEvent[], pc: Cha
   if (!npc) { const at = here.filter((n) => n.location.id === spot.id); if (at.length === 1) npc = at[0]!; }
   if (!npc) return null;
   // Del suelo o de un mueble no es robarle a nadie: si nombra algo que no lleva ese NPC pero está a la vista, no es esto.
-  const inst = owns(npc) ?? null;
+  let inst = owns(npc) ?? null;
   if (taking && !inst) return null;
+  // «Le arranco la camisa»: la ropa que lleva puesta no se le roba; es agarrarle (arreglo 3).
+  const clothes = (d: ItemDef) => RE_CLOTHES.test(plainText([d.name, ...d.aliases].join(' ')));
+  if ((kind === 'steal' || kind === 'snatch') && RE_CLOTHES.test(plainText(itemWords(text) ?? '')) && (!inst || clothes(world.itemDef(inst.item_id)))) { kind = 'grab'; inst = null; }
   const steals = kind === 'steal' || kind === 'snatch';
   if (steals && !inst && world.itemsIn({ type: 'spot', id: spot.id }).some((i) => namesItem(text, world.itemDef(i.item_id)))) return null;
   // «Agarro la bolsa»: agarrar algo suyo es arrebatárselo.
