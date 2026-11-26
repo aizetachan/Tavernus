@@ -18,11 +18,19 @@
  * Luego scripts/playtest-report.ts analiza conversaciones, misiones, combate, final y fluidez.
  * Para probar los finales sin jugar los actos anteriores, --start-act 2|3 los deja hechos por tools y sin máster:
  *   npm run autoplay -- --profiles dirigido-templar,dirigido-verdad,dirigido-arder --start-act 3 --actions 60 --parallel 3 --no-judge --live
+ * Perfiles mecánicos (`cycle`): no juegan un carácter, piden su lista de `wants` en orden para que el máster use todas sus
+ * tools. lanzador y tirador (conjuros, disparo, sigilo, forzar, saquear, trepar); herido (pociones, Tomar aliento, descansos,
+ * reglas: empieza a un tercio de PG), deudor (fiado, prendas, vender, regatear, pagar, propinas), cronista (su pasado, el
+ * tablón, encargos y lo que se anuncia con hora) y recolector (recolectar, pescar, coger y soltar, sintonizar su capa y leer
+ * su pergamino). Los seis entran en `all`; cada uno, unos 0,12 $ por 40 acciones con Haiku a esfuerzo bajo:
+ *   npm run autoplay -- --profiles herido,deudor,cronista,recolector --actions 40 --parallel 4 --live      (unos 0,5 $)
  * Partidas a dos (PAIRS): dos jugadores automáticos juntos en la misma partida, que a veces actúan a la vez (ventana de
  * turno, rondas de pelea), se hablan por el chat y en la escena, se dan cosas, se roban y contestan a las reacciones del otro.
  * Un resumen por jugador (mismo slug); --actions cuenta por jugador:
  *   npm run autoplay -- --pairs all --actions 100 --parallel 5 --live
  *   npm run autoplay -- --pairs picaro:novato,violento:pausado --actions 60 --live
+ * Si uno cae al lado del otro, el que sigue en pie tiene una vuelta para atenderle (ATTEND_WANT, `stabilize`) antes de
+ * esperar a que se levante; la pareja herido:violento está para eso.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -34,6 +42,9 @@ import { readerText } from '../src/engine/events.js';
 import { journalOf } from '../src/engine/journal.js';
 import { choiceOptions, pendingChoices, spellGroups } from '../src/engine/levels.js';
 import { coinsOf, money } from '../src/engine/money.js';
+import { spawnItem } from '../src/engine/inventory.js';
+import { isMagic } from '../src/engine/items.js';
+import { srdItem } from '../src/data/srd/items.js';
 import { resourceLines } from '../src/engine/rest.js';
 import { characterStory, questsOf, questStatus, storyOf } from '../src/engine/story.js';
 import { seededRng, type Rng } from '../src/engine/dice.js';
@@ -94,6 +105,18 @@ export interface PlayerProfile {
   leaves_after_refusals?: number;
   /** Recorre sus `wants` en orden, uno por acción propia, en vez de al azar (perfiles mecánicos: cobertura, no carácter). */
   cycle?: boolean;
+  /** Cómo empieza, para que pueda pedir lo que sus `wants` piden (applyStart): herido, o con algo más en la mochila. */
+  start?: ProfileStart;
+}
+
+/**
+ * Arranque de un perfil mecánico, aplicado por el script tras crear al PJ y antes de su presentación (no toca el motor):
+ * `hp_frac`, la parte de sus PG máximos con la que empieza; `kit`, objetos del catálogo de la partida o del SRD que
+ * lleva en la mochila además de los de su clase. Un pergamino lleva su conjuro (`spell_id`); lo mágico, ya identificado.
+ */
+export interface ProfileStart {
+  hp_frac?: number;
+  kit?: { item_id: string; quantity?: number; spell_id?: string }[];
 }
 
 const want = (id: string, prompt: string, dry = 'Miro alrededor con calma.') => ({ id, prompt, dry });
@@ -101,33 +124,96 @@ const want = (id: string, prompt: string, dry = 'Miro alrededor con calma.') => 
 const DIRECTED_PROMPT = 'Eres un jugador atento que quiere terminar la historia: haces lo que dice tu Diario, en orden, vas donde te manda y no te quedas discutiendo. Si alguien se niega a contarte algo dos veces, lo dejas y sigues por otro lado.';
 const DIRECTED_WANTS = [want('objetivo', 'dar el siguiente paso de tu misión activa, tal como lo dice el Diario', 'Hago lo siguiente que dice mi Diario.'), want('encargo', 'preguntar a quien tengas delante si necesita algo o qué puede contarte de tu misión', '¿Necesitas ayuda con algo?'), want('entregar', 'volver a quien te encargó algo para entregarlo y cobrar', 'Vengo a contarte que está hecho.')];
 
-/** Lo que puede pasar en una sesión normal y ningún perfil de carácter pide a propósito. Cada entrada es una tool o regla del motor. */
-const MECHANICS_COMMON = [
-  want('objeto', 'beber una poción, comer algo o usar un objeto concreto que lleves, diciendo cuál', 'Bebo una poción de curación.'),
-  want('disparar', 'atacar a distancia a alguien o algo con un arma o un conjuro de los que tienes', 'Disparo a la diana con mi arco.'),
+/**
+ * Lo que puede pasar en una sesión normal y ningún perfil de carácter pide a propósito. Cada entrada es una tool o regla
+ * del motor. Las frases del jugador falso (`dry`) nombran solo lo que lleva ese PJ: van aparte para cada uno.
+ * Sin «recurso» ni «curar» (H10): a nivel 1 ni la hechicera ni el explorador tienen usos de clase ni con qué curar, y
+ * pedirlos daba negativas correctas (informe 1); los piden el herido (Tomar aliento, pociones) y el recolector.
+ */
+const mechanicsCommon = (dry: { objeto: string; disparar: string; examinar: string; cuerpo: string }) => [
+  want('objeto', 'comer, beber o usar un objeto concreto que lleves en la mochila, diciendo cuál', dry.objeto),
+  want('disparar', 'atacar a distancia a alguien o algo hostil con un arma o un conjuro de los que pone tu ficha', dry.disparar),
   want('esconderse', 'esconderte o moverte con sigilo para que no te vean', 'Me escondo tras el carro y avanzo con sigilo.'),
   want('forzar', 'forzar o abrir una puerta, un cofre o una cerradura que esté cerrada', 'Fuerzo la cerradura del cofre.'),
   want('saquear', 'registrar un cadáver, un cofre o un rincón y llevarte lo que haya', 'Registro el cofre y me llevo lo que hay.'),
   want('trepar', 'trepar, saltar o nadar por algún sitio difícil de la escena', 'Trepo por el muro hasta el tejado.'),
-  want('descansar', 'descansar un rato o dormir para recuperarte', 'Me siento a descansar un rato.'),
-  want('curar', 'curar o estabilizar a alguien herido, o a ti mismo', 'Vendo la herida de mi compañero.'),
-  want('examinar', 'examinar de cerca un objeto raro o una marca para saber qué es', 'Examino el amuleto con detenimiento.'),
-  want('cuerpo', 'atacar cuerpo a cuerpo a alguien hostil o a un blanco de práctica', 'Golpeo con mi arma.'),
+  want('descansar', 'pedir un descanso corto de una hora en un sitio tranquilo para recuperarte', 'Me siento en un rincón tranquilo a descansar una hora.'),
+  want('examinar', 'examinar de cerca un objeto que lleves o que veas para saber qué es, diciendo cuál', dry.examinar),
+  want('cuerpo', 'atacar cuerpo a cuerpo a alguien hostil con el arma que llevas', dry.cuerpo),
 ];
+/** Hechicera de nivel 1: Descarga de fuego, Rayo de escarcha, Mano de mago y Luz; Proyectil mágico y Escudo. Lleva dos dagas. */
 const MECHANICS_CASTER = [
-  want('conjuro', 'lanzar un conjuro de los que tienes en tu lista (di cuál) contra alguien o algo de la escena', 'Lanzo Proyectil mágico contra el espantapájaros.'),
-  want('truco', 'lanzar un truco (cantrip) de tu lista, diciendo cuál', 'Lanzo Luz sobre mi bastón.'),
-  want('recurso', 'usar un rasgo de tu clase que gaste usos (puntos de hechicería, furia, ki, inspiración…), diciendo cuál', 'Uso un punto de hechicería.'),
-  ...MECHANICS_COMMON,
+  want('conjuro', 'lanzar uno de los conjuros de nivel 1 que pone tu ficha (con su nombre exacto) contra alguien o algo de la escena', 'Lanzo Proyectil mágico contra el lobo.'),
+  want('truco', 'lanzar un truco de los que pone tu ficha que no sea de ataque (Luz, Mano de mago), diciendo sobre qué', 'Lanzo Luz sobre mi daga.'),
+  want('truco_ataque', 'lanzar un truco de ataque de tu ficha (Descarga de fuego o Rayo de escarcha) contra un blanco concreto, diciendo cuál', 'Lanzo Rayo de escarcha contra el lobo.'),
+  ...mechanicsCommon({ objeto: 'Me como una de las raciones que llevo.', disparar: 'Le lanzo una de mis dagas al lobo.', examinar: 'Examino de cerca mi anillo de sello.', cuerpo: 'Le doy una puñalada con mi daga.' }),
 ];
+/** Explorador de nivel 1: arco corto, flechas, espada corta, pala y herramientas de carpintero; sin conjuros ni usos de clase. */
 const MECHANICS_RANGER = [
   want('rastrear', 'buscar huellas o rastrear a alguien o a un animal', 'Busco huellas en el barro.'),
-  want('recolectar', 'recolectar plantas, cazar algo o sacar agua o leña de la zona', 'Recojo hierbas junto al arroyo.'),
-  want('montar', 'montar un caballo, una mula o un carro si hay alguno cerca, o preguntar por uno', 'Monto en la mula del establo.'),
+  want('recolectar', 'recolectar bayas, pescar truchas o talar leña en un sitio que lo dé, diciendo de dónde', 'Pesco truchas en el arroyo.'),
+  want('montar', 'montar un caballo, una mula o un carro si hay alguno cerca, o preguntar por uno', 'Pregunto si hay alguna mula que pueda montar.'),
   want('trampas', 'buscar trampas o algo escondido antes de pasar', 'Busco trampas en el umbral.'),
-  want('recurso', 'usar un rasgo de tu clase que gaste usos, diciendo cuál', 'Uso mi Enemigo predilecto.'),
-  ...MECHANICS_COMMON,
+  ...mechanicsCommon({ objeto: 'Me como una de las raciones que llevo.', disparar: 'Disparo mi arco corto contra el lobo.', examinar: 'Examino de cerca las huellas del barro.', cuerpo: 'Le ataco con mi espada corta.' }),
 ];
+
+/**
+ * H10: perfiles que provocan, en orden, las tools del máster que llevaban cuatro pasadas a cero (informes 1 a 4).
+ * Cada `want` dice el objeto o la acción con las palabras de las tools (tools.ts) y de los alias de los objetos; cada
+ * `dry` nombra solo lo que el PJ lleva (su clase y su `start`). Lo que el motor resuelve sin máster (coger, soltar,
+ * moverse) solo va cuando hace falta para lo siguiente.
+ */
+/** Guerrero (Tomar aliento 1/1), empieza a un tercio de PG con dos pociones de curación y un kit de sanador. */
+const WANTS_HERIDO = [
+  want('pocion', 'curarte bebiendo una de las pociones de curación que llevas en la mochila', 'Me bebo una de mis pociones de curación.'),
+  want('aliento', 'usar tu rasgo de clase Tomar aliento para recuperar fuerzas', 'Uso Tomar aliento para recuperarme.'),
+  want('regla', 'preguntar al narrador qué dicen las reglas oficiales sobre algo que no sabes: cuántos días aguanta alguien sin comer ni beber', 'Una duda de reglas: ¿cuántos días aguanta alguien sin comer ni beber?'),
+  want('corto', 'pedir un descanso corto de una hora en un sitio tranquilo para vendarte y recuperar el aliento', 'Me siento en un rincón tranquilo a descansar una hora y vendarme.'),
+  want('curandera', 'buscar a alguien que sepa curar (una curandera, una herbolaria) y pedirle que te cure las heridas', 'Le pido a la curandera que me cure las heridas.'),
+  want('largo', 'buscar dónde dormir una noche entera (una cama en la posada o la taberna) y dormir ocho horas para curarte del todo', 'Pido una cama para esta noche y duermo hasta mañana.'),
+  want('regla_viaje', 'preguntar al narrador qué dicen las reglas oficiales sobre otra cosa que no sabes: cuántas millas se andan en un día de viaje a paso normal', 'Otra duda de reglas: ¿cuántas millas se andan en un día de viaje?'),
+  want('arriesgar', 'hacer algo arriesgado que pueda hacerte daño (trepar un muro alto, saltar un arroyo, enfrentarte a un animal hostil)', 'Trepo por el muro hasta el tejado.'),
+];
+/** Bardo con laúd y anillo de sello: fía, empeña, vende, regatea, paga, da propina y esconde dinero. */
+const WANTS_DEUDOR = [
+  want('fiado', 'pedir a quien venda comida o bebida una cerveza o una ración fiada, diciendo «apúntamela, te la pago mañana»', 'Le pido una cerveza fiada: apúntamela, te la pago mañana.'),
+  want('prenda', 'dejar en prenda algo tuyo que lleves (tu laúd o tu anillo de sello) a cambio de algo que se venda aquí o para garantizar lo que debes', 'Le dejo mi anillo de sello en prenda hasta que le pague lo que le debo.'),
+  want('vender', 'venderle al buhonero, a la tabernera o a quien compre algo que lleves (tu cuerda de cáñamo, una antorcha), diciendo qué', 'Le vendo mi cuerda de cáñamo.'),
+  want('regatear_compra', 'regatear el precio de algo que se venda aquí y comprarlo si llegáis a un trato', 'Te doy la mitad por esa ración y, si aceptas, te la compro ahora.'),
+  want('pagar', 'volver a quien le debes y pagarle la deuda con tus monedas, para recuperar lo que dejaste en prenda', 'Vengo a pagarte lo que te debo; devuélveme mi anillo de sello.'),
+  want('propina', 'darle unas monedas a alguien sin comprarle nada (una propina, una limosna, pagar un favor), diciendo cuántas', 'Le doy dos monedas de plata de propina por la ayuda.'),
+  want('esconder', 'sacar unas cuantas monedas de tu bolsa y esconderlas al fondo de la mochila, por si te roban', 'Paso cinco monedas de plata de mi bolsa al fondo de la mochila, por si me roban.'),
+];
+/** Bruja que cuenta su pasado, hace los encargos del tablón y los que le piden, y va a lo que se anuncia con hora. */
+const WANTS_CRONISTA = [
+  want('pasado', 'contarle a quien tengas delante algo concreto de tu pasado (dónde naciste, a qué se dedicaba tu familia, por qué te fuiste) y pedirle que se acuerde', 'Le cuento que nací en un pueblo de pescadores y que mi padre era barquero; acuérdate de mí.'),
+  want('tablon', 'ir al tablón de avisos y leer los encargos que hay', 'Leo el tablón de avisos.'),
+  want('hacer_encargo', 'hacer uno de los encargos del tablón que se pueda hacer pronto (ir a mirar un sitio y volver a contarlo), tal como lo dice el Diario', 'Voy a donde dice el encargo del tablón.'),
+  want('cobrar_encargo', 'volver a quien puso el encargo del tablón y contarle que ya está hecho, para cobrar', 'Vuelvo con quien puso el aviso y le cuento que ya está hecho.'),
+  want('anuncio', 'preguntar a quien tengas delante qué hay con hora en el pueblo (una misa, un mercado, una cena) y a qué hora es', '¿Qué hay hoy en el pueblo? ¿A qué hora es la misa?'),
+  want('quedar', 'proponer a quien tengas delante quedar a una hora concreta en un sitio (mañana al alba en el pozo, esta noche en la taberna)', 'Quedamos mañana al alba junto al pozo, ¿te parece?'),
+  want('pedir_trabajo', 'preguntar a quien tengas delante si necesita que hagas algo por él, y aceptarlo', '¿Necesitas que haga algo por ti? Lo que sea, acepto.'),
+  want('cumplir', 'hacer lo que te pidió alguien (lo que diga tu Diario) y volver a contárselo', 'Hago lo que me pidió y vuelvo a contárselo.'),
+  want('familia', 'contar algo de alguien de tu vida que no está aquí (una hermana, un maestro, un amor), con su nombre', 'Mi hermana Lía se fue a la ciudad hace dos inviernos y sigo buscándola.'),
+  want('acudir', 'ir al sitio y a la hora de lo que te han anunciado (la misa, la cena, el mercado) y quedarte a verlo', 'Voy a la plaza a ver la misa del pozo.'),
+];
+/** Druida gnomo (Curar heridas, Palabra de curación, Enmarañar) con un pergamino de Hablar con los animales y una capa de protección sin sintonizar. */
+const WANTS_RECOLECTOR = [
+  want('ir_campo', 'ir a un sitio del campo donde se pueda recolectar o pescar (el Soto, los Corrales, el molino)', 'Voy a los Corrales.'),
+  want('recolectar', 'recolectar algo de un punto que lo dé (bayas de un arbusto, huevos del ponedero, coles del huerto), diciendo de dónde', 'Recolecto huevos del ponedero.'),
+  want('examinar', 'examinar de cerca la capa de protección o el pergamino de conjuro que llevas para saber qué hacen', 'Examino de cerca mi capa de protección.'),
+  want('sintonizar', 'sintonizarte con tu capa de protección: una hora sentado con ella en las manos', 'Me siento una hora con la capa de protección en las manos para sintonizarme con ella.'),
+  want('soltar', 'dejar en el suelo algo que lleves y no te haga falta (una antorcha, una ración)', 'Dejo una antorcha en el suelo.'),
+  want('coger', 'coger algo suelto que haya en este sitio, diciendo qué', 'Cojo la antorcha del suelo.'),
+  want('pergamino', 'leer en voz alta el pergamino de conjuro que llevas para lanzar Hablar con los animales con algún animal de la zona', 'Leo el pergamino de conjuro para lanzar Hablar con los animales.'),
+  want('marcar', 'cambiar algo del sitio donde estás y que se quede así (apilar piedras para marcar el camino, cerrar una cerca, apagar un fuego)', 'Apilo unas piedras junto al camino para marcarlo.'),
+  want('pescar', 'pescar truchas en el arroyo o en el canal del molino', 'Pesco truchas en el arroyo.'),
+  want('conjuro', 'lanzar uno de los conjuros de nivel 1 que pone tu ficha (Enmarañar contra algo hostil, Curar heridas sobre alguien herido), diciendo contra quién o sobre quién', 'Lanzo Enmarañar contra el lobo.'),
+  want('vender_cosecha', 'venderle lo que has recolectado a quien lo compre (bayas, huevos o truchas), diciendo qué', 'Le vendo los huevos que he recogido.'),
+];
+
+/** A dos: el compañero ha caído a tu lado (H10, `stabilize`). Lo provoca el loop de parejas, no un perfil. */
+export const ATTEND_WANT = want('atender', 'atender a tu compañero, que está en el suelo sin sentido a tu lado: estabilizarle o vendarle para que no se muera', 'Me arrodillo junto a mi compañero y le vendo las heridas para estabilizarle.');
 
 export const PROFILES: PlayerProfile[] = [
   { id: 'metodico', label: 'Metódico', class_id: 'cleric', race_id: 'human', suggested_p: 0.3, game_min: 15,
@@ -170,6 +256,20 @@ export const PROFILES: PlayerProfile[] = [
   { id: 'tirador', label: 'Mecánico, tirador', class_id: 'ranger', race_id: 'elf', suggested_p: 0.1, game_min: 10, cycle: true,
     prompt: 'Eres un jugador que quiere probar todo lo que sabe hacer su personaje: cada vez intentas una cosa distinta (disparar, rastrear, esconderte, forzar, registrar, trepar, montar, descansar) sobre lo que haya en la escena, diciendo exactamente qué haces.',
     wants: MECHANICS_RANGER },
+  { id: 'herido', label: 'Mecánico, herido', class_id: 'fighter', race_id: 'dwarf', suggested_p: 0.1, game_min: 10, cycle: true,
+    start: { hp_frac: 1 / 3, kit: [{ item_id: 'it_pocion', quantity: 2 }, { item_id: 'it_equipo_sanador' }] },
+    prompt: 'Eres un jugador que llega malherido y quiere ver cómo se cura en este juego: cada vez pruebas una manera distinta (una poción de las tuyas, tu rasgo de clase, descansar, que te curen) y preguntas las reglas que no sabes, diciendo exactamente qué usas.',
+    wants: WANTS_HERIDO },
+  { id: 'deudor', label: 'Mecánico, deudor', class_id: 'bard', race_id: 'halfling', suggested_p: 0.1, game_min: 10, cycle: true,
+    prompt: 'Eres un jugador que quiere probar el dinero de este juego: pides fiado, dejas prendas, vendes, regateas, pagas lo que debes y das propinas, cada vez una cosa distinta, diciendo exactamente qué das, a quién y por cuánto.',
+    wants: WANTS_DEUDOR },
+  { id: 'cronista', label: 'Mecánico, cronista', class_id: 'warlock', race_id: 'human', suggested_p: 0.1, game_min: 5, cycle: true,
+    prompt: 'Eres un jugador que quiere dejar huella en el pueblo: cuentas tu pasado y tu gente, haces los encargos del tablón y lo que te pidan hasta cobrarlos, y vas a todo lo que se anuncia con hora. Cada vez una cosa distinta, con nombres y horas concretas.',
+    wants: WANTS_CRONISTA },
+  { id: 'recolector', label: 'Mecánico, recolector', class_id: 'druid', race_id: 'gnome', suggested_p: 0.1, game_min: 10, cycle: true,
+    start: { kit: [{ item_id: 'it_pergamino_1', spell_id: 'speak_with_animals' }, { item_id: 'it_capa_proteccion' }] },
+    prompt: 'Eres un jugador que vive del campo y quiere probar los objetos: recolectas y pescas donde se puede, coges y sueltas cosas, examinas lo que llevas, te sintonizas con tu capa y lees tu pergamino. Cada vez una cosa distinta, diciendo exactamente qué y dónde.',
+    wants: WANTS_RECOLECTOR },
 ];
 
 /** El dirigido, a por un final concreto: para las partidas que empiezan en el acto III. */
@@ -185,9 +285,10 @@ export const FINAL_PROFILES: PlayerProfile[] = ([
 /**
  * Partidas a dos (--pairs): dos jugadores automáticos en la misma partida, juntos desde el principio. Cada pareja junta
  * dos maneras de jugar que se estorban o se complementan: el que sigue el Diario con el que habla sin parar, el pícaro
- * con el novato al que robar, el violento con el que no tiene prisa, el que rompe el juego con el que quiere acabarlo.
+ * con el novato al que robar, el violento con el que no tiene prisa, el que rompe el juego con el que quiere acabarlo; y el
+ * herido, con su kit de sanador, junto al violento, que es el que cae (para `stabilize`, que solo se hace a otro PJ).
  */
-export const PAIRS: [string, string][] = [['metodico', 'charlatan'], ['picaro', 'novato'], ['violento', 'pausado'], ['rompejuegos', 'dirigido'], ['explorador', 'impredecible']];
+export const PAIRS: [string, string][] = [['metodico', 'charlatan'], ['picaro', 'novato'], ['violento', 'pausado'], ['rompejuegos', 'dirigido'], ['explorador', 'impredecible'], ['herido', 'violento']];
 
 /** Lo que un jugador hace con su compañero (lo que las partidas del 4-11 y del 11-11 pusieron a prueba). */
 const PAIR_WANTS_ALL = [
@@ -308,6 +409,10 @@ interface Seat {
   reactions: number;
   /** Perfiles `cycle`: por dónde va la lista de `wants`. */
   cycleAt: number;
+  /** A dos: el compañero que ha caído a su lado y al que va a atender en esta vuelta (ATTEND_WANT). */
+  attend?: Seat;
+  /** A dos: ya le ha tocado una vuelta a su compañero para atenderle desde que cayó; se borra al levantarse. */
+  attended?: boolean;
   pending?: { r: ActionResult; p: Planned; fresh: GameEvent[]; rolls: number; wall: number };
 }
 
@@ -390,7 +495,7 @@ export function dryPlayerClient(): TextClient {
   return {
     async create(params) {
       const prompt = params.messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n');
-      const impulse = [...IMPULSES, ...pairWantsFor(null), ...Object.values(PAIR_WANTS_BY_PROFILE).flat(), ...MECHANICS_CASTER, ...MECHANICS_RANGER].find((x) => prompt.includes(x.prompt));
+      const impulse = [...IMPULSES, ...pairWantsFor(null), ...Object.values(PAIR_WANTS_BY_PROFILE).flat(), ...PROFILES.filter((p) => p.cycle).flatMap((p) => p.wants), ATTEND_WANT].find((x) => prompt.includes(x.prompt));
       const text = /Responde SOLO con el número/.test(prompt) ? '1' : /«me dejo» o «me resisto»/.test(prompt) ? 'Me resisto.' : impulse?.dry ?? 'Miro alrededor con calma.';
       return fakeMessage(params.model, text, { input: 450, output: 20, cache_read: 0, cache_write: 0 });
     },
@@ -415,7 +520,37 @@ export function playerSheet(engine: Engine, c: Character): string {
   return parts.join(' ');
 }
 
-export const PLAYER_SYSTEM = 'Juegas a un juego de rol por chat en castellano: eres el jugador, no el narrador. Contestas solo con lo que hace o dice tu personaje, en primera persona, en una o dos frases (25 palabras como mucho), sin comillas de apertura ni explicaciones. Juegas con ganas: quieres avanzar en tu situación y a veces pones a prueba al narrador.';
+/**
+ * El arranque de un perfil (`PlayerProfile.start`): PG y objetos de más en la mochila (lo que va a la espalda), sin pasar por
+ * el motor. Lo que la partida no tenga en su catálogo se toma del SRD. Devuelve los nombres de lo dado, para el log.
+ */
+export function applyStart(engine: Engine, c: Character, start: ProfileStart): string[] {
+  const w = engine.world;
+  if (start.hp_frac !== undefined) {
+    c.hp_current = Math.max(1, Math.min(c.hp_max, Math.round(c.hp_max * start.hp_frac)));
+    w.touch('characters', c.id);
+  }
+  const pack = w.itemsCarriedBy(c.id).find((i) => i.location.type === 'character' && i.location.slot.kind === 'equipped' && i.location.slot.slot === 'back' && w.itemDef(i.item_id).container);
+  const given: string[] = [];
+  for (const k of start.kit ?? []) {
+    if (!w.itemDefs.has(k.item_id)) {
+      const d = srdItem(k.item_id);
+      if (!d) throw new Error(`start.kit: ${k.item_id} no está ni en la partida ni en el SRD`);
+      w.itemDefs.set(d.id, d);
+      w.touch('item_defs', d.id);
+    }
+    const r = spawnItem(w, k.item_id, k.quantity ?? 1, pack ? { type: 'container', id: pack.id } : { type: 'character', id: c.id, slot: { kind: 'pocket' } });
+    if (!r.ok) throw new Error(`start.kit: ${k.item_id} no cabe (${r.error})`);
+    const def = w.itemDef(k.item_id);
+    if (k.spell_id) r.moved.state.spell_id = k.spell_id;
+    if (isMagic(def)) r.moved.state.identified_by = [c.id];
+    w.touch('item_instances', r.moved.id);
+    given.push((k.quantity ?? 1) > 1 ? `${def.name} ×${k.quantity}` : def.name);
+  }
+  return given;
+}
+
+export const PLAYER_SYSTEM ='Juegas a un juego de rol por chat en castellano: eres el jugador, no el narrador. Contestas solo con lo que hace o dice tu personaje, en primera persona, en una o dos frases (25 palabras como mucho), sin comillas de apertura ni explicaciones. Juegas con ganas: quieres avanzar en tu situación y a veces pones a prueba al narrador.';
 
 export function playerPrompt(o: { sheet: string; situation: string | null; last: string; suggested: string[]; mode: 'suggested' | 'own'; impulse: { prompt: string } | null; profile?: string; diary?: string; history?: string[]; /** A dos: quién es el compañero y qué acaba de hacer. */ partner?: string; /** Sustituye la instrucción final (una reacción que decidir). */ question?: string }): string {
   const parts = [`## Tu personaje\n${o.sheet}`];
@@ -756,6 +891,7 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         // Partida preparada: sin escena de apertura, que ya ha pasado; se cuenta lo que trae hecho.
         const prepared = opts.startAct ? await prepareBrezalAct(engine, c, opts.startAct, (d) => { clock += engine.clock.gameToReal(d) * 1000; }) : null;
         if (prepared) { await chooseAtLevelUp(c); log(`${tag}preparado el acto ${opts.startAct}: ${prepared}`); }
+        if (p?.start) { const given = applyStart(engine, c, p.start); log(`${tag}${c.name} empieza con ${c.hp_current}/${c.hp_max} PG${given.length ? ` y con ${given.join(', ')}` : ''}`); }
         const startDone = characterStory(c).done.length;
         const intro = prepared ? null : await engine.introduce(c.id);
         seats.push({
@@ -834,6 +970,11 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         }
         const offer = (s.c.offers ?? []).find((o) => o.expires_real_ms > nowMs);
         if (offer) return { mode: 'own', impulse: 'oferta', text: 'Acepto.', how: 'offer', offer };
+        // El compañero acaba de caer aquí: lo primero es atenderle (no gasta su turno de la lista).
+        if (s.attend) {
+          s.attend = undefined;
+          return { mode: 'own', impulse: ATTEND_WANT.id, text: await ask(s, { mode: 'own', impulse: ATTEND_WANT }) };
+        }
         const other = partnerOf(s);
         const mode: PlayerTurn['mode'] = !s.leaveNow && s.suggested.length && rng() < (s.profile?.suggested_p ?? SUGGESTED_P) ? 'suggested' : 'own';
         const pairWant = other && mode === 'own' && !s.leaveNow && rng() < PAIR_WANT_P ? pick(rng, pairWantsFor(s.profile)) : null;
@@ -874,8 +1015,14 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         if (cap !== null && metered !== null && metered >= cap) { for (const s of playing()) s.ended = 'presupuesto'; break; }
         // Caído o muerto no se juega: se espera a que se levante o reaparezca, como quien vuelve al cabo de un rato.
         for (const s of playing()) {
-          if (!s.profile || s.c.status === 'active') continue;
-          if (s.c.status !== 'asleep') s.downs++;
+          if (!s.profile || s.c.status === 'active') { s.attended = false; continue; }
+          // A dos, recién caído y con el compañero en pie a su lado: antes de esperar, una vuelta para que le atienda (stabilize).
+          const helper = partnerOf(s);
+          if (s.c.status === 'unconscious' && !s.attended && helper?.ended === null && helper.c.status === 'active' && samePlace(s, helper)) {
+            s.attended = true; s.downs++; helper.attend = s;
+            continue;
+          }
+          if (s.c.status !== 'asleep' && !s.attended) s.downs++;
           const seqDown = lastSeq();
           const isUp = () => (s.c.status as string) === 'active';
           for (let k = 0; k < 200 && !isUp(); k++) { clock += 60_000; await engine.tick(); }
@@ -884,7 +1031,8 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
           s.last = `${s.last}\n\n${seenSince(s.c, seqDown, [s.last]).join('\n')}`.trim();
           s.suggested = [];
         }
-        const active = playing();
+        // Quien está caído esperando a que le atiendan no juega esta vuelta.
+        const active = playing().filter((s) => !s.profile || s.c.status === 'active');
         if (!active.length) break;
         // A la vez: en pelea siempre (la ronda los espera a los dos); si no, de vez en cuando, estando en el mismo sitio.
         const together = active.length === 2 && samePlace(active[0]!, active[1]!) && (inFight(active[0]!) || rng() < TOGETHER_P);
