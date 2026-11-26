@@ -42,7 +42,7 @@ import { bodiesAt, bodyStateOf, deadNpcsAt, isDying, isStable, NPC_DOWN_HINT } f
 import { crimeContext, npcCrimeLine, recentIncidents } from '../engine/crime.js';
 import { TALK_RULES } from './actor.js';
 import { concernsLine } from '../engine/concerns.js';
-import { movesOwnCoins, recentNpcLines } from '../engine/closecheck.js';
+import { movesOwnCoins, npcMovesSince, recentNpcLines } from '../engine/closecheck.js';
 import { isExtra, type ExtraNpc } from '../engine/extras.js';
 import { hitDiceLeft, resourceLines } from '../engine/rest.js';
 import { shopClosed, shopLines } from '../engine/shop.js';
@@ -425,6 +425,15 @@ export function actionContext(engine: Engine, actor: Character, text: string, ro
   }
   // Testigos: otros PJs que percibirían al actor aunque gritara. Sin ninguno, observable no le llega a nadie y es salida tirada.
   if (!witnesses(world, engine.clock, pos, nowG, WITNESS_LOUDNESS, actor.id).length) present.push(NO_WITNESSES);
+  // Quién ha salido de aquí desde el turno anterior del actor (npc_move del motor; arreglo 30): ya no habla ni actúa aquí.
+  const gone = new Map<Id, string>();
+  for (const e of npcMovesSince(engine.events.all(), actor.id)) {
+    const n = world.npcs.get(String(e.payload['npc_id']));
+    if (!n || e.location_id !== loc.id || world.spot(n.location.id).location_id === loc.id) continue;
+    const known = actor.knows.includes(n.id);
+    gone.set(n.id, `${known ? n.name : descriptorOf(world, n.id)} [${n.id}]${known && e.observable ? ` («${e.observable}»)` : ''}`);
+  }
+  if (gone.size) present.push(`- Se han ido desde el turno anterior (ya NO están aquí: no hablan, no contestan ni actúan en tu cierre; si el jugador les habla, nadie le contesta por ellos): ${[...gone.values()].join(', ')}.`);
   L.push('## Presentes que el actor percibe\n' + (present.length ? present.join('\n') : 'Nadie.'));
   if (extrasHere.length) L.push(`## Gente de relleno aquí (solo existen estos; no saben nada de la historia, no dan misiones, contestan dos frases como mucho y a la segunda pregunta que no es lo suyo se cierran)\n${extrasHere.join('\n')}`);
   // Crimen y ley (crime.ts): el incidente que hay que contar, y si el actor está buscado, detenido o preso.

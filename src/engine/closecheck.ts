@@ -1493,3 +1493,98 @@ export function jobClaimRejection(phrase: string, jobs: readonly JobAtHand[]): s
   const list = jobs.map((j) => `«${j.title}» (job_id ${j.id}, lo pidió ${j.giver}${j.wants ? `, pide ${j.wants}` : ''})`).join('; ');
   return `El jugador da por hecho un encargo («${phrase}») y no se ha cobrado: un encargo del tablón lo cierra complete_job (character_id del actor, job_id, npc_id de quien lo pidió), que comprueba que trae lo pedido, se lo quita y le paga. Encargos sin cobrar de quien está aquí: ${list}. Si el servidor dice que falta algo, o no es el encargo de nadie de aquí, que el NPC lo diga. Reescribe log_event.`;
 }
+
+// ---------------------------------------------------------------------------
+// Presencia de NPC en el cierre (arreglo 30)
+// ---------------------------------------------------------------------------
+
+/**
+ * Los `npc_move` que el motor ha emitido desde el último turno del actor (su último evento con texto del jugador):
+ * quién ha salido o entrado mientras tanto. Sin turno anterior, todos.
+ */
+export function npcMovesSince(events: readonly GameEvent[], actorId: string): GameEvent[] {
+  let from = 0;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.actor_id === actorId && e.input_text != null) { from = i + 1; break; }
+  }
+  return events.slice(from).filter((e) => e.action_type === 'npc_move' && typeof e.payload['npc_id'] === 'string');
+}
+
+/** Un NPC tal como lo ve la guarda: si está en la sala del actor, si el motor lo ha movido en este turno y si el cierre le ha dado una orden. */
+export interface NpcPresence {
+  id: string;
+  refs: readonly string[];
+  present: boolean;
+  /** El motor lo ha movido desde el turno anterior del actor (se puede contar que se va o que llega). */
+  moved_now?: boolean;
+  /** El cierre le ha dado una orden con set_npc_order (entra, se va o acompaña). */
+  ordered?: boolean;
+}
+
+export interface PresenceHit { kind: 'absent_speaks' | 'absent_acts' | 'false_exit' | 'false_entry'; npc_id: string; phrase: string }
+
+/** Lo que hace alguien en escena, en presente: habla, gesticula, coge, mira. Sin tildes. */
+const NPC_ACTS = String.raw`(?:dice|contesta|responde|replica|anade|asiente|sonrie|rie|grune|murmura|susurra|grita|suspira|resopla|carraspea|mira|observa|levanta|alza|senala|deja|coge|toma|pone|golpea|acerca|levanta|inclina|cuenta|limpia|sacude|saca|guarda|gira|cruza|remueve|sigue \w+(?:ando|iendo)|bebe|sirve|tiende|ofrece|pide|apoya|frunce|clava|encoge|agarra|sujeta|empuja|seca|escupe|interviene|corta|insiste|pregunta|ensena|da|niega con|entra|llega|aparece|se asoma|asoma)`;
+/** Lo que es entrar: con esto, el hint pide set_npc_order para traerlo. */
+const NPC_ENTERS = /^(?:entra|llega|aparece|se asoma|asoma)$/;
+/** Irse: «se va», «se marcha», «sale por la puerta», «se ha ido», «ya no está». «Se va a enfadar» es futuro, no salida. */
+const NPC_LEAVES = String.raw`(?:se va(?! a \w+(?:ar|er|ir)\b)|se va a (?:cenar|comer|dormir|misa|casa|la|el|su|sus)\b|se marcha|se ha ido|se ha marchado|se fue|se marcho|sale (?:de|por|hacia|a la calle|a la plaza|afuera)|ha salido|desaparece (?:por|tras|calle)|ya no esta|ya se ha ido|ya se fue)`;
+/** Hablar de otro, de lo que hará o de lo que suele hacer: no es que actúe ahora. */
+const REPORTED = /\b(que|si|cuando|segun|como|hasta que|antes de que|dicen|cuentan|manana|esta noche|luego|mas tarde|a las \d+|cada|siempre|suele|ayer|antes|nadie|ni rastro|pregunta(?:s)? por|buscas?)\b/;
+/** Entre el nombre y el verbo: un inciso entre comas, un adverbio y los clíticos. */
+const SUBJECT_GAP = String.raw`(?:\s*,[^,.;:]{0,60},)?\s+(?:(?:ya|todavia|aun|tambien|solo|apenas|entonces|luego|despues|por fin)\s+)?(?:(?:te|se|le|les|lo|la|los|las|me|nos)\s+){0,2}`;
+
+/**
+ * El cierre contra la sala (arreglo 30, patrón 1 del análisis del 26-11-2026): habla o actúa un NPC que no está (no
+ * está en «Presentes», el motor no lo ha movido en este turno y el cierre no lo hace entrar con set_npc_order), o se
+ * narra que un NPC que sigue aquí se va, sin que el motor lo haya movido. Pícaro T11: «Garrán se va de la barra» (motor,
+ * T10) y Garrán contesta cuatro turnos más; pareja violento T2: «Hugo, que se ha ido a cenar, ya no está» con Hugo en
+ * la herrería. Las palabras dentro de comillas son de alguien («Garrán está en la casona»): no cuentan. Devuelve el
+ * primer fallo, o null.
+ */
+export function npcPresenceProblem(input: { narration: string; lines?: readonly DialogueLine[]; npcs: readonly NpcPresence[] }): PresenceHit | null {
+  const free = (n: NpcPresence) => n.moved_now || n.ordered;
+  for (const l of input.lines ?? []) {
+    if (l.speaker !== 'npc' || !l.npc_id) continue;
+    const n = input.npcs.find((x) => x.id === l.npc_id);
+    if (n && !n.present && !free(n)) return { kind: 'absent_speaks', npc_id: n.id, phrase: l.text.slice(0, 80) };
+  }
+  // Sin tildes pero con mayúsculas: un nombre propio solo cuenta en mayúscula («Ceniza» el perro, no «la ceniza»).
+  const text = clauses(input.narration.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/«[^»]*»|“[^”]*”|"[^"]*"/g, ' . '));
+  const pattern = (refs: readonly string[], flags: string, present: boolean) => {
+    const list = refs.map((r) => r.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^(?:el|la|los|las|un|una) /i, '').trim()).filter((r) => r.length >= 3).map(esc).sort((a, b) => b.length - a.length);
+    if (!list.length) return null;
+    const who = String.raw`\b(?:${list.join('|')})\b`;
+    return new RegExp(present ? String.raw`${who}(?:${SUBJECT_GAP}${NPC_LEAVES}|\s*,\s*que\s+${NPC_LEAVES})` : String.raw`${who}${SUBJECT_GAP}(${NPC_ACTS})\b`, flags);
+  };
+  for (const n of input.npcs) {
+    if (free(n)) continue;
+    // Los nombres (con mayúscula) se buscan tal cual; los oficios («el herrero»), sin mirar mayúsculas.
+    const res = [pattern(n.refs.filter((r) => /^\p{Lu}/u.test(r)), '', n.present), pattern(n.refs.filter((r) => !/^\p{Lu}/u.test(r)), 'i', n.present)].filter((r): r is RegExp => r !== null);
+    for (const c of text) {
+      for (const re of res) {
+        const m = re.exec(c);
+        if (!m) continue;
+        const low = c.toLowerCase();
+        if (REPORTED.test(low.slice(0, m.index)) || (!n.present && REPORTED.test(low.slice(m.index + m[0].length)))) continue;
+        const verb = (m[1] ?? '').toLowerCase();
+        return { kind: n.present ? 'false_exit' : NPC_ENTERS.test(verb) ? 'false_entry' : 'absent_acts', npc_id: n.id, phrase: m[0] };
+      }
+    }
+  }
+  return null;
+}
+
+/** `left`: cuándo y cómo se fue, si el motor lo movió («a las 21:40: Garrán se va de la barra»). */
+export function presenceRejection(hit: PresenceHit, name: string, left: string | null): string {
+  switch (hit.kind) {
+    case 'absent_speaks':
+    case 'absent_acts':
+      return `${name} [${hit.npc_id}] no está aquí${left ? ` (se fue ${left})` : ''}: no habla ni actúa en este cierre («${hit.phrase}»). Mira «Presentes que el actor percibe»: solo ellos contestan. Si el jugador le busca o le habla, narra que no está y, si acaso, quién de los presentes le contesta o dónde dicen que anda. Si tiene que llegar ahora, set_npc_order (order go, target_location_id de aquí) antes de cerrar. Reescribe log_event.`;
+    case 'false_entry':
+      return `La narración hace entrar a ${name} [${hit.npc_id}] («${hit.phrase}») y no está aquí ni el servidor lo ha traído${left ? ` (se fue ${left})` : ''}. Si llega de verdad, set_npc_order (order go, target_location_id de aquí) antes de cerrar; si no, que no aparezca. Reescribe log_event.`;
+    case 'false_exit':
+      return `La narración dice que ${name} [${hit.npc_id}] se va («${hit.phrase}») y el servidor no lo ha movido: sigue aquí, en «Presentes». Si se marcha de verdad, set_npc_order (order go, adónde va) antes de cerrar; si no, que siga en escena. Reescribe log_event.`;
+  }
+}

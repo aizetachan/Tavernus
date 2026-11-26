@@ -47,7 +47,7 @@ import { freshTagOptions, tagOptions } from '../engine/worldrules.js';
 import { aEs, descriptorOf, fmtDuration, maskUnknownNames, nameRe, npcNameForms, unknownNpcsNamed } from '../engine/narrate.js';
 import { cancelHook, plantHook } from '../engine/hooks.js';
 import { plantRumor, rumorBudget, RUMOR_KINDS } from '../engine/rumors.js';
-import { addScheduledEvent, listSchedule, RECURRENCES } from '../engine/schedule.js';
+import { addScheduledEvent, hhmm, listSchedule, RECURRENCES } from '../engine/schedule.js';
 import { NPC_TASK_KINDS, orderLine, orderOf, promisedMove, promisedMoveRejection, setNpcOrder, type NpcTaskKind } from '../engine/npcorders.js';
 import { characterFacts, recordFact } from '../engine/facts.js';
 import type { DialogueLine, LineTo } from '../engine/moments.js';
@@ -69,6 +69,7 @@ import { ALARM_KINDS, clearAlarm, setAlarm } from '../engine/alarm.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { CONFLICT_KINDS, conflictKindOf, refusedBefore, confrontButtons, confrontOf, conflictVerdict, createItem, resolveConflict, type ConflictKind, type ConflictPlan, type ConflictResult, type ConflictVerdict } from '../engine/conflict.js';
 import { creditRejection, creditWithoutDebt, declaresTheft, jobClaimRejection, jobClaimWithoutComplete, meetingRejection, meetingWithoutSchedule, movesOwnCoins, ruleQuestionRejection, ruleQuestionWithoutLookup, type JobAtHand } from '../engine/closecheck.js';
+import { npcMovesSince, npcPresenceProblem, presenceRejection, type NpcPresence } from '../engine/closecheck.js';
 import { conflictCloseProblems, debtMismatch, debtRejection, failedToolNarrated, failedToolRejection, menuNamed, menuWords, npcHitRejection, npcHitWithoutAttack, reactionOutcomeMismatch, reactionOutcomeRejection, stateRejection, stateWithoutTool, type MenuItem, type StateKind } from '../engine/closecheck.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
@@ -521,6 +522,8 @@ export interface ToolContext {
   meeting_rejections?: number;
   rule_rejections?: number;
   job_rejections?: number;
+  /** Cierres rechazados porque habla o actúa un NPC que no está, o se va uno que el motor no ha movido (arreglo 30; uno como mucho). */
+  presence_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -877,6 +880,32 @@ const NPC_DOWN_NOTE = `cae INCONSCIENTE, no muerto (golpe no letal): respira, el
 /** Nombre de un NPC para el actor: el suyo si lo sabe; si no, cómo se le ve. */
 function npcLabel(world: World, actor: Character, id: Id): string {
   return actor.knows.includes(id) ? world.npc(id).name : descriptorOf(world, id);
+}
+
+/**
+ * Los NPC vivos tal como los mira la guarda de presencia (arreglo 30): cómo se les nombra (el nombre y, si nadie más
+ * lo comparte, el oficio), si están en la sala, si el motor los ha movido desde el turno anterior del actor y si el
+ * cierre les ha dado una orden.
+ */
+function npcPresence(ctx: ToolContext, locationId: Id): NpcPresence[] {
+  const { world } = ctx.engine;
+  const alive = [...world.npcs.values()].filter((n) => n.status === 'alive');
+  const label = (n: Npc) => descriptorOf(world, n.id).toLowerCase();
+  const moved = new Set(npcMovesSince(ctx.engine.events.all(), ctx.actor.id).map((e) => String(e.payload['npc_id'])));
+  const ordered = new Set((ctx.write_calls ?? []).filter((w) => w.name === 'set_npc_order' && !('error' in w.out)).map((w) => String(w.input['npc_id'])));
+  return alive.map((n) => ({
+    id: n.id,
+    refs: [n.name, ...npcNameForms(n.name), ...(alive.filter((o) => label(o) === label(n)).length === 1 ? [label(n)] : [])],
+    present: world.spot(n.location.id).location_id === locationId,
+    moved_now: moved.has(n.id),
+    ordered: ordered.has(n.id),
+  }));
+}
+
+/** Cuándo se fue un NPC de esta localización según el motor («a las 21:40: Garrán se va de la barra»), o null. */
+function leftAt(engine: Engine, npcId: Id, locationId: Id): string | null {
+  const e = engine.events.all().filter((x) => x.action_type === 'npc_move' && x.payload['npc_id'] === npcId && x.location_id === locationId && /\bse va\b|\bdeja\b/.test(x.observable ?? '')).at(-1);
+  return e ? `a las ${hhmm(e.timestamp_game_s)}: «${e.observable}»` : null;
 }
 
 /** ¿Nombra la narración a ese NPC (por su nombre, su oficio o cómo se le ve)? */
@@ -2031,6 +2060,19 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (missing.length || vague) {
           ctx.shared_rejections = (ctx.shared_rejections ?? 0) + 1;
           return { error: unansweredRejection(missing.map((m) => ({ id: m.id, name: m.name, text: acted.find((a) => a.id === m.id)!.text })), vague) };
+        }
+      }
+      // Presencia (arreglo 30): no habla ni actúa quien no está en «Presentes» (salvo que el motor lo haya movido en este
+      // turno o el cierre lo traiga con set_npc_order), y no se va quien el motor no ha movido. Se reescribe una vez.
+      if ((ctx.presence_rejections ?? 0) < 1 && !ctx.intro) {
+        const closing = input['npc_id'] && world.npcs.has(s('npc_id')) ? s('npc_id') : null;
+        const lines = parseLines(input['lines'], closing, (id) => world.npcs.has(id));
+        // Sin lines, lo citado en la narración que no ha dicho el jugador es del NPC del cierre.
+        const quoted = !lines.length && closing ? [...s('narration_private').matchAll(/«([^»]+)»/g)].map((m) => m[1]!).filter((q) => !saidByPlayer(q, ctx.action_text)) : [];
+        const hit = npcPresenceProblem({ narration: s('narration_private'), lines: [...lines, ...quoted.map((t): DialogueLine => ({ speaker: 'npc', npc_id: closing!, text: t }))], npcs: npcPresence(ctx, here()) });
+        if (hit) {
+          ctx.presence_rejections = (ctx.presence_rejections ?? 0) + 1;
+          return { error: presenceRejection(hit, npcLabel(world, actor, hit.npc_id), leftAt(engine, hit.npc_id, here())) };
         }
       }
       // Fiado pedido por el jugador y aceptado de palabra, sin set_debt (arreglo 24): una vez por acción, antes que el
