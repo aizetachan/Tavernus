@@ -40,7 +40,7 @@ export const DET_TYPES = {
 } as const;
 
 export const MODEL_TYPES = {
-  incoherencia_contexto: { label: 'Incoherencia con el contexto', def: 'la narración contradice la escena, el inventario, la ficha, lo ya narrado o el estado: personas que no están, objetos que el PJ no tiene, lugares que no existen, hora o luz imposibles.' },
+  incoherencia_contexto: { label: 'Incoherencia con el contexto', def: 'la narración contradice la escena, el inventario, la ficha, lo ya narrado o el estado: personas que no están, objetos que el PJ no tiene, lugares que no existen, hora o luz imposibles. Negar lo que el jugador se inventa no es incoherencia: es lo correcto.' },
   npc_fuera_de_personaje: { label: 'NPC fuera de personaje', def: 'un NPC habla o actúa en contra de su descripción o motivación, o suelta su secreto sin motivo.' },
   promesa_sin_estado: { label: 'Promesa o trato sin estado', def: 'el máster narra un trato, deuda, pago, prenda, entrega o recompensa como hecho, pero ningún tool del turno lo respalda (buy_item, sell_item, transfer_item, set_debt, pawn_item, settle_debt, complete_job).' },
   regla_mal_aplicada: { label: 'Regla de juego mal aplicada', def: 'tirada con habilidad o CD absurdas, éxito o fallo narrado al revés de lo que dice el dado, daño o PG mal contados, o una acción arriesgada resuelta sin tirada.' },
@@ -163,6 +163,18 @@ const STATE_TOOLS = new Set(['set_debt', 'pawn_item', 'settle_debt', 'transfer_i
 /** La memoria da un trato por cerrado (no basta con que se hable de una deuda: eso es contexto, no estado). */
 // Límites de palabra con letras acentuadas: \b de JS no ve «ó» como letra y no corta tras «fió» o «entregó».
 const DEAL_DONE = /(?<!\p{L})(dejó (\p{L}+ )*en prenda|empeñó|le (dio|entregó|pagó|vendió|compró|fió|debe)|le fía|quedó a deber|aceptó (el trato|la prenda|el pago|la oferta|el fiado)|acordaron|cerraron el trato|trato hecho|(apuntó|anotó) (la|una|su) deuda)(?!\p{L})/iu;
+/** «Le dio» sin nada que cambie de manos: un aviso, una pista, de comer, la espalda. */
+const GAVE_NOTHING = /(?<!\p{L})le (dio|dieron) (su |un |una |el |la |las )?(último |última )?(aviso|advertencia|pista|consejo|de comer|de beber|la razón|las gracias|la espalda|la mano|un golpe|un empujón|un puñetazo|permiso|largas|su palabra|un plazo|tiempo|conversación|charla|explicaciones)(?!\p{L})/iu;
+/** Recuerdo de una amenaza o un aviso: solo es trato si nombra algo de trato (prenda, deuda, pago, fiado, venta). */
+const THREAT = /(?<!\p{L})(amenaz\p{L}*|aviso|advirti\p{L}*|advertencia|intimid\p{L}*)(?!\p{L})/iu;
+const GOODS = /(?<!\p{L})(prenda|empeñ\p{L}*|deuda|deb[eií]\p{L}*|fi[oó]|fiad[oa]|pag[oó]|vendi\p{L}*|compr[oó]|monedas|plata|oro)(?!\p{L})/iu;
+
+/** ¿La memoria anotada da por cerrado un trato? Sin los «le dio un aviso» ni los recuerdos de amenazas (H3). */
+export function noteClosesDeal(note: string): boolean {
+  const deal = note.replace(new RegExp(GAVE_NOTHING.source, 'giu'), ' ');
+  if (!DEAL_DONE.test(deal) || DEAL_OPEN.test(deal)) return false;
+  return !THREAT.test(note) || GOODS.test(note);
+}
 /** Ofertas, preguntas y negativas: lo que la memoria cuenta pero no se ha cerrado. */
 const DEAL_OPEN = /(?<!\p{L})(ofreció|propuso|pidió|pregunt\p{L}*|exig\p{L}*|intent\p{L}*|reclam\p{L}*|no (la |lo )?acept\p{L}*|rechaz\p{L}*|sin que|evaluando|consider\p{L}*)(?!\p{L})/iu;
 /** Acciones cortas que no merecen tirada (aunque una CD alta sí podría tener sentido). */
@@ -235,7 +247,7 @@ export function detectPromiseWithoutState(t: Turn, state?: WorldSnapshot | null,
     if (c.name !== 'log_event' || isError(c.result)) continue;
     const note = String(c.input['npc_memory_note'] ?? '');
     const npc = String(c.input['npc_id'] ?? '');
-    if (!note || !DEAL_DONE.test(note) || DEAL_OPEN.test(note)) continue;
+    if (!note || !noteClosesDeal(note)) continue;
     if (t.calls.some((x) => STATE_TOOLS.has(x.name) && !isError(x.result))) continue;
     const pc = state?.characters.find((x) => x.id === characterId);
     if (pc && npc && (pc.debts ?? []).some((d) => d.npc_id === npc)) continue;
@@ -248,11 +260,16 @@ export function detectPromiseWithoutState(t: Turn, state?: WorldSnapshot | null,
  * Lo que el motor rechaza ahora en el cierre (src/engine/closecheck.ts), aplicado al turno grabado:
  * un trato narrado sin tool de trato, o un desenlace que no encaja con la categoría de la tirada.
  */
-export function detectDealWithoutState(t: Turn, state?: WorldSnapshot | null, characterId?: string): Finding[] {
+export function detectDealWithoutState(t: Turn, state?: WorldSnapshot | null, characterId?: string, prologue = ''): Finding[] {
+  // El prólogo cuenta el pasado del PJ («te pagó el viaje a cambio de…»): no es un trato de la partida (H3, pareja 1115 turno 0).
+  if (t.action_type === 'prologue') return [];
   const ok = t.calls.filter((c) => c.name !== 'log_event' && !isError(c.result)).map((c) => c.name);
   const pc = state?.characters.find((x) => x.id === characterId);
   const open = (pc?.debts ?? []).some((d) => d.created_game_s <= (t.game_s ?? Infinity) && (!d.settled || d.settled.game_s >= (t.game_s ?? 0)));
-  const words = dealWithoutState({ narration: t.narration, lines: t.lines as never, okTools: ok, pendingRoll: t.requires_roll !== null, hasOpenDebt: open });
+  const told = sentences(prologue);
+  const fromPrologue = (w: string) => { const xs = sentences(t.narration).filter((s) => norm(s).includes(w)); return xs.length > 0 && xs.every((s) => told.some((p) => jaccard(p, s) >= 0.5)); };
+  // Lo que ya contó el prólogo y la narración repite (el trato del pasado del PJ) tampoco es un trato nuevo sin tool.
+  const words = dealWithoutState({ narration: t.narration, lines: t.lines as never, okTools: ok, pendingRoll: t.requires_roll !== null, hasOpenDebt: open }).filter((w) => !prologue || !fromPrologue(w));
   return words.length ? [finding(t, 'trato_sin_estado', `cita ${words.map((w) => `«${w}»`).join(', ')} sin set_debt/pawn_item/transfer_item en el turno`, sentences(t.narration).find((s) => words.some((w) => norm(s).includes(w))) ?? t.narration)] : [];
 }
 
@@ -293,9 +310,10 @@ export function detectIrregularClose(t: Turn): Finding[] {
 
 export function runDetectors(turns: readonly Turn[], opts: { state?: WorldSnapshot | null; characterId?: string; capWords?: number } = {}): Finding[] {
   const cap = opts.capWords ?? NARRATION_CAP_WORDS['short']!;
+  const prologue = turns.filter((t) => t.action_type === 'prologue').map((t) => t.narration).join('\n');
   return turns.flatMap((t) => [
     ...detectFailedToolNarrated(t), ...detectInventedPlace(t), ...detectNpcOutOfReach(t),
-    ...detectPromiseWithoutState(t, opts.state, opts.characterId), ...detectDealWithoutState(t, opts.state, opts.characterId), ...detectOutcomeMismatch(t),
+    ...detectPromiseWithoutState(t, opts.state, opts.characterId), ...detectDealWithoutState(t, opts.state, opts.characterId, prologue), ...detectOutcomeMismatch(t),
     ...detectTrivialRoll(t), ...detectRepeatedSuggestion(t),
     ...detectLongNarration(t, cap), ...detectIrregularClose(t),
   ]);
@@ -316,6 +334,7 @@ export function detectNoResponse(actions: readonly PlayerTurn[]): Finding[] {
 export const JUDGE_SYSTEM = [
   'Revisas partidas de un juego de rol por chat en castellano entre un jugador automático y el narrador (el máster). Señala SOLO errores claros del máster, de esta lista cerrada:',
   ...Object.entries(MODEL_TYPES).map(([k, v]) => `- ${k}: ${v.def}`),
+  'Lo que el jugador se inventa o da por hecho en su acción (un objeto que no lleva, alguien que no está, un sitio, un trato o algo que no ha pasado) no es contexto: si el máster lo niega, lo corrige o no le sigue la corriente, lo hace bien y no es incoherencia_contexto. El error es concedérselo como cierto, o cortarlo en seco sin ofrecer nada (imposible_sin_ingenio).',
   'No señales estilo, gustos ni errores del jugador. Ante la duda, no lo señales: nada de entradas «para comprobar» ni que digan que no hay error. Cada error lleva el número de turno, una cita literal copiada de la narración del máster de ese turno (como mucho 200 caracteres) y una frase de por qué.',
   'Devuelve SOLO un objeto JSON, sin texto alrededor: {"findings":[{"turn":<número>,"type":"<tipo de la lista>","severity":<1 leve, 2 claro, 3 grave>,"quote":"<cita literal>","why":"<una frase>"}]}. Sin errores: {"findings":[]}.',
 ].join('\n');
@@ -345,6 +364,20 @@ export function judgePrompt(header: string, turns: readonly Turn[]): string {
 /** Entradas que el propio juez desmiente en su «por qué» («no hay error claro», «es coherente», «se retira»). */
 export const RETRACTED = /\b(no hay (ningún )?error|no es (un )?error|sin error|es coherente|coherente con la escena|se retira|lo dejo solo como comprobación|no (presenta|tiene) (ningún )?error|no procede|se descarta)\b/i;
 
+/** Cita que niega algo («no hay», «ya no está», «no llevas»…) y un «por qué» que habla de lo que dijo o hizo el jugador. */
+const DENIAL = /(?<!\p{L})(no hay|no est[aá]n?|ya no est[aá]n?|no (llevas|tienes|existe|existen|queda|quedan|ves)|nadie|ning[uú]n|ninguna|no es (un|una|el|la))(?!\p{L})/iu;
+const ABOUT_PLAYER_CLAIM = /(?<!\p{L})(niega|borra|lo desmiente|el jugador (\p{L}+ ){0,2}(dice|ve|cree|afirma|asegura|da por|menciona|saca|salta|busca|pide|invent\p{L}*|habla de|se refiere))(?!\p{L})/iu;
+
+/**
+ * Entradas del juez que no son error del máster: las que él mismo desmiente y las «incoherencias» que no son más que el
+ * máster negando bien lo que el jugador se inventa (informe del 25-11, H3: tirador 11, 18 y 21 de la tanda 1051).
+ */
+export function judgeDropReason(type: string, quote: string, why: string): string | null {
+  if (RETRACTED.test(why)) return 'retirado por el propio juez';
+  if (type === 'incoherencia_contexto' && DENIAL.test(quote) && ABOUT_PLAYER_CLAIM.test(why)) return 'niega lo que el jugador inventa';
+  return null;
+}
+
 /**
  * Parseo estricto pero tolerante con el envoltorio: admite ```json …``` o texto alrededor del objeto.
  * Descarta (y cuenta) entradas con tipo fuera de la lista, turno fuera del lote o sin cita.
@@ -367,7 +400,8 @@ export function parseJudge(text: string, turns: readonly Turn[]): { findings: Fi
     if (!(type in MODEL_TYPES)) { dropped.push(`tipo desconocido: ${type}`); continue; }
     if (!t) { dropped.push(`turno fuera del lote: ${String(x?.['turn'])}`); continue; }
     if (!quote) { dropped.push(`sin cita (turno ${turn})`); continue; }
-    if (RETRACTED.test(String(x['why'] ?? ''))) { dropped.push(`retirado por el propio juez (turno ${turn})`); continue; }
+    const drop = judgeDropReason(type, quote, String(x['why'] ?? ''));
+    if (drop) { dropped.push(`${drop} (turno ${turn})`); continue; }
     const sev = Math.min(3, Math.max(1, Math.round(Number(x['severity']) || 2)));
     const hay = norm([t.narration, t.input_text ?? '', ...t.suggested, ...t.lines.map((l) => l.text)].join(' '));
     findings.push({ type: type as ModelType, layer: 'model', turn, event_id: t.event_id, severity: sev, detail: clip(String(x['why'] ?? ''), 240), quote: clip(quote), quote_ok: hay.includes(norm(quote)) });
@@ -533,9 +567,9 @@ export async function judgeRun(opts: { runDir: string; model: string; dryRun: bo
     const g = await judgeGame(s.dir, { summary: s, client, model: opts.model, ...(opts.log ? { log: opts.log } : {}) });
     const old = previous.find((p) => p.slug === g.slug);
     if (old) {
-      const kept = old.findings.filter((f) => f.layer === 'model' && !RETRACTED.test(f.detail));
-      g.findings.push(...kept);
-      g.judge = { ...old.judge, dropped: [...old.judge.dropped, ...old.findings.filter((f) => f.layer === 'model' && RETRACTED.test(f.detail)).map((f) => `retirado por el propio juez (turno ${f.turn})`)] };
+      const model = old.findings.filter((f) => f.layer === 'model');
+      g.findings.push(...model.filter((f) => !judgeDropReason(f.type, f.quote, f.detail)));
+      g.judge = { ...old.judge, dropped: [...old.judge.dropped, ...model.flatMap((f) => { const d = judgeDropReason(f.type, f.quote, f.detail); return d ? [`${d} (turno ${f.turn})`] : []; })] };
     }
     games.push(g);
   }

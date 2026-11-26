@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { GameEvent } from '../src/engine/model.js';
 import {
-  buildReport, detectFailedToolNarrated, detectInventedPlace, detectLongNarration, detectNoResponse, detectNpcOutOfReach,
+  buildReport, detectDealWithoutState, detectFailedToolNarrated, JUDGE_SYSTEM, judgeDropReason, noteClosesDeal, detectInventedPlace, detectLongNarration, detectNoResponse, detectNpcOutOfReach,
   detectPromiseWithoutState, detectRepeatedSuggestion, detectTrivialRoll, judgeRun, parseJudge, runDetectors, turnsFromEvents, type GameJudgement, type Turn,
 } from '../scripts/judge.js';
 import { cleanOwnAction, dryMasterClient, playerSheet, dryPlayerClient, estimate, FINAL_PROFILES, masterTally, parseSuggestedChoice, playerPrompt, prepareBrezalAct, PROFILES, runAutoplay, type GameSummary } from '../scripts/autoplay.js';
@@ -165,6 +165,55 @@ describe('juez modelo: parseo', () => {
     expect(parseJudge('{"findings": [}', turns).error).toMatch(/JSON inválido/);
     expect(parseJudge('{"otra":1}', turns).error).toBe('falta findings[]');
     expect(parseJudge('{"findings":[]}', turns)).toEqual({ findings: [], dropped: [], error: null });
+  });
+});
+
+describe('juez: lo inventado, el prólogo y las amenazas (H3)', () => {
+  it('negar lo que el jugador inventa no es incoherencia: el prompt lo dice y el parseo lo descarta', () => {
+    expect(JUDGE_SYSTEM).toMatch(/lo niega, lo corrige o no le sigue la corriente, lo hace bien/);
+    // Falsos positivos de la tanda 20261125-1051 (tirador 18 y 21, informe 1).
+    const turns = [
+      turnOf(ev({ input_text: 'Salto al tejado del cobertizo', narration_private: 'No hay ningún tejado de cobertizo al otro lado: solo las tejas ennegrecidas de la herrería.', payload: master([]) })),
+      turnOf(ev({ input_text: 'Saco un vendaje de la mochila', narration_private: 'No hay vendaje en la mochila. Sacas la ropa de viaje, rasgas dos tiras con los dientes y te ciñes el costado.', payload: master([]) })),
+      turnOf(ev({ input_text: 'Busco algo con que cavar', narration_private: 'Lo único que sirve es la olla de hierro que llevas en la mochila.', payload: master([]) })),
+    ];
+    const text = JSON.stringify({ findings: [
+      { turn: turns[0]!.index, type: 'incoherencia_contexto', quote: 'No hay ningún tejado de cobertizo al otro lado', why: 'El jugador salta a un tejado de cobertizo que la narración anterior no describe; el máster lo niega después.' },
+      { turn: turns[1]!.index, type: 'incoherencia_contexto', quote: 'No hay vendaje en la mochila.', why: 'El máster niega el vendaje que el jugador dice sacar.' },
+      { turn: turns[2]!.index, type: 'incoherencia_contexto', quote: 'la olla de hierro que llevas en la mochila', why: 'Se introduce un objeto que no figura en el inventario del personaje.' },
+    ] });
+    const r = parseJudge(text, turns);
+    expect(r.findings.map((f) => f.turn)).toEqual([turns[2]!.index]);
+    expect(r.dropped).toEqual([`niega lo que el jugador inventa (turno ${turns[0]!.index})`, `niega lo que el jugador inventa (turno ${turns[1]!.index})`]);
+    // Otro tipo con la misma cita sí cuenta: lo que se descarta es la «incoherencia», no la negativa en seco.
+    expect(judgeDropReason('imposible_sin_ingenio', 'No hay ningún tejado', 'El jugador pide saltar y el máster lo niega en seco.')).toBeNull();
+  });
+
+  it('un recuerdo de amenaza o un «le dio un aviso» no es una prenda sin estado', () => {
+    // Notas reales: violento 48 de 20261125-1051 y pareja violento:pausado 38 y 40 de 20261125-1115.
+    for (const n of [
+      'Ciro le amenazó con el hacha en los sacos de harina y se plantó entre él y la puerta; Garrán le dio su último aviso.',
+      'Fiona la amenazó con partirle el cráneo al alguacil y, tras una charla tensa, Ilse le dio una pista sobre el agua del pozo a cambio de que no pierda los nervios en su casa.',
+      'Elmo se arrodilló junto a Fiona y le dio de comer, y luego miró a Hugo con el bastón en la mano.',
+    ]) {
+      expect(noteClosesDeal(n), n).toBe(false);
+      expect(detectPromiseWithoutState(turnOf(ev({ payload: master([{ name: 'log_event', input: { npc_id: 'npc_garran', npc_memory_note: n }, result: OK }]) })))).toEqual([]);
+    }
+    // Una amenaza que acaba en prenda sí es trato.
+    expect(noteClosesDeal('Le amenazó y al final le dejó la daga en prenda por la cena.')).toBe(true);
+    expect(noteClosesDeal('Le dio tres monedas de plata por la cuerda.')).toBe(true);
+  });
+
+  it('el prólogo cuenta el pasado del PJ: su «a cambio de» no es un trato sin tool, ni cuando la narración lo repite', () => {
+    // Pareja violento:pausado de 20261125-1115, turno 0.
+    const told = 'Te pagó el viaje desde Valcruz a cambio de que le cubrieras la espalda, y por el camino te contó lo de su padre.';
+    const prologue = turnOf(ev({ action_type: 'prologue', input_text: null, narration_private: `Estás en la herrería de Vharn. ${told}`, payload: master([]) }));
+    expect(detectDealWithoutState(prologue)).toEqual([]);
+    const again = turnOf(ev({ action_type: 'master_intro', input_text: null, narration_private: `Hugo cierra la puerta. ${told}`, payload: master([]) }));
+    expect(detectDealWithoutState(again)).toHaveLength(1);
+    expect(runDetectors([prologue, again]).filter((f) => f.type === 'trato_sin_estado')).toEqual([]);
+    const fresh = turnOf(ev({ narration_private: 'Brenna te deja la jarra a cambio de que le friegues los platos esta noche.', payload: master([]) }));
+    expect(runDetectors([prologue, fresh]).filter((f) => f.type === 'trato_sin_estado')).toHaveLength(1);
   });
 });
 
