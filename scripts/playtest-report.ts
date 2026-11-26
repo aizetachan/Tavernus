@@ -375,7 +375,7 @@ const HOW_LABEL: Record<NonNullable<PlayerTurn['how']>, string> = { chat: 'chat'
 
 export function transcriptOf(g: GameSummary): string {
   const head = [`# ${g.profile}: ${g.character.name}, ${g.character.race} ${g.character.class}${g.pair ? ` (con ${g.pair.partner}, ${g.pair.partner_profile})` : ''}`, '', `Fin: ${g.ended}${g.error ? ` (${g.error})` : ''}. Situación: ${g.character.situation ?? '—'}`, ''];
-  const body = g.actions.map((a) => `## ${a.i}. ${a.mode === 'own' ? `propia, ${a.impulse ?? ''}` : 'sugerida'}${a.how ? `, ${HOW_LABEL[a.how]}` : ''}${a.together ? ', a la vez' : ''}${a.ok ? '' : ', RECHAZADA'}, ${((a.wall_ms ?? 0) / 1000).toFixed(1)} s\n\n> ${a.text}\n\n${a.reply ?? a.engine_text ?? ''}\n${a.state ? `\n_PG ${a.state.hp}/${a.state.hp_max}, nivel ${a.state.level}, ${a.state.location}, ${questLine(a.state)}, pasos ${a.state.steps}, pistas ${a.state.clues}_\n` : ''}`);
+  const body = g.actions.map((a) => `## ${a.i}. ${a.mode === 'own' ? `propia, ${a.impulse ?? ''}` : 'sugerida'}${a.how ? `, ${HOW_LABEL[a.how]}` : ''}${a.together ? ', a la vez' : ''}${a.ok ? '' : ', RECHAZADA'}, ${((a.wall_ms ?? 0) / 1000).toFixed(1)} s\n\n${a.before ? `_Antes de actuar (lo dice la herramienta): ${a.before}_\n\n` : ''}> ${a.text}\n\n${a.reply ?? a.engine_text ?? ''}\n${a.state ? `\n_PG ${a.state.hp}/${a.state.hp_max}, nivel ${a.state.level}, ${a.state.location}, ${questLine(a.state)}, pasos ${a.state.steps}, pistas ${a.state.clues}_\n` : ''}`);
   return [...head, ...body, '## Epílogo', '', g.epilogue ?? ''].join('\n');
 }
 

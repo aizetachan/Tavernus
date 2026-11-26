@@ -118,6 +118,12 @@ export interface PlayerProfile {
  */
 export interface ProfileStart {
   hp_frac?: number;
+  /**
+   * H15: la herida se reabre. Si empieza una acción a PG máximos, vuelve a `hp_frac` (lo hace el script, como `hp_frac`;
+   * el jugador lo lee antes de actuar). En la tanda 5 el herido estaba a 13/13 desde el turno 4 y 33 de sus 37 peticiones
+   * de curación y descanso no midieron nada.
+   */
+  reopen?: boolean;
   kit?: { item_id: string; quantity?: number; spell_id?: string }[];
 }
 
@@ -188,7 +194,7 @@ const WANTS_DEUDOR = [
 ];
 /** Bruja que cuenta su pasado, hace los encargos del tablón y los que le piden, y va a lo que se anuncia con hora. */
 const WANTS_CRONISTA = [
-  want('pasado', 'contarle a quien tengas delante algo concreto de tu pasado (dónde naciste, a qué se dedicaba tu familia, por qué te fuiste) y pedirle que se acuerde', 'Le cuento que nací en un pueblo de pescadores y que mi padre era barquero; acuérdate de mí.'),
+  want('pasado', 'contarle a quien tengas delante algo concreto de tu pasado (dónde naciste, a qué se dedicaba tu familia, por qué te fuiste), siempre el de tu historia, y pedirle que se acuerde', 'Le cuento que nací en Vadoscuro y que era copista en el archivo del señor hasta que ardió; acuérdate de mí.'),
   want('tablon', 'ir al tablón de avisos y leer los encargos que hay', 'Leo el tablón de avisos.'),
   want('hacer_encargo', 'hacer uno de los encargos del tablón que se pueda hacer pronto (ir a mirar un sitio y volver a contarlo), tal como lo dice el Diario', 'Voy a donde dice el encargo del tablón.'),
   want('cobrar_encargo', 'volver a quien puso el encargo del tablón y contarle que ya está hecho, para cobrar', 'Vuelvo con quien puso el aviso y le cuento que ya está hecho.'),
@@ -196,7 +202,7 @@ const WANTS_CRONISTA = [
   want('quedar', 'proponer a quien tengas delante quedar a una hora concreta en un sitio (mañana al alba en el pozo, esta noche en la taberna)', 'Quedamos mañana al alba junto al pozo, ¿te parece?'),
   want('pedir_trabajo', 'preguntar a quien tengas delante si necesita que hagas algo por él, y aceptarlo', '¿Necesitas que haga algo por ti? Lo que sea, acepto.'),
   want('cumplir', 'hacer lo que te pidió alguien (lo que diga tu Diario) y volver a contárselo', 'Hago lo que me pidió y vuelvo a contárselo.'),
-  want('familia', 'contar algo de alguien de tu vida que no está aquí (una hermana, un maestro, un amor), con su nombre', 'Mi hermana Lía se fue a la ciudad hace dos inviernos y sigo buscándola.'),
+  want('familia', 'contar algo de alguien de tu vida que no está aquí (tu hermana o tu maestro), con su nombre, tal como es en tu historia', 'Mi hermana Maren es tejedora y sigue en Vadoscuro; le escribo cada luna.'),
   want('acudir', 'ir al sitio y a la hora de lo que te han anunciado (la misa, la cena, el mercado) y quedarte a verlo', 'Voy a la plaza a ver la misa del pozo.'),
 ];
 /**
@@ -207,6 +213,12 @@ const WANTS_CRONISTA = [
  * huerto, CD 8) y pesca en el canal del molino, los dos junto al pueblo; con antorcha, que los lobos de los caminos huyen
  * del fuego (life.ts). Primero lo que puede hacer en la plaza (examinar y sintonizar la capa).
  */
+/**
+ * H15: la historia del cronista, la misma toda la partida. En la tanda 5 tuvo tres pasados (cerero de Vharn, copista,
+ * tallista de Vadoscuro) y cuatro hermanas (Aldara, Maren, Maera, Maelis): `record_character_fact` no medía nada.
+ */
+export const CRONISTA_BIO = 'Tu historia es esta y no otra; no la cambies ni le añadas parientes: naciste en Vadoscuro, junto al río; eras copista en el archivo del señor de Vadoscuro hasta que el archivo ardió el invierno pasado y te quedaste sin oficio; tu maestro de copista era el viejo Anselmo, que murió en ese fuego; tienes una sola hermana, Maren, tejedora, que sigue en Vadoscuro y a la que escribes cada luna.';
+
 const WANTS_RECOLECTOR = [
   want('examinar', 'examinar de cerca la capa de protección o el pergamino de conjuro que llevas para saber qué hacen', 'Examino de cerca mi capa de protección.'),
   want('sintonizar', 'sintonizarte con tu capa de protección: una hora sentado con ella en las manos', 'Me siento una hora con la capa de protección en las manos para sintonizarme con ella.'),
@@ -268,14 +280,14 @@ export const PROFILES: PlayerProfile[] = [
     prompt: 'Eres un jugador que quiere probar todo lo que sabe hacer su personaje: cada vez intentas una cosa distinta (disparar, rastrear, esconderte, forzar, registrar, trepar, montar, descansar) sobre lo que haya en la escena, diciendo exactamente qué haces.',
     wants: MECHANICS_RANGER },
   { id: 'herido', label: 'Mecánico, herido', class_id: 'fighter', race_id: 'dwarf', suggested_p: 0.1, game_min: 10, cycle: true,
-    start: { hp_frac: 1 / 3, kit: [{ item_id: 'it_pocion', quantity: 2 }, { item_id: 'it_equipo_sanador' }] },
-    prompt: 'Eres un jugador que llega malherido y quiere ver cómo se cura en este juego: cada vez pruebas una manera distinta (una poción de las tuyas, tu rasgo de clase, descansar, que te curen) y preguntas las reglas que no sabes, diciendo exactamente qué usas.',
+    start: { hp_frac: 1 / 3, reopen: true, kit: [{ item_id: 'it_pocion', quantity: 2 }, { item_id: 'it_equipo_sanador' }] },
+    prompt: 'Eres un jugador que llega malherido y quiere ver cómo se cura en este juego: cada vez pruebas una manera distinta (una poción de las tuyas, tu rasgo de clase, descansar, que te curen) y preguntas las reglas que no sabes, diciendo exactamente qué usas. Llevas un tajo en el costado que se te reabre cada vez que te curas del todo.',
     wants: WANTS_HERIDO },
   { id: 'deudor', label: 'Mecánico, deudor', class_id: 'bard', race_id: 'halfling', suggested_p: 0.1, game_min: 10, cycle: true,
     prompt: 'Eres un jugador que quiere probar el dinero de este juego: pides fiado, dejas prendas, vendes, regateas, pagas lo que debes y das propinas, cada vez una cosa distinta, diciendo exactamente qué das, a quién y por cuánto.',
     wants: WANTS_DEUDOR },
   { id: 'cronista', label: 'Mecánico, cronista', class_id: 'warlock', race_id: 'human', suggested_p: 0.1, game_min: 5, cycle: true,
-    prompt: 'Eres un jugador que quiere dejar huella en el pueblo: cuentas tu pasado y tu gente, haces los encargos del tablón y lo que te pidan hasta cobrarlos, y vas a todo lo que se anuncia con hora. Cada vez una cosa distinta, con nombres y horas concretas.',
+    prompt: `Eres un jugador que quiere dejar huella en el pueblo: cuentas tu pasado y tu gente, haces los encargos del tablón y lo que te pidan hasta cobrarlos, y vas a todo lo que se anuncia con hora. Cada vez una cosa distinta, con nombres y horas concretas. ${CRONISTA_BIO}`,
     wants: WANTS_CRONISTA },
   { id: 'recolector', label: 'Mecánico, recolector', class_id: 'druid', race_id: 'gnome', suggested_p: 0.1, game_min: 10, cycle: true,
     start: { kit: [{ item_id: 'it_pergamino_1', spell_id: 'speak_with_animals' }, { item_id: 'it_capa_proteccion' }] },
@@ -343,6 +355,8 @@ export interface PlayerTurn {
   how?: 'chat' | 'say' | 'reaction' | 'offer';
   /** A dos: entró a la vez que la del compañero (ventana de turno o ronda). */
   together?: true;
+  /** Lo que la herramienta le dijo antes de esta acción (H15: reaparición, herida reabierta); no es texto del juego. */
+  before?: string;
   ok: boolean;
   /** Texto que vio el jugador cuando la acción no fue bien (máster sin respuesta, espera, etc.). */
   engine_text: string | null;
@@ -429,6 +443,8 @@ interface Seat {
   attend?: Seat;
   /** A dos: ya le ha tocado una vuelta a su compañero para atenderle desde que cayó; se borra al levantarse. */
   attended?: boolean;
+  /** Lo que la herramienta le dice antes de su próxima acción (reaparición, herida reabierta): va al transcript aparte. */
+  before?: string[];
   pending?: { r: ActionResult; p: Planned; fresh: GameEvent[]; rolls: number; wall: number };
 }
 
@@ -642,6 +658,28 @@ export function applyStart(engine: Engine, c: Character, start: ProfileStart): s
     given.push((k.quantity ?? 1) > 1 ? `${def.name} ×${k.quantity}` : def.name);
   }
   return given;
+}
+
+/** H15: si el perfil lleva `reopen` y empieza la acción a PG máximos, la herida se reabre; devuelve lo que lee el jugador. */
+export function reopenWound(engine: Engine, c: Character, start: ProfileStart | undefined): string | null {
+  if (!start?.reopen || c.status !== 'active' || c.hp_current < c.hp_max) return null;
+  c.hp_current = Math.max(1, Math.min(c.hp_max - 1, Math.round(c.hp_max * (start.hp_frac ?? 1 / 3))));
+  engine.world.touch('characters', c.id);
+  return `(El tajo del costado se te vuelve a abrir: estás a ${c.hp_current}/${c.hp_max} PG.)`;
+}
+
+/**
+ * H15 y H9: lo que el jugador automático tiene que saber al volver de una caída. Si ha muerto (evento `death` o
+ * `respawn` desde que cayó), que ha reaparecido, dónde y con cuántos PG, y que la escena de antes ya pasó: el violento
+ * seguía amenazando a Hugo desde el molino y el recolector «abría los ojos» y lanzaba Curar heridas a 0 PG (tanda 5, T11).
+ */
+export function wakeNote(world: Engine['world'], events: readonly GameEvent[], c: Character, since: number): string {
+  const died = events.some((e) => e.seq > since && e.actor_id === c.id && (e.action_type === 'death' || e.action_type === 'respawn'));
+  const loc = world.characterSpot(c)?.location_id;
+  const place = loc ? world.locations.get(loc)?.name ?? loc : 'algún sitio';
+  return died
+    ? `(Has muerto y has reaparecido en ${place}, a ${c.hp_current}/${c.hp_max} PG. Lo de antes de morir ya pasó: no estás donde caíste ni con quien estabas, y lo que pasó allí ya no lo tienes delante.)`
+    : `(Has estado sin sentido y vuelves en ti en ${place}, a ${c.hp_current}/${c.hp_max} PG.)`;
 }
 
 export const PLAYER_SYSTEM ='Juegas a un juego de rol por chat en castellano: eres el jugador, no el narrador. Contestas solo con lo que hace o dice tu personaje, en primera persona, en una o dos frases (25 palabras como mucho), sin comillas de apertura ni explicaciones. Juegas con ganas: quieres avanzar en tu situación y a veces pones a prueba al narrador.';
@@ -1106,7 +1144,8 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
         if (cap !== null && metered !== null && metered >= cap) { for (const s of playing()) s.ended = 'presupuesto'; break; }
         // Caído o muerto no se juega: se espera a que se levante o reaparezca, como quien vuelve al cabo de un rato.
         for (const s of playing()) {
-          if (!s.profile || s.c.status === 'active') { s.attended = false; continue; }
+          // A 0 PG no se juega aunque el estado diga otra cosa (el recolector lanzó Curar heridas a 0 PG, tanda 5 T11).
+          if (!s.profile || (s.c.status === 'active' && s.c.hp_current > 0)) { s.attended = false; continue; }
           // A dos, recién caído y con el compañero en pie a su lado: antes de esperar, una vuelta para que le atienda (stabilize).
           const helper = partnerOf(s);
           if (s.c.status === 'unconscious' && !s.attended && helper?.ended === null && helper.c.status === 'active' && samePlace(s, helper)) {
@@ -1115,16 +1154,22 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
           }
           if (s.c.status !== 'asleep' && !s.attended) s.downs++;
           const seqDown = lastSeq();
-          const isUp = () => (s.c.status as string) === 'active';
+          const isUp = () => (s.c.status as string) === 'active' && s.c.hp_current > 0;
           for (let k = 0; k < 200 && !isUp(); k++) { clock += 60_000; await engine.tick(); }
           await settle();
           if (!isUp()) { s.ended = 'caido'; continue; }
-          s.last = [s.last, ...seenSince(s.c, seqDown)].join('\n\n').trim();
+          const woke = wakeNote(engine.world, engine.events.all(), s.c, seqDown);
+          s.last = [s.last, ...seenSince(s.c, seqDown), woke].join('\n\n').trim();
+          (s.before ??= []).push(woke);
           s.suggested = [];
         }
         // Quien está caído esperando a que le atiendan no juega esta vuelta.
-        const active = playing().filter((s) => !s.profile || s.c.status === 'active');
+        const active = playing().filter((s) => !s.profile || (s.c.status === 'active' && s.c.hp_current > 0));
         if (!active.length) break;
+        for (const s of active) {
+          const reopened = reopenWound(engine, s.c, s.profile?.start);
+          if (reopened) { s.last = [s.last, reopened].join('\n\n').trim(); (s.before ??= []).push(reopened); }
+        }
         // A la vez: en pelea siempre (la ronda los espera a los dos); si no, de vez en cuando, estando en el mismo sitio.
         const together = active.length === 2 && samePlace(active[0]!, active[1]!) && (inFight(active[0]!) || rng() < TOGETHER_P);
         const before = new Map(active.map((s) => [s, new Set(turnEvents(s.c).map((e) => e.id))]));
@@ -1170,7 +1215,8 @@ export async function runAutoplay(opts: AutoplayOptions): Promise<AutoplayRun> {
           const { r, p, fresh, rolls, wall: w } = s.pending!;
           if (s.profile) await chooseAtLevelUp(s.c);
           const state = stateNow(s.c);
-          s.actions.push({ i, mode: p.mode, impulse: p.impulse, text: p.text, ok: r.ok, engine_text: r.ok ? null : r.text, rolls, usage: s.lastUsage ?? ZERO(), event_ids: fresh.map((e) => e.id), ...(p.how ? { how: p.how } : {}), ...(together ? { together: true as const } : {}), ...(s.profile ? { reply: s.last, wall_ms: w, state } : {}) });
+          s.actions.push({ i, mode: p.mode, impulse: p.impulse, text: p.text, ok: r.ok, engine_text: r.ok ? null : r.text, rolls, usage: s.lastUsage ?? ZERO(), event_ids: fresh.map((e) => e.id), ...(p.how ? { how: p.how } : {}), ...(together ? { together: true as const } : {}), ...(s.before?.length ? { before: s.before.join(' ') } : {}), ...(s.profile ? { reply: s.last, wall_ms: w, state } : {}) });
+          s.before = undefined;
           log(`${tag}${String(i).padStart(3)}${pair ? ` ${s.c.name.padEnd(7).slice(0, 7)}` : ''} ${r.ok ? '✓' : '✗'} [${p.how ?? (p.mode === 'own' ? p.impulse : 'sugerida')}${together ? ', a la vez' : ''}] ${p.text.slice(0, 70)}${rolls ? ` · 🎲×${rolls}` : ''}`);
           if (!s.profile) continue;
           s.history.push(`Tú: ${p.text}\nRespuesta: ${clip(s.last, 260)}`);
