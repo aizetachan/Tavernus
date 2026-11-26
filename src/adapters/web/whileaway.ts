@@ -234,7 +234,7 @@ export const AWAY_JS = String.raw`
     });
     var div = document.createElement('section');
     div.className = 'msg away-card'; div.setAttribute('aria-label', 'Mientras no estabas');
-    div.innerHTML = '<h3>Mientras no estabas</h3><p class="sub">Has estado fuera ' + escapeHtml(c.away) + (c.where ? ' · sigues en ' + escapeHtml(c.where) : '') + '</p>' +
+    div.innerHTML = '<h3>Mientras no estabas</h3><p class="sub">Has estado fuera ' + escapeHtml(c.away) + (c.where ? ', y sigues en ' + escapeHtml(c.where) : '') + '</p>' +
       awayList('Misiones y progreso', changes) + awayList('Te dijeron', said) + awayList('En tu sitio', c.here.map(li)) + awayList('Quién llegó y quién se fue', c.people.map(li)) +
       '<div class="foot">' + (c.board ? '<button type="button" class="link" data-away-tab="tablon">Hay avisos nuevos en el tablón</button>' : '') +
       '<button type="button" class="link" data-away-tab="journal">Abrir el Diario</button>' +

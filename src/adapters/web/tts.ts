@@ -559,11 +559,11 @@ export const TTS_SCRIPT = String.raw`<script>
   }
   function fillVoices() {
     var browser = !cloud(), list = ranked(), nv = narratorVoice();
-    var opt = function (v) { return '<option value="' + v.voiceURI.replace(/"/g, '&quot;') + '">' + v.name.replace(/</g, '&lt;') + ' · ' + v.lang + '</option>'; };
+    var opt = function (v) { return '<option value="' + v.voiceURI.replace(/"/g, '&quot;') + '">' + v.name.replace(/</g, '&lt;') + ' (' + v.lang + ')' + '</option>'; };
     var sv = pop.querySelector('[data-k=voice]'), sn = pop.querySelector('[data-k=npcvoice]');
     // Con voz en la nube, es la primera opción (y la marcada mientras se use); las del navegador quedan como alternativa.
     var clouds = provider === 'browser' ? [] : models.length ? models : [{ id: '', label: providerLabel }];
-    sv.innerHTML = clouds.map(function (m, i) { return '<option value="cloud' + (m.id ? ':' + m.id : '') + '">' + m.label.replace(/</g, '&lt;') + (i === 0 ? ' · voz de la partida' : '') + '</option>'; }).join('') +
+    sv.innerHTML = clouds.map(function (m, i) { return '<option value="cloud' + (m.id ? ':' + m.id : '') + '">' + m.label.replace(/</g, '&lt;') + (i === 0 ? ' (voz de la partida)' : '') + '</option>'; }).join('') +
       (list.map(opt).join('') || (provider === 'browser' ? '<option value="">Sin voces en castellano</option>' : ''));
     sn.innerHTML = '<option value="">Automática (otra voz u otro tono)</option>' + list.map(opt).join('');
     if (!browser) sv.value = 'cloud' + (cloudModel() ? ':' + cloudModel() : ''); else if (nv) sv.value = nv.voiceURI;

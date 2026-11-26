@@ -110,7 +110,7 @@ describe('una misión entra en el Diario al enterarse en escena', () => {
     await talkTo(engine, time, c, 'npc_brenna');
     expect(status(engine, c, 'q_cena_doro')).toBe('active');
     expect(status(engine, c, 'q_perro')).toBe('available'); // una por charla
-    expect(noticeOf(lastQuest(engine, c, 'q_cena_doro'))).toMatchObject({ text: 'Nueva misión · «La cena del portón»', quest: { event: 'open', why: 'Brenna nos lo pidió', declinable: true } });
+    expect(noticeOf(lastQuest(engine, c, 'q_cena_doro'))).toMatchObject({ text: 'Nueva misión: «La cena del portón»', quest: { event: 'open', why: 'Brenna nos lo pidió', declinable: true } });
     expect(characterStory(c).origins!['q_cena_doro']).toMatchObject({ kind: 'giver', text: 'Brenna nos lo pidió', location_id: 'loc_taberna' });
     expect(journalQuest(engine, c, 'q_cena_doro')).toMatchObject({ status: 'active', declinable: true, level: 1, difficulty: 'normal', giver: 'Brenna' });
     expect(journalQuest(engine, c, 'lead:q_cena_doro')).toBeUndefined();
@@ -130,7 +130,7 @@ describe('una misión entra en el Diario al enterarse en escena', () => {
     expect(journalQuest(engine, c, 'q_cena_doro')!.declinable).toBeUndefined(); // empezada: ya no se puede decir que no
     expect(questLeads(engine.world, c).has('npc_brenna')).toBe(true);
     const ready = gctx.progress.find((e) => e.quest?.event === 'ready')!;
-    expect(noticeOf({ action_type: 'progress_story', narration_private: ready.text, observable: null, payload: { quest: ready.quest } })).toMatchObject({ text: 'Lista para entregar · «La cena del portón»', quest: { why: 'Tenemos que volver con Brenna' } });
+    expect(noticeOf({ action_type: 'progress_story', narration_private: ready.text, observable: null, payload: { quest: ready.quest } })).toMatchObject({ text: 'Lista para entregar: «La cena del portón»', quest: { why: 'Tenemos que volver con Brenna' } });
 
     // La recompensa la da Brenna, al hablar con ella. El Diario, en primera persona del grupo.
     const coins = coinsOf(engine.world, c.id), xp = c.xp;
@@ -321,7 +321,7 @@ describe('la partida del 2026-10-27: muertes, voz y nombres', () => {
     expect(status(engine, c, 'q_cadena')).toBe('active');
     expect(characterStory(c).rerouted).toEqual({ q_cadena: 'npc_hugo' });
     const why = 'Hugo murió antes de enseñarnos los eslabones, pero siguen escondidos en su herrería';
-    expect(noticeOf(lastQuest(engine, c, 'q_cadena'))).toMatchObject({ text: 'La misión cambia · «La cadena de hierro frío»', quest: { event: 'changed', why } });
+    expect(noticeOf(lastQuest(engine, c, 'q_cadena'))).toMatchObject({ text: 'La misión cambia: «La cadena de hierro frío»', quest: { event: 'changed', why } });
     const q = journalQuest(engine, c, 'q_cadena')!;
     // El Diario no usa nombres que el PJ no sabe: Leodhin no llegó a saber cómo se llamaba el herrero.
     expect(q.history.at(-1)).toMatchObject({ kind: 'changed', text: 'El herrero murió antes de enseñarnos los eslabones, pero siguen escondidos en su herrería' });
@@ -340,7 +340,7 @@ describe('la partida del 2026-10-27: muertes, voz y nombres', () => {
     expect(status(engine, c, 'q_cadena')).toBe('failed');
     expect(journalQuest(engine, c, 'q_cadena')).toMatchObject({ status: 'failed' });
     expect(journalQuest(engine, c, 'q_cadena')!.history.at(-1)).toMatchObject({ kind: 'failed', text: 'Ilse murió, y con ella las palabras que templan el ascua' });
-    expect(noticeOf(lastQuest(engine, c, 'q_cadena'))).toMatchObject({ text: 'Se perdió · «La cadena de hierro frío»' });
+    expect(noticeOf(lastQuest(engine, c, 'q_cadena'))).toMatchObject({ text: 'Se perdió: «La cadena de hierro frío»' });
   });
 
   it('(fallo 6) lo que pasa en la escena lo cuenta el máster: con máster, un gancho para ese PJ; sin máster, un aviso', async () => {
@@ -383,7 +383,7 @@ describe('plazos por descansos e hitos, con aviso antes y la pérdida escrita', 
     expect(storyContext(engine.world, c, engine.gameNow())).toContain('Plazo de «Ceniza se ha perdido»: se pierde si descansa 2 veces más');
     await sleep(engine, time, c);
     expect(status(engine, c, 'q_perro')).toBe('active');
-    expect(noticeOf(lastQuest(engine, c, 'q_perro'))).toMatchObject({ text: 'Queda poco · «Ceniza se ha perdido»', quest: { event: 'warned', why: expect.stringContaining('si descansamos otra vez, será tarde') } });
+    expect(noticeOf(lastQuest(engine, c, 'q_perro'))).toMatchObject({ text: 'Queda poco: «Ceniza se ha perdido»', quest: { event: 'warned', why: expect.stringContaining('si descansamos otra vez, será tarde') } });
     await sleep(engine, time, c);
     expect(status(engine, c, 'q_perro')).toBe('failed');
     expect(journalQuest(engine, c, 'q_perro')!.history.at(-1)).toMatchObject({ kind: 'failed', text: 'Nos entretuvimos demasiado: el perro no salió vivo de la madriguera.' });
@@ -405,7 +405,7 @@ describe('plazos por descansos e hitos, con aviso antes y la pérdida escrita', 
     time.advanceGame(start + 48.5 * H - engine.gameNow());
     await engine.tick();
     expect(status(engine, c, 'q_cadena')).toBe('active');
-    expect(noticeOf(lastQuest(engine, c, 'q_cadena'))).toMatchObject({ text: 'Queda poco · «La cadena de hierro frío»' });
+    expect(noticeOf(lastQuest(engine, c, 'q_cadena'))).toMatchObject({ text: 'Queda poco: «La cadena de hierro frío»' });
     time.advanceGame(start + 54.5 * H - engine.gameNow());
     await engine.tick();
     expect(status(engine, c, 'q_cadena')).toBe('failed');

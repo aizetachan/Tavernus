@@ -2,7 +2,7 @@
  * Tiradas ocultas y reacciones solo a lo que se nota (fase 3 del plan de la
  * reunión del 11-11-2026, docs/PLAN-REUNION-2026-11-11.md). Como en D&D:
  * Percepción, Perspicacia, Investigación y Sigilo las tira el servidor sin que
- * el jugador vea el dado (ve el chip «🎲 Percepción» y la narración de lo que
+ * el jugador vea el dado (ve el chip «🎲 Percepción (tirada oculta)» y la narración de lo que
  * nota); y robar o espiar a otro jugador no le pregunta si se deja: tirada
  * enfrentada oculta, y solo si lo nota decide él («Lo notas: …»).
  */
@@ -76,7 +76,7 @@ describe('tiradas ocultas', () => {
     expect(isHiddenRoll({ kind: 'attack', key: 'melee' })).toBe(false);
   });
 
-  it('el máster pide Percepción: sin botón, el servidor tira al momento, el jugador ve solo «🎲 Percepción» y el máster narra con «TIRADA OCULTA»', async () => {
+  it('el máster pide Percepción: sin botón, el servidor tira al momento, el jugador ve solo «🎲 Percepción (tirada oculta)» y el máster narra con «TIRADA OCULTA»', async () => {
     const { engine, kael, mira, seen } = await together();
     const { client, requests } = fakeClient([
       msg([logEvent('Recorres la sala con la mirada.', 'Kael mira a su alrededor.', { requires_roll_kind: 'skill', requires_roll_key: 'perception', requires_roll_dc: 12, requires_roll_advantage: 'none' })]),
@@ -93,11 +93,11 @@ describe('tiradas ocultas', () => {
     expect(asked.payload['requires_roll']).toBeUndefined();
     // El chip: solo la etiqueta, solo para quien tira.
     const chip = engine.events.all().find((e) => e.action_type === 'roll')!;
-    expect(chip.narration_private).toBe('🎲 Percepción');
+    expect(chip.narration_private).toBe('🎲 Percepción (tirada oculta)');
     expect(chip.observable).toBeNull();
     expect(chip.delivered_to.map((d) => d.character_id)).toEqual([kael.id]);
     expect(seen(mira.id).some((d) => /🎲/.test(d.text ?? ''))).toBe(false);
-    expect(seen(kael.id).some((d) => d.text === '🎲 Percepción')).toBe(true);
+    expect(seen(kael.id).some((d) => d.text === '🎲 Percepción (tirada oculta)')).toBe(true);
     // El máster recibió el resultado como oculto, con la regla de no delatar el fallo.
     const second = String(requests[1]!.messages[0]!.content);
     expect(second).toContain('## Resultado de la tirada');
@@ -117,7 +117,7 @@ describe('tiradas ocultas', () => {
     expect(r.ok).toBe(true);
     expect(kael.sneak).not.toBeNull();
     const chip = engine.events.all().find((e) => e.action_type === 'roll')!;
-    expect(chip.narration_private).toBe('🎲 Sigilo');
+    expect(chip.narration_private).toBe('🎲 Sigilo (tirada oculta)');
   });
 
   it('una tirada a la vista (Atletismo) sigue pidiendo el botón', async () => {
@@ -146,7 +146,7 @@ describe('robar o espiar a otro jugador: tirada enfrentada oculta, sin preguntar
     expect(mira.reactions ?? []).toHaveLength(0);
     expect(ctx.stealth_won?.has(mira.id)).toBe(true);
     // Lo que ve cada uno: Kael su chip sin número; Mira, nada.
-    expect(seen(kael.id).map((d) => d.text)).toContain('🎲 Juego de manos');
+    expect(seen(kael.id).map((d) => d.text)).toContain('🎲 Juego de manos (tirada oculta)');
     expect(seen(mira.id)).toHaveLength(0);
     // Y se lo lleva ahora, sin el «needs_reaction» de antes.
     const moved = JSON.parse(executeTool(ctx, 'transfer_item', { instance_id: item.id, to_type: 'character', to_id: kael.id, quantity: null, slot: null, equip_slot: null })) as Record<string, unknown>;

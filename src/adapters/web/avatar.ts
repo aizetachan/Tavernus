@@ -162,7 +162,7 @@ export const AVATAR_SCRIPT = `
       var b = document.createElement('button');
       b.type = 'button';
       b.setAttribute('aria-pressed', x.chosen ? 'true' : 'false');
-      b.title = 'Versión ' + x.v + (x.source === 'describe' ? ' (descrita): ' + x.look : x.source === 'auto' ? ' (la primera)' : '') + (x.chosen ? ' · elegida' : '');
+      b.title = 'Versión ' + x.v + (x.source === 'describe' ? ' (descrita): ' + x.look : x.source === 'auto' ? ' (la primera)' : '') + (x.chosen ? ', elegida' : '');
       b.setAttribute('aria-label', b.title);
       if (x.src) { var i = document.createElement('img'); i.alt = ''; i.src = x.src; b.appendChild(i); b.addEventListener('click', function () { if (!x.chosen) send({ action: 'choose', v: x.v }); }); }
       else { b.textContent = '…'; b.disabled = true; }

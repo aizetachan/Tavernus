@@ -202,7 +202,7 @@ describe('4. lo que se pacta con quien cobra la deuda queda en la deuda', () => 
     const told = ctx.progress.filter((p) => p.quest?.id === debt.id);
     expect(told).toHaveLength(1);
     const notice = noticeOf({ action_type: 'progress_story', narration_private: told[0]!.text, observable: null, payload: { quest: told[0]!.quest } });
-    expect(notice).toMatchObject({ text: 'La misión cambia · «Deuda con el regidor»', tab: 'journal' });
+    expect(notice).toMatchObject({ text: 'La misión cambia: «Deuda con el regidor»', tab: 'journal' });
     // Repetirlo no lo apunta dos veces.
     executeTool(ctxFor(engine, c, text), 'give_quest', { title: 'Apagar las luces', npc_id: 'npc_garran', heard: null, text: 'x', objective: 'Subir al Granero Quemado, al otro lado del Soto, y apagar las luces.', reward: null });
     expect(journalOf(engine, c.id).quests.active.find((q) => q.kind === 'debt')!.history).toHaveLength(2);

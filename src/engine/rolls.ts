@@ -43,14 +43,20 @@ export interface ShownRoll {
   note?: string;
 }
 
-/** Desglose con el resultado: «d20 [6] + 1 = 7 vs CD 12 → fallo (1 natural)». */
+/** Lo que se dice de una tirada oculta: que se ha tirado y que el resultado no se enseña (arreglo 36). */
+export const HIDDEN_ROLL_NOTE = 'tirada oculta';
+
+/**
+ * Desglose con el resultado: «d20 [6] + 1 = 7 vs CD 12 → fallo (1 natural)». La oculta dice que lo es: «Percepción
+ * (tirada oculta)». La coletilla va tras punto y coma, sin «·» («éxitos 1/3, fallos 0/3»).
+ */
 function body(r: ShownRoll): string {
-  if (r.hidden) return r.label;
+  if (r.hidden) return `${r.label} (${HIDDEN_ROLL_NOTE})`;
   const dice = r.dice.replace(/ vs CD \d+$/, '');
   const dc = r.dc != null ? ` vs CD ${r.dc}` : '';
   const out = r.outcome ? ` → ${r.outcome}` : '';
   const nat = r.natural && !/natural|crítico/.test(r.outcome ?? '') ? ` (${r.natural} natural)` : '';
-  return `${r.label}: ${dice}${dc}${out}${nat}${r.note ? ` · ${r.note}` : ''}`;
+  return `${r.label}: ${dice}${dc}${out}${nat}${r.note ? `; ${r.note.replace(/\s*·\s*/g, ', ')}` : ''}`;
 }
 
 /** Una prueba de PJ (rules.ts) como tirada a la vista; la CD no se dice (el máster la fija oculta). */
@@ -80,10 +86,11 @@ export function rollTextForRoller(r: ShownRoll): string {
   return `🎲 ${body(r)}`;
 }
 
-/** Lo que leen los demás: quién tira delante. */
+/** Lo que leen los demás: quién tira delante («🎲 Bruno tira persuasión: d20 [2] + 3 = 5 → fallo»), sin «·». */
 export function rollTextForOthers(world: World, r: ShownRoll): string {
   const who = world.characters.get(r.roller_id)?.name ?? 'Alguien';
-  return `🎲 ${who} · ${body(r)}`;
+  const b = body(r);
+  return `🎲 ${who} tira ${b.charAt(0).toLowerCase()}${b.slice(1)}`;
 }
 
 /**

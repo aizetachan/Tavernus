@@ -180,7 +180,7 @@ describe('misiones que se aceptan solas', () => {
     expect(out['ok']).toBe(true);
     expect(ctx.progress).toEqual([{ kind: 'quest', text: 'Nueva misión: «El perro de Brenna». Te lo pide Brenna.', quest: { id: 'gq_perro_brenna', title: 'El perro de Brenna', event: 'open', why: 'Te lo pide Brenna' } }]);
     expect(noticeOf({ action_type: 'progress_quest', narration_private: ctx.progress[0]!.text, observable: null, payload: { quest: ctx.progress[0]!.quest } }))
-      .toEqual({ text: 'Nueva misión · «El perro de Brenna»', link: 'ver en el Diario', tab: 'journal', quest: { id: 'gq_perro_brenna', event: 'open', why: 'Te lo pide Brenna' } });
+      .toEqual({ text: 'Nueva misión: «El perro de Brenna»', link: 'ver en el Diario', tab: 'journal', quest: { id: 'gq_perro_brenna', event: 'open', why: 'Te lo pide Brenna' } });
     const q = journalOf(engine, c.id).quests.active.find((x) => x.kind === 'given')!;
     expect(q).toMatchObject({ title: 'El perro de Brenna', status: 'active', giver: 'Brenna', reward: '10 monedas', steps: [{ text: 'Encontrar al perro', done: false }] });
     expect(q.origin).toMatchObject({ kind: 'giver', text: 'Te lo pide Brenna' });
