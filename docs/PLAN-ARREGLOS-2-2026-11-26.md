@@ -264,8 +264,8 @@ que cada test vea solo la suya).
 
 - **E (`narrate.ts`, `maskNpcNames`).** Que no cambie por el oficio el nombre de un NPC que se llama como un PJ de la
   partida: «El jornalero habla con Garrán» en lo que lee Bruno es Ciro el jugador, enmascarado en la entrega
-  (`events.ts`, `readerText`). En el cierre del máster ya lo evito (`tools.ts`, `keep`), pero los avisos del motor pasan
-  por ahí. Lo mismo para el punto 2 de E: la guarda de presencia lee `payload.npc_id` y el `location_id` del `npc_move`
+  (`events.ts`, `readerText`). En el cierre del máster ya lo evito (`tools.ts`, `keep`), y el paquete H lo arregla en
+  `readerText`; si se hace en `maskNpcNames`, vale para todo (diario, tablón, prólogo). Lo mismo para el punto 2 de E: la guarda de presencia lee `payload.npc_id` y el `location_id` del `npc_move`
   (salida en el sitio de origen, llegada en el de destino); si E mantiene eso, no hay que tocar nada aquí, aunque cambie
   el texto.
 - **H (`fastpath.ts`, `extratalk.ts`).** Una acción que nombra a un JUGADOR que se llama como un NPC de relleno (Ciro)
