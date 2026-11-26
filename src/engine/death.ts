@@ -109,6 +109,18 @@ export function isStable(c: Character): boolean {
   return c.status === 'unconscious' && c.hp_current === 0 && (c.dying?.stable_until_game_s != null || c.conditions.some((x) => x.name === STABLE));
 }
 
+/**
+ * El estado de un PJ caído, inequívoco, en una línea para el contexto del máster (arreglo 38 del 26-11-2026): a 0 PG no
+ * abre los ojos, no habla, no se levanta ni lanza nada; solo le levanta una curación (heal), un 20 natural en su salvación
+ * o, estable, pasar las horas. null si está en pie (o muerto: eso lo cuenta la vuelta).
+ */
+export function downStateLine(c: Character): string | null {
+  if (c.hp_current > 0 || c.status !== 'unconscious') return null;
+  if (isStable(c)) return `${c.name} está a 0 PG, INCONSCIENTE y ESTABLE: no tira salvaciones; no abre los ojos, no habla ni actúa hasta que le curen (heal) o pasen sus horas (el servidor le despierta con 1 PG).`;
+  const d = c.dying;
+  return `${c.name} está a 0 PG, INCONSCIENTE y MURIENDO${d ? ` (salvaciones: éxitos ${d.success}/3, fallos ${d.fail}/3)` : ''}: no abre los ojos, no habla, no se levanta ni lanza conjuros. Un éxito no le levanta; solo heal, stabilize (Medicina CD 10) o un 20 natural en su salvación, que tira el servidor.`;
+}
+
 export function worldNow(world: World): number {
   return GameClock.fromCampaign(world.campaign).gameNow();
 }
