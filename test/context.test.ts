@@ -48,7 +48,7 @@ describe('contexto del máster: pistas y tablón', () => {
     const brezal = section(ctxOf(engine), 'Brezal');
     const jobLines = brezal.split('\n').filter((l) => /\[job_\w+\]/.test(l));
     expect(jobLines).toHaveLength(1);
-    expect(jobLines[0]).toMatch(/^Tablón: .+\[job_\w+\] · .+\[job_\w+\] · .+\[job_\w+\]\.$/);
+    expect(jobLines[0]).toMatch(/^Tablón: .+\[job_\w+\]; .+\[job_\w+\]; .+\[job_\w+\]\.$/);
     expect(brezal).not.toContain('Paga');
   });
 

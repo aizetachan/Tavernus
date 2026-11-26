@@ -1835,7 +1835,7 @@ export class Engine {
   private noteBoard(c: Character, nowG: number): void {
     const fresh = readBoard(this.world, c, nowG);
     this.emitProgress(c, fresh.map((j) => {
-      const why = `Aviso del tablón: lo pide ${this.world.npc(j.giver_npc_id).name} · ${money(this.world, j.reward_coins)}`;
+      const why = `Aviso del tablón: lo pide ${this.world.npc(j.giver_npc_id).name}, paga ${money(this.world, j.reward_coins)}`;
       return { kind: 'quest', text: `Encargo disponible: «${j.title}». ${why}.`, quest: { id: j.id, title: j.title, event: 'available', why } };
     }));
   }

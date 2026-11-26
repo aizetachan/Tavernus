@@ -292,7 +292,7 @@ function backText(engine: Engine, actor: Character): string {
 }
 
 function boardLine(jobs: string[]): string {
-  return jobs.length ? `Tablón: ${jobs.join(' · ')}.` : 'Tablón: vacío.';
+  return jobs.length ? `Tablón: ${jobs.join('; ')}.` : 'Tablón: vacío.';
 }
 
 export function actionContext(engine: Engine, actor: Character, text: string, roll?: RollContext, intro?: { origin: string; welcome: string; prologue?: string }, scene?: Scene, decisive?: DecisiveResponse, talk?: TalkPlan | null, conflict?: ConflictPlan | null): string {

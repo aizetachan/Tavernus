@@ -717,7 +717,7 @@ const RE_BLOW = /\b(punetazo|patada|bofetada|tortazo|cabezazo|codazo|rodillazo|g
 /** Ropa que lleva puesta: arrancársela no es quitarle algo de valor (robo), es agarrarle (agresión). */
 const RE_CLOTHES = /\b(camisa|camison|ropa|blusa|blusas|bluson|jubon|chaqueta|capa|pantalon|calzas|falda|mandil|delantal|vestido|sayo|tunica|chaleco|manga|cuello)\b/;
 /** Quien solo habla de ello, pregunta o lo niega no lo está haciendo. */
-const RE_NOT = /\b(no (le |la |lo |se lo |se la )?(robo|quito|empujo|toco|agarro|cojo)|sin (robar|tocar)|si (le|la|lo) (robo|quito|empujo|toco)|quien (me |le |te |nos )?(ha )?robado|me han robado|nos han robado|te han robado|le han robado)\b/;
+const RE_NOT = /\b(no (le |la |lo |se lo |se la )?(robo|quito|empujo|toco|agarro|cojo)|sin (robar|tocar)|si (le|la|lo) (robo|quito|empujo|toco)|quien (me |le |te |nos )?(ha )?robado|me han robado|nos han robado|te han robado|le han robado|por si (alguien |me |nos )?(me |nos )?rob\w+|que (no )?(me |nos )rob\w+|si (me |nos )rob\w+|miedo a que (me |nos )rob\w+)\b/;
 
 const plainText = (t: string) => ` ${norm(t).replace(/[«»"“”¡!¿.,;:()]/g, ' ').replace(/\s+/g, ' ').trim()} `;
 

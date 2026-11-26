@@ -1297,8 +1297,14 @@ export function parseInsult(text: string, target: Npc | null): Npc | null {
 const STEAL = /\b(?:rob\w*|hurt\w*|birl\w*|mang\w*|sise\w*|afan\w*|arrebat\w*|quitarle|quitarsel\w*|le quito|me lo quedo|me la quedo|le cojo|cojo su|meto la mano en su)\b/;
 
 /** ¿La acción es quitarle algo a alguien («le robo la bolsa»)? */
+/** Temer que le roben, negarlo o contar que le han robado no es robar («escondo mis monedas por si alguien me roba»). */
+const STEAL_NOT = /\b(?:por si (?:alguien |me |nos )?(?:me |nos )?rob\w+|que (?:no )?(?:me |nos )rob\w+|si (?:me |nos )rob\w+|miedo a que (?:me |nos )rob\w+|me han robado|nos han robado|no (?:le |la |lo )?robo)\b/;
+
+/** ¿La acción es quitarle algo a alguien («le robo la bolsa»)? */
 export function readsAsTheft(text: string | null | undefined): boolean {
-  return Boolean(text) && STEAL.test(plain(text!));
+  if (!text) return false;
+  const t = plain(text);
+  return STEAL.test(t) && !STEAL_NOT.test(t);
 }
 
 const VIOLENCE = /\b(?:atac\w*|ataqu\w*|golpe\w*|peg(?:o|ar|arle|arla|arlo)|mat(?:o|ar|arle|arla|arlo)|apunal\w*|acuchill\w*|dispar\w*|hier(?:o|e)|herir\w*|lanz\w*|proyectil|descarga|conjuro|hechizo|empuj\w*|derrib\w*|me lanzo|cargo contra|huy\w*|escap\w*|corro|salgo corriendo)\b/;
