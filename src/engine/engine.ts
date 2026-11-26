@@ -28,7 +28,7 @@ import { TURN_WINDOW_MS, windowClashes, type Clash } from './turnwindow.js';
 
 import { encounterAt, hostilesAt, recentCombatTag } from './encounter.js';
 
-import { GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
+import { dashForNpc, GROUP_WINDOW_MS, isLeaveTalk, namedNpc, npcsHere, npcTarget, parseTurn, presentPcs, ROUND_MS, talkersOf, talkingWith, tenseScene } from './scene.js';
 import { settleAudience } from './audience.js';
 import { bounceOff, parseCrossing } from './barrier.js';
 import { aEs, approachLine, arrivalNarration, describeSurroundings, descriptorOf, fmtDuration, listEs, maskUnknownNames, nameRe, npcNameForms, whereAmI, whoIsHere } from './narrate.js';
@@ -69,7 +69,7 @@ import { characterNameProblem, cleanCharacterName, newCharacter, resolveCharacte
 import type { Advantage, CheckResult } from './dice.js';
 import { World } from './world.js';
 import { bodiesAt, bodyStateOf, canLoot, damageCharacter, deathRules, isDying, isStable, lootBody, npcDeathReport, NPC_DOWN_HINT, respawn, respawnSpotId, respawnWaitS, rollDeathSave, SAVE_EVERY_CALM_S, SAVE_EVERY_THREAT_S, stabilize, stabilizeIfAway, wakeIfRested, wakeNpcs, type DeathSave } from './death.js';
-import { applyRest, cannotRest, parseRest, planRest, type RestKind, type RestPlan } from './rest.js';
+import { applyRest, cannotRest, parseRest, parseWake, planRest, type RestKind, type RestPlan } from './rest.js';
 import { hhmm } from './schedule.js';
 import { migrateExtras, placeExtraAt } from './extras.js';
 import { extraReply, lookPrompt, OFFTOPIC_TAG } from './extratalk.js';
@@ -955,7 +955,9 @@ export class Engine {
       text = asSpeech(text);
       if (!text) return { ok: false, text: '¿Qué dices?' };
     } else if (/^[—–-]/.test(text.trim()) && parseSay(text)) {
-      return this.say(characterId, text);
+      // La raya es el chat entre jugadores, salvo que vaya a un NPC (scene.ts, dashForNpc): eso se lo contesta él (arreglo 35).
+      if (!dashForNpc(this.world, this.world.character(characterId), text)) return this.say(characterId, text);
+      text = asSpeech(text);
     }
     await this.tick();
     const c = this.world.character(characterId);
@@ -1078,6 +1080,8 @@ export class Engine {
 
   /** ¿Lo resuelve el parser plano, sin máster? */
   private isMechanical(c: Character, text: string): boolean {
+    // Despierto, «me despierto en el calabozo y exijo…» es una acción (rest.ts, parseWake): al máster (arreglo 35).
+    if (c.status !== 'asleep' && /^(?:despierto|despertar|me despierto|wake)\b/i.test(text.trim()) && !parseWake(text)) return false;
     return Engine.MECHANICAL.test(text) || (Boolean(c.transit) && Engine.STOPS.test(text));
   }
 
@@ -3251,7 +3255,9 @@ export class Engine {
     if (isLeaveTalk(text) && (!/^(?:me despido|despedirme)\b/i.test(text.trim()) || [...this.world.npcs.values()].some((n) => n.talking_to?.character_id === c.id || n.talking_to?.with?.includes(c.id)))) return Promise.resolve(this.leaveTalk(c, true));
     // Esperar o unirse, con el botón o con sus palabras: sin máster y sin repetir el gesto del NPC.
     const turn = parseTurn(text);
-    if (turn && (!turn.loose || this.busyNpcFor(c, turn.who, events, nowG))) return Promise.resolve(this.takeTurn(c, turn.kind, turn.who, events, nowG));
+    // Sin NPC con quien esperar o unirse (se ha ido, no se entiende quién), no «¿Con quién?»: al máster (arreglo 35).
+    const turned = turn && (!turn.loose || this.busyNpcFor(c, turn.who, events, nowG)) ? this.takeTurn(c, turn.kind, turn.who, events, nowG) : null;
+    if (turned) return Promise.resolve(turned);
     const current = talkingWith(this.world, events, c, nowG);
     const target = npcTarget(this.world, events, c, text, nowG);
     // Moverse o dirigirse a otro NPC: deja la conversación en la que estaba.
@@ -3298,11 +3304,11 @@ export class Engine {
   }
 
   /** «Esperar turno» (cola real: aviso cuando quede libre) o «Unirme a la conversación». */
-  private takeTurn(c: Character, kind: 'wait' | 'join', who: string, events: readonly GameEvent[], nowG: number): ActionResult {
+  private takeTurn(c: Character, kind: 'wait' | 'join', who: string, events: readonly GameEvent[], nowG: number): ActionResult | null {
     const named = who ? namedNpc(this.world, c, who) : null;
     const busy = npcsHere(this.world, c).filter((n) => talkersOf(this.world, events, n, nowG).length > 0);
     const n = named ?? (busy.length === 1 ? busy[0]! : null);
-    if (!n) return { ok: false, text: '¿Con quién?' };
+    if (!n) return null;
     const label = this.npcLabel(c, n);
     const talkers = talkersOf(this.world, events, n, nowG);
     if (!talkers.length || talkers.includes(c.id)) {
@@ -4261,7 +4267,7 @@ export class Engine {
     // Solo la orden («quién», «dónde estoy»): «¿dónde está el granero?» no pregunta por el sitio propio.
     if (/^(quien|quién|who)(?:\s+(?:hay|hay aquí|está aquí))?[\s.!?]*$/.test(lower)) return { ok: true, text: whoIsHere(this.world, this.clock, c, nowG) };
     if (/^(donde|dónde|where)(?:\s+(?:estoy|me encuentro))?[\s.!?]*$/.test(lower)) return { ok: true, text: [whereAmI(this.world, this.clock, c, nowG), this.aheadNotice(c)].filter(Boolean).join('\n') };
-    if (/^(despierto|despertar|me despierto|wake)\b/.test(lower)) {
+    if (/^(despierto|despertar|me despierto|wake)\b/.test(lower) && (c.status === 'asleep' || parseWake(text))) {
       if (c.status !== 'asleep') return { ok: false, text: 'Ya estás despierto.' };
       c.status = 'active';
       c.veiled = false;

@@ -197,7 +197,7 @@ describe('arreglo 35: despertar y la raya', () => {
  * Lo mismo por el motor entero. Necesita los tres cambios de una línea en `engine.ts`, que no es de este paquete:
  * `docs/PLAN-ARREGLOS-2-2026-11-26.md`, «Estado del paquete H». Al aplicarlos, quitar el `.skip`.
  */
-describe.skip('arreglo 35 por el motor (con el parche de engine.ts)', () => {
+describe('arreglo 35 por el motor (con el parche de engine.ts)', () => {
   it('la raya a un NPC (charlatán T1) llega al máster y no se queda en «Dices: «…»»', async () => {
     const { engine, kael, calls } = await bar();
     const r = await engine.act(kael.id, '—Brenna, ¿por qué te tiembla tanto la voz al ver un poco de lacre?');
