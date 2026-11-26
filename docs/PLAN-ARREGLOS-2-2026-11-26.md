@@ -202,3 +202,67 @@ sus tests. Nada en `src/`.
    `--baseline data/local/autoplay/20261126-0418`, `-0442` y `-0602`. Unos 3,5 $. Lo que se mira: las tres categorías nuevas
    del juez (esperadas cerca de cero), incoherencia con el contexto (9,4 por 100 en la pasada 4), `conflict_act` por acción
    inocente (0), turnos duplicados en pareja (0), enlatadas repetidas (0).
+
+## Estado del paquete H
+
+Rama `claude/arreglos-h-pareja-e19f16`, cinco commits sobre 806cd69, subidos a `origin` sin PR. `npm run typecheck` y la
+suite entera (`npx vitest run --maxWorkers=2` bajo el tope de 3 GB: 132 ficheros, 1.781 tests y 3 saltados, los del parche de `engine.ts`) en verde.
+
+**Hecho**
+
+- **35, respuestas rápidas que contestan** (8a00864, `test/respuestas-rapidas-2026-11-26.test.ts`, con los casos de las
+  tandas). Vecinos de relleno (`extratalk.ts`): la frase de despachar («No tengo tiempo para charlas», «Sigue tu camino»)
+  solo a la charla y una vez por charla; una pregunta, pedir trabajo, un favor o convencerle van al máster, y lo que ya
+  dijo no lo repite. Lo que no es hablarle (trepar, beber, soltar a Ilse, arrebatar el cubo) o va a otro («le pregunto a
+  la vendedora» con el sereno delante) tampoco lo contesta el guion. La agenda («El señor regidor recibe por la mañana»,
+  «La escapada al granero: cada día a las 23:00») solo a quien pregunta cuándo: ese «rumor de relleno» del punto 5 del
+  paquete G salía de aquí, no de `reactions.ts`. «Con calma» ya no es disculparse (`talk.ts`) ni «sí que hace frío» es
+  mirarle. NPC ocupado (`scene.ts`): llamar por su nombre al compañero («¿Cuánto vale, Bruno? Y si convenzo a Garrán…»,
+  «Oye Bruno, …») no es hablarle al NPC, y «espero a que Brenna termine» tampoco; lo que va de verdad al NPC sigue con su
+  gesto de esperar.
+- **33, lo que lee el compañero** (a91fa8c, `test/pareja-lectura-2026-11-26.test.ts`, en Brezal con los cierres de C2 y
+  C12). Veredicto: **es la herramienta**. El motor entrega a cada uno una vez su parte y lo común, sin nada del otro en
+  segunda persona, por orden de evento, y la web pinta esa entrega. La ventana de turno (`engine.ts` flushWindow)
+  resuelve los `act()` de todos con el ActionResult del primero; la web no usa su texto (`server.ts` reply, probado), pero
+  `scripts/autoplay.ts` lo junta con lo que llega (seenSince) y de ahí el párrafo del otro en segunda persona, lo común
+  dos veces y el orden invertido (E2, E6). Lo arregla el paquete I (H13); se lo dejé escrito en la carpeta de notas
+  (`paquete-h-veredicto-33.md`). Arreglo del motor que salió del test: el compañero leía a Ciro el jugador como «el
+  jornalero» (el NPC Ciro, que no conoce); `readerText` (`events.ts`) ya no enmascara el nombre de un NPC que se llama
+  como un jugador (`pcNameClashes`, exportada).
+- **36, parte de la web** (3dbcc7f, `test/tiradas-web-2026-11-26.test.ts`). `rolls.ts` (de nadie): «🎲 Percepción (tirada
+  oculta)», «🎲 Bruno tira persuasión: d20 [2] + 3 = 5 → fallo», salvaciones «…; éxitos 1/3, fallos 0/3». La web pasa el
+  historial por `rollNoticeText` para que lo de antes se lea igual. Fuera el «·» de toda `src/adapters/web` (avisos de
+  misión, hoja, mapa, tablón, tarjeta de vuelta, botón del dado, avatares, voz, créditos, página de estado), con un test
+  que recorre la carpeta y falla si vuelve uno visible.
+- **42, parte de la web** (29804dd, `test/tablon-aviso-2026-11-26.test.ts`). La web ya pintaba el evento `board` como aviso
+  que lleva al Tablón por su `action_type`; ahora también por la etiqueta si no tiene actor, y el test lo fija en directo y
+  en el historial, con la lista de hoy y con el aviso corto que pondrá el paquete E.
+
+**No cerrado**
+
+- Tres respuestas del 35 están en `engine.ts`: «Dices: «…»» sin réplica (la raya a un NPC, charlatán T1 y T3), «Ya estás
+  despierto» (rompejuegos T35) y «¿Con quién?» (pareja pícaro C9). Dejé las funciones (`scene.ts` dashForNpc, `rest.ts`
+  parseWake) y el parche de tres cambios de una línea en `docs/parches/paquete-h-engine-35.diff` (`git apply` limpio sobre
+  806cd69), con sus tests en `describe.skip` al final de `test/respuestas-rapidas-2026-11-26.test.ts`; los probé con el
+  parche aplicado (verdes) y sin él (fallan).
+- M1, M2, M27 y M36 (pareja metódico) no son preguntas al compañero: van a Ilse mientras habla con Elmo, el compañero de
+  Mirela, y siguen con «te hace un gesto para que esperes». Si se quiere que el compañero entre en la charla sin el
+  botón, es `npcBusy`/`sceneRoute` en `engine.ts` (unirle a la conversación cuando quien la lleva es de su grupo).
+- Fuera de la lista del paquete toqué `scene.ts` (a quién va la acción) y `rolls.ts` (el texto de las tiradas), que no son
+  de ningún paquete; la coordinadora debería mirarlos al fusionar por si otro paquete también los tocó.
+
+**Cambios que pido en ficheros de otros paquetes**
+
+- `engine.ts` (E o coordinadora): aplicar `docs/parches/paquete-h-engine-35.diff` y quitar el `.skip` de «arreglo 35 por el
+  motor». Y, si se quiere, que `flushWindow` resuelva a cada uno con su propio texto (`readerText`) en vez del
+  ActionResult del primero: la web no lo necesita, pero cualquier otro cliente se equivocaría igual que la herramienta.
+- `engine.ts` (E): `downText` dice «(éxitos 1/3 · fallos 0/3)» y la nota de la salvación (línea 3685) «éxitos 1/3 · fallos
+  0/3» (la tirada ya la limpia `rolls.ts`, el texto de `downText` no). En el test del 33, la narración de Bruno empieza por
+  «Te acercas a la barra.» estando él y Garrán en la mesa del fondo: es la línea de aproximación del arreglo 41.
+- `src/engine/journal.ts` (E): «6 de plata · +1 de reputación», el título «I · El agua turbia», la recompensa y el resumen
+  (líneas 388, 545, 550 y 794) llevan «·»; el Diario de la web los enseña tal cual.
+- `src/ai/tools.ts` (F): el texto propio del actor lo enmascara `log_event` (línea 2539) sin la excepción del nombre
+  compartido; con `pcNameClashes(world)` (`events.ts`) en `keep`, Bruno dejaría de ver a Ciro como «el jornalero» también
+  en su propia narración (pareja pícaro B1 a B31, patrón 4).
+- `scripts/autoplay.ts` (I): con `r.event`, no usar `r.text` y leer solo las entregas desde `seq`, por orden de `seq`, como la
+  web (H13).

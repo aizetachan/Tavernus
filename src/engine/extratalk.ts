@@ -283,11 +283,13 @@ export function extraReply(world: World, events: readonly GameEvent[], pc: Chara
   // Lo que no es charla simple: al máster, con el guion corto.
   if (plan.intent === 'insult' || plan.intent === 'threat' || plan.intent === 'identity') return null;
   // Ni charla: hace otra cosa (trepa, bebe, le arrebata el cubo) o le habla a otro. Al máster (arreglo 35).
-  if (plan.talky === false || asksSomeoneElse(world, n, text)) return null;
+  // La compra sin nombrarle (buyingFrom) es un plan mínimo: comercio y nada más.
+  const full = 'text' in plan ? plan : null;
+  if (full?.talky === false || asksSomeoneElse(world, n, text)) return null;
   if (DOES.test(norm(text)) && plan.intent !== 'trade') return null;
   // Lo que pidió de verdad (el relleno lo resume en «chat»): una pregunta, trabajo o un favor piden respuesta.
-  const tx = 'text' in plan ? plan.text : null;
-  const asked: TalkIntent = !tx || !('topics' in plan) ? 'trade' : tx.question || tx.request || tx.asks_work ? 'question' : intentOf(plan.state, tx, plan.topics, text);
+  const tx = full?.text ?? null;
+  const asked: TalkIntent = !full || !tx ? 'trade' : tx.question || tx.request || tx.asks_work ? 'question' : intentOf(full.state, tx, full.topics, text);
 
   const refer = n.script.refer_to.map((id) => world.npcs.get(id)).filter((x): x is Npc => Boolean(x) && x!.status === 'alive');
   const referTo = refer[seed % Math.max(1, refer.length)];

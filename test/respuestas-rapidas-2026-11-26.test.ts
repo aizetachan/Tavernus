@@ -134,6 +134,8 @@ describe('arreglo 35: las frases de los vecinos contestan o no salen', () => {
     // La agenda («La escapada al granero: cada día a las 23:00») no es respuesta a «llévame al granero».
     expect(reply('Le suelto la muñeca a Ilse, me incorporo y le digo a la lavandera: «Basta de rodeos, sé dónde está la Brasa; llévame al granero ya y acabemos con esto».')).toBeNull();
     expect(reply('Lavandera, llévame al granero ya y acabemos con esto.')?.line ?? '').not.toMatch(/23:00/);
+    // A quien pregunta la hora, sí.
+    expect(reply('Lavandera, ¿a qué hora es la escapada al granero?')?.line).toMatch(/escapada al granero.*23:00/i);
     expect(reply('Pues ya estoy harto de tanta charla: me planto frente a la lavandera, le arrebato el cubo y le grito que me diga ya dónde está la Brasa.')).toBeNull();
   });
 
