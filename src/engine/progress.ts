@@ -9,7 +9,7 @@ import { consumeItem, spawnItem, transferItem } from './inventory.js';
 import { refusesService } from './crime.js';
 import type { Character, Id, Job, Npc, Placement } from './model.js';
 import { coinsOf, money, pay, receive } from './money.js';
-import { buyPrice, listPrice, putInStock, shopClosed, shopReach, stockCount, takeFromStock } from './shop.js';
+import { buyersLine, listPrice, npcBuyPrice, putInStock, shopClosed, shopReach, stockCount, takeFromStock } from './shop.js';
 import { priceFor } from './standing.js';
 import { discoverSpot } from './spots.js';
 import type { World } from './world.js';
@@ -53,19 +53,56 @@ export function grantClue(world: World, c: Character, clueId: Id): { ok: true; e
   return { ok: true, events };
 }
 
+/** Lo que lleva encima el PJ de lo que pide un encargo de entrega (manos, cinto, mochila y lo que haya dentro). */
+export function jobCarried(world: World, c: Character, job: Job): number {
+  if (job.kind !== 'deliver' || !job.deliver) return 0;
+  return world.itemsCarriedBy(c.id).filter((i) => i.item_id === job.deliver!.item_id).reduce((a, i) => a + i.quantity, 0);
+}
+
+/** Dónde está alguien, para un hint: «en Taberna del Jabalí». */
+function whereIs(world: World, npc: Npc): string {
+  if (npc.location.type !== 'spot') return 'lejos';
+  const sp = world.spots.get(npc.location.id);
+  const loc = sp ? world.locations.get(sp.location_id) : undefined;
+  return loc ? `en ${loc.name}` : 'en otro sitio';
+}
+
+/**
+ * Cómo va un encargo del tablón para el PJ (arreglo 26): listo para cobrar si lleva lo pedido y quien lo pidió está
+ * con él; si no, qué falta, dicho con lo que el jugador no puede adivinar (la cantidad, que es en mano, dónde está).
+ * El contexto del máster (talk.ts) y el hint de complete_job salen de aquí.
+ */
+export function jobReadiness(world: World, c: Character, job: Job): { ready: boolean; line: string } {
+  const giver = world.npc(job.giver_npc_id);
+  const here = world.characterSpot(c)?.id === giver.location.id && giver.status === 'alive';
+  const notHere = `${giver.name} no está con el actor (está ${whereIs(world, giver)}): se le entrega en mano y en persona`;
+  if (job.kind === 'deliver' && job.deliver) {
+    const name = world.itemDef(job.deliver.item_id).name;
+    const have = jobCarried(world, c, job);
+    const need = job.deliver.quantity;
+    if (have < need) return { ready: false, line: `pide ${need} de ${name} y el actor lleva ${have} encima: faltan ${need - have}. Solo cuenta lo que lleva encima (manos, cinto, mochila), no lo que dejó en otro sitio${here ? '' : `; y ${notHere}`}` };
+    if (!here) return { ready: false, line: `lleva ${have} de ${name}, lo que pide; falta llevárselo: ${notHere}` };
+    return { ready: true, line: `listo para cobrar: lleva ${need} de ${name} delante de ${giver.name}; complete_job ${job.id} con npc_id ${giver.id} y se lo da, cobra y suma reputación` };
+  }
+  if (!here) return { ready: false, line: `hay que contárselo a ${giver.name} en persona; ${notHere}` };
+  return { ready: true, line: `listo para cobrar si ya lo ha hecho: complete_job ${job.id} con npc_id ${giver.id}` };
+}
+
 /** Completa un encargo del tablón. Los de entrega se validan y cobran aquí. */
 export function completeJob(world: World, c: Character, jobId: Id, npcId: Id | null): { ok: true; events: ProgressEvent[] } | { ok: false; reason: string } {
   const job = world.campaign.jobs.find((x) => x.id === jobId);
-  if (!job) return { ok: false, reason: `encargo desconocido: ${jobId}` };
+  if (!job) {
+    const board = activeJobs(world).map((j) => `${j.title} [${j.id}]`).join(', ');
+    return { ok: false, reason: `encargo desconocido: ${jobId}. En el tablón: ${board || 'nada'}` };
+  }
   if (!world.campaign.board.active_job_ids.includes(jobId)) return { ok: false, reason: 'ese encargo no está en el tablón ahora' };
   if (c.completed_jobs.includes(jobId)) return { ok: false, reason: 'ya lo completó; cada encargo suma una vez' };
   const giver = world.npc(job.giver_npc_id);
-  if (npcId !== job.giver_npc_id) return { ok: false, reason: `hay que entregarlo a ${giver.name}` };
-  if (world.characterSpot(c)?.id !== giver.location.id) return { ok: false, reason: `${giver.name} no está aquí` };
+  if (npcId !== job.giver_npc_id) return { ok: false, reason: `lo pidió ${giver.name} [${giver.id}]: se le entrega a quien lo pidió, en mano` };
+  const state = jobReadiness(world, c, job);
+  if (!state.ready) return { ok: false, reason: `aún no: ${state.line}` };
   if (job.kind === 'deliver' && job.deliver) {
     const have = world.itemsCarriedBy(c.id).filter((i) => i.item_id === job.deliver!.item_id);
-    const total = have.reduce((a, i) => a + i.quantity, 0);
-    if (total < job.deliver.quantity) return { ok: false, reason: `faltan ${job.deliver.quantity - total} de ${world.itemDef(job.deliver.item_id).name}` };
     let left = job.deliver.quantity;
     for (const i of have) {
       if (left <= 0) break;
@@ -78,7 +115,7 @@ export function completeJob(world: World, c: Character, jobId: Id, npcId: Id | n
   c.completed_jobs.push(jobId);
   receive(world, c.id, job.reward_coins);
   const rep = addReputation(world, c, world.campaign.achievement.faction_id, job.reward_reputation);
-  const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${money(world, job.reward_coins)}. Reputación en Brezal: ${rep}.`, quest: { id: job.id, title: job.title, event: 'done', why: `se lo ${job.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${giver.name} · +${money(world, job.reward_coins)}` } }];
+  const events: ProgressEvent[] = [{ kind: 'job', text: `Encargo completado: ${job.title}. +${money(world, job.reward_coins)}. Reputación en Brezal: ${rep}.`, quest: { id: job.id, title: job.title, event: 'done', why: `se lo ${job.kind === 'deliver' ? 'entregaste' : 'contaste'} a ${giver.name}, +${money(world, job.reward_coins)}` } }];
   const ach = checkAchievement(world, c);
   if (ach) events.push(ach);
   return { ok: true, events };
@@ -182,11 +219,17 @@ export function sellToNpc(world: World, c: Character, npcId: Id, instanceId: Id,
   if (no) return { ok: false, reason: no };
   const inst = world.itemInstances.get(instanceId);
   if (!inst) return { ok: false, reason: 'ese objeto no existe' };
-  if (!world.itemsCarriedBy(c.id).some((i) => i.id === inst.id)) return { ok: false, reason: 'eso no lo llevas encima' };
+  if (!world.itemsCarriedBy(c.id).some((i) => i.id === inst.id)) return { ok: false, reason: `${world.itemDef(inst.item_id).name} no lo lleva encima: solo se vende lo que lleva el actor (en las manos, el cinto o la mochila); lo que dejó en otro sitio, primero hay que ir a cogerlo` };
   // Una bolsa con dinero dentro (money.ts) no se vende llena: el dinero iría con ella.
   if (typeof inst.state['coins'] === 'number' && inst.state['coins'] > 0) return { ok: false, reason: `primero saca el dinero de ${world.itemDef(inst.item_id).name}` };
-  const base = npc.shop ? buyPrice(world, npc, inst.item_id) : npc.buys.find((b) => b.item_id === inst.item_id)?.price ?? null;
-  if (base === null) return { ok: false, reason: `${npc.name} no compra ${world.itemDef(inst.item_id).name}` };
+  const base = npcBuyPrice(world, npc, inst.item_id);
+  if (base === null) {
+    // Arreglo 25: el hint dice quién lo compraría, para que el NPC lo diga en la ficción y no quede en «nadie».
+    const name = world.itemDef(inst.item_id).name;
+    const who = buyersLine(world, inst.item_id, npc.id);
+    const buys = npc.buys.length ? ` ${npc.name} compra ${npc.buys.map((b) => world.itemDef(b.item_id).name).join(', ')}.` : '';
+    return { ok: false, reason: `${npc.name} no compra ${name}.${buys} ${who ? `${who.includes('], ') ? 'Lo compran' : 'Lo compra'} ${who}: que ${npc.name} se lo diga si viene a cuento.` : 'Nadie de por aquí lo compra.'}` };
+  }
   const q = quantity ?? inst.quantity;
   if (!Number.isInteger(q) || q < 1 || q > inst.quantity) return { ok: false, reason: 'cantidad no válida' };
   // Lo que piensa de él cambia el precio (standing.ts).

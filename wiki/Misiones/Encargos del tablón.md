@@ -9,6 +9,8 @@ Hay dos tipos:
 - **Entregar**: llevar tantas unidades de algo a quien paga.
 - **Visitar**: ir a un punto concreto y volver.
 
+Uno de entrega se cobra **en mano y de una vez**: con todo lo que pide encima (en las manos, el cinto o la mochila; lo que se dejó en otro sitio no cuenta) y delante de quien lo pidió. Con menos, quien lo pidió dice cuánto falta; desde lejos («ya están en la posada») no se cobra. Cuando el personaje llega con algo de lo pedido, la charla con quien lo pidió ya sabe que lo tiene a medias, y si lleva todo, que está listo para cobrar (desde el 2026-11-26).
+
 ## Todos los encargos
 
 | Encargo | Quién paga | Qué pide | Tipo | Recompensa |

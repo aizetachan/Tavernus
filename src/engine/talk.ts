@@ -29,7 +29,7 @@ import { debtLine, openDebts } from './debts.js';
 import { descriptorOf } from './narrate.js';
 import { transcriptOf } from './conversation.js';
 import { rumorsIn } from './rumors.js';
-import { activeJobs } from './progress.js';
+import { activeJobs, jobCarried, jobReadiness } from './progress.js';
 import { givenQuests, droppedAt } from './quests.js';
 import { askedSince, holds, questStatus, storyOf, type StoryCondition } from './story.js';
 import { npcTarget } from './scene.js';
@@ -111,7 +111,7 @@ const RE = {
   request: /\b(necesito|me das|me dejas|me prestas|ayudame|puedes|podrias|quiero)\b/,
   trade: /\b(compr\w*|vend\w*|precio|cuanto (cuesta|vale|cobras|pides|es)|cuesta|me pones|ponme|sirveme|me sirves|pagar|(?:pido|pedir|pide|pedimos|ponnos) (?:una|un|dos|tres|otra|otro|algo de))\b/,
   asks_work: /\b(trabajo|encargo|recado|faena|tarea|necesitas (algo|ayuda)|en que (puedo|te puedo) ayudar|puedo ayudar|te ayudo|ayudarte|ayudarle|algo que hacer|que te (pasa|preocupa|ocurre)|que le (pasa|preocupa|ocurre)|algun problema)\b/,
-  delivery: /\b(traigo|aqui tienes|aqui esta|toma|ya esta hecho|lo tengo|la tengo|he encontrado|lo he hecho|cumplido|entrego|vengo a cobrar)\b/,
+  delivery: /\b(traigo|aqui tienes|aqui esta|toma|ya esta hecho|lo tengo|la tengo|los tengo|las tengo|ya tengo|ya lo tienes|ya la tienes|ya los tienes|ya las tienes|lo que (?:me )?pediste|he encontrado|lo he hecho|cumplido|entrego|vengo a cobrar|mi paga)\b/,
   hostile: /\b(amenaz\w*|te mato|te voy a matar|cabron\w*|imbecil|idiota|estupid\w*|callate|maldit\w*|escoria|basura|inutil)\b/,
   lore_word: /\b(historia|leyenda|que se cuenta|que se dice|que paso|antiguamente|origen|cuentame|cuentanos)\b/,
   argues: /\b(te (juro|prometo|aseguro|interesa)|le (juro|prometo|aseguro)|mi palabra|confia en mi|fiate de mi|convenc\w*|persuad\w*|escuchame|piensalo|por tu bien|vengo de parte|me envia|me manda|entiende que|si me (cuentas|dices|ayudas)|a cambio)\b/,
@@ -216,6 +216,8 @@ export interface TalkState {
   ripe: boolean;
   /** Títulos de lo que el PJ tiene en curso de él o de los suyos. */
   pending: string[];
+  /** Sus encargos del tablón de los que el PJ trae algo: si está listo para cobrar (complete_job) o qué falta. */
+  jobs: string[];
   /** Títulos de misiones de la historia que el PJ aún no puede coger: no se nombran. */
   locked: string[];
   debt: boolean;
@@ -484,7 +486,13 @@ export function talkState(world: World, events: readonly GameEvent[], pc: Charac
     if (s === 'available' && q.giver_npc_id === npc.id) can_offer.push(q.title);
     if ((s === 'active' || s === 'ready') && q.giver_npc_id && close.has(q.giver_npc_id) && !q.main_for) pending.push(q.title);
   }
-  for (const j of activeJobs(world)) if (j.giver_npc_id === npc.id && !pc.completed_jobs.includes(j.id)) can_offer.push(j.title);
+  // Arreglo 26: un encargo suyo del tablón del que el PJ ya trae algo no es algo que ofrecerle, es lo que tiene a
+  // medias, y la entrega dice si está listo para cobrar (complete_job) o qué falta.
+  const jobs: string[] = [];
+  for (const j of activeJobs(world)) {
+    if (j.giver_npc_id !== npc.id || pc.completed_jobs.includes(j.id)) continue;
+    if (jobCarried(world, pc, j) > 0) { pending.push(j.title); jobs.push(`«${j.title}»: ${jobReadiness(world, pc, j).line}`); } else can_offer.push(j.title);
+  }
   for (const g of givenQuests(pc)) if (g.status === 'active' && droppedAt(pc, g.id) === null && g.giver_npc_id && close.has(g.giver_npc_id)) pending.push(g.title);
   const tier = talkTier(npc, pc);
   // Turnos del jugador en que ya le ha contestado (lo que dijo en la apertura o en una llegada no es charla con él);
@@ -529,7 +537,7 @@ export function talkState(world: World, events: readonly GameEvent[], pc: Charac
     crime: crimeLine !== null,
     recent,
     busy,
-    can_offer, talked, ripe, pending, locked,
+    can_offer, talked, ripe, pending, locked, jobs,
     debt: openDebts(pc).some((d) => d.npc_id === npc.id || d.on_behalf_of === npc.id),
     trades: npc.sells.length > 0 || npc.buys.length > 0,
     terms,
@@ -924,7 +932,7 @@ function holeD(p: TalkPlan): string | null {
   const st = p.state;
   const friendly = st.tier === 'friend' || st.tier === 'ally';
   if (p.intent === 'delivery' && st.pending.length) {
-    return `Si trae lo que pidió (${quote(st.pending)}), lo reconoce y cierra la entrega con su tool (story_quest turn_in, complete_job o finish_quest); si no lo trae, se lo dice. ${friendly ? 'Lo agradece de corazón.' : 'Sin rodeos.'}`;
+    return `Si trae lo que pidió (${quote(st.pending)}), lo reconoce y cierra la entrega con su tool (story_quest turn_in, complete_job o finish_quest); si no lo trae, se lo dice.${st.jobs?.length ? ` Del tablón: ${st.jobs.join('; ')}.` : ''} ${friendly ? 'Lo agradece de corazón.' : 'Sin rodeos.'}`;
   }
   if (p.intent === 'work' || givesWork(p)) {
     if (st.can_offer.length) return `Le da UNA: ${quote(st.can_offer.slice(0, 1))}. La cuenta como la cuenta él (qué le pasa, por qué no va él, qué paga) y la registra en este mismo turno (story_quest ask o give_quest). Sin listar condiciones ni «¿aceptas?».`;
