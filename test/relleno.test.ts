@@ -551,16 +551,20 @@ describe('relleno, fase 3: charla sin máster', () => {
     expect(left).toBe(5);
   });
 
-  it('lo que no sabe, lo dice y remite a quien sabe; a la segunda le despacha; luego ya no le hace caso', async () => {
-    const { pc, talk } = await morning('sp_pl_horno');
+  it('lo que no sabe, lo dice y remite a quien sabe; a la segunda pregunta no la despacha con su frase: al máster (arreglo 35)', async () => {
+    const { engine, pc, talk } = await morning('sp_pl_horno');
     const a = await talk('Panadera, ¿qué sabes del granero quemado?');
     expect(a.line).toMatch(/Brenna|Mateo|Ni idea/);
     if (a.line?.includes('Brenna')) expect(pc.knows).toContain('npc_brenna');
-    const b = await talk('Panadera, ¿y de la niebla?');
+    // «Tengo faena» no contesta a una pregunta: la segunda ya no es cosa del guion.
+    expect(extraReply(engine.world, engine.events.all(), pc, 'Panadera, ¿y de la niebla?', engine.nowFor(pc))).toBeNull();
+    // A la charla sí despacha, una vez; y luego le da la espalda, una vez.
+    const b = await talk('Vaya mañana más fría, panadera.');
     expect(TRADES.baker.lines.brush).toContain(b.line);
     const c = await talk('Panadera, ¿y del regidor?');
     expect(c.line).toBeNull();
     expect(c.text).toMatch(/ya no te hace caso/);
+    expect(extraReply(engine.world, engine.events.all(), pc, 'Panadera, ¿y del molinero?', engine.nowFor(pc))).toBeNull();
     // Lo suyo sí lo sigue contestando.
     const d = await talk('Panadera, ¿cuánto vale el pan?');
     expect(d.line).toMatch(/2 de cobre/);
@@ -582,10 +586,10 @@ describe('relleno, fase 3: charla sin máster', () => {
     expect(r.line).toBe('La misa del pozo: cada día a las 20:00, en el pozo.');
   });
 
-  it('nunca da una misión, aunque se la pidan', async () => {
-    const { talk } = await morning('sp_pl_horno');
+  it('nunca da una misión, aunque se la pidan; pedir trabajo lo contesta el máster con su guion corto, no «Tengo faena» (arreglo 35)', async () => {
+    const { engine, pc, talk } = await morning('sp_pl_horno');
+    expect(extraReply(engine.world, engine.events.all(), pc, 'Panadera, ¿tienes algún trabajo para mí?', engine.nowFor(pc))).toBeNull();
     const r = await talk('Panadera, ¿tienes algún trabajo para mí?');
-    expect(r.ev?.tags).toContain('extra');
     expect(r.ev?.payload['story_quest']).toBeUndefined();
   });
 

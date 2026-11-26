@@ -24,7 +24,7 @@ import { descriptorOf, roleLabel } from './narrate.js';
 import { buyFromNpc } from './progress.js';
 import { allScheduled, hhmm } from './schedule.js';
 import { priceFor } from './standing.js';
-import { talkPlan } from './talk.js';
+import { intentOf, talkPlan, type TalkIntent } from './talk.js';
 import { allFacts, knowsFact } from './worldfacts.js';
 import type { World } from './world.js';
 
@@ -39,6 +39,16 @@ const padded = (s: string) => ` ${norm(s).replace(/[^a-z0-9]+/g, ' ').trim()} `;
 const ASKS_PRICE = /\b(cuanto|precio|vale|cuesta|que vendes|que tienes|que hay)\b/;
 /** Quiere comprar ya. */
 const WANTS = /\b(dame|deme|quiero|me llevo|compro|comprar|ponme|vendeme|vendame|uno|una)\b/;
+
+/** Pregunta cuándo: «¿a qué hora es la misa?», «¿cuándo recibe el regidor?». Sin eso, la agenda no es respuesta. */
+const ASKS_WHEN = /\b(cuando|a que hora|que hora|horario|hora de|recibe|abre|cierra|empieza)\b/;
+/**
+ * Lo que dice con el cuerpo, no con la boca: arrebatar, agarrar, beber, trepar, lanzar… Una frase así no la contesta el
+ * vecino con su guion: la narra el máster (rompejuegos T11, herido T17 y T18; arreglo 35).
+ */
+const DOES = /\b(arrebat\w*|le quito|quitarle|robo|robarle|agarr\w*|suelto|empujo|golpe\w*|ataco|apunal\w*|desenvain\w*|lanzo|disparo|trepo|me subo|subo al|salto|vuelo|bebo|me bebo|destapo|registro|rebusco|forcejeo|le doy un)\b/;
+/** Lo que es charla de verdad, a lo que vale su frase para despachar («Tengo faena»). Lo demás pide una respuesta. */
+const CHATTY: ReadonlySet<TalkIntent> = new Set(['chat', 'calm', 'flattery']);
 
 /** Una charla «seguida» con el mismo vecino: lo que le ha dicho en estos minutos cuenta para cansarse. */
 export const EXTRA_TALK_WINDOW_S = 10 * GAME_MINUTE;
@@ -83,8 +93,8 @@ const DOING: Record<ExtraNpc['script']['service'], readonly string[]> = {
   none: ['Sigue con su faena.', 'Está en lo suyo, sin hacer caso a nadie.', 'Descansa un momento antes de volver a lo suyo.'],
 };
 
-/** Le mira: «miro al herrero», «¿qué lleva la panadera?», «cómo va vestido». */
-const LOOKS_AT = /^(?:me fijo en|miro|observo|examino|contemplo|estudio|mirar|observar|examinar|le echo un vistazo|echo un vistazo)\b|\b(?:que lleva|que llevan|como es|como va vestid\w*|que aspecto|que esta haciendo|que hace)\b/;
+/** Le mira: «miro al herrero», «¿qué lleva la panadera?», «cómo va vestido». «¿Qué hace?» al empezar, no «sí que hace frío». */
+const LOOKS_AT = /^(?:me fijo en|miro|observo|examino|contemplo|estudio|mirar|observar|examinar|le echo un vistazo|echo un vistazo|(?:y )?que hace)\b|\b(?:que lleva|que llevan|como es|como va vestid\w*|que aspecto|que esta haciendo)\b/;
 
 /**
  * Cómo se le ve: lo que escribió el máster la primera vez (`script.look`), o la frase de sus datos. Más lo que está
@@ -141,6 +151,43 @@ function recentReplies(events: readonly GameEvent[], pc: Character, n: Npc, nowG
     if (Array.isArray(ls) && (ls as { speaker: string; npc_id?: string }[]).some((l) => l.speaker === 'npc' && l.npc_id === n.id)) k++;
   }
   return k;
+}
+
+/** Lo que este vecino le ha dicho a este PJ en la charla de ahora (dentro de la ventana). */
+function saidLately(events: readonly GameEvent[], pc: Character, n: Npc, nowG: number): string[] {
+  const out: string[] = [];
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.timestamp_game_s < nowG - EXTRA_TALK_WINDOW_S) break;
+    if (e.actor_id !== pc.id) continue;
+    const ls = e.payload['lines'];
+    if (Array.isArray(ls)) for (const l of ls as { speaker: string; npc_id?: string; text: string }[]) if (l.speaker === 'npc' && l.npc_id === n.id) out.push(l.text);
+  }
+  return out;
+}
+
+/** ¿Ya le dio la espalda en esta charla («ya no te hace caso»)? Eso se dice una vez. */
+function ignoredLately(events: readonly GameEvent[], pc: Character, n: Npc, nowG: number): boolean {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.timestamp_game_s < nowG - EXTRA_TALK_WINDOW_S) break;
+    if (e.actor_id === pc.id && e.tags.includes('extra') && e.payload['npc_id'] === n.id && !Array.isArray(e.payload['lines'])) return true;
+  }
+  return false;
+}
+
+/**
+ * ¿Le habla a otro, aunque este vecino sea el único al lado? «Le pregunto a la vendedora del puesto…» con el sereno
+ * delante (recolector T26): ni el sereno ni nadie contesta por ella; al máster.
+ */
+function asksSomeoneElse(world: World, self: Npc, text: string): boolean {
+  const m = norm(text).match(/\b(?:pregunto|digo|pido|cuento|comento|grito|susurro|hablo con|me dirijo)\s+a?\s*(?:(?:el|la|los|las|al)\s+)?([a-zñ]+)/);
+  if (!m) return false;
+  const w = m[1]!;
+  const mine = [self.name.split(' ')[0]!, ...words(self.role)].map(norm);
+  if (mine.includes(w) || mine.some((x) => x.startsWith(w) || w.startsWith(x))) return false;
+  return [...world.npcs.values()].some((x) => x.id !== self.id && [x.name.split(' ')[0]!, ...words(x.role)].map(norm).includes(w))
+    || /^(vendedor|vendedora|tendero|tendera|mujer|hombre|chico|chica|nino|nina|senor|senora|viejo|vieja)$/.test(w);
 }
 
 /** Le agredió (o sabe que mató o hirió a alguien): le tiene miedo. */
@@ -235,6 +282,12 @@ export function extraReply(world: World, events: readonly GameEvent[], pc: Chara
 
   // Lo que no es charla simple: al máster, con el guion corto.
   if (plan.intent === 'insult' || plan.intent === 'threat' || plan.intent === 'identity') return null;
+  // Ni charla: hace otra cosa (trepa, bebe, le arrebata el cubo) o le habla a otro. Al máster (arreglo 35).
+  if (plan.talky === false || asksSomeoneElse(world, n, text)) return null;
+  if (DOES.test(norm(text)) && plan.intent !== 'trade') return null;
+  // Lo que pidió de verdad (el relleno lo resume en «chat»): una pregunta, trabajo o un favor piden respuesta.
+  const tx = 'text' in plan ? plan.text : null;
+  const asked: TalkIntent = !tx || !('topics' in plan) ? 'trade' : tx.question || tx.request || tx.asks_work ? 'question' : intentOf(plan.state, tx, plan.topics, text);
 
   const refer = n.script.refer_to.map((id) => world.npcs.get(id)).filter((x): x is Npc => Boolean(x) && x!.status === 'alive');
   const referTo = refer[seed % Math.max(1, refer.length)];
@@ -259,7 +312,7 @@ export function extraReply(world: World, events: readonly GameEvent[], pc: Chara
       const w = whereIs(world, pc, n, text);
       if (w) return answer(say(L.service, { where: w.where }, seed), { names: w.names });
     }
-    if (n.script.service === 'hours') {
+    if (n.script.service === 'hours' && ASKS_WHEN.test(t)) {
       const when = whenIs(world, text);
       if (when || L.service.some((l) => !l.includes('{'))) return answer(say(L.service, { when: when ?? undefined }, seed));
     }
@@ -269,9 +322,14 @@ export function extraReply(world: World, events: readonly GameEvent[], pc: Chara
     }
   }
 
-  // 3. Ya le ha despachado: no le hace caso. Ya le contestó algo que no era lo suyo: le despacha.
-  if (off >= EXTRA_PATIENCE) return answer(null);
-  if (off === EXTRA_PATIENCE - 1 && plan.intent !== 'open' && plan.intent !== 'greeting' && plan.intent !== 'farewell') return answer(say(L.brush, {}, seed), { offtopic: true });
+  // 3. Lo que no es lo suyo, una vez por charla (arreglo 35). Ya le contestó algo que no era lo suyo y no es charla, o
+  // ya le despachó: que conteste el máster. Ya le dio la espalda: no se repite; al máster.
+  const said = saidLately(events, pc, n, nowG);
+  const brushed = said.some((l) => L.brush.includes(l));
+  const ignored = ignoredLately(events, pc, n, nowG);
+  if (off >= EXTRA_PATIENCE) return ignored ? null : answer(null);
+  const lead = plan.intent === 'open' || plan.intent === 'greeting' || plan.intent === 'farewell';
+  if (off === EXTRA_PATIENCE - 1 && !lead) return CHATTY.has(asked) && !brushed ? answer(say(L.brush, {}, seed), { offtopic: true }) : null;
 
   // 4. Saludo, lo que no sabe, despedida y lo demás.
   if (plan.intent === 'open' || plan.intent === 'greeting') {
@@ -282,9 +340,12 @@ export function extraReply(world: World, events: readonly GameEvent[], pc: Chara
   }
   if (plan.intent === 'delicate' || plan.intent === 'public') {
     const line = say(L.dunno, { refer: referName }, seed);
+    if (line && said.includes(line)) return null;
     return answer(line, { offtopic: true, ...(referTo && line?.includes(referTo.name) ? { names: [referTo.id] } : {}) });
   }
   if (plan.intent === 'farewell') return answer(say(L.bye, {}, seed));
+  // «No tengo tiempo para charlas» solo a la charla, y una vez: lo que pide respuesta lo contesta el máster.
+  if (!CHATTY.has(asked) || brushed) return null;
   return answer(say(L.brush, {}, seed), { offtopic: true });
 }
 

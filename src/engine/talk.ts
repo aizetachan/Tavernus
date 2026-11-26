@@ -119,7 +119,7 @@ const RE = {
   identity: /\b(sabes quien soy|sabe quien soy|sabeis quien soy|me conoces|me conoce|me recuerdas|me recuerda|te acuerdas de mi|se acuerda de mi|sabes como me llamo|sabe como me llamo)\b/,
   introduces: /\b(me llamo|mi nombre es|me llaman|puedes llamarme|llamame)\b/,
   asks_who: /\b(quien eres|quien es usted|como te llamas|como se llama usted|cual es tu nombre|tu nombre)\b/,
-  calm: /\b(vale,? vale|tranquil[oa]|calma|calmate|perdon|perdona|perdone|disculpa|disculpe|lo siento|no te enfades|no se enfade|sin ofender|no queria (ofender|molestar)|no era mi intencion|tienes razon|tiene razon)\b/,
+  calm: /\b(vale,? vale|tranquil[oa]|(?<!con )calma|calmate|perdon|perdona|perdone|disculpa|disculpe|lo siento|no te enfades|no se enfade|sin ofender|no queria (ofender|molestar)|no era mi intencion|tienes razon|tiene razon)\b/,
   flattery: /\b(eres (muy|la mejor|el mejor|un genio)|que (bien|bonit\w*|guap\w*) (te|le|lo|la)|admiro|me encanta (tu|su)|la mejor (cerveza|tabernera|del)|el mejor (herrero|de))\b/,
   affirmative: /^\s*(si|claro|vale|de acuerdo|por supuesto|cuentame|cuenteme|dime|digame|me interesa|adelante|venga|acepto|hecho|que necesitas|que necesita|en que consiste|de que se trata)\b/,
   opens: /^(?:(?:ir|voy|vamos|me acerco|acercarse|acercarme|acerco)\s+(?:a\s+)?)?(?:a\s+)?(?:hablar|charlar|saludar)(?:le|la)?(?:\s+(?:un rato\s+)?(?:con|a)\s+\p{L}+(?:\s+\p{L}+)?)?\s*[.!]?\s*$/u,

@@ -247,3 +247,12 @@ export function parseRest(text: string): { kind: RestKind; dice: number | null }
   if (/^(descanso corto|descansar|descanso|descanso un rato|me siento a descansar|short rest|rest)\b/.test(t)) return { kind: 'short', dice: n };
   return null;
 }
+
+/**
+ * «Me despierto», «despertar», «despertarme ya»: la orden de despertar, sola. «Me despierto en el calabozo y exijo…»
+ * no lo es (rompejuegos T35): es una acción, y a quien ya está despierto no se le contesta «Ya estás despierto».
+ */
+export function parseWake(text: string): boolean {
+  const t = text.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.!¡]+/g, '').trim();
+  return /^(?:me despierto|despierto|despertar|despertarme|wake|wake up)(?: ya)?$/.test(t);
+}

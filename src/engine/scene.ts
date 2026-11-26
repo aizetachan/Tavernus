@@ -82,19 +82,75 @@ export function namedPc(world: World, c: Character, text: string): Character | n
   return hits.length === 1 ? hits[0]! : null;
 }
 
+/** Minúsculas y sin tildes, con la puntuación: para ver a quién se llama («Bruno, …», «…, Bruno?»). */
+const plainPunct = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * ¿Le llama por su nombre (vocativo)? «Bruno, ¿qué opinas?», «Oye Bruno…», «¿Cuánto vale, Bruno?», «Y Bruno, ¿tú…?»,
+ * «le pregunto a Bruno», «a Bruno: …». Nombrarle de pasada («convencer a Bruno») no es llamarle.
+ */
+export function callsByName(text: string, name: string): boolean {
+  const n = plainPunct(name);
+  if (n.length < 2) return false;
+  const t = plainPunct(text).replace(/^[—–\-«"“¡¿\s]+/, '');
+  const N = escapeRe(n);
+  return new RegExp(`^(?:(?:oye|eh|mira|escucha|venga|vale|bueno|y|pues|ey|hola)\\s*,?\\s+)?${N}\\b\\s*[,:!?.]`).test(t)
+    || new RegExp(`(?:^|[.?!;¿¡]\\s*|\\b(?:y|oye|eh|mira|escucha)\\s+)${N}\\s*,`).test(t)
+    || new RegExp(`,\\s*${N}\\s*(?:[?!.,;:»"]|$)`).test(t)
+    || new RegExp(`\\b(?:(?:le|les)\\s+)?(?:pregunto|digo|pido|susurro|comento|cuento|grito)\\s+a\\s+${N}\\b`).test(t)
+    || new RegExp(`\\ba\\s+${N}\\s*:`).test(t);
+}
+
+/** Otro PJ de la sala al que llama por su nombre (calls), si es uno solo. */
+export function calledPc(world: World, c: Character, text: string): Character | null {
+  const loc = world.characterSpot(c)?.location_id;
+  const hits = [...world.characters.values()].filter((o) => o.id !== c.id && o.status !== 'dead' && o.status !== 'retired'
+    && world.characterSpot(o)?.location_id === loc && callsByName(text, o.name));
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+/**
+ * Lo que solo se menciona como sujeto de otra frase, que no va con él: «espero a que el alguacil se aleje de Fiona»,
+ * «hasta que Brenna termine». Fuera antes de buscar a quién va la acción (pareja pausado T16).
+ */
+function withoutAsides(text: string): string {
+  return text.replace(/\b(?:a|hasta|en cuanto|mientras|cuando)\s+que\s+[^,.;:?!]*/gi, ' ');
+}
+
 /**
  * A qué NPC va la acción: el que nombra o, sin nombrar a nadie, aquel con quien
  * ya habla el PJ. Si nombra a otro jugador y a ningún NPC, no va a ningún NPC.
+ * Si llama por su nombre a otro jugador («¿Cuánto vale una antorcha, Bruno? Y si
+ * convenzo a Garrán…»), va a él aunque nombre a un NPC, salvo que llame también
+ * al NPC (pareja pícaro C7, C8; arreglo 35).
  */
 export function npcTarget(world: World, events: readonly GameEvent[], c: Character, text: string, nowGameS: number): Npc | null {
-  const named = namedNpc(world, c, text);
-  if (named) return named;
-  return namedPc(world, c, text) ? null : talkingWith(world, events, c, nowGameS);
+  const own = withoutAsides(text);
+  const named = namedNpc(world, c, own);
+  const pc = calledPc(world, c, text);
+  if (named) return pc && !npcNames(c, named, world).concat(normalize(named.name)).some((n) => callsByName(text, n)) ? null : named;
+  return pc || namedPc(world, c, own) ? null : talkingWith(world, events, c, nowGameS);
 }
 
 /** El NPC con el que habla el PJ ahora (como el que lleva la charla o unido a ella). */
 export function talkingWith(world: World, events: readonly GameEvent[], c: Character, nowGameS: number): Npc | null {
   return [...world.npcs.values()].find((n) => talkersOf(world, events, n, nowGameS).includes(c.id)) ?? null;
+}
+
+/**
+ * Una frase con raya («— Suéltame la muñeca, Ilse…») es el chat entre jugadores, que no pasa por el máster. Salvo que
+ * vaya a un NPC: le llama o le nombra y no llama a ningún jugador, o no hay otro jugador en la sala que la oiga y sí
+ * algún NPC. Entonces es lo que le dice el PJ a ese NPC, y le contesta (charlatán T1 y T3, «Dices: «…»» sin réplica;
+ * arreglo 35). Para `Engine.act`, antes de mandarla a `say`.
+ */
+export function dashForNpc(world: World, c: Character, text: string): boolean {
+  if (calledPc(world, c, text)) return false;
+  if (namedNpc(world, c, text)) return true;
+  const loc = world.characterSpot(c)?.location_id;
+  if (!loc) return false;
+  const others = world.charactersInLocation(loc).filter((o) => o.id !== c.id && o.status === 'active');
+  return others.length === 0 && npcsHere(world, c).some((n) => !n.mute);
 }
 
 /** PJ que cuentan para una ronda: activos, conectados y quietos en la localización. */
