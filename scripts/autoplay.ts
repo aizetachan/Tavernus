@@ -13,6 +13,8 @@
  *
  * Partidas completas en Brezal, una por perfil de jugador (PROFILES), hasta un final, un atasco o el tope:
  *   npm run autoplay -- --profiles all --actions 300 --parallel 10 --max-usd-game 1.2 --live
+ * --max-usd-game es el tope de gasto del máster por jugador (a dos, la partida puede gastar el doble); una partida que
+ * revienta deja su resumen con lo jugado y lo gastado, con fin «error».
  * Luego scripts/playtest-report.ts analiza conversaciones, misiones, combate, final y fluidez.
  * Para probar los finales sin jugar los actos anteriores, --start-act 2|3 los deja hechos por tools y sin máster:
  *   npm run autoplay -- --profiles dirigido-templar,dirigido-verdad,dirigido-arder --start-act 3 --actions 60 --parallel 3 --no-judge --live

@@ -268,6 +268,8 @@ export function declaresStrike(text: string): boolean {
   return text.split(/[.;:!?¡¿«»"“”\n]+|\s[-–—]\s/).some((f) => ATTACK_VERB.test(f) && !NOT_A_STRIKE.test(f) && !SPOKEN.test(f));
 }
 const SOCIAL_ROLL = /Persuasi|Enga|Intimid|Interpret|Perspic/i;
+/** Turnos seguidos sin NPC que cortan la racha con uno (lo mismo que el juego). */
+export const NPC_RUN_GAP = 2;
 
 export interface WindowMetrics {
   profile: string; actions: number; steps: number; done: number; clues: number; npc_run: number; refusals: number; rolls: number; social_rolls: number;
@@ -284,10 +286,13 @@ export function windowMetrics(g: GameSummary, events: readonly GameEvent[], n: n
   const own = events.filter((e) => e.actor_id === pc && e.seq <= lastSeq);
   const roll = (e: GameEvent) => (e.payload['roll'] as { label?: string } | undefined)?.label ?? '';
   const rolls = own.filter((e) => e.action_type === 'roll');
-  let cur: string | null = null; let run = 0; let best = 0;
+  // Racha con el mismo NPC, como la cuenta el juego (paquete C, arreglo 13): dos turnos seguidos sin NPC la cortan.
+  let cur: string | null = null; let run = 0; let best = 0; let gap = 0;
   for (const e of own) {
+    if (!e.input_text) continue;
     const npc = e.payload['npc_id'] as string | undefined;
-    if (!npc || !e.input_text) continue;
+    if (!npc) { if (++gap >= NPC_RUN_GAP) { cur = null; run = 0; } continue; }
+    gap = 0;
     run = npc === cur ? run + 1 : 1; cur = npc; best = Math.max(best, run);
   }
   const calls = (e: GameEvent) => (e.payload['master'] as { calls?: { name: string; result: unknown; input?: Record<string, unknown> }[] } | null | undefined)?.calls ?? [];

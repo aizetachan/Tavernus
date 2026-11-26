@@ -61,6 +61,16 @@ describe('golpes declarados (H2 y H6)', () => {
   });
 });
 
+describe('racha con un NPC', () => {
+  it('dos turnos seguidos sin NPC la cortan; uno solo, no (como en el juego)', () => {
+    let seq = 0;
+    const turn = (npc: string | null) => { seq++; return { id: `e${seq}`, seq, actor_id: 'pc', action_type: 'master', input_text: 'algo', narration_private: '', tags: [], payload: { master: { calls: [] }, ...(npc ? { npc_id: npc } : {}) } } as unknown as GameEvent; };
+    const events = [turn('npc_ilse'), turn('npc_ilse'), turn(null), turn('npc_ilse'), turn(null), turn(null), turn('npc_ilse'), turn('npc_ilse')];
+    const g = { n: 1, profile: 'charlatan', character: { id: 'pc' }, actions: events.map((e, k) => ({ i: k + 1, text: 'algo', event_ids: [e.id] })) } as unknown as GameSummary;
+    expect(windowMetrics(g, events, 10).npc_run).toBe(3);
+  });
+});
+
 const MODELS = { master: 'claude-haiku-5-5', player: 'claude-haiku-5-5', worldgen: 'claude-haiku-5-5', judge: 'claude-haiku-5-5' };
 const pairOf = (a: string, b: string) => [PROFILES.find((p) => p.id === a)!, PROFILES.find((p) => p.id === b)!] as [PlayerProfile, PlayerProfile];
 const autoplayFixture = <T>(name: string): T => JSON.parse(readFileSync(join(import.meta.dirname, 'fixtures', 'autoplay', name), 'utf8')) as T;
