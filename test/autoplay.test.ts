@@ -20,6 +20,7 @@ import { coinsOf, money } from '../src/engine/money.js';
 import { spellGroups } from '../src/engine/levels.js';
 import { normalize } from '../src/engine/aliases.js';
 import { SPELLS } from '../src/data/srd/spells.js';
+import { die } from '../src/engine/death.js';
 
 const PC = 'ch_test';
 let seq = 0;
@@ -563,10 +564,45 @@ describe('perfiles mecánicos de H10 (herido, deudor, cronista, recolector)', ()
     expect(rec.engine.world.itemDef('it_capa_proteccion').attunement).toBe(true);
   });
 
+  it('H11: el recolector empieza en la plaza y su primer sitio de campo es la granja, nunca el Soto', () => {
+    const p = PROFILES.find((x) => x.id === 'recolector')!;
+    const PLACE = /\b(corrales|molino|soto|arroyo)\b/i;
+    const field = p.wants.find((w) => PLACE.test(w.dry))!;
+    expect(field.id).toBe('ir_campo');
+    expect(field.dry).toMatch(/Corrales/);
+    // Lo que dice el jugador falso no le lleva nunca al Soto ni al arroyo, y lo de antes de salir se hace en la plaza.
+    for (const w of p.wants) expect(w.dry, w.id).not.toMatch(/\b(soto|arroyo)\b/i);
+    expect(p.wants.indexOf(field)).toBeGreaterThan(p.wants.findIndex((w) => w.id === 'sintonizar'));
+    expect(p.prompt).toMatch(/Al Soto no vas nunca/);
+    // Sigue pidiendo lo suyo: harvest (ponedero, huerto, canal), get_item, attune_item, use_scroll, update_spot_state, cast_spell y sell_item.
+    for (const id of ['recolectar', 'huerto', 'pescar', 'examinar', 'sintonizar', 'pergamino', 'marcar', 'conjuro', 'vender_cosecha', 'soltar', 'coger']) expect(p.wants.map((w) => w.id)).toContain(id);
+  });
+
+  it('H12: la ficha dice qué lleva puesto, en qué bolsa va la capa y si está sintonizada; y, tras morir, dónde quedaron sus cosas', async () => {
+    const { engine, c } = await bootAs(PROFILES.find((x) => x.id === 'recolector')!);
+    const w = engine.world;
+    let sheet = playerSheet(engine, c);
+    expect(sheet).toContain('En las manos: bastón, escudo.');
+    expect(sheet).toMatch(/Lleva puesto: [^.]*armadura de cuero[^.]*mochila/);
+    expect(sheet).toMatch(/En su mochila: [^.]*antorcha ×\d[^.]*capa de protección \(sintonía: sin hacer\)/);
+    expect(sheet).toContain('pergamino de conjuro de nivel 1');
+    const capa = w.itemsCarriedBy(c.id).find((i) => i.item_id === 'it_capa_proteccion')!;
+    capa.state.attuned_to = c.id;
+    expect(playerSheet(engine, c)).toContain('capa de protección (sintonía: contigo)');
+    // Lo que le pasó en la tanda 5: muere en el arroyo del Soto y su capa se queda en el cuerpo, no en su ficha.
+    c.location = { type: 'spot', id: 'sp_cl_arroyo' };
+    die(w, c, 0, 'lobo');
+    sheet = playerSheet(engine, c);
+    expect(w.itemsCarriedBy(c.id)).toEqual([]);
+    expect(sheet).toContain('Lleva: nada.');
+    expect(sheet).toMatch(/Sintonizado con: capa de protección \(no lo lleva encima\)/);
+    expect(sheet).toMatch(/sus cosas se quedaron en su cuerpo, en el arroyo \(El Soto\), y solo él puede recogerlas: [^.]*capa de protección/);
+  });
+
   it('las frases de los mecánicos solo nombran objetos que el PJ lleva y conjuros que tiene', async () => {
     // Lo que no es suyo y sí puede nombrar: lo de la escena que la want busca (el cofre que forzar, el carro tras el que
     // esconderse), lo que va a conseguir (la cerveza fiada, la cama de una noche, lo que recolecta) y las monedas de plata.
-    const SCENE = new Set(['cofre', 'carro', 'cerradura', 'cerveza', 'noche', 'cama', 'truchas', 'huevos', 'bayas', 'plata']);
+    const SCENE = new Set(['cofre', 'carro', 'cerradura', 'cerveza', 'noche', 'cama', 'truchas', 'huevos', 'bayas', 'coles', 'plata']);
     const bad: string[] = [];
     for (const p of MECH) {
       const { engine, c } = await bootAs(p);
@@ -611,6 +647,10 @@ describe('perfiles mecánicos de H10 (herido, deudor, cronista, recolector)', ()
         expect(a, `${pid}/${wid} no se jugó`).toBeDefined();
         expect(a!.event_ids.length, `${pid}/${wid} lo resolvió el motor sin máster`).toBeGreaterThan(0);
       }
+      // H11: el recolector no pisa el Soto (los lobos del arroyo). En seco «Voy a los Corrales» solo le lleva al camino de
+      // la plaza (el motor anda punto a punto); en vivo lo mueve el máster.
+      const rec = run.games.find((g) => g.profile === 'recolector')!;
+      expect(rec.actions.map((a) => a.state?.location)).not.toContain('loc_claro');
       const herido = run.games.find((g) => g.profile === 'herido')!;
       expect(herido.actions[0]!.state!.hp).toBeLessThan(herido.actions[0]!.state!.hp_max);
     } finally {
