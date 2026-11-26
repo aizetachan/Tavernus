@@ -35,8 +35,9 @@ import { encounterAt, hostilesAt, recentCombatTag } from '../engine/encounter.js
 
 import { INCIDENT_KINDS, incidentRejection, npcCrimeLine, pendingIncidents, reactionSentences, readsAsTheft, reportAssault, reportIncident, reportKill, unnarratedReactors, type IncidentKind } from '../engine/crime.js';
 import { bodyHolding, canLoot, damageCharacter, deadNpcsAt, healCharacter, helplessNpc, isDying, killNpc, knockOutNpc, medicineDc, NPC_DOWN_HINT, reviveNpc, stabilize } from '../engine/death.js';
-import { spendResource } from '../engine/rest.js';
-import { castSpell, spellStats } from '../engine/levels.js';
+import { classResources, spendResource } from '../engine/rest.js';
+import { castableSpells, castSpell, spellStats } from '../engine/levels.js';
+import { spellById } from '../data/srd/spells.js';
 import { applyItemEffect, damageAfterResistance, gearLines, armorBlocksSpells, attackProfile, attune, canAttune, castFromCharges, copyCost, copyScroll, endAttunement, identify, reachCheck, spellItemBonus, spendCharges, useScroll, type ItemCast } from '../engine/itemrules.js';
 import { isIdentifiedBy } from '../engine/items.js';
 import { isWaypoint, setAhead } from '../engine/travel.js';
@@ -55,7 +56,7 @@ import { debtHeldBy, debtTitle, noteDebtTerms, openDebts, pawnItem, setDebt, set
 import { applyNarratorMode, clipLineBeat, closingMode, speakerRefs, type NarratorMode } from '../engine/narrator.js';
 import { recentNarration, withoutRepeatedNarration } from '../engine/closecheck.js';
 import { inventedPlaces } from '../engine/places.js';
-import { addToPurse, coinsAt, coinsOf, money, pay, receive, takeFromPurse } from '../engine/money.js';
+import { addToPurse, coinsAt, coinsOf, currencyOf, money, pay, receive, takeFromPurse } from '../engine/money.js';
 import { discoverSpot, hiddenSpots, knownSpots, knowsSpot, lookAround, spotsNamedIn } from '../engine/spots.js';
 import { magicRejection, magicWithoutTool, type MagicAtHand, coinsRejection, coinsWithoutTool, strikeRejection, strikeWithoutAttack, movedRejection, movedWithoutTool, actedForOthers, actedForRejection, confirmedNames, DEAL_REJECTION, dealWithoutState, deathNarration, deathRejection, EMPTY_REJECTION, emptyClose, introducedIn, isPlaceholder, namedByPlayer, outcomeMismatch, outcomeRejection, placeholderFields, placeholderRejection, receivedRejection, receivedWithoutOffer, recentNpcLines, repeatedLines, repeatedRejection, saidByPlayer, servedRejection, servedWithoutPay, stolenRejection, stolenWithoutTool, unansweredInShared, unansweredRejection, withoutDeathPhrases, withoutSelfCorrection, type DeathHit, type NamedNpc, type RollCategory } from '../engine/closecheck.js';
 import { othersForCheck, pcName } from '../engine/party.js';
@@ -67,7 +68,7 @@ import { askBlocked, endsTalk, introducesAs, npcPresumes, offersNow, talkPlanWit
 import { ALARM_KINDS, clearAlarm, setAlarm } from '../engine/alarm.js';
 import { attackRoll, checkRoll, type ShownRoll } from '../engine/rolls.js';
 import { CONFLICT_KINDS, conflictKindOf, refusedBefore, confrontButtons, confrontOf, conflictVerdict, createItem, resolveConflict, type ConflictKind, type ConflictPlan, type ConflictResult, type ConflictVerdict } from '../engine/conflict.js';
-import { conflictCloseProblems } from '../engine/closecheck.js';
+import { conflictCloseProblems, debtMismatch, debtRejection, failedToolNarrated, failedToolRejection, menuNamed, menuWords, npcHitRejection, npcHitWithoutAttack, reactionOutcomeMismatch, reactionOutcomeRejection, stateRejection, stateWithoutTool, type MenuItem, type StateKind } from '../engine/closecheck.js';
 import { formatRuleHits, loadRules, searchRules, type RulesIndex } from '../rules/index.js';
 
 type Tool = Anthropic.Beta.BetaTool;
@@ -489,6 +490,20 @@ export interface ToolContext {
   conflict_rejections?: number;
   /** Continuación de la tirada de una acción conflictiva: el motor ya lo ha resuelto (y movido lo que tocara). */
   conflict_resolved?: boolean;
+  /** Tools de escritura de esta acción, en orden, con lo que devolvieron (las guardas del cierre cuadran la narración con ellas). */
+  write_calls?: { name: string; input: Record<string, unknown>; out: Record<string, unknown> }[];
+  /** Cierres rechazados por narrar estado sin su tool: descanso, cura, coger, conjuro, hecho, recuerdo, fiado (closecheck.ts; uno como mucho). */
+  state_rejections?: number;
+  /** Cierres rechazados por dar por hecho lo que un tool de escritura no pudo hacer (closecheck.ts; uno como mucho). */
+  failed_rejections?: number;
+  /** Cierres rechazados por narrar lo contrario de la reacción que resolvió el servidor (closecheck.ts; uno como mucho). */
+  reaction_rejections?: number;
+  /** Cierres rechazados porque un NPC le pega al actor sin attack (closecheck.ts; uno como mucho). */
+  hit_rejections?: number;
+  /** apply_damage al actor con el golpe de un NPC que no ha atacado (uno como mucho). */
+  npc_damage_rejections?: number;
+  /** Cierres rechazados porque settle_debt o set_debt no cuadran con lo narrado (closecheck.ts; uno como mucho). */
+  debt_rejections?: number;
 }
 
 export interface LogEventInput {
@@ -694,6 +709,7 @@ export function executeTool(ctx: ToolContext, name: string, raw: Record<string, 
     const { input } = repairToolInput(raw, TOOL_PARAMS.get(name));
     const out = run(ctx, name, input);
     let res = typeof out === 'string' ? out : JSON.stringify(out);
+    if (WRITE_TOOLS.has(name)) (ctx.write_calls ??= []).push({ name, input, out: typeof out === 'string' ? { raw: out } : out as Record<string, unknown> });
     if (WRITE_TOOLS.has(name) && !res.startsWith('{"error"')) {
       (ctx.ok_tools ??= []).push(name);
       // La historia avanza ya (dar el agua a Ilse da el paso en esta misma respuesta): lo que pasa, a contarlo ahora.
@@ -704,7 +720,9 @@ export function executeTool(ctx: ToolContext, name: string, raw: Record<string, 
     }
     return res;
   } catch (e) {
-    return JSON.stringify({ error: unknownIdError(ctx, (e as Error).message) });
+    const error = unknownIdError(ctx, (e as Error).message);
+    if (WRITE_TOOLS.has(name)) (ctx.write_calls ??= []).push({ name, input: raw, out: { error } });
+    return JSON.stringify({ error });
   }
 }
 
@@ -924,6 +942,38 @@ function itemCastOut(ctx: ToolContext, r: ItemCast, tgt: Id | null): Record<stri
     if (!(sp.attack && tgt)) (ctx.shown_rolls ??= []).push({ roller_id: ctx.actor.id, label: `${sp.name} (${what})`, dice: r.roll.breakdown, total: r.roll.total, outcome: null });
   }
   return out;
+}
+
+/** Un NPC del sitio del actor nombrado en el origen de un daño («martillo de Hugo», «npc_hugo», «el herrero»), o null. */
+function npcInSource(ctx: ToolContext, source: string): Npc | null {
+  const world = ctx.engine.world;
+  const loc = world.characterSpot(ctx.actor)?.location_id;
+  const bare = (x: string) => x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9_]+/g, ' ').trim();
+  const t = ` ${bare(source)} `;
+  if (!loc || !t.trim()) return null;
+  return [...world.npcs.values()].find((n) => n.status === 'alive' && world.spots.get(n.location.id)?.location_id === loc
+    && [n.id, n.name, n.role].some((r) => { const w = bare(r).replace(/^(?:el|la|un|una) /, ''); return w.length >= 3 && t.includes(` ${w} `); })) ?? null;
+}
+
+/** Tools de escritura que han fallado en esta acción y no salieron bien después (el error, para el aviso del cierre). */
+function failedTools(ctx: ToolContext): { name: string; error: string }[] {
+  const out = new Map<string, string>();
+  for (const c of ctx.write_calls ?? []) {
+    if ('error' in c.out) {
+      const detail = c.out['detail'] as { reason?: unknown } | undefined;
+      out.set(c.name, [String(c.out['error']), typeof detail?.reason === 'string' ? detail.reason : '', typeof c.out['hint'] === 'string' ? c.out['hint'] : ''].filter(Boolean).join(': '));
+    } else out.delete(c.name);
+  }
+  return [...out].map(([name, error]) => ({ name, error }));
+}
+
+/** Lo que venden los NPC que están en el sitio del actor (su carta), con el precio que le pondrían. */
+function menuHere(ctx: ToolContext): MenuItem[] {
+  const world = ctx.engine.world;
+  const loc = world.characterSpot(ctx.actor)?.location_id;
+  if (!loc) return [];
+  return [...world.npcs.values()].filter((n) => n.status === 'alive' && n.sells.length && world.spots.get(n.location.id)?.location_id === loc)
+    .flatMap((n) => n.sells.flatMap((o) => { const def = world.itemDefs.get(o.item_id); return def ? [{ npc_id: n.id, npc: n.name, item_id: o.item_id, name: def.name, price: money(world, o.price) }] : []; }));
 }
 
 /** Lo que el actor tiene a mano que se puede usar con magia: el cierre solo vigila eso (closecheck.ts, magicWithoutTool). */
@@ -1637,6 +1687,17 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
       }
       const c = world.character(s('target_id'));
       if (c.veiled) return { error: `${c.name} está bajo el velo: no puede recibir daño` };
+      // El golpe de un NPC al actor pasa por attack (con su tirada), no por apply_damage (arreglo 12). Una vez: si
+      // insiste, será daño del mundo que el NPC solo acompaña. Solo en un turno del máster (con acción del jugador) y
+      // no con quien no es de pelear: su golpe no letal por apply_damage es el camino previsto (combat.ts, nonLethalSource).
+      if (c.id === actor.id && ctx.action_text !== undefined && (ctx.npc_damage_rejections ?? 0) < 1) {
+        const by = npcInSource(ctx, `${s('source')} ${s('damage_type')}`);
+        if (by && !by.noncombatant && !ctx.npc_turns?.has(by.id) && !(ctx.forced_turns ?? []).some((f) => f.npc_id === by.id) && !ctx.conflict) {
+          ctx.npc_damage_rejections = (ctx.npc_damage_rejections ?? 0) + 1;
+          const who = npcLabel(world, actor, by.id);
+          return { error: 'npc_blow', hint: `El daño viene de ${who}: su golpe pasa por attack (attacker_id ${by.id}, target_id ${actor.id}), que tira contra su CA y lo aplica si impacta. apply_damage es para el daño del mundo (una caída, el fuego, un veneno).` };
+        }
+      }
       if (c.status === 'dead') return { error: `${c.name} ya está muerto` };
       // Resistencia o inmunidad por lo que lleva o se ha tomado (itemrules.ts): el motor la aplica, no el máster.
       const r = damageCharacter(world, c, damageAfterResistance(world, c, Number(input['amount']) || 0, s('damage_type')), { cause: s('source') || s('damage_type') || 'daño', nowGameS, ...(nonLethalSource(world, c, s('source')) ? { nonLethal: true, rng: ctx.rng } : {}) });
@@ -1936,6 +1997,25 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
           return { error: outcomeRejection(ctx.roll_category, bad) };
         }
       }
+      // Desenlace de una reacción que resolvió el servidor (el otro resistió y ganó o perdió): la narración no cuenta lo contrario (arreglo 2).
+      if ((ctx.reaction_rejections ?? 0) < 1 && engine.inReactionOutcome(actor.id)) {
+        const won = [...world.characters.keys()].some((id) => engine.reactionWon(actor.id, id));
+        const bad = reactionOutcomeMismatch(won, s('narration_private'));
+        if (bad) {
+          ctx.reaction_rejections = (ctx.reaction_rejections ?? 0) + 1;
+          return { error: reactionOutcomeRejection(won, bad) };
+        }
+      }
+      // Un tool de escritura que falló en un mensaje anterior de este turno, narrado como hecho (arreglo 5). El del mismo
+      // mensaje lo para master.ts antes de llegar aquí. Se reescribe una vez.
+      if ((ctx.failed_rejections ?? 0) < 1) {
+        const failed = failedTools(ctx);
+        const hit = failed.length ? failedToolNarrated({ narration: s('narration_private'), failed, okTools: ctx.ok_tools ?? [] }) : null;
+        if (hit) {
+          ctx.failed_rejections = (ctx.failed_rejections ?? 0) + 1;
+          return { error: failedToolRejection(hit) };
+        }
+      }
       // Muerte o vuelta de un PJ sin estado: se reescribe dos veces; si insiste, esas frases se quitan.
       const deathHits: DeathHit[] = deathNarration({
         texts: [s('narration_private'), input['observable'] == null ? '' : s('observable'), input['observable_target'] == null ? '' : s('observable_target')],
@@ -2081,13 +2161,16 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         }
       }
       // Servir lo que se vende sin cobrarlo ni fiarlo (la jarra delante y nadie paga): se reescribe una vez.
+      // También el primer trago: si se nombra algo de la carta de quien está delante, es comercio aunque no lo marque (arreglo 14).
       if ((ctx.served_rejections ?? 0) < 1) {
         const tagged = s('tags').split(/[,\s]+/).includes('trade');
-        const trade = tagged || ctx.talk?.situation === 'trade' || ctx.talk?.second === 'trade';
-        const served = servedWithoutPay({ narration: s('narration_private'), lines: parseLines(input['lines'], null, (id) => world.npcs.has(id)), okTools: ctx.ok_tools ?? [], trade, pendingRoll: req !== null });
+        const closeLines = parseLines(input['lines'], null, (id) => world.npcs.has(id));
+        const item = menuNamed(menuHere(ctx), [ctx.action_text ?? '', s('narration_private'), ...closeLines.map((l) => l.text)]);
+        const declared = tagged || ctx.talk?.situation === 'trade' || ctx.talk?.second === 'trade';
+        const served = servedWithoutPay({ narration: s('narration_private'), lines: closeLines, okTools: ctx.ok_tools ?? [], trade: declared || item !== null, pendingRoll: req !== null, ...(declared || !item ? {} : { goods: menuWords(item.name) }) });
         if (served) {
           ctx.served_rejections = (ctx.served_rejections ?? 0) + 1;
-          return { error: servedRejection(served) };
+          return { error: servedRejection(served, item) };
         }
       }
       // Monedas pagadas solo de palabra (pone 200 sobre la mesa y sigue con sus 200): se reescribe una vez.
@@ -2104,6 +2187,55 @@ function run(ctx: ToolContext, name: string, input: Record<string, unknown>): un
         if (fx) {
           ctx.magic_rejections = (ctx.magic_rejections ?? 0) + 1;
           return { error: magicRejection(fx) };
+        }
+      }
+      // Estado narrado sin su tool: descansar, curar, coger algo del sitio, un conjuro, el pasado del PJ, lo que un NPC
+      // recordará o un fiado (arreglo 1). Se reescribe una vez. Lo que ya miran otras guardas de este cierre, fuera.
+      if ((ctx.state_rejections ?? 0) < 1 && !ctx.roll_category) {
+        const failedNames = new Set(failedTools(ctx).map((f) => f.name));
+        const skip: StateKind[] = [];
+        if (movedWithoutTool({ action: ctx.action_text ?? '', narration: s('narration_private'), okTools: ctx.ok_tools ?? [] }) || failedNames.has('transfer_item') || failedNames.has('harvest')) skip.push('pick');
+        if (failedNames.has('cast_spell') || failedNames.has('spend_resource')) skip.push('spell');
+        if (failedNames.has('heal') || failedNames.has('stabilize')) skip.push('heal');
+        if (failedNames.has('take_rest')) skip.push('rest');
+        const miss = stateWithoutTool({
+          action: ctx.action_text ?? null, narration: s('narration_private'), lines: parseLines(input['lines'], null, (id) => world.npcs.has(id)),
+          okTools: ctx.ok_tools ?? [], pendingRoll: req !== null, memoryNote: input['npc_memory_note'] != null && s('npc_memory_note').trim() !== '',
+          spells: castableSpells(actor).map((id) => spellById(id)?.name ?? id), resources: classResources(actor).map((r) => r.label),
+          hasOpenDebt: openDebts(actor).length > 0, skip,
+        });
+        if (miss) {
+          ctx.state_rejections = (ctx.state_rejections ?? 0) + 1;
+          return { error: stateRejection(miss) };
+        }
+      }
+      // Un NPC que le pega al actor sin attack ni conflict_act en este turno: el daño de palabra no vale (arreglo 12). Una vez.
+      if ((ctx.hit_rejections ?? 0) < 1 && !ctx.conflict && !ctx.conflict_resolved) {
+        const present = [...world.npcs.values()].filter((n) => n.status === 'alive' && world.spots.get(n.location.id)?.location_id === here());
+        // Ya golpeó quien hizo su turno (attack o el motor) y aquel cuyo daño al actor ya pasó por apply_damage.
+        const damaged = (ctx.write_calls ?? []).filter((w) => w.name === 'apply_damage' && !('error' in w.out) && String(w.input['target_id']) === actor.id)
+          .flatMap((w) => { const n = npcInSource(ctx, `${String(w.input['source'] ?? '')} ${String(w.input['damage_type'] ?? '')}`); return n ? [n.id] : []; });
+        const struck = new Set<string>([...(ctx.npc_turns ?? []), ...(ctx.forced_turns ?? []).map((f) => f.npc_id), ...damaged]);
+        const hit = npcHitWithoutAttack({ narration: s('narration_private'), npcs: present.map((n) => ({ id: n.id, refs: [n.name, ...npcNameForms(n.name), n.role] })), struck });
+        if (hit) {
+          ctx.hit_rejections = (ctx.hit_rejections ?? 0) + 1;
+          return { error: npcHitRejection(npcLabel(world, actor, hit.npc_id), hit.npc_id, hit.phrase, actor.id) };
+        }
+      }
+      // settle_debt y set_debt cuadrados con lo narrado: lo pagado, lo que queda y si da todo lo que lleva (arreglo 17). Una vez.
+      if ((ctx.debt_rejections ?? 0) < 1) {
+        const calls = (ctx.write_calls ?? []).filter((c) => !('error' in c.out));
+        const settle = calls.filter((c) => c.name === 'settle_debt').at(-1);
+        const set = calls.filter((c) => c.name === 'set_debt').at(-1);
+        const debtOf = (c: typeof settle) => (c ? openDebts(actor).find((d) => d.npc_id === String(c.input['npc_id'])) : undefined);
+        const why = debtMismatch({
+          narration: s('narration_private'), cur: currencyOf(world.campaign), fmt: (n) => money(world, n),
+          settle: settle ? { paid: Number(settle.out['paid']) || 0, remaining: Number(settle.out['remaining']) || 0, coins_left: coinsOf(world, actor.id) } : null,
+          set: set ? { amount: Math.floor(Number(set.input['amount']) || 0), owes: debtOf(set)?.amount ?? Math.floor(Number(set.input['amount']) || 0) } : null,
+        });
+        if (why) {
+          ctx.debt_rejections = (ctx.debt_rejections ?? 0) + 1;
+          return { error: debtRejection(why, settle ? 'settle_debt' : 'set_debt') };
         }
       }
       // El jugador declara un golpe y nadie lo resuelve: se reescribe una vez, y si hay razón para no tirar, que la cuente.
