@@ -198,19 +198,28 @@ const WANTS_CRONISTA = [
   want('familia', 'contar algo de alguien de tu vida que no está aquí (una hermana, un maestro, un amor), con su nombre', 'Mi hermana Lía se fue a la ciudad hace dos inviernos y sigo buscándola.'),
   want('acudir', 'ir al sitio y a la hora de lo que te han anunciado (la misa, la cena, el mercado) y quedarte a verlo', 'Voy a la plaza a ver la misa del pozo.'),
 ];
-/** Druida gnomo (Curar heridas, Palabra de curación, Enmarañar) con un pergamino de Hablar con los animales y una capa de protección sin sintonizar. */
+/**
+ * Druida gnomo (Curar heridas, Palabra de curación, Enmarañar) con un pergamino de Hablar con los animales y una capa de
+ * protección sin sintonizar. H11: nunca va al Soto. El lobo flaco bebe en el arroyo y la loba de ceniza vive al pie del
+ * roble a cualquier hora (people.ts, npc_lobo, hostil), y la partida empieza a las 18:00: en la tanda 5 corrió al arroyo
+ * en la primera acción y murió dos veces (19 horas de juego en 40 acciones). Recolecta en los Corrales (ponedero y
+ * huerto, CD 8) y pesca en el canal del molino, los dos junto al pueblo; con antorcha, que los lobos de los caminos huyen
+ * del fuego (life.ts). Primero lo que puede hacer en la plaza (examinar y sintonizar la capa).
+ */
 const WANTS_RECOLECTOR = [
-  want('ir_campo', 'ir a un sitio del campo donde se pueda recolectar o pescar (el Soto, los Corrales, el molino)', 'Voy a los Corrales.'),
-  want('recolectar', 'recolectar algo de un punto que lo dé (bayas de un arbusto, huevos del ponedero, coles del huerto), diciendo de dónde', 'Recolecto huevos del ponedero.'),
   want('examinar', 'examinar de cerca la capa de protección o el pergamino de conjuro que llevas para saber qué hacen', 'Examino de cerca mi capa de protección.'),
   want('sintonizar', 'sintonizarte con tu capa de protección: una hora sentado con ella en las manos', 'Me siento una hora con la capa de protección en las manos para sintonizarme con ella.'),
-  want('soltar', 'dejar en el suelo algo que lleves y no te haga falta (una antorcha, una ración)', 'Dejo una antorcha en el suelo.'),
-  want('coger', 'coger algo suelto que haya en este sitio, diciendo qué', 'Cojo la antorcha del suelo.'),
-  want('pergamino', 'leer en voz alta el pergamino de conjuro que llevas para lanzar Hablar con los animales con algún animal de la zona', 'Leo el pergamino de conjuro para lanzar Hablar con los animales.'),
-  want('marcar', 'cambiar algo del sitio donde estás y que se quede así (apilar piedras para marcar el camino, cerrar una cerca, apagar un fuego)', 'Apilo unas piedras junto al camino para marcarlo.'),
-  want('pescar', 'pescar truchas en el arroyo o en el canal del molino', 'Pesco truchas en el arroyo.'),
-  want('conjuro', 'lanzar uno de los conjuros de nivel 1 que pone tu ficha (Enmarañar contra algo hostil, Curar heridas sobre alguien herido), diciendo contra quién o sobre quién', 'Lanzo Enmarañar contra el lobo.'),
-  want('vender_cosecha', 'venderle lo que has recolectado a quien lo compre (bayas, huevos o truchas), diciendo qué', 'Le vendo los huevos que he recogido.'),
+  want('ir_campo', 'ir a los Corrales, la granja de Úrsula en el borde del pueblo, con una antorcha encendida (al Soto no: allí beben los lobos)', 'Voy a los Corrales.'),
+  want('recolectar', 'recolectar huevos del ponedero de la granja', 'Recolecto huevos del ponedero.'),
+  want('pergamino', 'leer en voz alta el pergamino de conjuro que llevas para lanzar Hablar con los animales con algún animal de la granja (las gallinas, las ovejas)', 'Leo el pergamino de conjuro para lanzar Hablar con los animales con las gallinas.'),
+  want('soltar', 'dejar en el suelo una de las antorchas o de las raciones que llevas en la mochila (la capa y el pergamino no)', 'Dejo una antorcha en el suelo.'),
+  want('coger', 'coger del suelo lo que acabas de dejar, diciendo qué', 'Cojo la antorcha del suelo.'),
+  want('huerto', 'recolectar coles o nabos del huerto de la granja', 'Recolecto coles del huerto.'),
+  want('marcar', 'cambiar algo del sitio donde estás y que se quede así (apilar piedras para marcar el camino, cerrar una cerca, apagar un fuego)', 'Apilo unas piedras junto a la cancela para marcar el camino.'),
+  want('ir_molino', 'ir al molino, junto al pueblo, donde el canal da truchas (al arroyo del Soto no)', 'Voy al molino.'),
+  want('pescar', 'pescar truchas en el canal del molino', 'Pesco truchas en el canal del molino.'),
+  want('conjuro', 'lanzar uno de los conjuros de nivel 1 que pone tu ficha (Curar heridas sobre alguien herido, Enmarañar sobre un trozo de suelo o contra algo hostil), diciendo sobre quién o dónde', 'Lanzo Enmarañar sobre el barro junto a la rueda.'),
+  want('vender_cosecha', 'volver a la taberna y venderle a Brenna lo que has recolectado (huevos, coles o truchas), diciendo qué', 'Le vendo a Brenna los huevos que he recogido.'),
 ];
 
 /** A dos: el compañero ha caído a tu lado (H10, `stabilize`). Lo provoca el loop de parejas, no un perfil. */
@@ -269,7 +278,7 @@ export const PROFILES: PlayerProfile[] = [
     wants: WANTS_CRONISTA },
   { id: 'recolector', label: 'Mecánico, recolector', class_id: 'druid', race_id: 'gnome', suggested_p: 0.1, game_min: 10, cycle: true,
     start: { kit: [{ item_id: 'it_pergamino_1', spell_id: 'speak_with_animals' }, { item_id: 'it_capa_proteccion' }] },
-    prompt: 'Eres un jugador que vive del campo y quiere probar los objetos: recolectas y pescas donde se puede, coges y sueltas cosas, examinas lo que llevas, te sintonizas con tu capa y lees tu pergamino. Cada vez una cosa distinta, diciendo exactamente qué y dónde.',
+    prompt: 'Eres un jugador que vive del campo y quiere probar los objetos: recolectas en la granja y pescas en el molino, junto al pueblo, coges y sueltas cosas, examinas lo que llevas, te sintonizas con tu capa y lees tu pergamino. Cada vez una cosa distinta, diciendo exactamente qué y dónde. Al Soto no vas nunca: allí beben los lobos.',
     wants: WANTS_RECOLECTOR },
 ];
 
