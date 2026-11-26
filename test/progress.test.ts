@@ -57,7 +57,7 @@ describe('progreso de la demo', () => {
     world.itemInstance('ii_kael_daga').location = { type: 'spot', id: 'sp_tab_chimenea' };
     const floor = world.itemsIn({ type: 'spot', id: 'sp_tab_chimenea' }).find((i) => i.item_id === 'it_madera')!;
     floor.location = { type: 'character', id: kael.id, slot: { kind: 'hand', which: 'main' } };
-    expect(completeJob(world, kael, jobId, 'npc_brenna')).toMatchObject({ ok: false, reason: 'Brenna no está aquí' });
+    expect(completeJob(world, kael, jobId, 'npc_brenna')).toMatchObject({ ok: false, reason: expect.stringContaining('Brenna no está con el actor') });
     kael.location = { type: 'spot', id: 'sp_tab_barra' };
     expect(completeJob(world, kael, jobId, 'npc_doro')).toMatchObject({ ok: false });
     const coins = coinsOf(world, kael.id);

@@ -74,7 +74,7 @@ Cada noche a las 20:00 acude a la misa del pozo, en la [[Plaza del Pozo]]. No ha
 ## Comercio
 
 - **Vende:** jarra de cerveza (30), ración (50), antorcha (10), poción de curación (2.500) y **noche de posada** (100), para la habitación de arriba.
-- **Compra:** leña (20), bayas (5), trucha (25), saco de harina (25) y huevo (6).
+- **Compra:** leña (20), bayas (5), trucha (25), saco de harina (25), huevo (6) y col: lo de la cocina y el fuego, lo mismo que pide en el tablón. Cuerda, antorchas o cacharros no; para eso manda al buhonero, [[Lucio Cendal]].
 - Su mula espera en la puerta de la taberna, en la plaza.
 
 Precios en monedas. Ver [[Objetos]].
