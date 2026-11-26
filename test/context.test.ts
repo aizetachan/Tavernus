@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionContext, NO_WITNESSES, OLD_EVENT_CHARS, RECENT_EVENTS } from '../src/ai/prompt.js';
+import { actionContext, NO_WITNESSES, OLD_EVENT_CHARS, RECENT_EVENTS, systemPrompt } from '../src/ai/prompt.js';
 import { executeTool, type ToolContext } from '../src/ai/tools.js';
 import { seededRng } from '../src/engine/dice.js';
 import type { Delivery } from '../src/engine/events.js';
@@ -185,5 +185,56 @@ describe('places_learned: el máster revela lugares', () => {
     expect(world.location('loc_plaza').discovery['ch_kael']).toBe('visited'); // no se degrada
     expect(ctxOf(engine)).not.toContain('Lugares de la región que el actor aún no conoce');
     expect(logEvent(engine, null)).toMatchObject({ ok: true });
+  });
+});
+
+describe('prompt de sistema: lo que piden las tandas del 25-11 (paquete C)', () => {
+  const prompt = async (actor = false) => systemPrompt((await bootEngine()).engine.world.campaign, { actor });
+
+  it('(1) cada estado con su tool y un ejemplo: descansar, curar, apuntar, fiar', async () => {
+    const guide = (await prompt()).split('\n').find((l) => l.startsWith('LO QUE SOLO PASA CON SU TOOL'));
+    expect(guide).toBeDefined();
+    expect(guide).toMatch(/Descansar[^.]*take_rest \(«me siento en el brocal a descansar» → take_rest short\)/);
+    expect(guide).toMatch(/Curar, vendarse[^.]*heal/);
+    expect(guide).toMatch(/record_character_fact \(«mi padre era minero»\)/);
+    expect(guide).toMatch(/Fiar, aplazar un pago, «apúntamela»: set_debt con quien fía \(«te lo apunto hasta mañana»\)/);
+    for (const t of ['stabilize', 'transfer_item', 'harvest', 'cast_spell', 'spend_resource', 'settle_debt', 'pawn_item']) expect(guide).toContain(t);
+  });
+
+  it('(14) el primer trago se cobra con buy_item', async () => {
+    expect(await prompt()).toMatch(/se sirve con buy_item y se cobra a su precio, también el primer trago \(«ponme una cerveza» → buy_item de la cerveza\): nada que tenga precio se sirve gratis/);
+  });
+
+  it('(12 y 18) un NPC pega con attack; quitarle algo a otro jugador es request_reaction con la enfrentada del servidor', async () => {
+    const text = await prompt();
+    expect(text).toMatch(/Un NPC que pega, empuja o hiere lo hace con attack \(attacker_id = el NPC\) y su tirada, también cuando responde a una tirada que ganó el jugador; nunca daño de palabra/);
+    expect(text).toMatch(/Quitarle algo a otro JUGADOR[^.]*request_reaction[^.]*sleight_of_hand\): la tirada enfrentada la hace el servidor/);
+    expect(text).toContain('Pegarle (un puñetazo, un cabezazo');
+  });
+
+  it('(11) lo plausible pide tirada social o rumor; lo inventado del mundo no se da por dato', async () => {
+    const text = await prompt();
+    expect(text).toMatch(/recibe una tirada social \(Persuasión, Engaño o Intimidación con requires_roll\), un precio o un rumor \(plant_rumor\), nunca un «no» seco/);
+    expect(text).toContain('Un NPC sí puede decir que de eso no sabe nada');
+  });
+
+  it('(4 y 13) en conversación, 40 palabras como mucho, y la charla larga se cierra', async () => {
+    const text = await prompt();
+    expect(text).toContain('en 40 palabras como mucho sin contar lo dicho');
+    expect(text).toContain('Ninguna charla se eterniza: si el contexto trae «Charla larga», el NPC la cierra en ese turno');
+  });
+
+  it('(revisión) sin contradicciones con el tope de 140 ni con los modos del narrador; COMBATE ya no repite la guía', async () => {
+    const text = await prompt();
+    expect(text).toContain('nunca más de 140 en total, contando lo dicho');
+    expect(text).not.toContain('Lo que se dice no se recorta');
+    expect(text).not.toContain('Atender a un caído: stabilize');
+    const actor = await prompt(true);
+    expect(actor).not.toContain('una línea de gesto como mucho');
+    expect(actor).toContain('cuánto se narra lo dice «Narrador en este turno»');
+  });
+
+  it('no se dispara de tamaño (26.354 caracteres antes del paquete C)', async () => {
+    expect((await prompt()).length).toBeLessThan(30_000);
   });
 });
